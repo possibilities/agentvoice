@@ -11,6 +11,7 @@
     "server": "bun run src/main.ts server",
     "client": "bun run src/main.ts client",
     "setup": "bun run scripts/setup.ts",
+    "cli:install": "bun run scripts/install.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

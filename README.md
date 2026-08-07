@@ -28,6 +28,20 @@ bun run client                       # in another terminal: the voice TUI
 bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
 ```
 
+### A global `agentvoicenext`
+
+`bun run cli:install` installs dependencies, runs setup, and `bun link`s this
+checkout, putting `agentvoicenext` on PATH (via bun's global bin, usually
+`~/.bun/bin`). The command is **editable** — it symlinks back into the
+checkout, so source edits apply immediately with no rebuild. Funk's installer
+(`~/code/funk/install`) invokes this same contract from
+`~/code/agentvoicenext` when that checkout exists.
+
+```bash
+bun run cli:install
+agentvoicenext server
+```
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--model <id>` | codex config | Orchestrator model — the agent that does the actual work |
