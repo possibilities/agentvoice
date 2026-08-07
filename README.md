@@ -101,7 +101,9 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
 - **Redial** tears down the voice session and negotiates a fresh one against
   the same conversation — the escape hatch when the media path dies silently.
-  Renewal happens automatically before the ~60-minute upstream ceiling.
+  It also reconnects after a busy rejection (another client held the server),
+  so `r` works once the slot is free. Renewal happens automatically before the
+  ~60-minute upstream ceiling.
 - **Headphones recommended**: there is no echo cancellation in this stack, so
   open speakers can let the agent hear itself. `s` is the manual guard.
 - macOS microphone permission belongs to your **terminal app** (System

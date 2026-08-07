@@ -119,11 +119,20 @@ export class VoiceTransport {
     this.rapidFailures = 0;
     this.wantLive = true;
     this.options.onInfo(`redial (${reason})`);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.teardownSession();
     if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
       void this.startSession();
+      return;
     }
-    // Otherwise the next `ready` re-offers (wantLive is set).
+    if (!this.ws || this.ws.readyState > WebSocket.OPEN) {
+      // The socket itself is gone — e.g. this client was rejected with 4429
+      // while another client held the server. Reopen it; the next `ready`
+      // re-offers because wantLive is set.
+      this.reconnectDelayMs = RECONNECT_INITIAL_MS;
+      this.openSocket();
+    }
+    // A socket still connecting needs nothing: `ready` will re-offer.
   }
 
   sendOpusFrame(frame: Buffer): void {
