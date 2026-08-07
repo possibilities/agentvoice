@@ -142,7 +142,7 @@ export function resolveConfig(
       `approval-policy must be one of ${APPROVAL_POLICIES.join(", ")}; got "${approvalPolicy}"`,
     );
   }
-  const portRaw = pick("port") ?? 8790;
+  const portRaw = pick("port") ?? 7890;
   const port =
     typeof portRaw === "number" ? portRaw : Number.parseInt(portRaw, 10);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

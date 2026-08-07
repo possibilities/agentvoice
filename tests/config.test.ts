@@ -14,7 +14,7 @@ const HOME = "/home/tester";
 describe("resolveConfig", () => {
   test("applies defaults when nothing is set", () => {
     const config = resolveConfig({}, {}, {}, HOME);
-    expect(config.port).toBe(8790);
+    expect(config.port).toBe(7890);
     expect(config.sandbox).toBe("danger-full-access");
     expect(config.approvalPolicy).toBe("never");
     expect(config.workspace).toBe(

@@ -18,4 +18,10 @@ _Avoid_: "cwd" (reserved for the app-server child's own working directory).
 
 **Client** — The single WebSocket + WebRTC voice client. Audio flows
 client↔voice model peer-to-peer; only coordination flows through this server.
-_Avoid_: "browser", "surface".
+The bundled terminal client is `agentvoicenext client`. _Avoid_: "browser",
+"surface".
+
+**Redial** — Tearing down the current voice session and negotiating a fresh
+one against the same orchestrator thread; the conversation continues. Manual
+(`r`), or automatic for renewal and recovery. _Avoid_: "reconnect" (reserved
+for the WebSocket).

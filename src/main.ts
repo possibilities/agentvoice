@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoicenext server [options]`. */
+/** CLI entry: `agentvoicenext server [options]` / `agentvoicenext client [options]`. */
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { ClientError, runClient } from "./client/ui.ts";
 import {
   ConfigError,
   defaultConfigPath,
@@ -13,13 +14,15 @@ import {
 import { runServer } from "./server.ts";
 
 export const VERSION = "0.1.0";
+const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";
 
-const USAGE = `agentvoicenext — minimal voice server for Codex
+const USAGE = `agentvoicenext — minimal voice server and terminal client for Codex
 
 Usage:
-  agentvoicenext server [options]
+  agentvoicenext server [options]   Start the voice server
+  agentvoicenext client [options]   Open the terminal voice client
 
-Options:
+Server options:
   --config <path>          Config file (default: ~/.config/agentvoicenext/server.yaml)
   --model <id>             Orchestrator model (default: codex config)
   --effort <level>         Orchestrator reasoning effort (default: codex config)
@@ -30,38 +33,56 @@ Options:
   --sandbox <mode>         read-only | workspace-write | danger-full-access
                            (default: danger-full-access)
   --approval-policy <p>    never | on-request | untrusted (default: never)
-  --port <n>               WebSocket port on 127.0.0.1 (default: 8790)
+  --port <n>               WebSocket port on 127.0.0.1 (default: 7890)
   --codex <path>           Codex binary (default: $CODEX_PATH or "codex")
   --debug                  Log app-server protocol frames to stderr
-  --help                   Show this help
+
+Client options:
+  --url <ws-url>           Server WebSocket (default: ${DEFAULT_CLIENT_URL})
+  --device <index>         Microphone device index (default: system default)
+  --debug                  Write a debug log to the state directory
+
+Keys in the client: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
 `;
 
-const VALUE_FLAGS = new Set([
-  "--config",
-  "--model",
-  "--effort",
-  "--voice-model",
-  "--voice",
-  "--workspace",
-  "--sandbox",
-  "--approval-policy",
-  "--port",
-  "--codex",
-]);
-const BOOLEAN_FLAGS = new Set(["--debug", "--help"]);
+export interface FlagSpec {
+  value: ReadonlySet<string>;
+  bool: ReadonlySet<string>;
+}
+
+const SERVER_FLAGS: FlagSpec = {
+  value: new Set([
+    "--config",
+    "--model",
+    "--effort",
+    "--voice-model",
+    "--voice",
+    "--workspace",
+    "--sandbox",
+    "--approval-policy",
+    "--port",
+    "--codex",
+  ]),
+  bool: new Set(["--debug", "--help"]),
+};
+
+const CLIENT_FLAGS: FlagSpec = {
+  value: new Set(["--url", "--device"]),
+  bool: new Set(["--debug", "--help"]),
+};
 
 export class UsageError extends Error {}
 
 export interface ParsedArgs {
-  values: ConfigValues;
+  values: Record<string, string>;
   configPath?: string;
   debug: boolean;
   help: boolean;
 }
 
-export function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): ParsedArgs {
   const seen = new Set<string>();
-  const values: ConfigValues = {};
+  const values: Record<string, string> = {};
   let configPath: string | undefined;
   let debug = false;
   let help = false;
@@ -77,14 +98,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
         inline = argument.slice(equals + 1);
       }
     }
-    if (!VALUE_FLAGS.has(flag) && !BOOLEAN_FLAGS.has(flag)) {
+    if (!spec.value.has(flag) && !spec.bool.has(flag)) {
       throw new UsageError(`unknown option "${flag}"`);
     }
     if (seen.has(flag)) {
       throw new UsageError(`option "${flag}" given more than once`);
     }
     seen.add(flag);
-    if (BOOLEAN_FLAGS.has(flag)) {
+    if (spec.bool.has(flag)) {
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
       else help = true;
@@ -100,10 +121,54 @@ export function parseArgs(argv: string[]): ParsedArgs {
       i++;
     }
     if (flag === "--config") configPath = value;
-    else (values as Record<string, string>)[flag.slice(2)] = value;
+    else values[flag.slice(2)] = value;
   }
 
   return { values, configPath, debug, help };
+}
+
+async function runServerCommand(argv: string[]): Promise<number> {
+  const parsed = parseArgs(argv, SERVER_FLAGS);
+  if (parsed.help) {
+    console.log(USAGE);
+    return 0;
+  }
+  const home = homedir();
+  const configPath = parsed.configPath
+    ? resolve(expandTilde(parsed.configPath, home))
+    : defaultConfigPath(process.env, home);
+  const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
+  const config = resolveConfig(
+    parsed.values as ConfigValues,
+    fileValues,
+    process.env,
+    home,
+    parsed.debug,
+  );
+  await runServer(config, VERSION);
+  return 0;
+}
+
+async function runClientCommand(argv: string[]): Promise<number> {
+  const parsed = parseArgs(argv, CLIENT_FLAGS);
+  if (parsed.help) {
+    console.log(USAGE);
+    return 0;
+  }
+  let deviceIndex: number | undefined;
+  const device = parsed.values["device"];
+  if (device !== undefined) {
+    deviceIndex = Number.parseInt(device, 10);
+    if (!Number.isInteger(deviceIndex) || deviceIndex < 0) {
+      throw new UsageError(`--device must be a non-negative integer; got "${device}"`);
+    }
+  }
+  await runClient({
+    url: parsed.values["url"] ?? DEFAULT_CLIENT_URL,
+    ...(deviceIndex !== undefined ? { deviceIndex } : {}),
+    debug: parsed.debug,
+  });
+  return 0;
 }
 
 async function main(): Promise<number> {
@@ -118,42 +183,20 @@ async function main(): Promise<number> {
     console.log(USAGE);
     return command === undefined ? 2 : 0;
   }
-  if (command !== "server") {
+
+  try {
+    if (command === "server") return await runServerCommand(argv.slice(1));
+    if (command === "client") return await runClientCommand(argv.slice(1));
     console.error(`unknown command "${command}"\n`);
     console.error(USAGE);
     return 2;
-  }
-
-  try {
-    const parsed = parseArgs(argv.slice(1));
-    if (parsed.help) {
-      console.log(USAGE);
-      return 0;
-    }
-    const home = homedir();
-    const configPath = parsed.configPath
-      ? resolve(expandTilde(parsed.configPath, home))
-      : defaultConfigPath(process.env, home);
-    const fileValues = await loadConfigFile(
-      configPath,
-      parsed.configPath !== undefined,
-    );
-    const config = resolveConfig(
-      parsed.values,
-      fileValues,
-      process.env,
-      home,
-      parsed.debug,
-    );
-    await runServer(config, VERSION);
-    return 0;
   } catch (error) {
     if (error instanceof UsageError) {
       console.error(`${error.message}\n`);
       console.error(USAGE);
       return 2;
     }
-    if (error instanceof ConfigError) {
+    if (error instanceof ConfigError || error instanceof ClientError) {
       console.error(error.message);
       return 1;
     }

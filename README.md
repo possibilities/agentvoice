@@ -1,11 +1,13 @@
 # agentvoicenext
 
-Minimal voice server for Codex. `agentvoicenext server` spawns a `codex
+Minimal voice system for Codex. `agentvoicenext server` spawns a `codex
 app-server`, opens one orchestrator thread in an agent-owned workspace, and
 exposes a localhost WebSocket that lets a single voice client hold a
-full-duplex WebRTC voice conversation with that thread. Audio flows peer-to-peer
-between the client and the voice model; the voice↔agent handoff happens inside
-app-server. Uses your existing ChatGPT/Codex login — **no OpenAI API key**.
+full-duplex WebRTC voice conversation with that thread. `agentvoicenext client`
+is that client: a terminal UI with live meters, transcripts, and mute controls.
+Audio flows peer-to-peer between the client and the voice model; the
+voice↔agent handoff happens inside app-server. Uses your existing ChatGPT/Codex
+login — **no OpenAI API key**.
 
 ## Requirements
 
@@ -13,12 +15,16 @@ app-server. Uses your existing ChatGPT/Codex login — **no OpenAI API key**.
 - [codex CLI](https://github.com/openai/codex) ≥ 0.147 on PATH, logged in
   (`codex login`). Built and verified against codex-cli **0.147.0**; the
   realtime surface is experimental upstream and may shift between releases.
+- [sox](https://sox.sourceforge.net) — client speaker playback only.
+  `bun run setup` checks everything and installs sox via Homebrew if missing.
 
 ## Run
 
 ```bash
 bun install
+bun run setup                        # one-time: verifies bun/codex, installs sox
 bun run server                       # all defaults
+bun run client                       # in another terminal: the voice TUI
 bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
 ```
 
@@ -31,7 +37,7 @@ bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
 | `--workspace <dir>` | `~/.local/state/agentvoicenext/workspace` | Directory the agent operates in |
 | `--sandbox <mode>` | `danger-full-access` | `read-only` \| `workspace-write` \| `danger-full-access` |
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
-| `--port <n>` | `8790` | WebSocket port, bound to `127.0.0.1` only |
+| `--port <n>` | `7890` | WebSocket port, bound to `127.0.0.1` only |
 | `--codex <path>` | `$CODEX_PATH` or `codex` | Codex binary to spawn |
 | `--config <path>` | `~/.config/agentvoicenext/server.yaml` | Config file location |
 | `--debug` | off | Log app-server protocol frames to stderr |
@@ -50,7 +56,7 @@ voice: marin
 workspace: ~/projects/sandbox
 sandbox: danger-full-access
 approval-policy: never
-port: 8790
+port: 7890
 codex: /usr/local/bin/codex
 ```
 
@@ -64,10 +70,37 @@ mode: `sandbox: workspace-write` + `approval-policy: on-request`. Approval
 requests are always **auto-denied** (there is no UI to answer them); the agent
 is told no and adapts instead of hanging.
 
+## Terminal client
+
+`agentvoicenext client` connects to a running server and opens a full-duplex
+voice console: your microphone is captured in-process (OpenTUI/CoreAudio),
+Opus-encoded, and sent over WebRTC; the agent's voice plays through a sox
+`play` child and both directions render as live meters with sparkline history.
+Finished turns stream in as transcripts (`you · …` / `agent · …`).
+
+```bash
+bun run client                                   # defaults to ws://127.0.0.1:7890/ws
+bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
+```
+
+- **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
+  Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
+- **Redial** tears down the voice session and negotiates a fresh one against
+  the same conversation — the escape hatch when the media path dies silently.
+  Renewal happens automatically before the ~60-minute upstream ceiling.
+- **Headphones recommended**: there is no echo cancellation in this stack, so
+  open speakers can let the agent hear itself. `s` is the manual guard.
+- macOS microphone permission belongs to your **terminal app** (System
+  Settings › Privacy & Security › Microphone, then fully restart it). If the
+  mic delivers pure silence the client shows a warning naming this.
+- `--debug` writes `~/.local/state/agentvoicenext/client-debug.log` including
+  every upstream event.
+
 ## Client API
 
 Protocol version **1**. `GET /` returns `{"name":"agentvoicenext","version":…,"protocol":1}`
 as a health/discovery check. WebSocket endpoint: `ws://127.0.0.1:<port>/ws`.
+The bundled terminal client speaks exactly this protocol.
 
 One client at a time — a second connection is closed with code **4429**. On
 server shutdown the client is closed with **1001**. The server pings; the

@@ -9,6 +9,8 @@
   },
   "scripts": {
     "server": "bun run src/main.ts server",
+    "client": "bun run src/main.ts client",
+    "setup": "bun run scripts/setup.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
@@ -18,5 +20,10 @@
   },
   "engines": {
     "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.1",
+    "opusscript": "^0.1.1",
+    "werift": "^0.24.3"
   }
 }
