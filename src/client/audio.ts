@@ -8,11 +8,13 @@ import { Audio, type AudioCaptureStream } from "@opentui/core";
 import type { Subprocess } from "bun";
 import OpusScript from "opusscript";
 import type { MediaStreamTrack } from "werift";
-import { FRAME_SAMPLES, SAMPLE_RATE, floatToS16, rmsDbFloat, rmsDbS16 } from "./dsp.ts";
+import { FRAME_SAMPLES, floatToS16, rmsDbFloat, rmsDbS16, SAMPLE_RATE } from "./dsp.ts";
 
 /** Consecutive all-zero 20 ms chunks (~1 s) before warning about mic silence. */
 const SILENCE_WARN_CHUNKS = 50;
 const MAX_PLAYBACK_RESTARTS = 3;
+/** A player alive this long proves health and resets the restart budget. */
+const PLAYER_HEALTHY_MS = 30_000;
 
 export interface VoiceAudioOptions {
   deviceIndex?: number;
@@ -33,11 +35,40 @@ export interface CaptureDeviceInfo {
 export function resolvePlaybackCommand(): string[] | null {
   const play = Bun.which("play");
   if (play) {
-    return [play, "-q", "-t", "raw", "-r", String(SAMPLE_RATE), "-e", "signed", "-b", "16", "-c", "2", "-"];
+    return [
+      play,
+      "-q",
+      "-t",
+      "raw",
+      "-r",
+      String(SAMPLE_RATE),
+      "-e",
+      "signed",
+      "-b",
+      "16",
+      "-c",
+      "2",
+      "-",
+    ];
   }
   const sox = Bun.which("sox");
   if (sox) {
-    return [sox, "-q", "-t", "raw", "-r", String(SAMPLE_RATE), "-e", "signed", "-b", "16", "-c", "2", "-", "-d"];
+    return [
+      sox,
+      "-q",
+      "-t",
+      "raw",
+      "-r",
+      String(SAMPLE_RATE),
+      "-e",
+      "signed",
+      "-b",
+      "16",
+      "-c",
+      "2",
+      "-",
+      "-d",
+    ];
   }
   return null;
 }
@@ -124,10 +155,7 @@ export class VoiceAudio {
     if (capture) {
       try {
         capture.stop();
-        await Promise.race([
-          capture.closed,
-          new Promise((resolve) => setTimeout(resolve, 1_000)),
-        ]);
+        await Promise.race([capture.closed, new Promise((resolve) => setTimeout(resolve, 1_000))]);
       } catch {
         // capture may already be gone
       }
@@ -157,11 +185,13 @@ export class VoiceAudio {
   // -------------------------------------------------------------------------
 
   private spawnPlayer(argv: string[]): void {
+    const spawnedAt = Date.now();
     const player = Bun.spawn(argv, { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
     this.player = player;
     void player.exited.then(() => {
       if (this.stopped || this.player !== player) return;
       this.player = null;
+      if (Date.now() - spawnedAt > PLAYER_HEALTHY_MS) this.playerRestarts = 0;
       if (this.playerRestarts >= MAX_PLAYBACK_RESTARTS) {
         this.options.onWarning("speaker playback keeps failing — audio output disabled");
         return;

@@ -2,18 +2,19 @@
 /** CLI entry: `agentvoicenext server [options]` / `agentvoicenext client [options]`. */
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import packageJson from "../package.json";
 import { ClientError, runClient } from "./client/ui.ts";
 import {
   ConfigError,
+  type ConfigValues,
   defaultConfigPath,
   expandTilde,
   loadConfigFile,
   resolveConfig,
-  type ConfigValues,
 } from "./config.ts";
 import { runServer } from "./server.ts";
 
-export const VERSION = "0.1.0";
+export const VERSION: string = packageJson.version;
 const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";
 
 const USAGE = `agentvoicenext — minimal voice server and terminal client for Codex
@@ -174,12 +175,7 @@ async function runClientCommand(argv: string[]): Promise<number> {
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const command = argv[0];
-  if (
-    command === undefined ||
-    command === "help" ||
-    command === "--help" ||
-    command === "-h"
-  ) {
+  if (command === undefined || command === "help" || command === "--help" || command === "-h") {
     console.log(USAGE);
     return command === undefined ? 2 : 0;
   }

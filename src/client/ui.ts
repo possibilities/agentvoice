@@ -4,20 +4,21 @@
  * and an event feed. Imperative @opentui/core, like every OpenTUI audio
  * example.
  */
-import {
-  BoxRenderable,
-  TextRenderable,
-  createCliRenderer,
-  type CliRenderer,
-  type ParsedKey,
-} from "@opentui/core";
+
 import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  BoxRenderable,
+  type CliRenderer,
+  createCliRenderer,
+  type ParsedKey,
+  TextRenderable,
+} from "@opentui/core";
 import { stateDirectory } from "../config.ts";
-import { VoiceAudio, resolvePlaybackCommand } from "./audio.ts";
+import { resolvePlaybackCommand, VoiceAudio } from "./audio.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
-import { VoiceTransport, type TransportPhase } from "./transport.ts";
+import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
 export interface ClientConfig {
   url: string;
@@ -51,7 +52,6 @@ const PHASE_LABEL: Record<TransportPhase, string> = {
   failed: "failed — press r",
   stopped: "stopped",
 };
-
 
 interface Meter {
   db: number;
@@ -156,7 +156,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
       // The v3 session streams finished turns with role + transcript.
       if (type === "turn.done") {
         const turn = event["turn"] as Record<string, unknown> | undefined;
-        const transcript = typeof turn?.["transcript"] === "string" ? turn["transcript"].trim() : "";
+        const transcript =
+          typeof turn?.["transcript"] === "string" ? turn["transcript"].trim() : "";
         if (!transcript) return;
         const isUser = turn?.["role"] === "user";
         const line = `${isUser ? "you" : "agent"} · ${transcript.length > 70 ? `${transcript.slice(0, 69)}…` : transcript}`;
@@ -300,15 +301,11 @@ export async function runClient(config: ClientConfig): Promise<void> {
     const dt = deltaMs / 1000;
     pulse += dt;
 
-    for (const [meter, active] of [
-      [mic, !audio.micMuted],
-      [agent, !audio.speakerMuted],
-    ] as const) {
+    for (const meter of [mic, agent]) {
       const level = levelFromDb(meter.db);
       meter.display = Math.max(level, meter.display - dt * 1.6);
       meter.history.push(level);
       if (meter.history.length > 120) meter.history.shift();
-      void active;
     }
 
     const innerWidth = Math.max(12, youPanel.panel.width - 6);
