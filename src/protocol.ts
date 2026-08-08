@@ -7,6 +7,8 @@
 export const PROTOCOL_VERSION = 1;
 /** Close code sent to a second concurrent client. */
 export const CLOSE_BUSY = 4429;
+/** Close code for a handshake with a missing or wrong connection token. */
+export const CLOSE_UNAUTHORIZED = 4401;
 
 // ---------------------------------------------------------------------------
 // Client → server

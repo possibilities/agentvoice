@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultConfigPath, expandTilde, stateDirectory } from "../src/paths.ts";
+import { defaultConfigPath, expandTilde, stateDirectory, tokenPath } from "../src/paths.ts";
 
 const HOME = "/home/tester";
 
@@ -13,6 +13,7 @@ describe("paths", () => {
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
       "/etc/xdg/agentvoicenext/server.yaml",
     );
+    expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoicenext/token");
   });
 
   test("expandTilde only rewrites leading ~", () => {

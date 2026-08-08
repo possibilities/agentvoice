@@ -13,6 +13,11 @@ export function stateDirectory(env: Environ, home: string): string {
   return join(base, "agentvoicenext");
 }
 
+/** The connection token: written by the server at boot, read by the client. */
+export function tokenPath(env: Environ, home: string): string {
+  return join(stateDirectory(env, home), "token");
+}
+
 export function defaultConfigPath(env: Environ, home: string): string {
   const xdg = env["XDG_CONFIG_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");

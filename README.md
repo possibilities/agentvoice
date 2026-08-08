@@ -141,13 +141,41 @@ recovery, and manual `r`), so keep it short.
 
 ## Security posture
 
-The server binds `127.0.0.1` only and accepts one client, with no
-authentication. The default `danger-full-access` + `never` runs an unattended,
-unrestricted agent with your user permissions in the workspace — the legacy
-posture, and what makes hands-free "install it and run the tests" work. Safer
-mode: `sandbox: workspace-write` + `approval-policy: on-request`. Approval
-requests are always **auto-denied** (there is no UI to answer them); the agent
-is told no and adapts instead of hanging.
+The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
+one client. Loopback alone is not a boundary: a web page can open a WebSocket
+to 127.0.0.1 (the handshake is exempt from the same-origin policy), and other
+local users share the interface. So every request also passes a three-part
+handshake gate:
+
+- **Connection token.** Created at first boot as
+  `~/.local/state/agentvoicenext/token` (mode 0600) and required on every
+  WebSocket handshake (`/ws?token=…`). The bundled client reads the same file
+  automatically, so same-machine use needs no setup; a missing or wrong token
+  is closed with code **4401**. File permissions are the boundary between
+  local users.
+- **Origin rejection.** Any request carrying an `Origin` header is refused
+  (403). Browsers attach one to every WebSocket handshake, so this closes the
+  drive-by class outright — malicious pages and injected captive-portal
+  scripts probing localhost from your own browser. A browser page deliberately
+  cannot be a client of this server.
+- **Host pinning.** Requests must name `127.0.0.1:<port>` or
+  `localhost:<port>` (421 otherwise), refusing DNS-rebinding hostnames.
+
+The gate decides who reaches the agent; it cannot constrain what the agent
+then does. Approval requests are always **auto-denied** (there is no UI to
+answer them; the agent is told no and adapts instead of hanging), so the
+**sandbox is the only real guardrail**. The default `danger-full-access` +
+`never` runs an unattended, unrestricted agent with your user permissions in
+the workspace — what makes hands-free "install it and run the tests" work.
+On untrusted networks (hotel, café), prefer `--sandbox workspace-write`.
+
+To talk to your laptop from another device, do **not** expose the port —
+tunnel to loopback and carry the token across once:
+
+```bash
+ssh -N -L 7890:127.0.0.1:7890 laptop        # or a Tailscale/WireGuard route
+agentvoicenext client --token <contents of the laptop's token file>
+```
 
 ## Terminal client
 
@@ -164,6 +192,9 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
 
 - **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
+- **Token**: read automatically from `~/.local/state/agentvoicenext/token`;
+  `--token` overrides it when the server's state directory is not yours
+  (tunneled or remote server).
 - **Redial** negotiates a fresh voice session against the same conversation
   while the old one keeps playing; audio swaps the moment the new session
   connects. It is the escape hatch when the media path dies silently, and also
@@ -181,12 +212,19 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
 ## Client API
 
 Protocol version **1**. `GET /` returns `{"name":"agentvoicenext","version":…,"protocol":1}`
-as a health/discovery check. WebSocket endpoint: `ws://127.0.0.1:<port>/ws`.
-The bundled terminal client speaks exactly this protocol.
+as a health/discovery check. WebSocket endpoint:
+`ws://127.0.0.1:<port>/ws?token=<token>`, where the token is the contents of
+`~/.local/state/agentvoicenext/token` on the server machine. The bundled
+terminal client speaks exactly this protocol. Requests carrying an `Origin`
+header are refused, so a web page cannot connect ([Security
+posture](#security-posture)) — build clients on a native WebRTC stack (the
+bundled client uses [werift](https://github.com/shinyoshiaki/werift-webrtc);
+the recipe below uses the standard API names, which those stacks mirror).
 
-One client at a time — a second connection is closed with code **4429**. On
-server shutdown the client is closed with **1001**. The server pings; the
-socket is legitimately silent for minutes while audio flows peer-to-peer.
+One client at a time — a second connection is closed with code **4429**, and a
+missing or wrong token with **4401**. On server shutdown the client is closed
+with **1001**. The server pings; the socket is legitimately silent for minutes
+while audio flows peer-to-peer.
 
 ### Messages: client → server
 
@@ -238,6 +276,9 @@ gets a non-fatal `error`.
 - `~/.local/state/agentvoicenext/app-server` — stable working directory for the
   app-server child process (it re-reads its own cwd on every thread start;
   leave it in place). `$XDG_STATE_HOME` is honored.
+- `~/.local/state/agentvoicenext/token` — the connection token (created at
+  first boot, mode 0600). Delete it to rotate; the next server start mints a
+  fresh one.
 - `~/.config/agentvoicenext/` — `server.yaml` and the prompt files beside it.
 
 Conversation state is in-memory per run: each server start opens a fresh

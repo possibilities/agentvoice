@@ -29,6 +29,8 @@ the server and the client use it; if only one does, it goes in that directory.
     prompt-file discovery (`PROMPT_FILES`)
   - `params.ts` — pure config+prompts → `thread/start`, `thread/resume`, and
     `thread/realtime/start` payloads; tested in `tests/params.test.ts`
+  - `gate.ts` — the handshake gate: pure Origin/Host/token checks every HTTP
+    request passes before the WebSocket; tested in `tests/gate.test.ts`
   - `appserver.ts` — JSON-RPC over stdio to the app-server child; framing,
     supervision, fail-closed denial of approval requests
   - `session.ts` — the voice-session state machine (supersede, attribution);
@@ -98,4 +100,6 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   `useLiteralKeys` is off).
 - State on disk under `~/.local/state/agentvoicenext/` (`$XDG_STATE_HOME`
   honored): `workspace` (agent cwd), `app-server` (stable child cwd — must
-  outlive the child; it re-reads its own cwd on every thread start).
+  outlive the child; it re-reads its own cwd on every thread start), `token`
+  (the connection token, mode 0600 — file permissions are the boundary
+  between local users).

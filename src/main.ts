@@ -39,6 +39,8 @@ Prompts are files in the config file's directory, all optional:
 
 Client options:
   --url <ws-url>           Server WebSocket (default: ${DEFAULT_CLIENT_URL})
+  --token <secret>         Connection token (default: the server-written token file
+                           in the state directory)
   --device <index>         Microphone device index (default: system default)
   --debug                  Write a debug log to the state directory
 
@@ -67,7 +69,7 @@ const SERVER_FLAGS: FlagSpec = {
 };
 
 const CLIENT_FLAGS: FlagSpec = {
-  value: new Set(["--url", "--device"]),
+  value: new Set(["--url", "--token", "--device"]),
   bool: new Set(["--debug", "--help"]),
 };
 
@@ -161,8 +163,10 @@ async function runClientCommand(argv: string[]): Promise<number> {
       throw new UsageError(`--device must be a non-negative integer; got "${device}"`);
     }
   }
+  const token = parsed.values["token"];
   await runClient({
     url: parsed.values["url"] ?? DEFAULT_CLIENT_URL,
+    ...(token !== undefined ? { token } : {}),
     ...(deviceIndex !== undefined ? { deviceIndex } : {}),
     debug: parsed.debug,
   });

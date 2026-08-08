@@ -41,3 +41,12 @@ _Avoid_: "reconnect" (reserved for the WebSocket).
 session inside app-server: the old session's control plane stops silently (no
 `closed` notification) and only its media path lingers. _Avoid_: "replace",
 "preempt".
+
+**Handshake gate** — The pure Origin/Host/token checks (`src/server/gate.ts`)
+every HTTP request passes before it can reach the WebSocket. _Avoid_: "auth
+middleware", "firewall".
+
+**Connection token** — The shared secret the handshake gate requires on every
+WebSocket handshake, persisted at `~/.local/state/agentvoicenext/token`
+(mode 0600); the server creates it at first boot, the bundled client reads it
+automatically. _Avoid_: "API key", "auth token", "password".

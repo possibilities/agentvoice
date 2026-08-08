@@ -10,7 +10,12 @@
  * processed, so the old audio is a best-effort tail, not a guarantee.)
  */
 import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters, RtpBuilder } from "werift";
-import { CLOSE_BUSY, parseServerMessage, type ReadyMessage } from "../protocol.ts";
+import {
+  CLOSE_BUSY,
+  CLOSE_UNAUTHORIZED,
+  parseServerMessage,
+  type ReadyMessage,
+} from "../protocol.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
 
 export type TransportPhase =
@@ -199,6 +204,13 @@ export class VoiceTransport {
       this.dropPeers();
       if (event.code === CLOSE_BUSY) {
         this.options.onError("another client is connected to the server");
+        this.setPhase("failed");
+        return;
+      }
+      if (event.code === CLOSE_UNAUTHORIZED) {
+        this.options.onError(
+          "server rejected the connection token — copy ~/.local/state/agentvoicenext/token from the server machine or pass --token",
+        );
         this.setPhase("failed");
         return;
       }

@@ -8,32 +8,56 @@
  * inside app-server. Session lifecycle lives in session.ts; this file is
  * wiring: process supervision, the thread, and the WebSocket.
  */
-import { mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { stateDirectory } from "../paths.ts";
+import { stateDirectory, tokenPath } from "../paths.ts";
 import {
   CLOSE_BUSY,
+  CLOSE_UNAUTHORIZED,
   PROTOCOL_VERSION,
   parseClientMessage,
   type ServerMessage,
 } from "../protocol.ts";
 import { AppServer, AppServerError } from "./appserver.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
+import { gateRequest, tokenMatches } from "./gate.ts";
 import { realtimeParams, threadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
+
+type ClientSocket = ServerWebSocket<{ authorized: boolean }>;
 
 const RESTART_BACKOFF_INITIAL_MS = 500;
 const RESTART_BACKOFF_CAP_MS = 30_000;
 const HEALTHY_UPTIME_MS = 60_000;
 const SHUTDOWN_STOP_TIMEOUT_MS = 1_500;
 
+/**
+ * Persisted rather than per-run so the client can outlive server restarts and
+ * a remote client only ever copies it once. 0600 makes file permissions the
+ * boundary between local users.
+ */
+function loadOrCreateToken(path: string): string {
+  try {
+    const existing = readFileSync(path, "utf8").trim();
+    if (existing.length > 0) return existing;
+  } catch {
+    // fall through to create
+  }
+  const token = randomBytes(32).toString("hex");
+  writeFileSync(path, `${token}\n`, { mode: 0o600 });
+  return token;
+}
+
 export async function runServer(config: ServerConfig, version: string): Promise<void> {
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
   mkdirSync(config.orchestrator.workspace, { recursive: true, mode: 0o700 });
+  const tokenFile = tokenPath(process.env, homedir());
+  const token = loadOrCreateToken(tokenFile);
 
   // Read once at boot: prompts prime each agent identically for every thread
   // and every voice session of this run.
@@ -48,7 +72,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   let appServer: AppServer | null = null;
   let threadId: string | null = null;
   let threadReady = false;
-  let client: ServerWebSocket<undefined> | null = null;
+  let client: ClientSocket | null = null;
   let restartFailures = 0;
   let shuttingDown = false;
 
@@ -219,13 +243,23 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   // Boot fails fast: the operator is present. Later child exits are supervised.
   await connectAppServer();
 
-  const httpServer = Bun.serve({
+  const httpServer = Bun.serve<{ authorized: boolean }>({
     hostname: "127.0.0.1",
     port: config.port,
     fetch(request, server) {
       const url = new URL(request.url);
+      const verdict = gateRequest(
+        request.headers.get("origin"),
+        request.headers.get("host"),
+        config.port,
+      );
+      if (!verdict.ok) return new Response(verdict.reason, { status: verdict.status });
       if (url.pathname === "/ws") {
-        return server.upgrade(request)
+        // A bad token still upgrades, then closes with 4401: a plain HTTP 401
+        // reaches the client as an anonymous handshake failure, the close code
+        // as a diagnosable error.
+        const authorized = tokenMatches(url.searchParams.get("token"), token);
+        return server.upgrade(request, { data: { authorized } })
           ? undefined
           : new Response("websocket upgrade required", { status: 426 });
       }
@@ -244,7 +278,12 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       idleTimeout: 120,
       sendPings: true,
       maxPayloadLength: 1 << 20,
-      open(ws: ServerWebSocket<undefined>) {
+      open(ws: ClientSocket) {
+        // Auth before busy: an unauthorized caller learns nothing about the slot.
+        if (!ws.data.authorized) {
+          ws.close(CLOSE_UNAUTHORIZED, "missing or wrong connection token");
+          return;
+        }
         if (client) {
           ws.close(CLOSE_BUSY, "another client is connected");
           return;
@@ -253,11 +292,11 @@ export async function runServer(config: ServerConfig, version: string): Promise<
         debugLog?.("client connected");
         sendReady();
       },
-      message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
+      message(ws: ClientSocket, raw: string | Buffer) {
         if (ws !== client) return;
         handleClientMessage(typeof raw === "string" ? raw : raw.toString());
       },
-      close(ws: ServerWebSocket<undefined>) {
+      close(ws: ClientSocket) {
         if (ws !== client) return;
         client = null;
         debugLog?.("client disconnected");
@@ -269,6 +308,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
   const { orchestrator, voice } = config;
   console.log(`agentvoicenext server listening on ws://127.0.0.1:${config.port}/ws`);
+  console.log(`  token           ${tokenFile}`);
   console.log(`  workspace       ${orchestrator.workspace}`);
   console.log(`  thread          ${threadId}`);
   console.log(

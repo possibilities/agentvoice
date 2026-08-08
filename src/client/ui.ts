@@ -5,7 +5,7 @@
  * example.
  */
 
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,18 +15,29 @@ import {
   type ParsedKey,
   TextRenderable,
 } from "@opentui/core";
-import { stateDirectory } from "../paths.ts";
+import { stateDirectory, tokenPath } from "../paths.ts";
 import { resolvePlaybackCommand, VoiceAudio } from "./audio.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
 export interface ClientConfig {
   url: string;
+  /** Connection token; defaults to the server-written token file. */
+  token?: string;
   deviceIndex?: number;
   debug: boolean;
 }
 
 export class ClientError extends Error {}
+
+function readTokenFile(): string | undefined {
+  try {
+    const token = readFileSync(tokenPath(process.env, homedir()), "utf8").trim();
+    return token.length > 0 ? token : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const PALETTE = {
   bg: "#0a0d13",
@@ -67,12 +78,20 @@ export async function runClient(config: ClientConfig): Promise<void> {
     );
   }
   let origin: string;
+  let wsUrl: string;
   try {
     const url = new URL(config.url);
     if (url.protocol !== "ws:" && url.protocol !== "wss:") {
       throw new Error(`unsupported protocol ${url.protocol}`);
     }
     origin = `${url.protocol === "wss:" ? "https:" : "http:"}//${url.host}/`;
+    // Missing token is not an error here: the server answers 4401 with a
+    // message that says what to do, and older servers ignore the parameter.
+    const token = config.token ?? readTokenFile();
+    if (token !== undefined && !url.searchParams.has("token")) {
+      url.searchParams.set("token", token);
+    }
+    wsUrl = url.toString();
   } catch (error) {
     throw new ClientError(
       `invalid --url ${JSON.stringify(config.url)}: ${error instanceof Error ? error.message : String(error)}`,
@@ -136,7 +155,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
   });
 
   const transport = new VoiceTransport({
-    url: config.url,
+    url: wsUrl,
     debug: debugLog,
     onPhase: (next) => {
       phase = next;
