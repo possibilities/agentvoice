@@ -15,14 +15,6 @@ const SILENCE_WARN_CHUNKS = 50;
 const MAX_PLAYBACK_RESTARTS = 3;
 /** A player alive this long proves health and resets the restart budget. */
 const PLAYER_HEALTHY_MS = 30_000;
-/**
- * Sustained backpressure this long means the player is no longer consuming at
- * realtime — the output device changed format underneath it (the Bluetooth
- * profile flip) or sox wedged. A fresh player opens the device as it now is.
- */
-const PLAYER_STALL_MS = 1_000;
-/** Pause between a player death and the next spawn attempt. */
-const PLAYER_RESPAWN_COOLDOWN_MS = 1_000;
 
 export interface VoiceAudioOptions {
   deviceIndex?: number;
@@ -66,7 +58,7 @@ export function sharedDeviceWarning(
   const hint = alternative
     ? `; try another mic, e.g. --device ${alternative.index} (${alternative.name.trim()})`
     : "";
-  return `mic and speakers are the same device (${capture.name.trim()}) — a Bluetooth headset drops to phone quality while its mic is open, and playback may briefly stall when the profile flips${hint}`;
+  return `mic and speakers are the same device (${capture.name.trim()}) — a Bluetooth headset drops to telephone quality and may go silent while its mic is open${hint}`;
 }
 
 /** Argv for a raw-PCM playback child, or null when sox is not installed. */
@@ -118,11 +110,7 @@ export class VoiceAudio {
   private encoder: OpusScript | null = null;
   private decoder: OpusScript | null = null;
   private player: Subprocess<"pipe", "ignore", "ignore"> | null = null;
-  private playerArgv: string[] | null = null;
   private playerRestarts = 0;
-  private playerCooldownUntil = 0;
-  /** Wall-clock start of the current backpressure episode, null when flowing. */
-  private stallSince: number | null = null;
   private remoteSubscription: { unSubscribe(): void } | null = null;
   private remoteGeneration = 0;
   private silentChunks = 0;
@@ -150,10 +138,7 @@ export class VoiceAudio {
     }
     this.encoder = new OpusScript(SAMPLE_RATE, 1, OpusScript.Application.VOIP);
     this.decoder = new OpusScript(SAMPLE_RATE, 2, OpusScript.Application.VOIP);
-    // The player spawns lazily on first agent audio: opening the output device
-    // before capture invites the Bluetooth profile flip to reconfigure the
-    // device underneath an already-playing stream.
-    this.playerArgv = argv;
+    this.spawnPlayer(argv);
 
     this.engine = Audio.create({ sampleRate: SAMPLE_RATE, playbackChannels: 2 });
     if (this.options.deviceIndex !== undefined) {
@@ -235,29 +220,23 @@ export class VoiceAudio {
 
   // -------------------------------------------------------------------------
 
-  /** Spawn the playback child if none is running and the budget allows it. */
-  private maybeSpawnPlayer(): void {
-    const argv = this.playerArgv;
-    if (!argv || this.player || this.stopped) return;
-    if (this.playerRestarts >= MAX_PLAYBACK_RESTARTS) return;
-    if (Date.now() < this.playerCooldownUntil) return;
+  private spawnPlayer(argv: string[]): void {
     const spawnedAt = Date.now();
-    this.stallSince = null;
     const player = Bun.spawn(argv, { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
     this.player = player;
     void player.exited.then(() => {
       if (this.stopped || this.player !== player) return;
       this.player = null;
-      this.stallSince = null;
-      this.playerCooldownUntil = Date.now() + PLAYER_RESPAWN_COOLDOWN_MS;
       if (Date.now() - spawnedAt > PLAYER_HEALTHY_MS) this.playerRestarts = 0;
+      if (this.playerRestarts >= MAX_PLAYBACK_RESTARTS) {
+        this.options.onWarning("speaker playback keeps failing — audio output disabled");
+        return;
+      }
       this.playerRestarts++;
-      // The next downlink chunk respawns it; no timer needed.
-      this.options.onWarning(
-        this.playerRestarts >= MAX_PLAYBACK_RESTARTS
-          ? "speaker playback keeps failing — audio output disabled"
-          : "speaker playback stalled or exited; restarting",
-      );
+      this.options.onWarning("speaker playback process exited; restarting");
+      setTimeout(() => {
+        if (!this.stopped) this.spawnPlayer(argv);
+      }, 1_000);
     });
   }
 
@@ -326,29 +305,11 @@ export class VoiceAudio {
     }
     this.options.onAgentLevel(rmsDbS16(pcm));
     if (this.speakerMuted) return;
-    this.maybeSpawnPlayer();
     const player = this.player;
     if (!player) return;
-    if (this.stallSince !== null) {
-      // Late audio is worthless: drop chunks rather than queue them while the
-      // pipe is blocked, and give up on a player that stays blocked.
-      if (Date.now() - this.stallSince >= PLAYER_STALL_MS) player.kill("SIGKILL");
-      return;
-    }
     try {
-      // Both calls return a Promise instead of a number near child death; an
-      // unattached rejection (EPIPE) would crash the client.
-      const wrote = player.stdin.write(pcm);
-      if (wrote instanceof Promise) wrote.catch(() => {});
-      const flushed = player.stdin.flush();
-      if (flushed instanceof Promise) {
-        this.stallSince = Date.now();
-        flushed
-          .then(() => {
-            if (this.player === player) this.stallSince = null;
-          })
-          .catch(() => {});
-      }
+      player.stdin.write(pcm);
+      player.stdin.flush();
     } catch {
       // the exit handler restarts the child; drop this chunk
     }
