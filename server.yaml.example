@@ -31,9 +31,12 @@
 #
 # Two cautions:
 #   - ORCHESTRATOR_BASE.md replaces codex's entire system prompt, including its
-#     tool discipline. The server warns at boot when it is present.
-#   - ORCHESTRATOR_SESSION_START.md is re-sent on every redial — renewal near
-#     the ~60-minute ceiling, every recovery, every manual `r`. Keep it short.
+#     tool discipline, and silently disables `personality`. The server warns at
+#     boot when it is present.
+#   - ORCHESTRATOR_SESSION_START.md rides on every redial, but codex delivers
+#     it to the orchestrator only when a session opens after being closed (not
+#     on renewals) — and repeats it after every compaction while a session is
+#     live. Keep it short. Verified semantics: docs/field-guide.md.
 #
 # Seed files are sent in fixed developer → user → assistant order, one item
 # each. For interleaving or repeats, use voice.extra.initialItems.
@@ -52,7 +55,9 @@
 # orchestrator:
 #   workspace: ~/.local/state/agentvoicenext/workspace
 #                                  # the agent's cwd; AGENTS.md here applies
-#   model: gpt-5.3-codex           # default: codex config
+#   model: gpt-5.6-sol             # default: codex config. Mind the auth class:
+#                                  # codex-branded models (gpt-5.3-codex …) are
+#                                  # rejected on ChatGPT-account auth
 #   effort: high                   # none…ultra; sugar for model_reasoning_effort
 #   personality: pragmatic         # none | friendly | pragmatic
 #
@@ -84,10 +89,11 @@
 # ---------------------------------------------------------------------------
 
 # voice:
-#   model: gpt-realtime            # default: codex config
-#   name: marin                    # timbre: alloy arbor ash ballad breeze cedar
-#                                  # coral cove echo ember juniper maple marin
-#                                  # sage shimmer sol spruce vale verse
+#   model: gpt-live-1-boulder-alpha  # default: codex config / upstream
+#   name: cove                     # v3 timbres: arbor breeze cove ember juniper
+#                                  # maple sol spruce vale. (alloy ash ballad
+#                                  # cedar coral echo marin sage shimmer verse
+#                                  # are v2-only and REJECTED under v3)
 #   version: v3                    # v1 | v2 | v3. agentvoicenext defaults to v3
 #                                  # rather than codex's config: seed items are
 #                                  # v3-only and the verified session semantics

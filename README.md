@@ -34,7 +34,7 @@ bun run setup                        # one-time: verifies bun/codex, installs so
 bun run native:build                 # build the opt-in duplex audio device
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
-bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
+bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 ```
 
 ### A global `agentvoicenext`
@@ -78,6 +78,11 @@ Precedence: **CLI > file > default**. An option left unset is not sent to codex
 at all, so your `~/.codex/config.toml` applies — the defaults add no opinions
 of their own.
 
+This section is the surface; **[the agent priming field
+guide](docs/field-guide.md)** is the depth — every lever that shapes either
+agent's behavior, verified against codex 0.147 source and live probes, with
+compaction and restart semantics, gotchas, and recipes.
+
 **[`server.yaml.example`](server.yaml.example) is the complete surface**, every
 key documented and commented out. Copying it verbatim behaves exactly like
 having no config file:
@@ -93,7 +98,7 @@ port: 7890
 
 orchestrator:                    # the Codex thread that does the work
   workspace: ~/projects/sandbox
-  model: gpt-5.3-codex
+  model: gpt-5.6-sol
   effort: high
   personality: pragmatic
   sandbox: danger-full-access
@@ -102,8 +107,7 @@ orchestrator:                    # the Codex thread that does the work
   extra: {}                      # raw thread/start passthrough
 
 voice:                           # the realtime model you talk to
-  model: gpt-realtime
-  name: marin
+  name: cove
   version: v3
   include-startup-context: false
   extra: {}                      # raw thread/realtime/start passthrough
@@ -111,8 +115,9 @@ voice:                           # the realtime model you talk to
 
 Each `extra:` block is merged last into its RPC, so anything the protocol
 accepts but this config does not name yet is still reachable — useful because
-the realtime surface is experimental upstream. Typos there surface as RPC
-errors at boot rather than config errors.
+the realtime surface is experimental upstream. Beware: upstream ignores
+unknown fields rather than rejecting them, so a typo in `extra:` is silently
+dropped — verify against a `--debug` frame when a knob seems dead.
 
 ### Prompts
 
@@ -143,9 +148,13 @@ server prints which prompt files it found at boot, and the client shows the
 count in its session panel.
 
 Two cautions. `ORCHESTRATOR_BASE.md` replaces codex's *entire* system prompt
-including its tool discipline — the server warns at boot when it is present.
-And `ORCHESTRATOR_SESSION_START.md` is re-sent on **every** redial (renewal,
-recovery, and manual `r`), so keep it short.
+including its tool discipline — the server warns at boot when it is present
+(it also silently disables `orchestrator.personality`). And while
+`ORCHESTRATOR_SESSION_START.md` rides on **every** redial, codex delivers it
+to the orchestrator only when a voice session actually opens after being
+closed — not on renewals — and repeats it after every context compaction
+while a session is live, so keep it short. Details and verified semantics:
+[the field guide](docs/field-guide.md).
 
 ## Security posture
 

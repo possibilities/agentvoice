@@ -47,6 +47,31 @@ session inside app-server: the old session's control plane stops silently (no
 `closed` notification) and only its media path lingers. _Avoid_: "replace",
 "preempt".
 
+**Delegation** — The voice agent handing a user request to the orchestrator
+agent: in realtime v3 it is server-side wiring that lands in the thread as a
+`<realtime_delegation>` user turn. _Avoid_: "handoff" for this direction
+(reserved for orchestrator→voice output), "tool call".
+
+**Handoff** — Orchestrator output flowing back into the voice session as
+delegation context, shaped by `voice.codex-response-*` options and capped at
+~1,000 tokens per response. _Avoid_: "delegation" for this direction.
+
+**Startup context** — The `<startup_context>` block codex synthesizes into the
+voice agent's instructions at session start (current-thread tail, recent work
+across the machine, workspace map); the only cross-session voice memory.
+_Avoid_: "session memory", "context window".
+
+**Session-boundary instructions** — `ORCHESTRATOR_SESSION_START.md` /
+`ORCHESTRATOR_SESSION_END.md`: developer messages to the orchestrator wrapped
+in `<realtime_conversation>`, delivered on voice-session open/close
+transitions (not on renewals) and restated after compaction. _Avoid_: "session
+prompts".
+
+**Compaction** — Codex compressing the orchestrator thread's model-visible
+history (~90% of the context window; summary plus recent user messages).
+Base instructions are immune; developer instructions and AGENTS.md re-inject.
+The voice session is never told. _Avoid_: "summarization", "truncation".
+
 **Handshake gate** — The pure Origin/Host/token checks (`src/server/gate.ts`)
 every HTTP request passes before it can reach the WebSocket. _Avoid_: "auth
 middleware", "firewall".
