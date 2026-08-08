@@ -3,13 +3,14 @@
  * peer. Owns session lifecycle — offer/answer, renewal before the upstream
  * ceiling, reconnect with backoff, and manual redial — and hands audio to the
  * pipeline as opaque Opus frames.
+ *
+ * A redial is seamless-ish: the new peer negotiates while the old one keeps
+ * playing, and audio swaps when the new peer connects. (The server-side
+ * supersede kills the old session's control plane as soon as the new start is
+ * processed, so the old audio is a best-effort tail, not a guarantee.)
  */
-import {
-  MediaStreamTrack,
-  RTCPeerConnection,
-  RTCRtpCodecParameters,
-  RtpBuilder,
-} from "werift";
+import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters, RtpBuilder } from "werift";
+import { CLOSE_BUSY, parseServerMessage, type ReadyMessage } from "../protocol.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
 
 export type TransportPhase =
@@ -21,14 +22,7 @@ export type TransportPhase =
   | "failed"
   | "stopped";
 
-export interface ReadyInfo {
-  threadId: string;
-  workspace: string;
-  model: string | null;
-  effort: string | null;
-  voiceModel: string | null;
-  voice: string | null;
-}
+export type ReadyInfo = Omit<ReadyMessage, "type" | "protocol">;
 
 export interface TransportEvents {
   onPhase(phase: TransportPhase): void;
@@ -51,6 +45,7 @@ const RENEWAL_MS = 52 * 60_000;
 const NEGOTIATION_TIMEOUT_MS = 30_000;
 const RECONNECT_INITIAL_MS = 1_000;
 const RECONNECT_CAP_MS = 15_000;
+const RETRY_OFFER_MS = 1_000;
 /** Consecutive failed sessions before requiring a manual redial. */
 const MAX_RAPID_FAILURES = 3;
 /** A session live this long proves health and resets the failure budget. */
@@ -62,11 +57,12 @@ const OPUS = new RTCRtpCodecParameters({
   channels: 2,
 });
 
-interface Session {
+interface PeerSession {
   generation: number;
   pc: RTCPeerConnection;
   sendTrack: MediaStreamTrack;
   builder: RtpBuilder;
+  remoteTrack: MediaStreamTrack | null;
   connected: boolean;
   liveSince: number | null;
   timers: ReturnType<typeof setTimeout>[];
@@ -75,7 +71,10 @@ interface Session {
 export class VoiceTransport {
   private readonly options: VoiceTransportOptions;
   private ws: WebSocket | null = null;
-  private session: Session | null = null;
+  /** The session whose audio is flowing (or last was). */
+  private live: PeerSession | null = null;
+  /** A successor still negotiating; promoted to live when it connects. */
+  private pending: PeerSession | null = null;
   private generation = 0;
   private phase: TransportPhase = "connecting";
   private ready: ReadyInfo | null = null;
@@ -83,6 +82,7 @@ export class VoiceTransport {
   private rapidFailures = 0;
   private reconnectDelayMs = RECONNECT_INITIAL_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopping = false;
 
   constructor(options: VoiceTransportOptions) {
@@ -99,7 +99,7 @@ export class VoiceTransport {
 
   /** Milliseconds the current session has been live, or null. */
   get liveForMs(): number | null {
-    const since = this.session?.liveSince;
+    const since = this.live?.liveSince;
     return since ? Date.now() - since : null;
   }
 
@@ -113,22 +113,25 @@ export class VoiceTransport {
     this.openSocket();
   }
 
-  /** Manual or programmatic re-offer: fresh session, same conversation. */
+  /**
+   * Negotiate a replacement session; the current one keeps playing until the
+   * replacement connects. Manual (`r`), or automatic for renewal and retry.
+   */
   redial(reason: string): void {
     if (this.stopping) return;
     this.rapidFailures = 0;
     this.wantLive = true;
     this.options.onInfo(`redial (${reason})`);
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.teardownSession();
+    this.clearTimer("retryTimer");
     if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
-      void this.startSession();
+      this.negotiate();
       return;
     }
     if (!this.ws || this.ws.readyState > WebSocket.OPEN) {
       // The socket itself is gone — e.g. this client was rejected with 4429
       // while another client held the server. Reopen it; the next `ready`
       // re-offers because wantLive is set.
+      this.clearTimer("reconnectTimer");
       this.reconnectDelayMs = RECONNECT_INITIAL_MS;
       this.openSocket();
     }
@@ -136,10 +139,10 @@ export class VoiceTransport {
   }
 
   sendOpusFrame(frame: Buffer): void {
-    const session = this.session;
-    if (!session || !session.connected) return;
+    const live = this.live;
+    if (!live?.connected) return;
     try {
-      session.sendTrack.writeRtp(session.builder.create(frame));
+      live.sendTrack.writeRtp(live.builder.create(frame));
     } catch (error) {
       this.debug(`writeRtp failed: ${message(error)}`);
     }
@@ -147,8 +150,9 @@ export class VoiceTransport {
 
   async stop(): Promise<void> {
     this.stopping = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.teardownSession();
+    this.clearTimer("reconnectTimer");
+    this.clearTimer("retryTimer");
+    this.dropPeers();
     const ws = this.ws;
     this.ws = null;
     if (ws && ws.readyState <= WebSocket.OPEN) ws.close(1000, "client quit");
@@ -165,6 +169,12 @@ export class VoiceTransport {
 
   private debug(line: string): void {
     this.options.debug?.(line);
+  }
+
+  private clearTimer(name: "reconnectTimer" | "retryTimer"): void {
+    const timer = this[name];
+    if (timer) clearTimeout(timer);
+    this[name] = null;
   }
 
   private openSocket(): void {
@@ -186,15 +196,13 @@ export class VoiceTransport {
       if (this.ws !== ws || this.stopping) return;
       this.ws = null;
       this.ready = null;
-      this.teardownSession();
-      if (event.code === 4429) {
+      this.dropPeers();
+      if (event.code === CLOSE_BUSY) {
         this.options.onError("another client is connected to the server");
         this.setPhase("failed");
         return;
       }
-      this.options.onInfo(
-        `server connection lost (${event.code}); reconnecting`,
-      );
+      this.options.onInfo(`server connection lost (${event.code}); reconnecting`);
       this.setPhase("reconnecting");
       this.reconnectTimer = setTimeout(() => this.openSocket(), this.reconnectDelayMs);
       this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, RECONNECT_CAP_MS);
@@ -205,100 +213,97 @@ export class VoiceTransport {
   }
 
   private async handleServerMessage(text: string): Promise<void> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      this.debug(`unparseable server message: ${text.slice(0, 120)}`);
+    const msg = parseServerMessage(text);
+    if (!msg) {
+      this.debug(`unrecognized server message: ${text.slice(0, 120)}`);
       return;
     }
-    const msg = parsed as Record<string, unknown>;
-    switch (msg["type"]) {
+    switch (msg.type) {
       case "ready": {
-        this.ready = {
-          threadId: String(msg["threadId"] ?? ""),
-          workspace: String(msg["workspace"] ?? ""),
-          model: (msg["model"] as string | null) ?? null,
-          effort: (msg["effort"] as string | null) ?? null,
-          voiceModel: (msg["voiceModel"] as string | null) ?? null,
-          voice: (msg["voice"] as string | null) ?? null,
-        };
-        this.options.onReady(this.ready);
-        this.debug(`ready: thread ${this.ready.threadId}`);
-        if (this.wantLive && !this.session) {
+        const { type: _type, protocol: _protocol, ...info } = msg;
+        this.ready = info;
+        this.options.onReady(info);
+        this.debug(`ready: thread ${info.threadId}`);
+        if (this.wantLive && !this.live && !this.pending) {
           if (this.rapidFailures >= MAX_RAPID_FAILURES) {
-            this.options.onError(
-              "voice failed repeatedly — press r to redial when ready",
-            );
+            this.options.onError("voice failed repeatedly — press r to redial when ready");
             this.setPhase("failed");
           } else {
-            void this.startSession();
+            this.negotiate();
           }
         }
         return;
       }
       case "answer": {
-        const session = this.session;
-        const sdp = msg["sdp"];
-        if (!session || typeof sdp !== "string") return;
+        const pending = this.pending;
+        if (!pending) {
+          this.debug("dropping answer with no pending session");
+          return;
+        }
         try {
-          await session.pc.setRemoteDescription({ type: "answer", sdp });
+          await pending.pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
           this.debug("answer applied");
         } catch (error) {
-          this.failSession(session, `answer rejected: ${message(error)}`);
+          this.failPending(pending, `answer rejected: ${message(error)}`);
         }
         return;
       }
       case "closed": {
-        const reason = typeof msg["reason"] === "string" ? msg["reason"] : "server closed the session";
-        this.options.onInfo(`voice session closed: ${reason}`);
-        this.teardownSession();
+        this.options.onInfo(`voice session closed: ${msg.reason ?? "server closed the session"}`);
+        const live = this.live;
+        this.live = null;
+        if (live) this.closePeer(live);
+        if (!this.pending) {
+          this.setPhase(this.ws?.readyState === WebSocket.OPEN ? "waiting-ready" : this.phase);
+        }
         // The server re-sends `ready` when offers reopen; wantLive re-offers.
         return;
       }
       case "error": {
-        const text = typeof msg["message"] === "string" ? msg["message"] : "unknown server error";
-        if (msg["fatal"] === true) {
-          const session = this.session;
-          if (session) this.failSession(session, text);
-          else this.options.onError(text);
-        } else {
-          this.options.onInfo(`server: ${text}`);
+        if (!msg.fatal) {
+          this.options.onInfo(`server: ${msg.message}`);
+          return;
         }
+        const pending = this.pending;
+        const live = this.live;
+        if (pending) this.failPending(pending, msg.message);
+        else if (live) this.failLive(live, msg.message);
+        else this.options.onError(msg.message);
         return;
       }
-      default:
-        this.debug(`unknown server message type: ${String(msg["type"])}`);
     }
   }
 
-  private async startSession(): Promise<void> {
-    if (this.stopping || this.session) return;
+  private negotiate(): void {
+    if (this.stopping) return;
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const stale = this.pending;
+    this.pending = null;
+    if (stale) this.closePeer(stale);
 
     const generation = ++this.generation;
     const pc = new RTCPeerConnection({ codecs: { audio: [OPUS] } });
     const sendTrack = new MediaStreamTrack({ kind: "audio" });
-    const session: Session = {
+    const session: PeerSession = {
       generation,
       pc,
       sendTrack,
       builder: new RtpBuilder({ between: 20, clockRate: SAMPLE_RATE }),
+      remoteTrack: null,
       connected: false,
       liveSince: null,
       timers: [],
     };
-    this.session = session;
-    this.setPhase("negotiating");
+    this.pending = session;
+    if (!this.live) this.setPhase("negotiating");
 
     pc.addTransceiver(sendTrack, { direction: "sendrecv" });
     const dc = pc.createDataChannel("oai-events");
     dc.onmessage = (event) => {
-      if (this.session?.generation !== generation) return;
+      if (this.pending !== session && this.live !== session) return;
       const data = (event as { data?: unknown }).data ?? event;
-      const text =
-        typeof data === "string" ? data : new TextDecoder().decode(data as Uint8Array);
+      const text = typeof data === "string" ? data : new TextDecoder().decode(data as Uint8Array);
       try {
         this.options.onOaiEvent(JSON.parse(text) as Record<string, unknown>);
       } catch {
@@ -307,94 +312,131 @@ export class VoiceTransport {
     };
 
     pc.onTrack.subscribe((track) => {
-      if (this.session?.generation !== generation) return;
       if (track.kind !== "audio") return;
-      this.options.onRemoteTrack(track);
+      session.remoteTrack = track;
+      // Held until this session is promoted; the old session's audio keeps
+      // playing through negotiation.
+      if (this.live === session) this.options.onRemoteTrack(track);
     });
 
     pc.connectionStateChange.subscribe((state) => {
-      if (this.session?.generation !== generation) return;
-      this.debug(`peer connection ${state}`);
+      if (this.stopping) return;
+      this.debug(`peer ${generation} connection ${state}`);
       if (state === "connected") {
-        session.connected = true;
-        session.liveSince = Date.now();
-        this.setPhase("live");
-        this.options.onInfo("voice connected");
-        const renewTimer = setTimeout(() => {
-          if (this.session?.generation !== generation) return;
-          this.redial("renewal");
-        }, RENEWAL_MS);
-        session.timers.push(renewTimer);
-        const healthTimer = setTimeout(() => {
-          if (this.session?.generation !== generation) return;
-          this.rapidFailures = 0;
-        }, HEALTHY_SESSION_MS);
-        session.timers.push(healthTimer);
+        if (this.pending === session) this.promote(session);
       } else if (state === "failed" || state === "closed") {
-        if (this.session?.generation === generation) {
-          this.failSession(session, `media path ${state}`);
-        }
+        if (this.pending === session) this.failPending(session, `media path ${state}`);
+        else if (this.live === session) this.failLive(session, `media path ${state}`);
       }
     });
 
-    const negotiationTimer = setTimeout(() => {
-      if (this.session?.generation !== generation || session.connected) return;
-      this.failSession(session, "voice negotiation timed out");
-    }, NEGOTIATION_TIMEOUT_MS);
-    session.timers.push(negotiationTimer);
+    session.timers.push(
+      setTimeout(() => {
+        if (this.pending === session && !session.connected) {
+          this.failPending(session, "voice negotiation timed out");
+        }
+      }, NEGOTIATION_TIMEOUT_MS),
+    );
 
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      const sdp = pc.localDescription?.sdp;
-      if (!sdp) throw new Error("no local description after gathering");
-      if (this.session?.generation !== generation) return;
-      ws.send(JSON.stringify({ type: "offer", sdp }));
-      this.debug("offer sent");
-    } catch (error) {
-      this.failSession(session, `offer failed: ${message(error)}`);
-    }
+    void (async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const sdp = pc.localDescription?.sdp;
+        if (!sdp) throw new Error("no local description after gathering");
+        if (this.pending !== session) return;
+        ws.send(JSON.stringify({ type: "offer", sdp }));
+        this.debug(`offer sent (generation ${generation})`);
+      } catch (error) {
+        this.failPending(session, `offer failed: ${message(error)}`);
+      }
+    })();
   }
 
-  /** Session-scoped failure: tear down, count it, and re-offer if budget allows. */
-  private failSession(session: Session, reason: string): void {
-    if (this.session?.generation !== session.generation) return;
+  /** The successor connected: swap audio to it and retire the predecessor. */
+  private promote(session: PeerSession): void {
+    this.pending = null;
+    const previous = this.live;
+    this.live = session;
+    session.connected = true;
+    session.liveSince = Date.now();
+    if (previous) this.closePeer(previous);
+    if (session.remoteTrack) this.options.onRemoteTrack(session.remoteTrack);
+    this.setPhase("live");
+    this.options.onInfo(previous ? "voice session renewed" : "voice connected");
+    session.timers.push(
+      setTimeout(() => {
+        if (this.live === session) this.redial("renewal");
+      }, RENEWAL_MS),
+    );
+    session.timers.push(
+      setTimeout(() => {
+        if (this.live === session) this.rapidFailures = 0;
+      }, HEALTHY_SESSION_MS),
+    );
+  }
+
+  private failPending(session: PeerSession, reason: string): void {
+    if (this.pending !== session) return;
+    this.pending = null;
+    this.closePeer(session);
+    this.options.onError(`voice: ${reason}`);
+    this.rapidFailures++;
+    this.afterFailure();
+  }
+
+  private failLive(session: PeerSession, reason: string): void {
+    if (this.live !== session) return;
     const wasHealthy =
       session.liveSince !== null && Date.now() - session.liveSince > HEALTHY_SESSION_MS;
+    this.live = null;
+    this.closePeer(session);
     this.options.onError(`voice: ${reason}`);
-    this.teardownSession();
+    if (this.pending) return; // a successor is already negotiating
     this.rapidFailures = wasHealthy ? 1 : this.rapidFailures + 1;
+    this.afterFailure();
+  }
+
+  /** Shared failure tail: give up at the budget, otherwise re-offer shortly. */
+  private afterFailure(): void {
     if (this.rapidFailures >= MAX_RAPID_FAILURES) {
       this.options.onError("voice failed repeatedly — press r to redial");
+      // Repeated supersede attempts have killed the old session's control
+      // plane server-side; don't pretend it is still live.
+      this.dropPeers();
       this.setPhase("failed");
       return;
     }
-    // A fatal error or media failure leaves the server ready for a new offer;
-    // it re-sends `ready`, and wantLive re-offers there. For local media
-    // failures with no server event, offer again directly.
+    if (!this.live) {
+      this.setPhase(this.ws?.readyState === WebSocket.OPEN ? "waiting-ready" : this.phase);
+    }
     if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
-      const retryTimer = setTimeout(() => {
-        if (!this.session && this.wantLive) void this.startSession();
-      }, 1_000);
-      // Not session-scoped: session is already gone. Track for stop().
-      this.reconnectTimer = retryTimer;
+      this.clearTimer("retryTimer");
+      this.retryTimer = setTimeout(() => {
+        if (!this.stopping && this.wantLive && !this.pending) this.negotiate();
+      }, RETRY_OFFER_MS);
     }
   }
 
-  private teardownSession(): void {
-    const session = this.session;
-    if (!session) return;
-    this.session = null;
+  /** Detach both peers before closing them: pc.close() fires state changes
+   *  synchronously, and a still-attached session would re-enter the failure
+   *  paths. */
+  private dropPeers(): void {
+    const pending = this.pending;
+    const live = this.live;
+    this.pending = null;
+    this.live = null;
+    if (pending) this.closePeer(pending);
+    if (live) this.closePeer(live);
+  }
+
+  private closePeer(session: PeerSession): void {
     for (const timer of session.timers) clearTimeout(timer);
+    session.timers = [];
     try {
       void session.pc.close();
     } catch {
       // peer may already be closed
-    }
-    if (!this.stopping) {
-      this.setPhase(
-        this.ws?.readyState === WebSocket.OPEN ? "waiting-ready" : this.phase,
-      );
     }
   }
 }
