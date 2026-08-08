@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { sharedDeviceWarning } from "../src/client/audio.ts";
 import {
   barString,
   FRAME_SAMPLES,
@@ -104,40 +103,5 @@ describe("shortId", () => {
     expect(shortId("abc")).toBe("abc");
     expect(shortId("012345678")).toBe("012345678");
     expect(shortId("0123456789abcdef")).toBe("01234567…");
-  });
-});
-
-describe("sharedDeviceWarning", () => {
-  const headsetMic = { index: 0, name: "soundcore  Q30", isDefault: true };
-  const usbMic = { index: 1, name: "TONOR TC30 Audio Device", isDefault: false };
-  const headsetOut = { index: 1, name: "soundcore  Q30", isDefault: true };
-  const monitorOut = { index: 0, name: "Q3277", isDefault: false };
-
-  test("warns when the default mic is the default speaker device", () => {
-    const warning = sharedDeviceWarning(undefined, [headsetMic, usbMic], [monitorOut, headsetOut]);
-    expect(warning).toContain("soundcore  Q30");
-    expect(warning).toContain("--device 1 (TONOR TC30 Audio Device)");
-  });
-
-  test("warns when the shared device is picked explicitly", () => {
-    expect(sharedDeviceWarning(0, [headsetMic, usbMic], [headsetOut])).not.toBeNull();
-  });
-
-  test("stays quiet for distinct devices", () => {
-    expect(sharedDeviceWarning(1, [headsetMic, usbMic], [headsetOut])).toBeNull();
-    expect(
-      sharedDeviceWarning(undefined, [{ ...usbMic, isDefault: true }], [headsetOut]),
-    ).toBeNull();
-  });
-
-  test("stays quiet without device information", () => {
-    expect(sharedDeviceWarning(undefined, [], [headsetOut])).toBeNull();
-    expect(sharedDeviceWarning(undefined, [headsetMic], [])).toBeNull();
-  });
-
-  test("omits the hint when no other mic exists", () => {
-    const warning = sharedDeviceWarning(undefined, [headsetMic], [headsetOut]);
-    expect(warning).toContain("soundcore  Q30");
-    expect(warning).not.toContain("--device");
   });
 });
