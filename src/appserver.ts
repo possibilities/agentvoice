@@ -47,11 +47,7 @@ export function parseFrames(buffer: string): ParsedFrames {
   return { frames, rest };
 }
 
-export function frameRequest(
-  id: number,
-  method: string,
-  params: unknown,
-): string {
+export function frameRequest(id: number, method: string, params: unknown): string {
   return `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`;
 }
 
@@ -199,9 +195,7 @@ export class AppServer {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(
-          new AppServerError(`${method} timed out after ${timeoutMs}ms`, undefined, true),
-        );
+        reject(new AppServerError(`${method} timed out after ${timeoutMs}ms`, undefined, true));
       }, timeoutMs);
       this.pending.set(id, {
         resolve: resolve as (value: unknown) => void,
@@ -307,9 +301,7 @@ export class AppServer {
       if (!pending) return;
       this.pending.delete(id as number);
       clearTimeout(pending.timer);
-      const error = message["error"] as
-        | { code?: number; message?: string }
-        | undefined;
+      const error = message["error"] as { code?: number; message?: string } | undefined;
       if (error) {
         pending.reject(
           new AppServerError(
@@ -330,10 +322,7 @@ export class AppServer {
     }
 
     if (typeof method === "string") {
-      this.options.onNotification(
-        method,
-        (message["params"] ?? {}) as Record<string, unknown>,
-      );
+      this.options.onNotification(method, (message["params"] ?? {}) as Record<string, unknown>);
     }
   }
 
@@ -342,9 +331,7 @@ export class AppServer {
     this.child = null;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(
-        new AppServerError(`${pending.method}: app-server exited before responding`),
-      );
+      pending.reject(new AppServerError(`${pending.method}: app-server exited before responding`));
     }
     this.pending.clear();
     this.options.onExit({ code, expected });

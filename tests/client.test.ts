@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-  FRAME_SAMPLES,
-  SAMPLE_RATE,
   barString,
+  FRAME_SAMPLES,
   floatToS16,
   formatClock,
   levelFromDb,
   rmsDbFloat,
   rmsDbS16,
+  SAMPLE_RATE,
   shortId,
   sparkline,
 } from "../src/client/dsp.ts";

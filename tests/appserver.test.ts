@@ -60,9 +60,7 @@ describe("buildDenialResponse", () => {
     expect(buildDenialResponse("item/commandExecution/requestApproval")).toEqual({
       decision: "decline",
     });
-    expect(buildDenialResponse("execCommandApproval")).toHaveProperty(
-      "decision.denied",
-    );
+    expect(buildDenialResponse("execCommandApproval")).toHaveProperty("decision.denied");
     expect(buildDenialResponse("item/permissions/requestApproval")).toEqual({
       permissions: {},
       scope: "turn",

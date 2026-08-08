@@ -5,11 +5,7 @@
  */
 import { isAbsolute, join, resolve } from "node:path";
 
-export const SANDBOX_MODES = [
-  "read-only",
-  "workspace-write",
-  "danger-full-access",
-] as const;
+export const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"] as const;
 export const APPROVAL_POLICIES = ["never", "on-request", "untrusted"] as const;
 
 export type SandboxMode = (typeof SANDBOX_MODES)[number];
@@ -108,10 +104,7 @@ export function parseYamlConfig(text: string, source: string): ConfigValues {
   return values;
 }
 
-export async function loadConfigFile(
-  path: string,
-  explicit: boolean,
-): Promise<ConfigValues> {
+export async function loadConfigFile(path: string, explicit: boolean): Promise<ConfigValues> {
   const file = Bun.file(path);
   if (!(await file.exists())) {
     if (explicit) throw new ConfigError(`config file not found: ${path}`);
@@ -127,14 +120,11 @@ export function resolveConfig(
   home: string,
   debug = false,
 ): ServerConfig {
-  const pick = <K extends keyof ConfigValues>(key: K): ConfigValues[K] =>
-    cli[key] ?? file[key];
+  const pick = <K extends keyof ConfigValues>(key: K): ConfigValues[K] => cli[key] ?? file[key];
 
   const sandbox = pick("sandbox") ?? "danger-full-access";
   if (!(SANDBOX_MODES as readonly string[]).includes(sandbox)) {
-    throw new ConfigError(
-      `sandbox must be one of ${SANDBOX_MODES.join(", ")}; got "${sandbox}"`,
-    );
+    throw new ConfigError(`sandbox must be one of ${SANDBOX_MODES.join(", ")}; got "${sandbox}"`);
   }
   const approvalPolicy = pick("approval-policy") ?? "never";
   if (!(APPROVAL_POLICIES as readonly string[]).includes(approvalPolicy)) {
@@ -143,18 +133,12 @@ export function resolveConfig(
     );
   }
   const portRaw = pick("port") ?? 7890;
-  const port =
-    typeof portRaw === "number" ? portRaw : Number.parseInt(portRaw, 10);
+  const port = typeof portRaw === "number" ? portRaw : Number.parseInt(portRaw, 10);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new ConfigError(
-      `port must be an integer between 1 and 65535; got "${portRaw}"`,
-    );
+    throw new ConfigError(`port must be an integer between 1 and 65535; got "${portRaw}"`);
   }
   const workspace = resolve(
-    expandTilde(
-      pick("workspace") ?? join(stateDirectory(env, home), "workspace"),
-      home,
-    ),
+    expandTilde(pick("workspace") ?? join(stateDirectory(env, home), "workspace"), home),
   );
   const codex = expandTilde(pick("codex") ?? env["CODEX_PATH"] ?? "codex", home);
 

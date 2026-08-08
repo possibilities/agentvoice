@@ -17,9 +17,7 @@ describe("resolveConfig", () => {
     expect(config.port).toBe(7890);
     expect(config.sandbox).toBe("danger-full-access");
     expect(config.approvalPolicy).toBe("never");
-    expect(config.workspace).toBe(
-      "/home/tester/.local/state/agentvoicenext/workspace",
-    );
+    expect(config.workspace).toBe("/home/tester/.local/state/agentvoicenext/workspace");
     expect(config.codex).toBe("codex");
     expect(config.model).toBeUndefined();
     expect(config.effort).toBeUndefined();
@@ -49,27 +47,16 @@ describe("resolveConfig", () => {
   });
 
   test("expands tilde in workspace and codex paths", () => {
-    const config = resolveConfig(
-      { workspace: "~/w", codex: "~/bin/codex" },
-      {},
-      {},
-      HOME,
-    );
+    const config = resolveConfig({ workspace: "~/w", codex: "~/bin/codex" }, {}, {}, HOME);
     expect(config.workspace).toBe("/home/tester/w");
     expect(config.codex).toBe("/home/tester/bin/codex");
   });
 
   test("rejects invalid sandbox, approval policy, and port", () => {
-    expect(() => resolveConfig({ sandbox: "yolo" }, {}, {}, HOME)).toThrow(
-      ConfigError,
-    );
-    expect(() =>
-      resolveConfig({ "approval-policy": "always" }, {}, {}, HOME),
-    ).toThrow(ConfigError);
+    expect(() => resolveConfig({ sandbox: "yolo" }, {}, {}, HOME)).toThrow(ConfigError);
+    expect(() => resolveConfig({ "approval-policy": "always" }, {}, {}, HOME)).toThrow(ConfigError);
     expect(() => resolveConfig({ port: "0" }, {}, {}, HOME)).toThrow(ConfigError);
-    expect(() => resolveConfig({ port: "nope" }, {}, {}, HOME)).toThrow(
-      ConfigError,
-    );
+    expect(() => resolveConfig({ port: "nope" }, {}, {}, HOME)).toThrow(ConfigError);
   });
 });
 
@@ -92,12 +79,8 @@ describe("parseYamlConfig", () => {
   });
 
   test("rejects unknown keys and non-mapping documents", () => {
-    expect(() => parseYamlConfig("modle: typo\n", "server.yaml")).toThrow(
-      /unknown option "modle"/,
-    );
-    expect(() => parseYamlConfig("- a\n- b\n", "server.yaml")).toThrow(
-      ConfigError,
-    );
+    expect(() => parseYamlConfig("modle: typo\n", "server.yaml")).toThrow(/unknown option "modle"/);
+    expect(() => parseYamlConfig("- a\n- b\n", "server.yaml")).toThrow(ConfigError);
   });
 });
 
@@ -107,9 +90,7 @@ describe("paths", () => {
     expect(stateDirectory({ XDG_STATE_HOME: "relative" }, HOME)).toBe(
       "/home/tester/.local/state/agentvoicenext",
     );
-    expect(defaultConfigPath({}, HOME)).toBe(
-      "/home/tester/.config/agentvoicenext/server.yaml",
-    );
+    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoicenext/server.yaml");
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
       "/etc/xdg/agentvoicenext/server.yaml",
     );

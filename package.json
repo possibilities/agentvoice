@@ -13,9 +13,12 @@
     "setup": "bun run scripts/setup.ts",
     "cli:install": "bun run scripts/install.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check",
+    "format": "biome check --write"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
     "@types/bun": "latest",
     "typescript": "^5"
   },
