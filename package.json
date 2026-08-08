@@ -1,6 +1,11 @@
 {
   "name": "agentvoicenext",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/possibilities/agentvoicenext.git"
+  },
   "private": true,
   "type": "module",
   "description": "Minimal voice server over the Codex app-server realtime (WebRTC) surface.",
