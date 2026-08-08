@@ -207,7 +207,8 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
   Settings › Privacy & Security › Microphone, then fully restart it). If the
   mic delivers pure silence the client shows a warning naming this.
 - `--debug` writes `~/.local/state/agentvoicenext/client-debug.log` including
-  every upstream event.
+  audio-device inventory, decoded/playback cadence, sox's negotiated output
+  format and pipe backpressure, plus every upstream event.
 
 ## Client API
 
