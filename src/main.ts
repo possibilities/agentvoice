@@ -17,7 +17,15 @@ Usage:
   agentvoicenext server [options]   Start the voice server
   agentvoicenext client [options]   Open the terminal voice client
 
-Server options (the full surface lives in server.yaml; see server.yaml.example):
+Run \`agentvoicenext server --help\` or \`agentvoicenext client --help\` for options.
+`;
+
+const SERVER_USAGE = `agentvoicenext server — start the voice server
+
+Usage:
+  agentvoicenext server [options]
+
+Options (the full surface lives in server.yaml; see server.yaml.example):
   --config <path>          Config file (default: ~/.config/agentvoicenext/server.yaml)
   --model <id>             Orchestrator agent model (default: codex config)
   --effort <level>         Orchestrator agent reasoning effort (default: codex config)
@@ -36,15 +44,21 @@ Prompts are files in the config file's directory, all optional:
   VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
   ORCHESTRATOR.md, ORCHESTRATOR_BASE.md,               prime the orchestrator
   ORCHESTRATOR_SESSION_{START,END}.md                    agent
+`;
 
-Client options:
+const CLIENT_USAGE = `agentvoicenext client — open the terminal voice client
+
+Usage:
+  agentvoicenext client [options]
+
+Options:
   --url <ws-url>           Server WebSocket (default: ${DEFAULT_CLIENT_URL})
   --token <secret>         Connection token (default: the server-written token file
                            in the state directory)
   --device <index>         Microphone device index (default: system default)
   --debug                  Write a debug log to the state directory
 
-Keys in the client: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
+Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
 `;
 
 export interface FlagSpec {
@@ -132,7 +146,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): Parsed
 async function runServerCommand(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv, SERVER_FLAGS);
   if (parsed.help) {
-    console.log(USAGE);
+    console.log(SERVER_USAGE);
     return 0;
   }
   const home = homedir();
@@ -152,7 +166,7 @@ async function runServerCommand(argv: string[]): Promise<number> {
 async function runClientCommand(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv, CLIENT_FLAGS);
   if (parsed.help) {
-    console.log(USAGE);
+    console.log(CLIENT_USAGE);
     return 0;
   }
   let deviceIndex: number | undefined;
@@ -181,16 +195,23 @@ async function main(): Promise<number> {
     return command === undefined ? 2 : 0;
   }
 
-  try {
-    if (command === "server") return await runServerCommand(argv.slice(1));
-    if (command === "client") return await runClientCommand(argv.slice(1));
+  const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
+    server: { run: runServerCommand, usage: SERVER_USAGE },
+    client: { run: runClientCommand, usage: CLIENT_USAGE },
+  };
+  const entry = commands[command];
+  if (entry === undefined) {
     console.error(`unknown command "${command}"\n`);
     console.error(USAGE);
     return 2;
+  }
+
+  try {
+    return await entry.run(argv.slice(1));
   } catch (error) {
     if (error instanceof UsageError) {
       console.error(`${error.message}\n`);
-      console.error(USAGE);
+      console.error(entry.usage);
       return 2;
     }
     if (error instanceof ConfigError || error instanceof ClientError) {
