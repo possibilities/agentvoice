@@ -12,21 +12,16 @@ import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
-import { AppServer, AppServerError } from "./appserver.ts";
-import {
-  PROMPT_FILES,
-  promptFilenames,
-  readPrompts,
-  type ServerConfig,
-  stateDirectory,
-} from "./config.ts";
-import { realtimeParams, threadParams } from "./params.ts";
+import { stateDirectory } from "../paths.ts";
 import {
   CLOSE_BUSY,
   PROTOCOL_VERSION,
   parseClientMessage,
   type ServerMessage,
-} from "./protocol.ts";
+} from "../protocol.ts";
+import { AppServer, AppServerError } from "./appserver.ts";
+import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
+import { realtimeParams, threadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
 
 const RESTART_BACKOFF_INITIAL_MS = 500;

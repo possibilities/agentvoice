@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type VoiceSessionEffects, VoiceSessionManager } from "../src/session.ts";
+import { type VoiceSessionEffects, VoiceSessionManager } from "../src/server/session.ts";
 
 interface Call {
   kind: "answer" | "closed" | "failed" | "ready" | "start" | "stop";

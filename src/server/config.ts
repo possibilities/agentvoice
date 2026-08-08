@@ -11,7 +11,8 @@
  * Prose is never named here. Prompt files are discovered by convention next to
  * the config file; see PROMPT_FILES.
  */
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { defaultConfigPath, type Environ, expandTilde, stateDirectory } from "../paths.ts";
 
 export const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"] as const;
 export const APPROVAL_POLICIES = ["never", "on-request", "untrusted"] as const;
@@ -176,31 +177,7 @@ export const MOVED_KEYS: Readonly<Record<string, string>> = {
   "voice-model": "voice.model",
 };
 
-export type Environ = Record<string, string | undefined>;
-
 export class ConfigError extends Error {}
-
-// ---------------------------------------------------------------------------
-// Paths
-// ---------------------------------------------------------------------------
-
-export function stateDirectory(env: Environ, home: string): string {
-  const xdg = env["XDG_STATE_HOME"];
-  const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "state");
-  return join(base, "agentvoicenext");
-}
-
-export function defaultConfigPath(env: Environ, home: string): string {
-  const xdg = env["XDG_CONFIG_HOME"];
-  const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");
-  return join(base, "agentvoicenext", "server.yaml");
-}
-
-export function expandTilde(path: string, home: string): string {
-  if (path === "~") return home;
-  if (path.startsWith("~/")) return join(home, path.slice(2));
-  return path;
-}
 
 // ---------------------------------------------------------------------------
 // Prompt files — discovered by convention, never named in the config

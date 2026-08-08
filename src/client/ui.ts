@@ -15,7 +15,7 @@ import {
   type ParsedKey,
   TextRenderable,
 } from "@opentui/core";
-import { stateDirectory } from "../config.ts";
+import { stateDirectory } from "../paths.ts";
 import { resolvePlaybackCommand, VoiceAudio } from "./audio.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";

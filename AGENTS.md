@@ -15,25 +15,38 @@ terms in code, comments, and commit messages.
 
 ## Map
 
-- `src/main.ts` — CLI entry, flag parsing
-- `src/config.ts` — config resolution (CLI > `server.yaml` > default); unset
-  options are not sent to codex at all. Values nest under `orchestrator` and
-  `voice` by which agent they prime, not by which RPC carries them. Also owns
-  prompt-file discovery (`PROMPT_FILES`)
-- `src/params.ts` — pure config+prompts → `thread/start`, `thread/resume`, and
-  `thread/realtime/start` payloads; tested in `tests/params.test.ts`
-- `src/appserver.ts` — JSON-RPC over stdio to the app-server child; framing,
-  supervision, fail-closed denial of approval requests
-- `src/session.ts` — the voice-session state machine (supersede, attribution);
-  pure effects-injected logic, tested in `tests/session.test.ts`
+`src/` root is the shared surface — only what both sides need. Everything else
+belongs to exactly one side. Adding a root-level module is a claim that both
+the server and the client use it; if only one does, it goes in that directory.
+
+- `src/main.ts` — CLI entry, flag parsing; dispatches both commands
 - `src/protocol.ts` — client↔server wire messages; both sides import it
-- `src/server.ts` — wiring: process supervision, thread, WebSocket
+- `src/paths.ts` — XDG path resolution; the client needs the state directory
+- `src/server/`
+  - `config.ts` — config resolution (CLI > `server.yaml` > default); unset
+    options are not sent to codex at all. Values nest under `orchestrator` and
+    `voice` by which agent they prime, not by which RPC carries them. Also owns
+    prompt-file discovery (`PROMPT_FILES`)
+  - `params.ts` — pure config+prompts → `thread/start`, `thread/resume`, and
+    `thread/realtime/start` payloads; tested in `tests/params.test.ts`
+  - `appserver.ts` — JSON-RPC over stdio to the app-server child; framing,
+    supervision, fail-closed denial of approval requests
+  - `session.ts` — the voice-session state machine (supersede, attribution);
+    pure effects-injected logic, tested in `tests/session.test.ts`
+  - `server.ts` — wiring: process supervision, thread, WebSocket
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
   two-peer redial), `audio.ts` (mic capture → Opus; Opus → sox playback),
   `dsp.ts` (pure audio math, tested), `ui.ts` (OpenTUI console)
 - `server.yaml.example` — the whole config surface, every key commented out.
   Copying it verbatim must stay a no-op; a test asserts that. Add new keys here
   the same commit you add them to `config.ts`.
+
+**One `AGENTS.md`, at the root.** Codex loads only the chain from the project
+root down to the thread's cwd and never descends into subdirectories
+(`codex-rs/core/src/agents_md.rs`; confirmed on 0.147 with a two-level probe).
+Since codex runs here with cwd at the repo root, a `src/server/AGENTS.md` would
+be read *never* — it would rot unnoticed. This differs from Claude Code, which
+loads a subtree `CLAUDE.md` on demand when it reads files there.
 
 ## Upstream realtime semantics (verified against codex 0.147 source + probes)
 

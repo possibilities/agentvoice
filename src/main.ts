@@ -4,15 +4,9 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
 import { ClientError, runClient } from "./client/ui.ts";
-import {
-  ConfigError,
-  cliToConfigValues,
-  defaultConfigPath,
-  expandTilde,
-  loadConfigFile,
-  resolveConfig,
-} from "./config.ts";
-import { runServer } from "./server.ts";
+import { defaultConfigPath, expandTilde } from "./paths.ts";
+import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./server/config.ts";
+import { runServer } from "./server/server.ts";
 
 export const VERSION: string = packageJson.version;
 const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";

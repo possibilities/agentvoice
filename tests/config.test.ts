@@ -2,18 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseArgs, UsageError } from "../src/main.ts";
 import {
   ConfigError,
   cliToConfigValues,
-  defaultConfigPath,
-  expandTilde,
   parseYamlConfig,
   promptFilenames,
   readPrompts,
   resolveConfig,
-  stateDirectory,
-} from "../src/config.ts";
-import { parseArgs, UsageError } from "../src/main.ts";
+} from "../src/server/config.ts";
 
 const HOME = "/home/tester";
 
@@ -262,25 +259,6 @@ describe("prompt files", () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
-  });
-});
-
-describe("paths", () => {
-  test("stateDirectory and defaultConfigPath follow XDG with absolute overrides", () => {
-    expect(stateDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoicenext");
-    expect(stateDirectory({ XDG_STATE_HOME: "relative" }, HOME)).toBe(
-      "/home/tester/.local/state/agentvoicenext",
-    );
-    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoicenext/server.yaml");
-    expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
-      "/etc/xdg/agentvoicenext/server.yaml",
-    );
-  });
-
-  test("expandTilde only rewrites leading ~", () => {
-    expect(expandTilde("~", HOME)).toBe(HOME);
-    expect(expandTilde("~/x", HOME)).toBe("/home/tester/x");
-    expect(expandTilde("/a/~/b", HOME)).toBe("/a/~/b");
   });
 });
 

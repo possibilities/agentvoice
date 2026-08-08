@@ -6,7 +6,7 @@ import {
   frameResponse,
   parseFrames,
   spawnArgv,
-} from "../src/appserver.ts";
+} from "../src/server/appserver.ts";
 
 describe("parseFrames", () => {
   test("parses complete lines and keeps the partial tail", () => {
