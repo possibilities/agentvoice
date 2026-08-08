@@ -1,8 +1,8 @@
 /**
- * The voice server: one codex app-server child, one orchestrator thread, one
+ * The voice server: one codex app-server child, one orchestrator agent, one
  * WebSocket client, at most one realtime (WebRTC) voice session.
  *
- * The client's audio flows peer-to-peer to the voice model; this server only
+ * The client's audio flows peer-to-peer to the voice agent; this server only
  * coordinates: it relays the client's SDP offer into `thread/realtime/start`
  * and the answer back out. The voice↔orchestrator handoff happens entirely
  * inside app-server. Session lifecycle lives in session.ts; this file is
@@ -13,7 +13,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AppServer, AppServerError } from "./appserver.ts";
-import { type ServerConfig, stateDirectory } from "./config.ts";
+import {
+  PROMPT_FILES,
+  promptFilenames,
+  readPrompts,
+  type ServerConfig,
+  stateDirectory,
+} from "./config.ts";
+import { realtimeParams, threadParams } from "./params.ts";
 import {
   CLOSE_BUSY,
   PROTOCOL_VERSION,
@@ -31,7 +38,12 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
-  mkdirSync(config.workspace, { recursive: true, mode: 0o700 });
+  mkdirSync(config.orchestrator.workspace, { recursive: true, mode: 0o700 });
+
+  // Read once at boot: prompts prime each agent identically for every thread
+  // and every voice session of this run.
+  const prompts = await readPrompts(config.configDir);
+  const foundPrompts = promptFilenames(prompts);
 
   const debugLog = config.debug
     ? (line: string) =>
@@ -55,11 +67,12 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       type: "ready",
       protocol: PROTOCOL_VERSION,
       threadId,
-      workspace: config.workspace,
-      model: config.model ?? null,
-      effort: config.effort ?? null,
-      voiceModel: config.voiceModel ?? null,
-      voice: config.voice ?? null,
+      workspace: config.orchestrator.workspace,
+      model: config.orchestrator.model ?? null,
+      effort: config.orchestrator.effort ?? null,
+      voiceModel: config.voice.model ?? null,
+      voice: config.voice.name ?? null,
+      prompts: foundPrompts,
     });
   }
 
@@ -72,16 +85,12 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       if (!appServer || !threadId) {
         return Promise.reject(new AppServerError("app-server is not running"));
       }
-      const params: Record<string, unknown> = {
-        threadId,
-        realtimeSessionId,
-        version: "v3",
-        outputModality: "audio",
-        transport: { type: "webrtc", sdp },
-      };
-      if (config.voiceModel) params["model"] = config.voiceModel;
-      if (config.voice) params["voice"] = config.voice;
-      return appServer.request("thread/realtime/start", params).then(() => {});
+      return appServer
+        .request(
+          "thread/realtime/start",
+          realtimeParams(config, prompts, threadId, realtimeSessionId, sdp),
+        )
+        .then(() => {});
     },
     stopRealtime() {
       if (!appServer || !threadId) {
@@ -91,19 +100,6 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     },
     debug: debugLog,
   });
-
-  function threadOptions(): Record<string, unknown> {
-    const options: Record<string, unknown> = {
-      cwd: config.workspace,
-      approvalPolicy: config.approvalPolicy,
-      sandbox: config.sandbox,
-    };
-    if (config.model) options["model"] = config.model;
-    if (config.effort) {
-      options["config"] = { model_reasoning_effort: config.effort };
-    }
-    return options;
-  }
 
   function extractThreadId(result: unknown): string {
     const shape = result as { thread?: { id?: string }; threadId?: string };
@@ -119,7 +115,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
           await server.request("thread/resume", {
             threadId,
             excludeTurns: true,
-            ...threadOptions(),
+            ...threadParams(config, prompts, "resume"),
           }),
         );
       } catch (error) {
@@ -128,7 +124,9 @@ export async function runServer(config: ServerConfig, version: string): Promise<
         );
       }
     }
-    return extractThreadId(await server.request("thread/start", threadOptions()));
+    return extractThreadId(
+      await server.request("thread/start", threadParams(config, prompts, "start")),
+    );
   }
 
   async function connectAppServer(): Promise<void> {
@@ -185,7 +183,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     try {
       await connectAppServer();
       restartFailures = 0;
-      console.error("app-server restarted; orchestrator thread re-established");
+      console.error("app-server restarted; orchestrator agent re-established");
     } catch (error) {
       restartFailures++;
       const delay = Math.min(
@@ -215,7 +213,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       send({
         type: "error",
         code: "not-ready",
-        message: "no orchestrator thread yet; wait for ready",
+        message: "no orchestrator agent yet; wait for ready",
         fatal: false,
       });
       return;
@@ -274,14 +272,27 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   });
 
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
+  const { orchestrator, voice } = config;
   console.log(`agentvoicenext server listening on ws://127.0.0.1:${config.port}/ws`);
-  console.log(`  workspace       ${config.workspace}`);
+  console.log(`  workspace       ${orchestrator.workspace}`);
   console.log(`  thread          ${threadId}`);
-  console.log(`  model           ${orDefault(config.model)}  effort ${orDefault(config.effort)}`);
   console.log(
-    `  voice model     ${orDefault(config.voiceModel)}  voice ${config.voice ?? "(upstream default)"}`,
+    `  orchestrator    ${orDefault(orchestrator.model)}  effort ${orDefault(orchestrator.effort)}`,
   );
-  console.log(`  sandbox         ${config.sandbox}  approvals ${config.approvalPolicy}`);
+  console.log(
+    `  voice agent     ${orDefault(voice.model)}  voice ${voice.name ?? "(upstream default)"}`,
+  );
+  console.log(
+    `  sandbox         ${orchestrator.permissions ?? orchestrator.sandbox}  approvals ${orchestrator.approvalPolicy}`,
+  );
+  console.log(
+    `  prompts         ${foundPrompts.length > 0 ? foundPrompts.join(" ") : "(none)"}  in ${config.configDir}`,
+  );
+  if (prompts.orchestratorBaseInstructions !== undefined) {
+    console.error(
+      `warning: ${PROMPT_FILES.orchestratorBaseInstructions} replaces codex's entire system prompt, including its tool discipline`,
+    );
+  }
 
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;

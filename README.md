@@ -1,13 +1,17 @@
 # agentvoicenext
 
 Minimal voice system for Codex. `agentvoicenext server` spawns a `codex
-app-server`, opens one orchestrator thread in an agent-owned workspace, and
+app-server`, opens one **orchestrator agent** in an agent-owned workspace, and
 exposes a localhost WebSocket that lets a single voice client hold a
-full-duplex WebRTC voice conversation with that thread. `agentvoicenext client`
-is that client: a terminal UI with live meters, transcripts, and mute controls.
-Audio flows peer-to-peer between the client and the voice model; the
-voice↔agent handoff happens inside app-server. Uses your existing ChatGPT/Codex
-login — **no OpenAI API key**.
+full-duplex WebRTC voice conversation with it. `agentvoicenext client` is that
+client: a terminal UI with live meters, transcripts, and mute controls.
+
+There are two agents. The **voice agent** is the realtime speech model you
+actually talk to; the **orchestrator agent** is the Codex thread that does the
+work. Audio flows peer-to-peer between the client and the voice agent, and the
+handoff between the two agents happens inside app-server. Both can be primed —
+see [Configuration](#configuration). Uses your existing ChatGPT/Codex login —
+**no OpenAI API key**.
 
 ## Requirements
 
@@ -42,13 +46,16 @@ bun run cli:install
 agentvoicenext server
 ```
 
+Flags cover the handful of things worth changing per run; the full surface
+lives in the config file.
+
 | Flag | Default | Meaning |
 |---|---|---|
-| `--model <id>` | codex config | Orchestrator model — the agent that does the actual work |
-| `--effort <level>` | codex config | Orchestrator reasoning effort (`none…ultra`); think-time per turn |
-| `--voice-model <id>` | codex config | Realtime speech model — conversational front-end only |
+| `--model <id>` | codex config | Orchestrator agent model — the agent that does the actual work |
+| `--effort <level>` | codex config | Orchestrator agent reasoning effort (`none…ultra`); think-time per turn |
+| `--voice-model <id>` | codex config | Voice agent model — conversational front-end only |
 | `--voice <name>` | upstream | Voice timbre (e.g. `marin`, `cove`) |
-| `--workspace <dir>` | `~/.local/state/agentvoicenext/workspace` | Directory the agent operates in |
+| `--workspace <dir>` | `~/.local/state/agentvoicenext/workspace` | Directory the orchestrator agent operates in |
 | `--sandbox <mode>` | `danger-full-access` | `read-only` \| `workspace-write` \| `danger-full-access` |
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
 | `--port <n>` | `7890` | WebSocket port, bound to `127.0.0.1` only |
@@ -58,21 +65,79 @@ agentvoicenext server
 
 ## Configuration
 
-`$XDG_CONFIG_HOME/agentvoicenext/server.yaml` (default `~/.config/…`). Keys are
-the flag names. Precedence: **CLI > file > default**. An option left unset is
-not sent to codex at all, so your `~/.codex/config.toml` applies.
+`$XDG_CONFIG_HOME/agentvoicenext/server.yaml` (default `~/.config/…`).
+Precedence: **CLI > file > default**. An option left unset is not sent to codex
+at all, so your `~/.codex/config.toml` applies — the defaults add no opinions
+of their own.
+
+**[`server.yaml.example`](server.yaml.example) is the complete surface**, every
+key documented and commented out. Copying it verbatim behaves exactly like
+having no config file:
+
+```bash
+cp server.yaml.example ~/.config/agentvoicenext/server.yaml
+```
+
+Keys nest by which agent they prime, not by which call carries them:
 
 ```yaml
-model: gpt-5.3-codex
-effort: high
-voice-model: gpt-realtime
-voice: marin
-workspace: ~/projects/sandbox
-sandbox: danger-full-access
-approval-policy: never
 port: 7890
-codex: /usr/local/bin/codex
+
+orchestrator:                    # the Codex thread that does the work
+  workspace: ~/projects/sandbox
+  model: gpt-5.3-codex
+  effort: high
+  personality: pragmatic
+  sandbox: danger-full-access
+  approval-policy: never
+  config: {}                     # raw ~/.codex/config.toml overrides
+  extra: {}                      # raw thread/start passthrough
+
+voice:                           # the realtime model you talk to
+  model: gpt-realtime
+  name: marin
+  version: v3
+  include-startup-context: false
+  extra: {}                      # raw thread/realtime/start passthrough
 ```
+
+Each `extra:` block is merged last into its RPC, so anything the protocol
+accepts but this config does not name yet is still reachable — useful because
+the realtime surface is experimental upstream. Typos there surface as RPC
+errors at boot rather than config errors.
+
+### Prompts
+
+Prompt content is never named in the config. Files are found by convention in
+the config file's own directory, so `--config` relocates the whole bundle. All
+are optional, and **none exist by default, so nothing is injected**.
+
+| File | Primes | Effect |
+|---|---|---|
+| `VOICE.md` | voice agent | **Replaces** its system prompt |
+| `VOICE_SEED_DEVELOPER.md` | voice agent | Seeds the session as a `developer` item |
+| `VOICE_SEED_USER.md` | voice agent | … as a `user` item |
+| `VOICE_SEED_ASSISTANT.md` | voice agent | … as an `assistant` item (e.g. a greeting) |
+| `ORCHESTRATOR.md` | orchestrator agent | Appended to its instructions |
+| `ORCHESTRATOR_BASE.md` | orchestrator agent | **Replaces** its system prompt |
+| `ORCHESTRATOR_SESSION_START.md` | orchestrator agent | Told to it when voice opens |
+| `ORCHESTRATOR_SESSION_END.md` | orchestrator agent | … and when it closes |
+
+Three states, so you can strip a built-in prompt as well as replace it:
+
+- **absent** — codex's built-in prompt stands
+- **present, with content** — your text replaces or appends, per the table
+- **present, empty** — the field is sent empty, stripping the built-in prompt
+
+Seed files become `initialItems` in fixed developer → user → assistant order,
+one item each; for interleaving or repeats use `voice.extra.initialItems`. The
+server prints which prompt files it found at boot, and the client shows the
+count in its session panel.
+
+Two cautions. `ORCHESTRATOR_BASE.md` replaces codex's *entire* system prompt
+including its tool discipline — the server warns at boot when it is present.
+And `ORCHESTRATOR_SESSION_START.md` is re-sent on **every** redial (renewal,
+recovery, and manual `r`), so keep it short.
 
 ## Security posture
 
@@ -138,7 +203,7 @@ gets a non-fatal `error`.
 
 | Message | Shape | Meaning |
 |---|---|---|
-| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart). `null` fields mean "codex default". |
+| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart). `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
 | `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
 | `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |
@@ -168,10 +233,13 @@ gets a non-fatal `error`.
 
 ## State on disk
 
-- `~/.local/state/agentvoicenext/workspace` — default agent workspace.
+- `~/.local/state/agentvoicenext/workspace` — default orchestrator workspace.
+  An `AGENTS.md` here reaches the orchestrator agent the ordinary codex way.
 - `~/.local/state/agentvoicenext/app-server` — stable working directory for the
   app-server child process (it re-reads its own cwd on every thread start;
   leave it in place). `$XDG_STATE_HOME` is honored.
+- `~/.config/agentvoicenext/` — `server.yaml` and the prompt files beside it.
 
 Conversation state is in-memory per run: each server start opens a fresh
-orchestrator thread (surviving app-server restarts within the run).
+orchestrator agent (surviving app-server restarts within the run). Prompt files
+are read once at boot, so editing one takes effect on the next server start.

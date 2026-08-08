@@ -61,6 +61,8 @@ export interface ReadyMessage {
   effort: string | null;
   voiceModel: string | null;
   voice: string | null;
+  /** Prompt files the server found and is priming the agents with. */
+  prompts: string[];
 }
 
 export interface AnswerMessage {
@@ -112,6 +114,9 @@ export function parseServerMessage(text: string): ServerMessage | null {
         effort: (message["effort"] as string | null) ?? null,
         voiceModel: (message["voiceModel"] as string | null) ?? null,
         voice: (message["voice"] as string | null) ?? null,
+        prompts: Array.isArray(message["prompts"])
+          ? message["prompts"].filter((entry): entry is string => typeof entry === "string")
+          : [],
       };
     case "answer":
       return typeof message["sdp"] === "string" ? { type: "answer", sdp: message["sdp"] } : null;

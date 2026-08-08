@@ -1,0 +1,128 @@
+# agentvoicenext — server.yaml
+#
+#   cp server.yaml.example ~/.config/agentvoicenext/server.yaml
+#
+# Every key below is commented out on purpose: copying this file verbatim
+# behaves exactly like having no config file at all. An option left unset is
+# not sent to codex, so your ~/.codex/config.toml applies. The value shown
+# after each key is what codex does when you leave it alone.
+#
+# Precedence: CLI flag > this file > default.
+# Values are grouped by which agent they prime, not by which RPC carries them.
+#
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+# Prose is never named in this file. Prompt files are found by convention in
+# this file's own directory, so --config relocates the whole bundle. All are
+# optional and none exist by default, so nothing is injected.
+#
+#   VOICE.md                          REPLACES the voice agent's system prompt
+#   VOICE_SEED_DEVELOPER.md           seeds the voice session as a developer item
+#   VOICE_SEED_USER.md                  … as a user item
+#   VOICE_SEED_ASSISTANT.md             … as an assistant item (e.g. a greeting)
+#   ORCHESTRATOR.md                   appended to the orchestrator's instructions
+#   ORCHESTRATOR_BASE.md              REPLACES the orchestrator's system prompt
+#   ORCHESTRATOR_SESSION_START.md     told to the orchestrator when voice opens
+#   ORCHESTRATOR_SESSION_END.md         … and when it closes
+#
+# Absent leaves codex's built-in prompt in place. Present and non-empty uses
+# your text. Present but EMPTY strips the built-in prompt without replacing it.
+#
+# Two cautions:
+#   - ORCHESTRATOR_BASE.md replaces codex's entire system prompt, including its
+#     tool discipline. The server warns at boot when it is present.
+#   - ORCHESTRATOR_SESSION_START.md is re-sent on every redial — renewal near
+#     the ~60-minute ceiling, every recovery, every manual `r`. Keep it short.
+#
+# Seed files are sent in fixed developer → user → assistant order, one item
+# each. For interleaving or repeats, use voice.extra.initialItems.
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+
+# port: 7890                       # WebSocket port, bound to 127.0.0.1 only
+# codex: codex                     # codex binary; $CODEX_PATH is the fallback
+
+# ---------------------------------------------------------------------------
+# Orchestrator agent — the codex thread that does the actual work
+# ---------------------------------------------------------------------------
+
+# orchestrator:
+#   workspace: ~/.local/state/agentvoicenext/workspace
+#                                  # the agent's cwd; AGENTS.md here applies
+#   model: gpt-5.3-codex           # default: codex config
+#   effort: high                   # none…ultra; sugar for model_reasoning_effort
+#   personality: pragmatic         # none | friendly | pragmatic
+#
+#   sandbox: danger-full-access    # read-only | workspace-write | danger-full-access
+#   approval-policy: never         # never | on-request | untrusted
+#   approvals-reviewer: user       # user | auto_review | guardian_subagent
+#   permissions: <profile-id>      # named permission profile; NOT combinable
+#                                  # with `sandbox` — set one or the other
+#
+#   model-provider: openai         # default: codex config
+#   service-tier: default          # default: codex config
+#   ephemeral: false               # true leaves no persisted thread history
+#   history-mode: paginated        # legacy | paginated
+#   runtime-workspace-roots:       # replaces the thread's workspace roots
+#     - ~/projects/one
+#
+#   config:                        # raw ~/.codex/config.toml overrides, applied
+#                                  # to this thread only. An entry here beats
+#                                  # the `effort` shorthand above.
+#     model_reasoning_summary_format: experimental
+#
+#   extra: {}                      # raw thread/start passthrough, merged last.
+#                                  # Anything the protocol accepts but this file
+#                                  # does not name yet. Typos surface as RPC
+#                                  # errors at boot, not as config errors.
+
+# ---------------------------------------------------------------------------
+# Voice agent — the realtime speech model the user actually talks to
+# ---------------------------------------------------------------------------
+
+# voice:
+#   model: gpt-realtime            # default: codex config
+#   name: marin                    # timbre: alloy arbor ash ballad breeze cedar
+#                                  # coral cove echo ember juniper maple marin
+#                                  # sage shimmer sol spruce vale verse
+#   version: v3                    # v1 | v2 | v3. agentvoicenext defaults to v3
+#                                  # rather than codex's config: seed items are
+#                                  # v3-only and the verified session semantics
+#                                  # in AGENTS.md are v3's.
+#
+#   include-startup-context: true  # appends a synthesized <startup_context> to
+#                                  # the voice agent's instructions: current
+#                                  # thread, recent work across your other codex
+#                                  # threads, and a depth-2 workspace tree.
+#                                  # Worth false for an empty workspace.
+#
+#   delegation-ack-filler: true    # let the voice agent emit a filler ack while
+#                                  # the orchestrator works. Omitted keeps the
+#                                  # Realtime API's own behavior.
+#
+#   codex-response-handoff-mode: thinking      # thinking | commentary | bemTags
+#   codex-responses-as-items: false            # deliver orchestrator output as
+#                                              # conversation items
+#   codex-response-item-prefix: "…"            # prefix for those items
+#   codex-response-handoff-channel-prefixes:   # rename the bracketed channel
+#     final: ["[RESULT] "]                     # markers per channel
+#     analysis: ["[THINKING] "]
+#     commentary: ["[NOTE] "]
+#
+#   flush-transcript-tail-on-session-end: false
+#                                  # route any leftover transcript tail through
+#                                  # the orchestrator when the session ends
+#
+#   client-managed-handoffs: false # SHARP EDGE: true stops app-server from
+#                                  # forwarding orchestrator output to the voice
+#                                  # agent, expecting the client to append it
+#                                  # explicitly. agentvoicenext never does, so
+#                                  # true silently severs the two agents.
+#
+#   extra: {}                      # raw thread/realtime/start passthrough,
+#                                  # merged last. outputModality and transport
+#                                  # are owned by the server and belong here if
+#                                  # you ever need them.

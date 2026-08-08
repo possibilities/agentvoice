@@ -4,25 +4,36 @@
 speaks newline-delimited JSON-RPC to over stdio. _Avoid_: "codex process",
 "backend server".
 
-**Orchestrator thread** — The single Codex thread the server opens at boot; the
-agent that does the actual work. The voice session is layered onto this thread
-inside app-server. _Avoid_: "orchestrator agent", "conversation".
+**Orchestrator agent** — The agent that does the actual work: one Codex thread
+opened at boot, living in the workspace. The thread is its identity and its
+persistent state; the voice session is layered onto it inside app-server.
+_Avoid_: "orchestrator thread" for the actor, "conversation".
 
-**Voice session** — One realtime (WebRTC) session on the orchestrator thread,
-created per client offer and superseded by the next offer. _Avoid_: "call",
-"realtime conversation".
+**Voice agent** — The realtime speech model the user actually talks to. It
+holds the conversation and delegates execution to the orchestrator agent; the
+handoff between them happens inside app-server. _Avoid_: "voice model",
+"realtime model", "backend" (upstream's word for the orchestrator, not ours).
 
-**Workspace** — The directory the orchestrator thread operates in (codex thread
+**Voice session** — One realtime (WebRTC) session connecting the client to the
+voice agent, created per client offer and superseded by the next offer.
+_Avoid_: "call", "realtime conversation".
+
+**Prompt file** — A conventionally named `SHOUTCASE.md` in the config
+directory that primes one agent, discovered by name rather than referenced from
+`server.yaml`. Absent leaves codex's built-in prompt; empty strips it. _Avoid_:
+"system prompt" (ambiguous across the two agents).
+
+**Workspace** — The directory the orchestrator agent operates in (codex thread
 `cwd`); defaults to an agent-owned empty directory under the state dir.
 _Avoid_: "cwd" (reserved for the app-server child's own working directory).
 
 **Client** — The single WebSocket + WebRTC voice client. Audio flows
-client↔voice model peer-to-peer; only coordination flows through this server.
+client↔voice agent peer-to-peer; only coordination flows through this server.
 The bundled terminal client is `agentvoicenext client`. _Avoid_: "browser",
 "surface".
 
 **Redial** — Negotiating a replacement voice session against the same
-orchestrator thread while the current one keeps playing; audio swaps when the
+orchestrator agent while the current one keeps playing; audio swaps when the
 replacement connects. Manual (`r`), or automatic for renewal and recovery.
 _Avoid_: "reconnect" (reserved for the WebSocket).
 

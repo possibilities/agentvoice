@@ -1,6 +1,6 @@
 /**
  * The voice-session state machine: at most one realtime session on the
- * orchestrator thread, superseded by each new offer.
+ * orchestrator agent, superseded by each new offer.
  *
  * Built on verified codex 0.147 app-server semantics (see AGENTS.md):
  *  - app-server manages ONE realtime session per thread; a new start

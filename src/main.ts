@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /** CLI entry: `agentvoicenext server [options]` / `agentvoicenext client [options]`. */
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
 import { ClientError, runClient } from "./client/ui.ts";
 import {
   ConfigError,
-  type ConfigValues,
+  cliToConfigValues,
   defaultConfigPath,
   expandTilde,
   loadConfigFile,
@@ -23,13 +23,13 @@ Usage:
   agentvoicenext server [options]   Start the voice server
   agentvoicenext client [options]   Open the terminal voice client
 
-Server options:
+Server options (the full surface lives in server.yaml; see server.yaml.example):
   --config <path>          Config file (default: ~/.config/agentvoicenext/server.yaml)
-  --model <id>             Orchestrator model (default: codex config)
-  --effort <level>         Orchestrator reasoning effort (default: codex config)
-  --voice-model <id>       Realtime speech model (default: codex config)
+  --model <id>             Orchestrator agent model (default: codex config)
+  --effort <level>         Orchestrator agent reasoning effort (default: codex config)
+  --voice-model <id>       Voice agent model (default: codex config)
   --voice <name>           Voice timbre (default: upstream default)
-  --workspace <dir>        Agent working directory
+  --workspace <dir>        Orchestrator agent working directory
                            (default: ~/.local/state/agentvoicenext/workspace)
   --sandbox <mode>         read-only | workspace-write | danger-full-access
                            (default: danger-full-access)
@@ -37,6 +37,11 @@ Server options:
   --port <n>               WebSocket port on 127.0.0.1 (default: 7890)
   --codex <path>           Codex binary (default: $CODEX_PATH or "codex")
   --debug                  Log app-server protocol frames to stderr
+
+Prompts are files in the config file's directory, all optional:
+  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
+  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md,               prime the orchestrator
+  ORCHESTRATOR_SESSION_{START,END}.md                    agent
 
 Client options:
   --url <ws-url>           Server WebSocket (default: ${DEFAULT_CLIENT_URL})
@@ -139,13 +144,11 @@ async function runServerCommand(argv: string[]): Promise<number> {
     ? resolve(expandTilde(parsed.configPath, home))
     : defaultConfigPath(process.env, home);
   const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
-  const config = resolveConfig(
-    parsed.values as ConfigValues,
-    fileValues,
-    process.env,
-    home,
-    parsed.debug,
-  );
+  // Prompt files live beside the config file, so --config relocates the bundle.
+  const config = resolveConfig(cliToConfigValues(parsed.values), fileValues, process.env, home, {
+    debug: parsed.debug,
+    configDir: dirname(configPath),
+  });
   await runServer(config, VERSION);
   return 0;
 }

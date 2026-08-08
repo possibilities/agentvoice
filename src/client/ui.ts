@@ -277,8 +277,10 @@ export async function runClient(config: ClientConfig): Promise<void> {
   function refreshStatic(): void {
     const info = transport.readyInfo;
     const orDefault = (value: string | null) => value ?? "codex default";
+    const primed =
+      info && info.prompts.length > 0 ? ` · ${plural(info.prompts.length, "prompt")}` : "";
     sessionLeft.content = info
-      ? `thread     ${shortId(info.threadId)}\nworkspace  ${tail(info.workspace, 34)}`
+      ? `thread     ${shortId(info.threadId)}${primed}\nworkspace  ${tail(info.workspace, 34)}`
       : "thread     —\nworkspace  —";
     const renew = transport.renewInMs;
     sessionRight.content = info
@@ -294,6 +296,10 @@ export async function runClient(config: ClientConfig): Promise<void> {
 
   function tail(path: string, max: number): string {
     return path.length <= max ? path : `…${path.slice(-max + 1)}`;
+  }
+
+  function plural(count: number, noun: string): string {
+    return `${count} ${noun}${count === 1 ? "" : "s"}`;
   }
 
   let pulse = 0;
