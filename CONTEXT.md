@@ -21,7 +21,12 @@ client↔voice model peer-to-peer; only coordination flows through this server.
 The bundled terminal client is `agentvoicenext client`. _Avoid_: "browser",
 "surface".
 
-**Redial** — Tearing down the current voice session and negotiating a fresh
-one against the same orchestrator thread; the conversation continues. Manual
-(`r`), or automatic for renewal and recovery. _Avoid_: "reconnect" (reserved
-for the WebSocket).
+**Redial** — Negotiating a replacement voice session against the same
+orchestrator thread while the current one keeps playing; audio swaps when the
+replacement connects. Manual (`r`), or automatic for renewal and recovery.
+_Avoid_: "reconnect" (reserved for the WebSocket).
+
+**Supersede** — What a new `thread/realtime/start` does to the running voice
+session inside app-server: the old session's control plane stops silently (no
+`closed` notification) and only its media path lingers. _Avoid_: "replace",
+"preempt".

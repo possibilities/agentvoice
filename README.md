@@ -99,11 +99,12 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
 
 - **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
-- **Redial** tears down the voice session and negotiates a fresh one against
-  the same conversation — the escape hatch when the media path dies silently.
-  It also reconnects after a busy rejection (another client held the server),
-  so `r` works once the slot is free. Renewal happens automatically before the
-  ~60-minute upstream ceiling.
+- **Redial** negotiates a fresh voice session against the same conversation
+  while the old one keeps playing; audio swaps the moment the new session
+  connects. It is the escape hatch when the media path dies silently, and also
+  reconnects after a busy rejection (another client held the server), so `r`
+  works once the slot is free. Renewal happens automatically before the
+  ~60-minute upstream ceiling, using the same near-seamless swap.
 - **Headphones recommended**: there is no echo cancellation in this stack, so
   open speakers can let the agent hear itself. `s` is the manual guard.
 - macOS microphone permission belongs to your **terminal app** (System
@@ -129,8 +130,9 @@ socket is legitimately silent for minutes while audio flows peer-to-peer.
 | `offer` | `{"type":"offer","sdp":"<complete SDP offer>"}` |
 
 An offer is accepted any time after the most recent `ready`. Sending a new
-offer while a session is running **supersedes** it (this is how you renew).
-Anything else gets a non-fatal `error`.
+offer while a session is running **supersedes** it (this is how you renew) —
+the superseded session ends silently, with no `closed` message. Anything else
+gets a non-fatal `error`.
 
 ### Messages: server → client
 
@@ -138,7 +140,7 @@ Anything else gets a non-fatal `error`.
 |---|---|---|
 | `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart). `null` fields mean "codex default". |
 | `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
-| `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (upstream ceiling, internal restart, …). Wait for the next `ready`, then re-offer if desired. |
+| `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |
 
 ### WebRTC recipe
@@ -155,9 +157,12 @@ Anything else gets a non-fatal `error`.
 ### Session lifetime and renewal
 
 - The session ends when your socket closes; closing the tab hangs up.
-- Upstream sessions live ~60 minutes. To renew seamlessly, build a **new**
-  peer + offer at ~55 minutes and send it — the server supersedes the old
-  session; swap audio on the new answer, then close the old peer.
+- Upstream sessions live ~60 minutes. To renew, build a **new** peer + offer
+  before the ceiling (the bundled client uses 52 minutes) and send it — the
+  server supersedes the old session silently. Keep the old peer playing until
+  the new one reaches `connected`, then swap audio to it and close the old
+  peer. The audible gap is the upstream call setup (~1–2 s); the superseded
+  peer lingers with a dead control plane, so closing it is your job.
 - If the connection dies (peer state `failed`, or `closed` arrives), re-offer
   after the next `ready` with a fresh peer.
 
