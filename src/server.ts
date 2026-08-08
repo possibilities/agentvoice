@@ -5,35 +5,29 @@
  * The client's audio flows peer-to-peer to the voice model; this server only
  * coordinates: it relays the client's SDP offer into `thread/realtime/start`
  * and the answer back out. The voice↔orchestrator handoff happens entirely
- * inside app-server.
+ * inside app-server. Session lifecycle lives in session.ts; this file is
+ * wiring: process supervision, the thread, and the WebSocket.
  */
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { AppServer, AppServerError } from "./appserver.ts";
-import { stateDirectory, type ServerConfig } from "./config.ts";
+import { type ServerConfig, stateDirectory } from "./config.ts";
+import {
+  CLOSE_BUSY,
+  PROTOCOL_VERSION,
+  parseClientMessage,
+  type ServerMessage,
+} from "./protocol.ts";
+import { VoiceSessionManager } from "./session.ts";
 
-export const PROTOCOL_VERSION = 1;
-export const CLOSE_BUSY = 4429;
-
-/** Readiness is the `thread/realtime/started` notification, not the RPC ack. */
-const REALTIME_START_TIMEOUT_MS = 60_000;
 const RESTART_BACKOFF_INITIAL_MS = 500;
 const RESTART_BACKOFF_CAP_MS = 30_000;
 const HEALTHY_UPTIME_MS = 60_000;
-const SHUTDOWN_RPC_TIMEOUT_MS = 1_500;
+const SHUTDOWN_STOP_TIMEOUT_MS = 1_500;
 
-interface VoiceSession {
-  realtimeSessionId: string;
-  active: boolean;
-  startTimer: ReturnType<typeof setTimeout> | null;
-}
-
-export async function runServer(
-  config: ServerConfig,
-  version: string,
-): Promise<void> {
+export async function runServer(config: ServerConfig, version: string): Promise<void> {
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
@@ -48,15 +42,10 @@ export async function runServer(
   let threadId: string | null = null;
   let threadReady = false;
   let client: ServerWebSocket<undefined> | null = null;
-  let session: VoiceSession | null = null;
-  // Sessions we abandoned (superseded, timed out, or client gone) whose
-  // closed/error notification is still in flight; those events must not be
-  // attributed to the current session.
-  let pendingPredecessorClose = 0;
   let restartFailures = 0;
   let shuttingDown = false;
 
-  function send(payload: Record<string, unknown>): void {
+  function send(payload: ServerMessage): void {
     if (client && client.readyState === 1) client.send(JSON.stringify(payload));
   }
 
@@ -74,20 +63,34 @@ export async function runServer(
     });
   }
 
-  function clearSession(): void {
-    if (session?.startTimer) clearTimeout(session.startTimer);
-    session = null;
-  }
-
-  /** Abandon the current session: its late events belong to a predecessor now. */
-  function abandonSession(): void {
-    if (!session) return;
-    pendingPredecessorClose++;
-    clearSession();
-    if (appServer && threadId) {
-      void appServer.request("thread/realtime/stop", { threadId }).catch(() => {});
-    }
-  }
+  const sessions = new VoiceSessionManager({
+    sendAnswer: (sdp) => send({ type: "answer", sdp }),
+    sendClosed: (reason) => send({ type: "closed", ...(reason ? { reason } : {}) }),
+    sendFailed: (message) => send({ type: "error", code: "realtime-failed", message, fatal: true }),
+    sendReady,
+    startRealtime(realtimeSessionId, sdp) {
+      if (!appServer || !threadId) {
+        return Promise.reject(new AppServerError("app-server is not running"));
+      }
+      const params: Record<string, unknown> = {
+        threadId,
+        realtimeSessionId,
+        version: "v3",
+        outputModality: "audio",
+        transport: { type: "webrtc", sdp },
+      };
+      if (config.voiceModel) params["model"] = config.voiceModel;
+      if (config.voice) params["voice"] = config.voice;
+      return appServer.request("thread/realtime/start", params).then(() => {});
+    },
+    stopRealtime() {
+      if (!appServer || !threadId) {
+        return Promise.reject(new AppServerError("app-server is not running"));
+      }
+      return appServer.request("thread/realtime/stop", { threadId }).then(() => {});
+    },
+    debug: debugLog,
+  });
 
   function threadOptions(): Record<string, unknown> {
     const options: Record<string, unknown> = {
@@ -161,19 +164,19 @@ export async function runServer(
     if (appServer !== server) return; // an instance we already replaced or tore down
     appServer = null;
     threadReady = false;
-    const hadSession = session !== null;
-    clearSession();
-    pendingPredecessorClose = 0; // every session died with the child
+    const hadSession = sessions.hasSession;
+    sessions.reset(); // every session died with the child
     if (shuttingDown || expected) return;
     if (hadSession) send({ type: "closed", reason: "app-server-exited" });
+    // A child that dies young counts as a failure even if it spawned cleanly,
+    // so a crash loop backs off instead of restarting hot.
     if (Date.now() - server.spawnedAt > HEALTHY_UPTIME_MS) restartFailures = 0;
+    else restartFailures++;
     const delay = Math.min(
       RESTART_BACKOFF_INITIAL_MS * 2 ** restartFailures,
       RESTART_BACKOFF_CAP_MS,
     );
-    console.error(
-      `app-server exited unexpectedly (code ${code}); restarting in ${delay}ms`,
-    );
+    console.error(`app-server exited unexpectedly (code ${code}); restarting in ${delay}ms`);
     setTimeout(() => void restart(), delay);
   }
 
@@ -196,80 +199,18 @@ export async function runServer(
     }
   }
 
-  function handleNotification(
-    method: string,
-    params: Record<string, unknown>,
-  ): void {
+  function handleNotification(method: string, params: Record<string, unknown>): void {
     if (!method.startsWith("thread/realtime/")) return;
     if (params["threadId"] !== undefined && params["threadId"] !== threadId) return;
-    switch (method) {
-      case "thread/realtime/started": {
-        const sessionId = params["realtimeSessionId"];
-        if (session && sessionId === session.realtimeSessionId) {
-          session.active = true;
-          if (session.startTimer) {
-            clearTimeout(session.startTimer);
-            session.startTimer = null;
-          }
-          debugLog?.(`realtime session ${String(sessionId)} active`);
-        } else if (!session) {
-          // An abandoned start came up after all; reclaim the orphan. Its
-          // closed notification is already budgeted in pendingPredecessorClose.
-          debugLog?.("stopping orphaned realtime session");
-          if (appServer && threadId) {
-            void appServer
-              .request("thread/realtime/stop", { threadId })
-              .catch(() => {});
-          }
-        }
-        // A foreign id while a session exists: a predecessor coming up late;
-        // its stop is already in flight. Never apply it to the current session.
-        return;
-      }
-      case "thread/realtime/sdp": {
-        const sdp = params["sdp"];
-        // `started` always precedes the answer within a session, so an answer
-        // with no active session belongs to an abandoned predecessor: drop it
-        // rather than poison the successor's peer.
-        if (session?.active && typeof sdp === "string") {
-          send({ type: "answer", sdp });
-        } else {
-          debugLog?.("dropping realtime sdp with no active session");
-        }
-        return;
-      }
-      case "thread/realtime/error":
-      case "thread/realtime/closed": {
-        if (pendingPredecessorClose > 0) {
-          pendingPredecessorClose--;
-          debugLog?.(`${method} attributed to an abandoned session`);
-          return;
-        }
-        if (!session) return;
-        clearSession();
-        if (method === "thread/realtime/error") {
-          const message =
-            typeof params["message"] === "string"
-              ? params["message"]
-              : "realtime session failed";
-          send({ type: "error", code: "realtime-failed", message, fatal: true });
-        } else {
-          send({
-            type: "closed",
-            ...(typeof params["reason"] === "string"
-              ? { reason: params["reason"] }
-              : {}),
-          });
-        }
-        sendReady(); // the thread survives its voice session; offers reopen
-        return;
-      }
-      default:
-        return; // transcript deltas and other realtime chatter: not our surface
-    }
+    sessions.handleNotification(method, params);
   }
 
-  async function handleOffer(sdp: string): Promise<void> {
+  function handleClientMessage(text: string): void {
+    const parsed = parseClientMessage(text);
+    if (!parsed.ok) {
+      send({ type: "error", code: parsed.code, message: parsed.error, fatal: false });
+      return;
+    }
     if (!threadReady || !appServer || !threadId) {
       send({
         type: "error",
@@ -279,86 +220,7 @@ export async function runServer(
       });
       return;
     }
-    abandonSession(); // renewal or retry: supersede whatever is running
-    const realtimeSessionId = crypto.randomUUID();
-    const next: VoiceSession = { realtimeSessionId, active: false, startTimer: null };
-    session = next;
-    next.startTimer = setTimeout(() => {
-      if (session !== next || next.active) return;
-      abandonSession(); // it may still come up; budget its late events
-      send({
-        type: "error",
-        code: "realtime-failed",
-        message: `realtime session did not start within ${REALTIME_START_TIMEOUT_MS}ms`,
-        fatal: true,
-      });
-      sendReady();
-    }, REALTIME_START_TIMEOUT_MS);
-
-    const params: Record<string, unknown> = {
-      threadId,
-      realtimeSessionId,
-      version: "v3",
-      outputModality: "audio",
-      transport: { type: "webrtc", sdp },
-    };
-    if (config.voiceModel) params["model"] = config.voiceModel;
-    if (config.voice) params["voice"] = config.voice;
-
-    try {
-      // The response is only a queue-ack; readiness arrives as a notification.
-      await appServer.request("thread/realtime/start", params);
-    } catch (error) {
-      if (session !== next) return; // superseded while in flight
-      if (error instanceof AppServerError && error.timedOut) {
-        abandonSession(); // the ack timed out but the session may still come up
-      } else {
-        clearSession(); // synchronous rejection: the session never existed
-      }
-      send({
-        type: "error",
-        code: "realtime-failed",
-        message: error instanceof Error ? error.message : String(error),
-        fatal: true,
-      });
-      sendReady();
-    }
-  }
-
-  function handleClientMessage(text: string): void {
-    let message: unknown;
-    try {
-      message = JSON.parse(text);
-    } catch {
-      send({
-        type: "error",
-        code: "bad-message",
-        message: "messages must be JSON",
-        fatal: false,
-      });
-      return;
-    }
-    const type = (message as Record<string, unknown> | null)?.["type"];
-    if (type === "offer") {
-      const sdp = (message as Record<string, unknown>)["sdp"];
-      if (typeof sdp !== "string" || sdp.length === 0) {
-        send({
-          type: "error",
-          code: "bad-offer",
-          message: "offer requires a non-empty sdp string",
-          fatal: false,
-        });
-        return;
-      }
-      void handleOffer(sdp);
-      return;
-    }
-    send({
-      type: "error",
-      code: "unknown-message",
-      message: `unsupported message type ${JSON.stringify(type ?? null)}`,
-      fatal: false,
-    });
+    sessions.handleOffer(parsed.message.sdp);
   }
 
   // Boot fails fast: the operator is present. Later child exits are supervised.
@@ -406,7 +268,7 @@ export async function runServer(
         if (ws !== client) return;
         client = null;
         debugLog?.("client disconnected");
-        abandonSession(); // session lifetime is socket lifetime
+        sessions.handleClientGone();
       },
     },
   });
@@ -416,7 +278,9 @@ export async function runServer(
   console.log(`  workspace       ${config.workspace}`);
   console.log(`  thread          ${threadId}`);
   console.log(`  model           ${orDefault(config.model)}  effort ${orDefault(config.effort)}`);
-  console.log(`  voice model     ${orDefault(config.voiceModel)}  voice ${config.voice ?? "(upstream default)"}`);
+  console.log(
+    `  voice model     ${orDefault(config.voiceModel)}  voice ${config.voice ?? "(upstream default)"}`,
+  );
   console.log(`  sandbox         ${config.sandbox}  approvals ${config.approvalPolicy}`);
 
   async function shutdown(): Promise<void> {
@@ -428,12 +292,10 @@ export async function runServer(
     } catch {
       // client may already be gone
     }
-    if (session && appServer && threadId) {
-      clearSession();
-      await appServer
-        .request("thread/realtime/stop", { threadId }, SHUTDOWN_RPC_TIMEOUT_MS)
-        .catch(() => {});
-    }
+    await Promise.race([
+      sessions.shutdown(),
+      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
+    ]);
     httpServer.stop(true);
     if (appServer) await appServer.stop().catch(() => {});
   }
