@@ -19,14 +19,19 @@ see [Configuration](#configuration). Uses your existing ChatGPT/Codex login —
 - [codex CLI](https://github.com/openai/codex) ≥ 0.147 on PATH, logged in
   (`codex login`). Built and verified against codex-cli **0.147.0**; the
   realtime surface is experimental upstream and may shift between releases.
-- [sox](https://sox.sourceforge.net) — client speaker playback only.
-  `bun run setup` checks everything and installs sox via Homebrew if missing.
+- [sox](https://sox.sourceforge.net) — default client speaker playback only.
+  `bun run setup` checks the default environment and installs sox via Homebrew
+  if missing.
+- [Zig](https://ziglang.org/) or a C11 compiler — builds the opt-in native
+  duplex audio path. `bun run native:build` prefers Zig and falls back to
+  `clang`/`cc`.
 
 ## Run
 
 ```bash
 bun install
 bun run setup                        # one-time: verifies bun/codex, installs sox
+bun run native:build                 # build the opt-in duplex audio device
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
 bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
@@ -37,9 +42,12 @@ bun run src/main.ts server --model gpt-5.3-codex --effort high --voice marin
 `bun run cli:install` installs dependencies, runs setup, and `bun link`s this
 checkout, putting `agentvoicenext` on PATH (via bun's global bin, usually
 `~/.bun/bin`). The command is **editable** — it symlinks back into the
-checkout, so source edits apply immediately with no rebuild. Funk's installer
-(`~/code/funk/install`) invokes this same contract from
+checkout, so TypeScript edits apply immediately with no rebuild. Funk's
+installer (`~/code/funk/install`) invokes this same contract from
 `~/code/agentvoicenext` when that checkout exists.
+
+TypeScript edits remain immediate. Changes under `src/client/native/` require
+`bun run native:build`; `bun run cli:install` runs that build automatically.
 
 ```bash
 bun run cli:install
@@ -180,15 +188,26 @@ agentvoicenext client --token <contents of the laptop's token file>
 ## Terminal client
 
 `agentvoicenext client` connects to a running server and opens a full-duplex
-voice console: your microphone is captured in-process (OpenTUI/CoreAudio),
-Opus-encoded, and sent over WebRTC; the agent's voice plays through a sox
-`play` child and both directions render as live meters with sparkline history.
-Finished turns stream in as transcripts (`you · …` / `agent · …`).
+voice console. The default sox comparison path captures the microphone
+in-process through OpenTUI and plays the voice agent through a sox `play`
+child. The opt-in `duplex` path replaces both with one client-owned miniaudio
+duplex device and bounded capture/playback PCM rings. Both paths exchange Opus
+over WebRTC and render live meters, sparklines, and finished-turn transcripts
+(`you · …` / `agent · …`).
 
 ```bash
 bun run client                                   # defaults to ws://127.0.0.1:7890/ws
 bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
+bun run src/main.ts client --audio-backend duplex --device 1 --debug
 ```
+
+The duplex path is an A/B slice, not yet the default. It requests 48 kHz s16
+mono capture and stereo playback from one `ma_device_type_duplex`; miniaudio
+negotiates the physical device formats. Playback holds a 500 ms playout
+cushion on start/rebuffer in a ring with 1 s of capacity. Use
+`--output-device` to select a non-default speaker, or
+`bun run audio:probe --device 1` to enumerate and briefly open the real duplex
+device without starting a voice session.
 
 - **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
@@ -207,8 +226,11 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
   Settings › Privacy & Security › Microphone, then fully restart it). If the
   mic delivers pure silence the client shows a warning naming this.
 - `--debug` writes `~/.local/state/agentvoicenext/client-debug.log` including
-  audio-device inventory, decoded/playback cadence, sox's negotiated output
-  format and pipe backpressure, plus every upstream event.
+  audio-device inventory, decoded/playback cadence, plus every upstream event.
+  The sox path adds negotiated output and pipe backpressure; the duplex path
+  adds physical formats, callback cadence, RTP arrival-gap and handler-time
+  distributions, ring occupancy, drops, callback-level starvation events,
+  reroutes, and interruption counters.
 
 ## Client API
 

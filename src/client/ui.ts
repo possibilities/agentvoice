@@ -18,6 +18,8 @@ import {
 import { stateDirectory, tokenPath } from "../paths.ts";
 import { resolvePlaybackCommand, VoiceAudio } from "./audio.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
+import { DuplexVoiceAudio } from "./duplex-audio.ts";
+import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
 export interface ClientConfig {
@@ -25,6 +27,8 @@ export interface ClientConfig {
   /** Connection token; defaults to the server-written token file. */
   token?: string;
   deviceIndex?: number;
+  outputDeviceIndex?: number;
+  audioBackend: "sox" | "duplex";
   debug: boolean;
 }
 
@@ -72,10 +76,14 @@ interface Meter {
 
 export async function runClient(config: ClientConfig): Promise<void> {
   // ---- preflights: fail with plain text before any screen takeover --------
-  if (!resolvePlaybackCommand()) {
+  if (config.audioBackend === "sox" && !resolvePlaybackCommand()) {
     throw new ClientError(
       'sox is required for speaker playback — run "bun run setup" or "brew install sox"',
     );
+  }
+  if (config.audioBackend === "duplex") {
+    const availabilityError = duplexAudioAvailabilityError();
+    if (availabilityError) throw new ClientError(availabilityError);
   }
   let origin: string;
   let wsUrl: string;
@@ -119,7 +127,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
         // debug logging must never break the client
       }
     };
-    debugLog(`client start url=${config.url}`);
+    debugLog(`client start url=${config.url} audio_backend=${config.audioBackend}`);
   }
 
   // ---- state --------------------------------------------------------------
@@ -141,8 +149,10 @@ export async function runClient(config: ClientConfig): Promise<void> {
   };
 
   // ---- wiring: audio <-> transport ---------------------------------------
-  const audio = new VoiceAudio({
+  const AudioImplementation = config.audioBackend === "duplex" ? DuplexVoiceAudio : VoiceAudio;
+  const audio = new AudioImplementation({
     deviceIndex: config.deviceIndex,
+    outputDeviceIndex: config.outputDeviceIndex,
     sendFrame: (frame) => transport.sendOpusFrame(frame),
     onMicLevel: (db) => {
       mic.db = db;

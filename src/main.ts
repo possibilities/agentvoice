@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
-import { ClientError, runClient } from "./client/ui.ts";
+import { type ClientConfig, ClientError, runClient } from "./client/ui.ts";
 import { defaultConfigPath, expandTilde } from "./paths.ts";
 import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./server/config.ts";
 import { runServer } from "./server/server.ts";
@@ -56,6 +56,8 @@ Options:
   --token <secret>         Connection token (default: the server-written token file
                            in the state directory)
   --device <index>         Microphone device index (default: system default)
+  --output-device <index>  Speaker device index (duplex backend; default: system default)
+  --audio-backend <name>   sox | duplex (default: sox)
   --debug                  Write a debug log to the state directory
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
@@ -83,7 +85,7 @@ const SERVER_FLAGS: FlagSpec = {
 };
 
 const CLIENT_FLAGS: FlagSpec = {
-  value: new Set(["--url", "--token", "--device"]),
+  value: new Set(["--url", "--token", "--device", "--output-device", "--audio-backend"]),
   bool: new Set(["--debug", "--help"]),
 };
 
@@ -95,6 +97,8 @@ export interface ParsedArgs {
   debug: boolean;
   help: boolean;
 }
+
+export type ParsedClientCommand = { help: true } | { help: false; config: ClientConfig };
 
 export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): ParsedArgs {
   const seen = new Set<string>();
@@ -164,27 +168,51 @@ async function runServerCommand(argv: string[]): Promise<number> {
 }
 
 async function runClientCommand(argv: string[]): Promise<number> {
-  const parsed = parseArgs(argv, CLIENT_FLAGS);
-  if (parsed.help) {
+  const command = parseClientArgs(argv);
+  if (command.help) {
     console.log(CLIENT_USAGE);
     return 0;
   }
-  let deviceIndex: number | undefined;
+  await runClient(command.config);
+  return 0;
+}
+
+export function parseClientArgs(argv: string[]): ParsedClientCommand {
+  const parsed = parseArgs(argv, CLIENT_FLAGS);
+  if (parsed.help) return { help: true };
+
   const device = parsed.values["device"];
-  if (device !== undefined) {
-    deviceIndex = Number.parseInt(device, 10);
-    if (!Number.isInteger(deviceIndex) || deviceIndex < 0) {
-      throw new UsageError(`--device must be a non-negative integer; got "${device}"`);
-    }
+  const deviceIndex = device === undefined ? undefined : parseDeviceIndex("--device", device);
+  const outputDevice = parsed.values["output-device"];
+  const outputDeviceIndex =
+    outputDevice === undefined ? undefined : parseDeviceIndex("--output-device", outputDevice);
+  const audioBackend = parsed.values["audio-backend"] ?? "sox";
+  if (audioBackend !== "sox" && audioBackend !== "duplex") {
+    throw new UsageError(`--audio-backend must be "sox" or "duplex"; got "${audioBackend}"`);
+  }
+  if (outputDeviceIndex !== undefined && audioBackend !== "duplex") {
+    throw new UsageError("--output-device requires --audio-backend duplex");
   }
   const token = parsed.values["token"];
-  await runClient({
-    url: parsed.values["url"] ?? DEFAULT_CLIENT_URL,
-    ...(token !== undefined ? { token } : {}),
-    ...(deviceIndex !== undefined ? { deviceIndex } : {}),
-    debug: parsed.debug,
-  });
-  return 0;
+  return {
+    help: false,
+    config: {
+      url: parsed.values["url"] ?? DEFAULT_CLIENT_URL,
+      ...(token !== undefined ? { token } : {}),
+      ...(deviceIndex !== undefined ? { deviceIndex } : {}),
+      ...(outputDeviceIndex !== undefined ? { outputDeviceIndex } : {}),
+      audioBackend,
+      debug: parsed.debug,
+    },
+  };
+}
+
+function parseDeviceIndex(flag: string, value: string): number {
+  const index = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(index) || index > 0x7fffffff) {
+    throw new UsageError(`${flag} must be a non-negative 32-bit integer; got "${value}"`);
+  }
+  return index;
 }
 
 async function main(): Promise<number> {

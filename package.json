@@ -11,6 +11,8 @@
     "server": "bun run src/main.ts server",
     "client": "bun run src/main.ts client",
     "setup": "bun run scripts/setup.ts",
+    "native:build": "bun run scripts/build-native.ts",
+    "audio:probe": "bun run scripts/audio-probe.ts",
     "cli:install": "bun run scripts/install.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

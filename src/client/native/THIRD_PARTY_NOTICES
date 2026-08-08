@@ -1,0 +1,7 @@
+miniaudio 0.11.22
+https://github.com/mackron/miniaudio/tree/0.11.22
+
+Vendored as vendor/miniaudio.h under the MIT No Attribution alternative
+included at the end of that file. Upstream SHA-256:
+
+9019743287e443c55e5737a7297f38e5e358561701d6db2d905afb114390c410

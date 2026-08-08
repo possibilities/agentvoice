@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseArgs, UsageError } from "../src/main.ts";
+import { parseArgs, parseClientArgs, UsageError } from "../src/main.ts";
 import {
   ConfigError,
   cliToConfigValues,
@@ -284,5 +284,65 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--model"])).toThrow(UsageError);
     expect(() => parseArgs(["--model", "--port"])).toThrow(UsageError);
     expect(() => parseArgs(["--debug=1"])).toThrow(UsageError);
+  });
+});
+
+describe("parseClientArgs", () => {
+  test("defaults to the sox backend and system devices", () => {
+    expect(parseClientArgs([])).toEqual({
+      help: false,
+      config: {
+        url: "ws://127.0.0.1:7890/ws",
+        audioBackend: "sox",
+        debug: false,
+      },
+    });
+  });
+
+  test("parses the duplex backend and both device indices", () => {
+    expect(
+      parseClientArgs([
+        "--url=ws://voice.test/ws",
+        "--token",
+        "secret",
+        "--device",
+        "1",
+        "--output-device=2",
+        "--audio-backend",
+        "duplex",
+        "--debug",
+      ]),
+    ).toEqual({
+      help: false,
+      config: {
+        url: "ws://voice.test/ws",
+        token: "secret",
+        deviceIndex: 1,
+        outputDeviceIndex: 2,
+        audioBackend: "duplex",
+        debug: true,
+      },
+    });
+  });
+
+  test("rejects an unknown backend and a duplex-only output option on sox", () => {
+    expect(() => parseClientArgs(["--audio-backend", "other"])).toThrow(
+      /must be "sox" or "duplex"/,
+    );
+    expect(() => parseClientArgs(["--output-device", "1"])).toThrow(
+      /requires --audio-backend duplex/,
+    );
+  });
+
+  test("rejects malformed and out-of-range device indices", () => {
+    for (const value of ["1junk", "1.5", "-1", "+1", "", "2147483648"]) {
+      expect(() => parseClientArgs([`--device=${value}`])).toThrow(
+        /must be a non-negative 32-bit integer/,
+      );
+    }
+  });
+
+  test("lets --help bypass value validation after syntax is parsed", () => {
+    expect(parseClientArgs(["--device=bad", "--help"])).toEqual({ help: true });
   });
 });

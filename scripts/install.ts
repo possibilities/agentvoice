@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Editable install: dependencies, environment setup (codex, sox), and a
+ * Editable install: dependencies, environment setup, native client audio, and a
  * global `agentvoicenext` command linked back to this checkout via `bun link`
- * — edits to the source apply immediately, no rebuild. Funk invokes this same
- * contract (`bun run cli:install`) from ~/code/agentvoicenext.
+ * — TypeScript edits apply immediately; native audio edits need `native:build`.
+ * Funk invokes this same contract (`bun run cli:install`) from
+ * ~/code/agentvoicenext.
  */
 import { dirname, join } from "node:path";
 
@@ -27,6 +28,7 @@ async function run(label: string, argv: string[]): Promise<void> {
 
 await run("installing dependencies", [bun, "install"]);
 await run("checking the environment (codex, sox)", [bun, "run", join(root, "scripts", "setup.ts")]);
+await run("building native duplex audio", [bun, "run", join(root, "scripts", "build-native.ts")]);
 await run("linking a global agentvoicenext (editable)", [bun, "link"]);
 
 const linked = Bun.which("agentvoicenext");

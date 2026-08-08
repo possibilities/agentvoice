@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * One-time environment setup: verifies bun and codex, and installs sox
- * (required for the client's speaker playback) via Homebrew when missing.
+ * (required for the default client's speaker playback) via Homebrew when missing.
  */
 export {};
 
@@ -29,7 +29,7 @@ if (codex) {
 
 // sox
 if (Bun.which("play") ?? Bun.which("sox")) {
-  ok("sox installed (speaker playback)");
+  ok("sox installed (default speaker playback)");
 } else {
   const brew = Bun.which("brew");
   if (!brew) {

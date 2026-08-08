@@ -1,7 +1,7 @@
 /**
- * The audio pipeline: OpenTUI microphone capture → Opus → transport uplink,
- * and transport downlink → Opus decode → a sox `play` child process (OpenTUI
- * streams cannot ingest raw PCM yet, so playback goes out of process).
+ * The comparison audio path: OpenTUI microphone capture → Opus → transport
+ * uplink, and transport downlink → Opus decode → a sox `play` child process
+ * (OpenTUI streams cannot ingest raw PCM yet, so playback goes out of process).
  * Decoding continues while the speaker is muted so the agent meter stays live.
  */
 import { Audio, type AudioCaptureStream } from "@opentui/core";
@@ -40,6 +40,7 @@ interface DownlinkWindow {
 
 export interface VoiceAudioOptions {
   deviceIndex?: number;
+  outputDeviceIndex?: number;
   sendFrame(frame: Buffer): void;
   onMicLevel(db: number): void;
   onAgentLevel(db: number): void;

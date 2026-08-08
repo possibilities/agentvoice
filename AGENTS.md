@@ -11,7 +11,10 @@ terms in code, comments, and commit messages.
 - `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
 - `bun run lint` / `bun run format` — Biome check / autofix
 - `bun run server` / `bun run client` — the real thing (needs codex ≥ 0.147
-  logged in; client also needs sox and a microphone)
+  logged in; the default client also needs sox and a microphone)
+- `bun run native:build` / `bun run audio:probe` — build and exercise the
+  opt-in duplex audio device (needs Zig or a C11 compiler; the probe needs
+  audio hardware)
 
 ## Map
 
@@ -37,8 +40,9 @@ the server and the client use it; if only one does, it goes in that directory.
     pure effects-injected logic, tested in `tests/session.test.ts`
   - `server.ts` — wiring: process supervision, thread, WebSocket
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
-  two-peer redial), `audio.ts` (mic capture → Opus; Opus → sox playback),
-  `dsp.ts` (pure audio math, tested), `ui.ts` (OpenTUI console)
+  two-peer redial), `audio.ts` (comparison path: OpenTUI capture + sox
+  playback), `duplex-audio.ts` + `duplex-device.ts` + `native/` (opt-in duplex
+  audio device), `dsp.ts` (pure audio math, tested), `ui.ts` (OpenTUI console)
 - `server.yaml.example` — the whole config surface, every key commented out.
   Copying it verbatim must stay a no-op; a test asserts that. Add new keys here
   the same commit you add them to `config.ts`.
