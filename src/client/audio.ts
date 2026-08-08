@@ -31,6 +31,36 @@ export interface CaptureDeviceInfo {
   isDefault: boolean;
 }
 
+export interface PlaybackDeviceInfo {
+  index: number;
+  name: string;
+  isDefault: boolean;
+}
+
+/**
+ * Warning line when the chosen mic is the default speaker device, else null.
+ * macOS drops a Bluetooth headset to telephony (HFP) while its mic is open —
+ * output falls to mono 16 kHz and often goes silent under an already-playing
+ * stream — so the shared device must be surfaced before capture starts.
+ */
+export function sharedDeviceWarning(
+  deviceIndex: number | undefined,
+  captureDevices: readonly CaptureDeviceInfo[],
+  playbackDevices: readonly PlaybackDeviceInfo[],
+): string | null {
+  const capture =
+    deviceIndex !== undefined
+      ? captureDevices.find((d) => d.index === deviceIndex)
+      : captureDevices.find((d) => d.isDefault);
+  const playback = playbackDevices.find((d) => d.isDefault);
+  if (!capture || !playback || capture.name !== playback.name) return null;
+  const alternative = captureDevices.find((d) => d.name !== capture.name);
+  const hint = alternative
+    ? `; try another mic, e.g. --device ${alternative.index} (${alternative.name.trim()})`
+    : "";
+  return `mic and speakers are the same device (${capture.name.trim()}) — a Bluetooth headset drops to telephone quality and may go silent while its mic is open${hint}`;
+}
+
 /** Argv for a raw-PCM playback child, or null when sox is not installed. */
 export function resolvePlaybackCommand(): string[] | null {
   const play = Bun.which("play");
@@ -121,6 +151,12 @@ export class VoiceAudio {
       this.engine.selectCaptureDevice(device.index);
       this.options.debug?.(`capture device: ${device.name}`);
     }
+    const warning = sharedDeviceWarning(
+      this.options.deviceIndex,
+      this.captureDevices(),
+      this.engine.listPlaybackDevices() ?? [],
+    );
+    if (warning) this.options.onWarning(warning);
     this.capture = await this.engine.openCapture({
       channels: 1,
       chunkFrames: FRAME_SAMPLES,

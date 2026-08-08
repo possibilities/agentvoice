@@ -203,6 +203,12 @@ bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
   ~60-minute upstream ceiling, using the same near-seamless swap.
 - **Headphones recommended**: there is no echo cancellation in this stack, so
   open speakers can let the agent hear itself. `s` is the manual guard.
+- **Bluetooth headsets: not as the mic.** Opening a Bluetooth headset's
+  microphone flips the whole headset from A2DP to telephony (HFP) — its own
+  playback drops to mono 16 kHz and often goes silent under an
+  already-playing stream. Keep the headset as output and pick a wired, USB,
+  or built-in mic with `--device <n>`; the client warns when the mic and the
+  speakers resolve to the same device.
 - macOS microphone permission belongs to your **terminal app** (System
   Settings › Privacy & Security › Microphone, then fully restart it). If the
   mic delivers pure silence the client shows a warning naming this.
