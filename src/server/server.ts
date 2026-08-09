@@ -24,8 +24,9 @@ import {
 import { AppServer, AppServerError } from "./appserver.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { gateRequest, tokenMatches } from "./gate.ts";
-import { realtimeParams, threadParams } from "./params.ts";
+import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
+import { WorkerManager } from "./workers.ts";
 
 type ClientSocket = ServerWebSocket<{ authorized: boolean }>;
 
@@ -127,6 +128,49 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     return id;
   }
 
+  // Present only under orchestrator.dispatch; every effect requires a live
+  // child and the orchestrator thread, and rejections surface to the model as
+  // tool refusals rather than hangs (workers.ts owns that translation).
+  const workers = config.orchestrator.dispatch
+    ? new WorkerManager({
+        async startWorker(brief) {
+          if (!appServer) throw new AppServerError("app-server is not running");
+          const workerThreadId = extractThreadId(
+            await appServer.request("thread/start", workerThreadParams(config)),
+          );
+          const turn = (await appServer.request("turn/start", {
+            threadId: workerThreadId,
+            input: [{ type: "text", text: brief }],
+          })) as { turn?: { id?: string } };
+          const turnId = turn?.turn?.id;
+          if (!turnId) throw new AppServerError("app-server returned no turn id for the worker");
+          return { threadId: workerThreadId, turnId };
+        },
+        async interruptWorker(workerThreadId, turnId) {
+          if (!appServer) throw new AppServerError("app-server is not running");
+          await appServer.request("turn/interrupt", { threadId: workerThreadId, turnId });
+        },
+        reportToOrchestrator(text) {
+          if (!appServer || !threadId) return;
+          // Fire and forget: upstream admission steers the report into a
+          // running turn or opens a fresh one; a failure only loses one
+          // report, and check_workers still carries the outcome.
+          appServer
+            .request("turn/start", {
+              threadId,
+              input: [{ type: "text", text }],
+            })
+            .catch((error) => {
+              console.error(
+                `worker report failed to land: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            });
+        },
+        now: () => Date.now(),
+        debug: debugLog,
+      })
+    : null;
+
   async function openThread(server: AppServer): Promise<string> {
     if (threadId) {
       try {
@@ -154,6 +198,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       processCwd: appServerCwd,
       clientVersion: version,
       onNotification: handleNotification,
+      onRequest: handleAppServerRequest,
       onExit: (info) => handleAppServerExit(server, info),
       debug: debugLog,
     });
@@ -183,6 +228,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     threadReady = false;
     const hadSession = sessions.hasSession;
     sessions.reset(); // every session died with the child
+    workers?.reset(); // running workers died with it too — marked lost, not resumed
     if (shuttingDown || expected) return;
     if (hadSession) send({ type: "closed", reason: "app-server-exited" });
     // A child that dies young counts as a failure even if it spawned cleanly,
@@ -217,9 +263,29 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   }
 
   function handleNotification(method: string, params: Record<string, unknown>): void {
+    if (method === "turn/completed" && workers) {
+      const turnThread = params["threadId"];
+      if (typeof turnThread === "string" && workers.ownsThread(turnThread)) {
+        workers.handleTurnCompleted(turnThread, (params["turn"] ?? {}) as Record<string, unknown>);
+      }
+      return;
+    }
     if (!method.startsWith("thread/realtime/")) return;
     if (params["threadId"] !== undefined && params["threadId"] !== threadId) return;
     sessions.handleNotification(method, params);
+  }
+
+  function handleAppServerRequest(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> | null {
+    if (method !== "item/tool/call" || !workers) return null;
+    // Only the orchestrator's thread carries the dispatch tools; anything
+    // else falls through to the fail-closed denial.
+    if (params["threadId"] !== threadId) return null;
+    const tool = typeof params["tool"] === "string" ? params["tool"] : "";
+    const args = (params["arguments"] ?? {}) as Record<string, unknown>;
+    return workers.handleToolCall(tool, args);
   }
 
   function handleClientMessage(text: string): void {
@@ -320,6 +386,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   console.log(
     `  sandbox         ${orchestrator.permissions ?? orchestrator.sandbox}  approvals ${orchestrator.approvalPolicy}`,
   );
+  console.log(`  dispatch        ${orchestrator.dispatch === true ? "on" : "off"}`);
   console.log(
     `  prompts         ${foundPrompts.length > 0 ? foundPrompts.join(" ") : "(none)"}  in ${config.configDir}`,
   );

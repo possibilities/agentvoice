@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/server/config.ts";
-import { realtimeParams, threadParams } from "../src/server/params.ts";
+import { realtimeParams, threadParams, workerThreadParams } from "../src/server/params.ts";
 
 const HOME = "/home/tester";
 
@@ -96,12 +96,25 @@ describe("threadParams", () => {
 
   test("resume omits the start-only fields", () => {
     const values: ConfigValues = {
-      orchestrator: { ephemeral: true, "history-mode": "legacy", model: "m" },
+      orchestrator: { ephemeral: true, "history-mode": "legacy", model: "m", dispatch: true },
     };
     const resumed = thread(values, {}, "resume");
     expect(resumed).not.toHaveProperty("ephemeral");
     expect(resumed).not.toHaveProperty("historyMode");
+    expect(resumed).not.toHaveProperty("dynamicTools");
     expect(resumed["model"]).toBe("m");
+  });
+
+  test("dispatch declares the worker tools at start only", () => {
+    const on = thread({ orchestrator: { dispatch: true } });
+    const tools = on["dynamicTools"] as Array<Record<string, unknown>>;
+    expect(tools.map((tool) => tool["name"])).toEqual([
+      "dispatch_worker",
+      "check_workers",
+      "cancel_worker",
+    ]);
+    expect(thread()).not.toHaveProperty("dynamicTools");
+    expect(thread({ orchestrator: { dispatch: false } })).not.toHaveProperty("dynamicTools");
   });
 
   test("extra merges last and can override", () => {
@@ -196,5 +209,42 @@ describe("realtimeParams", () => {
     const params = realtime({ voice: { extra: { outputModality: "text", brandNew: true } } });
     expect(params["outputModality"]).toBe("text");
     expect(params["brandNew"]).toBe(true);
+  });
+});
+
+describe("workerThreadParams", () => {
+  test("inherits the execution posture but not the identity", () => {
+    const params = workerThreadParams(
+      configure({
+        orchestrator: {
+          dispatch: true,
+          model: "m",
+          effort: "high",
+          sandbox: "workspace-write",
+          "approval-policy": "on-request",
+          "approvals-reviewer": "auto_review",
+          config: { agents: { enabled: false } },
+        },
+      }),
+    );
+    expect(params["cwd"]).toBe("/home/tester/.local/state/agentvoice/workspace");
+    expect(params["sandbox"]).toBe("workspace-write");
+    expect(params["approvalPolicy"]).toBe("on-request");
+    expect(params["approvalsReviewer"]).toBe("auto_review");
+    expect(params["model"]).toBe("m");
+    expect(params["config"]).toEqual({
+      model_reasoning_effort: "high",
+      agents: { enabled: false },
+    });
+    expect(params).not.toHaveProperty("dynamicTools");
+    expect(params).not.toHaveProperty("developerInstructions");
+    expect(params).not.toHaveProperty("baseInstructions");
+    expect(params).not.toHaveProperty("personality");
+  });
+
+  test("prefers a named permission profile over the sandbox, like the orchestrator", () => {
+    const params = workerThreadParams(configure({ orchestrator: { permissions: "profile-1" } }));
+    expect(params["permissions"]).toBe("profile-1");
+    expect(params).not.toHaveProperty("sandbox");
   });
 });

@@ -35,10 +35,15 @@ the server and the client use it; if only one does, it goes in that directory.
   - `gate.ts` — the handshake gate: pure Origin/Host/token checks every HTTP
     request passes before the WebSocket; tested in `tests/gate.test.ts`
   - `appserver.ts` — JSON-RPC over stdio to the app-server child; framing,
-    supervision, fail-closed denial of approval requests
+    supervision, fail-closed denial of approval requests (an optional
+    `onRequest` answerer may claim a request first; everything else denies)
   - `session.ts` — the voice-session state machine (supersede, attribution);
     pure effects-injected logic, tested in `tests/session.test.ts`
-  - `server.ts` — wiring: process supervision, thread, WebSocket
+  - `workers.ts` — worker dispatch under `orchestrator.dispatch`: the three
+    dynamic tools, the worker registry, and worker-report composition; pure
+    effects-injected logic, tested in `tests/workers.test.ts`
+  - `server.ts` — wiring: process supervision, thread, worker threads,
+    WebSocket
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
   two-peer redial), `audio.ts` (comparison path: OpenTUI capture + sox
   playback), `duplex-audio.ts` + `duplex-device.ts` + `native/` (opt-in duplex

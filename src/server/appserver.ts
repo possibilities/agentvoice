@@ -112,6 +112,15 @@ export interface AppServerOptions {
   processCwd: string;
   clientVersion: string;
   onNotification(method: string, params: Record<string, unknown>): void;
+  /**
+   * Optional answerer for server→client requests. Return a promise resolving
+   * to the response payload, or null (or reject) to fall back to the
+   * fail-closed denial. Absent means every request is denied.
+   */
+  onRequest?(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> | null;
   /** Called once when the child exits, after all pending requests were rejected. */
   onExit(info: { code: number | null; expected: boolean }): void;
   debug?(line: string): void;
@@ -316,8 +325,23 @@ export class AppServer {
     }
 
     if (id !== undefined && typeof method === "string") {
-      // Server→client request (approvals, user input): fail closed, always answer.
-      this.write(frameResponse(id as number | string, buildDenialResponse(method)));
+      // Server→client request. A handler may answer it (dispatch tool calls);
+      // everything else — and a handler that declines or throws — fail-closes
+      // with an immediate denial so no request ever parks a turn.
+      const requestId = id as number | string;
+      const params = (message["params"] ?? {}) as Record<string, unknown>;
+      const handled = this.options.onRequest?.(method, params);
+      if (handled) {
+        handled
+          .then((response) => {
+            this.write(frameResponse(requestId, response ?? buildDenialResponse(method)));
+          })
+          .catch(() => {
+            this.write(frameResponse(requestId, buildDenialResponse(method)));
+          });
+      } else {
+        this.write(frameResponse(requestId, buildDenialResponse(method)));
+      }
       return;
     }
 

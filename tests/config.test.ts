@@ -175,6 +175,12 @@ describe("parseYamlConfig", () => {
     expect(() =>
       parseYamlConfig("voice:\n  include-startup-context: yep\n", "server.yaml"),
     ).toThrow(/must be true or false/);
+    expect(() => parseYamlConfig("orchestrator:\n  dispatch: yep\n", "server.yaml")).toThrow(
+      /must be true or false/,
+    );
+    expect(parseYamlConfig("orchestrator:\n  dispatch: true\n", "server.yaml")).toEqual({
+      orchestrator: { dispatch: true },
+    });
     expect(() => parseYamlConfig("orchestrator: 3\n", "server.yaml")).toThrow(/must be a mapping/);
     expect(() => parseYamlConfig("- a\n- b\n", "server.yaml")).toThrow(ConfigError);
   });

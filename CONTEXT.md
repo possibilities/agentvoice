@@ -80,3 +80,19 @@ middleware", "firewall".
 WebSocket handshake, persisted at `~/.local/state/agentvoice/token`
 (mode 0600); the server creates it at first boot, the bundled client reads it
 automatically. _Avoid_: "API key", "auth token", "password".
+
+**Worker** — a sibling codex thread the orchestrator agent dispatches
+asynchronous work to, with its own context and the orchestrator's execution
+posture but none of its prompts. Addressed by a speakable handle (`w1`), never
+a thread id. _Avoid_: subagent (codex's in-thread feature, deliberately
+disabled), background task.
+
+**Dispatch** — the `orchestrator.dispatch` surface: three dynamic tools
+(`dispatch_worker`, `check_workers`, `cancel_worker`) declared on the
+orchestrator's thread, answered by this server. _Avoid_: delegation (reserved
+for voice→orchestrator), spawn.
+
+**Worker report** — the `<worker_report>` turn the server starts on the
+orchestrator's thread when a worker's turn completes: status plus the worker's
+final message, trimmed. Arrives mid-turn as steered input or opens a fresh
+turn. _Avoid_: callback, notification (reserved for JSON-RPC).

@@ -45,6 +45,8 @@ export interface OrchestratorConfig {
   workspace: string;
   sandbox: SandboxMode;
   approvalPolicy: ApprovalPolicy;
+  /** Declare the worker-dispatch tools on the orchestrator's thread. */
+  dispatch?: boolean;
   model?: string;
   effort?: string;
   personality?: Personality;
@@ -94,6 +96,7 @@ export interface ServerConfig {
 
 export interface OrchestratorValues {
   workspace?: string;
+  dispatch?: boolean;
   model?: string;
   effort?: string;
   personality?: Personality;
@@ -136,6 +139,7 @@ export const SERVER_KEYS = ["port", "codex", "orchestrator", "voice"] as const;
 
 export const ORCHESTRATOR_KEYS = [
   "workspace",
+  "dispatch",
   "model",
   "effort",
   "personality",
@@ -321,6 +325,9 @@ function parseOrchestrator(source: string, raw: unknown): OrchestratorValues {
         break;
       case "ephemeral":
         values.ephemeral = asBoolean(source, path, value);
+        break;
+      case "dispatch":
+        values.dispatch = asBoolean(source, path, value);
         break;
       case "runtime-workspace-roots":
         values["runtime-workspace-roots"] = asStringArray(source, path, value);
@@ -538,6 +545,7 @@ export function resolveConfig(
     workspace,
     sandbox: explicitSandbox ?? "danger-full-access",
     approvalPolicy: pickOrchestrator("approval-policy") ?? "never",
+    dispatch: pickOrchestrator("dispatch"),
     model: pickOrchestrator("model"),
     effort: pickOrchestrator("effort"),
     personality: pickOrchestrator("personality"),

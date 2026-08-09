@@ -75,6 +75,7 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 | `orchestrator.sandbox` / `approval-policy` / `approvals-reviewer` / `permissions` | orchestrator | same-named fields | per thread |
 | `orchestrator.model-provider` / `service-tier` / `ephemeral` / `history-mode` / `runtime-workspace-roots` | orchestrator | same-named fields | per thread (`ephemeral`, `history-mode` are start-only) |
 | `orchestrator.config:` | orchestrator | `thread/start config{}` | per thread, any config.toml key |
+| `orchestrator.dispatch` | orchestrator | `thread/start dynamicTools` | per thread (start-only; upstream restores tools on resume) |
 | `orchestrator.extra:` | orchestrator | merged into `thread/start` | per thread |
 | `ORCHESTRATOR_BASE.md` | orchestrator | `baseInstructions` | **every model request** (immune to compaction) |
 | `ORCHESTRATOR.md` | orchestrator | `developerInstructions` | in-history developer item, re-injected after compaction |
@@ -407,6 +408,23 @@ default writable roots, so "outside the workspace" is not automatically
 "outside the sandbox" — escalations only trigger for genuinely protected
 paths.
 
+### Worker dispatch
+
+`orchestrator.dispatch: true` is this server's own lever on the surfaces
+above: it declares `dispatch_worker` / `check_workers` / `cancel_worker` as
+dynamic tools on the orchestrator's thread and answers their `item/tool/call`
+requests itself. A worker is a sibling thread carrying the orchestrator's
+execution posture (sandbox, approvals, model, `config:` layer) and none of
+its prompts; its `turn/completed` — whose payload carries the turn's items,
+final message included *(probe)* — becomes a `<worker_report>` turn started
+on the orchestrator's thread, which upstream admission steers into a running
+turn or opens fresh *(source)*. While a voice session is live, the report
+turn's response mirrors to the voice agent like any other output, which is
+what makes spoken announcements of finished work possible. Workers die with
+the app-server child (`lost`, never resumed). Disable codex's in-thread
+sub-agents (`agents.enabled: false`) so the two dispatch surfaces never
+compete.
+
 ### The ambient surface: MCP, skills, hooks, memory
 
 The orchestrator inherits the machine's codex environment, which is easy to
@@ -676,8 +694,11 @@ lever for a fork or a future version of this server:
 - `thread/start.dynamicTools` — client-implemented tools declared **at
   thread start** (thread-scoped, so later turns carry them); a model call
   comes back as an `item/tool/call` server→client request for the client
-  to execute *(source)*. The natural dispatch surface for a
-  worker-thread registry.
+  to execute *(source, probe: full round trip)*. Delegation turns carry
+  them too: the v3 delegation path submits through the same user-input
+  admission as `turn/start` (`session/mod.rs
+  route_realtime_text_input`) *(source)*. This is the surface
+  `orchestrator.dispatch` rides.
 - `thread/settings/update` — change model, effort, personality, sandbox,
   collaboration mode **mid-thread**.
 - `thread/realtime/appendText` — inject silent context into a live voice

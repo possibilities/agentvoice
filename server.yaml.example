@@ -61,6 +61,15 @@
 #   effort: high                   # none…ultra; sugar for model_reasoning_effort
 #   personality: pragmatic         # none | friendly | pragmatic
 #
+#   dispatch: false                # true declares three dynamic tools on the
+#                                  # orchestrator's thread — dispatch_worker,
+#                                  # check_workers, cancel_worker — so it can
+#                                  # run asynchronous work as sibling worker
+#                                  # threads that report back when they finish.
+#                                  # Workers inherit the execution posture
+#                                  # (sandbox, approvals, model, config) but
+#                                  # no prompt files and no dispatch tools.
+#
 #   sandbox: danger-full-access    # read-only | workspace-write | danger-full-access
 #   approval-policy: never         # never | on-request | untrusted
 #   approvals-reviewer: user       # user | auto_review | guardian_subagent

@@ -156,6 +156,23 @@ closed — not on renewals — and repeats it after every context compaction
 while a session is live, so keep it short. Details and verified semantics:
 [the field guide](docs/field-guide.md).
 
+### Worker dispatch
+
+`orchestrator.dispatch: true` declares three dynamic tools on the
+orchestrator's thread — `dispatch_worker`, `check_workers`, `cancel_worker` —
+answered by this server. A dispatched worker is a sibling codex thread with
+its own context: it inherits the orchestrator's execution posture (sandbox,
+approvals, model, `config:` layer) but no prompt files and no dispatch tools.
+The orchestrator's turn ends immediately with a speakable handle (`w1`); when
+the worker's turn completes, the server starts a `<worker_report>` turn on
+the orchestrator's thread carrying the status and the worker's final message
+— upstream admission steers it into a running turn or opens a fresh one, so
+reports land whether or not a conversation is mid-flight. Workers die with
+the app-server child and are reported as `lost` rather than resumed. Pairs
+with a doctrine that keeps asynchronous work off the conversation thread;
+`agents.enabled: false` in `orchestrator.config:` removes codex's own
+in-thread sub-agent tools so the two surfaces never compete.
+
 ## Security posture
 
 The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
