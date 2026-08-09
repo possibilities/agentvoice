@@ -10,6 +10,8 @@
  *   never send it to codex at all. The `default` entries in `.meta()` are
  *   schema documentation of resolution-time behavior, not parse-time values.
  * - The root, `accounts`, `orchestrator`, and `voice` reject unknown keys.
+ *   `strictObject` alone does not finish that job: zod skips a literal own
+ *   `__proto__` key, so `config.ts` scans the raw document for it separately.
  *   `orchestrator.config`, `orchestrator.extra`, and `voice.extra` are open
  *   passthroughs into the codex key space and must stay open.
  * - `$schema` appears only in the published-file schema; the loader tolerates

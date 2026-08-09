@@ -230,6 +230,26 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   voice: VOICE_KEYS,
 };
 
+/**
+ * zod's object parser deliberately skips a literal own `__proto__` key as an
+ * anti-pollution guard, so `strictObject` never reports it among its
+ * `unrecognized_keys`. The strict levels rejected it before the schema port and
+ * must keep rejecting it, so the raw `JSON.parse` output — where the key is
+ * still an own data property — is scanned once the schema itself is satisfied.
+ */
+function rejectProtoKeys(source: string, document: Record<string, unknown>): void {
+  if (Object.hasOwn(document, "__proto__")) {
+    fail(source, unknownKeyMessage("__proto__", SERVER_KEYS));
+  }
+  for (const [section, known] of Object.entries(KNOWN_KEYS)) {
+    const value = document[section];
+    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+    if (Object.hasOwn(value, "__proto__")) {
+      fail(source, unknownKeyMessage(`${section}.__proto__`, known));
+    }
+  }
+}
+
 /** `["a", "b", 2]` → `a.b[2]` — the key path every config error must name. */
 function formatIssuePath(path: ReadonlyArray<PropertyKey>): string {
   let formatted = "";
@@ -313,13 +333,15 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
     throw new ConfigError(`${source}: expected an object of options`);
   }
 
+  const raw = document as Record<string, unknown>;
   // Reserved for editor tooling; carries no configuration, whatever its value.
-  const { $schema: _schema, ...options } = document as Record<string, unknown>;
+  const { $schema: _schema, ...options } = raw;
   const parsed = configValuesSchema.safeParse(options);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     fail(source, issue !== undefined ? issueMessage(issue) : parsed.error.message);
   }
+  rejectProtoKeys(source, raw);
   return parsed.data;
 }
 

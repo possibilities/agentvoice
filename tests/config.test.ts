@@ -219,6 +219,44 @@ describe("parseJsonConfig", () => {
     );
     expect(() => parseJsonConfig('["a", "b"]', "server.json")).toThrow(ConfigError);
   });
+
+  // zod's object parser skips a literal own `__proto__` key, so `strictObject`
+  // never lists it among its unrecognized keys. Every level that rejected
+  // unknown options before the schema port must still reject this one, with the
+  // same prose. The inputs are built by JSON.parse rather than object literals
+  // because a `__proto__` key written in source is special-cased by the
+  // language and would not create the own property this exercises.
+  test("a __proto__ key is an unknown option at every strict level", () => {
+    expect(() => parseJsonConfig('{"__proto__": {"polluted": true}}', "server.json")).toThrow(
+      /unknown option "__proto__"; known keys: port, codex, accounts, orchestrator, voice/,
+    );
+    expect(() =>
+      parseJsonConfig('{"codex": "codex", "__proto__": {"polluted": true}}', "server.json"),
+    ).toThrow(/unknown option "__proto__"/);
+    expect(() =>
+      parseJsonConfig('{"accounts": {"__proto__": {"polluted": true}}}', "server.json"),
+    ).toThrow(/unknown option "accounts.__proto__"; known keys: balance, switch-threshold/);
+    expect(() =>
+      parseJsonConfig('{"orchestrator": {"__proto__": {"polluted": true}}}', "server.json"),
+    ).toThrow(/unknown option "orchestrator.__proto__"; known keys: workspace, dispatch/);
+    expect(() =>
+      parseJsonConfig('{"voice": {"__proto__": {"polluted": true}}}', "server.json"),
+    ).toThrow(/unknown option "voice.__proto__"; known keys: model, name, version/);
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false);
+  });
+
+  test("the open passthroughs stay open under a __proto__ key", () => {
+    expect(
+      parseJsonConfig(
+        '{"orchestrator": {"extra": {"__proto__": {"x": 1}, "a": 2}}}',
+        "server.json",
+      ),
+    ).toEqual({ orchestrator: { extra: { a: 2 } } });
+    expect(
+      parseJsonConfig('{"voice": {"extra": {"__proto__": {"x": 1}, "a": 2}}}', "server.json"),
+    ).toEqual({ voice: { extra: { a: 2 } } });
+    expect(Object.hasOwn(Object.prototype, "x")).toBe(false);
+  });
 });
 
 describe("loadConfigFile", () => {
