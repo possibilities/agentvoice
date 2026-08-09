@@ -174,18 +174,18 @@ describe("parseJsonConfig", () => {
     expect(() => parseJsonConfig("port: 9001\n", "server.json")).toThrow(/not valid JSON/);
   });
 
-  test("names where each moved key went", () => {
+  test("flat pre-nesting keys are plain unknown options", () => {
     expect(() => parseJsonConfig('{"model": "m"}', "server.json")).toThrow(
-      /"model" moved to "orchestrator.model"/,
+      /unknown option "model"/,
     );
     expect(() => parseJsonConfig('{"voice-model": "vm"}', "server.json")).toThrow(
-      /"voice-model" moved to "voice.model"/,
+      /unknown option "voice-model"/,
     );
     expect(() => parseJsonConfig('{"voice": "marin"}', "server.json")).toThrow(
-      /moved to "voice.name"/,
+      /"voice" must be an object/,
     );
     expect(() => parseJsonConfig('{"orchestrator": {"voice-model": "vm"}}', "server.json")).toThrow(
-      /did you mean "voice.model"/,
+      /unknown option "orchestrator.voice-model"/,
     );
   });
 

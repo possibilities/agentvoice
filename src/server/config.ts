@@ -194,16 +194,6 @@ export const VOICE_KEYS = [
   "extra",
 ] as const;
 
-/** Flat keys from the pre-nesting layout, mapped to where they moved. */
-export const MOVED_KEYS: Readonly<Record<string, string>> = {
-  model: "orchestrator.model",
-  effort: "orchestrator.effort",
-  workspace: "orchestrator.workspace",
-  sandbox: "orchestrator.sandbox",
-  "approval-policy": "orchestrator.approval-policy",
-  "voice-model": "voice.model",
-};
-
 export class ConfigError extends Error {}
 
 // ---------------------------------------------------------------------------
@@ -363,7 +353,7 @@ function parseOrchestrator(source: string, raw: unknown): OrchestratorValues {
         values[key] = asMapping(source, path, value);
         break;
       default:
-        fail(source, unknownKeyMessage(path, key, ORCHESTRATOR_KEYS));
+        fail(source, unknownKeyMessage(path, ORCHESTRATOR_KEYS));
     }
   }
   return values;
@@ -386,16 +376,13 @@ function parseAccounts(source: string, raw: unknown): AccountsValues {
         break;
       }
       default:
-        fail(source, unknownKeyMessage(path, key, ACCOUNTS_KEYS));
+        fail(source, unknownKeyMessage(path, ACCOUNTS_KEYS));
     }
   }
   return values;
 }
 
 function parseVoice(source: string, raw: unknown): VoiceValues {
-  if (typeof raw === "string") {
-    fail(source, `"voice" is now an object; the voice name moved to "voice.name"`);
-  }
   const mapping = asMapping(source, "voice", raw);
   const values: VoiceValues = {};
   for (const [key, value] of Object.entries(mapping)) {
@@ -430,15 +417,13 @@ function parseVoice(source: string, raw: unknown): VoiceValues {
         values.extra = asMapping(source, path, value);
         break;
       default:
-        fail(source, unknownKeyMessage(path, key, VOICE_KEYS));
+        fail(source, unknownKeyMessage(path, VOICE_KEYS));
     }
   }
   return values;
 }
 
-function unknownKeyMessage(path: string, key: string, known: readonly string[]): string {
-  const moved = MOVED_KEYS[key];
-  if (moved) return `unknown option "${path}" — did you mean "${moved}"?`;
+function unknownKeyMessage(path: string, known: readonly string[]): string {
   return `unknown option "${path}"; known keys: ${known.join(", ")}`;
 }
 
@@ -459,10 +444,6 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
 
   const values: ConfigValues = {};
   for (const [key, raw] of Object.entries(document)) {
-    const moved = MOVED_KEYS[key];
-    if (moved) {
-      fail(source, `"${key}" moved to "${moved}"; see server.json.example`);
-    }
     switch (key) {
       case "$schema":
         // Reserved for editor tooling; carries no configuration.
