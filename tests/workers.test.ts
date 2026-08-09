@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DISPATCH_TOOLS,
+  dispatchTools,
   finalAgentMessage,
   type WorkerEffects,
   WorkerManager,
@@ -12,26 +12,35 @@ interface Recorded {
   reports: string[];
 }
 
-function manager(overrides: Partial<WorkerEffects> = {}): {
+function manager(
+  overrides: Partial<WorkerEffects> = {},
+  pushReports = true,
+): {
   workers: WorkerManager;
   recorded: Recorded;
 } {
   const recorded: Recorded = { briefs: [], interrupted: [], reports: [] };
   let clock = 1_000;
-  const workers = new WorkerManager({
-    async startWorker(brief) {
-      recorded.briefs.push(brief);
-      return { threadId: `th_${recorded.briefs.length}`, turnId: `tu_${recorded.briefs.length}` };
+  const workers = new WorkerManager(
+    {
+      async startWorker(brief) {
+        recorded.briefs.push(brief);
+        return {
+          threadId: `th_${recorded.briefs.length}`,
+          turnId: `tu_${recorded.briefs.length}`,
+        };
+      },
+      async interruptWorker(threadId, turnId) {
+        recorded.interrupted.push({ threadId, turnId });
+      },
+      reportToOrchestrator(text) {
+        recorded.reports.push(text);
+      },
+      now: () => (clock += 500),
+      ...overrides,
     },
-    async interruptWorker(threadId, turnId) {
-      recorded.interrupted.push({ threadId, turnId });
-    },
-    reportToOrchestrator(text) {
-      recorded.reports.push(text);
-    },
-    now: () => (clock += 500),
-    ...overrides,
-  });
+    pushReports,
+  );
   return { workers, recorded };
 }
 
@@ -42,16 +51,28 @@ function text(response: Record<string, unknown>): string {
 
 describe("the dispatch tool specs", () => {
   test("declare the three tools as functions with input schemas", () => {
-    expect(DISPATCH_TOOLS.map((tool) => tool["name"])).toEqual([
-      "dispatch_worker",
-      "check_workers",
-      "cancel_worker",
-    ]);
-    for (const tool of DISPATCH_TOOLS) {
-      expect(tool["type"]).toBe("function");
-      expect(tool["inputSchema"]).toBeDefined();
-      expect(String(tool["description"]).length).toBeGreaterThan(0);
+    for (const pushReports of [true, false]) {
+      const tools = dispatchTools(pushReports);
+      expect(tools.map((tool) => tool["name"])).toEqual([
+        "dispatch_worker",
+        "check_workers",
+        "cancel_worker",
+      ]);
+      for (const tool of tools) {
+        expect(tool["type"]).toBe("function");
+        expect(tool["inputSchema"]).toBeDefined();
+        expect(String(tool["description"]).length).toBeGreaterThan(0);
+      }
     }
+  });
+
+  test("the description promises only the behavior the mode delivers", () => {
+    const describeDispatch = (pushReports: boolean) =>
+      String(dispatchTools(pushReports)[0]?.["description"]);
+    expect(describeDispatch(true)).toContain("report arrives");
+    expect(describeDispatch(true)).not.toContain("call check_workers");
+    expect(describeDispatch(false)).toContain("check_workers");
+    expect(describeDispatch(false)).toContain("nothing is pushed");
   });
 });
 
@@ -189,6 +210,26 @@ describe("worker reports", () => {
     workers.handleTurnCompleted("th_1", { status: "completed", items: [] });
     workers.handleTurnCompleted("th_1", { status: "completed", items: [] });
     expect(recorded.reports).toHaveLength(1);
+  });
+});
+
+describe("pull-only mode (dispatch-reports off)", () => {
+  test("completion is recorded and relayed, but never pushed as a turn", async () => {
+    const updates: string[] = [];
+    const { workers, recorded } = manager(
+      { onWorkerUpdate: (worker) => updates.push(worker.status) },
+      false,
+    );
+    const ack = await workers.handleToolCall("dispatch_worker", { title: "one", brief: "b1" });
+    expect(text(ack)).toContain("check_workers");
+    expect(text(ack)).not.toContain("report will arrive");
+    workers.handleTurnCompleted("th_1", {
+      status: "completed",
+      items: [{ type: "agentMessage", text: "quietly done" }],
+    });
+    expect(recorded.reports).toEqual([]);
+    expect(updates).toEqual(["running", "completed"]);
+    expect(text(await workers.handleToolCall("check_workers", {}))).toContain("quietly done");
   });
 });
 

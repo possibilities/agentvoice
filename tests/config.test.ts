@@ -99,6 +99,23 @@ describe("resolveConfig", () => {
     expect(config.orchestrator.permissions).toBe("p");
   });
 
+  test("dispatch-reports requires dispatch", () => {
+    expect(() =>
+      resolveConfig({}, { orchestrator: { "dispatch-reports": true } }, {}, HOME),
+    ).toThrow(/requires orchestrator.dispatch/);
+    const config = resolveConfig(
+      {},
+      { orchestrator: { dispatch: true, "dispatch-reports": true } },
+      {},
+      HOME,
+    );
+    expect(config.orchestrator.dispatch).toBe(true);
+    expect(config.orchestrator.dispatchReports).toBe(true);
+    expect(
+      resolveConfig({}, { orchestrator: { dispatch: true } }, {}, HOME).orchestrator,
+    ).toHaveProperty("dispatchReports", undefined);
+  });
+
   test("configDir defaults to the config directory", () => {
     expect(resolveConfig({}, {}, {}, HOME).configDir).toBe("/home/tester/.config/agentvoice");
     expect(resolveConfig({}, {}, {}, HOME, { configDir: "/etc/avn" }).configDir).toBe("/etc/avn");
@@ -181,6 +198,9 @@ describe("parseYamlConfig", () => {
     expect(parseYamlConfig("orchestrator:\n  dispatch: true\n", "server.yaml")).toEqual({
       orchestrator: { dispatch: true },
     });
+    expect(() =>
+      parseYamlConfig("orchestrator:\n  dispatch-reports: yep\n", "server.yaml"),
+    ).toThrow(/must be true or false/);
     expect(() => parseYamlConfig("orchestrator: 3\n", "server.yaml")).toThrow(/must be a mapping/);
     expect(() => parseYamlConfig("- a\n- b\n", "server.yaml")).toThrow(ConfigError);
   });

@@ -54,53 +54,64 @@ export interface WorkerEffects {
  */
 type ToolResponse = Record<string, unknown>;
 
-/** Wire specs for `thread/start.dynamicTools` (0.147 DynamicToolFunctionSpec). */
-export const DISPATCH_TOOLS: ReadonlyArray<Record<string, unknown>> = [
-  {
-    type: "function",
-    name: "dispatch_worker",
-    description:
-      "Run asynchronous work as a separate worker thread with its own context. " +
-      "Give a crisp, self-contained brief: what to do, where, what done looks " +
-      "like, and where to write results. Returns a worker handle immediately; " +
-      "a worker report arrives as a later message when it finishes, so do not " +
-      "wait or poll — keep the conversation going.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          description: "A few speakable words naming the work, e.g. 'lint sweep'.",
+/**
+ * Wire specs for `thread/start.dynamicTools` (0.147 DynamicToolFunctionSpec).
+ * The descriptions are model-visible behavior contracts, so they follow the
+ * report mode: pushed reports promise "a report will arrive"; pull-only says
+ * to check. A description that promises events the server will not send
+ * would be a lie in the orchestrator's prompt surface.
+ */
+export function dispatchTools(pushReports: boolean): ReadonlyArray<Record<string, unknown>> {
+  return [
+    {
+      type: "function",
+      name: "dispatch_worker",
+      description:
+        "Run asynchronous work as a separate worker thread with its own context. " +
+        "Give a crisp, self-contained brief: what to do, where, what done looks " +
+        "like, and where to write results. Returns a worker handle immediately; " +
+        (pushReports
+          ? "a worker report arrives as a later message when it finishes, so do " +
+            "not wait or poll — keep the conversation going."
+          : "nothing is pushed to you when it finishes — call check_workers when " +
+            "you want status or results."),
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "A few speakable words naming the work, e.g. 'lint sweep'.",
+          },
+          brief: {
+            type: "string",
+            description: "The complete instructions the worker executes, standing alone.",
+          },
         },
-        brief: {
-          type: "string",
-          description: "The complete instructions the worker executes, standing alone.",
+        required: ["title", "brief"],
+      },
+    },
+    {
+      type: "function",
+      name: "check_workers",
+      description:
+        "List dispatched workers and their status (running, completed, failed, " +
+        "interrupted, cancelled, lost) with each finished worker's report.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      type: "function",
+      name: "cancel_worker",
+      description: "Interrupt a running worker by its handle (for example w2).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          worker: { type: "string", description: "The worker handle, e.g. w2." },
         },
+        required: ["worker"],
       },
-      required: ["title", "brief"],
     },
-  },
-  {
-    type: "function",
-    name: "check_workers",
-    description:
-      "List dispatched workers and their status (running, completed, failed, " +
-      "interrupted, cancelled, lost) with each finished worker's report.",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    type: "function",
-    name: "cancel_worker",
-    description: "Interrupt a running worker by its handle (for example w2).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        worker: { type: "string", description: "The worker handle, e.g. w2." },
-      },
-      required: ["worker"],
-    },
-  },
-];
+  ];
+}
 
 /** Keeps a worker's final message from flooding the orchestrator's context. */
 const REPORT_LIMIT_CHARS = 4_000;
@@ -137,11 +148,14 @@ function snapshot(worker: WorkerRecord): WorkerSnapshot {
 
 export class WorkerManager {
   private readonly effects: WorkerEffects;
+  /** Push `<worker_report>` turns on completion; off leaves check_workers as the only read. */
+  private readonly pushReports: boolean;
   private readonly workers = new Map<string, WorkerRecord>();
   private nextWorker = 1;
 
-  constructor(effects: WorkerEffects) {
+  constructor(effects: WorkerEffects, pushReports: boolean) {
     this.effects = effects;
+    this.pushReports = pushReports;
   }
 
   /** Thread ids of workers, for routing notifications. */
@@ -192,7 +206,9 @@ export class WorkerManager {
       const record = this.workers.get(id);
       if (record) this.effects.onWorkerUpdate?.(snapshot(record));
       return ok(
-        `${id} "${title}" is running. Its report will arrive as a message when it finishes — continue the conversation, don't wait.`,
+        this.pushReports
+          ? `${id} "${title}" is running. Its report will arrive as a message when it finishes — continue the conversation, don't wait.`
+          : `${id} "${title}" is running. Nothing is pushed when it finishes — check_workers reads status and results.`,
       );
     } catch (error) {
       // The id is not reused: a racing dispatch may already hold the next one.
@@ -241,6 +257,7 @@ export class WorkerManager {
     worker.report = trimReport(finalAgentMessage(turn) ?? "(the worker produced no final message)");
     this.effects.onWorkerUpdate?.(snapshot(worker));
 
+    if (!this.pushReports) return;
     this.effects.reportToOrchestrator(
       [
         `<worker_report worker="${worker.id}" title="${worker.title}" status="${worker.status}">`,

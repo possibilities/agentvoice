@@ -132,46 +132,49 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   // child and the orchestrator thread, and rejections surface to the model as
   // tool refusals rather than hangs (workers.ts owns that translation).
   const workers = config.orchestrator.dispatch
-    ? new WorkerManager({
-        async startWorker(brief) {
-          if (!appServer) throw new AppServerError("app-server is not running");
-          const workerThreadId = extractThreadId(
-            await appServer.request("thread/start", workerThreadParams(config)),
-          );
-          const turn = (await appServer.request("turn/start", {
-            threadId: workerThreadId,
-            input: [{ type: "text", text: brief }],
-          })) as { turn?: { id?: string } };
-          const turnId = turn?.turn?.id;
-          if (!turnId) throw new AppServerError("app-server returned no turn id for the worker");
-          return { threadId: workerThreadId, turnId };
+    ? new WorkerManager(
+        {
+          async startWorker(brief) {
+            if (!appServer) throw new AppServerError("app-server is not running");
+            const workerThreadId = extractThreadId(
+              await appServer.request("thread/start", workerThreadParams(config)),
+            );
+            const turn = (await appServer.request("turn/start", {
+              threadId: workerThreadId,
+              input: [{ type: "text", text: brief }],
+            })) as { turn?: { id?: string } };
+            const turnId = turn?.turn?.id;
+            if (!turnId) throw new AppServerError("app-server returned no turn id for the worker");
+            return { threadId: workerThreadId, turnId };
+          },
+          async interruptWorker(workerThreadId, turnId) {
+            if (!appServer) throw new AppServerError("app-server is not running");
+            await appServer.request("turn/interrupt", { threadId: workerThreadId, turnId });
+          },
+          reportToOrchestrator(text) {
+            if (!appServer || !threadId) return;
+            // Fire and forget: upstream admission steers the report into a
+            // running turn or opens a fresh one; a failure only loses one
+            // report, and check_workers still carries the outcome.
+            appServer
+              .request("turn/start", {
+                threadId,
+                input: [{ type: "text", text }],
+              })
+              .catch((error) => {
+                console.error(
+                  `worker report failed to land: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              });
+          },
+          onWorkerUpdate(worker) {
+            send({ type: "worker", worker });
+          },
+          now: () => Date.now(),
+          debug: debugLog,
         },
-        async interruptWorker(workerThreadId, turnId) {
-          if (!appServer) throw new AppServerError("app-server is not running");
-          await appServer.request("turn/interrupt", { threadId: workerThreadId, turnId });
-        },
-        reportToOrchestrator(text) {
-          if (!appServer || !threadId) return;
-          // Fire and forget: upstream admission steers the report into a
-          // running turn or opens a fresh one; a failure only loses one
-          // report, and check_workers still carries the outcome.
-          appServer
-            .request("turn/start", {
-              threadId,
-              input: [{ type: "text", text }],
-            })
-            .catch((error) => {
-              console.error(
-                `worker report failed to land: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            });
-        },
-        onWorkerUpdate(worker) {
-          send({ type: "worker", worker });
-        },
-        now: () => Date.now(),
-        debug: debugLog,
-      })
+        config.orchestrator.dispatchReports === true,
+      )
     : null;
 
   async function openThread(server: AppServer): Promise<string> {

@@ -93,6 +93,8 @@ orchestrator's thread, answered by this server. _Avoid_: delegation (reserved
 for voice→orchestrator), spawn.
 
 **Worker report** — the `<worker_report>` turn the server starts on the
-orchestrator's thread when a worker's turn completes: status plus the worker's
-final message, trimmed. Arrives mid-turn as steered input or opens a fresh
-turn. _Avoid_: callback, notification (reserved for JSON-RPC).
+orchestrator's thread when a worker's turn completes, under
+`orchestrator.dispatch-reports` (off by default — pull-only reading through
+`check_workers`): status plus the worker's final message, trimmed. Arrives
+mid-turn as steered input or opens a fresh turn. _Avoid_: callback,
+notification (reserved for JSON-RPC).

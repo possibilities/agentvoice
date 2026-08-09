@@ -117,6 +117,17 @@ describe("threadParams", () => {
     expect(thread({ orchestrator: { dispatch: false } })).not.toHaveProperty("dynamicTools");
   });
 
+  test("dispatch-reports flips the tools' promised behavior on the wire", () => {
+    const description = (values: ConfigValues) =>
+      String(
+        (thread(values)["dynamicTools"] as Array<Record<string, unknown>>)[0]?.["description"],
+      );
+    expect(description({ orchestrator: { dispatch: true } })).toContain("check_workers");
+    expect(description({ orchestrator: { dispatch: true, "dispatch-reports": true } })).toContain(
+      "report arrives",
+    );
+  });
+
   test("extra merges last and can override", () => {
     const params = thread({ orchestrator: { extra: { sandbox: "read-only", newField: 7 } } });
     expect(params["sandbox"]).toBe("read-only");

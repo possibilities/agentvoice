@@ -9,7 +9,7 @@
  */
 import type { Prompts, ServerConfig } from "./config.ts";
 import { VOICE_SEEDS } from "./config.ts";
-import { DISPATCH_TOOLS } from "./workers.ts";
+import { dispatchTools } from "./workers.ts";
 
 function setIfDefined(target: Record<string, unknown>, key: string, value: unknown): void {
   if (value !== undefined) target[key] = value;
@@ -56,7 +56,9 @@ export function threadParams(
     // Start-only on purpose: upstream persists dynamic tools in the session
     // meta and restores them on resume, so re-sending would be a lie about
     // what resuming applies (same reasoning as the fields above).
-    if (orchestrator.dispatch === true) params["dynamicTools"] = DISPATCH_TOOLS;
+    if (orchestrator.dispatch === true) {
+      params["dynamicTools"] = dispatchTools(orchestrator.dispatchReports === true);
+    }
   }
   return { ...params, ...orchestrator.extra };
 }

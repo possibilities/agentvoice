@@ -65,10 +65,17 @@
 #                                  # orchestrator's thread — dispatch_worker,
 #                                  # check_workers, cancel_worker — so it can
 #                                  # run asynchronous work as sibling worker
-#                                  # threads that report back when they finish.
-#                                  # Workers inherit the execution posture
-#                                  # (sandbox, approvals, model, config) but
-#                                  # no prompt files and no dispatch tools.
+#                                  # threads. Workers inherit the execution
+#                                  # posture (sandbox, approvals, model,
+#                                  # config) but no prompt files and no
+#                                  # dispatch tools. Pull-only by default:
+#                                  # results are read with check_workers.
+#   dispatch-reports: false        # true additionally pushes a <worker_report>
+#                                  # turn at the orchestrator when a worker
+#                                  # finishes — the evented mode a doctrine
+#                                  # written for fire-and-forget expects. The
+#                                  # tool descriptions promise whichever mode
+#                                  # is on. Requires dispatch: true.
 #
 #   sandbox: danger-full-access    # read-only | workspace-write | danger-full-access
 #   approval-policy: never         # never | on-request | untrusted

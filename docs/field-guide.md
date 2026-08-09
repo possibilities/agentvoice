@@ -76,6 +76,7 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 | `orchestrator.model-provider` / `service-tier` / `ephemeral` / `history-mode` / `runtime-workspace-roots` | orchestrator | same-named fields | per thread (`ephemeral`, `history-mode` are start-only) |
 | `orchestrator.config:` | orchestrator | `thread/start config{}` | per thread, any config.toml key |
 | `orchestrator.dispatch` | orchestrator | `thread/start dynamicTools` | per thread (start-only; upstream restores tools on resume) |
+| `orchestrator.dispatch-reports` | orchestrator | the tools' descriptions + pushed `turn/start` reports | per thread (default off: pull-only via `check_workers`) |
 | `orchestrator.extra:` | orchestrator | merged into `thread/start` | per thread |
 | `ORCHESTRATOR_BASE.md` | orchestrator | `baseInstructions` | **every model request** (immune to compaction) |
 | `ORCHESTRATOR.md` | orchestrator | `developerInstructions` | in-history developer item, re-injected after compaction |
@@ -415,15 +416,18 @@ above: it declares `dispatch_worker` / `check_workers` / `cancel_worker` as
 dynamic tools on the orchestrator's thread and answers their `item/tool/call`
 requests itself. A worker is a sibling thread carrying the orchestrator's
 execution posture (sandbox, approvals, model, `config:` layer) and none of
-its prompts; its `turn/completed` — whose payload carries the turn's items,
-final message included *(probe)* — becomes a `<worker_report>` turn started
-on the orchestrator's thread, which upstream admission steers into a running
-turn or opens fresh *(source)*. While a voice session is live, the report
-turn's response mirrors to the voice agent like any other output, which is
-what makes spoken announcements of finished work possible. Workers die with
-the app-server child (`lost`, never resumed). Disable codex's in-thread
-sub-agents (`agents.enabled: false`) so the two dispatch surfaces never
-compete.
+its prompts; its `turn/completed` payload carries the turn's items, final
+message included *(probe)*. Completion is pull-only by default —
+`check_workers` reads outcomes, and the tool descriptions say so. With
+`orchestrator.dispatch-reports: true` the completion instead becomes a
+`<worker_report>` turn started on the orchestrator's thread, which upstream
+admission steers into a running turn or opens fresh *(source)* — and the
+descriptions promise that instead, so the model-visible contract always
+matches the wiring. While a voice session is live, a report turn's response
+mirrors to the voice agent like any other output, which is what makes spoken
+announcements of finished work possible. Workers die with the app-server
+child (`lost`, never resumed). Disable codex's in-thread sub-agents
+(`agents.enabled: false`) so the two dispatch surfaces never compete.
 
 ### The ambient surface: MCP, skills, hooks, memory
 
