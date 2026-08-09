@@ -32,10 +32,11 @@ client↔voice agent peer-to-peer; only coordination flows through this server.
 The bundled terminal client is `agentvoice client`. _Avoid_: "browser",
 "surface".
 
-**Duplex audio device** — The bundled client's client-owned miniaudio device:
-one `ma_device_type_duplex` whose native callback moves raw PCM through a
-capture ring and a playback ring. It is independent of OpenTUI's audio engine
-and stays open across redials. _Avoid_: "OpenTUI audio", "sox replacement".
+**Duplex audio device** — The bundled client's client-owned miniaudio device
+and its only audio path: one `ma_device_type_duplex` whose native callback
+moves raw PCM through a capture ring and a playback ring. It is independent of
+OpenTUI's audio engine and stays open across redials. _Avoid_: "OpenTUI
+audio".
 
 **Redial** — Negotiating a replacement voice session against the same
 orchestrator agent while the current one keeps playing; audio swaps when the

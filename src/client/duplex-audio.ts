@@ -5,7 +5,6 @@
 
 import OpusScript from "opusscript";
 import type { MediaStreamTrack } from "werift";
-import type { CaptureDeviceInfo, VoiceAudioOptions } from "./audio.ts";
 import { FRAME_SAMPLES, rmsDbS16 } from "./dsp.ts";
 import {
   DUPLEX_PLAYBACK_CHANNELS,
@@ -15,6 +14,22 @@ import {
   type DuplexStats,
   NativeDuplexDevice,
 } from "./duplex-device.ts";
+
+export interface VoiceAudioOptions {
+  deviceIndex?: number;
+  outputDeviceIndex?: number;
+  sendFrame(frame: Buffer): void;
+  onMicLevel(db: number): void;
+  onAgentLevel(db: number): void;
+  onWarning(line: string): void;
+  debug?(line: string): void;
+}
+
+export interface CaptureDeviceInfo {
+  index: number;
+  name: string;
+  isDefault: boolean;
+}
 
 const SILENCE_WARN_CHUNKS = 50;
 const CAPTURE_POLL_MS = 5;

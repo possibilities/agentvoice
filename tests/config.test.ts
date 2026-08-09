@@ -357,18 +357,17 @@ describe("parseArgs", () => {
 });
 
 describe("parseClientArgs", () => {
-  test("defaults to the sox backend and system devices", () => {
+  test("defaults to system devices", () => {
     expect(parseClientArgs([])).toEqual({
       help: false,
       config: {
         url: "ws://127.0.0.1:7890/ws",
-        audioBackend: "sox",
         debug: false,
       },
     });
   });
 
-  test("parses the duplex backend and both device indices", () => {
+  test("parses both device indices", () => {
     expect(
       parseClientArgs([
         "--url=ws://voice.test/ws",
@@ -377,8 +376,6 @@ describe("parseClientArgs", () => {
         "--device",
         "1",
         "--output-device=2",
-        "--audio-backend",
-        "duplex",
         "--debug",
       ]),
     ).toEqual({
@@ -388,19 +385,13 @@ describe("parseClientArgs", () => {
         token: "secret",
         deviceIndex: 1,
         outputDeviceIndex: 2,
-        audioBackend: "duplex",
         debug: true,
       },
     });
   });
 
-  test("rejects an unknown backend and a duplex-only output option on sox", () => {
-    expect(() => parseClientArgs(["--audio-backend", "other"])).toThrow(
-      /must be "sox" or "duplex"/,
-    );
-    expect(() => parseClientArgs(["--output-device", "1"])).toThrow(
-      /requires --audio-backend duplex/,
-    );
+  test("rejects the removed backend selector", () => {
+    expect(() => parseClientArgs(["--audio-backend", "duplex"])).toThrow(UsageError);
   });
 
   test("rejects malformed and out-of-range device indices", () => {

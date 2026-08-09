@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
 /**
- * One-time environment setup: verifies bun and codex, and installs sox
- * (required for the default client's speaker playback) via Homebrew when missing.
+ * One-time environment setup: verifies bun and codex, and builds the native
+ * duplex audio library the client cannot start without.
  */
-export {};
+import { dirname, join } from "node:path";
+
+const root = dirname(import.meta.dir);
+const bunExe = process.execPath;
 
 const ok = (line: string) => console.log(`  ✓ ${line}`);
 const warn = (line: string) => console.log(`  ! ${line}`);
@@ -27,27 +30,25 @@ if (codex) {
   warn("codex not found on PATH — the server needs it: https://github.com/openai/codex");
 }
 
-// sox
-if (Bun.which("play") ?? Bun.which("sox")) {
-  ok("sox installed (default speaker playback)");
-} else {
-  const brew = Bun.which("brew");
-  if (!brew) {
-    fail("sox is missing and Homebrew is not available to install it.");
-    fail("Install sox manually (https://sox.sourceforge.net), then re-run setup.");
-    process.exit(1);
-  }
-  console.log("\n  installing sox via Homebrew…\n");
-  const install = Bun.spawn([brew, "install", "sox"], {
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if ((await install.exited) !== 0) {
-    fail("brew install sox failed — install it manually, then re-run setup.");
-    process.exit(1);
-  }
-  ok("sox installed");
+// native duplex audio — the client's only audio path, built from source
+const compiler = Bun.which("zig") ?? Bun.which("clang") ?? Bun.which("cc");
+if (!compiler) {
+  fail("no C compiler found — the client's duplex audio device is built from source.");
+  fail("Install Zig (https://ziglang.org) or a C11 compiler, then re-run setup.");
+  process.exit(1);
 }
+ok(`C compiler at ${compiler}`);
+
+console.log("\n  building the duplex audio device…\n");
+const build = Bun.spawn([bunExe, "run", join(root, "scripts", "build-native.ts")], {
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if ((await build.exited) !== 0) {
+  fail('duplex audio build failed — fix the toolchain, then run "bun run native:build".');
+  process.exit(1);
+}
+ok("duplex audio device built");
 
 console.log("\nready:  bun run server   then, in another terminal:  bun run client");

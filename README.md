@@ -19,19 +19,15 @@ see [Configuration](#configuration). Uses your existing ChatGPT/Codex login —
 - [codex CLI](https://github.com/openai/codex) ≥ 0.147 on PATH, logged in
   (`codex login`). Built and verified against codex-cli **0.147.0**; the
   realtime surface is experimental upstream and may shift between releases.
-- [sox](https://sox.sourceforge.net) — default client speaker playback only.
-  `bun run setup` checks the default environment and installs sox via Homebrew
-  if missing.
-- [Zig](https://ziglang.org/) or a C11 compiler — builds the opt-in native
-  duplex audio path. `bun run native:build` prefers Zig and falls back to
-  `clang`/`cc`.
+- [Zig](https://ziglang.org/) or a C11 compiler — the client's duplex audio
+  device is built from source and it has no other audio path. `bun run setup`
+  builds it, preferring Zig and falling back to `clang`/`cc`.
 
 ## Run
 
 ```bash
 bun install
-bun run setup                        # one-time: verifies bun/codex, installs sox
-bun run native:build                 # build the opt-in duplex audio device
+bun run setup                        # one-time: verifies bun/codex, builds duplex audio
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
 bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
@@ -266,26 +262,26 @@ agentvoice client --token <contents of the laptop's token file>
 ## Terminal client
 
 `agentvoice client` connects to a running server and opens a full-duplex
-voice console. The default sox comparison path captures the microphone
-in-process through OpenTUI and plays the voice agent through a sox `play`
-child. The opt-in `duplex` path replaces both with one client-owned miniaudio
-duplex device and bounded capture/playback PCM rings. Both paths exchange Opus
-over WebRTC and render live meters, sparklines, and finished-turn transcripts
+voice console. Capture and playback both run on one client-owned miniaudio
+duplex device with bounded PCM rings; audio is exchanged as Opus over WebRTC,
+and the console renders live meters, sparklines, and finished-turn transcripts
 (`you · …` / `agent · …`).
 
 ```bash
 bun run client                                   # defaults to ws://127.0.0.1:7890/ws
 bun run src/main.ts client --url ws://127.0.0.1:7890/ws --device 1 --debug
-bun run src/main.ts client --audio-backend duplex --device 1 --debug
 ```
 
-The duplex path is an A/B slice, not yet the default. It requests 48 kHz s16
-mono capture and stereo playback from one `ma_device_type_duplex`; miniaudio
-negotiates the physical device formats. Playback holds a 500 ms playout
-cushion on start/rebuffer in a ring with 1 s of capacity. Use
-`--output-device` to select a non-default speaker, or
+The device requests 48 kHz s16 mono capture and stereo playback from one
+`ma_device_type_duplex`; miniaudio negotiates the physical device formats.
+Playback holds a 500 ms playout cushion on start/rebuffer in a ring with 1 s
+of capacity. Use `--output-device` to select a non-default speaker, or
 `bun run audio:probe --device 1` to enumerate and briefly open the real duplex
 device without starting a voice session.
+
+The device is built from source and the client refuses to start without it —
+`bun run setup` builds it, and `bun run native:build` rebuilds after editing
+`src/client/native/`.
 
 - **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
@@ -304,11 +300,10 @@ device without starting a voice session.
   Settings › Privacy & Security › Microphone, then fully restart it). If the
   mic delivers pure silence the client shows a warning naming this.
 - `--debug` writes `~/.local/state/agentvoice/client-debug.log` including
-  audio-device inventory, decoded/playback cadence, plus every upstream event.
-  The sox path adds negotiated output and pipe backpressure; the duplex path
-  adds physical formats, callback cadence, RTP arrival-gap and handler-time
-  distributions, ring occupancy, drops, callback-level starvation events,
-  reroutes, and interruption counters.
+  audio-device inventory, decoded/playback cadence, physical device formats,
+  callback cadence, RTP arrival-gap and handler-time distributions, ring
+  occupancy, drops, callback-level starvation events, reroutes, and
+  interruption counters, plus every upstream event.
 
 ## Client API
 

@@ -11,7 +11,6 @@ import {
   shortId,
   sparkline,
 } from "../src/client/dsp.ts";
-import { observeSinkResult } from "../src/client/playback.ts";
 
 describe("frame constants", () => {
   test("one frame is 20ms at the session rate", () => {
@@ -104,39 +103,5 @@ describe("shortId", () => {
     expect(shortId("abc")).toBe("abc");
     expect(shortId("012345678")).toBe("012345678");
     expect(shortId("0123456789abcdef")).toBe("01234567…");
-  });
-});
-
-describe("observeSinkResult", () => {
-  test("leaves synchronous sink results alone", () => {
-    let settled = false;
-    const pending = observeSinkResult(960, {
-      resolved: () => {
-        settled = true;
-      },
-      rejected: () => {
-        settled = true;
-      },
-    });
-    expect(pending).toBeFalse();
-    expect(settled).toBeFalse();
-  });
-
-  test("observes asynchronous completion and rejection", async () => {
-    const outcomes: string[] = [];
-    expect(
-      observeSinkResult(Promise.resolve(960), {
-        resolved: () => outcomes.push("resolved"),
-        rejected: () => outcomes.push("unexpected rejection"),
-      }),
-    ).toBeTrue();
-    expect(
-      observeSinkResult(Promise.reject(new Error("EPIPE")), {
-        resolved: () => outcomes.push("unexpected resolution"),
-        rejected: (error) => outcomes.push(error instanceof Error ? error.message : String(error)),
-      }),
-    ).toBeTrue();
-    await Promise.resolve();
-    expect(outcomes).toEqual(["resolved", "EPIPE"]);
   });
 });

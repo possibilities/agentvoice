@@ -83,8 +83,7 @@ Options:
   --token <secret>         Connection token (default: the server-written token file
                            in the state directory)
   --device <index>         Microphone device index (default: system default)
-  --output-device <index>  Speaker device index (duplex backend; default: system default)
-  --audio-backend <name>   sox | duplex (default: sox)
+  --output-device <index>  Speaker device index (default: system default)
   --debug                  Write a debug log to the state directory
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
@@ -112,7 +111,7 @@ const SERVER_FLAGS: FlagSpec = {
 };
 
 const CLIENT_FLAGS: FlagSpec = {
-  value: new Set(["--url", "--token", "--device", "--output-device", "--audio-backend"]),
+  value: new Set(["--url", "--token", "--device", "--output-device"]),
   bool: new Set(["--debug", "--help"]),
 };
 
@@ -301,13 +300,6 @@ export function parseClientArgs(argv: string[]): ParsedClientCommand {
   const outputDevice = parsed.values["output-device"];
   const outputDeviceIndex =
     outputDevice === undefined ? undefined : parseDeviceIndex("--output-device", outputDevice);
-  const audioBackend = parsed.values["audio-backend"] ?? "sox";
-  if (audioBackend !== "sox" && audioBackend !== "duplex") {
-    throw new UsageError(`--audio-backend must be "sox" or "duplex"; got "${audioBackend}"`);
-  }
-  if (outputDeviceIndex !== undefined && audioBackend !== "duplex") {
-    throw new UsageError("--output-device requires --audio-backend duplex");
-  }
   const token = parsed.values["token"];
   return {
     help: false,
@@ -316,7 +308,6 @@ export function parseClientArgs(argv: string[]): ParsedClientCommand {
       ...(token !== undefined ? { token } : {}),
       ...(deviceIndex !== undefined ? { deviceIndex } : {}),
       ...(outputDeviceIndex !== undefined ? { outputDeviceIndex } : {}),
-      audioBackend,
       debug: parsed.debug,
     },
   };

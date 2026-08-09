@@ -27,8 +27,11 @@ async function run(label: string, argv: string[]): Promise<void> {
 }
 
 await run("installing dependencies", [bun, "install"]);
-await run("checking the environment (codex, sox)", [bun, "run", join(root, "scripts", "setup.ts")]);
-await run("building native duplex audio", [bun, "run", join(root, "scripts", "build-native.ts")]);
+await run("checking the environment and building native duplex audio", [
+  bun,
+  "run",
+  join(root, "scripts", "setup.ts"),
+]);
 await run("linking a global agentvoice (editable)", [bun, "link"]);
 
 const linked = Bun.which("agentvoice");

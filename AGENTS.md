@@ -11,10 +11,10 @@ terms in code, comments, and commit messages.
 - `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
 - `bun run lint` / `bun run format` — Biome check / autofix
 - `bun run server` / `bun run client` — the real thing (needs codex ≥ 0.147
-  logged in; the default client also needs sox and a microphone)
+  logged in; the client also needs a built duplex device and a microphone)
 - `bun run native:build` / `bun run audio:probe` — build and exercise the
-  opt-in duplex audio device (needs Zig or a C11 compiler; the probe needs
-  audio hardware)
+  duplex audio device (needs Zig or a C11 compiler; the probe needs audio
+  hardware). `bun run setup` builds it; the client will not start without it
 
 ## Map
 
@@ -50,9 +50,9 @@ the server and the client use it; if only one does, it goes in that directory.
   - `server.ts` — wiring: process supervision, thread, worker threads,
     WebSocket, account rotation at idle
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
-  two-peer redial), `audio.ts` (comparison path: OpenTUI capture + sox
-  playback), `duplex-audio.ts` + `duplex-device.ts` + `native/` (opt-in duplex
-  audio device), `dsp.ts` (pure audio math, tested), `ui.ts` (OpenTUI console)
+  two-peer redial), `duplex-audio.ts` + `duplex-device.ts` + `native/` (the
+  duplex audio device — the only audio path), `dsp.ts` (pure audio math,
+  tested), `ui.ts` (OpenTUI console)
 - `server.schema.json` — the whole config surface, every key typed and
   documented; generated from `config.ts`'s key lists by
   `bun run generate:schema` (a test fails on drift, and the generator throws
