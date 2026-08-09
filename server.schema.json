@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "agentvoice server configuration",
+  "description": "Configuration for `agentvoice server`, read once at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reserved for editor tooling; agentvoice ignores it."
+    },
+    "port": {
+      "type": ["integer", "string"],
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "WebSocket port, bound to 127.0.0.1 only.",
+      "default": 7890
+    },
+    "codex": {
+      "type": "string",
+      "description": "The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else \"codex\" on PATH."
+    },
+    "accounts": {
+      "type": "object",
+      "description": "Opt-in multi-account balancing over account profiles: per-account CODEX_HOMEs under ~/.local/state/agentvoice/accounts/, each holding its own auth.json with everything else symlinked to the canonical ~/.codex so every account shares one session store (threads resume across accounts).",
+      "properties": {
+        "balance": {
+          "type": "boolean",
+          "description": "Ask the balancer (`agentusage balance codex`, falling back to `codex-swap select`) which account to run on at every app-server child spawn. Needs profiles: `agentvoice accounts add <slug>` once per account — with codex-swap installed and none logged in, boot exits with the exact onboarding commands. Without the balancer CLIs, or on transient refusals, the server falls back to the canonical home loudly. Default: false (the canonical ~/.codex and whatever `codex login` put there).",
+          "default": false
+        },
+        "switch-threshold": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 100,
+          "description": "Utilization percent at which an idle child rotates to a better account.",
+          "default": 95
+        }
+      },
+      "additionalProperties": false
+    },
+    "orchestrator": {
+      "type": "object",
+      "description": "Primes the orchestrator agent — the codex thread that does the actual work.",
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "description": "The agent's working directory (its cwd; an AGENTS.md there applies). Tilde-expanded. Default: ~/.local/state/agentvoice/workspace."
+        },
+        "dispatch": {
+          "type": "boolean",
+          "description": "Declare three dynamic tools on the orchestrator's thread — dispatch_worker, check_workers, cancel_worker — so it can run asynchronous work as sibling worker threads. Workers inherit the execution posture (sandbox, approvals, model, config) but no prompt files and no dispatch tools. Pull-only by default: results are read with check_workers. Default: false.",
+          "default": false
+        },
+        "dispatch-reports": {
+          "type": "boolean",
+          "description": "Additionally push a <worker_report> turn at the orchestrator when a worker finishes — the evented mode a doctrine written for fire-and-forget expects. The tool descriptions promise whichever mode is on. Requires dispatch: true. Default: false.",
+          "default": false
+        },
+        "model": {
+          "type": "string",
+          "description": "Orchestrator model id. Mind the auth class: codex-branded models (gpt-5.3-codex …) are rejected on ChatGPT-account auth. Default: codex config."
+        },
+        "effort": {
+          "type": "string",
+          "description": "Reasoning effort (none…ultra); sugar for model_reasoning_effort. An entry in orchestrator.config beats this shorthand. Note: ultra additionally switches on codex's proactive multi-agent mode. Default: codex config."
+        },
+        "personality": {
+          "type": "string",
+          "enum": ["none", "friendly", "pragmatic"],
+          "description": "Orchestrator personality. Silently disabled when ORCHESTRATOR_BASE.md replaces the system prompt (the server warns at boot). Default: codex config."
+        },
+        "sandbox": {
+          "type": "string",
+          "enum": ["read-only", "workspace-write", "danger-full-access"],
+          "description": "Execution sandbox for the orchestrator thread. NOT combinable with permissions — set one or the other.",
+          "default": "danger-full-access"
+        },
+        "approval-policy": {
+          "type": "string",
+          "enum": ["never", "on-request", "untrusted"],
+          "description": "When codex escalates for approval.",
+          "default": "never"
+        },
+        "approvals-reviewer": {
+          "type": "string",
+          "enum": ["user", "auto_review", "guardian_subagent"],
+          "description": "Who reviews approval requests. auto_review gives escalations outside the sandbox an AI review (~3 s) instead of agentvoice's blanket fail-closed denial. Default: user."
+        },
+        "permissions": {
+          "type": "string",
+          "description": "Named permission profile. NOT combinable with sandbox — set one or the other."
+        },
+        "model-provider": {
+          "type": "string",
+          "description": "Model provider id. Default: codex config."
+        },
+        "service-tier": {
+          "type": "string",
+          "description": "Service tier. Default: codex config."
+        },
+        "ephemeral": {
+          "type": "boolean",
+          "description": "Leave no persisted thread history. Default: false."
+        },
+        "history-mode": {
+          "type": "string",
+          "enum": ["legacy", "paginated"],
+          "description": "Thread history mode. Default: codex config."
+        },
+        "runtime-workspace-roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Replaces the thread's workspace roots. Entries are tilde-expanded."
+        },
+        "config": {
+          "type": "object",
+          "description": "Raw ~/.codex/config.toml overrides, applied to this thread only. An entry here beats the effort shorthand above."
+        },
+        "extra": {
+          "type": "object",
+          "description": "Raw thread/start passthrough, merged last — anything the protocol accepts but this file does not name yet. Typos surface as RPC errors at boot, not as config errors."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "not": {
+            "required": ["permissions", "sandbox"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "dispatch-reports": {
+                "const": true
+              }
+            },
+            "required": ["dispatch-reports"]
+          },
+          "then": {
+            "properties": {
+              "dispatch": {
+                "const": true
+              }
+            },
+            "required": ["dispatch"]
+          }
+        }
+      ]
+    },
+    "voice": {
+      "type": "object",
+      "description": "Primes the voice agent — the realtime speech model the user talks to.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Realtime voice model id. Default: codex config / upstream."
+        },
+        "name": {
+          "type": "string",
+          "description": "Voice timbre. v3 timbres: arbor breeze cove ember juniper maple sol spruce vale (alloy ash ballad cedar coral echo marin sage shimmer verse are v2-only and REJECTED under v3). Default: upstream."
+        },
+        "version": {
+          "type": "string",
+          "enum": ["v1", "v2", "v3"],
+          "description": "Realtime protocol version. agentvoice defaults to v3 rather than deferring to codex config: seed items are v3-only, and the verified session semantics are v3's.",
+          "default": "v3"
+        },
+        "include-startup-context": {
+          "type": "boolean",
+          "description": "Append a synthesized <startup_context> to the voice agent's instructions: the current thread, recent work across your other codex threads, and a depth-2 workspace tree. Worth false for an empty workspace. Default: upstream behavior."
+        },
+        "delegation-ack-filler": {
+          "type": "boolean",
+          "description": "Let the voice agent emit a filler acknowledgement while the orchestrator works. Unset keeps the Realtime API's own behavior."
+        },
+        "codex-response-handoff-mode": {
+          "type": "string",
+          "enum": ["thinking", "commentary", "bemTags"],
+          "description": "How orchestrator output is handed to the voice agent."
+        },
+        "codex-responses-as-items": {
+          "type": "boolean",
+          "description": "Deliver orchestrator output as conversation items. Default: false."
+        },
+        "codex-response-item-prefix": {
+          "type": "string",
+          "description": "Prefix for those conversation items."
+        },
+        "codex-response-handoff-channel-prefixes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Rename the bracketed channel markers per channel, e.g. {\"final\": [\"[RESULT] \"], \"analysis\": [\"[THINKING] \"], \"commentary\": [\"[NOTE] \"]}."
+        },
+        "flush-transcript-tail-on-session-end": {
+          "type": "boolean",
+          "description": "Route any leftover transcript tail through the orchestrator when the session ends.",
+          "default": false
+        },
+        "client-managed-handoffs": {
+          "type": "boolean",
+          "description": "SHARP EDGE: true stops app-server from forwarding orchestrator output to the voice agent, expecting the client to append it explicitly. agentvoice never does, so true silently severs the two agents. Default: false.",
+          "default": false
+        },
+        "extra": {
+          "type": "object",
+          "description": "Raw thread/realtime/start passthrough, merged last. outputModality and transport are owned by the server and belong here if you ever need them."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

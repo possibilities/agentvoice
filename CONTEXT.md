@@ -20,7 +20,7 @@ _Avoid_: "call", "realtime conversation".
 
 **Prompt file** — A conventionally named `SHOUTCASE.md` in the config
 directory that primes one agent, discovered by name rather than referenced from
-`server.yaml`. Absent leaves codex's built-in prompt; empty strips it. _Avoid_:
+`server.json`. Absent leaves codex's built-in prompt; empty strips it. _Avoid_:
 "system prompt" (ambiguous across the two agents).
 
 **Workspace** — The directory the orchestrator agent operates in (codex thread

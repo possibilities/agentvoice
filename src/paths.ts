@@ -21,7 +21,7 @@ export function tokenPath(env: Environ, home: string): string {
 export function defaultConfigPath(env: Environ, home: string): string {
   const xdg = env["XDG_CONFIG_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");
-  return join(base, "agentvoice", "server.yaml");
+  return join(base, "agentvoice", "server.json");
 }
 
 export function expandTilde(path: string, home: string): string {

@@ -6,7 +6,8 @@ import { parseArgs, parseClientArgs, UsageError } from "../src/main.ts";
 import {
   ConfigError,
   cliToConfigValues,
-  parseYamlConfig,
+  loadConfigFile,
+  parseJsonConfig,
   promptFilenames,
   readPrompts,
   resolveConfig,
@@ -122,26 +123,25 @@ describe("resolveConfig", () => {
   });
 });
 
-describe("parseYamlConfig", () => {
+describe("parseJsonConfig", () => {
   test("parses nested sections", () => {
-    const values = parseYamlConfig(
-      [
-        "port: 9001",
-        "orchestrator:",
-        "  model: gpt-5.3-codex",
-        "  personality: friendly",
-        "  ephemeral: false",
-        "  config:",
-        "    model_reasoning_summary_format: experimental",
-        "voice:",
-        "  model: gpt-realtime",
-        "  name: marin",
-        "  include-startup-context: false",
-        "  codex-response-handoff-channel-prefixes:",
-        "    final: ['[RESULT] ']",
-        "",
-      ].join("\n"),
-      "server.yaml",
+    const values = parseJsonConfig(
+      JSON.stringify({
+        port: 9001,
+        orchestrator: {
+          model: "gpt-5.3-codex",
+          personality: "friendly",
+          ephemeral: false,
+          config: { model_reasoning_summary_format: "experimental" },
+        },
+        voice: {
+          model: "gpt-realtime",
+          name: "marin",
+          "include-startup-context": false,
+          "codex-response-handoff-channel-prefixes": { final: ["[RESULT] "] },
+        },
+      }),
+      "server.json",
     );
     expect(values).toEqual({
       port: 9001,
@@ -160,56 +160,109 @@ describe("parseYamlConfig", () => {
     });
   });
 
-  test("empty file yields no values", () => {
-    expect(parseYamlConfig("", "server.yaml")).toEqual({});
-    expect(parseYamlConfig("# comments only\n", "server.yaml")).toEqual({});
+  test("empty and null documents yield no values", () => {
+    expect(parseJsonConfig("", "server.json")).toEqual({});
+    expect(parseJsonConfig("   \n", "server.json")).toEqual({});
+    expect(parseJsonConfig("null", "server.json")).toEqual({});
+  });
+
+  test("ignores $schema, which is reserved for editor tooling", () => {
+    expect(parseJsonConfig('{ "$schema": "./server.schema.json" }', "server.json")).toEqual({});
+  });
+
+  test("rejects a document that is not JSON", () => {
+    expect(() => parseJsonConfig("port: 9001\n", "server.json")).toThrow(/not valid JSON/);
   });
 
   test("names where each moved key went", () => {
-    expect(() => parseYamlConfig("model: m\n", "server.yaml")).toThrow(
+    expect(() => parseJsonConfig('{"model": "m"}', "server.json")).toThrow(
       /"model" moved to "orchestrator.model"/,
     );
-    expect(() => parseYamlConfig("voice-model: vm\n", "server.yaml")).toThrow(
+    expect(() => parseJsonConfig('{"voice-model": "vm"}', "server.json")).toThrow(
       /"voice-model" moved to "voice.model"/,
     );
-    expect(() => parseYamlConfig("voice: marin\n", "server.yaml")).toThrow(/moved to "voice.name"/);
-    expect(() => parseYamlConfig("orchestrator:\n  voice-model: vm\n", "server.yaml")).toThrow(
+    expect(() => parseJsonConfig('{"voice": "marin"}', "server.json")).toThrow(
+      /moved to "voice.name"/,
+    );
+    expect(() => parseJsonConfig('{"orchestrator": {"voice-model": "vm"}}', "server.json")).toThrow(
       /did you mean "voice.model"/,
     );
   });
 
   test("rejects unknown keys, bad enums, and bad types", () => {
-    expect(() => parseYamlConfig("modle: typo\n", "server.yaml")).toThrow(/unknown option "modle"/);
-    expect(() => parseYamlConfig("orchestrator:\n  nope: 1\n", "server.yaml")).toThrow(
+    expect(() => parseJsonConfig('{"modle": "typo"}', "server.json")).toThrow(
+      /unknown option "modle"/,
+    );
+    expect(() => parseJsonConfig('{"orchestrator": {"nope": 1}}', "server.json")).toThrow(
       /unknown option "orchestrator.nope"/,
     );
-    expect(() => parseYamlConfig("orchestrator:\n  personality: zany\n", "server.yaml")).toThrow(
-      /must be one of none, friendly, pragmatic/,
-    );
-    expect(() => parseYamlConfig("voice:\n  version: v9\n", "server.yaml")).toThrow(
+    expect(() =>
+      parseJsonConfig('{"orchestrator": {"personality": "zany"}}', "server.json"),
+    ).toThrow(/must be one of none, friendly, pragmatic/);
+    expect(() => parseJsonConfig('{"voice": {"version": "v9"}}', "server.json")).toThrow(
       /must be one of v1, v2, v3/,
     );
     expect(() =>
-      parseYamlConfig("voice:\n  include-startup-context: yep\n", "server.yaml"),
+      parseJsonConfig('{"voice": {"include-startup-context": "yep"}}', "server.json"),
     ).toThrow(/must be true or false/);
-    expect(() => parseYamlConfig("orchestrator:\n  dispatch: yep\n", "server.yaml")).toThrow(
+    expect(() => parseJsonConfig('{"orchestrator": {"dispatch": "yep"}}', "server.json")).toThrow(
       /must be true or false/,
     );
-    expect(parseYamlConfig("orchestrator:\n  dispatch: true\n", "server.yaml")).toEqual({
+    expect(parseJsonConfig('{"orchestrator": {"dispatch": true}}', "server.json")).toEqual({
       orchestrator: { dispatch: true },
     });
     expect(() =>
-      parseYamlConfig("orchestrator:\n  dispatch-reports: yep\n", "server.yaml"),
+      parseJsonConfig('{"orchestrator": {"dispatch-reports": "yep"}}', "server.json"),
     ).toThrow(/must be true or false/);
-    expect(() => parseYamlConfig("orchestrator: 3\n", "server.yaml")).toThrow(/must be a mapping/);
-    expect(() => parseYamlConfig("- a\n- b\n", "server.yaml")).toThrow(ConfigError);
+    expect(() => parseJsonConfig('{"orchestrator": 3}', "server.json")).toThrow(
+      /must be an object/,
+    );
+    expect(() => parseJsonConfig('["a", "b"]', "server.json")).toThrow(ConfigError);
   });
 });
 
-describe("server.yaml.example", () => {
+describe("loadConfigFile", () => {
+  let directory: string;
+
+  beforeAll(() => {
+    directory = mkdtempSync(join(tmpdir(), "avn-config-"));
+  });
+
+  afterAll(() => rmSync(directory, { recursive: true, force: true }));
+
+  test("a missing default-path file is no config at all", async () => {
+    expect(await loadConfigFile(join(directory, "absent", "server.json"), false)).toEqual({});
+  });
+
+  test("a missing explicit file is an error", async () => {
+    await expect(loadConfigFile(join(directory, "absent", "server.json"), true)).rejects.toThrow(
+      /config file not found/,
+    );
+  });
+
+  test("an explicit YAML path is rejected with a conversion hint", async () => {
+    await expect(loadConfigFile(join(directory, "server.yaml"), true)).rejects.toThrow(
+      /YAML configuration is no longer read/,
+    );
+  });
+
+  test("a leftover pre-migration server.yaml fails loud rather than booting on defaults", async () => {
+    const legacyDir = mkdtempSync(join(tmpdir(), "avn-legacy-"));
+    try {
+      writeFileSync(join(legacyDir, "server.yaml"), "orchestrator:\n  dispatch: true\n");
+      await expect(loadConfigFile(join(legacyDir, "server.json"), false)).rejects.toThrow(
+        /server\.yaml is no longer read; convert it/,
+      );
+    } finally {
+      rmSync(legacyDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("server.json.example", () => {
   test("is a no-op when copied verbatim", async () => {
-    const text = await Bun.file(join(import.meta.dir, "..", "server.yaml.example")).text();
-    const values = parseYamlConfig(text, "server.yaml.example");
+    const text = await Bun.file(join(import.meta.dir, "..", "server.json.example")).text();
+    const values = parseJsonConfig(text, "server.json.example");
     expect(values).toEqual({});
     expect(resolveConfig({}, values, {}, HOME)).toEqual(resolveConfig({}, {}, {}, HOME));
   });
@@ -293,11 +346,11 @@ describe("parseArgs", () => {
       "m1",
       "--voice-model=vm",
       "--config",
-      "/tmp/c.yaml",
+      "/tmp/c.json",
       "--debug",
     ]);
     expect(parsed.values).toEqual({ model: "m1", "voice-model": "vm" });
-    expect(parsed.configPath).toBe("/tmp/c.yaml");
+    expect(parsed.configPath).toBe("/tmp/c.json");
     expect(parsed.debug).toBe(true);
     expect(parsed.help).toBe(false);
   });

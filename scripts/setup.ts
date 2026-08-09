@@ -16,7 +16,7 @@ const [major, minor] = Bun.version.split(".").map((n) => Number.parseInt(n, 10))
 if ((major ?? 0) > 1 || ((major ?? 0) === 1 && (minor ?? 0) >= 3)) {
   ok(`bun ${Bun.version}`);
 } else {
-  warn(`bun ${Bun.version} — 1.3+ recommended (Bun.YAML, OpenTUI)`);
+  warn(`bun ${Bun.version} — 1.3+ recommended (OpenTUI)`);
 }
 
 // codex

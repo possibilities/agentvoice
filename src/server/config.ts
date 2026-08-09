@@ -1,5 +1,5 @@
 /**
- * Server configuration: CLI flags over `server.yaml` over built-in defaults.
+ * Server configuration: CLI flags over `server.json` over built-in defaults.
  * Options left unset are not sent to codex at all, so codex's own
  * configuration (`~/.codex/config.toml`) applies.
  *
@@ -104,7 +104,7 @@ export interface ServerConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Parsed option values (one source: CLI or YAML), keyed by config key
+// Parsed option values (one source: CLI or config file), keyed by config key
 // ---------------------------------------------------------------------------
 
 export interface OrchestratorValues {
@@ -295,7 +295,7 @@ function asStringArray(source: string, path: string, raw: unknown): string[] {
 
 function asMapping(source: string, path: string, raw: unknown): Record<string, unknown> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    fail(source, `"${path}" must be a mapping`);
+    fail(source, `"${path}" must be an object`);
   }
   return raw as Record<string, unknown>;
 }
@@ -394,7 +394,7 @@ function parseAccounts(source: string, raw: unknown): AccountsValues {
 
 function parseVoice(source: string, raw: unknown): VoiceValues {
   if (typeof raw === "string") {
-    fail(source, `"voice" is now a mapping; the voice name moved to "voice.name"`);
+    fail(source, `"voice" is now an object; the voice name moved to "voice.name"`);
   }
   const mapping = asMapping(source, "voice", raw);
   const values: VoiceValues = {};
@@ -442,27 +442,31 @@ function unknownKeyMessage(path: string, key: string, known: readonly string[]):
   return `unknown option "${path}"; known keys: ${known.join(", ")}`;
 }
 
-export function parseYamlConfig(text: string, source: string): ConfigValues {
+export function parseJsonConfig(text: string, source: string): ConfigValues {
+  if (text.trim().length === 0) return {};
   let document: unknown;
   try {
-    document = Bun.YAML.parse(text);
+    document = JSON.parse(text);
   } catch (error) {
     throw new ConfigError(
-      `${source}: not valid YAML: ${error instanceof Error ? error.message : String(error)}`,
+      `${source}: not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   if (document === null || document === undefined) return {};
   if (typeof document !== "object" || Array.isArray(document)) {
-    throw new ConfigError(`${source}: expected a mapping of options`);
+    throw new ConfigError(`${source}: expected an object of options`);
   }
 
   const values: ConfigValues = {};
   for (const [key, raw] of Object.entries(document)) {
     const moved = MOVED_KEYS[key];
     if (moved) {
-      fail(source, `"${key}" moved to "${moved}"; see server.yaml.example`);
+      fail(source, `"${key}" moved to "${moved}"; see server.json.example`);
     }
     switch (key) {
+      case "$schema":
+        // Reserved for editor tooling; carries no configuration.
+        break;
       case "port":
         if (typeof raw !== "number" && typeof raw !== "string") {
           fail(source, `"port" must be a number`);
@@ -489,12 +493,25 @@ export function parseYamlConfig(text: string, source: string): ConfigValues {
 }
 
 export async function loadConfigFile(path: string, explicit: boolean): Promise<ConfigValues> {
+  if (path.endsWith(".yaml") || path.endsWith(".yml")) {
+    throw new ConfigError(
+      `${path}: YAML configuration is no longer read; convert the file to JSON (see server.json.example)`,
+    );
+  }
   const file = Bun.file(path);
   if (!(await file.exists())) {
     if (explicit) throw new ConfigError(`config file not found: ${path}`);
+    // A leftover pre-migration server.yaml must fail loud rather than let the
+    // server silently boot on defaults.
+    const legacy = path.endsWith(".json") ? `${path.slice(0, -".json".length)}.yaml` : null;
+    if (legacy !== null && (await Bun.file(legacy).exists())) {
+      throw new ConfigError(
+        `${legacy} is no longer read; convert it to ${path} (see server.json.example)`,
+      );
+    }
     return {};
   }
-  return parseYamlConfig(await file.text(), path);
+  return parseJsonConfig(await file.text(), path);
 }
 
 /**

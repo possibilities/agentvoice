@@ -20,6 +20,7 @@
     "audio:probe": "bun run scripts/audio-probe.ts",
     "accounts:probe": "bun run scripts/account-profiles-probe.ts",
     "cli:install": "bun run scripts/install.ts",
+    "generate:schema": "bun run scripts/generate-schema.ts && biome check --write server.schema.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check",

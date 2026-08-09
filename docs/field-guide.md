@@ -41,7 +41,7 @@ collide):
 | Channel | Scope | Examples |
 |---|---|---|
 | CLI flags | server run | `--model`, `--voice`, `--effort` |
-| `server.yaml` named keys | server run | everything in `server.yaml.example` |
+| `server.json` named keys | server run | everything in `server.schema.json` |
 | Prompt files | server run (read at boot) | `VOICE.md`, `ORCHESTRATOR.md`, seeds |
 | `orchestrator.extra:` / `voice.extra:` | thread / voice session | any RPC field, merged last |
 | `orchestrator.config:` | thread | raw config.toml overrides (SessionFlags layer) |
@@ -465,7 +465,7 @@ forget when "configuring the agent":
 
 ### Precedence, end to end
 
-For any single knob the chain is: **CLI flag > `server.yaml` > (unset ⇒ not
+For any single knob the chain is: **CLI flag > `server.json` > (unset ⇒ not
 sent) > `~/.codex/config.toml` > codex built-in**. Two layered subtleties:
 
 - `orchestrator.config:` entries become a per-thread config layer that beats
@@ -495,7 +495,7 @@ If your `VOICE.md` seems inert, check the first row before anything else.
 Upstream deserialization ignores unknown fields on `thread/start` and
 `thread/realtime/start`. Inside `extra:` (and any hand-rolled client), a
 misspelled key is **dropped without an error**. The named keys in
-`server.yaml` are validated by this server; everything else is on you. When an
+`server.json` are validated by this server; everything else is on you. When an
 `extra:` knob seems dead, diff the `--debug` frame against the field tables in
 this guide.
 

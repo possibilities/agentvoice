@@ -9,9 +9,9 @@ describe("paths", () => {
     expect(stateDirectory({ XDG_STATE_HOME: "relative" }, HOME)).toBe(
       "/home/tester/.local/state/agentvoice",
     );
-    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoice/server.yaml");
+    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoice/server.json");
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
-      "/etc/xdg/agentvoice/server.yaml",
+      "/etc/xdg/agentvoice/server.json",
     );
     expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/token");
   });

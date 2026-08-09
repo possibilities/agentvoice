@@ -35,7 +35,7 @@ const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-accou
 A profile is a per-account CODEX_HOME under the state directory: its own
 auth.json, everything else symlinked to the canonical ~/.codex so all
 accounts share one session store. Enable selection with accounts.balance
-in server.yaml.
+in server.json.
 
 Usage:
   agentvoice accounts add <slug>   Create a profile and log it in
@@ -51,8 +51,9 @@ const SERVER_USAGE = `agentvoice server — start the voice server
 Usage:
   agentvoice server [options]
 
-Options (the full surface lives in server.yaml; see server.yaml.example):
-  --config <path>          Config file (default: ~/.config/agentvoice/server.yaml)
+Options (the full surface lives in server.json; see server.json.example
+and server.schema.json):
+  --config <path>          Config file (default: ~/.config/agentvoice/server.json)
   --model <id>             Orchestrator agent model (default: codex config)
   --effort <level>         Orchestrator agent reasoning effort (default: codex config)
   --voice-model <id>       Voice agent model (default: codex config)

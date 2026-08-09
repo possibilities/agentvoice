@@ -26,7 +26,7 @@ the server and the client use it; if only one does, it goes in that directory.
 - `src/protocol.ts` — client↔server wire messages; both sides import it
 - `src/paths.ts` — XDG path resolution; the client needs the state directory
 - `src/server/`
-  - `config.ts` — config resolution (CLI > `server.yaml` > default); unset
+  - `config.ts` — config resolution (CLI > `server.json` > default); unset
     options are not sent to codex at all. Values nest under `orchestrator` and
     `voice` by which agent they prime, not by which RPC carries them. Also owns
     prompt-file discovery (`PROMPT_FILES`)
@@ -53,9 +53,12 @@ the server and the client use it; if only one does, it goes in that directory.
   two-peer redial), `audio.ts` (comparison path: OpenTUI capture + sox
   playback), `duplex-audio.ts` + `duplex-device.ts` + `native/` (opt-in duplex
   audio device), `dsp.ts` (pure audio math, tested), `ui.ts` (OpenTUI console)
-- `server.yaml.example` — the whole config surface, every key commented out.
-  Copying it verbatim must stay a no-op; a test asserts that. Add new keys here
-  the same commit you add them to `config.ts`.
+- `server.schema.json` — the whole config surface, every key typed and
+  documented; generated from `config.ts`'s key lists by
+  `bun run generate:schema` (a test fails on drift, and the generator throws
+  on an undocumented key). `server.json.example` must stay a verbatim-copy
+  no-op; a test asserts that. Adding a config key means updating
+  `scripts/generate-schema.ts` in the same commit — the drift gate enforces it.
 
 **One `AGENTS.md`, at the root.** Codex loads only the chain from the project
 root down to the thread's cwd and never descends into subdirectories

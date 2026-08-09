@@ -68,12 +68,12 @@ lives in the config file.
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
 | `--port <n>` | `7890` | WebSocket port, bound to `127.0.0.1` only |
 | `--codex <path>` | `$CODEX_PATH` or `codex` | Codex binary to spawn |
-| `--config <path>` | `~/.config/agentvoice/server.yaml` | Config file location |
+| `--config <path>` | `~/.config/agentvoice/server.json` | Config file location |
 | `--debug` | off | Log app-server protocol frames to stderr |
 
 ## Configuration
 
-`$XDG_CONFIG_HOME/agentvoice/server.yaml` (default `~/.config/…`).
+`$XDG_CONFIG_HOME/agentvoice/server.json` (default `~/.config/…`).
 Precedence: **CLI > file > default**. An option left unset is not sent to codex
 at all, so your `~/.codex/config.toml` applies — the defaults add no opinions
 of their own.
@@ -83,41 +83,50 @@ guide](docs/field-guide.md)** is the depth — every lever that shapes either
 agent's behavior, verified against codex 0.147 source and live probes, with
 compaction and restart semantics, gotchas, and recipes.
 
-**[`server.yaml.example`](server.yaml.example) is the complete surface**, every
-key documented and commented out. Copying it verbatim behaves exactly like
-having no config file:
+**[`server.schema.json`](server.schema.json) documents the complete surface** —
+every key, type, enum, and default, surfaced as autocomplete and hover docs in
+any editor that honors the `$schema` key. [`server.json.example`](server.json.example)
+is the starting point; copying it verbatim behaves exactly like having no
+config file:
 
 ```bash
-cp server.yaml.example ~/.config/agentvoice/server.yaml
+cp server.json.example ~/.config/agentvoice/server.json
 ```
 
-Keys nest by which agent they prime, not by which call carries them:
+Keys nest by which agent they prime, not by which call carries them. `config`
+holds raw `~/.codex/config.toml` overrides; each `extra` is a raw RPC
+passthrough:
 
-```yaml
-port: 7890
-
-orchestrator:                    # the Codex thread that does the work
-  workspace: ~/projects/sandbox
-  model: gpt-5.6-sol
-  effort: high
-  personality: pragmatic
-  sandbox: danger-full-access
-  approval-policy: never
-  config: {}                     # raw ~/.codex/config.toml overrides
-  extra: {}                      # raw thread/start passthrough
-
-voice:                           # the realtime model you talk to
-  name: cove
-  version: v3
-  include-startup-context: false
-  extra: {}                      # raw thread/realtime/start passthrough
+```json
+{
+  "$schema": "./server.schema.json",
+  "port": 7890,
+  "orchestrator": {
+    "workspace": "~/projects/sandbox",
+    "model": "gpt-5.6-sol",
+    "effort": "high",
+    "personality": "pragmatic",
+    "sandbox": "danger-full-access",
+    "approval-policy": "never",
+    "config": {},
+    "extra": {}
+  },
+  "voice": {
+    "name": "cove",
+    "version": "v3",
+    "include-startup-context": false,
+    "extra": {}
+  }
+}
 ```
 
-Each `extra:` block is merged last into its RPC, so anything the protocol
+Each `extra` block is merged last into its RPC, so anything the protocol
 accepts but this config does not name yet is still reachable — useful because
 the realtime surface is experimental upstream. Beware: upstream ignores
 unknown fields rather than rejecting them, so a typo in `extra:` is silently
-dropped — verify against a `--debug` frame when a knob seems dead.
+dropped — verify against a `--debug` frame when a knob seems dead. (The same
+applies inside `config` and `extra` to the JSON Schema: it declares them as
+free-form objects, so editor validation ends at their boundary.)
 
 ### Prompts
 
@@ -376,7 +385,8 @@ gets a non-fatal `error`.
   multi-account balancing: a real `auth.json` per account, everything else
   symlinked to `~/.codex`. Safe to delete; recreate with
   `agentvoice accounts add`.
-- `~/.config/agentvoice/` — `server.yaml` and the prompt files beside it.
+- `~/.config/agentvoice/` — `server.json` (with `server.schema.json` beside
+  it for editor validation) and the prompt files beside it.
 
 Conversation state is in-memory per run: each server start opens a fresh
 orchestrator agent (surviving app-server restarts within the run). Prompt files
