@@ -23,8 +23,11 @@ import {
 } from "../protocol.ts";
 import {
   accountsDirectory,
+  balancerCliPresent,
   discoverProfiles,
+  listPoolAccounts,
   maxUsedPercent,
+  onboardingFailureMessage,
   reconcileFarm,
   runBalancerCommand,
   selectAccount,
@@ -405,6 +408,17 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       return;
     }
     sessions.handleOffer(parsed.message.sdp);
+  }
+
+  // Balancing on + a balancing setup installed + nothing onboarded is a
+  // configuration error, not a degraded mode: exit with the exact commands.
+  // Without the CLIs the same config quietly runs canonical, so one config
+  // deploys to every machine. Transient refusals later still fall back.
+  if (config.accounts.balance && balancerCliPresent()) {
+    const profiles = discoverProfiles(accountsDir);
+    if (!profiles.some((profile) => profile.identity !== null)) {
+      throw new Error(onboardingFailureMessage(await listPoolAccounts()));
+    }
   }
 
   // Boot fails fast: the operator is present. Later child exits are supervised.

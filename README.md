@@ -202,10 +202,15 @@ Selection runs at every child spawn (boot and supervised restarts). When the
 active account crosses `accounts.switch-threshold` (default 95% of either
 rate-limit window), the server rotates: at the next idle moment — no voice
 session, no running turn, no live workers — it restarts the child onto the
-balancer's next pick and resumes the same orchestrator thread. Any refusal
-(no balancer CLI, no profiles, nothing eligible) falls back loudly to the
-canonical `~/.codex` — with balancing off or codex-swap absent, behavior is
-exactly the single-account default.
+balancer's next pick and resumes the same orchestrator thread.
+
+Refusal posture: balancing on with codex-swap installed but **no profile
+logged in is a configuration error — boot exits with the exact
+`accounts add` commands** for the registered pool. Everything else degrades:
+without the balancer CLIs the same config quietly runs the canonical
+`~/.codex` (one config deploys to every machine), and transient refusals
+mid-run (nothing eligible, balancer hiccup) fall back loudly for that spawn.
+With balancing off, behavior is exactly the single-account default.
 
 Two things this deliberately never does: copy credentials between stores
 (ChatGPT refresh tokens rotate with reuse detection — each profile is its own

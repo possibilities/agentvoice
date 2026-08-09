@@ -109,8 +109,10 @@ ChatGPT account it holds a grant for), "codex home swap".
 
 **Balancer** — the external CLI consulted at child spawn when
 `accounts.balance` is on: `agentusage balance codex`, falling back to
-`codex-swap select`. Its pick is mapped to an account profile by email; every
-refusal degrades to the canonical home. _Avoid_: "load balancer", "router".
+`codex-swap select`. Its pick is mapped to an account profile by email.
+Transient refusals degrade to the canonical home; balancing configured with
+codex-swap installed but nothing onboarded refuses to boot, with
+instructions. _Avoid_: "load balancer", "router".
 
 **Rotation** — the supervised child restart that moves the server to the
 balancer's next pick after the active account crosses

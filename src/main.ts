@@ -10,6 +10,8 @@ import {
   AUTH_FILE,
   accountsDirectory,
   discoverProfiles,
+  listPoolAccounts,
+  onboardingCommands,
   reconcileFarm,
 } from "./server/accounts.ts";
 import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./server/config.ts";
@@ -213,10 +215,7 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
 
   if (subcommand === "list") {
     const profiles = discoverProfiles(accountsDir);
-    if (profiles.length === 0) {
-      console.log(`no account profiles in ${accountsDir}`);
-      return 0;
-    }
+    if (profiles.length === 0) console.log(`no account profiles in ${accountsDir}`);
     for (const profile of profiles) {
       const identity = profile.identity;
       console.log(
@@ -224,6 +223,11 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
           ? `${profile.slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`
           : `${profile.slug}  (not logged in — rerun \`agentvoice accounts add ${profile.slug}\`)`,
       );
+    }
+    const missing = onboardingCommands(await listPoolAccounts(), profiles);
+    if (missing.length > 0) {
+      console.log("\nregistered with codex-swap but still without a profile:");
+      for (const command of missing) console.log(`  ${command}`);
     }
     return 0;
   }
@@ -243,6 +247,9 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
       // codex owns the whole OAuth flow; the profile only scopes where the
       // grant lands. Device auth works headless and never binds port 1455.
       console.log(`logging in profile ${slug} (codex login --device-auth)…`);
+      console.log(
+        "This profile binds to whichever ChatGPT account approves the device\ncode — use a browser window signed into the account you mean.\n",
+      );
       const child = Bun.spawn(["codex", "login", "--device-auth"], {
         env: { ...process.env, CODEX_HOME: profileDir },
         stdin: "inherit",
@@ -261,13 +268,22 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
       return 1;
     }
     console.log(`${slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`);
-    const duplicate = discoverProfiles(accountsDir).find(
+    const profiles = discoverProfiles(accountsDir);
+    const duplicate = profiles.find(
       (candidate) => candidate.slug !== slug && candidate.identity?.email === identity.email,
     );
     if (duplicate) {
       console.error(
         `warning: ${duplicate.slug} holds the same account; selection maps by email and needs one profile per account`,
       );
+    }
+    const pool = await listPoolAccounts();
+    const missing = onboardingCommands(pool, profiles);
+    if (missing.length > 0) {
+      console.log("\nstill without a profile:");
+      for (const command of missing) console.log(`  ${command}`);
+    } else if (pool.length > 0) {
+      console.log("\nevery codex-swap account has a profile; restart the server to balance");
     }
     return 0;
   }

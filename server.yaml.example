@@ -59,8 +59,10 @@
 # profile: a per-account CODEX_HOME under ~/.local/state/agentvoice/accounts/
 # holding its own auth.json, everything else symlinked to ~/.codex so every
 # account shares one session store (threads resume across accounts). Onboard
-# profiles with `agentvoice accounts add <slug>`. Any refusal — no balancer,
-# no profiles, nothing eligible — falls back to the canonical home loudly.
+# profiles with `agentvoice accounts add <slug>`. With codex-swap installed
+# but no profile logged in, boot exits with the exact onboarding commands;
+# without the balancer CLIs, or on transient refusals, the server falls back
+# to the canonical home loudly.
 
 # accounts:
 #   balance: false                 # ask the balancer at every child spawn

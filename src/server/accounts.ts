@@ -11,8 +11,9 @@
  *
  * Selection is delegated to the balancer CLI — `agentusage balance codex`
  * first, `codex-swap select` as fallback — and its pick is mapped to a
- * profile by account email. Every refusal degrades to the canonical home so
- * the server always comes up.
+ * profile by account email. Transient refusals degrade to the canonical home;
+ * balancing configured with codex-swap installed but nothing onboarded
+ * refuses to boot, with instructions (`onboardingFailureMessage`).
  */
 import {
   existsSync,
@@ -296,4 +297,102 @@ export async function runBalancerCommand(argv: string[], timeoutMs: number): Pro
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding guidance
+// ---------------------------------------------------------------------------
+
+export interface PoolAccount {
+  email: string;
+  label: string | null;
+}
+
+/** `codex-swap accounts --json`: the registered pool, secret-free. */
+export function parseCodexSwapAccounts(stdout: string): PoolAccount[] {
+  try {
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const data = parsed["data"] as Record<string, unknown> | null | undefined;
+    const accounts = data?.["accounts"];
+    if (!Array.isArray(accounts)) return [];
+    const pool: PoolAccount[] = [];
+    for (const entry of accounts) {
+      const account = entry as Record<string, unknown>;
+      const email = account["email"];
+      if (typeof email !== "string" || email.length === 0) continue;
+      const label = account["label"];
+      pool.push({ email, label: typeof label === "string" ? label : null });
+    }
+    return pool;
+  } catch {
+    return [];
+  }
+}
+
+/** A slug proposal from the email's local part, held to the slug charset. */
+export function suggestSlug(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const slug = local
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug.length > 0 ? slug : "account";
+}
+
+export function balancerCliPresent(): boolean {
+  return Bun.which("codex-swap") !== null || Bun.which("agentusage") !== null;
+}
+
+/** Best-effort pool listing for guidance; failures mean an empty list. */
+export async function listPoolAccounts(
+  run: RunBalancer = runBalancerCommand,
+): Promise<PoolAccount[]> {
+  try {
+    const result = await run(["codex-swap", "accounts", "--json"], BALANCER_TIMEOUT_MS);
+    return parseCodexSwapAccounts(result.stdout);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * One `accounts add` line per pool account that has no logged-in profile
+ * yet. Empty when everything is mapped — or when the pool is unreadable, so
+ * absence of guidance never blocks anything.
+ */
+export function onboardingCommands(pool: PoolAccount[], profiles: AccountProfile[]): string[] {
+  const mapped = new Set(
+    profiles.flatMap((profile) => (profile.identity ? [profile.identity.email] : [])),
+  );
+  return pool
+    .filter((account) => !mapped.has(account.email))
+    .map((account) => {
+      const label = account.label ? `  (${account.label})` : "";
+      return `agentvoice accounts add ${suggestSlug(account.email)}   # ${account.email}${label}`;
+    });
+}
+
+/**
+ * The boot refusal for balance-on with nothing onboarded: exiting with
+ * instructions beats silently running single-account on a machine that
+ * clearly has a multi-account setup.
+ */
+export function onboardingFailureMessage(pool: PoolAccount[]): string {
+  const commands =
+    pool.length > 0
+      ? onboardingCommands(pool, [])
+      : ["agentvoice accounts add <slug>   # one per ChatGPT account"];
+  return [
+    "accounts.balance is on, but no account profile is logged in.",
+    "",
+    "Each ChatGPT account needs a one-time profile login — its own grant;",
+    "credentials are never copied from codex-swap:",
+    "",
+    ...commands.map((command) => `  ${command}`),
+    "",
+    "Each login binds its profile to whichever account approves the device",
+    "code, so use a browser window signed into the account you mean.",
+    "Then restart the server. To run single-account instead, set",
+    "accounts.balance: false.",
+  ].join("\n");
 }

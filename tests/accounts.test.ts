@@ -18,10 +18,14 @@ import {
   decodeIdentity,
   discoverProfiles,
   maxUsedPercent,
+  onboardingCommands,
+  onboardingFailureMessage,
   parseAgentusageBalance,
+  parseCodexSwapAccounts,
   parseCodexSwapSelect,
   reconcileFarm,
   selectAccount,
+  suggestSlug,
 } from "../src/server/accounts.ts";
 
 function fakeAuthJson(email: string, accountId = "acct-1", plan = "plus"): string {
@@ -101,6 +105,53 @@ describe("maxUsedPercent", () => {
     );
     expect(maxUsedPercent({ rateLimits: {} })).toBeNull();
     expect(maxUsedPercent({})).toBeNull();
+  });
+});
+
+describe("onboarding guidance", () => {
+  const pool = [
+    { email: "mike.b+work@gmail.com", label: "ArtHack (role:owner)" },
+    { email: "other@x.y", label: null },
+  ];
+
+  test("parses the codex-swap accounts envelope, tolerating garbage", () => {
+    expect(
+      parseCodexSwapAccounts(
+        JSON.stringify({
+          data: { accounts: [{ email: "a@b.c", label: "L" }, { email: "" }, { notEmail: 1 }] },
+        }),
+      ),
+    ).toEqual([{ email: "a@b.c", label: "L" }]);
+    expect(parseCodexSwapAccounts("nope")).toEqual([]);
+    expect(parseCodexSwapAccounts(JSON.stringify({ data: null }))).toEqual([]);
+  });
+
+  test("suggests a slug from the email local part, held to the slug charset", () => {
+    expect(suggestSlug("mike.b+work@gmail.com")).toBe("mike-b-work");
+    expect(suggestSlug("UPPER@x.y")).toBe("upper");
+    expect(suggestSlug("---@x.y")).toBe("account");
+  });
+
+  test("lists an add command per unmapped pool account", () => {
+    const profiles = [
+      {
+        slug: "other",
+        directory: "/p/other",
+        identity: { email: "other@x.y", accountId: null, plan: null },
+      },
+    ];
+    const commands = onboardingCommands(pool, profiles);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toContain("agentvoice accounts add mike-b-work");
+    expect(commands[0]).toContain("mike.b+work@gmail.com");
+    expect(onboardingCommands(pool, [])).toHaveLength(2);
+  });
+
+  test("the boot failure names the commands, or a placeholder without a pool", () => {
+    const message = onboardingFailureMessage(pool);
+    expect(message).toContain("accounts.balance is on");
+    expect(message).toContain("agentvoice accounts add mike-b-work");
+    expect(onboardingFailureMessage([])).toContain("agentvoice accounts add <slug>");
   });
 });
 
