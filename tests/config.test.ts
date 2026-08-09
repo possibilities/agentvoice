@@ -240,21 +240,13 @@ describe("loadConfigFile", () => {
     );
   });
 
-  test("an explicit YAML path is rejected with a conversion hint", async () => {
-    await expect(loadConfigFile(join(directory, "server.yaml"), true)).rejects.toThrow(
-      /YAML configuration is no longer read/,
-    );
-  });
-
-  test("a leftover pre-migration server.yaml fails loud rather than booting on defaults", async () => {
-    const legacyDir = mkdtempSync(join(tmpdir(), "avn-legacy-"));
+  test("a stray server.yaml beside a missing server.json is ignored", async () => {
+    const strayDir = mkdtempSync(join(tmpdir(), "avn-stray-"));
     try {
-      writeFileSync(join(legacyDir, "server.yaml"), "orchestrator:\n  dispatch: true\n");
-      await expect(loadConfigFile(join(legacyDir, "server.json"), false)).rejects.toThrow(
-        /server\.yaml is no longer read; convert it/,
-      );
+      writeFileSync(join(strayDir, "server.yaml"), "orchestrator:\n  dispatch: true\n");
+      expect(await loadConfigFile(join(strayDir, "server.json"), false)).toEqual({});
     } finally {
-      rmSync(legacyDir, { recursive: true, force: true });
+      rmSync(strayDir, { recursive: true, force: true });
     }
   });
 });

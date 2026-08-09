@@ -493,22 +493,9 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
 }
 
 export async function loadConfigFile(path: string, explicit: boolean): Promise<ConfigValues> {
-  if (path.endsWith(".yaml") || path.endsWith(".yml")) {
-    throw new ConfigError(
-      `${path}: YAML configuration is no longer read; convert the file to JSON (see server.json.example)`,
-    );
-  }
   const file = Bun.file(path);
   if (!(await file.exists())) {
     if (explicit) throw new ConfigError(`config file not found: ${path}`);
-    // A leftover pre-migration server.yaml must fail loud rather than let the
-    // server silently boot on defaults.
-    const legacy = path.endsWith(".json") ? `${path.slice(0, -".json".length)}.yaml` : null;
-    if (legacy !== null && (await Bun.file(legacy).exists())) {
-      throw new ConfigError(
-        `${legacy} is no longer read; convert it to ${path} (see server.json.example)`,
-      );
-    }
     return {};
   }
   return parseJsonConfig(await file.text(), path);
