@@ -8,33 +8,68 @@
  * ride on `thread/realtime/start` but are developer messages to the
  * orchestrator agent, so they live on its side.
  *
+ * The file surface itself — keys, types, enums, descriptions — is the zod
+ * schema in `config-schema.ts`, which also generates `server.schema.json`.
+ * This module owns everything around it: file discovery, CLI mapping,
+ * precedence, and resolution.
+ *
  * Prose is never named here. Prompt files are discovered by convention next to
  * the config file; see PROMPT_FILES.
  */
 import { dirname, join, resolve } from "node:path";
+import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde, stateDirectory } from "../paths.ts";
+import {
+  ACCOUNTS_KEYS,
+  type AccountsValues,
+  APPROVAL_POLICIES,
+  type ApprovalPolicy,
+  type ApprovalsReviewer,
+  type ConfigValues,
+  configValuesSchema,
+  DEFAULT_REALTIME_VERSION,
+  DEFAULT_SWITCH_THRESHOLD,
+  type HandoffMode,
+  type HistoryMode,
+  ORCHESTRATOR_KEYS,
+  type OrchestratorValues,
+  type Personality,
+  type RealtimeVersion,
+  SANDBOX_MODES,
+  type SandboxMode,
+  SERVER_KEYS,
+  VOICE_KEYS,
+  type VoiceValues,
+} from "./config-schema.ts";
 
-export const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"] as const;
-export const APPROVAL_POLICIES = ["never", "on-request", "untrusted"] as const;
-export const APPROVALS_REVIEWERS = ["user", "auto_review", "guardian_subagent"] as const;
-export const PERSONALITIES = ["none", "friendly", "pragmatic"] as const;
-export const HISTORY_MODES = ["legacy", "paginated"] as const;
-export const REALTIME_VERSIONS = ["v1", "v2", "v3"] as const;
-export const HANDOFF_MODES = ["thinking", "commentary", "bemTags"] as const;
-
-export type SandboxMode = (typeof SANDBOX_MODES)[number];
-export type ApprovalPolicy = (typeof APPROVAL_POLICIES)[number];
-export type ApprovalsReviewer = (typeof APPROVALS_REVIEWERS)[number];
-export type Personality = (typeof PERSONALITIES)[number];
-export type HistoryMode = (typeof HISTORY_MODES)[number];
-export type RealtimeVersion = (typeof REALTIME_VERSIONS)[number];
-export type HandoffMode = (typeof HANDOFF_MODES)[number];
-
-/**
- * agentvoice pins realtime v3 rather than deferring to codex: initial items
- * are v3-only, and the verified session semantics in AGENTS.md are v3's.
- */
-export const DEFAULT_REALTIME_VERSION: RealtimeVersion = "v3";
+export type {
+  AccountsValues,
+  ApprovalPolicy,
+  ApprovalsReviewer,
+  ConfigValues,
+  HandoffMode,
+  HistoryMode,
+  OrchestratorValues,
+  Personality,
+  RealtimeVersion,
+  SandboxMode,
+  VoiceValues,
+} from "./config-schema.ts";
+export {
+  ACCOUNTS_KEYS,
+  APPROVAL_POLICIES,
+  APPROVALS_REVIEWERS,
+  DEFAULT_REALTIME_VERSION,
+  DEFAULT_SWITCH_THRESHOLD,
+  HANDOFF_MODES,
+  HISTORY_MODES,
+  ORCHESTRATOR_KEYS,
+  PERSONALITIES,
+  REALTIME_VERSIONS,
+  SANDBOX_MODES,
+  SERVER_KEYS,
+  VOICE_KEYS,
+} from "./config-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Resolved configuration
@@ -90,8 +125,6 @@ export interface AccountsConfig {
   switchThreshold: number;
 }
 
-export const DEFAULT_SWITCH_THRESHOLD = 95;
-
 export interface ServerConfig {
   port: number;
   codex: string;
@@ -102,97 +135,6 @@ export interface ServerConfig {
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
 }
-
-// ---------------------------------------------------------------------------
-// Parsed option values (one source: CLI or config file), keyed by config key
-// ---------------------------------------------------------------------------
-
-export interface OrchestratorValues {
-  workspace?: string;
-  dispatch?: boolean;
-  "dispatch-reports"?: boolean;
-  model?: string;
-  effort?: string;
-  personality?: Personality;
-  sandbox?: SandboxMode;
-  "approval-policy"?: ApprovalPolicy;
-  "approvals-reviewer"?: ApprovalsReviewer;
-  permissions?: string;
-  "model-provider"?: string;
-  "service-tier"?: string;
-  ephemeral?: boolean;
-  "history-mode"?: HistoryMode;
-  "runtime-workspace-roots"?: string[];
-  config?: Record<string, unknown>;
-  extra?: Record<string, unknown>;
-}
-
-export interface VoiceValues {
-  model?: string;
-  name?: string;
-  version?: RealtimeVersion;
-  "include-startup-context"?: boolean;
-  "delegation-ack-filler"?: boolean;
-  "codex-response-handoff-mode"?: HandoffMode;
-  "codex-responses-as-items"?: boolean;
-  "codex-response-item-prefix"?: string;
-  "codex-response-handoff-channel-prefixes"?: Record<string, string[]>;
-  "flush-transcript-tail-on-session-end"?: boolean;
-  "client-managed-handoffs"?: boolean;
-  extra?: Record<string, unknown>;
-}
-
-export interface AccountsValues {
-  balance?: boolean;
-  "switch-threshold"?: number;
-}
-
-export interface ConfigValues {
-  port?: string | number;
-  codex?: string;
-  accounts?: AccountsValues;
-  orchestrator?: OrchestratorValues;
-  voice?: VoiceValues;
-}
-
-export const SERVER_KEYS = ["port", "codex", "accounts", "orchestrator", "voice"] as const;
-
-export const ACCOUNTS_KEYS = ["balance", "switch-threshold"] as const;
-
-export const ORCHESTRATOR_KEYS = [
-  "workspace",
-  "dispatch",
-  "dispatch-reports",
-  "model",
-  "effort",
-  "personality",
-  "sandbox",
-  "approval-policy",
-  "approvals-reviewer",
-  "permissions",
-  "model-provider",
-  "service-tier",
-  "ephemeral",
-  "history-mode",
-  "runtime-workspace-roots",
-  "config",
-  "extra",
-] as const;
-
-export const VOICE_KEYS = [
-  "model",
-  "name",
-  "version",
-  "include-startup-context",
-  "delegation-ack-filler",
-  "codex-response-handoff-mode",
-  "codex-responses-as-items",
-  "codex-response-item-prefix",
-  "codex-response-handoff-channel-prefixes",
-  "flush-transcript-tail-on-session-end",
-  "client-managed-handoffs",
-  "extra",
-] as const;
 
 export class ConfigError extends Error {}
 
@@ -260,11 +202,6 @@ function asString(source: string, path: string, raw: unknown): string {
   return raw;
 }
 
-function asBoolean(source: string, path: string, raw: unknown): boolean {
-  if (typeof raw !== "boolean") fail(source, `"${path}" must be true or false`);
-  return raw;
-}
-
 function asEnum<T extends string>(
   source: string,
   path: string,
@@ -278,153 +215,87 @@ function asEnum<T extends string>(
   return value as T;
 }
 
-function asStringArray(source: string, path: string, raw: unknown): string[] {
-  if (!Array.isArray(raw)) fail(source, `"${path}" must be a list of strings`);
-  return raw.map((entry, index) => asString(source, `${path}[${index}]`, entry));
-}
-
-function asMapping(source: string, path: string, raw: unknown): Record<string, unknown> {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    fail(source, `"${path}" must be an object`);
-  }
-  return raw as Record<string, unknown>;
-}
-
-function asStringArrayMapping(
-  source: string,
-  path: string,
-  raw: unknown,
-): Record<string, string[]> {
-  const mapping = asMapping(source, path, raw);
-  const result: Record<string, string[]> = {};
-  for (const [key, value] of Object.entries(mapping)) {
-    result[key] = asStringArray(source, `${path}.${key}`, value);
-  }
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------------
-
-function parseOrchestrator(source: string, raw: unknown): OrchestratorValues {
-  const mapping = asMapping(source, "orchestrator", raw);
-  const values: OrchestratorValues = {};
-  for (const [key, value] of Object.entries(mapping)) {
-    const path = `orchestrator.${key}`;
-    switch (key) {
-      case "workspace":
-      case "model":
-      case "effort":
-      case "permissions":
-      case "model-provider":
-      case "service-tier":
-        (values as Record<string, unknown>)[key] = asString(source, path, value);
-        break;
-      case "personality":
-        values.personality = asEnum(source, path, value, PERSONALITIES);
-        break;
-      case "sandbox":
-        values.sandbox = asEnum(source, path, value, SANDBOX_MODES);
-        break;
-      case "approval-policy":
-        values["approval-policy"] = asEnum(source, path, value, APPROVAL_POLICIES);
-        break;
-      case "approvals-reviewer":
-        values["approvals-reviewer"] = asEnum(source, path, value, APPROVALS_REVIEWERS);
-        break;
-      case "history-mode":
-        values["history-mode"] = asEnum(source, path, value, HISTORY_MODES);
-        break;
-      case "ephemeral":
-        values.ephemeral = asBoolean(source, path, value);
-        break;
-      case "dispatch":
-        values.dispatch = asBoolean(source, path, value);
-        break;
-      case "dispatch-reports":
-        values["dispatch-reports"] = asBoolean(source, path, value);
-        break;
-      case "runtime-workspace-roots":
-        values["runtime-workspace-roots"] = asStringArray(source, path, value);
-        break;
-      case "config":
-      case "extra":
-        values[key] = asMapping(source, path, value);
-        break;
-      default:
-        fail(source, unknownKeyMessage(path, ORCHESTRATOR_KEYS));
-    }
-  }
-  return values;
-}
-
-function parseAccounts(source: string, raw: unknown): AccountsValues {
-  const mapping = asMapping(source, "accounts", raw);
-  const values: AccountsValues = {};
-  for (const [key, value] of Object.entries(mapping)) {
-    const path = `accounts.${key}`;
-    switch (key) {
-      case "balance":
-        values.balance = asBoolean(source, path, value);
-        break;
-      case "switch-threshold": {
-        if (typeof value !== "number" || !Number.isInteger(value) || value < 50 || value > 100) {
-          fail(source, `"${path}" must be an integer between 50 and 100`);
-        }
-        values["switch-threshold"] = value;
-        break;
-      }
-      default:
-        fail(source, unknownKeyMessage(path, ACCOUNTS_KEYS));
-    }
-  }
-  return values;
-}
-
-function parseVoice(source: string, raw: unknown): VoiceValues {
-  const mapping = asMapping(source, "voice", raw);
-  const values: VoiceValues = {};
-  for (const [key, value] of Object.entries(mapping)) {
-    const path = `voice.${key}`;
-    switch (key) {
-      case "model":
-      case "name":
-      case "codex-response-item-prefix":
-        (values as Record<string, unknown>)[key] = asString(source, path, value);
-        break;
-      case "version":
-        values.version = asEnum(source, path, value, REALTIME_VERSIONS);
-        break;
-      case "codex-response-handoff-mode":
-        values["codex-response-handoff-mode"] = asEnum(source, path, value, HANDOFF_MODES);
-        break;
-      case "include-startup-context":
-      case "delegation-ack-filler":
-      case "codex-responses-as-items":
-      case "flush-transcript-tail-on-session-end":
-      case "client-managed-handoffs":
-        (values as Record<string, unknown>)[key] = asBoolean(source, path, value);
-        break;
-      case "codex-response-handoff-channel-prefixes":
-        values["codex-response-handoff-channel-prefixes"] = asStringArrayMapping(
-          source,
-          path,
-          value,
-        );
-        break;
-      case "extra":
-        values.extra = asMapping(source, path, value);
-        break;
-      default:
-        fail(source, unknownKeyMessage(path, VOICE_KEYS));
-    }
-  }
-  return values;
-}
-
 function unknownKeyMessage(path: string, known: readonly string[]): string {
   return `unknown option "${path}"; known keys: ${known.join(", ")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Parsing — zod issues rendered as the loader's own error prose
+// ---------------------------------------------------------------------------
+
+/** The four strict objects, by dotted path, for unknown-key messages. */
+const KNOWN_KEYS: Record<string, readonly string[]> = {
+  accounts: ACCOUNTS_KEYS,
+  orchestrator: ORCHESTRATOR_KEYS,
+  voice: VOICE_KEYS,
+};
+
+/** `["a", "b", 2]` → `a.b[2]` — the key path every config error must name. */
+function formatIssuePath(path: ReadonlyArray<PropertyKey>): string {
+  let formatted = "";
+  for (const segment of path) {
+    formatted +=
+      typeof segment === "number"
+        ? `[${segment}]`
+        : formatted === ""
+          ? String(segment)
+          : `.${String(segment)}`;
+  }
+  return formatted;
+}
+
+function typeText(expected: string): string {
+  switch (expected) {
+    case "string":
+      return "a string";
+    case "boolean":
+      return "true or false";
+    case "int":
+      return "an integer";
+    case "number":
+      return "a number";
+    case "array":
+      return "a list of strings";
+    case "object":
+    case "record":
+      return "an object";
+    default:
+      return `of type ${expected}`;
+  }
+}
+
+function issueMessage(issue: z.core.$ZodIssue): string {
+  const path = formatIssuePath(issue.path);
+  switch (issue.code) {
+    case "unrecognized_keys": {
+      const key = issue.keys[0] ?? "?";
+      return unknownKeyMessage(
+        path === "" ? key : `${path}.${key}`,
+        KNOWN_KEYS[path] ?? SERVER_KEYS,
+      );
+    }
+    case "invalid_type":
+      return `"${path}" must be ${typeText(issue.expected)}`;
+    case "invalid_value":
+      return `"${path}" must be one of ${issue.values.join(", ")}`;
+    case "too_small":
+      return `"${path}" must be at least ${issue.minimum}`;
+    case "too_big":
+      return `"${path}" must be at most ${issue.maximum}`;
+    case "invalid_union": {
+      const expected: string[] = [];
+      for (const branchIssue of issue.errors.flat()) {
+        if (branchIssue.code === "invalid_type" && !expected.includes(branchIssue.expected)) {
+          expected.push(branchIssue.expected);
+        }
+      }
+      return expected.length > 0
+        ? `"${path}" must be ${expected.map(typeText).join(" or ")}`
+        : `"${path}" is invalid`;
+    }
+    default:
+      return `"${path}": ${issue.message}`;
+  }
 }
 
 export function parseJsonConfig(text: string, source: string): ConfigValues {
@@ -442,35 +313,14 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
     throw new ConfigError(`${source}: expected an object of options`);
   }
 
-  const values: ConfigValues = {};
-  for (const [key, raw] of Object.entries(document)) {
-    switch (key) {
-      case "$schema":
-        // Reserved for editor tooling; carries no configuration.
-        break;
-      case "port":
-        if (typeof raw !== "number" && typeof raw !== "string") {
-          fail(source, `"port" must be a number`);
-        }
-        values.port = raw;
-        break;
-      case "codex":
-        values.codex = asString(source, "codex", raw);
-        break;
-      case "accounts":
-        values.accounts = parseAccounts(source, raw);
-        break;
-      case "orchestrator":
-        values.orchestrator = parseOrchestrator(source, raw);
-        break;
-      case "voice":
-        values.voice = parseVoice(source, raw);
-        break;
-      default:
-        fail(source, `unknown option "${key}"; known keys: ${SERVER_KEYS.join(", ")}`);
-    }
+  // Reserved for editor tooling; carries no configuration, whatever its value.
+  const { $schema: _schema, ...options } = document as Record<string, unknown>;
+  const parsed = configValuesSchema.safeParse(options);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    fail(source, issue !== undefined ? issueMessage(issue) : parsed.error.message);
   }
-  return values;
+  return parsed.data;
 }
 
 export async function loadConfigFile(path: string, explicit: boolean): Promise<ConfigValues> {
@@ -484,8 +334,8 @@ export async function loadConfigFile(path: string, explicit: boolean): Promise<C
 
 /**
  * CLI flags keep the flat names people type; nesting belongs in the file, not
- * in argv. Validation runs through the same helpers so a bad `--sandbox` fails
- * exactly like a bad `orchestrator.sandbox`.
+ * in argv. Enum flags validate against the same allowed values as the file
+ * schema, so a bad `--sandbox` fails exactly like a bad `orchestrator.sandbox`.
  */
 export function cliToConfigValues(values: Record<string, string>): ConfigValues {
   const source = "command line";

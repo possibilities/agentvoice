@@ -26,6 +26,10 @@ the server and the client use it; if only one does, it goes in that directory.
 - `src/protocol.ts` — client↔server wire messages; both sides import it
 - `src/paths.ts` — XDG path resolution; the client needs the state directory
 - `src/server/`
+  - `config-schema.ts` — the `server.json` surface as a zod schema, the
+    single source of truth: `config.ts` validates files with it, and
+    `scripts/generate-schema.ts` generates `server.schema.json` from it.
+    Every field is `.optional()` with no zod `.default()` so unset stays unset
   - `config.ts` — config resolution (CLI > `server.json` > default); unset
     options are not sent to codex at all. Values nest under `orchestrator` and
     `voice` by which agent they prime, not by which RPC carries them. Also owns
@@ -54,11 +58,12 @@ the server and the client use it; if only one does, it goes in that directory.
   duplex audio device — the only audio path), `dsp.ts` (pure audio math,
   tested), `ui.ts` (OpenTUI console)
 - `server.schema.json` — the whole config surface, every key typed and
-  documented; generated from `config.ts`'s key lists by
-  `bun run generate:schema` (a test fails on drift, and the generator throws
-  on an undocumented key). `server.json.example` must stay a verbatim-copy
-  no-op; a test asserts that. Adding a config key means updating
-  `scripts/generate-schema.ts` in the same commit — the drift gate enforces it.
+  documented; generated from the zod schema in `src/server/config-schema.ts`
+  by `bun run generate:schema` (a test fails on drift, and the generator
+  throws on an undocumented key). `server.json.example` must stay a
+  verbatim-copy no-op; a test asserts that. Adding a config key means
+  declaring and describing it in `config-schema.ts` — the loader and the
+  published schema both follow, and the drift gate enforces regeneration.
 
 **One `AGENTS.md`, at the root.** Codex loads only the chain from the project
 root down to the thread's cwd and never descends into subdirectories
