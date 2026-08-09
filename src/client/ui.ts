@@ -110,7 +110,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch {
     throw new ClientError(
-      `voice server not reachable at ${config.url} — start it with: agentvoicenext server`,
+      `voice server not reachable at ${config.url} — start it with: agentvoice server`,
     );
   }
 

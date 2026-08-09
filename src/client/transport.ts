@@ -209,7 +209,7 @@ export class VoiceTransport {
       }
       if (event.code === CLOSE_UNAUTHORIZED) {
         this.options.onError(
-          "server rejected the connection token — copy ~/.local/state/agentvoicenext/token from the server machine or pass --token",
+          "server rejected the connection token — copy ~/.local/state/agentvoice/token from the server machine or pass --token",
         );
         this.setPhase("failed");
         return;

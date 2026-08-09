@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agentvoicenext",
+      "name": "agentvoice",
       "dependencies": {
         "@opentui/core": "^0.5.1",
         "opusscript": "^0.1.1",

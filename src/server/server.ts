@@ -265,7 +265,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       }
       if (url.pathname === "/") {
         return Response.json({
-          name: "agentvoicenext",
+          name: "agentvoice",
           version,
           protocol: PROTOCOL_VERSION,
         });
@@ -307,7 +307,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
 
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
   const { orchestrator, voice } = config;
-  console.log(`agentvoicenext server listening on ws://127.0.0.1:${config.port}/ws`);
+  console.log(`agentvoice server listening on ws://127.0.0.1:${config.port}/ws`);
   console.log(`  token           ${tokenFile}`);
   console.log(`  workspace       ${orchestrator.workspace}`);
   console.log(`  thread          ${threadId}`);

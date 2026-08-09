@@ -10,7 +10,7 @@ export type Environ = Record<string, string | undefined>;
 export function stateDirectory(env: Environ, home: string): string {
   const xdg = env["XDG_STATE_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "state");
-  return join(base, "agentvoicenext");
+  return join(base, "agentvoice");
 }
 
 /** The connection token: written by the server at boot, read by the client. */
@@ -21,7 +21,7 @@ export function tokenPath(env: Environ, home: string): string {
 export function defaultConfigPath(env: Environ, home: string): string {
   const xdg = env["XDG_CONFIG_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");
-  return join(base, "agentvoicenext", "server.yaml");
+  return join(base, "agentvoice", "server.yaml");
 }
 
 export function expandTilde(path: string, home: string): string {

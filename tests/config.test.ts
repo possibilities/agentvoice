@@ -21,9 +21,7 @@ describe("resolveConfig", () => {
     expect(config.codex).toBe("codex");
     expect(config.orchestrator.sandbox).toBe("danger-full-access");
     expect(config.orchestrator.approvalPolicy).toBe("never");
-    expect(config.orchestrator.workspace).toBe(
-      "/home/tester/.local/state/agentvoicenext/workspace",
-    );
+    expect(config.orchestrator.workspace).toBe("/home/tester/.local/state/agentvoice/workspace");
     expect(config.orchestrator.model).toBeUndefined();
     expect(config.orchestrator.effort).toBeUndefined();
     expect(config.orchestrator.personality).toBeUndefined();
@@ -70,7 +68,7 @@ describe("resolveConfig", () => {
       HOME,
     );
     expect(config.codex).toBe("/opt/codex");
-    expect(config.orchestrator.workspace).toBe("/var/state/agentvoicenext/workspace");
+    expect(config.orchestrator.workspace).toBe("/var/state/agentvoice/workspace");
   });
 
   test("expands tilde in workspace, roots, and codex paths", () => {
@@ -102,7 +100,7 @@ describe("resolveConfig", () => {
   });
 
   test("configDir defaults to the config directory", () => {
-    expect(resolveConfig({}, {}, {}, HOME).configDir).toBe("/home/tester/.config/agentvoicenext");
+    expect(resolveConfig({}, {}, {}, HOME).configDir).toBe("/home/tester/.config/agentvoice");
     expect(resolveConfig({}, {}, {}, HOME, { configDir: "/etc/avn" }).configDir).toBe("/etc/avn");
   });
 });

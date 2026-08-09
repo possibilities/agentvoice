@@ -23,7 +23,7 @@ function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
 describe("threadParams", () => {
   test("sends nothing beyond the server's own defaults", () => {
     expect(thread()).toEqual({
-      cwd: "/home/tester/.local/state/agentvoicenext/workspace",
+      cwd: "/home/tester/.local/state/agentvoice/workspace",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
     });

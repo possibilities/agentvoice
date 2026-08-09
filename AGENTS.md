@@ -1,4 +1,4 @@
-# agentvoicenext — repository guidance
+# agentvoice — repository guidance
 
 Minimal voice system for Codex: a coordination server over `codex app-server`'s
 realtime (WebRTC) surface, plus a terminal voice client. Read `README.md` for
@@ -102,7 +102,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - Comments state constraints the code can't show; no narration.
 - `Record<string, unknown>` access uses bracket keys (hence Biome's
   `useLiteralKeys` is off).
-- State on disk under `~/.local/state/agentvoicenext/` (`$XDG_STATE_HOME`
+- State on disk under `~/.local/state/agentvoice/` (`$XDG_STATE_HOME`
   honored): `workspace` (agent cwd), `app-server` (stable child cwd — must
   outlive the child; it re-reads its own cwd on every thread start), `token`
   (the connection token, mode 0600 — file permissions are the boundary

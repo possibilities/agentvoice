@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoicenext server [options]` / `agentvoicenext client [options]`. */
+/** CLI entry: `agentvoice server [options]` / `agentvoice client [options]`. */
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
@@ -11,28 +11,28 @@ import { runServer } from "./server/server.ts";
 export const VERSION: string = packageJson.version;
 const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";
 
-const USAGE = `agentvoicenext — minimal voice server and terminal client for Codex
+const USAGE = `agentvoice — minimal voice server and terminal client for Codex
 
 Usage:
-  agentvoicenext server [options]   Start the voice server
-  agentvoicenext client [options]   Open the terminal voice client
+  agentvoice server [options]   Start the voice server
+  agentvoice client [options]   Open the terminal voice client
 
-Run \`agentvoicenext server --help\` or \`agentvoicenext client --help\` for options.
+Run \`agentvoice server --help\` or \`agentvoice client --help\` for options.
 `;
 
-const SERVER_USAGE = `agentvoicenext server — start the voice server
+const SERVER_USAGE = `agentvoice server — start the voice server
 
 Usage:
-  agentvoicenext server [options]
+  agentvoice server [options]
 
 Options (the full surface lives in server.yaml; see server.yaml.example):
-  --config <path>          Config file (default: ~/.config/agentvoicenext/server.yaml)
+  --config <path>          Config file (default: ~/.config/agentvoice/server.yaml)
   --model <id>             Orchestrator agent model (default: codex config)
   --effort <level>         Orchestrator agent reasoning effort (default: codex config)
   --voice-model <id>       Voice agent model (default: codex config)
   --voice <name>           Voice timbre (default: upstream default)
   --workspace <dir>        Orchestrator agent working directory
-                           (default: ~/.local/state/agentvoicenext/workspace)
+                           (default: ~/.local/state/agentvoice/workspace)
   --sandbox <mode>         read-only | workspace-write | danger-full-access
                            (default: danger-full-access)
   --approval-policy <p>    never | on-request | untrusted (default: never)
@@ -46,10 +46,10 @@ Prompts are files in the config file's directory, all optional:
   ORCHESTRATOR_SESSION_{START,END}.md                    agent
 `;
 
-const CLIENT_USAGE = `agentvoicenext client — open the terminal voice client
+const CLIENT_USAGE = `agentvoice client — open the terminal voice client
 
 Usage:
-  agentvoicenext client [options]
+  agentvoice client [options]
 
 Options:
   --url <ws-url>           Server WebSocket (default: ${DEFAULT_CLIENT_URL})

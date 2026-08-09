@@ -9,7 +9,7 @@ const ok = (line: string) => console.log(`  ✓ ${line}`);
 const warn = (line: string) => console.log(`  ! ${line}`);
 const fail = (line: string) => console.error(`  ✗ ${line}`);
 
-console.log("agentvoicenext setup\n");
+console.log("agentvoice setup\n");
 
 // bun
 const [major, minor] = Bun.version.split(".").map((n) => Number.parseInt(n, 10));

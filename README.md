@@ -1,9 +1,9 @@
-# agentvoicenext
+# agentvoice
 
-Minimal voice system for Codex. `agentvoicenext server` spawns a `codex
+Minimal voice system for Codex. `agentvoice server` spawns a `codex
 app-server`, opens one **orchestrator agent** in an agent-owned workspace, and
 exposes a localhost WebSocket that lets a single voice client hold a
-full-duplex WebRTC voice conversation with it. `agentvoicenext client` is that
+full-duplex WebRTC voice conversation with it. `agentvoice client` is that
 client: a terminal UI with live meters, transcripts, and mute controls.
 
 There are two agents. The **voice agent** is the realtime speech model you
@@ -37,21 +37,21 @@ bun run client                       # in another terminal: the voice TUI
 bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 ```
 
-### A global `agentvoicenext`
+### A global `agentvoice`
 
 `bun run cli:install` installs dependencies, runs setup, and `bun link`s this
-checkout, putting `agentvoicenext` on PATH (via bun's global bin, usually
+checkout, putting `agentvoice` on PATH (via bun's global bin, usually
 `~/.bun/bin`). The command is **editable** — it symlinks back into the
 checkout, so TypeScript edits apply immediately with no rebuild. Funk's
 installer (`~/code/funk/install`) invokes this same contract from
-`~/code/agentvoicenext` when that checkout exists.
+`~/code/agentvoice` when that checkout exists.
 
 TypeScript edits remain immediate. Changes under `src/client/native/` require
 `bun run native:build`; `bun run cli:install` runs that build automatically.
 
 ```bash
 bun run cli:install
-agentvoicenext server
+agentvoice server
 ```
 
 Flags cover the handful of things worth changing per run; the full surface
@@ -63,17 +63,17 @@ lives in the config file.
 | `--effort <level>` | codex config | Orchestrator agent reasoning effort (`none…ultra`); think-time per turn |
 | `--voice-model <id>` | codex config | Voice agent model — conversational front-end only |
 | `--voice <name>` | upstream | Voice timbre (e.g. `marin`, `cove`) |
-| `--workspace <dir>` | `~/.local/state/agentvoicenext/workspace` | Directory the orchestrator agent operates in |
+| `--workspace <dir>` | `~/.local/state/agentvoice/workspace` | Directory the orchestrator agent operates in |
 | `--sandbox <mode>` | `danger-full-access` | `read-only` \| `workspace-write` \| `danger-full-access` |
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
 | `--port <n>` | `7890` | WebSocket port, bound to `127.0.0.1` only |
 | `--codex <path>` | `$CODEX_PATH` or `codex` | Codex binary to spawn |
-| `--config <path>` | `~/.config/agentvoicenext/server.yaml` | Config file location |
+| `--config <path>` | `~/.config/agentvoice/server.yaml` | Config file location |
 | `--debug` | off | Log app-server protocol frames to stderr |
 
 ## Configuration
 
-`$XDG_CONFIG_HOME/agentvoicenext/server.yaml` (default `~/.config/…`).
+`$XDG_CONFIG_HOME/agentvoice/server.yaml` (default `~/.config/…`).
 Precedence: **CLI > file > default**. An option left unset is not sent to codex
 at all, so your `~/.codex/config.toml` applies — the defaults add no opinions
 of their own.
@@ -88,7 +88,7 @@ key documented and commented out. Copying it verbatim behaves exactly like
 having no config file:
 
 ```bash
-cp server.yaml.example ~/.config/agentvoicenext/server.yaml
+cp server.yaml.example ~/.config/agentvoice/server.yaml
 ```
 
 Keys nest by which agent they prime, not by which call carries them:
@@ -165,7 +165,7 @@ local users share the interface. So every request also passes a three-part
 handshake gate:
 
 - **Connection token.** Created at first boot as
-  `~/.local/state/agentvoicenext/token` (mode 0600) and required on every
+  `~/.local/state/agentvoice/token` (mode 0600) and required on every
   WebSocket handshake (`/ws?token=…`). The bundled client reads the same file
   automatically, so same-machine use needs no setup; a missing or wrong token
   is closed with code **4401**. File permissions are the boundary between
@@ -191,12 +191,12 @@ tunnel to loopback and carry the token across once:
 
 ```bash
 ssh -N -L 7890:127.0.0.1:7890 laptop        # or a Tailscale/WireGuard route
-agentvoicenext client --token <contents of the laptop's token file>
+agentvoice client --token <contents of the laptop's token file>
 ```
 
 ## Terminal client
 
-`agentvoicenext client` connects to a running server and opens a full-duplex
+`agentvoice client` connects to a running server and opens a full-duplex
 voice console. The default sox comparison path captures the microphone
 in-process through OpenTUI and plays the voice agent through a sox `play`
 child. The opt-in `duplex` path replaces both with one client-owned miniaudio
@@ -220,7 +220,7 @@ device without starting a voice session.
 
 - **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `q` quit.
   Clicking the YOU panel toggles the mic; clicking AGENT toggles the speaker.
-- **Token**: read automatically from `~/.local/state/agentvoicenext/token`;
+- **Token**: read automatically from `~/.local/state/agentvoice/token`;
   `--token` overrides it when the server's state directory is not yours
   (tunneled or remote server).
 - **Redial** negotiates a fresh voice session against the same conversation
@@ -234,7 +234,7 @@ device without starting a voice session.
 - macOS microphone permission belongs to your **terminal app** (System
   Settings › Privacy & Security › Microphone, then fully restart it). If the
   mic delivers pure silence the client shows a warning naming this.
-- `--debug` writes `~/.local/state/agentvoicenext/client-debug.log` including
+- `--debug` writes `~/.local/state/agentvoice/client-debug.log` including
   audio-device inventory, decoded/playback cadence, plus every upstream event.
   The sox path adds negotiated output and pipe backpressure; the duplex path
   adds physical formats, callback cadence, RTP arrival-gap and handler-time
@@ -243,10 +243,10 @@ device without starting a voice session.
 
 ## Client API
 
-Protocol version **1**. `GET /` returns `{"name":"agentvoicenext","version":…,"protocol":1}`
+Protocol version **1**. `GET /` returns `{"name":"agentvoice","version":…,"protocol":1}`
 as a health/discovery check. WebSocket endpoint:
 `ws://127.0.0.1:<port>/ws?token=<token>`, where the token is the contents of
-`~/.local/state/agentvoicenext/token` on the server machine. The bundled
+`~/.local/state/agentvoice/token` on the server machine. The bundled
 terminal client speaks exactly this protocol. Requests carrying an `Origin`
 header are refused, so a web page cannot connect ([Security
 posture](#security-posture)) — build clients on a native WebRTC stack (the
@@ -303,15 +303,15 @@ gets a non-fatal `error`.
 
 ## State on disk
 
-- `~/.local/state/agentvoicenext/workspace` — default orchestrator workspace.
+- `~/.local/state/agentvoice/workspace` — default orchestrator workspace.
   An `AGENTS.md` here reaches the orchestrator agent the ordinary codex way.
-- `~/.local/state/agentvoicenext/app-server` — stable working directory for the
+- `~/.local/state/agentvoice/app-server` — stable working directory for the
   app-server child process (it re-reads its own cwd on every thread start;
   leave it in place). `$XDG_STATE_HOME` is honored.
-- `~/.local/state/agentvoicenext/token` — the connection token (created at
+- `~/.local/state/agentvoice/token` — the connection token (created at
   first boot, mode 0600). Delete it to rotate; the next server start mints a
   fresh one.
-- `~/.config/agentvoicenext/` — `server.yaml` and the prompt files beside it.
+- `~/.config/agentvoice/` — `server.yaml` and the prompt files beside it.
 
 Conversation state is in-memory per run: each server start opens a fresh
 orchestrator agent (surviving app-server restarts within the run). Prompt files

@@ -31,7 +31,7 @@ export type RealtimeVersion = (typeof REALTIME_VERSIONS)[number];
 export type HandoffMode = (typeof HANDOFF_MODES)[number];
 
 /**
- * agentvoicenext pins realtime v3 rather than deferring to codex: initial items
+ * agentvoice pins realtime v3 rather than deferring to codex: initial items
  * are v3-only, and the verified session semantics in AGENTS.md are v3's.
  */
 export const DEFAULT_REALTIME_VERSION: RealtimeVersion = "v3";

@@ -23,7 +23,7 @@
 #define MA_ENABLE_ALSA
 #define MA_ENABLE_PULSEAUDIO
 #else
-#error "agentvoicenext duplex audio does not support this platform"
+#error "agentvoice duplex audio does not support this platform"
 #endif
 
 #define MINIAUDIO_IMPLEMENTATION

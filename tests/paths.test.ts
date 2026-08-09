@@ -5,15 +5,15 @@ const HOME = "/home/tester";
 
 describe("paths", () => {
   test("stateDirectory and defaultConfigPath follow XDG with absolute overrides", () => {
-    expect(stateDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoicenext");
+    expect(stateDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoice");
     expect(stateDirectory({ XDG_STATE_HOME: "relative" }, HOME)).toBe(
-      "/home/tester/.local/state/agentvoicenext",
+      "/home/tester/.local/state/agentvoice",
     );
-    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoicenext/server.yaml");
+    expect(defaultConfigPath({}, HOME)).toBe("/home/tester/.config/agentvoice/server.yaml");
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
-      "/etc/xdg/agentvoicenext/server.yaml",
+      "/etc/xdg/agentvoice/server.yaml",
     );
-    expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoicenext/token");
+    expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/token");
   });
 
   test("expandTilde only rewrites leading ~", () => {

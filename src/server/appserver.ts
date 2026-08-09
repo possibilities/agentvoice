@@ -70,7 +70,7 @@ export function buildDenialResponse(method: string): Record<string, unknown> {
     case "applyPatchApproval":
       return {
         decision: {
-          denied: { rejection: "agentvoicenext runs unattended and never approves" },
+          denied: { rejection: "agentvoice runs unattended and never approves" },
         },
       };
     case "item/commandExecution/requestApproval":
@@ -174,8 +174,8 @@ export class AppServer {
 
     await this.request("initialize", {
       clientInfo: {
-        name: "agentvoicenext",
-        title: "AgentVoiceNext",
+        name: "agentvoice",
+        title: "AgentVoice",
         version: this.options.clientVersion,
       },
       capabilities: { experimentalApi: true, requestAttestation: false },

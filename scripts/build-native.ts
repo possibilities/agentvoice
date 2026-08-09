@@ -8,13 +8,13 @@ const root = dirname(import.meta.dir);
 const target = `${process.platform}-${process.arch}`;
 const extension =
   process.platform === "darwin" ? "dylib" : process.platform === "win32" ? "dll" : "so";
-const output = join(root, "build", "native", target, `libagentvoicenext_audio.${extension}`);
+const output = join(root, "build", "native", target, `libagentvoice_audio.${extension}`);
 const source = join(root, "src", "client", "native", "duplex_audio.c");
 
 const zig = Bun.which("zig");
 const compiler = zig ?? Bun.which("clang") ?? Bun.which("cc");
 if (!compiler) {
-  console.error("agentvoicenext native build: no C compiler found (install Zig or a C11 compiler)");
+  console.error("agentvoice native build: no C compiler found (install Zig or a C11 compiler)");
   process.exit(1);
 }
 

@@ -28,7 +28,7 @@ Three actors run every conversation:
 Four nested lifetimes decide how long anything you inject lasts:
 
 ```
-server run            one `agentvoicenext server` process; prompts read once at boot
+server run            one `agentvoice server` process; prompts read once at boot
  └─ app-server child  supervised; a crash is invisible except to voice sessions
      └─ thread        the orchestrator agent's identity and memory
          └─ voice session   one WebRTC call; superseded by every redial
@@ -56,7 +56,7 @@ Two consequences worth internalizing before touching anything:
 - **An option you leave unset is not sent at all**, so the orchestrator
   inherits the machine's `~/.codex/config.toml`. If your daily codex runs
   `gpt-5.6-sol` at `max` effort, that is exactly what an unconfigured
-  agentvoicenext orchestrator runs.
+  agentvoice orchestrator runs.
 - **The machine's codex config can silently outrank your explicit settings**
   in three places (see [the three trump cards](#the-three-trump-cards)).
 
@@ -148,7 +148,7 @@ history though: greeted with "what did you just tell me?", the agent quoted
 its seeded line back as its own prior words. So `VOICE_SEED_ASSISTANT.md`
 shapes the conversation's opening state, but an audible greeting needs the
 user to speak first (upstream also has `thread/realtime/appendSpeech` — make
-the agent say arbitrary text — which agentvoicenext does not currently
+the agent say arbitrary text — which agentvoice does not currently
 expose).
 
 A fresh voice session is seeded with exactly three things *(source, probe)*:
@@ -190,7 +190,7 @@ workspace, or override the whole blob with the config.toml key below.
 
 ### Timbre, model, and version
 
-`voice.version` is pinned `v3` by agentvoicenext (seed items are v3-only, and
+`voice.version` is pinned `v3` by agentvoice (seed items are v3-only, and
 every verified semantic in this guide is v3's). The three upstream versions
 are effectively different products *(source)*: v1 (legacy bidi), v2 (the
 OpenAI Realtime API shape — the only version supporting `outputModality:
@@ -317,7 +317,7 @@ it silently does nothing:
 3. **`features.personality = false`** in config.toml.
 
 Mid-thread changes (upstream `thread/settings/update` — not exposed by
-agentvoicenext) inject a `<personality_spec>` developer message instead of
+agentvoice) inject a `<personality_spec>` developer message instead of
 rewriting the prompt *(source)*.
 
 For the voice agent's mood, none of this applies — its personality lives in
@@ -373,9 +373,9 @@ anyway.
 
 ### Sandbox, approvals, and the guardian
 
-Approval settings are behavior levers, not just safety rails. agentvoicenext
+Approval settings are behavior levers, not just safety rails. agentvoice
 runs unattended and **fail-closes every approval request** — the orchestrator
-is told "agentvoicenext runs unattended and never approves" and adapts rather
+is told "agentvoice runs unattended and never approves" and adapts rather
 than hangs. Under the default `danger-full-access` + `never` nothing ever
 asks; the sandbox is the only guardrail.
 
@@ -388,7 +388,7 @@ whether it does anything at all: the guardian engages **only under
 re-approval flows don't exist here (no UI). The candidate recipe for a safer
 unattended mode is therefore `sandbox: workspace-write` +
 `approval-policy: on-request` + `approvals-reviewer: auto_review` — escalations
-get AI adjudication instead of agentvoicenext's blanket denial.
+get AI adjudication instead of agentvoice's blanket denial.
 
 Live-validated *(probe)*: an escalated write outside the sandbox was
 **denied** under `approvals-reviewer: user` (the fail-closed default path)
@@ -423,7 +423,7 @@ forget when "configuring the agent":
   fresh results) in config.
 - **Memory**: threads participate in codex's cross-thread memory feature
   (upstream `thread/memoryMode/set` toggles per thread; `memory/reset` wipes
-  globally). agentvoicenext does not currently touch it, so whatever your
+  globally). agentvoice does not currently touch it, so whatever your
   codex-wide memory setting is applies to voice-driven work too.
 - **Instruction-block toggles**: `include_environment_context`,
   `include_permissions_instructions`, `include_apps_instructions`,
@@ -591,7 +591,7 @@ whisper of cross-run continuity the voice agent gets for free.
 
 ## Recipes
 
-Each recipe names files in `~/.config/agentvoicenext/` (or your `--config`
+Each recipe names files in `~/.config/agentvoice/` (or your `--config`
 directory).
 
 **A different voice persona, delegation intact.** `VOICE.md` with your
@@ -641,7 +641,7 @@ exchanges will be summarized away.
 disk, no resume after an app-server crash) + `include-startup-context: false`
 (no Recent Work leak).
 
-## Upstream surfaces agentvoicenext does not (yet) expose
+## Upstream surfaces agentvoice does not (yet) expose
 
 All verified present in 0.147's app-server protocol; each is a candidate
 lever for a fork or a future version of this server:

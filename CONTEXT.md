@@ -29,7 +29,7 @@ _Avoid_: "cwd" (reserved for the app-server child's own working directory).
 
 **Client** — The single WebSocket + WebRTC voice client. Audio flows
 client↔voice agent peer-to-peer; only coordination flows through this server.
-The bundled terminal client is `agentvoicenext client`. _Avoid_: "browser",
+The bundled terminal client is `agentvoice client`. _Avoid_: "browser",
 "surface".
 
 **Duplex audio device** — The bundled client's client-owned miniaudio device:
@@ -77,6 +77,6 @@ every HTTP request passes before it can reach the WebSocket. _Avoid_: "auth
 middleware", "firewall".
 
 **Connection token** — The shared secret the handshake gate requires on every
-WebSocket handshake, persisted at `~/.local/state/agentvoicenext/token`
+WebSocket handshake, persisted at `~/.local/state/agentvoice/token`
 (mode 0600); the server creates it at first boot, the bundled client reads it
 automatically. _Avoid_: "API key", "auth token", "password".

@@ -94,9 +94,9 @@ const nativeSymbols = {
 } as const;
 
 function platformLibraryName(): string {
-  if (process.platform === "darwin") return "libagentvoicenext_audio.dylib";
-  if (process.platform === "win32") return "libagentvoicenext_audio.dll";
-  return "libagentvoicenext_audio.so";
+  if (process.platform === "darwin") return "libagentvoice_audio.dylib";
+  if (process.platform === "win32") return "libagentvoice_audio.dll";
+  return "libagentvoice_audio.so";
 }
 
 function duplexLibraryPath(): string {

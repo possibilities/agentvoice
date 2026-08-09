@@ -1,6 +1,6 @@
-# agentvoicenext — server.yaml
+# agentvoice — server.yaml
 #
-#   cp server.yaml.example ~/.config/agentvoicenext/server.yaml
+#   cp server.yaml.example ~/.config/agentvoice/server.yaml
 #
 # Every key below is commented out on purpose: copying this file verbatim
 # behaves exactly like having no config file at all. An option left unset is
@@ -53,7 +53,7 @@
 # ---------------------------------------------------------------------------
 
 # orchestrator:
-#   workspace: ~/.local/state/agentvoicenext/workspace
+#   workspace: ~/.local/state/agentvoice/workspace
 #                                  # the agent's cwd; AGENTS.md here applies
 #   model: gpt-5.6-sol             # default: codex config. Mind the auth class:
 #                                  # codex-branded models (gpt-5.3-codex …) are
@@ -94,7 +94,7 @@
 #                                  # maple sol spruce vale. (alloy ash ballad
 #                                  # cedar coral echo marin sage shimmer verse
 #                                  # are v2-only and REJECTED under v3)
-#   version: v3                    # v1 | v2 | v3. agentvoicenext defaults to v3
+#   version: v3                    # v1 | v2 | v3. agentvoice defaults to v3
 #                                  # rather than codex's config: seed items are
 #                                  # v3-only and the verified session semantics
 #                                  # in AGENTS.md are v3's.
@@ -125,7 +125,7 @@
 #   client-managed-handoffs: false # SHARP EDGE: true stops app-server from
 #                                  # forwarding orchestrator output to the voice
 #                                  # agent, expecting the client to append it
-#                                  # explicitly. agentvoicenext never does, so
+#                                  # explicitly. agentvoice never does, so
 #                                  # true silently severs the two agents.
 #
 #   extra: {}                      # raw thread/realtime/start passthrough,
