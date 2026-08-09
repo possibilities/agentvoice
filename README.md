@@ -294,6 +294,7 @@ gets a non-fatal `error`.
 | `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
 | `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |
+| `worker` | `{"type":"worker","worker":{"id":…,"title":…,"status":…,"startedAt":…,"finishedAt"?:…,"report"?:…}}` | A dispatched worker changed state ([worker dispatch](#worker-dispatch)); `status` is `running`, `completed`, `failed`, `interrupted`, `cancelled`, or `lost`. Known workers are replayed on connect, so a UI joining mid-run starts complete. Additive — absent unless `orchestrator.dispatch` is on. |
 
 ### WebRTC recipe
 

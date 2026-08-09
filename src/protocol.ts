@@ -93,7 +93,33 @@ export interface ErrorMessage {
   fatal: boolean;
 }
 
-export type ServerMessage = ReadyMessage | AnswerMessage | ClosedMessage | ErrorMessage;
+/** A dispatched worker's lifecycle, for progress UIs. */
+export interface WorkerSnapshot {
+  /** Speakable handle (w1, w2, …), stable for the worker's lifetime. */
+  id: string;
+  title: string;
+  status: "running" | "completed" | "failed" | "interrupted" | "cancelled" | "lost";
+  startedAt: number;
+  finishedAt?: number;
+  /** The worker's final message, trimmed; present once finished. */
+  report?: string;
+}
+
+/**
+ * Sent on every worker transition, and replayed for known workers when a
+ * client connects. Additive: older clients ignore unrecognized types.
+ */
+export interface WorkerUpdateMessage {
+  type: "worker";
+  worker: WorkerSnapshot;
+}
+
+export type ServerMessage =
+  | ReadyMessage
+  | AnswerMessage
+  | ClosedMessage
+  | ErrorMessage
+  | WorkerUpdateMessage;
 
 /** Lenient parse for the client: null for anything unrecognized. */
 export function parseServerMessage(text: string): ServerMessage | null {
@@ -135,6 +161,21 @@ export function parseServerMessage(text: string): ServerMessage | null {
           typeof message["message"] === "string" ? message["message"] : "unknown server error",
         fatal: message["fatal"] === true,
       };
+    case "worker": {
+      const worker = message["worker"] as Record<string, unknown> | undefined;
+      if (typeof worker?.["id"] !== "string" || typeof worker["status"] !== "string") return null;
+      return {
+        type: "worker",
+        worker: {
+          id: worker["id"],
+          title: typeof worker["title"] === "string" ? worker["title"] : "",
+          status: worker["status"] as WorkerSnapshot["status"],
+          startedAt: typeof worker["startedAt"] === "number" ? worker["startedAt"] : 0,
+          ...(typeof worker["finishedAt"] === "number" ? { finishedAt: worker["finishedAt"] } : {}),
+          ...(typeof worker["report"] === "string" ? { report: worker["report"] } : {}),
+        },
+      };
+    }
     default:
       return null;
   }

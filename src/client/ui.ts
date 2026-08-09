@@ -197,6 +197,16 @@ export async function runClient(config: ClientConfig): Promise<void> {
         feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`, PALETTE.err);
       }
     },
+    onWorker: (worker) => {
+      const seconds =
+        worker.finishedAt === undefined
+          ? ""
+          : ` (${Math.max(0, Math.round((worker.finishedAt - worker.startedAt) / 1000))}s)`;
+      feed(
+        `worker ${worker.id} · ${worker.title} — ${worker.status}${seconds}`,
+        worker.status === "failed" || worker.status === "lost" ? PALETTE.warn : PALETTE.agent,
+      );
+    },
     onInfo: (line) => feed(line),
     onError: (line) => feed(line, PALETTE.err),
   });

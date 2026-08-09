@@ -15,6 +15,7 @@ import {
   CLOSE_UNAUTHORIZED,
   parseServerMessage,
   type ReadyMessage,
+  type WorkerSnapshot,
 } from "../protocol.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
 
@@ -34,6 +35,8 @@ export interface TransportEvents {
   onReady(info: ReadyInfo): void;
   onRemoteTrack(track: MediaStreamTrack): void;
   onOaiEvent(event: Record<string, unknown>): void;
+  /** A dispatched worker changed state (also replayed on connect). */
+  onWorker?(worker: WorkerSnapshot): void;
   /** One-line notices for the event feed. */
   onInfo(line: string): void;
   /** Errors worth surfacing prominently (fatal server errors, busy, …). */
@@ -281,6 +284,10 @@ export class VoiceTransport {
         if (pending) this.failPending(pending, msg.message);
         else if (live) this.failLive(live, msg.message);
         else this.options.onError(msg.message);
+        return;
+      }
+      case "worker": {
+        this.options.onWorker?.(msg.worker);
         return;
       }
     }

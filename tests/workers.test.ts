@@ -192,6 +192,32 @@ describe("worker reports", () => {
   });
 });
 
+describe("worker updates for the client feed", () => {
+  test("every transition emits a snapshot, and snapshots() replays them", async () => {
+    const updates: Array<{ id: string; status: string }> = [];
+    const { workers } = manager({
+      onWorkerUpdate: (worker) => updates.push({ id: worker.id, status: worker.status }),
+    });
+    await workers.handleToolCall("dispatch_worker", { title: "one", brief: "b1" });
+    await workers.handleToolCall("dispatch_worker", { title: "two", brief: "b2" });
+    workers.handleTurnCompleted("th_1", {
+      status: "completed",
+      items: [{ type: "agentMessage", text: "done" }],
+    });
+    await workers.handleToolCall("cancel_worker", { worker: "w2" });
+    expect(updates).toEqual([
+      { id: "w1", status: "running" },
+      { id: "w2", status: "running" },
+      { id: "w1", status: "completed" },
+      { id: "w2", status: "cancelled" },
+    ]);
+    const snapshots = workers.snapshots();
+    expect(snapshots.map((worker) => worker.status)).toEqual(["completed", "cancelled"]);
+    expect(snapshots[0]?.report).toBe("done");
+    expect(snapshots[0]).not.toHaveProperty("brief");
+  });
+});
+
 describe("losing the app-server child", () => {
   test("running workers become lost; finished ones keep their outcome", async () => {
     const { workers } = manager();

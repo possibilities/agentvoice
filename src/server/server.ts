@@ -166,6 +166,9 @@ export async function runServer(config: ServerConfig, version: string): Promise<
               );
             });
         },
+        onWorkerUpdate(worker) {
+          send({ type: "worker", worker });
+        },
         now: () => Date.now(),
         debug: debugLog,
       })
@@ -357,6 +360,8 @@ export async function runServer(config: ServerConfig, version: string): Promise<
         client = ws;
         debugLog?.("client connected");
         sendReady();
+        // Replay worker state so a UI joining mid-run starts complete.
+        for (const worker of workers?.snapshots() ?? []) send({ type: "worker", worker });
       },
       message(ws: ClientSocket, raw: string | Buffer) {
         if (ws !== client) return;

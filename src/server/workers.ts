@@ -16,13 +16,9 @@
  * learns that from its next check or dispatch, not from a ghost report.
  */
 
-export type WorkerStatus =
-  | "running"
-  | "completed"
-  | "failed"
-  | "interrupted"
-  | "cancelled"
-  | "lost";
+import type { WorkerSnapshot } from "../protocol.ts";
+
+export type WorkerStatus = WorkerSnapshot["status"];
 
 export interface WorkerRecord {
   /** Short speakable handle: w1, w2, … — never a thread id. */
@@ -45,6 +41,8 @@ export interface WorkerEffects {
   interruptWorker(threadId: string, turnId: string): Promise<void>;
   /** Start the report turn on the orchestrator's thread; never awaited by callers. */
   reportToOrchestrator(text: string): void;
+  /** A worker changed state — the client-facing progress feed. */
+  onWorkerUpdate?(worker: WorkerSnapshot): void;
   now(): number;
   debug?(line: string): void;
 }
@@ -126,6 +124,17 @@ function describe(worker: WorkerRecord, now: number): string {
   return worker.report === undefined ? head : `${head}\n${worker.report}`;
 }
 
+function snapshot(worker: WorkerRecord): WorkerSnapshot {
+  return {
+    id: worker.id,
+    title: worker.title,
+    status: worker.status,
+    startedAt: worker.startedAt,
+    ...(worker.finishedAt === undefined ? {} : { finishedAt: worker.finishedAt }),
+    ...(worker.report === undefined ? {} : { report: worker.report }),
+  };
+}
+
 export class WorkerManager {
   private readonly effects: WorkerEffects;
   private readonly workers = new Map<string, WorkerRecord>();
@@ -180,6 +189,8 @@ export class WorkerManager {
         startedAt: this.effects.now(),
       });
       this.effects.debug?.(`worker ${id} dispatched on thread ${threadId}`);
+      const record = this.workers.get(id);
+      if (record) this.effects.onWorkerUpdate?.(snapshot(record));
       return ok(
         `${id} "${title}" is running. Its report will arrive as a message when it finishes — continue the conversation, don't wait.`,
       );
@@ -207,6 +218,7 @@ export class WorkerManager {
       await this.effects.interruptWorker(worker.threadId, worker.turnId);
       worker.status = "cancelled";
       worker.finishedAt = this.effects.now();
+      this.effects.onWorkerUpdate?.(snapshot(worker));
       return ok(`${worker.id} "${worker.title}" cancelled`);
     } catch (error) {
       return refuse(`cancel failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -227,6 +239,7 @@ export class WorkerManager {
       status === "completed" ? "completed" : status === "interrupted" ? "interrupted" : "failed";
     worker.finishedAt = this.effects.now();
     worker.report = trimReport(finalAgentMessage(turn) ?? "(the worker produced no final message)");
+    this.effects.onWorkerUpdate?.(snapshot(worker));
 
     this.effects.reportToOrchestrator(
       [
@@ -246,8 +259,14 @@ export class WorkerManager {
         worker.status = "lost";
         worker.finishedAt = now;
         worker.report = "lost with an app-server restart";
+        this.effects.onWorkerUpdate?.(snapshot(worker));
       }
     }
+  }
+
+  /** Every worker this run, for replaying state to a connecting client. */
+  snapshots(): WorkerSnapshot[] {
+    return [...this.workers.values()].map(snapshot);
   }
 }
 
