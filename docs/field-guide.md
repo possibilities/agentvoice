@@ -212,7 +212,13 @@ upstream** — no param or config key reaches them *(source)*.
 ### The handoff: how orchestrator output reaches the voice agent's ears
 
 Everything the orchestrator streams back is appended into the voice session as
-delegation context *(probe: `delegation.context.appended` frames)*, shaped by:
+delegation context *(probe: `delegation.context.appended` frames)*. The mirror
+is **thread-scoped, not delegation-scoped** *(source)*: while a session is
+live, agent-message output from *any* turn on the thread — a client-started
+turn included — is forwarded, and output with no delegation to attach to
+flows as standalone-handoff frames through the same channel routing. That is
+the mechanism that lets an injected report turn reach the voice agent's ears
+(the basis for proactive announcements). Shaping:
 
 - `codex-response-handoff-mode` — `thinking` (default): channel-less appends
   the voice model reads but isn't pushed to speak; `commentary`: everything
@@ -334,7 +340,9 @@ For the voice agent's mood, none of this applies — its personality lives in
 - `orchestrator.effort` — sugar for `config.model_reasoning_effort`
   (`none…ultra`); an explicit `config:` entry wins over the sugar. `ultra`
   additionally unlocks codex's proactive multi-agent behavior (the deprecated
-  `multiAgentMode` is ignored in its favor) *(source)*.
+  `multiAgentMode` is ignored in its favor) — moot under
+  `agents.enabled: false`, which removes the spawn tools at any effort
+  *(source)*.
 - `model_verbosity` (config-only: `orchestrator.config: {model_verbosity:
   low|medium|high}`) — the Responses `text.verbosity` param; **silently
   ignored** (with only a codex-side warn log) when the model lacks verbosity
@@ -481,8 +489,13 @@ much tool output re-enters context), `project_doc_max_bytes`,
 `orchestrator.mcp.enabled` / `orchestrator.skills.enabled`,
 `include_*_instructions` toggles, `features.*` (e.g. `token_budget` — a
 no-summary context-rollover mode with model-visible reminder/guidance
-templates), `agents.default_subagent_model` / `_reasoning_effort`, `notify`
-(turn-end argv hook, not model-visible).
+templates), `agents.enabled` (**false removes the sub-agent spawn tools
+entirely**, forcing the multi-agent version to disabled at any effort — the
+hard form of "workers are app-server threads, not subagents" *(source)*),
+`agents.max_concurrent_threads_per_session`, `agents.default_subagent_model`
+/ `_reasoning_effort`, `notify` (turn-end argv hook, not model-visible;
+fires with `{"type":"agent-turn-complete","turn-id":…}` — a callback
+channel for out-of-process workers).
 
 ## Compaction
 
@@ -646,6 +659,25 @@ disk, no resume after an app-server crash) + `include-startup-context: false`
 All verified present in 0.147's app-server protocol; each is a candidate
 lever for a fork or a future version of this server:
 
+- `thread/inject_items` — append raw Responses API items to a thread's
+  model-visible history **without starting a turn** *(source)*: the
+  environmental-chatter channel. A worker report injected here waits
+  silently until the orchestrator's next turn; note the snake_case wire
+  name.
+- `turn/start` on a busy thread **steers instead of failing** *(source)*:
+  admission tries steer first, so input (plus `additionalContext`) merges
+  into a running turn and only spawns a fresh turn when the thread is idle.
+  Only review and compaction turns refuse steering — delegations are
+  ordinary turns and accept it. `turn/steer` is the explicit
+  add-to-running-turn verb (with an `expected_turn_id` precondition);
+  `turn/interrupt` also exists.
+- `turn/start.additionalContext` (also on steer) — client context fragments
+  keyed by source id, typed `application` or `untrusted` *(source)*.
+- `thread/start.dynamicTools` — client-implemented tools declared **at
+  thread start** (thread-scoped, so later turns carry them); a model call
+  comes back as an `item/tool/call` server→client request for the client
+  to execute *(source)*. The natural dispatch surface for a
+  worker-thread registry.
 - `thread/settings/update` — change model, effort, personality, sandbox,
   collaboration mode **mid-thread**.
 - `thread/realtime/appendText` — inject silent context into a live voice
@@ -661,8 +693,14 @@ lever for a fork or a future version of this server:
 - `thread/fork`, `thread/rollback`, `turn/steer`.
 - `turn/start additionalContext` / `dynamicTools` / `environments` — per-turn
   context fragments, client-defined tools, sticky environments (start-only).
-- Notifications worth relaying to a richer client: `thread/tokenUsage/
-  updated`, `thread/compacted`, `item/*` progress, `hook/*`.
+- Notifications worth relaying to a richer client: `turn/started`,
+  `turn/completed` (turn status `completed | interrupted | failed` — the
+  push signal a worker-thread supervisor consumes), `thread/tokenUsage/
+  updated`, `thread/compacted`, `item/*` progress, `hook/*`. Event
+  streaming is per-thread and subscription-based upstream: a connection
+  hears a thread once it has engaged it (start, resume, a turn, realtime
+  start), which is also the attach path for monitoring a thread some other
+  actor spawned *(source)*.
 - Upstream control frames with no codex surface at all yet:
   `input_audio.pause`/`resume`, `session.feedback` *(probe: allowlist)*.
 
