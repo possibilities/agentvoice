@@ -356,6 +356,374 @@ describe("parseArgs", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Characterization ahead of the zod port. These pin current behavior and that
+// errors NAME the offending key path — never exact message prose, which the
+// port may replace with zod-derived strings.
+// ---------------------------------------------------------------------------
+
+describe("parseJsonConfig characterization", () => {
+  test("rejects scalar documents", () => {
+    for (const text of ["3", '"x"', "true"]) {
+      expect(() => parseJsonConfig(text, "server.json")).toThrow(ConfigError);
+    }
+  });
+
+  test("errors carry the source they were parsed from", () => {
+    expect(() => parseJsonConfig('{"nope": 1}', "/etc/avn/server.json")).toThrow(
+      /\/etc\/avn\/server\.json/,
+    );
+  });
+
+  test("tolerates $schema alongside real keys, whatever its value", () => {
+    expect(
+      parseJsonConfig('{"$schema": "./server.schema.json", "port": 9001}', "server.json"),
+    ).toEqual({ port: 9001 });
+    // The value is never inspected; even a non-string is ignored.
+    expect(parseJsonConfig('{"$schema": 123}', "server.json")).toEqual({});
+  });
+
+  test("port passes through as number or string; other types are named", () => {
+    expect(parseJsonConfig('{"port": 9001}', "server.json")).toEqual({ port: 9001 });
+    expect(parseJsonConfig('{"port": "9001"}', "server.json")).toEqual({ port: "9001" });
+    expect(() => parseJsonConfig('{"port": true}', "server.json")).toThrow(/port/);
+    expect(() => parseJsonConfig('{"port": null}', "server.json")).toThrow(/port/);
+  });
+
+  test("codex must be a string, named on rejection", () => {
+    expect(parseJsonConfig('{"codex": "~/bin/codex"}', "server.json")).toEqual({
+      codex: "~/bin/codex",
+    });
+    expect(() => parseJsonConfig('{"codex": 3}', "server.json")).toThrow(/codex/);
+  });
+
+  test("accounts: shape, balance type, and unknown keys are named", () => {
+    expect(
+      parseJsonConfig('{"accounts": {"balance": true, "switch-threshold": 80}}', "server.json"),
+    ).toEqual({ accounts: { balance: true, "switch-threshold": 80 } });
+    expect(() => parseJsonConfig('{"accounts": 3}', "server.json")).toThrow(/accounts/);
+    expect(() => parseJsonConfig('{"accounts": {"balance": "yes"}}', "server.json")).toThrow(
+      /accounts\.balance/,
+    );
+    expect(() => parseJsonConfig('{"accounts": {"nope": 1}}', "server.json")).toThrow(
+      /accounts\.nope/,
+    );
+  });
+
+  test("accounts.switch-threshold is an integer between 50 and 100", () => {
+    for (const threshold of [50, 95, 100]) {
+      expect(
+        parseJsonConfig(`{"accounts": {"switch-threshold": ${threshold}}}`, "server.json"),
+      ).toEqual({ accounts: { "switch-threshold": threshold } });
+    }
+    for (const bad of ["49", "101", "95.5", '"95"', "true"]) {
+      expect(() =>
+        parseJsonConfig(`{"accounts": {"switch-threshold": ${bad}}}`, "server.json"),
+      ).toThrow(/accounts\.switch-threshold/);
+    }
+  });
+
+  test("orchestrator string options are named on type errors", () => {
+    const keys = ["workspace", "model", "effort", "permissions", "model-provider", "service-tier"];
+    for (const key of keys) {
+      expect(parseJsonConfig(`{"orchestrator": {"${key}": "v"}}`, "server.json")).toEqual({
+        orchestrator: { [key]: "v" },
+      });
+      expect(() => parseJsonConfig(`{"orchestrator": {"${key}": 3}}`, "server.json")).toThrow(
+        new RegExp(`orchestrator\\.${key}`),
+      );
+    }
+  });
+
+  test("orchestrator enum options validate at file level with the path named", () => {
+    const cases: Array<[string, string]> = [
+      ["sandbox", "workspace-write"],
+      ["approval-policy", "on-request"],
+      ["approvals-reviewer", "auto_review"],
+      ["history-mode", "paginated"],
+    ];
+    for (const [key, good] of cases) {
+      expect(parseJsonConfig(`{"orchestrator": {"${key}": "${good}"}}`, "server.json")).toEqual({
+        orchestrator: { [key]: good },
+      });
+      expect(() => parseJsonConfig(`{"orchestrator": {"${key}": "bogus"}}`, "server.json")).toThrow(
+        new RegExp(`orchestrator\\.${key}`),
+      );
+    }
+  });
+
+  test("orchestrator.ephemeral must be boolean", () => {
+    expect(parseJsonConfig('{"orchestrator": {"ephemeral": true}}', "server.json")).toEqual({
+      orchestrator: { ephemeral: true },
+    });
+    expect(() => parseJsonConfig('{"orchestrator": {"ephemeral": 1}}', "server.json")).toThrow(
+      /orchestrator\.ephemeral/,
+    );
+  });
+
+  test("orchestrator.runtime-workspace-roots is a string list with indexed errors", () => {
+    expect(
+      parseJsonConfig(
+        '{"orchestrator": {"runtime-workspace-roots": ["~/a", "/b"]}}',
+        "server.json",
+      ),
+    ).toEqual({ orchestrator: { "runtime-workspace-roots": ["~/a", "/b"] } });
+    expect(() =>
+      parseJsonConfig('{"orchestrator": {"runtime-workspace-roots": "a"}}', "server.json"),
+    ).toThrow(/orchestrator\.runtime-workspace-roots/);
+    expect(() =>
+      parseJsonConfig('{"orchestrator": {"runtime-workspace-roots": ["a", 3]}}', "server.json"),
+    ).toThrow(/runtime-workspace-roots\[1\]/);
+  });
+
+  test("orchestrator.config and orchestrator.extra are open passthroughs", () => {
+    // These forward to the codex key space; unknown nested keys must survive.
+    const document = {
+      orchestrator: {
+        config: { anything: { nested: true }, "weird key": [1, 2] },
+        extra: { experimental: "yes", list: ["a"] },
+      },
+    };
+    expect(parseJsonConfig(JSON.stringify(document), "server.json")).toEqual(document);
+    expect(() => parseJsonConfig('{"orchestrator": {"config": 3}}', "server.json")).toThrow(
+      /orchestrator\.config/,
+    );
+    expect(() => parseJsonConfig('{"orchestrator": {"extra": []}}', "server.json")).toThrow(
+      /orchestrator\.extra/,
+    );
+  });
+
+  test("voice string options are named on type errors", () => {
+    for (const key of ["model", "name", "codex-response-item-prefix"]) {
+      expect(parseJsonConfig(`{"voice": {"${key}": "v"}}`, "server.json")).toEqual({
+        voice: { [key]: "v" },
+      });
+      expect(() => parseJsonConfig(`{"voice": {"${key}": 3}}`, "server.json")).toThrow(
+        new RegExp(`voice\\.${key}`),
+      );
+    }
+  });
+
+  test("voice boolean options are named on type errors", () => {
+    const keys = [
+      "include-startup-context",
+      "delegation-ack-filler",
+      "codex-responses-as-items",
+      "flush-transcript-tail-on-session-end",
+      "client-managed-handoffs",
+    ];
+    for (const key of keys) {
+      expect(parseJsonConfig(`{"voice": {"${key}": false}}`, "server.json")).toEqual({
+        voice: { [key]: false },
+      });
+      expect(() => parseJsonConfig(`{"voice": {"${key}": "no"}}`, "server.json")).toThrow(
+        new RegExp(`voice\\.${key}`),
+      );
+    }
+  });
+
+  test("voice.codex-response-handoff-mode is an enum with the path named", () => {
+    expect(
+      parseJsonConfig('{"voice": {"codex-response-handoff-mode": "bemTags"}}', "server.json"),
+    ).toEqual({ voice: { "codex-response-handoff-mode": "bemTags" } });
+    expect(() =>
+      parseJsonConfig('{"voice": {"codex-response-handoff-mode": "loud"}}', "server.json"),
+    ).toThrow(/voice\.codex-response-handoff-mode/);
+  });
+
+  test("voice unknown keys are named", () => {
+    expect(() => parseJsonConfig('{"voice": {"nope": 1}}', "server.json")).toThrow(/voice\.nope/);
+  });
+
+  test("channel prefixes map arbitrary channel names to string lists", () => {
+    expect(
+      parseJsonConfig(
+        '{"voice": {"codex-response-handoff-channel-prefixes": {"final": ["[R] "], "someFutureChannel": []}}}',
+        "server.json",
+      ),
+    ).toEqual({
+      voice: {
+        "codex-response-handoff-channel-prefixes": { final: ["[R] "], someFutureChannel: [] },
+      },
+    });
+    expect(() =>
+      parseJsonConfig('{"voice": {"codex-response-handoff-channel-prefixes": 3}}', "server.json"),
+    ).toThrow(/voice\.codex-response-handoff-channel-prefixes/);
+    expect(() =>
+      parseJsonConfig(
+        '{"voice": {"codex-response-handoff-channel-prefixes": {"final": "x"}}}',
+        "server.json",
+      ),
+    ).toThrow(/codex-response-handoff-channel-prefixes\.final/);
+    expect(() =>
+      parseJsonConfig(
+        '{"voice": {"codex-response-handoff-channel-prefixes": {"final": [3]}}}',
+        "server.json",
+      ),
+    ).toThrow(/codex-response-handoff-channel-prefixes\.final\[0\]/);
+  });
+
+  test("voice.extra is an open passthrough", () => {
+    const document = { voice: { extra: { initialItems: [{ role: "user", text: "hi" }] } } };
+    expect(parseJsonConfig(JSON.stringify(document), "server.json")).toEqual(document);
+    expect(() => parseJsonConfig('{"voice": {"extra": null}}', "server.json")).toThrow(
+      /voice\.extra/,
+    );
+  });
+});
+
+describe("cliToConfigValues characterization", () => {
+  test("names the offending flag", () => {
+    expect(() => cliToConfigValues({ sandbox: "yolo" })).toThrow(/--sandbox/);
+    expect(() => cliToConfigValues({ "approval-policy": "always" })).toThrow(/--approval-policy/);
+    expect(() => cliToConfigValues({ nope: "x" })).toThrow(ConfigError);
+    expect(() => cliToConfigValues({ nope: "x" })).toThrow(/--nope/);
+  });
+});
+
+describe("resolveConfig characterization", () => {
+  test("accounts defaults, file values, and CLI precedence", () => {
+    expect(resolveConfig({}, {}, {}, HOME).accounts).toEqual({
+      balance: false,
+      switchThreshold: 95,
+    });
+    expect(
+      resolveConfig({}, { accounts: { balance: true, "switch-threshold": 80 } }, {}, HOME).accounts,
+    ).toEqual({ balance: true, switchThreshold: 80 });
+    expect(
+      resolveConfig(
+        { accounts: { "switch-threshold": 60 } },
+        { accounts: { "switch-threshold": 80 } },
+        {},
+        HOME,
+      ).accounts.switchThreshold,
+    ).toBe(60);
+  });
+
+  test("codex: CLI beats file beats $CODEX_PATH beats the bare default", () => {
+    const env = { CODEX_PATH: "/env/codex" };
+    expect(resolveConfig({ codex: "/cli/codex" }, { codex: "/file/codex" }, env, HOME).codex).toBe(
+      "/cli/codex",
+    );
+    expect(resolveConfig({}, { codex: "/file/codex" }, env, HOME).codex).toBe("/file/codex");
+    expect(resolveConfig({}, {}, env, HOME).codex).toBe("/env/codex");
+    expect(resolveConfig({}, {}, {}, HOME).codex).toBe("codex");
+  });
+
+  test("debug defaults to false and follows the option", () => {
+    expect(resolveConfig({}, {}, {}, HOME).debug).toBe(false);
+    expect(resolveConfig({}, {}, {}, HOME, { debug: true }).debug).toBe(true);
+  });
+
+  test("configDir default honors XDG_CONFIG_HOME", () => {
+    expect(resolveConfig({}, {}, { XDG_CONFIG_HOME: "/xdg" }, HOME).configDir).toBe(
+      "/xdg/agentvoice",
+    );
+  });
+
+  test("every optional leaf stays undefined when unset", () => {
+    // Anything undefined here is omitted from the codex payloads entirely
+    // (params.ts drops undefined); resolution must never default-inject.
+    const { orchestrator, voice } = resolveConfig({}, {}, {}, HOME);
+    const orchestratorLeaves = [
+      "dispatch",
+      "dispatchReports",
+      "model",
+      "effort",
+      "personality",
+      "approvalsReviewer",
+      "permissions",
+      "modelProvider",
+      "serviceTier",
+      "ephemeral",
+      "historyMode",
+      "runtimeWorkspaceRoots",
+      "config",
+      "extra",
+    ] as const;
+    for (const key of orchestratorLeaves) expect(orchestrator[key]).toBeUndefined();
+    const voiceLeaves = [
+      "model",
+      "name",
+      "includeStartupContext",
+      "delegationAckFiller",
+      "codexResponseHandoffMode",
+      "codexResponsesAsItems",
+      "codexResponseItemPrefix",
+      "codexResponseHandoffChannelPrefixes",
+      "flushTranscriptTailOnSessionEnd",
+      "clientManagedHandoffs",
+      "extra",
+    ] as const;
+    for (const key of voiceLeaves) expect(voice[key]).toBeUndefined();
+  });
+
+  test("port bounds at resolution, with port named", () => {
+    expect(resolveConfig({ port: 1 }, {}, {}, HOME).port).toBe(1);
+    expect(resolveConfig({ port: 65535 }, {}, {}, HOME).port).toBe(65535);
+    for (const bad of [0, 65536, 1.5, "-1", "nope"]) {
+      expect(() => resolveConfig({ port: bad }, {}, {}, HOME)).toThrow(ConfigError);
+    }
+    expect(() => resolveConfig({ port: 65536 }, {}, {}, HOME)).toThrow(/port/);
+  });
+
+  test("string ports go through parseInt, which tolerates trailing junk", () => {
+    // Current behavior (Number.parseInt): "7890junk" resolves to 7890 and
+    // "1.5" to 1, while the number 1.5 is rejected above. The zod port may
+    // deliberately tighten this; this pin makes that a decision, not an
+    // accident.
+    expect(resolveConfig({ port: "7890junk" }, {}, {}, HOME).port).toBe(7890);
+    expect(resolveConfig({ port: "1.5" }, {}, {}, HOME).port).toBe(1);
+  });
+
+  test("dispatch-reports: false needs no dispatch", () => {
+    const config = resolveConfig({}, { orchestrator: { "dispatch-reports": false } }, {}, HOME);
+    expect(config.orchestrator.dispatchReports).toBe(false);
+    expect(config.orchestrator.dispatch).toBeUndefined();
+  });
+
+  test("config and extra pass through resolution unchanged", () => {
+    const file = {
+      orchestrator: {
+        config: { model_reasoning_summary_format: "experimental" },
+        extra: { anything: ["goes"] },
+      },
+      voice: { extra: { initialItems: [] } },
+    };
+    const config = resolveConfig({}, file, {}, HOME);
+    expect(config.orchestrator.config).toEqual({ model_reasoning_summary_format: "experimental" });
+    expect(config.orchestrator.extra).toEqual({ anything: ["goes"] });
+    expect(config.voice.extra).toEqual({ initialItems: [] });
+  });
+});
+
+describe("loadConfigFile characterization", () => {
+  let directory: string;
+
+  beforeAll(() => {
+    directory = mkdtempSync(join(tmpdir(), "avn-load-"));
+  });
+
+  afterAll(() => rmSync(directory, { recursive: true, force: true }));
+
+  test("reads and parses an existing file, naming it in errors", async () => {
+    const good = join(directory, "good-server.json");
+    writeFileSync(good, '{"port": 9001, "voice": {"name": "marin"}}');
+    expect(await loadConfigFile(good, false)).toEqual({ port: 9001, voice: { name: "marin" } });
+
+    const bad = join(directory, "bad-server.json");
+    writeFileSync(bad, '{"voice": {"nope": 1}}');
+    await expect(loadConfigFile(bad, true)).rejects.toThrow(/voice\.nope/);
+    await expect(loadConfigFile(bad, true)).rejects.toThrow(/bad-server\.json/);
+  });
+});
+
+describe("parseArgs characterization", () => {
+  test("a bare word is an unknown option", () => {
+    expect(() => parseArgs(["foo"])).toThrow(UsageError);
+  });
+});
+
 describe("parseClientArgs", () => {
   test("defaults to system devices", () => {
     expect(parseClientArgs([])).toEqual({
