@@ -42,8 +42,13 @@ the server and the client use it; if only one does, it goes in that directory.
   - `workers.ts` — worker dispatch under `orchestrator.dispatch`: the three
     dynamic tools, the worker registry, and worker-report composition; pure
     effects-injected logic, tested in `tests/workers.test.ts`
+  - `accounts.ts` — account profiles and balanced selection under
+    `accounts.balance`: identity/balancer-output parsing (pure), the symlink
+    farm, selection with canonical fallback; tested in
+    `tests/accounts.test.ts`, upstream mechanics re-verified by
+    `scripts/account-profiles-probe.ts`
   - `server.ts` — wiring: process supervision, thread, worker threads,
-    WebSocket
+    WebSocket, account rotation at idle
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
   two-peer redial), `audio.ts` (comparison path: OpenTUI capture + sox
   playback), `duplex-audio.ts` + `duplex-device.ts` + `native/` (opt-in duplex
@@ -101,6 +106,20 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
    text tokens. This is why `voice.version` defaults to v3 rather than
    deferring to codex config.
+10. The webrtc transport is load-bearing for auth, not just media: the
+    websocket transport hard-requires an API key (`realtime_api_key`,
+    `realtime_conversation.rs`), while webrtc authorizes the SDP POST and the
+    sideband WebSocket with the ModelClient's ordinary bearer — which is what
+    makes a ChatGPT login work here at all. The call URL derives from the
+    session's model provider (`client.rs`, `REALTIME_CALLS_ENDPOINT`), so any
+    provider-swapping wrapper (e.g. a localhost credential proxy) silently
+    breaks realtime even when threads still work.
+11. ChatGPT refresh tokens rotate with server-side reuse detection
+    (`login/src/auth/manager.rs`, `refresh_token_reused`): exactly one party
+    may ever refresh a grant. Account profiles therefore hold their own
+    grant's `auth.json` and codex alone refreshes it — never copy credentials
+    between stores. Cross-profile resume and grant coexistence are re-verified
+    by `bun run accounts:probe`.
 
 ## Conventions
 
@@ -111,4 +130,6 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   honored): `workspace` (agent cwd), `app-server` (stable child cwd — must
   outlive the child; it re-reads its own cwd on every thread start), `token`
   (the connection token, mode 0600 — file permissions are the boundary
-  between local users).
+  between local users), `accounts/<slug>` (account profiles: a real
+  `auth.json` plus a symlink farm over the canonical `~/.codex`, reconciled
+  at every child spawn).

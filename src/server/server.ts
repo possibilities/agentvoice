@@ -21,6 +21,14 @@ import {
   parseClientMessage,
   type ServerMessage,
 } from "../protocol.ts";
+import {
+  accountsDirectory,
+  discoverProfiles,
+  maxUsedPercent,
+  reconcileFarm,
+  runBalancerCommand,
+  selectAccount,
+} from "./accounts.ts";
 import { AppServer, AppServerError } from "./appserver.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { gateRequest, tokenMatches } from "./gate.ts";
@@ -76,6 +84,36 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   let client: ClientSocket | null = null;
   let restartFailures = 0;
   let shuttingDown = false;
+
+  // Account balancing state. The active account is fixed per child; rotation
+  // is a supervised restart at an idle boundary onto the balancer's next pick.
+  const canonicalHome = process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+  const accountsDir = accountsDirectory(process.env, homedir());
+  let activeAccount: string | null = null; // email, or null for the canonical home
+  let orchestratorTurnActive = false;
+  let exhaustedPercent: number | null = null;
+  let rotating = false;
+
+  interface SpawnChoice {
+    codexHome?: string;
+    account: string | null;
+  }
+
+  async function chooseSpawnHome(): Promise<SpawnChoice> {
+    if (!config.accounts.balance) return { account: null };
+    const selection = await selectAccount(discoverProfiles(accountsDir), runBalancerCommand);
+    if (selection.kind === "canonical") {
+      console.error(`accounts: canonical home fallback — ${selection.reason}`);
+      return { account: null };
+    }
+    reconcileFarm(canonicalHome, selection.profile.directory, (message) =>
+      console.error(`accounts: ${message}`),
+    );
+    console.error(
+      `accounts: selected ${selection.email} (${selection.profile.slug}) — ${selection.reason}`,
+    );
+    return { codexHome: selection.profile.directory, account: selection.email };
+  }
 
   function send(payload: ServerMessage): void {
     if (client && client.readyState === 1) client.send(JSON.stringify(payload));
@@ -198,16 +236,20 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     );
   }
 
-  async function connectAppServer(): Promise<void> {
+  async function connectAppServer(preselected?: SpawnChoice): Promise<void> {
+    const choice = preselected ?? (await chooseSpawnHome());
     const server = new AppServer({
       codexBin: config.codex,
       processCwd: appServerCwd,
+      ...(choice.codexHome !== undefined ? { codexHome: choice.codexHome } : {}),
       clientVersion: version,
       onNotification: handleNotification,
       onRequest: handleAppServerRequest,
       onExit: (info) => handleAppServerExit(server, info),
       debug: debugLog,
     });
+    activeAccount = choice.account;
+    exhaustedPercent = null;
     appServer = server;
     try {
       await server.start();
@@ -232,6 +274,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     if (appServer !== server) return; // an instance we already replaced or tore down
     appServer = null;
     threadReady = false;
+    orchestratorTurnActive = false;
     const hadSession = sessions.hasSession;
     sessions.reset(); // every session died with the child
     workers?.reset(); // running workers died with it too — marked lost, not resumed
@@ -269,16 +312,68 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   }
 
   function handleNotification(method: string, params: Record<string, unknown>): void {
+    if (method === "turn/started" && params["threadId"] === threadId) {
+      orchestratorTurnActive = true;
+    } else if (method === "turn/completed" && params["threadId"] === threadId) {
+      orchestratorTurnActive = false;
+    } else if (method === "account/rateLimits/updated" && config.accounts.balance) {
+      const used = maxUsedPercent(params);
+      exhaustedPercent = used !== null && used >= config.accounts.switchThreshold ? used : null;
+    }
     if (method === "turn/completed" && workers) {
       const turnThread = params["threadId"];
       if (typeof turnThread === "string" && workers.ownsThread(turnThread)) {
         workers.handleTurnCompleted(turnThread, (params["turn"] ?? {}) as Record<string, unknown>);
       }
+      maybeRotate();
       return;
     }
-    if (!method.startsWith("thread/realtime/")) return;
-    if (params["threadId"] !== undefined && params["threadId"] !== threadId) return;
-    sessions.handleNotification(method, params);
+    if (method.startsWith("thread/realtime/")) {
+      if (params["threadId"] === undefined || params["threadId"] === threadId) {
+        sessions.handleNotification(method, params);
+      }
+    }
+    maybeRotate();
+  }
+
+  /**
+   * An exhausted account rotates only between things: never under a voice
+   * session, a running orchestrator turn, or live workers. The balancer is
+   * consulted first — picking the already-active account disarms instead of
+   * restarting into the same exhaustion.
+   */
+  function maybeRotate(): void {
+    if (exhaustedPercent === null || rotating || shuttingDown) return;
+    if (!config.accounts.balance || !appServer || !threadReady) return;
+    if (sessions.hasSession || orchestratorTurnActive) return;
+    if (workers?.snapshots().some((worker) => worker.status === "running")) return;
+    rotating = true;
+    const usedPercent = exhaustedPercent;
+    void (async () => {
+      try {
+        const choice = await chooseSpawnHome();
+        if (choice.account === null || choice.account === activeAccount) {
+          exhaustedPercent = null; // nothing better; re-armed by the next update
+          return;
+        }
+        const server = appServer;
+        if (!server || sessions.hasSession || orchestratorTurnActive) return;
+        console.error(
+          `accounts: rotating off ${activeAccount ?? "canonical"} (${usedPercent}% used) to ${choice.account}`,
+        );
+        threadReady = false;
+        await server.stop();
+        await connectAppServer(choice);
+        restartFailures = 0;
+      } catch (error) {
+        console.error(
+          `accounts: rotation failed (${error instanceof Error ? error.message : String(error)}); restarting`,
+        );
+        setTimeout(() => void restart(), RESTART_BACKOFF_INITIAL_MS);
+      } finally {
+        rotating = false;
+      }
+    })();
   }
 
   function handleAppServerRequest(
@@ -395,6 +490,13 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     `  sandbox         ${orchestrator.permissions ?? orchestrator.sandbox}  approvals ${orchestrator.approvalPolicy}`,
   );
   console.log(`  dispatch        ${orchestrator.dispatch === true ? "on" : "off"}`);
+  console.log(
+    `  accounts        ${
+      config.accounts.balance
+        ? `balancing (active: ${activeAccount ?? "canonical"}, rotate at ${config.accounts.switchThreshold}%)`
+        : "canonical"
+    }`,
+  );
   console.log(
     `  prompts         ${foundPrompts.length > 0 ? foundPrompts.join(" ") : "(none)"}  in ${config.configDir}`,
   );

@@ -110,6 +110,12 @@ export interface AppServerOptions {
    * directory that outlives the child.
    */
   processCwd: string;
+  /**
+   * CODEX_HOME for the child — an account profile when balancing, absent for
+   * the canonical home. Auth is process-scoped, so this is fixed for the
+   * child's lifetime; switching accounts is a child restart.
+   */
+  codexHome?: string;
   clientVersion: string;
   onNotification(method: string, params: Record<string, unknown>): void;
   /**
@@ -153,6 +159,9 @@ export class AppServer {
     try {
       child = Bun.spawn(spawnArgv(this.options.codexBin), {
         cwd: this.options.processCwd,
+        ...(this.options.codexHome !== undefined
+          ? { env: { ...process.env, CODEX_HOME: this.options.codexHome } }
+          : {}),
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",

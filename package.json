@@ -18,6 +18,7 @@
     "setup": "bun run scripts/setup.ts",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",
+    "accounts:probe": "bun run scripts/account-profiles-probe.ts",
     "cli:install": "bun run scripts/install.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

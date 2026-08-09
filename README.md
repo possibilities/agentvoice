@@ -180,7 +180,38 @@ and the defaults here add none. Pairs with `agents.enabled: false` in
 `orchestrator.config:`, which removes codex's own in-thread sub-agent tools
 so the two surfaces never compete.
 
-## Security posture
+### Multi-account balancing
+
+`accounts.balance: true` makes the server pick which ChatGPT account each
+app-server child runs on, using live quota data. Selection is delegated to
+`agentusage balance codex` (falling back to `codex-swap select`), so the
+balancing algorithm, freshness rules, and focus policies live with the quota
+observer rather than here; the pick maps by email onto an
+**account profile** — a per-account `CODEX_HOME` under
+`~/.local/state/agentvoice/accounts/<slug>/` holding its own `auth.json`
+while symlinking everything else to the canonical `~/.codex`. One shared
+session store is what lets the orchestrator thread resume under any account.
+
+```bash
+agentvoice accounts add personal   # codex login --device-auth, per account
+agentvoice accounts add work
+agentvoice accounts list
+```
+
+Selection runs at every child spawn (boot and supervised restarts). When the
+active account crosses `accounts.switch-threshold` (default 95% of either
+rate-limit window), the server rotates: at the next idle moment — no voice
+session, no running turn, no live workers — it restarts the child onto the
+balancer's next pick and resumes the same orchestrator thread. Any refusal
+(no balancer CLI, no profiles, nothing eligible) falls back loudly to the
+canonical `~/.codex` — with balancing off or codex-swap absent, behavior is
+exactly the single-account default.
+
+Two things this deliberately never does: copy credentials between stores
+(ChatGPT refresh tokens rotate with reuse detection — each profile is its own
+grant, logged in once, refreshed only by codex), and wrap the child in
+`codex-swap run` (its credential proxy swaps the model provider out from
+under the realtime surface; see AGENTS.md invariant 10).
 
 The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
 one client. Loopback alone is not a boundary: a web page can open a WebSocket
@@ -336,6 +367,10 @@ gets a non-fatal `error`.
 - `~/.local/state/agentvoice/token` — the connection token (created at
   first boot, mode 0600). Delete it to rotate; the next server start mints a
   fresh one.
+- `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
+  multi-account balancing: a real `auth.json` per account, everything else
+  symlinked to `~/.codex`. Safe to delete; recreate with
+  `agentvoice accounts add`.
 - `~/.config/agentvoice/` — `server.yaml` and the prompt files beside it.
 
 Conversation state is in-memory per run: each server start opens a fresh

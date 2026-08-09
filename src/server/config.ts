@@ -82,12 +82,23 @@ export interface VoiceConfig {
   extra?: Record<string, unknown>;
 }
 
+/** Opt-in multi-account balancing over account profiles. */
+export interface AccountsConfig {
+  /** Select the spawn account via the balancer; off means the canonical home. */
+  balance: boolean;
+  /** Utilization percent at which an idle child rotates to a better account. */
+  switchThreshold: number;
+}
+
+export const DEFAULT_SWITCH_THRESHOLD = 95;
+
 export interface ServerConfig {
   port: number;
   codex: string;
   debug: boolean;
   /** Directory prompt files are discovered in. */
   configDir: string;
+  accounts: AccountsConfig;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
 }
@@ -131,14 +142,22 @@ export interface VoiceValues {
   extra?: Record<string, unknown>;
 }
 
+export interface AccountsValues {
+  balance?: boolean;
+  "switch-threshold"?: number;
+}
+
 export interface ConfigValues {
   port?: string | number;
   codex?: string;
+  accounts?: AccountsValues;
   orchestrator?: OrchestratorValues;
   voice?: VoiceValues;
 }
 
-export const SERVER_KEYS = ["port", "codex", "orchestrator", "voice"] as const;
+export const SERVER_KEYS = ["port", "codex", "accounts", "orchestrator", "voice"] as const;
+
+export const ACCOUNTS_KEYS = ["balance", "switch-threshold"] as const;
 
 export const ORCHESTRATOR_KEYS = [
   "workspace",
@@ -350,6 +369,29 @@ function parseOrchestrator(source: string, raw: unknown): OrchestratorValues {
   return values;
 }
 
+function parseAccounts(source: string, raw: unknown): AccountsValues {
+  const mapping = asMapping(source, "accounts", raw);
+  const values: AccountsValues = {};
+  for (const [key, value] of Object.entries(mapping)) {
+    const path = `accounts.${key}`;
+    switch (key) {
+      case "balance":
+        values.balance = asBoolean(source, path, value);
+        break;
+      case "switch-threshold": {
+        if (typeof value !== "number" || !Number.isInteger(value) || value < 50 || value > 100) {
+          fail(source, `"${path}" must be an integer between 50 and 100`);
+        }
+        values["switch-threshold"] = value;
+        break;
+      }
+      default:
+        fail(source, unknownKeyMessage(path, key, ACCOUNTS_KEYS));
+    }
+  }
+  return values;
+}
+
 function parseVoice(source: string, raw: unknown): VoiceValues {
   if (typeof raw === "string") {
     fail(source, `"voice" is now a mapping; the voice name moved to "voice.name"`);
@@ -429,6 +471,9 @@ export function parseYamlConfig(text: string, source: string): ConfigValues {
         break;
       case "codex":
         values.codex = asString(source, "codex", raw);
+        break;
+      case "accounts":
+        values.accounts = parseAccounts(source, raw);
         break;
       case "orchestrator":
         values.orchestrator = parseOrchestrator(source, raw);
@@ -521,6 +566,8 @@ export function resolveConfig(
   options: ResolveOptions = {},
 ): ServerConfig {
   const pickTop = <K extends keyof ConfigValues>(key: K): ConfigValues[K] => cli[key] ?? file[key];
+  const pickAccounts = <K extends keyof AccountsValues>(key: K): AccountsValues[K] =>
+    cli.accounts?.[key] ?? file.accounts?.[key];
   const pickOrchestrator = <K extends keyof OrchestratorValues>(key: K): OrchestratorValues[K] =>
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
@@ -596,6 +643,10 @@ export function resolveConfig(
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     debug: options.debug ?? false,
     configDir: options.configDir ?? dirname(defaultConfigPath(env, home)),
+    accounts: {
+      balance: pickAccounts("balance") ?? false,
+      switchThreshold: pickAccounts("switch-threshold") ?? DEFAULT_SWITCH_THRESHOLD,
+    },
     orchestrator,
     voice,
   };

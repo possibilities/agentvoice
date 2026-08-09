@@ -1,10 +1,17 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoice server [options]` / `agentvoice client [options]`. */
+/** CLI entry: `agentvoice server|client|accounts [options]`. */
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
 import { type ClientConfig, ClientError, runClient } from "./client/ui.ts";
 import { defaultConfigPath, expandTilde } from "./paths.ts";
+import {
+  AUTH_FILE,
+  accountsDirectory,
+  discoverProfiles,
+  reconcileFarm,
+} from "./server/accounts.ts";
 import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./server/config.ts";
 import { runServer } from "./server/server.ts";
 
@@ -14,10 +21,27 @@ const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";
 const USAGE = `agentvoice — minimal voice server and terminal client for Codex
 
 Usage:
-  agentvoice server [options]   Start the voice server
-  agentvoice client [options]   Open the terminal voice client
+  agentvoice server [options]     Start the voice server
+  agentvoice client [options]     Open the terminal voice client
+  agentvoice accounts <command>   Manage account profiles for balancing
 
-Run \`agentvoice server --help\` or \`agentvoice client --help\` for options.
+Run \`agentvoice <command> --help\` for options.
+`;
+
+const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
+
+A profile is a per-account CODEX_HOME under the state directory: its own
+auth.json, everything else symlinked to the canonical ~/.codex so all
+accounts share one session store. Enable selection with accounts.balance
+in server.yaml.
+
+Usage:
+  agentvoice accounts add <slug>   Create a profile and log it in
+                                   (runs codex login --device-auth inside it)
+  agentvoice accounts list         Show profiles and their identities
+
+The slug is a local label (lowercase letters, digits, hyphens) — pick one
+per ChatGPT account, e.g. "personal" or "work".
 `;
 
 const SERVER_USAGE = `agentvoice server — start the voice server
@@ -177,6 +201,80 @@ async function runClientCommand(argv: string[]): Promise<number> {
   return 0;
 }
 
+async function runAccountsCommand(argv: string[]): Promise<number> {
+  const subcommand = argv[0];
+  if (subcommand === undefined || subcommand === "--help" || subcommand === "help") {
+    console.log(ACCOUNTS_USAGE);
+    return subcommand === undefined ? 2 : 0;
+  }
+  const home = homedir();
+  const canonicalHome = process.env["CODEX_HOME"] ?? join(home, ".codex");
+  const accountsDir = accountsDirectory(process.env, home);
+
+  if (subcommand === "list") {
+    const profiles = discoverProfiles(accountsDir);
+    if (profiles.length === 0) {
+      console.log(`no account profiles in ${accountsDir}`);
+      return 0;
+    }
+    for (const profile of profiles) {
+      const identity = profile.identity;
+      console.log(
+        identity
+          ? `${profile.slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`
+          : `${profile.slug}  (not logged in — rerun \`agentvoice accounts add ${profile.slug}\`)`,
+      );
+    }
+    return 0;
+  }
+
+  if (subcommand === "add") {
+    const slug = argv[1];
+    if (slug === undefined || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+      throw new UsageError("accounts add requires a slug of lowercase letters, digits, hyphens");
+    }
+    if (!existsSync(canonicalHome)) {
+      throw new UsageError(`canonical codex home ${canonicalHome} does not exist; run codex once`);
+    }
+    const profileDir = join(accountsDir, slug);
+    reconcileFarm(canonicalHome, profileDir, (message) => console.error(`accounts: ${message}`));
+    const authPath = join(profileDir, AUTH_FILE);
+    if (!existsSync(authPath)) {
+      // codex owns the whole OAuth flow; the profile only scopes where the
+      // grant lands. Device auth works headless and never binds port 1455.
+      console.log(`logging in profile ${slug} (codex login --device-auth)…`);
+      const child = Bun.spawn(["codex", "login", "--device-auth"], {
+        env: { ...process.env, CODEX_HOME: profileDir },
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      if ((await child.exited) !== 0) {
+        console.error(`codex login failed for profile ${slug}`);
+        return 1;
+      }
+    }
+    const profile = discoverProfiles(accountsDir).find((candidate) => candidate.slug === slug);
+    const identity = profile?.identity;
+    if (!identity) {
+      console.error(`profile ${slug} has no readable identity; login may not have completed`);
+      return 1;
+    }
+    console.log(`${slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`);
+    const duplicate = discoverProfiles(accountsDir).find(
+      (candidate) => candidate.slug !== slug && candidate.identity?.email === identity.email,
+    );
+    if (duplicate) {
+      console.error(
+        `warning: ${duplicate.slug} holds the same account; selection maps by email and needs one profile per account`,
+      );
+    }
+    return 0;
+  }
+
+  throw new UsageError(`unknown accounts command "${subcommand}"`);
+}
+
 export function parseClientArgs(argv: string[]): ParsedClientCommand {
   const parsed = parseArgs(argv, CLIENT_FLAGS);
   if (parsed.help) return { help: true };
@@ -226,6 +324,7 @@ async function main(): Promise<number> {
   const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
     server: { run: runServerCommand, usage: SERVER_USAGE },
     client: { run: runClientCommand, usage: CLIENT_USAGE },
+    accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
   };
   const entry = commands[command];
   if (entry === undefined) {

@@ -98,3 +98,23 @@ orchestrator's thread when a worker's turn completes, under
 `check_workers`): status plus the worker's final message, trimmed. Arrives
 mid-turn as steered input or opens a fresh turn. _Avoid_: callback,
 notification (reserved for JSON-RPC).
+
+**Account profile** — a per-account `CODEX_HOME` under
+`~/.local/state/agentvoice/accounts/<slug>/`: its own `auth.json` (a separate
+OAuth grant, refreshed only by codex) with every other top-level entry
+symlinked to the canonical `~/.codex`, so all accounts share one session
+store and any thread resumes under any account. Onboarded with
+`agentvoice accounts add`. _Avoid_: "account" alone (ambiguous with the
+ChatGPT account it holds a grant for), "codex home swap".
+
+**Balancer** — the external CLI consulted at child spawn when
+`accounts.balance` is on: `agentusage balance codex`, falling back to
+`codex-swap select`. Its pick is mapped to an account profile by email; every
+refusal degrades to the canonical home. _Avoid_: "load balancer", "router".
+
+**Rotation** — the supervised child restart that moves the server to the
+balancer's next pick after the active account crosses
+`accounts.switch-threshold`, taken only when idle: no voice session, no
+running orchestrator turn, no live workers. The orchestrator thread survives
+via `thread/resume`; a voice session never does. _Avoid_: "failover",
+"account switch" (suggests in-place switching, which codex cannot do).

@@ -49,6 +49,24 @@
 # codex: codex                     # codex binary; $CODEX_PATH is the fallback
 
 # ---------------------------------------------------------------------------
+# Accounts — opt-in multi-account balancing over account profiles
+# ---------------------------------------------------------------------------
+# Off (the default), the app-server child runs on the canonical ~/.codex and
+# whatever `codex login` put there — exactly the single-account behavior.
+#
+# On, each spawn asks the balancer (`agentusage balance codex`, falling back
+# to `codex-swap select`) for an account and runs the child on that account's
+# profile: a per-account CODEX_HOME under ~/.local/state/agentvoice/accounts/
+# holding its own auth.json, everything else symlinked to ~/.codex so every
+# account shares one session store (threads resume across accounts). Onboard
+# profiles with `agentvoice accounts add <slug>`. Any refusal — no balancer,
+# no profiles, nothing eligible — falls back to the canonical home loudly.
+
+# accounts:
+#   balance: false                 # ask the balancer at every child spawn
+#   switch-threshold: 95           # % utilization that rotates an idle child
+
+# ---------------------------------------------------------------------------
 # Orchestrator agent — the codex thread that does the actual work
 # ---------------------------------------------------------------------------
 
