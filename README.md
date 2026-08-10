@@ -1,4 +1,4 @@
-# agentvoice
+# AgentVoice
 
 [![CI](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml)
 
