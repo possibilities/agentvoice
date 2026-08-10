@@ -1,5 +1,7 @@
 # agentvoice
 
+[![CI](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml)
+
 Minimal voice system for Codex. `agentvoice server` spawns a `codex
 app-server`, opens one **orchestrator agent** in an agent-owned workspace, and
 exposes a localhost WebSocket that lets a single voice client hold a
