@@ -2,11 +2,13 @@
 
 [![CI](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/possibilities/agentvoice/actions/workflows/ci.yml)
 
-Minimal voice system for Codex. `agentvoice server` spawns a `codex
-app-server`, opens one **orchestrator agent** in an agent-owned workspace, and
-exposes a localhost WebSocket that lets a single voice client hold a
-full-duplex WebRTC voice conversation with it. `agentvoice client` is that
-client: a terminal UI with live meters, transcripts, and mute controls.
+Minimal voice system for Codex — talk to a coding agent, hands-free.
+
+`agentvoice server` spawns a `codex app-server`, opens one **orchestrator
+agent** in an agent-owned workspace, and exposes a localhost WebSocket that
+lets a single voice client hold a full-duplex WebRTC conversation with it.
+`agentvoice client` is that client: a terminal UI with live meters,
+transcripts, and mute controls.
 
 There are two agents. The **voice agent** is the realtime speech model you
 actually talk to; the **orchestrator agent** is the Codex thread that does the
@@ -44,8 +46,8 @@ checkout, so TypeScript edits apply immediately with no rebuild. Funk's
 installer (`~/code/funk/install`) invokes this same contract from
 `~/code/agentvoice` when that checkout exists.
 
-TypeScript edits remain immediate. Changes under `src/client/native/` require
-`bun run native:build`; `bun run cli:install` runs that build automatically.
+Changes under `src/client/native/` are the exception: they require
+`bun run native:build`, which `bun run cli:install` runs automatically.
 
 ```bash
 bun run cli:install
@@ -224,6 +226,8 @@ Two things this deliberately never does: copy credentials between stores
 grant, logged in once, refreshed only by codex), and wrap the child in
 `codex-swap run` (its credential proxy swaps the model provider out from
 under the realtime surface; see AGENTS.md invariant 10).
+
+## Security posture
 
 The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
 one client. Loopback alone is not a boundary: a web page can open a WebSocket
