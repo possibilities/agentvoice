@@ -1,8 +1,6 @@
 /**
- * The terminal UI: a dark, two-voice console — YOU in warm amber, AGENT in
- * cool blue — with live sub-cell meters, history sparklines, session facts,
- * and an event feed. Imperative @opentui/core, like every OpenTUI audio
- * example.
+ * The terminal UI: a Signal Room instrument panel with local and remote
+ * signal rails, live sub-cell meters, session facts, and an event feed.
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -10,15 +8,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   BoxRenderable,
+  bold,
   type CliRenderer,
   createCliRenderer,
+  fg,
   type ParsedKey,
+  StyledText,
   TextRenderable,
 } from "@opentui/core";
 import { stateDirectory, tokenPath } from "../paths.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
+import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
 export interface ClientConfig {
@@ -41,35 +43,51 @@ function readTokenFile(): string | undefined {
   }
 }
 
-const PALETTE = {
-  bg: "#0a0d13",
-  panel: "#10141d",
-  border: "#232a38",
-  text: "#cdd6e4",
-  dim: "#5c6678",
-  you: "#ffb454",
-  youDim: "#8a6a3a",
-  agent: "#73b8ff",
-  agentDim: "#41628c",
-  ok: "#7fd88f",
-  warn: "#ffd166",
-  err: "#f27983",
-} as const;
+const PALETTE = VOICE_TONES;
 
 const PHASE_LABEL: Record<TransportPhase, string> = {
-  connecting: "connecting",
-  "waiting-ready": "waiting for server",
-  negotiating: "negotiating voice",
-  live: "live",
-  reconnecting: "reconnecting",
-  failed: "failed — press r",
-  stopped: "stopped",
+  connecting: "CONNECTING",
+  "waiting-ready": "WAITING FOR SERVER",
+  negotiating: "NEGOTIATING VOICE",
+  live: "LIVE",
+  reconnecting: "RECONNECTING",
+  failed: "FAILED · R REDIAL",
+  stopped: "STOPPED",
+};
+
+const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
+  connecting: "CONNECT",
+  "waiting-ready": "WAITING",
+  negotiating: "NEGOTIATE",
+  live: "LIVE",
+  reconnecting: "RECONNECT",
+  failed: "FAILED",
+  stopped: "STOPPED",
 };
 
 interface Meter {
   db: number;
   display: number;
   history: number[];
+}
+
+function styledFacts(rows: ReadonlyArray<readonly [label: string, value: string]>): StyledText {
+  const chunks: ReturnType<typeof bold>[] = [];
+  rows.forEach(([label, value], index) => {
+    chunks.push(fg(PALETTE.dim)(label.padEnd(11)));
+    chunks.push(fg(PALETTE.text)(value));
+    if (index < rows.length - 1) chunks.push(fg(PALETTE.text)("\n"));
+  });
+  return new StyledText(chunks);
+}
+
+function styledKeybar(entries: ReadonlyArray<readonly [key: string, label: string]>): StyledText {
+  const chunks: ReturnType<typeof bold>[] = [];
+  entries.forEach(([key, label], index) => {
+    chunks.push(bold(fg(PALETTE.accent)(`[${key}]`)));
+    chunks.push(fg(PALETTE.dim)(` ${label}${index < entries.length - 1 ? "  " : ""}`));
+  });
+  return new StyledText(chunks);
 }
 
 export async function runClient(config: ClientConfig): Promise<void> {
@@ -205,6 +223,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
   const renderer: CliRenderer = await createCliRenderer({
     exitOnCtrlC: false,
     targetFps: 30,
+    screenMode: "alternate-screen",
+    backgroundColor: PALETTE.bg,
   });
 
   const root = new BoxRenderable(renderer, {
@@ -212,51 +232,80 @@ export async function runClient(config: ClientConfig): Promise<void> {
     height: "100%",
     flexDirection: "column",
     backgroundColor: PALETTE.bg,
-    padding: 1,
-    gap: 1,
   });
   renderer.root.add(root);
 
   const header = new BoxRenderable(renderer, {
+    width: "100%",
     height: 3,
-    border: true,
-    borderStyle: "rounded",
+    border: ["bottom"],
+    borderStyle: "single",
     borderColor: PALETTE.border,
-    backgroundColor: PALETTE.panel,
+    backgroundColor: PALETTE.field,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingLeft: 2,
     paddingRight: 2,
   });
+  const brand = new BoxRenderable(renderer, {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+    backgroundColor: PALETTE.field,
+  });
+  const railText = new TextRenderable(renderer, {
+    content: SIGNAL_GLYPHS.rail,
+    fg: PALETTE.accent,
+  });
   const titleText = new TextRenderable(renderer, {
-    content: "◉ AGENTVOICE",
-    fg: PALETTE.you,
+    content: new StyledText([bold(fg(PALETTE.text)("AGENTVOICE"))]),
+  });
+  const contextText = new TextRenderable(renderer, { content: " / LIVE AUDIO", fg: PALETTE.dim });
+  brand.add(railText);
+  brand.add(titleText);
+  brand.add(contextText);
+
+  const phaseCluster = new BoxRenderable(renderer, {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: PALETTE.field,
   });
   const statusText = new TextRenderable(renderer, { content: "", fg: PALETTE.warn });
   const timerText = new TextRenderable(renderer, { content: "--:--", fg: PALETTE.dim });
-  header.add(titleText);
-  header.add(statusText);
-  header.add(timerText);
+  phaseCluster.add(statusText);
+  phaseCluster.add(timerText);
+  header.add(brand);
+  header.add(phaseCluster);
   root.add(header);
+
+  const main = new BoxRenderable(renderer, {
+    width: "100%",
+    flexGrow: 1,
+    flexDirection: "column",
+    padding: 1,
+    gap: 1,
+    backgroundColor: PALETTE.bg,
+  });
+  root.add(main);
 
   const meters = new BoxRenderable(renderer, {
     flexGrow: 1,
     flexDirection: "row",
     gap: 1,
+    backgroundColor: PALETTE.bg,
   });
-  root.add(meters);
+  main.add(meters);
 
-  const makePanel = (title: string, onClick: () => void) => {
+  const makePanel = (labelText: string, color: string, onClick: () => void) => {
     const panel = new BoxRenderable(renderer, {
       flexGrow: 1,
       flexBasis: 1,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: PALETTE.border,
+      border: ["left"],
+      borderStyle: "single",
+      borderColor: color,
       backgroundColor: PALETTE.panel,
-      title,
-      titleAlignment: "left",
       flexDirection: "column",
       justifyContent: "center",
       paddingLeft: 2,
@@ -264,63 +313,160 @@ export async function runClient(config: ClientConfig): Promise<void> {
       gap: 1,
       onMouseDown: onClick,
     });
+    const label = new TextRenderable(renderer, { content: labelText, fg: color });
     const bar = new TextRenderable(renderer, { content: "" });
     const spark = new TextRenderable(renderer, { content: "" });
     const caption = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
+    panel.add(label);
     panel.add(bar);
     panel.add(spark);
     panel.add(caption);
     meters.add(panel);
-    return { panel, bar, spark, caption };
+    return { panel, label, bar, spark, caption };
   };
 
-  const youPanel = makePanel(" YOU ", () => toggleMic());
-  const agentPanel = makePanel(" AGENT ", () => toggleSpeaker());
+  const youPanel = makePanel("INPUT / YOU", PALETTE.you, () => toggleMic());
+  const agentPanel = makePanel("OUTPUT / AGENT", PALETTE.agent, () => toggleSpeaker());
 
   const sessionBox = new BoxRenderable(renderer, {
-    height: 4,
-    border: true,
-    borderStyle: "rounded",
+    width: "100%",
+    height: 5,
+    border: ["top"],
+    borderStyle: "single",
     borderColor: PALETTE.border,
-    backgroundColor: PALETTE.panel,
-    title: " session ",
+    backgroundColor: PALETTE.field,
+    title: " SESSION ",
+    titleColor: PALETTE.dim,
     titleAlignment: "left",
     flexDirection: "row",
     paddingLeft: 2,
     paddingRight: 2,
+    paddingTop: 1,
     gap: 4,
   });
-  const sessionLeft = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
-  const sessionRight = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
+  const sessionLeft = new TextRenderable(renderer, {
+    content: "",
+    fg: PALETTE.dim,
+    flexGrow: 1,
+    flexBasis: 1,
+  });
+  const sessionRight = new TextRenderable(renderer, {
+    content: "",
+    fg: PALETTE.dim,
+    flexGrow: 1,
+    flexBasis: 1,
+  });
   sessionBox.add(sessionLeft);
   sessionBox.add(sessionRight);
-  root.add(sessionBox);
+  main.add(sessionBox);
 
-  const eventText = new TextRenderable(renderer, { content: "", height: 3, fg: PALETTE.dim });
-  root.add(eventText);
+  const eventBox = new BoxRenderable(renderer, {
+    width: "100%",
+    height: 5,
+    border: ["top"],
+    borderStyle: "single",
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.bg,
+    title: " EVENTS ",
+    titleColor: PALETTE.dim,
+    titleAlignment: "left",
+    flexDirection: "column",
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 1,
+  });
+  const eventRows = Array.from(
+    { length: 3 },
+    (_, index) =>
+      new TextRenderable(renderer, { id: `event-${index}`, content: "", fg: PALETTE.dim }),
+  );
+  for (const row of eventRows) eventBox.add(row);
+  main.add(eventBox);
 
+  const footer = new BoxRenderable(renderer, {
+    width: "100%",
+    height: 3,
+    border: ["top"],
+    borderStyle: "single",
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.field,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingLeft: 2,
+    paddingRight: 2,
+  });
   const footerText = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
-  root.add(footerText);
+  const footerMode = new TextRenderable(renderer, { content: "DUPLEX / 48 KHZ", fg: PALETTE.dim });
+  footer.add(footerText);
+  footer.add(footerMode);
+  root.add(footer);
 
   // ---- view refresh -------------------------------------------------------
+  let layoutWidth = 0;
+
   function refreshStatic(): void {
+    const width = renderer.width || process.stdout.columns || 100;
+    layoutWidth = width;
+    const narrow = width < 104;
+    meters.flexDirection = width < 68 ? "column" : "row";
+    sessionBox.flexDirection = narrow ? "column" : "row";
+    sessionBox.height = narrow ? 7 : 5;
+    sessionBox.gap = narrow ? 0 : 4;
+    contextText.content = width >= 72 ? " / LIVE AUDIO" : "";
+    footerMode.content = width >= 92 ? "DUPLEX / 48 KHZ" : "";
+
     const info = transport.readyInfo;
     const orDefault = (value: string | null) => value ?? "codex default";
     const primed =
       info && info.prompts.length > 0 ? ` · ${plural(info.prompts.length, "prompt")}` : "";
-    sessionLeft.content = info
-      ? `thread     ${shortId(info.threadId)}${primed}\nworkspace  ${tail(info.workspace, 34)}`
-      : "thread     —\nworkspace  —";
+    sessionLeft.content = styledFacts(
+      info
+        ? [
+            ["thread", `${shortId(info.threadId)}${primed}`],
+            ["workspace", tail(info.workspace, narrow ? Math.max(20, width - 20) : 34)],
+          ]
+        : [
+            ["thread", "—"],
+            ["workspace", "—"],
+          ],
+    );
     const renew = transport.renewInMs;
-    sessionRight.content = info
-      ? `model  ${orDefault(info.model)} · effort ${orDefault(info.effort)}\nvoice  ${orDefault(info.voiceModel)}${info.voice ? ` · ${info.voice}` : ""}${renew !== null ? ` · renew in ${formatClock(renew)}` : ""}`
-      : "";
+    sessionRight.content = styledFacts(
+      info
+        ? [
+            ["model", `${orDefault(info.model)} · effort ${orDefault(info.effort)}`],
+            [
+              "voice",
+              `${orDefault(info.voiceModel)}${info.voice ? ` · ${info.voice}` : ""}${renew !== null ? ` · renew in ${formatClock(renew)}` : ""}`,
+            ],
+          ]
+        : [],
+    );
     const recent = events.slice(-3);
-    eventText.content = recent.map((e) => `· ${e.text}`).join("\n");
-    eventText.fg = recent.at(-1)?.color ?? PALETTE.dim;
-    footerText.content = `[m] mic ${audio.micMuted ? "muted" : "live "}   [s] speaker ${audio.speakerMuted ? "muted" : "live "}   [r] redial voice   [q] quit`;
-    youPanel.panel.title = audio.micMuted ? " YOU · MUTED " : " YOU ";
-    agentPanel.panel.title = audio.speakerMuted ? " AGENT · MUTED " : " AGENT ";
+    const visibleEvents: Array<{ text: string; color: string } | undefined> = [
+      ...Array.from({ length: 3 - recent.length }, () => undefined),
+      ...recent,
+    ];
+    eventRows.forEach((row, index) => {
+      const event = visibleEvents[index];
+      row.content = event === undefined ? "" : `${SIGNAL_GLYPHS.event} ${event.text}`;
+      row.fg = event?.color ?? PALETTE.faint;
+    });
+    footerText.content = styledKeybar([
+      ["M", narrow ? "mic" : `mic ${audio.micMuted ? "muted" : "live"}`],
+      ["S", narrow ? "speaker" : `speaker ${audio.speakerMuted ? "muted" : "live"}`],
+      ["R", "redial"],
+      ["Q", "quit"],
+    ]);
+    const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
+    const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
+    youPanel.label.content = audio.micMuted ? "INPUT / YOU · MUTED" : "INPUT / YOU";
+    youPanel.label.fg = youColor;
+    youPanel.panel.borderColor = youColor;
+    agentPanel.label.content = audio.speakerMuted ? "OUTPUT / AGENT · MUTED" : "OUTPUT / AGENT";
+    agentPanel.label.fg = agentColor;
+    agentPanel.panel.borderColor = agentColor;
   }
 
   function tail(path: string, max: number): string {
@@ -335,6 +481,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
   const frameCallback = async (deltaMs: number): Promise<void> => {
     const dt = deltaMs / 1000;
     pulse += dt;
+    if (renderer.width !== layoutWidth) refreshStatic();
 
     for (const meter of [mic, agent]) {
       const level = levelFromDb(meter.db);
@@ -371,7 +518,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
           : busy
             ? PALETTE.warn
             : PALETTE.dim;
-    statusText.content = `${dotOn ? "●" : "○"} ${PHASE_LABEL[phase]}`;
+    const phaseLabel = renderer.width < 64 ? COMPACT_PHASE_LABEL[phase] : PHASE_LABEL[phase];
+    statusText.content = `${dotOn ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${phaseLabel}`;
     statusText.fg = color;
 
     const live = transport.liveForMs;
