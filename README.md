@@ -42,9 +42,9 @@ bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 `bun run cli:install` installs dependencies, runs setup, and `bun link`s this
 checkout, putting `agentvoice` on PATH (via bun's global bin, usually
 `~/.bun/bin`). The command is **editable** — it symlinks back into the
-checkout, so TypeScript edits apply immediately with no rebuild. Funk's
-installer (`~/code/funk/install`) invokes this same contract from
-`~/code/agentvoice` when that checkout exists.
+checkout, so TypeScript edits apply immediately with no rebuild. AgentStart's
+installer (`~/code/agentstart/scripts/install-agent-clis`) invokes this same
+contract from `~/code/agentvoice` when that checkout exists.
 
 Changes under `src/client/native/` are the exception: they require
 `bun run native:build`, which `bun run cli:install` runs automatically.

@@ -3,7 +3,7 @@
  * Editable install: dependencies, environment setup, native client audio, and a
  * global `agentvoice` command linked back to this checkout via `bun link`
  * — TypeScript edits apply immediately; native audio edits need `native:build`.
- * Funk invokes this same contract (`bun run cli:install`) from
+ * AgentStart invokes this same contract (`bun run cli:install`) from
  * ~/code/agentvoice.
  */
 import { dirname, join } from "node:path";
