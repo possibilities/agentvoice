@@ -429,6 +429,28 @@ announcements of finished work possible. Workers die with the app-server
 child (`lost`, never resumed). Disable codex's in-thread sub-agents
 (`agents.enabled: false`) so the two dispatch surfaces never compete.
 
+Worker ownership begins after `thread/start` and before `turn/start`, closing
+the fast-completion notification race. A terminal `turn/completed` is first
+reduced into the public task outcome and report, then the worker root receives
+`thread/archive`: upstream removes and shuts down the loaded session (MCP,
+terminals, hooks, guardian runtime) before moving the rollout to archived
+history *(source)*. Archival is idempotent and retries separately from the
+outcome. If `turn/start` is definitively rejected, the empty root instead gets
+`thread/delete`; timeout, malformed success, or lost transport are ambiguous
+because core submits before app-server builds the response, so they archive
+to preserve any materialized history *(source)*. Cancellation remains visibly
+`cancelled`, but cleanup waits for the terminal notification so final output is
+not lost. Account rotation also waits for cleanup to settle.
+
+One upstream edge is normalized deliberately: deleting a never-materialized
+thread shuts down its runtime before the store reports `no rollout found`.
+AgentVoice treats that response as successful retirement; there is no history
+file to preserve or delete *(source, probe)*.
+
+Orchestrator roots carry `threadSource: "agentvoice-orchestrator"`; worker
+roots carry `threadSource: "agentvoice-worker"`. These app-owned labels are
+persisted scalar metadata for later inventory without heuristics *(source)*.
+
 ### The ambient surface: MCP, skills, hooks, memory
 
 The orchestrator inherits the machine's codex environment, which is easy to

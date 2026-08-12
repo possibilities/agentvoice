@@ -26,6 +26,7 @@ describe("threadParams", () => {
       cwd: "/home/tester/.local/state/agentvoice/workspace",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
+      threadSource: "agentvoice-orchestrator",
     });
   });
 
@@ -132,6 +133,12 @@ describe("threadParams", () => {
     const params = thread({ orchestrator: { extra: { sandbox: "read-only", newField: 7 } } });
     expect(params["sandbox"]).toBe("read-only");
     expect(params["newField"]).toBe(7);
+  });
+
+  test("extra cannot erase AgentVoice thread identity", () => {
+    expect(
+      thread({ orchestrator: { extra: { threadSource: "something-else" } } })["threadSource"],
+    ).toBe("agentvoice-orchestrator");
   });
 });
 
@@ -241,6 +248,7 @@ describe("workerThreadParams", () => {
     expect(params["cwd"]).toBe("/home/tester/.local/state/agentvoice/workspace");
     expect(params["sandbox"]).toBe("workspace-write");
     expect(params["approvalPolicy"]).toBe("on-request");
+    expect(params["threadSource"]).toBe("agentvoice-worker");
     expect(params["approvalsReviewer"]).toBe("auto_review");
     expect(params["model"]).toBe("m");
     expect(params["config"]).toEqual({

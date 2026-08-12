@@ -38,7 +38,12 @@ import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./
 import { gateRequest, tokenMatches } from "./gate.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
-import { WorkerManager } from "./workers.ts";
+import {
+  archiveWorkerThread,
+  deleteWorkerThread,
+  WorkerManager,
+  WorkerTurnStartError,
+} from "./workers.ts";
 
 type ClientSocket = ServerWebSocket<{ authorized: boolean }>;
 
@@ -187,22 +192,59 @@ export async function runServer(
   const workers = config.orchestrator.dispatch
     ? new WorkerManager(
         {
-          async startWorker(brief) {
+          async startWorkerThread() {
             if (!appServer) throw new AppServerError("app-server is not running");
             const workerThreadId = extractThreadId(
               await appServer.request("thread/start", workerThreadParams(config)),
             );
-            const turn = (await appServer.request("turn/start", {
-              threadId: workerThreadId,
-              input: [{ type: "text", text: brief }],
-            })) as { turn?: { id?: string } };
+            return { threadId: workerThreadId };
+          },
+          async startWorkerTurn(workerThreadId, brief) {
+            if (!appServer) {
+              throw new WorkerTurnStartError("app-server is not running", false);
+            }
+            let turn: { turn?: { id?: string } };
+            try {
+              turn = (await appServer.request("turn/start", {
+                threadId: workerThreadId,
+                input: [{ type: "text", text: brief }],
+              })) as { turn?: { id?: string } };
+            } catch (error) {
+              const detail = error instanceof Error ? error.message : String(error);
+              // An app-server JSON-RPC error means submission was rejected.
+              // Timeouts, exits, and transport failures can lose a response
+              // after core accepted the turn, so those preserve history.
+              const mayHaveStarted = !(error instanceof AppServerError && error.code !== undefined);
+              throw new WorkerTurnStartError(detail, mayHaveStarted);
+            }
             const turnId = turn?.turn?.id;
-            if (!turnId) throw new AppServerError("app-server returned no turn id for the worker");
-            return { threadId: workerThreadId, turnId };
+            if (!turnId) {
+              throw new WorkerTurnStartError("app-server returned no turn id for the worker", true);
+            }
+            return { turnId };
           },
           async interruptWorker(workerThreadId, turnId) {
             if (!appServer) throw new AppServerError("app-server is not running");
             await appServer.request("turn/interrupt", { threadId: workerThreadId, turnId });
+          },
+          async archiveWorker(workerThreadId) {
+            const server = appServer;
+            if (!server) throw new AppServerError("app-server is not running");
+            await archiveWorkerThread(
+              (method, params) => server.request(method, params),
+              workerThreadId,
+            );
+          },
+          async deleteWorker(workerThreadId) {
+            const server = appServer;
+            if (!server) throw new AppServerError("app-server is not running");
+            await deleteWorkerThread(
+              (method, params) => server.request(method, params),
+              workerThreadId,
+            );
+          },
+          scheduleCleanupRetry(run, delayMs) {
+            setTimeout(run, delayMs).unref();
           },
           reportToOrchestrator(text) {
             if (!appServer || !threadId) return;
@@ -222,6 +264,9 @@ export async function runServer(
           },
           onWorkerUpdate(worker) {
             send({ type: "worker", worker });
+          },
+          onWorkSettled() {
+            maybeRotate();
           },
           now: () => Date.now(),
           debug: debugLog,
@@ -361,7 +406,7 @@ export async function runServer(
     if (exhaustedPercent === null || rotating || shuttingDown) return;
     if (!config.accounts.balance || !appServer || !threadReady) return;
     if (sessions.hasSession || orchestratorTurnActive) return;
-    if (workers?.snapshots().some((worker) => worker.status === "running")) return;
+    if (workers?.hasUnfinishedWork()) return;
     rotating = true;
     const usedPercent = exhaustedPercent;
     void (async () => {
@@ -372,7 +417,14 @@ export async function runServer(
           return;
         }
         const server = appServer;
-        if (!server || sessions.hasSession || orchestratorTurnActive) return;
+        if (
+          !server ||
+          sessions.hasSession ||
+          orchestratorTurnActive ||
+          workers?.hasUnfinishedWork()
+        ) {
+          return;
+        }
         console.error(
           `accounts: rotating off ${activeAccount ?? "canonical"} (${usedPercent}% used) to ${choice.account}`,
         );

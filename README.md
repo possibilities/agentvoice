@@ -122,7 +122,9 @@ passthrough:
 
 Each `extra` block is merged last into its RPC, so anything the protocol
 accepts but this config does not name yet is still reachable — useful because
-the realtime surface is experimental upstream. Beware: upstream ignores
+the realtime surface is experimental upstream. The start-only `threadSource`
+is the exception: AgentVoice owns its orchestrator/worker labels so inventory
+cannot be made ambiguous by configuration. Beware: upstream ignores
 unknown fields rather than rejecting them, so a typo in `extra:` is silently
 dropped — verify against a `--debug` frame when a knob seems dead. (The same
 applies inside `config` and `extra` to the JSON Schema: it declares them as
@@ -180,6 +182,16 @@ approvals, model, `config:` layer) but no prompt files and no dispatch tools.
 The orchestrator's turn ends immediately with a speakable handle (`w1`);
 workers die with the app-server child and are reported as `lost` rather than
 resumed.
+
+The server owns each worker thread before starting its turn, then retires it
+after the terminal notification has supplied the status and final message.
+Materialized workers are archived — history remains listable, while the live
+thread and its MCP/runtime resources shut down immediately. A thread whose
+first turn is definitively rejected is deleted; ambiguous response loss is
+archived so possible history is never erased. Cleanup retries independently
+without changing the worker's visible outcome. AgentVoice tags orchestrator
+and worker threads as `agentvoice-orchestrator` and `agentvoice-worker` in
+Codex's `threadSource` metadata for durable inventory.
 
 Completion has two modes, and the tool descriptions promise whichever one is
 on. The default is **pull-only**: nothing is pushed when a worker finishes;

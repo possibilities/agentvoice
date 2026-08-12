@@ -11,6 +11,9 @@ import type { Prompts, ServerConfig } from "./config.ts";
 import { VOICE_SEEDS } from "./config.ts";
 import { dispatchTools } from "./workers.ts";
 
+export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
+export const WORKER_THREAD_SOURCE = "agentvoice-worker";
+
 function setIfDefined(target: Record<string, unknown>, key: string, value: unknown): void {
   if (value !== undefined) target[key] = value;
 }
@@ -60,7 +63,11 @@ export function threadParams(
       params["dynamicTools"] = dispatchTools(orchestrator.dispatchReports === true);
     }
   }
-  return { ...params, ...orchestrator.extra };
+  const merged = { ...params, ...orchestrator.extra };
+  // Thread identity is owned by AgentVoice, not the generic extra escape
+  // hatch: inventory must remain reliable under every configuration.
+  if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;
+  return merged;
 }
 
 /**
@@ -74,6 +81,7 @@ export function workerThreadParams(config: ServerConfig): Record<string, unknown
   const params: Record<string, unknown> = {
     cwd: orchestrator.workspace,
     approvalPolicy: orchestrator.approvalPolicy,
+    threadSource: WORKER_THREAD_SOURCE,
   };
   if (orchestrator.permissions !== undefined) params["permissions"] = orchestrator.permissions;
   else params["sandbox"] = orchestrator.sandbox;

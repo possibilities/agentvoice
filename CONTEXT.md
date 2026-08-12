@@ -85,8 +85,17 @@ automatically. _Avoid_: "API key", "auth token", "password".
 **Worker** — a sibling codex thread the orchestrator agent dispatches
 asynchronous work to, with its own context and the orchestrator's execution
 posture but none of its prompts. Addressed by a speakable handle (`w1`), never
-a thread id. _Avoid_: subagent (codex's in-thread feature, deliberately
-disabled), background task.
+a thread id. Its task outcome remains readable after its thread is retired;
+completed turns are archived, while a thread whose first turn was definitively
+rejected is deleted. _Avoid_: subagent (codex's in-thread feature,
+deliberately disabled), background task.
+
+**Worker cleanup** — retiring a Worker's app-server thread after its task
+settles, tracked and retried separately from the task outcome. Archival
+preserves a materialized turn's history while immediately shutting down its
+runtime; deletion is reserved for a definitively pre-turn thread. _Avoid_:
+status (the Worker's task result), unsubscribe (which only schedules a later
+unload).
 
 **Dispatch** — the `orchestrator.dispatch` surface: three dynamic tools
 (`dispatch_worker`, `check_workers`, `cancel_worker`) declared on the
