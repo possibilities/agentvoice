@@ -14,6 +14,7 @@ import {
   type DuplexStats,
   NativeDuplexDevice,
 } from "./duplex-device.ts";
+import { packetAgeMs, shouldReportRtpStall } from "./media-trace.ts";
 
 export interface VoiceAudioOptions {
   deviceIndex?: number;
@@ -62,6 +63,13 @@ interface PacketTiming {
   sequenceBreak: boolean;
 }
 
+interface DownlinkProgress {
+  rtpCallbacks: number;
+  decodeSuccesses: number;
+  decodeFailures: number;
+  decodedPcmFrames: number;
+}
+
 export class DuplexVoiceAudio {
   private readonly options: VoiceAudioOptions;
   private device: NativeDuplexDevice | null = null;
@@ -75,6 +83,10 @@ export class DuplexVoiceAudio {
   private lastPacketArrivalAt: number | null = null;
   private lastPacketSequenceNumber: number | null = null;
   private lastPacketTimestamp: number | null = null;
+  private lastDecodedDb = -Infinity;
+  private downlinkProgress: DownlinkProgress = emptyDownlinkProgress();
+  private previousDownlinkProgress: DownlinkProgress = emptyDownlinkProgress();
+  private rtpStallReported = false;
   private observedPlaybackStarvations = 0n;
   private remoteSubscription: { unSubscribe(): void } | null = null;
   private remoteGeneration = 0;
@@ -158,6 +170,8 @@ export class DuplexVoiceAudio {
     this.warnedDecode = false;
     this.warnedPlaybackDrop = false;
     this.seenRemoteAudio = false;
+    this.rtpStallReported = false;
+    this.lastDecodedDb = -Infinity;
     this.resetPacketTiming();
     this.observedPlaybackStarvations = this.device?.playbackStarvationCount() ?? 0n;
     const subscription = track.onReceiveRtp.subscribe((packet) => {
@@ -239,12 +253,17 @@ export class DuplexVoiceAudio {
   }
 
   private handleDownlink(payload: Buffer, sequenceNumber: number, timestamp: number): void {
-    if (!this.decoder || payload.length === 0) return;
     const timing = this.observePacketTiming(sequenceNumber, timestamp);
+    if (this.options.debug) {
+      this.downlinkProgress.rtpCallbacks++;
+      this.rtpStallReported = false;
+    }
+    if (!this.decoder || payload.length === 0) return;
     let pcm: Buffer;
     try {
       pcm = Buffer.from(this.decoder.decode(payload));
     } catch (error) {
+      if (this.options.debug) this.downlinkProgress.decodeFailures++;
       if (!this.warnedDecode) {
         this.warnedDecode = true;
         this.options.onWarning(`agent audio decode failed: ${message(error)}`);
@@ -253,6 +272,11 @@ export class DuplexVoiceAudio {
     }
 
     const agentDb = rmsDbS16(pcm);
+    if (this.options.debug) {
+      this.downlinkProgress.decodeSuccesses++;
+      this.downlinkProgress.decodedPcmFrames += pcm.length / (DUPLEX_PLAYBACK_CHANNELS * 2);
+      this.lastDecodedDb = agentDb;
+    }
     this.options.onAgentLevel(agentDb);
     const playbackFrames = pcm.length / (DUPLEX_PLAYBACK_CHANNELS * 2);
     let written = 0;
@@ -456,17 +480,45 @@ export class DuplexVoiceAudio {
     const stats = device.stats();
     const previous = this.previousStats;
     this.previousStats = stats;
+    const now = performance.now();
+    const packetAge = packetAgeMs(now, this.lastPacketArrivalAt);
+    const downlink = this.downlinkProgress;
+    const previousDownlink = this.previousDownlinkProgress;
+    this.previousDownlinkProgress = { ...downlink };
     this.options.debug(
       `duplex stats ${reason} state=${deviceStateName(stats.state)} started=${stats.started} ` +
         `callbacks=${stats.callbacks} callbacks_delta=${delta(stats.callbacks, previous?.callbacks)} max_callback_frames=${stats.maxCallbackFrames} ` +
         `capture_buffered=${stats.captureBufferedFrames} capture_received_delta=${delta(stats.captureReceivedFrames, previous?.captureReceivedFrames)} ` +
         `capture_read_delta=${delta(stats.captureReadFrames, previous?.captureReadFrames)} capture_dropped=${stats.captureDroppedFrames} ` +
-        `playback_buffered=${stats.playbackBufferedFrames} playback_submitted_delta=${delta(stats.playbackSubmittedFrames, previous?.playbackSubmittedFrames)} ` +
-        `playback_written_delta=${delta(stats.playbackWrittenFrames, previous?.playbackWrittenFrames)} playback_rendered_delta=${delta(stats.playbackRenderedFrames, previous?.playbackRenderedFrames)} ` +
+        `remote_attached=${this.remoteSubscription !== null} remote_generation=${this.remoteGeneration} ` +
+        `rtp_callbacks=${downlink.rtpCallbacks} rtp_callbacks_delta=${numberDelta(downlink.rtpCallbacks, previousDownlink.rtpCallbacks)} ` +
+        `rtp_callback_age_ms=${formatOptionalAge(packetAge)} last_sequence=${formatOptionalFrames(this.lastPacketSequenceNumber)} ` +
+        `last_rtp_timestamp=${formatOptionalFrames(this.lastPacketTimestamp)} last_pcm_db=${formatDb(this.lastDecodedDb)} ` +
+        `decode_successes=${downlink.decodeSuccesses} decode_successes_delta=${numberDelta(downlink.decodeSuccesses, previousDownlink.decodeSuccesses)} ` +
+        `decode_failures=${downlink.decodeFailures} decode_failures_delta=${numberDelta(downlink.decodeFailures, previousDownlink.decodeFailures)} ` +
+        `decoded_pcm_frames=${downlink.decodedPcmFrames} decoded_pcm_frames_delta=${numberDelta(downlink.decodedPcmFrames, previousDownlink.decodedPcmFrames)} ` +
+        `playback_buffered=${stats.playbackBufferedFrames} playback_submitted=${stats.playbackSubmittedFrames} playback_submitted_delta=${delta(stats.playbackSubmittedFrames, previous?.playbackSubmittedFrames)} ` +
+        `playback_written=${stats.playbackWrittenFrames} playback_written_delta=${delta(stats.playbackWrittenFrames, previous?.playbackWrittenFrames)} ` +
+        `playback_rendered=${stats.playbackRenderedFrames} playback_rendered_delta=${delta(stats.playbackRenderedFrames, previous?.playbackRenderedFrames)} ` +
         `playback_dropped=${stats.playbackDroppedFrames} starvations=${stats.playbackStarvations} starvations_delta=${delta(stats.playbackStarvations, previous?.playbackStarvations)} ` +
         `starved_frames=${stats.playbackStarvedFrames} notifications=${stats.startedNotifications}/${stats.stoppedNotifications}/${stats.reroutedNotifications}/${stats.interruptionBeganNotifications}/${stats.interruptionEndedNotifications}`,
     );
+    if (shouldReportRtpStall(this.remoteSubscription !== null, packetAge, this.rtpStallReported)) {
+      this.rtpStallReported = true;
+      this.options.debug(
+        `agent audio stalled remote_generation=${this.remoteGeneration} rtp_callback_age_ms=${formatOptionalAge(packetAge)} ` +
+          `last_sequence=${formatOptionalFrames(this.lastPacketSequenceNumber)} last_rtp_timestamp=${formatOptionalFrames(this.lastPacketTimestamp)} ` +
+          `last_pcm_db=${formatDb(this.lastDecodedDb)} rtp_callbacks=${downlink.rtpCallbacks} ` +
+          `decode_successes=${downlink.decodeSuccesses} decode_failures=${downlink.decodeFailures} decoded_pcm_frames=${downlink.decodedPcmFrames} ` +
+          `playback_buffered=${stats.playbackBufferedFrames} playback_submitted=${stats.playbackSubmittedFrames} ` +
+          `playback_written=${stats.playbackWrittenFrames} playback_rendered=${stats.playbackRenderedFrames} speaker_muted=${this.speakerMutedValue}`,
+      );
+    }
   }
+}
+
+function emptyDownlinkProgress(): DownlinkProgress {
+  return { rtpCallbacks: 0, decodeSuccesses: 0, decodeFailures: 0, decodedPcmFrames: 0 };
 }
 
 function validateDeviceIndex(
@@ -522,6 +574,10 @@ function formatOptionalFrames(value: number | null): string {
   return value === null ? "none" : String(value);
 }
 
+function formatOptionalAge(value: number | null): string {
+  return value === null ? "none" : String(Math.round(value));
+}
+
 function formatDb(value: number): string {
   return Number.isFinite(value) ? value.toFixed(1) : "-inf";
 }
@@ -534,6 +590,10 @@ function formatFrameRange(minimumFrames: number | null, maximumFrames: number | 
 
 function delta(current: bigint, previous: bigint | undefined): bigint {
   return previous === undefined ? current : current - previous;
+}
+
+function numberDelta(current: number, previous: number): number {
+  return current - previous;
 }
 
 function deviceStateName(state: number): string {

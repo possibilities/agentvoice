@@ -18,6 +18,13 @@ import {
   type WorkerSnapshot,
 } from "../protocol.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
+import {
+  formatWebRtcMediaTrace,
+  packetAgeMs,
+  shouldReportRtpStall,
+  type WebRtcMediaSnapshot,
+  webRtcMediaSnapshot,
+} from "./media-trace.ts";
 
 export type TransportPhase =
   | "connecting"
@@ -58,6 +65,7 @@ const RETRY_OFFER_MS = 1_000;
 const MAX_RAPID_FAILURES = 3;
 /** A session live this long proves health and resets the failure budget. */
 const HEALTHY_SESSION_MS = 60_000;
+const MEDIA_TRACE_INTERVAL_MS = 1_000;
 
 const OPUS = new RTCRtpCodecParameters({
   mimeType: "audio/opus",
@@ -74,6 +82,10 @@ interface PeerSession {
   connected: boolean;
   liveSince: number | null;
   timers: ReturnType<typeof setTimeout>[];
+  mediaTraceTimer: ReturnType<typeof setInterval> | null;
+  mediaTraceSampling: boolean;
+  decryptedRtpStallReported: boolean;
+  previousMediaSnapshot: WebRtcMediaSnapshot | null;
 }
 
 export class VoiceTransport {
@@ -317,6 +329,10 @@ export class VoiceTransport {
       connected: false,
       liveSince: null,
       timers: [],
+      mediaTraceTimer: null,
+      mediaTraceSampling: false,
+      decryptedRtpStallReported: false,
+      previousMediaSnapshot: null,
     };
     this.pending = session;
     if (!this.live) this.setPhase("negotiating");
@@ -387,6 +403,7 @@ export class VoiceTransport {
     if (session.remoteTrack) this.options.onRemoteTrack(session.remoteTrack);
     this.setPhase("live");
     this.options.onInfo(previous ? "voice session renewed" : "voice connected");
+    this.startMediaTrace(session);
     session.timers.push(
       setTimeout(() => {
         if (this.live === session) this.redial("renewal");
@@ -456,10 +473,65 @@ export class VoiceTransport {
   private closePeer(session: PeerSession): void {
     for (const timer of session.timers) clearTimeout(timer);
     session.timers = [];
+    if (session.mediaTraceTimer) clearInterval(session.mediaTraceTimer);
+    session.mediaTraceTimer = null;
     try {
       void session.pc.close();
     } catch {
       // peer may already be closed
+    }
+  }
+
+  private startMediaTrace(session: PeerSession): void {
+    if (!this.options.debug) return;
+    const sample = () => void this.sampleMediaTrace(session);
+    sample();
+    session.mediaTraceTimer = setInterval(sample, MEDIA_TRACE_INTERVAL_MS);
+    session.mediaTraceTimer.unref?.();
+  }
+
+  private async sampleMediaTrace(session: PeerSession): Promise<void> {
+    if (this.live !== session || session.mediaTraceSampling) return;
+    session.mediaTraceSampling = true;
+    try {
+      const report = await session.pc.getStats();
+      if (this.live !== session) return;
+      const sampledAt = Date.now();
+      const snapshot = webRtcMediaSnapshot(
+        report.values(),
+        sampledAt,
+        session.pc.connectionState,
+        session.pc.iceConnectionState,
+      );
+      const previous = session.previousMediaSnapshot;
+      const line = formatWebRtcMediaTrace(
+        snapshot,
+        previous,
+        session.generation,
+        sampledAt - (session.liveSince ?? sampledAt),
+      );
+      this.debug(line);
+      if ((snapshot.inboundRtp?.packets ?? 0) > (previous?.inboundRtp?.packets ?? 0)) {
+        session.decryptedRtpStallReported = false;
+      }
+      const decryptedPacketAge = packetAgeMs(sampledAt, snapshot.inboundRtp?.lastPacketAt ?? null);
+      if (
+        shouldReportRtpStall(
+          (snapshot.inboundRtp?.packets ?? 0) > 0,
+          decryptedPacketAge,
+          session.decryptedRtpStallReported,
+        )
+      ) {
+        session.decryptedRtpStallReported = true;
+        this.debug(line.replace("voice media ", "voice media stalled "));
+      }
+      session.previousMediaSnapshot = snapshot;
+    } catch (error) {
+      if (this.live === session) {
+        this.debug(`voice media generation=${session.generation} stats_error=${message(error)}`);
+      }
+    } finally {
+      session.mediaTraceSampling = false;
     }
   }
 }
