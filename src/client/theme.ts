@@ -33,6 +33,7 @@ export const VOICE_TONES = {
   youDim: "#806944",
   agent: SIGNAL_ROOM.remote,
   agentDim: "#4d718b",
+  contact: SIGNAL_ROOM.hot,
   ok: SIGNAL_ROOM.ok,
   warn: SIGNAL_ROOM.local,
   err: SIGNAL_ROOM.danger,

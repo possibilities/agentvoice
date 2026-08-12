@@ -18,11 +18,13 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import { clientControlSocketPath, stateDirectory, tokenPath } from "../paths.ts";
-import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
+import { formatClock, levelFromDb, shortId } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer } from "./remote-control.ts";
 import { REMOTE_PROTOCOL_VERSION } from "./remote-protocol.ts";
+import { SignalField } from "./signal-field.ts";
+import { styledSignalField } from "./signal-field-ui.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
@@ -70,14 +72,12 @@ const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
 
 interface Meter {
   db: number;
-  display: number;
-  history: number[];
 }
 
-export const VOICE_ACTIVITY_PANEL_HEIGHT = 4;
+export const VOICE_ACTIVITY_PANEL_HEIGHT = 9;
 
-export function voiceActivityHeight(width: number): number {
-  return width < 68 ? VOICE_ACTIVITY_PANEL_HEIGHT * 2 + 1 : VOICE_ACTIVITY_PANEL_HEIGHT;
+export function voiceActivityHeight(_width: number): number {
+  return VOICE_ACTIVITY_PANEL_HEIGHT;
 }
 
 function styledFacts(rows: ReadonlyArray<readonly [label: string, value: string]>): StyledText {
@@ -97,6 +97,55 @@ function styledKeybar(entries: ReadonlyArray<readonly [key: string, label: strin
     chunks.push(fg(PALETTE.dim)(` ${label}${index < entries.length - 1 ? "  " : ""}`));
   });
   return new StyledText(chunks);
+}
+
+function styledFieldLabels(
+  width: number,
+  youMuted: boolean,
+  agentMuted: boolean,
+  youColor: string,
+  agentColor: string,
+): StyledText {
+  const left = `YOU ${youMuted ? "× MUTED" : "▷ INPUT"}`;
+  const right = `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
+  const clippedRight = right.slice(
+    Math.max(0, right.length - Math.max(0, width - left.length - 1)),
+  );
+  return new StyledText([
+    bold(fg(youColor)(left.slice(0, Math.max(0, width - 1)))),
+    fg(PALETTE.faint)(
+      " ".repeat(Math.max(1, width - Math.min(left.length, width - 1) - clippedRight.length)),
+    ),
+    bold(fg(agentColor)(clippedRight)),
+  ]);
+}
+
+function styledFieldReadout(
+  width: number,
+  youDb: number,
+  agentDb: number,
+  contact: number,
+  youColor: string,
+  agentColor: string,
+): StyledText {
+  const left = dbText(youDb);
+  const right = dbText(agentDb);
+  const contactText = contact > 0.12 ? ` CONTACT ${Math.min(99, Math.round(contact * 100))}` : "";
+  const spare = Math.max(0, width - left.length - right.length);
+  const middle = contactText.length + 2 <= spare ? contactText : "";
+  const leftGap = Math.max(1, Math.floor((spare - middle.length) / 2));
+  const rightGap = Math.max(0, spare - middle.length - leftGap);
+  return new StyledText([
+    fg(youColor)(left),
+    fg(PALETTE.faint)(" ".repeat(leftGap)),
+    ...(middle ? [fg(PALETTE.contact)(middle)] : []),
+    fg(PALETTE.faint)(" ".repeat(rightGap)),
+    fg(agentColor)(right),
+  ]);
+}
+
+function dbText(db: number): string {
+  return Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
 }
 
 export async function runClient(config: ClientConfig): Promise<void> {
@@ -149,8 +198,9 @@ export async function runClient(config: ClientConfig): Promise<void> {
   }
 
   // ---- state --------------------------------------------------------------
-  const mic: Meter = { db: -Infinity, display: 0, history: [] };
-  const agent: Meter = { db: -Infinity, display: 0, history: [] };
+  const mic: Meter = { db: -Infinity };
+  const agent: Meter = { db: -Infinity };
+  const signalField = new SignalField();
   const events: { text: string; color: string }[] = [];
   let phase: TransportPhase = "connecting";
   let shuttingDown = false;
@@ -316,39 +366,37 @@ export async function runClient(config: ClientConfig): Promise<void> {
   const meters = new BoxRenderable(renderer, {
     height: voiceActivityHeight(renderer.width || process.stdout.columns || 100),
     flexShrink: 0,
-    flexDirection: "row",
-    gap: 1,
-    backgroundColor: PALETTE.bg,
+    flexDirection: "column",
+    border: ["left"],
+    borderStyle: "single",
+    borderColor: PALETTE.accent,
+    backgroundColor: PALETTE.panel,
+    paddingLeft: 2,
+    paddingRight: 2,
+    onMouseDown: (event) => {
+      const middle = meters.x + meters.width / 2;
+      if (event.x < middle) toggleMic();
+      else toggleSpeaker();
+    },
   });
   main.add(meters);
 
-  const makePanel = (labelText: string, color: string, onClick: () => void) => {
-    const panel = new BoxRenderable(renderer, {
-      flexGrow: 1,
-      flexBasis: 1,
-      border: ["left"],
-      borderStyle: "single",
-      borderColor: color,
-      backgroundColor: PALETTE.panel,
-      flexDirection: "column",
-      paddingLeft: 2,
-      paddingRight: 2,
-      onMouseDown: onClick,
-    });
-    const label = new TextRenderable(renderer, { content: labelText, fg: color });
-    const bar = new TextRenderable(renderer, { content: "" });
-    const spark = new TextRenderable(renderer, { content: "" });
-    const caption = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
-    panel.add(label);
-    panel.add(bar);
-    panel.add(spark);
-    panel.add(caption);
-    meters.add(panel);
-    return { panel, label, bar, spark, caption };
-  };
-
-  const youPanel = makePanel("INPUT / YOU", PALETTE.you, () => toggleMic());
-  const agentPanel = makePanel("OUTPUT / AGENT", PALETTE.agent, () => toggleSpeaker());
+  const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
+  const fieldCanvas = new TextRenderable(renderer, {
+    content: "",
+    flexGrow: 1,
+    wrapMode: "none",
+    fg: PALETTE.faint,
+  });
+  const fieldReadout = new TextRenderable(renderer, {
+    content: "",
+    height: 1,
+    wrapMode: "none",
+    fg: PALETTE.dim,
+  });
+  meters.add(fieldLabels);
+  meters.add(fieldCanvas);
+  meters.add(fieldReadout);
 
   const sessionBox = new BoxRenderable(renderer, {
     width: "100%",
@@ -431,7 +479,6 @@ export async function runClient(config: ClientConfig): Promise<void> {
     const width = renderer.width || process.stdout.columns || 100;
     layoutWidth = width;
     const narrow = width < 104;
-    meters.flexDirection = width < 68 ? "column" : "row";
     meters.height = voiceActivityHeight(width);
     sessionBox.flexDirection = narrow ? "column" : "row";
     sessionBox.height = narrow ? 7 : 5;
@@ -493,12 +540,13 @@ export async function runClient(config: ClientConfig): Promise<void> {
     ]);
     const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
-    youPanel.label.content = audio.micMuted ? "INPUT / YOU · MUTED" : "INPUT / YOU";
-    youPanel.label.fg = youColor;
-    youPanel.panel.borderColor = youColor;
-    agentPanel.label.content = audio.speakerMuted ? "OUTPUT / AGENT · MUTED" : "OUTPUT / AGENT";
-    agentPanel.label.fg = agentColor;
-    agentPanel.panel.borderColor = agentColor;
+    fieldLabels.content = styledFieldLabels(
+      Math.max(1, fieldLabels.width),
+      audio.micMuted,
+      audio.speakerMuted,
+      youColor,
+      agentColor,
+    );
   }
 
   function tail(path: string, max: number): string {
@@ -515,26 +563,42 @@ export async function runClient(config: ClientConfig): Promise<void> {
     pulse += dt;
     if (renderer.width !== layoutWidth) refreshStatic();
 
-    for (const meter of [mic, agent]) {
-      const level = levelFromDb(meter.db);
-      meter.display = Math.max(level, meter.display - dt * 1.6);
-      meter.history.push(level);
-      if (meter.history.length > 120) meter.history.shift();
-    }
-
-    const innerWidth = Math.max(12, youPanel.panel.width - 6);
     const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
-    youPanel.bar.content = barString(mic.display, innerWidth);
-    youPanel.bar.fg = youColor;
-    youPanel.spark.content = sparkline(mic.history, innerWidth);
-    youPanel.spark.fg = youColor;
-    youPanel.caption.content = captionFor(mic.db, audio.micMuted);
-    agentPanel.bar.content = barString(agent.display, innerWidth);
-    agentPanel.bar.fg = agentColor;
-    agentPanel.spark.content = sparkline(agent.history, innerWidth);
-    agentPanel.spark.fg = agentColor;
-    agentPanel.caption.content = captionFor(agent.db, audio.speakerMuted);
+    signalField.step(dt, {
+      you: levelFromDb(mic.db),
+      agent: levelFromDb(agent.db),
+      youMuted: audio.micMuted,
+      agentMuted: audio.speakerMuted,
+    });
+    const fieldWidth = Math.max(1, fieldCanvas.width);
+    const fieldHeight = Math.max(1, fieldCanvas.height);
+    const fieldFrame = signalField.render(fieldWidth, fieldHeight, {
+      you: audio.micMuted,
+      agent: audio.speakerMuted,
+    });
+    fieldCanvas.content = styledSignalField(fieldFrame, {
+      faint: PALETTE.faint,
+      dim: PALETTE.dim,
+      you: youColor,
+      agent: agentColor,
+      contact: PALETTE.contact,
+    });
+    fieldLabels.content = styledFieldLabels(
+      Math.max(1, fieldLabels.width),
+      audio.micMuted,
+      audio.speakerMuted,
+      youColor,
+      agentColor,
+    );
+    fieldReadout.content = styledFieldReadout(
+      Math.max(1, fieldReadout.width),
+      mic.db,
+      agent.db,
+      fieldFrame.contact,
+      youColor,
+      agentColor,
+    );
 
     const busy =
       phase === "connecting" ||
@@ -560,11 +624,6 @@ export async function runClient(config: ClientConfig): Promise<void> {
 
     if (transport.renewInMs !== null && Math.floor(pulse) % 5 === 0) refreshStatic();
   };
-
-  function captionFor(db: number, muted: boolean): string {
-    const dbText = Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
-    return muted ? `${dbText}   MUTED` : dbText;
-  }
 
   // ---- controls -----------------------------------------------------------
   function toggleMic(): void {

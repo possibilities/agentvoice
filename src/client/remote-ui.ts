@@ -9,8 +9,9 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import { barString } from "./dsp.ts";
 import { encodeRemoteMessage, parseRemoteState, type RemoteState } from "./remote-protocol.ts";
+import { SignalField } from "./signal-field.ts";
+import { styledSignalField } from "./signal-field-ui.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 
 const RECONNECT_MS = 750;
@@ -75,21 +76,39 @@ export async function runRemote(socketPath: string): Promise<void> {
     width: "100%",
     flexGrow: 1,
     flexDirection: "column",
-    justifyContent: "center",
-    gap: 1,
+    minHeight: 7,
+    border: ["left"],
+    borderStyle: "single",
+    borderColor: PALETTE.accent,
     paddingLeft: 1,
     paddingRight: 1,
     backgroundColor: PALETTE.panel,
+    onMouseDown: (event) => {
+      const middle = rails.x + rails.width / 2;
+      toggle(event.x < middle ? "mic" : "speaker");
+    },
   });
-  const youRail = new TextRenderable(renderer, { content: "YOU", fg: PALETTE.you });
-  const agentRail = new TextRenderable(renderer, { content: "AGENT", fg: PALETTE.agent });
-  rails.add(youRail);
-  rails.add(agentRail);
+  const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
+  const fieldCanvas = new TextRenderable(renderer, {
+    content: "",
+    flexGrow: 1,
+    wrapMode: "none",
+    fg: PALETTE.faint,
+  });
+  const fieldReadout = new TextRenderable(renderer, {
+    content: "",
+    height: 1,
+    wrapMode: "none",
+    fg: PALETTE.dim,
+  });
+  rails.add(fieldLabels);
+  rails.add(fieldCanvas);
+  rails.add(fieldReadout);
   main.add(rails);
 
   const controls = new BoxRenderable(renderer, {
     width: "100%",
-    height: "48%",
+    height: "42%",
     minHeight: 7,
     flexDirection: "row",
     gap: 1,
@@ -129,6 +148,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   let closed = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let layoutWidth = 0;
+  const signalField = new SignalField({ seed: 0x2e6d_07e });
 
   const paint = (): void => {
     const width = renderer.width || process.stdout.columns || 40;
@@ -146,9 +166,6 @@ export async function runRemote(socketPath: string): Promise<void> {
       : `${SIGNAL_GLYPHS.idle} WAITING`;
     status.fg = phase === "live" ? PALETTE.ok : connected ? PALETTE.warn : PALETTE.dim;
 
-    const meterWidth = Math.max(4, width - (compact ? 9 : 11));
-    youRail.content = railLine("YOU", latest?.mic.level ?? 0, meterWidth);
-    agentRail.content = railLine(compact ? "AGT" : "AGENT", latest?.speaker.level ?? 0, meterWidth);
     paintControl(micControl, "MIC", latest?.mic.muted, connected);
     paintControl(speakerControl, "SPEAKER", latest?.speaker.muted, connected);
     renderer.requestRender();
@@ -211,17 +228,53 @@ export async function runRemote(socketPath: string): Promise<void> {
   });
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
-  renderer.setFrameCallback(async () => {
+  renderer.setFrameCallback(async (deltaMs) => {
     if (renderer.width !== layoutWidth) paint();
+    const micMuted = latest?.mic.muted ?? false;
+    const agentMuted = latest?.speaker.muted ?? false;
+    signalField.step(deltaMs / 1000, {
+      you: connected ? (latest?.mic.level ?? 0) : 0,
+      agent: connected ? (latest?.speaker.level ?? 0) : 0,
+      youMuted: micMuted,
+      agentMuted,
+    });
+    const frame = signalField.render(
+      Math.max(1, fieldCanvas.width),
+      Math.max(1, fieldCanvas.height),
+      {
+        you: micMuted,
+        agent: agentMuted,
+      },
+    );
+    const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
+    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
+    fieldCanvas.content = styledSignalField(frame, {
+      faint: PALETTE.faint,
+      dim: PALETTE.dim,
+      you: youColor,
+      agent: agentColor,
+      contact: PALETTE.contact,
+    });
+    fieldLabels.content = remoteFieldLabels(
+      Math.max(1, fieldLabels.width),
+      micMuted,
+      agentMuted,
+      youColor,
+      agentColor,
+    );
+    fieldReadout.content = remoteFieldReadout(
+      Math.max(1, fieldReadout.width),
+      latest?.mic.level ?? 0,
+      latest?.speaker.level ?? 0,
+      frame.contact,
+      youColor,
+      agentColor,
+    );
   });
   renderer.requestLive();
   paint();
   connect();
   await done;
-}
-
-function railLine(label: string, level: number, width: number): string {
-  return `${label.padEnd(6)}${barString(level, width)}`;
 }
 
 function phaseLabel(phase: RemoteState["phase"] | undefined): string {
@@ -230,6 +283,52 @@ function phaseLabel(phase: RemoteState["phase"] | undefined): string {
   if (phase === "reconnecting") return "RECONNECT";
   if (phase === "negotiating") return "CONNECT";
   return "WAITING";
+}
+
+function remoteFieldLabels(
+  width: number,
+  youMuted: boolean,
+  agentMuted: boolean,
+  youColor: string,
+  agentColor: string,
+): StyledText {
+  const left = width < 30 ? "YOU ▷" : `YOU ${youMuted ? "× MUTED" : "▷ INPUT"}`;
+  const right = width < 30 ? "◁ AGT" : `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
+  const availableRight = Math.max(0, width - Math.min(left.length, width) - 1);
+  const clippedRight = right.slice(Math.max(0, right.length - availableRight));
+  const clippedLeft = left.slice(0, Math.max(0, width - clippedRight.length - 1));
+  return new StyledText([
+    bold(fg(youColor)(clippedLeft)),
+    fg(PALETTE.faint)(" ".repeat(Math.max(1, width - clippedLeft.length - clippedRight.length))),
+    bold(fg(agentColor)(clippedRight)),
+  ]);
+}
+
+function remoteFieldReadout(
+  width: number,
+  you: number,
+  agent: number,
+  contact: number,
+  youColor: string,
+  agentColor: string,
+): StyledText {
+  const left = `${Math.round(you * 100)
+    .toString()
+    .padStart(3)}%`;
+  const right = `${Math.round(agent * 100)
+    .toString()
+    .padStart(3)}%`;
+  const middle = contact > 0.12 && width >= 24 ? "CONTACT" : "";
+  const spare = Math.max(0, width - left.length - right.length - middle.length);
+  const leftGap = Math.max(1, Math.floor(spare / 2));
+  const rightGap = Math.max(0, spare - leftGap);
+  return new StyledText([
+    fg(youColor)(left),
+    fg(PALETTE.faint)(" ".repeat(leftGap)),
+    ...(middle ? [fg(PALETTE.contact)(middle)] : []),
+    fg(PALETTE.faint)(" ".repeat(rightGap)),
+    fg(agentColor)(right),
+  ]);
 }
 
 function paintControl(
