@@ -5,6 +5,7 @@
  */
 
 export const PROTOCOL_VERSION = 1;
+export const APP_SERVER_GATEWAY_PROTOCOL = 2;
 /** Close code sent to a second concurrent client. */
 export const CLOSE_BUSY = 4429;
 /** Close code for a handshake with a missing or wrong connection token. */

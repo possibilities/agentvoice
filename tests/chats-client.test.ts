@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Server } from "bun";
 import { ChatsConnection, ChatsConnectionError } from "../src/chats/client.ts";
 import {
   AppServerGateway,
   type GatewayUpstream,
   type GatewayUpstreamCallbacks,
 } from "../src/server/appserver-gateway.ts";
-import { type SocketData, startHttpServer } from "../src/server/http-server.ts";
+import { startHttpServer } from "../src/server/http-server.ts";
 
 class RpcUpstream implements GatewayUpstream {
   constructor(readonly callbacks: GatewayUpstreamCallbacks) {}
@@ -26,7 +25,7 @@ class RpcUpstream implements GatewayUpstream {
   close(): void {}
 }
 
-const servers: Server<SocketData>[] = [];
+const servers: Array<{ stop(closeActiveConnections?: boolean): void }> = [];
 
 afterEach(() => {
   for (const server of servers.splice(0)) server.stop(true);
@@ -45,6 +44,21 @@ function fixture(): string {
     version: "test",
     appServerGateway: gateway,
     voice: { open() {}, message() {}, close() {} },
+  });
+  servers.push(server);
+  return `ws://127.0.0.1:${server.port}/app-server`;
+}
+
+function legacyFixture(): string {
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (new URL(request.url).pathname === "/") {
+        return Response.json({ name: "agentvoice", version: "old", protocol: 1 });
+      }
+      return new Response("not found", { status: 404 });
+    },
   });
   servers.push(server);
   return `ws://127.0.0.1:${server.port}/app-server`;
@@ -88,6 +102,18 @@ describe("ChatsConnection", () => {
     await expect(connection.connect()).rejects.toThrow(ChatsConnectionError);
     await expect(connection.request("thread/loaded/list", {})).rejects.toThrow(
       "app-server gateway is not connected",
+    );
+  });
+
+  test("explains when a live server predates the app-server gateway", async () => {
+    const connection = new ChatsConnection({
+      url: legacyFixture(),
+      token: "secret",
+      version: "test",
+      onFrame() {},
+    });
+    await expect(connection.connect()).rejects.toThrow(
+      "predates chats support — restart agentvoice server, then retry",
     );
   });
 

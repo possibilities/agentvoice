@@ -1,10 +1,11 @@
 import type { ServerWebSocket } from "bun";
-import { CLOSE_BUSY, CLOSE_UNAUTHORIZED, PROTOCOL_VERSION } from "../protocol.ts";
 import {
-  APP_SERVER_GATEWAY_PATH,
   APP_SERVER_GATEWAY_PROTOCOL,
-  type AppServerGateway,
-} from "./appserver-gateway.ts";
+  CLOSE_BUSY,
+  CLOSE_UNAUTHORIZED,
+  PROTOCOL_VERSION,
+} from "../protocol.ts";
+import { APP_SERVER_GATEWAY_PATH, type AppServerGateway } from "./appserver-gateway.ts";
 import { gateRequest, tokenMatches } from "./gate.ts";
 
 export interface SocketData {

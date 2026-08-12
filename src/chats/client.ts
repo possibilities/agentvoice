@@ -1,3 +1,5 @@
+import { APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
+
 export interface GatewayFrameHandlers {
   onFrame(params: Record<string, unknown>): void;
   onNotification?(method: string, params: Record<string, unknown>): void;
@@ -23,6 +25,61 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function displayUrl(url: URL): string {
+  const safe = new URL(url);
+  safe.searchParams.delete("token");
+  return safe.toString();
+}
+
+async function preflightGateway(gatewayUrl: URL): Promise<void> {
+  const serverUrl = new URL(gatewayUrl);
+  serverUrl.protocol = gatewayUrl.protocol === "wss:" ? "https:" : "http:";
+  serverUrl.pathname = "/";
+  serverUrl.search = "";
+  serverUrl.hash = "";
+
+  let response: Response;
+  try {
+    response = await fetch(serverUrl, { signal: AbortSignal.timeout(2_000) });
+  } catch {
+    throw new ChatsConnectionError(
+      `unable to reach AgentVoice server at ${serverUrl} — start agentvoice server first`,
+    );
+  }
+  if (!response.ok) {
+    throw new ChatsConnectionError(
+      `AgentVoice server probe at ${serverUrl} returned HTTP ${response.status}`,
+    );
+  }
+
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new ChatsConnectionError(`${serverUrl} is not an AgentVoice server`);
+  }
+  const root = isRecord(value) ? value : {};
+  if (root["name"] !== "agentvoice") {
+    throw new ChatsConnectionError(`${serverUrl} is not an AgentVoice server`);
+  }
+  const gateway = isRecord(root["appServerGateway"]) ? root["appServerGateway"] : null;
+  if (!gateway) {
+    throw new ChatsConnectionError(
+      `the running AgentVoice server at ${serverUrl} predates chats support — restart agentvoice server, then retry`,
+    );
+  }
+  if (gateway["protocol"] !== APP_SERVER_GATEWAY_PROTOCOL) {
+    throw new ChatsConnectionError(
+      `AgentVoice server at ${serverUrl} advertises unsupported app-server gateway protocol ${String(gateway["protocol"])}`,
+    );
+  }
+  if (typeof gateway["path"] === "string" && gateway["path"] !== gatewayUrl.pathname) {
+    throw new ChatsConnectionError(
+      `AgentVoice server advertises its app-server gateway at ${gateway["path"]}, not ${gatewayUrl.pathname}`,
+    );
+  }
+}
+
 export class ChatsConnection {
   private readonly options: ChatsConnectionOptions;
   private ws: WebSocket | null = null;
@@ -39,8 +96,10 @@ export class ChatsConnection {
     if (url.protocol !== "ws:" && url.protocol !== "wss:") {
       throw new ChatsConnectionError(`unsupported chats URL protocol ${url.protocol}`);
     }
+    await preflightGateway(url);
     if (!url.searchParams.has("token")) url.searchParams.set("token", this.options.token);
     if (!url.searchParams.has("observe")) url.searchParams.set("observe", "agentvoice");
+    const safeUrl = displayUrl(url);
     const ws = new WebSocket(url);
     this.ws = ws;
     this.closedNotified = false;
@@ -49,7 +108,7 @@ export class ChatsConnection {
       const timer = setTimeout(() => {
         settled = true;
         ws.close();
-        reject(new ChatsConnectionError(`timed out connecting to ${this.options.url}`));
+        reject(new ChatsConnectionError(`timed out connecting to ${safeUrl}`));
       }, 5_000);
       ws.onmessage = (event) => this.handle(String(event.data));
       ws.onopen = () => {
@@ -61,7 +120,7 @@ export class ChatsConnection {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        reject(new ChatsConnectionError(`unable to connect to ${this.options.url}`));
+        reject(new ChatsConnectionError(`unable to connect to ${safeUrl}`));
       };
       ws.onclose = (event) => {
         // An explicit close may be followed immediately by a reconnect; the

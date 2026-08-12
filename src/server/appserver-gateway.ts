@@ -2,7 +2,6 @@ import type { AppServer } from "./appserver.ts";
 import { UnixWebSocket } from "./unix-websocket.ts";
 
 export const APP_SERVER_GATEWAY_PATH = "/app-server";
-export const APP_SERVER_GATEWAY_PROTOCOL = 2;
 const MAX_QUEUED_BYTES = 16 << 20;
 
 export type AppServerFrameDirection = "toAppServer" | "fromAppServer";
