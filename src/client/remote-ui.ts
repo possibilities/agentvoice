@@ -45,6 +45,9 @@ export async function runRemote(socketPath: string): Promise<void> {
     alignItems: "center",
     paddingLeft: 1,
     paddingRight: 1,
+    // Signal Room headers reserve the first row and put the divider directly
+    // below the title row; direct Text children otherwise round upward here.
+    paddingTop: 1,
   });
   const brand = new TextRenderable(renderer, {
     content: new StyledText([
