@@ -78,6 +78,12 @@ export interface ClosedMessage {
   reason?: string;
 }
 
+/** Replace only the realtime voice session, leaving the socket and thread intact. */
+export interface RedialMessage {
+  type: "redial";
+  reason: string;
+}
+
 export type ErrorCode =
   | "not-ready"
   | "bad-message"
@@ -118,6 +124,7 @@ export type ServerMessage =
   | ReadyMessage
   | AnswerMessage
   | ClosedMessage
+  | RedialMessage
   | ErrorMessage
   | WorkerUpdateMessage;
 
@@ -153,6 +160,10 @@ export function parseServerMessage(text: string): ServerMessage | null {
         type: "closed",
         ...(typeof message["reason"] === "string" ? { reason: message["reason"] } : {}),
       };
+    case "redial":
+      return typeof message["reason"] === "string"
+        ? { type: "redial", reason: message["reason"] }
+        : null;
     case "error":
       return {
         type: "error",

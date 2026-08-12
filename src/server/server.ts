@@ -34,6 +34,7 @@ import {
 } from "./accounts.ts";
 import { AppServer, AppServerError } from "./appserver.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
+import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
 import { gateRequest, tokenMatches } from "./gate.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
@@ -63,7 +64,11 @@ function loadOrCreateToken(path: string): string {
   return token;
 }
 
-export async function runServer(config: ServerConfig, version: string): Promise<void> {
+export async function runServer(
+  config: ServerConfig,
+  version: string,
+  configSource?: WatchedConfigSource,
+): Promise<void> {
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
@@ -87,6 +92,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   let client: ClientSocket | null = null;
   let restartFailures = 0;
   let shuttingDown = false;
+  let activeVoiceName = config.voice.name;
 
   // Account balancing state. The active account is fixed per child; rotation
   // is a supervised restart at an idle boundary onto the balancer's next pick.
@@ -132,7 +138,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       model: config.orchestrator.model ?? null,
       effort: config.orchestrator.effort ?? null,
       voiceModel: config.voice.model ?? null,
-      voice: config.voice.name ?? null,
+      voice: activeVoiceName ?? null,
       prompts: foundPrompts,
     });
   }
@@ -149,7 +155,13 @@ export async function runServer(config: ServerConfig, version: string): Promise<
       return appServer
         .request(
           "thread/realtime/start",
-          realtimeParams(config, prompts, threadId, realtimeSessionId, sdp),
+          realtimeParams(
+            configWithVoiceName(config, activeVoiceName),
+            prompts,
+            threadId,
+            realtimeSessionId,
+            sdp,
+          ),
         )
         .then(() => {});
     },
@@ -488,6 +500,24 @@ export async function runServer(config: ServerConfig, version: string): Promise<
     },
   });
 
+  const configWatcher = configSource
+    ? new ConfigWatcher(configSource, config, {
+        voiceNameChanged(name) {
+          activeVoiceName = name;
+          console.error(`config: voice.name changed to ${name ?? "upstream default"}`);
+          sendReady();
+          if (sessions.hasSession) send({ type: "redial", reason: "voice-name-changed" });
+        },
+        rejected(error) {
+          console.error(
+            `config change ignored: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        },
+      })
+    : null;
+  configWatcher?.start();
+  void configWatcher?.reload();
+
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
   const { orchestrator, voice } = config;
   console.log(`agentvoice server listening on ws://127.0.0.1:${config.port}/ws`);
@@ -523,6 +553,7 @@ export async function runServer(config: ServerConfig, version: string): Promise<
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
+    configWatcher?.stop();
     console.error("shutting down");
     try {
       client?.close(1001, "server shutting down");

@@ -44,4 +44,11 @@ describe("parseServerMessage", () => {
     expect(parseServerMessage(JSON.stringify({ type: "sparkles" }))).toBeNull();
     expect(parseServerMessage("not json")).toBeNull();
   });
+
+  test("parses a voice-session redial command", () => {
+    expect(
+      parseServerMessage(JSON.stringify({ type: "redial", reason: "voice-name-changed" })),
+    ).toEqual({ type: "redial", reason: "voice-name-changed" });
+    expect(parseServerMessage(JSON.stringify({ type: "redial" }))).toBeNull();
+  });
 });

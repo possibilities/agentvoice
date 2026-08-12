@@ -11,6 +11,7 @@ import {
   shortId,
   sparkline,
 } from "../src/client/dsp.ts";
+import { VoiceTransport } from "../src/client/transport.ts";
 
 describe("frame constants", () => {
   test("one frame is 20ms at the session rate", () => {
@@ -103,5 +104,27 @@ describe("shortId", () => {
     expect(shortId("abc")).toBe("abc");
     expect(shortId("012345678")).toBe("012345678");
     expect(shortId("0123456789abcdef")).toBe("01234567…");
+  });
+});
+
+describe("voice transport server messages", () => {
+  test("routes a config change to the existing make-before-break redial", async () => {
+    const reasons: string[] = [];
+    const transport = new VoiceTransport({
+      url: "ws://127.0.0.1/ws",
+      onPhase() {},
+      onReady() {},
+      onRemoteTrack() {},
+      onOaiEvent() {},
+      onInfo() {},
+      onError() {},
+    });
+    transport.redial = (reason) => reasons.push(reason);
+
+    await (
+      transport as unknown as { handleServerMessage(text: string): Promise<void> }
+    ).handleServerMessage(JSON.stringify({ type: "redial", reason: "voice-name-changed" }));
+
+    expect(reasons).toEqual(["voice-name-changed"]);
   });
 });

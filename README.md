@@ -128,6 +128,11 @@ dropped — verify against a `--debug` frame when a knob seems dead. (The same
 applies inside `config` and `extra` to the JSON Schema: it declares them as
 free-form objects, so editor validation ends at their boundary.)
 
+`voice.name` is the only live-watched key. A valid change redials only the
+realtime voice session; the server process, WebSocket, and orchestrator thread
+stay in place. Invalid, unchanged, and unrelated edits are ignored for live
+reaction. Every other config key remains boot-time configuration.
+
 ### Prompts
 
 Prompt content is never named in the config. Files are found by convention in
@@ -343,8 +348,9 @@ gets a non-fatal `error`.
 
 | Message | Shape | Meaning |
 |---|---|---|
-| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart). `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
+| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart) or the active voice changes. `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
 | `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
+| `redial` | `{"type":"redial","reason":"voice-name-changed"}` | Negotiate a replacement voice session while retaining the WebSocket and orchestrator thread. The bundled client keeps the current audio peer until its successor connects. |
 | `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |
 | `worker` | `{"type":"worker","worker":{"id":…,"title":…,"status":…,"startedAt":…,"finishedAt"?:…,"report"?:…}}` | A dispatched worker changed state ([worker dispatch](#worker-dispatch)); `status` is `running`, `completed`, `failed`, `interrupted`, `cancelled`, or `lost`. Known workers are replayed on connect, so a UI joining mid-run starts complete. Additive — absent unless `orchestrator.dispatch` is on. |

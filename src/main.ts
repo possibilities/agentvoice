@@ -183,13 +183,18 @@ async function runServerCommand(argv: string[]): Promise<number> {
   const configPath = parsed.configPath
     ? resolve(expandTilde(parsed.configPath, home))
     : defaultConfigPath(process.env, home);
-  const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
+  const explicitConfig = parsed.configPath !== undefined;
+  const cliValues = cliToConfigValues(parsed.values);
+  const loadResolvedConfig = async () => {
+    const fileValues = await loadConfigFile(configPath, explicitConfig);
+    return resolveConfig(cliValues, fileValues, process.env, home, {
+      debug: parsed.debug,
+      configDir: dirname(configPath),
+    });
+  };
   // Prompt files live beside the config file, so --config relocates the bundle.
-  const config = resolveConfig(cliToConfigValues(parsed.values), fileValues, process.env, home, {
-    debug: parsed.debug,
-    configDir: dirname(configPath),
-  });
-  await runServer(config, VERSION);
+  const config = await loadResolvedConfig();
+  await runServer(config, VERSION, { path: configPath, load: loadResolvedConfig });
   return 0;
 }
 

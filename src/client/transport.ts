@@ -274,6 +274,10 @@ export class VoiceTransport {
         // The server re-sends `ready` when offers reopen; wantLive re-offers.
         return;
       }
+      case "redial": {
+        this.redial(msg.reason);
+        return;
+      }
       case "error": {
         if (!msg.fatal) {
           this.options.onInfo(`server: ${msg.message}`);
