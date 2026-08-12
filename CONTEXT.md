@@ -150,3 +150,9 @@ balancer's next pick after the active account crosses
 running orchestrator turn, no live workers. The orchestrator thread survives
 via `thread/resume`; a voice session never does. _Avoid_: "failover",
 "account switch" (suggests in-place switching, which codex cannot do).
+
+**Signal field** — The shared text-mode visualization in the Client and Remote
+console that maps the human and voice-agent activity envelopes into motion,
+persistence, and collision at the contact fault. It visualizes energy and
+turn-taking, not frequency content. _Avoid_: "spectrum", "spectrogram",
+"equalizer" (the Duplex audio device does not expose frequency bins).
