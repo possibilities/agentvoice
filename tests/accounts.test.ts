@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  APP_SERVER_CONTROL_DIRECTORY,
   accountsDirectory,
   type BalancerRun,
   decodeIdentity,
@@ -173,15 +174,35 @@ describe("reconcileFarm and discoverProfiles", () => {
     writeFileSync(join(canonical, "auth.json"), fakeAuthJson("canonical@x.y"));
     writeFileSync(join(canonical, "config.toml"), "model = 'x'\n");
     mkdirSync(join(canonical, "sessions"));
+    mkdirSync(join(canonical, APP_SERVER_CONTROL_DIRECTORY));
     return { canonical, profile };
   }
 
-  test("links every canonical entry except auth.json", () => {
+  test("links shared canonical entries but keeps auth and app-server control local", () => {
     const { canonical, profile } = setup();
     reconcileFarm(canonical, profile);
     expect(readlinkSync(join(profile, "config.toml"))).toBe(join(canonical, "config.toml"));
     expect(readlinkSync(join(profile, "sessions"))).toBe(join(canonical, "sessions"));
     expect(existsSync(join(profile, "auth.json"))).toBe(false);
+    expect(lstatSync(join(profile, APP_SERVER_CONTROL_DIRECTORY)).isDirectory()).toBe(true);
+    expect(lstatSync(join(profile, APP_SERVER_CONTROL_DIRECTORY)).isSymbolicLink()).toBe(false);
+  });
+
+  test("replaces a legacy app-server control symlink with a private directory", () => {
+    const { canonical, profile } = setup();
+    mkdirSync(profile, { recursive: true });
+    symlinkSync(
+      join(canonical, APP_SERVER_CONTROL_DIRECTORY),
+      join(profile, APP_SERVER_CONTROL_DIRECTORY),
+    );
+    const warnings: string[] = [];
+    reconcileFarm(canonical, profile, (message) => warnings.push(message));
+    const control = lstatSync(join(profile, APP_SERVER_CONTROL_DIRECTORY));
+    expect(control.isDirectory()).toBe(true);
+    expect(control.isSymbolicLink()).toBe(false);
+    expect(warnings).toContain(
+      `profile ${APP_SERVER_CONTROL_DIRECTORY} replaced with a private local directory`,
+    );
   });
 
   test("prunes dangling links and adopts real entries the canonical home lacks", () => {

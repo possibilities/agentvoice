@@ -4,10 +4,11 @@
  * A profile is a per-account `CODEX_HOME` under `<state>/accounts/<slug>/`:
  * a real `auth.json` (its own OAuth grant, refreshed only by codex — never
  * copy credentials between stores; refresh tokens rotate with server-side
- * reuse detection) plus symlinks to every other top-level entry of the
- * canonical `~/.codex`. The shared session store is what lets one thread
- * resume under any account; `scripts/account-profiles-probe.ts` re-verifies
- * that against the installed codex.
+ * reuse detection) plus symlinks to shared top-level entries of the canonical
+ * `~/.codex`. The app-server control directory stays profile-local because
+ * codex rejects symlinks at that private socket boundary. The shared session
+ * store is what lets one thread resume under any account;
+ * `scripts/account-profiles-probe.ts` re-verifies that against installed codex.
  *
  * Selection is delegated to the balancer CLI — `agentusage balance codex`
  * first, `codex-swap select` as fallback — and its pick is mapped to a
@@ -31,6 +32,7 @@ import type { Environ } from "../paths.ts";
 import { stateDirectory } from "../paths.ts";
 
 export const AUTH_FILE = "auth.json";
+export const APP_SERVER_CONTROL_DIRECTORY = "app-server-control";
 export const BALANCER_TIMEOUT_MS = 60_000;
 
 export interface ProfileIdentity {
@@ -159,11 +161,12 @@ export function maxUsedPercent(params: Record<string, unknown>): number | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Makes `profileDir` a faithful view of the canonical home: every top-level
- * entry symlinked except auth.json, which stays the profile's own. Runs at
- * every spawn so state files codex grows later never drift: a real entry the
- * canonical home lacks is adopted (moved) into it; a real entry both have is
- * set aside as `<name>.superseded`; dangling links are pruned.
+ * Makes `profileDir` a view of shared canonical state. auth.json and the
+ * app-server control directory stay profile-local; codex deliberately rejects
+ * a symlink for its private control-socket directory. Runs at every spawn so
+ * state files codex grows later never drift: a real shared entry the canonical
+ * home lacks is adopted (moved) into it; a real shared entry both have is set
+ * aside as `<name>.superseded`; dangling links are pruned.
  */
 export function reconcileFarm(
   canonicalHome: string,
@@ -173,6 +176,16 @@ export function reconcileFarm(
   mkdirSync(profileDir, { recursive: true, mode: 0o700 });
   const canonicalEntries = new Set(readdirSync(canonicalHome));
   for (const entry of readdirSync(profileDir)) {
+    if (entry === APP_SERVER_CONTROL_DIRECTORY) {
+      const path = join(profileDir, entry);
+      const stat = lstatSync(path);
+      if (!stat.isDirectory()) {
+        rmSync(path, { recursive: true, force: true });
+        mkdirSync(path, { mode: 0o700 });
+        warn(`profile ${entry} replaced with a private local directory`);
+      }
+      continue;
+    }
     // Set-aside copies stay quarantined in the profile, never adopted.
     if (entry === AUTH_FILE || entry.endsWith(".superseded")) continue;
     const path = join(profileDir, entry);
@@ -194,12 +207,13 @@ export function reconcileFarm(
     }
   }
   for (const entry of canonicalEntries) {
-    if (entry === AUTH_FILE) continue;
+    if (entry === AUTH_FILE || entry === APP_SERVER_CONTROL_DIRECTORY) continue;
     const path = join(profileDir, entry);
     if (!existsSync(path) && !lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) {
       symlinkSync(join(canonicalHome, entry), path);
     }
   }
+  mkdirSync(join(profileDir, APP_SERVER_CONTROL_DIRECTORY), { recursive: true, mode: 0o700 });
 }
 
 /** Profiles under the accounts directory; identity is null until logged in. */

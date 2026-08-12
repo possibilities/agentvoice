@@ -68,7 +68,7 @@ export const accountsValuesSchema = z
   })
   .meta({
     description:
-      "Opt-in multi-account balancing over account profiles: per-account CODEX_HOMEs under ~/.local/state/agentvoice/accounts/, each holding its own auth.json with everything else symlinked to the canonical ~/.codex so every account shares one session store (threads resume across accounts).",
+      "Opt-in multi-account balancing over account profiles: per-account CODEX_HOMEs under ~/.local/state/agentvoice/accounts/, each holding its own auth.json and private app-server control directory, with session/config state symlinked to the canonical ~/.codex so every account shares one session store (threads resume across accounts).",
   });
 
 export const orchestratorValuesSchema = z

@@ -39,9 +39,9 @@ Run \`agentvoice <command> --help\` for options.
 const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
 
 A profile is a per-account CODEX_HOME under the state directory: its own
-auth.json, everything else symlinked to the canonical ~/.codex so all
-accounts share one session store. Enable selection with accounts.balance
-in server.json.
+auth.json and private app-server control directory, with session/config state
+symlinked to the canonical ~/.codex so all accounts share one session store.
+Enable selection with accounts.balance in server.json.
 
 Usage:
   agentvoice accounts add <slug>   Create a profile and log it in

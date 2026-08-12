@@ -221,8 +221,9 @@ balancing algorithm, freshness rules, and focus policies live with the quota
 observer rather than here; the pick maps by email onto an
 **account profile** — a per-account `CODEX_HOME` under
 `~/.local/state/agentvoice/accounts/<slug>/` holding its own `auth.json`
-while symlinking everything else to the canonical `~/.codex`. One shared
-session store is what lets the orchestrator thread resume under any account.
+and private `app-server-control/`, while symlinking session/config state to the
+canonical `~/.codex`. One shared session store is what lets the orchestrator
+thread resume under any account.
 
 ```bash
 agentvoice accounts add personal   # codex login --device-auth, per account
@@ -513,8 +514,9 @@ gets a non-fatal `error`.
 - `~/.local/state/agentvoice/client.sock` — ephemeral owner-only IPC between
   the running Client and any local Remote consoles. It never carries audio.
 - `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
-  multi-account balancing: a real `auth.json` per account, everything else
-  symlinked to `~/.codex`. Safe to delete; recreate with
+  multi-account balancing: a real `auth.json` and private app-server control
+  directory per account, with session/config state symlinked to `~/.codex`.
+  Safe to delete; recreate with
   `agentvoice accounts add`.
 - `~/.config/agentvoice/` — `server.json` (with `server.schema.json` beside
   it for editor validation) and the prompt files beside it.

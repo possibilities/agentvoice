@@ -153,8 +153,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   outlive the child; it re-reads its own cwd on every thread start), `token`
   (the connection token, mode 0600 — file permissions are the boundary
   between local users), `accounts/<slug>` (account profiles: a real
-  `auth.json` plus a symlink farm over the canonical `~/.codex`, reconciled
-  at every child spawn).
+  `auth.json`, a private `app-server-control/`, and a symlink farm over shared
+  canonical `~/.codex` state, reconciled at every child spawn).
 
 ## The fleet
 

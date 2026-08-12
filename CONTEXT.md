@@ -131,9 +131,9 @@ notification (reserved for JSON-RPC).
 
 **Account profile** — a per-account `CODEX_HOME` under
 `~/.local/state/agentvoice/accounts/<slug>/`: its own `auth.json` (a separate
-OAuth grant, refreshed only by codex) with every other top-level entry
-symlinked to the canonical `~/.codex`, so all accounts share one session
-store and any thread resumes under any account. Onboarded with
+OAuth grant, refreshed only by codex) and private `app-server-control/`, with
+session/config state symlinked to the canonical `~/.codex` so all accounts
+share one session store and any thread resumes under any account. Onboarded with
 `agentvoice accounts add`. _Avoid_: "account" alone (ambiguous with the
 ChatGPT account it holds a grant for), "codex home swap".
 
