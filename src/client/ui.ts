@@ -13,6 +13,7 @@ import {
   createCliRenderer,
   fg,
   type ParsedKey,
+  ScrollBoxRenderable,
   StyledText,
   TextRenderable,
 } from "@opentui/core";
@@ -71,6 +72,12 @@ interface Meter {
   db: number;
   display: number;
   history: number[];
+}
+
+export const VOICE_ACTIVITY_PANEL_HEIGHT = 4;
+
+export function voiceActivityHeight(width: number): number {
+  return width < 68 ? VOICE_ACTIVITY_PANEL_HEIGHT * 2 + 1 : VOICE_ACTIVITY_PANEL_HEIGHT;
 }
 
 function styledFacts(rows: ReadonlyArray<readonly [label: string, value: string]>): StyledText {
@@ -307,7 +314,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
   root.add(main);
 
   const meters = new BoxRenderable(renderer, {
-    flexGrow: 1,
+    height: voiceActivityHeight(renderer.width || process.stdout.columns || 100),
+    flexShrink: 0,
     flexDirection: "row",
     gap: 1,
     backgroundColor: PALETTE.bg,
@@ -323,10 +331,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
       borderColor: color,
       backgroundColor: PALETTE.panel,
       flexDirection: "column",
-      justifyContent: "center",
       paddingLeft: 2,
       paddingRight: 2,
-      gap: 1,
       onMouseDown: onClick,
     });
     const label = new TextRenderable(renderer, { content: labelText, fg: color });
@@ -376,9 +382,11 @@ export async function runClient(config: ClientConfig): Promise<void> {
   sessionBox.add(sessionRight);
   main.add(sessionBox);
 
-  const eventBox = new BoxRenderable(renderer, {
+  const eventBox = new ScrollBoxRenderable(renderer, {
     width: "100%",
-    height: 5,
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 3,
     border: ["top"],
     borderStyle: "single",
     borderColor: PALETTE.border,
@@ -386,17 +394,15 @@ export async function runClient(config: ClientConfig): Promise<void> {
     title: " EVENTS ",
     titleColor: PALETTE.dim,
     titleAlignment: "left",
-    flexDirection: "column",
     paddingLeft: 2,
     paddingRight: 2,
     paddingTop: 1,
+    stickyScroll: true,
+    stickyStart: "bottom",
+    scrollX: false,
+    scrollY: true,
   });
-  const eventRows = Array.from(
-    { length: 3 },
-    (_, index) =>
-      new TextRenderable(renderer, { id: `event-${index}`, content: "", fg: PALETTE.dim }),
-  );
-  for (const row of eventRows) eventBox.add(row);
+  const eventRows: TextRenderable[] = [];
   main.add(eventBox);
 
   const footer = new BoxRenderable(renderer, {
@@ -426,6 +432,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
     layoutWidth = width;
     const narrow = width < 104;
     meters.flexDirection = width < 68 ? "column" : "row";
+    meters.height = voiceActivityHeight(width);
     sessionBox.flexDirection = narrow ? "column" : "row";
     sessionBox.height = narrow ? 7 : 5;
     sessionBox.gap = narrow ? 0 : 4;
@@ -459,13 +466,22 @@ export async function runClient(config: ClientConfig): Promise<void> {
           ]
         : [],
     );
-    const recent = events.slice(-3);
-    const visibleEvents: Array<{ text: string; color: string } | undefined> = [
-      ...Array.from({ length: 3 - recent.length }, () => undefined),
-      ...recent,
-    ];
+    const rowCount = Math.max(1, events.length);
+    while (eventRows.length > rowCount) {
+      const row = eventRows.pop();
+      if (row) eventBox.remove(row);
+    }
+    while (eventRows.length < rowCount) {
+      const row = new TextRenderable(renderer, {
+        id: `event-${eventRows.length}`,
+        content: "",
+        fg: PALETTE.dim,
+      });
+      eventRows.push(row);
+      eventBox.add(row);
+    }
     eventRows.forEach((row, index) => {
-      const event = visibleEvents[index];
+      const event = events[index];
       row.content = event === undefined ? "" : `${SIGNAL_GLYPHS.event} ${event.text}`;
       row.fg = event?.color ?? PALETTE.faint;
     });
