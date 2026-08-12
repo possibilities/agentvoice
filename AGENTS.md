@@ -68,9 +68,13 @@ the server and the client use it; if only one does, it goes in that directory.
 **One `AGENTS.md`, at the root.** Codex loads only the chain from the project
 root down to the thread's cwd and never descends into subdirectories
 (`codex-rs/core/src/agents_md.rs`; confirmed on 0.147 with a two-level probe).
-Since codex runs here with cwd at the repo root, a `src/server/AGENTS.md` would
-be read *never* — it would rot unnoticed. This differs from Claude Code, which
-loads a subtree `CLAUDE.md` on demand when it reads files there.
+pi is the same shape from the other direction: at startup it walks from cwd up
+through every ancestor, taking one guidance file per directory — `AGENTS.md`
+before `CLAUDE.md` — and never descends either
+(`@earendil-works/pi-coding-agent` 0.84.1, `dist/core/resource-loader.js`,
+`loadProjectContextFiles`). Since both run here with cwd at the repo root, a
+`src/server/AGENTS.md` would be read *never* — it would rot unnoticed. Only
+Claude Code loads a subtree `CLAUDE.md` on demand when it reads files there.
 
 ## Upstream realtime semantics (verified against codex 0.147 source + probes)
 
