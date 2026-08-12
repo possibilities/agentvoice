@@ -10,8 +10,9 @@ terms in code, comments, and commit messages.
 - `bun test` — unit tests (pure logic only; no codex or audio needed)
 - `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
 - `bun run lint` / `bun run format` — Biome check / autofix
-- `bun run server` / `bun run client` — the real thing (needs codex ≥ 0.147
-  logged in; the client also needs a built duplex device and a microphone)
+- `bun run server` / `bun run client` / `agentvoice chats` — the real thing
+  (needs codex ≥ 0.147 logged in; the client also needs a built duplex device
+  and a microphone)
 - `bun run native:build` / `bun run audio:probe` — build and exercise the
   duplex audio device (needs Zig or a C11 compiler; the probe needs audio
   hardware). `bun run setup` builds it; the client will not start without it
@@ -38,9 +39,16 @@ the server and the client use it; if only one does, it goes in that directory.
     `thread/realtime/start` payloads; tested in `tests/params.test.ts`
   - `gate.ts` — the handshake gate: pure Origin/Host/token checks every HTTP
     request passes before the WebSocket; tested in `tests/gate.test.ts`
-  - `appserver.ts` — JSON-RPC over stdio to the app-server child; framing,
-    supervision, fail-closed denial of approval requests (an optional
-    `onRequest` answerer may claim a request first; everything else denies)
+  - `appserver.ts` — supervised App-server child on a private Unix listener,
+    AgentVoice's owning JSON-RPC connection, fail-closed approval handling,
+    and owning-frame observation
+  - `unix-websocket.ts` — the bounded RFC 6455 client for Codex's native Unix
+    listener (Bun's WebSocket client cannot dial Unix sockets)
+  - `appserver-gateway.ts` — one native App-server connection per authenticated
+    gateway peer, byte-preserving frame forwarding, disconnect cleanup, and
+    additive AgentVoice owning-frame envelopes
+  - `http-server.ts` — authenticated loopback HTTP/WebSocket admission for the
+    singleton voice Client and multiple independent App-server gateway clients
   - `session.ts` — the voice-session state machine (supersede, attribution);
     pure effects-injected logic, tested in `tests/session.test.ts`
   - `workers.ts` — worker dispatch under `orchestrator.dispatch`: the three
@@ -53,6 +61,8 @@ the server and the client use it; if only one does, it goes in that directory.
     `scripts/account-profiles-probe.ts`
   - `server.ts` — wiring: process supervision, thread, worker threads,
     WebSocket, account rotation at idle
+- `src/chats/` — `agentvoice chats`: gateway connection, loaded-thread and raw
+  frame model, orchestration, and the OpenTUI thread browser/event stream
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
   two-peer redial), `duplex-audio.ts` + `duplex-device.ts` + `native/` (the
   duplex audio device — the only audio path), `dsp.ts` (pure audio math,

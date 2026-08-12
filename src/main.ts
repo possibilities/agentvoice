@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoice server|client|remote|accounts [options]`. */
+/** CLI entry: `agentvoice server|client|remote|chats|accounts [options]`. */
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
+import { type ChatsConfig, runChats } from "./chats/chats.ts";
+import { ChatsConnectionError } from "./chats/client.ts";
 import { RemoteError, runRemote } from "./client/remote-ui.ts";
 import { type ClientConfig, ClientError, runClient } from "./client/ui.ts";
 import { clientControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
@@ -20,6 +22,7 @@ import { runServer } from "./server/server.ts";
 
 export const VERSION: string = packageJson.version;
 const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";
+const DEFAULT_CHATS_URL = "ws://127.0.0.1:7890/app-server";
 
 const USAGE = `agentvoice — minimal voice server and terminal client for Codex
 
@@ -27,6 +30,7 @@ Usage:
   agentvoice server [options]     Start the voice server
   agentvoice client [options]     Open the terminal voice client
   agentvoice remote               Open the phone-sized remote console
+  agentvoice chats [options]      Browse loaded threads and raw app-server events
   agentvoice accounts <command>   Manage account profiles for balancing
 
 Run \`agentvoice <command> --help\` for options.
@@ -100,6 +104,18 @@ The remote attaches to the running client on this machine. It carries mute
 commands and activity levels only; audio remains on the client's device.
 `;
 
+const CHATS_USAGE = `agentvoice chats — browse AgentVoice's live Codex threads
+
+Usage:
+  agentvoice chats [options]
+
+Options:
+  --url <ws-url>    Raw app-server gateway (default: ${DEFAULT_CHATS_URL})
+  --token <secret>  Connection token (default: the server-written token file)
+
+Keys: [↑↓/jk] select · [enter] open/expand · [esc] back · [f] follow · [q] quit
+`;
+
 export interface FlagSpec {
   value: ReadonlySet<string>;
   bool: ReadonlySet<string>;
@@ -124,6 +140,11 @@ const SERVER_FLAGS: FlagSpec = {
 const CLIENT_FLAGS: FlagSpec = {
   value: new Set(["--url", "--token", "--device", "--output-device"]),
   bool: new Set(["--debug", "--help"]),
+};
+
+const CHATS_FLAGS: FlagSpec = {
+  value: new Set(["--url", "--token"]),
+  bool: new Set(["--help"]),
 };
 
 export class UsageError extends Error {}
@@ -226,6 +247,21 @@ async function runRemoteCommand(argv: string[]): Promise<number> {
     return 0;
   }
   await runRemote(clientControlSocketPath(process.env, homedir()));
+  return 0;
+}
+
+async function runChatsCommand(argv: string[]): Promise<number> {
+  const parsed = parseArgs(argv, CHATS_FLAGS);
+  if (parsed.help) {
+    console.log(CHATS_USAGE);
+    return 0;
+  }
+  const config: ChatsConfig = {
+    url: parsed.values["url"] ?? DEFAULT_CHATS_URL,
+    ...(parsed.values["token"] !== undefined ? { token: parsed.values["token"] } : {}),
+    version: VERSION,
+  };
+  await runChats(config);
   return 0;
 }
 
@@ -359,6 +395,7 @@ async function main(): Promise<number> {
     server: { run: runServerCommand, usage: SERVER_USAGE },
     client: { run: runClientCommand, usage: CLIENT_USAGE },
     remote: { run: runRemoteCommand, usage: REMOTE_USAGE },
+    chats: { run: runChatsCommand, usage: CHATS_USAGE },
     accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
   };
   const entry = commands[command];
@@ -379,7 +416,8 @@ async function main(): Promise<number> {
     if (
       error instanceof ConfigError ||
       error instanceof ClientError ||
-      error instanceof RemoteError
+      error instanceof RemoteError ||
+      error instanceof ChatsConnectionError
     ) {
       console.error(error.message);
       return 1;

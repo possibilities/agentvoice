@@ -1,8 +1,22 @@
 # Glossary
 
-**App-server** — The `codex app-server` child process this server spawns and
-speaks newline-delimited JSON-RPC to over stdio. _Avoid_: "codex process",
-"backend server".
+**App-server** — The `codex app-server` child process this server supervises on
+an owner-only Unix listener. AgentVoice and each gateway peer have independent
+native connections to it. _Avoid_: "codex process", "backend server".
+
+**App-server gateway** — The authenticated `/app-server` WebSocket surface
+that gives every peer its own native App-server connection and forwards its raw
+JSON-RPC frames without method translation. Closing a peer closes that physical
+connection and releases its connection-scoped subscriptions. _Avoid_: "shared
+connection", "virtual connection".
+
+**Frame envelope** — The `agentvoice/frame` notification emitted by the
+App-server gateway for every JSON frame crossing AgentVoice's own connection:
+exact parsed payload plus direction and owner. A gateway peer's own native
+frames remain ordinary App-server traffic, and the envelope stream is an
+explicit `observe=agentvoice` opt-in. _Avoid_: "event" without
+qualification (the payload may be a request, response, or notification), "chat
+message".
 
 **Orchestrator agent** — The agent that does the actual work: one Codex thread
 opened at boot, living in the workspace. The thread is its identity and its

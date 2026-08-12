@@ -12,15 +12,8 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ServerWebSocket } from "bun";
 import { stateDirectory, tokenPath } from "../paths.ts";
-import {
-  CLOSE_BUSY,
-  CLOSE_UNAUTHORIZED,
-  PROTOCOL_VERSION,
-  parseClientMessage,
-  type ServerMessage,
-} from "../protocol.ts";
+import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage } from "../protocol.ts";
 import {
   accountsDirectory,
   balancerCliPresent,
@@ -33,9 +26,10 @@ import {
   selectAccount,
 } from "./accounts.ts";
 import { AppServer, AppServerError } from "./appserver.ts";
+import { APP_SERVER_GATEWAY_PATH, AppServerGateway } from "./appserver-gateway.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
-import { gateRequest, tokenMatches } from "./gate.ts";
+import { type AgentVoiceSocket, startHttpServer } from "./http-server.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
 import {
@@ -44,8 +38,6 @@ import {
   WorkerManager,
   WorkerTurnStartError,
 } from "./workers.ts";
-
-type ClientSocket = ServerWebSocket<{ authorized: boolean }>;
 
 const RESTART_BACKOFF_INITIAL_MS = 500;
 const RESTART_BACKOFF_CAP_MS = 30_000;
@@ -76,6 +68,7 @@ export async function runServer(
 ): Promise<void> {
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
+  const appServerSocket = join(appServerCwd, "control.sock");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
   mkdirSync(config.orchestrator.workspace, { recursive: true, mode: 0o700 });
   const tokenFile = tokenPath(process.env, homedir());
@@ -94,10 +87,11 @@ export async function runServer(
   let appServer: AppServer | null = null;
   let threadId: string | null = null;
   let threadReady = false;
-  let client: ClientSocket | null = null;
+  let client: AgentVoiceSocket | null = null;
   let restartFailures = 0;
   let shuttingDown = false;
   let activeVoiceName = config.voice.name;
+  const appServerGateway = new AppServerGateway({ debug: debugLog });
 
   // Account balancing state. The active account is fixed per child; rotation
   // is a supervised restart at an idle boundary onto the balancer's next pick.
@@ -301,10 +295,12 @@ export async function runServer(
     const server = new AppServer({
       codexBin: config.codex,
       processCwd: appServerCwd,
+      socketPath: appServerSocket,
       ...(choice.codexHome !== undefined ? { codexHome: choice.codexHome } : {}),
       clientVersion: version,
       onNotification: handleNotification,
       onRequest: handleAppServerRequest,
+      onFrame: (direction, owner, frame) => appServerGateway.frame(direction, owner, frame),
       onExit: (info) => handleAppServerExit(server, info),
       debug: debugLog,
     });
@@ -314,8 +310,10 @@ export async function runServer(
     try {
       await server.start();
       threadId = await openThread(server);
+      appServerGateway.setAppServer(server);
     } catch (error) {
       appServer = null;
+      appServerGateway.setAppServer(null);
       const stderr = server.recentStderr;
       await server.stop().catch(() => {});
       if (error instanceof AppServerError && stderr) {
@@ -333,6 +331,7 @@ export async function runServer(
   ): void {
     if (appServer !== server) return; // an instance we already replaced or tore down
     appServer = null;
+    appServerGateway.setAppServer(null);
     threadReady = false;
     orchestratorTurnActive = false;
     const hadSession = sessions.hasSession;
@@ -488,63 +487,24 @@ export async function runServer(
   // Boot fails fast: the operator is present. Later child exits are supervised.
   await connectAppServer();
 
-  const httpServer = Bun.serve<{ authorized: boolean }>({
-    hostname: "127.0.0.1",
+  const httpServer = startHttpServer({
     port: config.port,
-    fetch(request, server) {
-      const url = new URL(request.url);
-      const verdict = gateRequest(
-        request.headers.get("origin"),
-        request.headers.get("host"),
-        config.port,
-      );
-      if (!verdict.ok) return new Response(verdict.reason, { status: verdict.status });
-      if (url.pathname === "/ws") {
-        // A bad token still upgrades, then closes with 4401: a plain HTTP 401
-        // reaches the client as an anonymous handshake failure, the close code
-        // as a diagnosable error.
-        const authorized = tokenMatches(url.searchParams.get("token"), token);
-        return server.upgrade(request, { data: { authorized } })
-          ? undefined
-          : new Response("websocket upgrade required", { status: 426 });
-      }
-      if (url.pathname === "/") {
-        return Response.json({
-          name: "agentvoice",
-          version,
-          protocol: PROTOCOL_VERSION,
-        });
-      }
-      return new Response("not found", { status: 404 });
-    },
-    websocket: {
-      // Audio flows peer-to-peer, so the socket is legitimately silent for
-      // minutes; a short idle timeout would sever healthy sessions.
-      idleTimeout: 120,
-      sendPings: true,
-      maxPayloadLength: 1 << 20,
-      open(ws: ClientSocket) {
-        // Auth before busy: an unauthorized caller learns nothing about the slot.
-        if (!ws.data.authorized) {
-          ws.close(CLOSE_UNAUTHORIZED, "missing or wrong connection token");
-          return;
-        }
-        if (client) {
-          ws.close(CLOSE_BUSY, "another client is connected");
-          return;
-        }
+    token,
+    version,
+    appServerGateway,
+    debug: debugLog,
+    voice: {
+      open(ws) {
         client = ws;
         debugLog?.("client connected");
         sendReady();
         // Replay worker state so a UI joining mid-run starts complete.
         for (const worker of workers?.snapshots() ?? []) send({ type: "worker", worker });
       },
-      message(ws: ClientSocket, raw: string | Buffer) {
-        if (ws !== client) return;
-        handleClientMessage(typeof raw === "string" ? raw : raw.toString());
+      message(_ws, text) {
+        handleClientMessage(text);
       },
-      close(ws: ClientSocket) {
-        if (ws !== client) return;
+      close() {
         client = null;
         debugLog?.("client disconnected");
         sessions.handleClientGone();
@@ -573,6 +533,7 @@ export async function runServer(
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
   const { orchestrator, voice } = config;
   console.log(`agentvoice server listening on ws://127.0.0.1:${config.port}/ws`);
+  console.log(`  app-server API  ws://127.0.0.1:${config.port}${APP_SERVER_GATEWAY_PATH}`);
   console.log(`  token           ${tokenFile}`);
   console.log(`  workspace       ${orchestrator.workspace}`);
   console.log(`  thread          ${threadId}`);

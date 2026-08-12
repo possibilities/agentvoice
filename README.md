@@ -10,6 +10,11 @@ lets a single voice client hold a full-duplex WebRTC conversation with it.
 `agentvoice client` is that client: a terminal UI with live meters,
 transcripts, and mute controls.
 
+`agentvoice chats` is the companion thread browser. It connects to the same
+server, lists the threads currently loaded in AgentVoice's App-server, and
+shows a live, syntax-highlighted stream of their raw JSON frames without
+subscribing to or retaining a thread.
+
 There are two agents. The **voice agent** is the realtime speech model you
 actually talk to; the **orchestrator agent** is the Codex thread that does the
 work. Audio flows peer-to-peer between the client and the voice agent, and the
@@ -34,6 +39,7 @@ bun install
 bun run setup                        # one-time: verifies bun/codex, builds duplex audio
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
+agentvoice chats                     # in another terminal: loaded threads + raw frames
 bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 ```
 
@@ -247,17 +253,17 @@ under the realtime surface; see AGENTS.md invariant 10).
 ## Security posture
 
 The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
-one client. Loopback alone is not a boundary: a web page can open a WebSocket
-to 127.0.0.1 (the handshake is exempt from the same-origin policy), and other
-local users share the interface. So every request also passes a three-part
-handshake gate:
+one voice Client plus independent App-server gateway clients. Loopback alone
+is not a boundary: a web page can open a WebSocket to 127.0.0.1 (the handshake
+is exempt from the same-origin policy), and other local users share the
+interface. So every request also passes a three-part handshake gate:
 
 - **Connection token.** Created at first boot as
   `~/.local/state/agentvoice/token` (mode 0600) and required on every
-  WebSocket handshake (`/ws?token=…`). The bundled client reads the same file
-  automatically, so same-machine use needs no setup; a missing or wrong token
-  is closed with code **4401**. File permissions are the boundary between
-  local users.
+  WebSocket handshake (`/ws?token=…` and `/app-server?token=…`). The bundled
+  clients read the same file automatically, so same-machine use needs no
+  setup; a missing or wrong token is closed with code **4401**. File
+  permissions are the boundary between local users.
 - **Origin rejection.** Any request carrying an `Origin` header is refused
   (403). Browsers attach one to every WebSocket handshake, so this closes the
   drive-by class outright — malicious pages and injected captive-portal
@@ -273,6 +279,12 @@ answer them; the agent is told no and adapts instead of hanging), so the
 `never` runs an unattended, unrestricted agent with your user permissions in
 the workspace — what makes hands-free "install it and run the tests" work.
 On untrusted networks (hotel, café), prefer `--sandbox workspace-write`.
+
+The App-server gateway is intentionally powerful: an authenticated native
+client can call arbitrary present or future App-server methods under
+AgentVoice's credentials. It is loopback-only and uses the same gate, token,
+and tunnel guidance as the voice endpoint. `agentvoice chats` itself uses only
+non-subscribing reads.
 
 To talk to your laptop from another device, do **not** expose the port —
 tunnel to loopback and carry the token across once:
@@ -328,6 +340,34 @@ The device is built from source and the client refuses to start without it —
   occupancy, drops, callback-level starvation events, reroutes, and
   interruption counters, plus every upstream event.
 
+## Chats thread browser
+
+`agentvoice chats` opens a full-screen OpenTUI browser for the threads that
+are authoritatively loaded in the running App-server. The list refreshes every
+two seconds. Selecting a compact thread card opens its raw frame stream; each
+frame retains the exact parsed JSON payload and is marked by direction and
+owner (`agentvoice` or unsolicited `appServer` traffic on AgentVoice's owning
+connection). The viewer's own request/response traffic arrives as ordinary raw
+App-server frames marked `client`.
+
+```bash
+agentvoice chats
+agentvoice chats --url ws://127.0.0.1:7890/app-server --token <secret>
+```
+
+Use arrow keys or `j`/`k` to move, Return or a click/tap to open and expand,
+Escape or `h` to return, `f` or End to follow the tail, Page Up/Down to scroll,
+and `q` to quit. JSON is compact by default, syntax-highlighted and wrapped;
+expansion exposes the complete pretty-printed payload, which remains
+selectable. Mouse wheel and terminal touch-as-mouse work through the native
+scroll surface. Each thread retains the latest 300 frames in the viewer and
+reports any older frames evicted from that local display.
+
+This is a read-only observer by construction: it lists with
+`thread/loaded/list` and reads metadata with `thread/read` using
+`includeTurns:false`. It never starts, resumes, forks, archives, deletes, or
+unsubscribes a thread, so opening the browser cannot load or retain one.
+
 ### Phone remote
 
 With the server and Client running on the same machine, SSH into that machine
@@ -353,8 +393,9 @@ waits and reconnects automatically when the Client is not running or restarts.
 
 ## Client API
 
-Protocol version **1**. `GET /` returns `{"name":"agentvoice","version":…,"protocol":1}`
-as a health/discovery check. WebSocket endpoint:
+Voice protocol version **1**. `GET /` returns the voice protocol plus
+`"appServerGateway":{"path":"/app-server","protocol":2}` as a
+health/discovery check. Voice WebSocket endpoint:
 `ws://127.0.0.1:<port>/ws?token=<token>`, where the token is the contents of
 `~/.local/state/agentvoice/token` on the server machine. The bundled
 terminal client speaks exactly this protocol. Requests carrying an `Origin`
@@ -363,10 +404,56 @@ posture](#security-posture)) — build clients on a native WebRTC stack (the
 bundled client uses [werift](https://github.com/shinyoshiaki/werift-webrtc);
 the recipe below uses the standard API names, which those stacks mirror).
 
-One client at a time — a second connection is closed with code **4429**, and a
-missing or wrong token with **4401**. On server shutdown the client is closed
-with **1001**. The server pings; the socket is legitimately silent for minutes
-while audio flows peer-to-peer.
+One voice Client at a time — a second `/ws` connection is closed with code
+**4429**, and a missing or wrong token with **4401**. On server shutdown the
+Client is closed with **1001**. The server pings; the socket is legitimately
+silent for minutes while audio flows peer-to-peer.
+
+### App-server gateway
+
+`ws://127.0.0.1:<port>/app-server?token=<token>` exposes app-server-shaped
+JSON-RPC over AgentVoice's existing WebSocket server. Any number of gateway
+clients can connect independently; they do not consume the singleton voice
+Client slot. Send `initialize`, wait for its response, then send `initialized`
+as with a direct App-server connection. That is exactly what each peer has:
+one real connection to the same supervised App-server, with its own
+initialization, capabilities, request-id namespace, subscriptions, approvals,
+and server notifications.
+
+All peer frames pass through without parsing, request-id remapping, a method
+schema, or a denylist. Disconnecting closes the corresponding native
+connection, which lets App-server release that connection's subscriptions.
+An App-server restart closes gateway clients with WebSocket code **1012**;
+clients reconnect and initialize a fresh connection. `agentvoice chats` retries
+that automatically on its two-second refresh cadence.
+
+Every exact parsed frame that crosses AgentVoice's separate owning connection
+is available by adding `observe=agentvoice` to the gateway URL. That explicit
+opt-in adds frame envelopes:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agentvoice/frame",
+  "params": {
+    "direction": "toAppServer",
+    "owner": "agentvoice",
+    "payload": { "jsonrpc": "2.0", "id": 17, "method": "turn/start", "params": {} }
+  }
+}
+```
+
+`direction` is `toAppServer` or `fromAppServer`; `owner` is `agentvoice` for
+responses to AgentVoice requests and `appServer` for unsolicited traffic on
+that owning connection. This observation notification is the only extension;
+without the query parameter the peer's protocol stream is exactly native. The
+peer's own App-server protocol remains raw either way. App-server→client
+requests on a peer's native connection are the peer's responsibility, just as
+they are when connecting directly. `agentvoice chats` adds the opt-in itself.
+
+The 16 MiB WebSocket frame and backpressure limits accommodate raw App-server
+payloads while closing a client that cannot keep up. Frame observation is
+fail-isolated from AgentVoice's own physical traffic.
 
 ### Messages: client → server
 
