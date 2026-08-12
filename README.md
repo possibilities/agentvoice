@@ -328,6 +328,29 @@ The device is built from source and the client refuses to start without it —
   occupancy, drops, callback-level starvation events, reroutes, and
   interruption counters, plus every upstream event.
 
+### Phone remote
+
+With the server and Client running on the same machine, SSH into that machine
+from a phone and open the narrow Remote console:
+
+```bash
+ssh laptop
+agentvoice remote
+```
+
+The console shows live `YOU` and `AGENT` activity rails and two large mute
+controls for the microphone and speaker. It is designed around a portrait
+terminal, while still adapting to other terminal sizes. Terminal mouse events
+toggle the controls when the SSH app forwards them; `m` and `s` are the
+keyboard equivalents, and `q` exits.
+
+The Remote console connects to the Client—not the server—through
+`~/.local/state/agentvoice/client.sock`, an owner-only Unix socket. It carries
+only normalized levels, mute state, connection phase, and mute assignments.
+Audio stays on the Client machine and needs no SSH forwarding; for the intended
+setup, that machine's Bluetooth audio remains the listening path. The console
+waits and reconnects automatically when the Client is not running or restarts.
+
 ## Client API
 
 Protocol version **1**. `GET /` returns `{"name":"agentvoice","version":…,"protocol":1}`
@@ -400,6 +423,8 @@ gets a non-fatal `error`.
 - `~/.local/state/agentvoice/token` — the connection token (created at
   first boot, mode 0600). Delete it to rotate; the next server start mints a
   fresh one.
+- `~/.local/state/agentvoice/client.sock` — ephemeral owner-only IPC between
+  the running Client and any local Remote consoles. It never carries audio.
 - `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
   multi-account balancing: a real `auth.json` per account, everything else
   symlinked to `~/.codex`. Safe to delete; recreate with

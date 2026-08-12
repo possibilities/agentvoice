@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { defaultConfigPath, expandTilde, stateDirectory, tokenPath } from "../src/paths.ts";
+import {
+  clientControlSocketPath,
+  defaultConfigPath,
+  expandTilde,
+  stateDirectory,
+  tokenPath,
+} from "../src/paths.ts";
 
 const HOME = "/home/tester";
 
@@ -14,6 +20,9 @@ describe("paths", () => {
       "/etc/xdg/agentvoice/server.json",
     );
     expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/token");
+    expect(clientControlSocketPath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/client.sock",
+    );
   });
 
   test("expandTilde only rewrites leading ~", () => {

@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoice server|client|accounts [options]`. */
+/** CLI entry: `agentvoice server|client|remote|accounts [options]`. */
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
+import { RemoteError, runRemote } from "./client/remote-ui.ts";
 import { type ClientConfig, ClientError, runClient } from "./client/ui.ts";
-import { defaultConfigPath, expandTilde } from "./paths.ts";
+import { clientControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
 import {
   AUTH_FILE,
   accountsDirectory,
@@ -25,6 +26,7 @@ const USAGE = `agentvoice — minimal voice server and terminal client for Codex
 Usage:
   agentvoice server [options]     Start the voice server
   agentvoice client [options]     Open the terminal voice client
+  agentvoice remote               Open the phone-sized remote console
   agentvoice accounts <command>   Manage account profiles for balancing
 
 Run \`agentvoice <command> --help\` for options.
@@ -87,6 +89,15 @@ Options:
   --debug                  Write a debug log to the state directory
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [q] quit
+`;
+
+const REMOTE_USAGE = `agentvoice remote — control the local voice client over SSH
+
+Usage:
+  agentvoice remote
+
+The remote attaches to the running client on this machine. It carries mute
+commands and activity levels only; audio remains on the client's device.
 `;
 
 export interface FlagSpec {
@@ -205,6 +216,16 @@ async function runClientCommand(argv: string[]): Promise<number> {
     return 0;
   }
   await runClient(command.config);
+  return 0;
+}
+
+async function runRemoteCommand(argv: string[]): Promise<number> {
+  const parsed = parseArgs(argv, { value: new Set(), bool: new Set(["--help"]) });
+  if (parsed.help) {
+    console.log(REMOTE_USAGE);
+    return 0;
+  }
+  await runRemote(clientControlSocketPath(process.env, homedir()));
   return 0;
 }
 
@@ -337,6 +358,7 @@ async function main(): Promise<number> {
   const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
     server: { run: runServerCommand, usage: SERVER_USAGE },
     client: { run: runClientCommand, usage: CLIENT_USAGE },
+    remote: { run: runRemoteCommand, usage: REMOTE_USAGE },
     accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
   };
   const entry = commands[command];
@@ -354,7 +376,11 @@ async function main(): Promise<number> {
       console.error(entry.usage);
       return 2;
     }
-    if (error instanceof ConfigError || error instanceof ClientError) {
+    if (
+      error instanceof ConfigError ||
+      error instanceof ClientError ||
+      error instanceof RemoteError
+    ) {
       console.error(error.message);
       return 1;
     }

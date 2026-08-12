@@ -16,10 +16,12 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import { stateDirectory, tokenPath } from "../paths.ts";
+import { clientControlSocketPath, stateDirectory, tokenPath } from "../paths.ts";
 import { barString, formatClock, levelFromDb, shortId, sparkline } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
+import { ClientControlServer } from "./remote-control.ts";
+import { REMOTE_PROTOCOL_VERSION } from "./remote-protocol.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
@@ -217,6 +219,20 @@ export async function runClient(config: ClientConfig): Promise<void> {
     },
     onInfo: (line) => feed(line),
     onError: (line) => feed(line, PALETTE.err),
+  });
+
+  let remoteSequence = 0;
+  const remoteControl = new ClientControlServer({
+    socketPath: clientControlSocketPath(process.env, homedir()),
+    state: () => ({
+      type: "state",
+      protocol: REMOTE_PROTOCOL_VERSION,
+      sequence: remoteSequence++,
+      phase,
+      mic: { muted: audio.micMuted, level: levelFromDb(mic.db) },
+      speaker: { muted: audio.speakerMuted, level: levelFromDb(agent.db) },
+    }),
+    onCommand: (command) => setMuted(command.target, command.muted),
   });
 
   // ---- UI -----------------------------------------------------------------
@@ -536,12 +552,21 @@ export async function runClient(config: ClientConfig): Promise<void> {
 
   // ---- controls -----------------------------------------------------------
   function toggleMic(): void {
-    audio.micMuted = !audio.micMuted;
-    feed(audio.micMuted ? "microphone muted" : "microphone live", PALETTE.you);
+    setMuted("mic", !audio.micMuted);
   }
   function toggleSpeaker(): void {
-    audio.speakerMuted = !audio.speakerMuted;
-    feed(audio.speakerMuted ? "speaker muted" : "speaker live", PALETTE.agent);
+    setMuted("speaker", !audio.speakerMuted);
+  }
+  function setMuted(target: "mic" | "speaker", muted: boolean): void {
+    const previous = target === "mic" ? audio.micMuted : audio.speakerMuted;
+    if (previous === muted) return;
+    if (target === "mic") audio.micMuted = muted;
+    else audio.speakerMuted = muted;
+    feed(
+      `${target === "mic" ? "microphone" : "speaker"} ${muted ? "muted" : "live"}`,
+      target === "mic" ? PALETTE.you : PALETTE.agent,
+    );
+    remoteControl.publish();
   }
 
   async function shutdown(): Promise<void> {
@@ -550,6 +575,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
     debugLog?.("client shutdown");
     renderer.removeFrameCallback(frameCallback);
     renderer.dropLive();
+    await remoteControl.close().catch(() => {});
     await audio.stop().catch(() => {});
     await transport.stop().catch(() => {});
     renderer.destroy();
@@ -573,6 +599,15 @@ export async function runClient(config: ClientConfig): Promise<void> {
   renderer.setFrameCallback(frameCallback);
   renderer.requestLive();
   refreshStatic();
+
+  try {
+    await remoteControl.start();
+  } catch (error) {
+    await shutdown();
+    throw new ClientError(
+      `could not open client control socket: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 
   try {
     await audio.start();

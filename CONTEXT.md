@@ -32,6 +32,12 @@ client↔voice agent peer-to-peer; only coordination flows through this server.
 The bundled terminal client is `agentvoice client`. _Avoid_: "browser",
 "surface".
 
+**Remote console** — The phone-sized terminal control surface started with
+`agentvoice remote` after SSHing into the Client's machine. It attaches to the
+Client through owner-only local IPC and carries mute state, mute assignments,
+and normalized activity levels—never audio. _Avoid_: "remote client" (the
+Client remains the sole media peer), "phone app".
+
 **Duplex audio device** — The bundled client's client-owned miniaudio device
 and its only audio path: one `ma_device_type_duplex` whose native callback
 moves raw PCM through a capture ring and a playback ring. It is independent of

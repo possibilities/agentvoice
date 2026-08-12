@@ -18,6 +18,11 @@ export function tokenPath(env: Environ, home: string): string {
   return join(stateDirectory(env, home), "token");
 }
 
+/** Owner-only local IPC through which a Remote console attaches to the Client. */
+export function clientControlSocketPath(env: Environ, home: string): string {
+  return join(stateDirectory(env, home), "client.sock");
+}
+
 export function defaultConfigPath(env: Environ, home: string): string {
   const xdg = env["XDG_CONFIG_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");
