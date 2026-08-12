@@ -1,3 +1,5 @@
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
 
 export interface GatewayFrameHandlers {
@@ -31,6 +33,85 @@ function displayUrl(url: URL): string {
   return safe.toString();
 }
 
+function readServerAdvertisement(serverUrl: URL): Promise<{ status: number; value: unknown }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (
+      result:
+        | { ok: true; status: number; value: unknown }
+        | { ok: false; error: ChatsConnectionError },
+    ): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (result.ok) resolve({ status: result.status, value: result.value });
+      else reject(result.error);
+    };
+    const request = (serverUrl.protocol === "https:" ? httpsRequest : httpRequest)(
+      serverUrl,
+      { method: "GET", headers: { accept: "application/json" } },
+      (response) => {
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        response.on("data", (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          bytes += buffer.byteLength;
+          if (bytes > 64 << 10) {
+            request.destroy();
+            finish({
+              ok: false,
+              error: new ChatsConnectionError(
+                `AgentVoice server probe at ${serverUrl} exceeded 64 KiB`,
+              ),
+            });
+            return;
+          }
+          chunks.push(buffer);
+        });
+        response.on("end", () => {
+          let value: unknown;
+          try {
+            value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          } catch {
+            finish({
+              ok: false,
+              error: new ChatsConnectionError(`${serverUrl} is not an AgentVoice server`),
+            });
+            return;
+          }
+          finish({ ok: true, status: response.statusCode ?? 0, value });
+        });
+        response.on("error", () => {
+          finish({
+            ok: false,
+            error: new ChatsConnectionError(
+              `unable to read AgentVoice server at ${serverUrl} — retry or restart agentvoice server`,
+            ),
+          });
+        });
+      },
+    );
+    const timer = setTimeout(() => {
+      request.destroy();
+      finish({
+        ok: false,
+        error: new ChatsConnectionError(
+          `timed out probing AgentVoice server at ${serverUrl} — retry or restart agentvoice server`,
+        ),
+      });
+    }, 2_000);
+    request.on("error", () => {
+      finish({
+        ok: false,
+        error: new ChatsConnectionError(
+          `unable to reach AgentVoice server at ${serverUrl} — start agentvoice server first`,
+        ),
+      });
+    });
+    request.end();
+  });
+}
+
 async function preflightGateway(gatewayUrl: URL): Promise<void> {
   const serverUrl = new URL(gatewayUrl);
   serverUrl.protocol = gatewayUrl.protocol === "wss:" ? "https:" : "http:";
@@ -38,27 +119,13 @@ async function preflightGateway(gatewayUrl: URL): Promise<void> {
   serverUrl.search = "";
   serverUrl.hash = "";
 
-  let response: Response;
-  try {
-    response = await fetch(serverUrl, { signal: AbortSignal.timeout(2_000) });
-  } catch {
+  const advertisement = await readServerAdvertisement(serverUrl);
+  if (advertisement.status < 200 || advertisement.status >= 300) {
     throw new ChatsConnectionError(
-      `unable to reach AgentVoice server at ${serverUrl} — start agentvoice server first`,
+      `AgentVoice server probe at ${serverUrl} returned HTTP ${advertisement.status}`,
     );
   }
-  if (!response.ok) {
-    throw new ChatsConnectionError(
-      `AgentVoice server probe at ${serverUrl} returned HTTP ${response.status}`,
-    );
-  }
-
-  let value: unknown;
-  try {
-    value = await response.json();
-  } catch {
-    throw new ChatsConnectionError(`${serverUrl} is not an AgentVoice server`);
-  }
-  const root = isRecord(value) ? value : {};
+  const root = isRecord(advertisement.value) ? advertisement.value : {};
   if (root["name"] !== "agentvoice") {
     throw new ChatsConnectionError(`${serverUrl} is not an AgentVoice server`);
   }

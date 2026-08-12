@@ -64,6 +64,18 @@ function legacyFixture(): string {
   return `ws://127.0.0.1:${server.port}/app-server`;
 }
 
+function hangingFixture(): string {
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      return new Promise<Response>(() => {});
+    },
+  });
+  servers.push(server);
+  return `ws://127.0.0.1:${server.port}/app-server`;
+}
+
 describe("ChatsConnection", () => {
   test("initializes and speaks app-server requests through its native connection", async () => {
     const frames: Record<string, unknown>[] = [];
@@ -115,6 +127,18 @@ describe("ChatsConnection", () => {
     await expect(connection.connect()).rejects.toThrow(
       "predates chats support — restart agentvoice server, then retry",
     );
+  });
+
+  test("bounds a server probe that accepts TCP but never answers HTTP", async () => {
+    const connection = new ChatsConnection({
+      url: hangingFixture(),
+      token: "secret",
+      version: "test",
+      onFrame() {},
+    });
+    const startedAt = performance.now();
+    await expect(connection.connect()).rejects.toThrow("timed out probing AgentVoice server");
+    expect(performance.now() - startedAt).toBeLessThan(3_000);
   });
 
   test("can initialize a fresh native connection after closing", async () => {
