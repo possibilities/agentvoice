@@ -33,10 +33,18 @@ afterEach(() => {
   for (const server of servers.splice(0)) server.stop(true);
 });
 
-function fixture(): { url: string; voiceOpens: () => number } {
+function fixture(): {
+  url: string;
+  voiceOpens: () => number;
+  voiceObservations: () => readonly boolean[];
+} {
+  const voiceObservationChanges: boolean[] = [];
   const gateway = new AppServerGateway({
     connect(_socketPath, callbacks) {
       return new EchoUpstream(callbacks);
+    },
+    onVoiceObservationChanged(observed) {
+      voiceObservationChanges.push(observed);
     },
   });
   gateway.setAppServer({ alive: true, socketPath: "/private/app-server.sock" });
@@ -58,6 +66,7 @@ function fixture(): { url: string; voiceOpens: () => number } {
   return {
     url: `ws://127.0.0.1:${server.port}`,
     voiceOpens: () => voiceOpenCount,
+    voiceObservations: () => voiceObservationChanges,
   };
 }
 
@@ -84,17 +93,35 @@ function nextClose(socket: WebSocket): Promise<CloseEvent> {
 }
 
 describe("AgentVoice HTTP/WebSocket server", () => {
-  test("advertises protocol 2 and rejects the wrong token after upgrade", async () => {
+  test("advertises protocol 3 and rejects the wrong token after upgrade", async () => {
     const { url } = fixture();
     const health = await fetch(url.replace("ws:", "http:"));
     expect(await health.json()).toMatchObject({
-      appServerGateway: { path: "/app-server", protocol: 2 },
+      appServerGateway: { path: "/app-server", protocol: 3 },
     });
 
     const socket = new WebSocket(`${url}/app-server?token=wrong`);
     sockets.push(socket);
     const closed = nextClose(socket);
     expect((await closed).code).toBe(4401);
+  });
+
+  test("parses repeatable observer capabilities independently", async () => {
+    const { url, voiceObservations } = fixture();
+    const framesOnly = await connect(`${url}/app-server?token=secret&observe=agentvoice`);
+    expect(voiceObservations()).toEqual([]);
+
+    const voiceObserver = await connect(
+      `${url}/app-server?token=secret&observe=agentvoice&observe=voice`,
+    );
+    expect(voiceObservations()).toEqual([true]);
+
+    const closed = nextClose(voiceObserver);
+    voiceObserver.close();
+    await closed;
+    await Bun.sleep(10);
+    expect(voiceObservations()).toEqual([true, false]);
+    expect(framesOnly.readyState).toBe(WebSocket.OPEN);
   });
 
   test("serves independent raw gateway clients without consuming the voice slot", async () => {

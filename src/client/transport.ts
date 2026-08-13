@@ -66,12 +66,24 @@ const MAX_RAPID_FAILURES = 3;
 /** A session live this long proves health and resets the failure budget. */
 const HEALTHY_SESSION_MS = 60_000;
 const MEDIA_TRACE_INTERVAL_MS = 1_000;
+export const OAI_EVENT_RELAY_BACKPRESSURE_LIMIT = 1 << 20;
+const OAI_EVENT_GAP_RETRY_MS = 25;
 
 const OPUS = new RTCRtpCodecParameters({
   mimeType: "audio/opus",
   clockRate: SAMPLE_RATE,
   channels: 2,
 });
+
+interface PendingObservationGap {
+  fromSequence: number;
+  toSequence: number;
+  dropped: number;
+}
+
+interface RetiredObservationGap extends PendingObservationGap {
+  voiceSessionId: string;
+}
 
 interface PeerSession {
   generation: number;
@@ -86,6 +98,9 @@ interface PeerSession {
   mediaTraceSampling: boolean;
   decryptedRtpStallReported: boolean;
   previousMediaSnapshot: WebRtcMediaSnapshot | null;
+  voiceSessionId: string | null;
+  nextObservationSequence: number;
+  pendingObservationGap: PendingObservationGap | null;
 }
 
 export class VoiceTransport {
@@ -104,6 +119,9 @@ export class VoiceTransport {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopping = false;
+  private observeVoiceEvents = false;
+  private observationFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private retiredObservationGaps: RetiredObservationGap[] = [];
 
   constructor(options: VoiceTransportOptions) {
     this.options = options;
@@ -172,9 +190,13 @@ export class VoiceTransport {
     this.stopping = true;
     this.clearTimer("reconnectTimer");
     this.clearTimer("retryTimer");
+    if (this.observationFlushTimer) clearTimeout(this.observationFlushTimer);
+    this.observationFlushTimer = null;
+    this.retiredObservationGaps = [];
     this.dropPeers();
     const ws = this.ws;
     this.ws = null;
+    this.observeVoiceEvents = false;
     if (ws && ws.readyState <= WebSocket.OPEN) ws.close(1000, "client quit");
     this.setPhase("stopped");
   }
@@ -216,6 +238,8 @@ export class VoiceTransport {
       if (this.ws !== ws || this.stopping) return;
       this.ws = null;
       this.ready = null;
+      this.observeVoiceEvents = false;
+      this.retiredObservationGaps = [];
       this.dropPeers();
       if (event.code === CLOSE_BUSY) {
         this.options.onError("another client is connected to the server");
@@ -268,6 +292,9 @@ export class VoiceTransport {
           return;
         }
         try {
+          // Bind the server-issued identity before applying the answer: the
+          // data channel may become active synchronously during that await.
+          pending.voiceSessionId = msg.voiceSessionId;
           await pending.pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
           this.debug("answer applied");
         } catch (error) {
@@ -306,7 +333,152 @@ export class VoiceTransport {
         this.options.onWorker?.(msg.worker);
         return;
       }
+      case "observe-oai-events": {
+        this.observeVoiceEvents = msg.enabled;
+        if (msg.enabled) {
+          this.scheduleObservationGapFlush();
+        } else {
+          if (this.observationFlushTimer) clearTimeout(this.observationFlushTimer);
+          this.observationFlushTimer = null;
+          this.retiredObservationGaps = [];
+          if (this.live) this.live.pendingObservationGap = null;
+          if (this.pending) this.pending.pendingObservationGap = null;
+        }
+        return;
+      }
     }
+  }
+
+  private handleOaiEventText(session: PeerSession, text: string): void {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        this.debug(`non-object oai-event: ${text.slice(0, 80)}`);
+        return;
+      }
+      const event = parsed as Record<string, unknown>;
+      this.options.onOaiEvent(event);
+      const ws = this.ws;
+      if (!this.observeVoiceEvents || !session.voiceSessionId || ws?.readyState !== WebSocket.OPEN)
+        return;
+
+      const sequence = session.nextObservationSequence++;
+      this.flushObservationGap(session, ws);
+      if (ws.bufferedAmount > OAI_EVENT_RELAY_BACKPRESSURE_LIMIT) {
+        this.recordObservationGap(session, sequence);
+        this.scheduleObservationGapFlush();
+        return;
+      }
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "oai-event",
+            voiceSessionId: session.voiceSessionId,
+            sequence,
+            observedAt: Date.now(),
+            payload: event,
+          }),
+        );
+      } catch {
+        this.recordObservationGap(session, sequence);
+        this.scheduleObservationGapFlush();
+      }
+    } catch {
+      this.debug(`non-JSON oai-event: ${text.slice(0, 80)}`);
+    }
+  }
+
+  private recordObservationGap(session: PeerSession, sequence: number): void {
+    const gap = session.pendingObservationGap;
+    if (gap) {
+      gap.toSequence = sequence;
+      gap.dropped++;
+    } else {
+      session.pendingObservationGap = {
+        fromSequence: sequence,
+        toSequence: sequence,
+        dropped: 1,
+      };
+    }
+  }
+
+  private flushObservationGap(session: PeerSession, ws: WebSocket): void {
+    const gap = session.pendingObservationGap;
+    if (!gap || !session.voiceSessionId || ws.bufferedAmount > OAI_EVENT_RELAY_BACKPRESSURE_LIMIT)
+      return;
+    try {
+      ws.send(
+        JSON.stringify({
+          type: "oai-event-gap",
+          voiceSessionId: session.voiceSessionId,
+          ...gap,
+          observedAt: Date.now(),
+        }),
+      );
+      session.pendingObservationGap = null;
+    } catch {
+      // The socket close path owns recovery; retain the gap until then.
+    }
+  }
+
+  private retireObservationGap(session: PeerSession): void {
+    const gap = session.pendingObservationGap;
+    if (
+      !gap ||
+      !session.voiceSessionId ||
+      this.stopping ||
+      !this.observeVoiceEvents ||
+      this.ws?.readyState !== WebSocket.OPEN
+    )
+      return;
+    this.retiredObservationGaps.push({ voiceSessionId: session.voiceSessionId, ...gap });
+    session.pendingObservationGap = null;
+    this.scheduleObservationGapFlush();
+  }
+
+  private flushRetiredObservationGaps(ws: WebSocket): void {
+    while (
+      this.retiredObservationGaps.length > 0 &&
+      ws.bufferedAmount <= OAI_EVENT_RELAY_BACKPRESSURE_LIMIT
+    ) {
+      const gap = this.retiredObservationGaps[0]!;
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "oai-event-gap",
+            ...gap,
+            observedAt: Date.now(),
+          }),
+        );
+        this.retiredObservationGaps.shift();
+      } catch {
+        return;
+      }
+    }
+  }
+
+  private scheduleObservationGapFlush(): void {
+    if (this.observationFlushTimer || this.stopping || !this.observeVoiceEvents) return;
+    const hasGap =
+      this.retiredObservationGaps.length > 0 ||
+      this.live?.pendingObservationGap ||
+      this.pending?.pendingObservationGap;
+    if (!hasGap) return;
+    this.observationFlushTimer = setTimeout(() => {
+      this.observationFlushTimer = null;
+      const ws = this.ws;
+      if (!this.observeVoiceEvents || ws?.readyState !== WebSocket.OPEN) return;
+      this.flushRetiredObservationGaps(ws);
+      const sessions = new Set([this.live, this.pending].filter((session) => session !== null));
+      for (const session of sessions) this.flushObservationGap(session, ws);
+      if (
+        this.retiredObservationGaps.length > 0 ||
+        [...sessions].some((session) => session.pendingObservationGap)
+      ) {
+        this.scheduleObservationGapFlush();
+      }
+    }, OAI_EVENT_GAP_RETRY_MS);
+    this.observationFlushTimer.unref?.();
   }
 
   private negotiate(): void {
@@ -333,6 +505,9 @@ export class VoiceTransport {
       mediaTraceSampling: false,
       decryptedRtpStallReported: false,
       previousMediaSnapshot: null,
+      voiceSessionId: null,
+      nextObservationSequence: 1,
+      pendingObservationGap: null,
     };
     this.pending = session;
     if (!this.live) this.setPhase("negotiating");
@@ -343,11 +518,7 @@ export class VoiceTransport {
       if (this.pending !== session && this.live !== session) return;
       const data = (event as { data?: unknown }).data ?? event;
       const text = typeof data === "string" ? data : new TextDecoder().decode(data as Uint8Array);
-      try {
-        this.options.onOaiEvent(JSON.parse(text) as Record<string, unknown>);
-      } catch {
-        this.debug(`non-JSON oai-event: ${text.slice(0, 80)}`);
-      }
+      this.handleOaiEventText(session, text);
     };
 
     pc.onTrack.subscribe((track) => {
@@ -471,6 +642,7 @@ export class VoiceTransport {
   }
 
   private closePeer(session: PeerSession): void {
+    this.retireObservationGap(session);
     for (const timer of session.timers) clearTimeout(timer);
     session.timers = [];
     if (session.mediaTraceTimer) clearInterval(session.mediaTraceTimer);

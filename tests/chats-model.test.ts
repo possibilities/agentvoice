@@ -4,7 +4,10 @@ import {
   displayRole,
   displayStatus,
   MAX_EVENTS_PER_THREAD,
+  MAX_VOICE_EVENTS_PER_SESSION,
+  MAX_VOICE_SESSIONS,
   threadCard,
+  VOICE_STREAM_ID,
 } from "../src/chats/model.ts";
 
 function envelope(
@@ -110,6 +113,153 @@ describe("chats thread model", () => {
 });
 
 describe("chats raw event model", () => {
+  test("keeps Voice Sessions distinct and preserves raw event payload identity", () => {
+    const model = new ChatsModel();
+    model.replaceThreads([{ id: "thread-a", updatedAt: 10 }]);
+    const payload = {
+      type: "response.done",
+      response: { id: "response-1", futureField: [1, true, null] },
+    };
+
+    model.recordVoiceObservation(
+      {
+        kind: "lifecycle",
+        voiceSessionId: "voice-a",
+        threadId: "thread-a",
+        state: "starting",
+        observedAt: 120,
+      },
+      121,
+    );
+    const event = model.recordVoiceObservation(
+      {
+        kind: "event",
+        voiceSessionId: "voice-a",
+        threadId: "thread-a",
+        sequence: 1,
+        observedAt: 122,
+        payload,
+      },
+      123,
+    );
+
+    expect(model.sortedStreams.map((stream) => [stream.kind, stream.id])).toEqual([
+      ["voice", VOICE_STREAM_ID],
+      ["thread", "thread-a"],
+    ]);
+    expect(event).toMatchObject({
+      kind: "voice",
+      receivedAt: 123,
+      voiceSessionId: "voice-a",
+      threadId: "thread-a",
+      observedAt: 122,
+    });
+    expect(event?.observation.kind).toBe("event");
+    if (event?.observation.kind === "event") expect(event.observation.payload).toBe(payload);
+    expect(model.voiceSessionList).toMatchObject([
+      {
+        id: "voice-a",
+        threadId: "thread-a",
+        state: "starting",
+        firstObservedAt: 120,
+        lastObservedAt: 122,
+      },
+    ]);
+    expect(model.voiceSessionList[0]?.observations).toHaveLength(2);
+    expect(model.events.has(VOICE_STREAM_ID)).toBe(false);
+    expect(model.threads.has(VOICE_STREAM_ID)).toBe(false);
+    expect(model.events.has("thread-a")).toBe(false);
+  });
+
+  test("bounds raw rows per voice session and retains only the latest sessions", () => {
+    const model = new ChatsModel();
+    model.recordVoiceObservation({
+      kind: "lifecycle",
+      voiceSessionId: "voice-bounded",
+      threadId: "thread-a",
+      state: "active",
+      observedAt: 1,
+    });
+    for (let index = 0; index < MAX_VOICE_EVENTS_PER_SESSION + 3; index++) {
+      model.recordVoiceObservation({
+        kind: "event",
+        voiceSessionId: "voice-bounded",
+        threadId: "thread-a",
+        sequence: index + 1,
+        observedAt: index + 2,
+        payload: { type: "voice.test", index },
+      });
+    }
+
+    const bounded = model.voiceSessions.get("voice-bounded");
+    expect(bounded?.observations.filter((row) => row.observation.kind === "event")).toHaveLength(
+      MAX_VOICE_EVENTS_PER_SESSION,
+    );
+    expect(bounded?.observations.some((row) => row.observation.kind === "lifecycle")).toBe(true);
+    expect(bounded?.droppedEvents).toBe(3);
+
+    for (let index = 0; index < MAX_VOICE_SESSIONS + 2; index++) {
+      model.recordVoiceObservation({
+        kind: "lifecycle",
+        voiceSessionId: `voice-${index}`,
+        threadId: `thread-${index}`,
+        state: "starting",
+        observedAt: 1_000 + index,
+      });
+    }
+    expect(model.voiceSessionList.map((session) => session.id)).toEqual(
+      Array.from({ length: MAX_VOICE_SESSIONS }, (_, index) => `voice-${index + 2}`),
+    );
+    expect(model.events.size).toBe(0);
+  });
+
+  test("keeps lifecycle and gap rows chronological without thread correlation", () => {
+    const model = new ChatsModel();
+    model.replaceThreads([{ id: "thread-a" }]);
+    const rows = [
+      {
+        kind: "lifecycle" as const,
+        voiceSessionId: "voice-a",
+        threadId: "thread-a",
+        state: "active" as const,
+        observedAt: 10,
+      },
+      {
+        kind: "gap" as const,
+        voiceSessionId: "voice-a",
+        threadId: "thread-a",
+        fromSequence: 2,
+        toSequence: 4,
+        dropped: 3,
+        observedAt: 11,
+      },
+      {
+        kind: "lifecycle" as const,
+        voiceSessionId: "voice-a",
+        threadId: "thread-a",
+        state: "ended" as const,
+        reason: "upstream-closed" as const,
+        observedAt: 12,
+      },
+    ];
+    rows.forEach((row) => {
+      model.recordVoiceObservation(row);
+    });
+
+    expect(model.voiceSessionList[0]?.observations.map((row) => row.observation.kind)).toEqual([
+      "lifecycle",
+      "gap",
+      "lifecycle",
+    ]);
+    expect(model.voiceSessionList[0]).toMatchObject({
+      state: "ended",
+      reason: "upstream-closed",
+      droppedEvents: 0,
+    });
+    expect(model.events.get("thread-a")).toBeUndefined();
+    expect(model.recordVoiceObservation({ ...rows[0], state: "bogus" })).toBeNull();
+  });
+
   test("correlates response-only frames with the originating thread request", () => {
     const model = new ChatsModel();
     const request = model.recordEnvelope(

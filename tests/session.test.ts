@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { VoiceLifecycleReason, VoiceLifecycleState } from "../src/protocol.ts";
 import { type VoiceSessionEffects, VoiceSessionManager } from "../src/server/session.ts";
 
 interface Call {
-  kind: "answer" | "closed" | "failed" | "ready" | "start" | "stop";
+  kind: "answer" | "closed" | "failed" | "lifecycle" | "ready" | "start" | "stop";
+  voiceSessionId?: string;
+  state?: VoiceLifecycleState;
+  reason?: VoiceLifecycleReason;
   detail?: string;
 }
 
@@ -14,7 +18,8 @@ function harness(options?: {
   const calls: Call[] = [];
   const startIds: string[] = [];
   const effects: VoiceSessionEffects = {
-    sendAnswer: (sdp) => calls.push({ kind: "answer", detail: sdp }),
+    sendAnswer: (voiceSessionId, sdp) =>
+      calls.push({ kind: "answer", voiceSessionId, detail: sdp }),
     sendClosed: (reason) => calls.push({ kind: "closed", detail: reason }),
     sendFailed: (message) => calls.push({ kind: "failed", detail: message }),
     sendReady: () => calls.push({ kind: "ready" }),
@@ -29,24 +34,38 @@ function harness(options?: {
       calls.push({ kind: "stop" });
       return options?.stopRejects ? Promise.reject(new Error("stop rejected")) : Promise.resolve();
     },
+    publishLifecycle: (voiceSessionId, state, reason) =>
+      calls.push({ kind: "lifecycle", voiceSessionId, state, reason }),
   };
   const manager = new VoiceSessionManager(effects, options?.startTimeoutMs ?? 60_000);
-  const kinds = () => calls.map((call) => call.kind);
-  return { manager, calls, startIds, kinds };
+  const operationalCalls = () => calls.filter((call) => call.kind !== "lifecycle");
+  const kinds = () => operationalCalls().map((call) => call.kind);
+  const lifecycleCalls = () => calls.filter((call) => call.kind === "lifecycle");
+  return { manager, calls, startIds, operationalCalls, kinds, lifecycleCalls };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("offer → answer", () => {
   test("relays the answer once the session has started", () => {
-    const { manager, calls, startIds } = harness();
+    const { manager, calls, startIds, lifecycleCalls } = harness();
     manager.handleOffer("offer-sdp");
-    expect(calls).toEqual([{ kind: "start", detail: "offer-sdp" }]);
+    expect(lifecycleCalls()).toEqual([
+      { kind: "lifecycle", voiceSessionId: startIds[0], state: "starting" },
+    ]);
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
     manager.handleNotification("thread/realtime/sdp", { sdp: "answer-sdp" });
-    expect(calls.at(-1)).toEqual({ kind: "answer", detail: "answer-sdp" });
+    expect(calls.at(-1)).toEqual({
+      kind: "answer",
+      voiceSessionId: startIds[0],
+      detail: "answer-sdp",
+    });
+    expect(lifecycleCalls()).toEqual([
+      { kind: "lifecycle", voiceSessionId: startIds[0], state: "starting" },
+      { kind: "lifecycle", voiceSessionId: startIds[0], state: "active" },
+    ]);
   });
 
   test("drops an answer that arrives before started", () => {
@@ -59,7 +78,7 @@ describe("offer → answer", () => {
 
 describe("renewal supersedes without a stop", () => {
   test("a second offer never issues a stop and ignores the stale start", () => {
-    const { manager, calls, startIds, kinds } = harness();
+    const { manager, calls, startIds, kinds, lifecycleCalls } = harness();
     manager.handleOffer("offer-1");
     manager.handleOffer("offer-2");
     expect(kinds()).toEqual(["start", "start"]);
@@ -75,7 +94,22 @@ describe("renewal supersedes without a stop", () => {
       realtimeSessionId: startIds[1],
     });
     manager.handleNotification("thread/realtime/sdp", { sdp: "fresh-answer" });
-    expect(calls.at(-1)).toEqual({ kind: "answer", detail: "fresh-answer" });
+    expect(calls.at(-1)).toEqual({
+      kind: "answer",
+      voiceSessionId: startIds[1],
+      detail: "fresh-answer",
+    });
+    expect(lifecycleCalls()).toEqual([
+      { kind: "lifecycle", voiceSessionId: startIds[0], state: "starting" },
+      {
+        kind: "lifecycle",
+        voiceSessionId: startIds[0],
+        state: "ended",
+        reason: "superseded",
+      },
+      { kind: "lifecycle", voiceSessionId: startIds[1], state: "starting" },
+      { kind: "lifecycle", voiceSessionId: startIds[1], state: "active" },
+    ]);
   });
 });
 
@@ -93,16 +127,22 @@ describe("closed attribution", () => {
   });
 
   test("a natural close is forwarded and reopens offers", () => {
-    const { manager, calls, startIds } = harness();
+    const { manager, operationalCalls, startIds, lifecycleCalls } = harness();
     manager.handleOffer("offer-1");
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
     manager.handleNotification("thread/realtime/closed", { reason: "transport_closed" });
-    expect(calls.slice(1)).toEqual([
+    expect(operationalCalls().slice(1)).toEqual([
       { kind: "closed", detail: "transport_closed" },
       { kind: "ready" },
     ]);
+    expect(lifecycleCalls().at(-1)).toEqual({
+      kind: "lifecycle",
+      voiceSessionId: startIds[0],
+      state: "ended",
+      reason: "upstream-closed",
+    });
     expect(manager.hasSession).toBe(false);
   });
 
@@ -115,18 +155,24 @@ describe("closed attribution", () => {
 
 describe("errors", () => {
   test("an error fails the session and the trailing closed(error) is ignored", () => {
-    const { manager, calls, startIds } = harness();
+    const { manager, operationalCalls, startIds, lifecycleCalls } = harness();
     manager.handleOffer("offer-1");
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
     manager.handleNotification("thread/realtime/error", { message: "upstream broke" });
-    expect(calls.slice(1)).toEqual([
+    expect(operationalCalls().slice(1)).toEqual([
       { kind: "failed", detail: "upstream broke" },
       { kind: "ready" },
     ]);
+    expect(lifecycleCalls().at(-1)).toEqual({
+      kind: "lifecycle",
+      voiceSessionId: startIds[0],
+      state: "ended",
+      reason: "upstream-error",
+    });
     manager.handleNotification("thread/realtime/closed", { reason: "error" });
-    expect(calls.length).toBe(3); // nothing further
+    expect(operationalCalls()).toHaveLength(3); // nothing further
   });
 
   test("a rejected start RPC fails the session and issues an ordered stop", async () => {
@@ -181,5 +227,40 @@ describe("reset", () => {
     // A requested close now must belong to a live stop, not the stale one.
     manager.handleNotification("thread/realtime/closed", { reason: "requested" });
     expect(kinds().filter((kind) => kind === "closed")).toEqual(["closed"]);
+  });
+});
+
+describe("lifecycle termination", () => {
+  test("publishes client-gone, app-server-reset, and shutdown exactly once", async () => {
+    const client = harness();
+    client.manager.handleOffer("offer");
+    client.manager.handleClientGone();
+    expect(client.lifecycleCalls().at(-1)).toEqual({
+      kind: "lifecycle",
+      voiceSessionId: client.startIds[0],
+      state: "ended",
+      reason: "client-gone",
+    });
+
+    const reset = harness();
+    reset.manager.handleOffer("offer");
+    reset.manager.reset();
+    expect(reset.lifecycleCalls().at(-1)).toEqual({
+      kind: "lifecycle",
+      voiceSessionId: reset.startIds[0],
+      state: "ended",
+      reason: "app-server-reset",
+    });
+
+    const shutdown = harness();
+    shutdown.manager.handleOffer("offer");
+    await shutdown.manager.shutdown();
+    expect(shutdown.lifecycleCalls().at(-1)).toEqual({
+      kind: "lifecycle",
+      voiceSessionId: shutdown.startIds[0],
+      state: "ended",
+      reason: "shutdown",
+    });
+    expect(shutdown.kinds()).toEqual(["start", "stop"]);
   });
 });

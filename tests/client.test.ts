@@ -11,7 +11,7 @@ import {
   shortId,
   sparkline,
 } from "../src/client/dsp.ts";
-import { VoiceTransport } from "../src/client/transport.ts";
+import { OAI_EVENT_RELAY_BACKPRESSURE_LIMIT, VoiceTransport } from "../src/client/transport.ts";
 import { voiceActivityHeight } from "../src/client/ui.ts";
 
 describe("client vertical layout", () => {
@@ -137,4 +137,212 @@ describe("voice transport server messages", () => {
 
     expect(reasons).toEqual(["voice-name-changed"]);
   });
+
+  test("relays parsed oai-events only while a voice observer is present", async () => {
+    const received: Record<string, unknown>[] = [];
+    const sent: string[] = [];
+    const transport = new VoiceTransport({
+      url: "ws://127.0.0.1/ws",
+      onPhase() {},
+      onReady() {},
+      onRemoteTrack() {},
+      onOaiEvent(event) {
+        received.push(event);
+      },
+      onInfo() {},
+      onError() {},
+    });
+    const internals = transport as unknown as {
+      ws: { readyState: number; bufferedAmount: number; send(text: string): void };
+      handleServerMessage(text: string): Promise<void>;
+      handleOaiEventText(session: TestPeerSession, text: string): void;
+    };
+    internals.ws = {
+      readyState: WebSocket.OPEN,
+      bufferedAmount: 0,
+      send(text) {
+        sent.push(text);
+      },
+    };
+    const session = testPeerSession("voice-1");
+
+    const unobserved = { type: "response.audio_transcript.delta", delta: "hello" };
+    internals.handleOaiEventText(session, JSON.stringify(unobserved));
+    expect(received).toEqual([unobserved]);
+    expect(sent).toEqual([]);
+
+    await internals.handleServerMessage(
+      JSON.stringify({ type: "observe-oai-events", enabled: true }),
+    );
+    const observed = {
+      type: "response.done",
+      response: { id: "response-1", output: [{ type: "message", content: [] }] },
+      futureField: { untouched: [1, true, null] },
+    };
+    internals.handleOaiEventText(session, JSON.stringify(observed));
+    expect(received.at(-1)).toEqual(observed);
+    expect(JSON.parse(sent[0]!)).toEqual({
+      type: "oai-event",
+      voiceSessionId: "voice-1",
+      sequence: 1,
+      observedAt: expect.any(Number),
+      payload: observed,
+    });
+
+    await internals.handleServerMessage(
+      JSON.stringify({ type: "observe-oai-events", enabled: false }),
+    );
+    internals.handleOaiEventText(session, JSON.stringify({ type: "session.updated" }));
+    expect(sent).toHaveLength(1);
+  });
+
+  test("coalesces dropped sequences under backpressure and reports the gap first", async () => {
+    const sent: Record<string, unknown>[] = [];
+    const transport = new VoiceTransport({
+      url: "ws://127.0.0.1/ws",
+      onPhase() {},
+      onReady() {},
+      onRemoteTrack() {},
+      onOaiEvent() {},
+      onInfo() {},
+      onError() {},
+    });
+    const ws = {
+      readyState: WebSocket.OPEN,
+      bufferedAmount: OAI_EVENT_RELAY_BACKPRESSURE_LIMIT + 1,
+      send(text: string) {
+        sent.push(JSON.parse(text));
+      },
+    };
+    const session = testPeerSession("voice-backpressure");
+    const internals = transport as unknown as {
+      ws: typeof ws;
+      handleServerMessage(text: string): Promise<void>;
+      handleOaiEventText(session: TestPeerSession, text: string): void;
+    };
+    internals.ws = ws;
+    await internals.handleServerMessage(
+      JSON.stringify({ type: "observe-oai-events", enabled: true }),
+    );
+
+    internals.handleOaiEventText(session, JSON.stringify({ type: "one" }));
+    internals.handleOaiEventText(session, JSON.stringify({ type: "two" }));
+    expect(sent).toEqual([]);
+    expect(session.pendingObservationGap).toEqual({
+      fromSequence: 1,
+      toSequence: 2,
+      dropped: 2,
+    });
+
+    ws.bufferedAmount = 0;
+    internals.handleOaiEventText(session, JSON.stringify({ type: "three" }));
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual({
+      type: "oai-event-gap",
+      voiceSessionId: "voice-backpressure",
+      fromSequence: 1,
+      toSequence: 2,
+      dropped: 2,
+      observedAt: expect.any(Number),
+    });
+    expect(sent[1]).toEqual({
+      type: "oai-event",
+      voiceSessionId: "voice-backpressure",
+      sequence: 3,
+      observedAt: expect.any(Number),
+      payload: { type: "three" },
+    });
+  });
+
+  test("retains a coalesced gap after its peer is replaced", async () => {
+    const sent: Record<string, unknown>[] = [];
+    const transport = new VoiceTransport({
+      url: "ws://127.0.0.1/ws",
+      onPhase() {},
+      onReady() {},
+      onRemoteTrack() {},
+      onOaiEvent() {},
+      onInfo() {},
+      onError() {},
+    });
+    const ws = {
+      readyState: WebSocket.OPEN,
+      bufferedAmount: OAI_EVENT_RELAY_BACKPRESSURE_LIMIT + 1,
+      send(text: string) {
+        sent.push(JSON.parse(text));
+      },
+    };
+    const session = testPeerSession("voice-retired");
+    session.pendingObservationGap = { fromSequence: 7, toSequence: 9, dropped: 3 };
+    const internals = transport as unknown as {
+      ws: typeof ws;
+      handleServerMessage(text: string): Promise<void>;
+      retireObservationGap(session: TestPeerSession): void;
+      flushRetiredObservationGaps(socket: typeof ws): void;
+    };
+    internals.ws = ws;
+    await internals.handleServerMessage(
+      JSON.stringify({ type: "observe-oai-events", enabled: true }),
+    );
+
+    internals.retireObservationGap(session);
+    expect(session.pendingObservationGap).toBeNull();
+    ws.bufferedAmount = 0;
+    internals.flushRetiredObservationGaps(ws);
+
+    expect(sent).toEqual([
+      {
+        type: "oai-event-gap",
+        voiceSessionId: "voice-retired",
+        fromSequence: 7,
+        toSequence: 9,
+        dropped: 3,
+        observedAt: expect.any(Number),
+      },
+    ]);
+  });
+
+  test("binds the answer identity before applying its SDP", async () => {
+    const transport = new VoiceTransport({
+      url: "ws://127.0.0.1/ws",
+      onPhase() {},
+      onReady() {},
+      onRemoteTrack() {},
+      onOaiEvent() {},
+      onInfo() {},
+      onError() {},
+    });
+    const session = testPeerSession(null);
+    let identityDuringApply: string | null | undefined;
+    session.pc = {
+      async setRemoteDescription() {
+        identityDuringApply = session.voiceSessionId;
+      },
+    };
+    const internals = transport as unknown as {
+      pending: TestPeerSession;
+      handleServerMessage(text: string): Promise<void>;
+    };
+    internals.pending = session;
+    await internals.handleServerMessage(
+      JSON.stringify({ type: "answer", sdp: "answer-sdp", voiceSessionId: "voice-new" }),
+    );
+    expect(identityDuringApply).toBe("voice-new");
+  });
 });
+
+interface TestPeerSession {
+  pc: { setRemoteDescription?(description: { type: string; sdp: string }): Promise<void> };
+  voiceSessionId: string | null;
+  nextObservationSequence: number;
+  pendingObservationGap: { fromSequence: number; toSequence: number; dropped: number } | null;
+}
+
+function testPeerSession(voiceSessionId: string | null): TestPeerSession {
+  return {
+    pc: {},
+    voiceSessionId,
+    nextObservationSequence: 1,
+    pendingObservationGap: null,
+  };
+}

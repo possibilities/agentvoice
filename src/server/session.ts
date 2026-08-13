@@ -16,9 +16,11 @@
  * closed("requested"), so any other closed belongs to the current session.
  */
 
+import type { VoiceLifecycleReason, VoiceLifecycleState } from "../protocol.ts";
+
 export interface VoiceSessionEffects {
   /** Relay the answer for the current session. */
-  sendAnswer(sdp: string): void;
+  sendAnswer(voiceSessionId: string, sdp: string): void;
   /** The current session ended; the client should wait for ready. */
   sendClosed(reason?: string): void;
   /** The current session failed fatally; the client should drop its peer. */
@@ -29,6 +31,12 @@ export interface VoiceSessionEffects {
   startRealtime(realtimeSessionId: string, sdp: string): Promise<void>;
   /** thread/realtime/stop; always yields exactly one closed("requested"). */
   stopRealtime(): Promise<void>;
+  /** Publish the authoritative lifetime of a realtime voice session. */
+  publishLifecycle(
+    voiceSessionId: string,
+    state: VoiceLifecycleState,
+    reason?: VoiceLifecycleReason,
+  ): void;
   debug?(line: string): void;
 }
 
@@ -59,9 +67,10 @@ export class VoiceSessionManager {
 
   /** A new offer supersedes whatever is running — renewal and retry alike. */
   handleOffer(sdp: string): void {
-    if (this.session?.startTimer) clearTimeout(this.session.startTimer);
+    if (this.session) this.endSession("superseded");
     const next: Session = { id: crypto.randomUUID(), active: false, startTimer: null };
     this.session = next;
+    this.effects.publishLifecycle(next.id, "starting");
     next.startTimer = setTimeout(() => {
       if (this.session !== next) return;
       this.fail(next, `realtime session did not start within ${this.startTimeoutMs}ms`);
@@ -85,6 +94,7 @@ export class VoiceSessionManager {
             this.session.startTimer = null;
           }
           this.effects.debug?.(`realtime session ${this.session.id} active`);
+          this.effects.publishLifecycle(this.session.id, "active");
         }
         return;
       }
@@ -93,7 +103,7 @@ export class VoiceSessionManager {
         // session belongs to a superseded start: drop it.
         const sdp = params["sdp"];
         if (this.session?.active && typeof sdp === "string") {
-          this.effects.sendAnswer(sdp);
+          this.effects.sendAnswer(this.session.id, sdp);
         } else {
           this.effects.debug?.("dropping realtime sdp with no active session");
         }
@@ -107,7 +117,7 @@ export class VoiceSessionManager {
           return;
         }
         if (!this.session) return;
-        this.clearSession();
+        this.endSession("upstream-closed");
         this.effects.sendClosed(reason);
         this.effects.sendReady();
         return;
@@ -116,7 +126,7 @@ export class VoiceSessionManager {
         if (!this.session) return;
         const message =
           typeof params["message"] === "string" ? params["message"] : "realtime session failed";
-        this.clearSession();
+        this.endSession("upstream-error");
         this.effects.sendFailed(message);
         this.effects.sendReady();
         return;
@@ -129,26 +139,26 @@ export class VoiceSessionManager {
   /** The client is gone; session lifetime is socket lifetime. */
   handleClientGone(): void {
     if (!this.session) return;
-    this.clearSession();
+    this.endSession("client-gone");
     this.stop();
   }
 
   /** Everything died with the app-server child; nothing left to stop. */
   reset(): void {
-    this.clearSession();
+    if (this.session) this.endSession("app-server-reset");
     this.pendingRequestedCloses = 0;
   }
 
   /** Bounded by the caller; resolves when the stop RPC is acknowledged. */
   async shutdown(): Promise<void> {
     if (!this.session) return;
-    this.clearSession();
+    this.endSession("shutdown");
     await this.stopCounted();
   }
 
   private fail(session: Session, message: string): void {
     if (this.session !== session) return;
-    this.clearSession();
+    this.endSession("upstream-error");
     // Ordered after the start, so this reclaims the session even if it was
     // still coming up when we gave up on it.
     this.stop();
@@ -159,6 +169,13 @@ export class VoiceSessionManager {
   private clearSession(): void {
     if (this.session?.startTimer) clearTimeout(this.session.startTimer);
     this.session = null;
+  }
+
+  private endSession(reason: VoiceLifecycleReason): void {
+    const session = this.session;
+    if (!session) return;
+    this.effects.publishLifecycle(session.id, "ended", reason);
+    this.clearSession();
   }
 
   private stop(): void {

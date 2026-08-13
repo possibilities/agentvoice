@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { BoxRenderable, CodeRenderable, ScrollBoxRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer, MouseButtons } from "@opentui/core/testing";
 import type { ChatsConnection } from "../src/chats/client.ts";
-import { ChatsModel, type RawFrameEvent } from "../src/chats/model.ts";
+import { ChatsModel, type RawStreamEvent } from "../src/chats/model.ts";
 import { runChatsUi } from "../src/chats/ui.ts";
 
 function thread(id: string, name: string, cwd = "/tmp/workspace"): Record<string, unknown> {
@@ -24,7 +24,7 @@ describe("AgentVoice Chats UI", () => {
     const setup = await createTestRenderer({ width: 100, height: 30 });
     const model = new ChatsModel();
     model.replaceThreads([thread("thread-a", "Inspect live traffic", "/Users/arthack/project")]);
-    const eventHandler: { current: ((event: RawFrameEvent) => void) | null } = { current: null };
+    const eventHandler: { current: ((event: RawStreamEvent) => void) | null } = { current: null };
     let closed = false;
     const ui = runChatsUi({
       connection: { close() {} } as ChatsConnection,
@@ -50,11 +50,15 @@ describe("AgentVoice Chats UI", () => {
 
     await setup.flush();
     expect(text("chats-title")).toContain("AGENTVOICE / CHATS");
+    expect(setup.renderer.root.findDescendantById("voice-stream-card")).toBeDefined();
     expect(setup.renderer.root.findDescendantById("thread-card-thread-a")).toBeDefined();
+    expect(setup.captureCharFrame()).toContain("VOICE");
     expect(setup.captureCharFrame()).toContain("ORCHESTRATOR");
     expect(setup.captureCharFrame()).not.toContain("Inspect live traffic");
 
-    setup.mockInput.pressEnter();
+    const initialThreadCard = setup.renderer.root.findDescendantById("thread-card-thread-a");
+    expect(initialThreadCard).toBeInstanceOf(BoxRenderable);
+    await setup.mockMouse.click(initialThreadCard!.x + 1, initialThreadCard!.y, MouseButtons.LEFT);
     await setup.flush();
     expect(text("empty-events")).toContain("Waiting for this thread's next app-server frame");
     expect(text("detail-title")).toBe("Inspect live traffic");
@@ -107,7 +111,78 @@ describe("AgentVoice Chats UI", () => {
     expect(back).toBeInstanceOf(BoxRenderable);
     await setup.mockMouse.click(back!.x + 1, back!.y, MouseButtons.LEFT);
     await setup.flush();
-    await setup.mockMouse.click(10, 5, MouseButtons.LEFT);
+    const voiceCard = setup.renderer.root.findDescendantById("voice-stream-card");
+    expect(voiceCard).toBeInstanceOf(BoxRenderable);
+    await setup.mockMouse.click(voiceCard!.x + 1, voiceCard!.y, MouseButtons.LEFT);
+    await setup.flush();
+    expect(text("detail-title")).toBe("Voice Sessions");
+    expect(text("detail-state")).toBe("LIVE");
+    expect(text("detail-facts")).toContain("latest 8 sessions");
+    expect(text("detail-facts")).toContain("300 / session");
+    expect(text("detail-facts")).toContain("audio excluded; no replay");
+    expect(text("empty-events")).toContain("Waiting for a voice-session lifecycle or raw event");
+
+    const lifecycle = model.recordVoiceObservation({
+      kind: "lifecycle",
+      voiceSessionId: "voice-session-a",
+      threadId: "thread-a",
+      state: "active",
+      observedAt: 100,
+    });
+    expect(lifecycle).not.toBeNull();
+    eventHandler.current?.(lifecycle!);
+    await setup.flush();
+    await setup.waitFor(
+      () => text(`event-code-${lifecycle!.sequence}`)?.includes("active") === true,
+    );
+    expect(setup.renderer.root.findDescendantById("voice-session-voice-session-a")).toBeInstanceOf(
+      BoxRenderable,
+    );
+    expect(setup.captureCharFrame()).toContain("VOICE SESSION  voice-session-a");
+    expect(setup.captureCharFrame()).toContain("LIFECYCLE ACTIVE");
+    expect(setup.captureCharFrame()).toContain("THREAD thread-a");
+
+    const payload = {
+      type: "response.done",
+      response: { id: "response-1", raw: { untouched: true } },
+    };
+    const voice = model.recordVoiceObservation({
+      kind: "event",
+      voiceSessionId: "voice-session-a",
+      threadId: "thread-a",
+      sequence: 1,
+      observedAt: 101,
+      payload,
+    });
+    expect(voice).not.toBeNull();
+    eventHandler.current?.(voice!);
+    await setup.waitFor(
+      () => text(`event-code-${voice!.sequence}`)?.includes("response.done") === true,
+    );
+    expect(voice?.observation.kind).toBe("event");
+    if (voice?.observation.kind === "event") expect(voice.observation.payload).toBe(payload);
+    expect(text("chats-status")).toBe("2 EVENTS  FOLLOW");
+
+    const gap = model.recordVoiceObservation({
+      kind: "gap",
+      voiceSessionId: "voice-session-a",
+      threadId: "thread-a",
+      fromSequence: 2,
+      toSequence: 4,
+      dropped: 3,
+      observedAt: 102,
+    });
+    eventHandler.current?.(gap!);
+    await setup.waitFor(
+      () => text(`event-code-${gap!.sequence}`)?.includes('"dropped":3') === true,
+    );
+
+    const voiceBack = setup.renderer.root.findDescendantById("detail-back");
+    await setup.mockMouse.click(voiceBack!.x + 1, voiceBack!.y, MouseButtons.LEFT);
+    await setup.flush();
+    const threadCard = setup.renderer.root.findDescendantById("thread-card-thread-a");
+    expect(threadCard).toBeInstanceOf(BoxRenderable);
+    await setup.mockMouse.click(threadCard!.x + 1, threadCard!.y, MouseButtons.LEFT);
     await setup.flush();
     expect(text("detail-title")).toBe("Inspect live traffic");
 

@@ -1,7 +1,14 @@
 import { homedir } from "node:os";
 import { createFleetFooter } from "../tui/footer.ts";
 import type { ChatsConnection } from "./client.ts";
-import type { ChatsModel, RawFrameEvent, ThreadCard } from "./model.ts";
+import {
+  type ChatsModel,
+  type ChatsStream,
+  type RawStreamEvent,
+  type ThreadCard,
+  VOICE_STREAM_ID,
+  type VoiceSession,
+} from "./model.ts";
 
 interface RendererFactoryResult {
   renderer: Awaited<ReturnType<typeof import("@opentui/core")["createCliRenderer"]>>;
@@ -27,7 +34,7 @@ export interface ChatsUiOptions {
   connection: ChatsConnection;
   model: ChatsModel;
   refreshThreads(reread?: boolean): Promise<void>;
-  setEventHandler(handler: (event: RawFrameEvent) => void): void;
+  setEventHandler(handler: (event: RawStreamEvent) => void): void;
   onClosed(): void;
   createRenderer?(): Promise<RendererFactoryResult["renderer"]>;
 }
@@ -50,7 +57,18 @@ export function homeRelativePath(path: string, home = homedir()): string {
   return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
 }
 
-function eventLabel(event: RawFrameEvent): string {
+function eventLabel(event: RawStreamEvent): string {
+  if (event.kind === "voice") {
+    const observation = event.observation;
+    if (observation.kind === "event") {
+      const type = observation.payload["type"];
+      return typeof type === "string" ? type : "voice event";
+    }
+    if (observation.kind === "lifecycle") {
+      return `${observation.state}${observation.reason ? ` · ${observation.reason}` : ""}`;
+    }
+    return `gap ${observation.fromSequence}–${observation.toSequence} · ${observation.dropped} dropped`;
+  }
   const method = event.payload["method"];
   if (typeof method === "string") return method;
   const id = event.payload["id"];
@@ -243,8 +261,8 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   root.add(footer.root);
 
   let view: "list" | "detail" = "list";
-  let threadIndex = 0;
-  let selectedThreadId: string | null = null;
+  let streamIndex = 0;
+  let selectedStreamId: string | null = null;
   let eventIndex = -1;
   let selectedEventSequence: number | null = null;
   let followTail = true;
@@ -268,8 +286,10 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     }
   }
 
-  function selectedThread(): ThreadCard | null {
-    return selectedThreadId ? (options.model.threads.get(selectedThreadId) ?? null) : null;
+  function selectedStream(): ChatsStream | null {
+    return selectedStreamId
+      ? (options.model.sortedStreams.find((stream) => stream.id === selectedStreamId) ?? null)
+      : null;
   }
 
   function updateChrome(): void {
@@ -299,8 +319,8 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
         ],
       });
     } else {
-      const thread = selectedThread();
-      const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
+      const stream = selectedStream();
+      const events = stream ? options.model.eventsFor(stream) : [];
       headerTitle.content = "▎ AGENTVOICE / CHATS";
       headerStatus.content = `${events.length} EVENTS${followTail ? "  FOLLOW" : ""}`;
       headerStatus.fg = TONES.muted;
@@ -348,31 +368,35 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     ].join("\n");
   }
 
+  function streamCardId(stream: ChatsStream): string {
+    return stream.kind === "voice" ? "voice-stream-card" : `thread-card-${stream.id}`;
+  }
+
+  function streamCardText(stream: ChatsStream): string {
+    if (stream.kind === "thread") return cardText(stream.thread);
+    const sessions = options.model.voiceSessionList;
+    const latest = sessions.at(-1);
+    return [
+      "VOICE SESSIONS",
+      `SESSIONS ${sessions.length}   LATEST ${latest?.state.toUpperCase() ?? "WAITING"}`,
+      "RAW PARSED EVENTS   AUDIO EXCLUDED",
+    ].join("\n");
+  }
+
   function rebuildThreadList(): void {
-    const previous = selectedThreadId;
-    const threads = options.model.sortedThreads;
+    const previous = selectedStreamId;
+    const streams = options.model.sortedStreams;
     if (previous) {
-      const nextIndex = threads.findIndex((thread) => thread.id === previous);
-      if (nextIndex >= 0) threadIndex = nextIndex;
+      const nextIndex = streams.findIndex((stream) => stream.id === previous);
+      if (nextIndex >= 0) streamIndex = nextIndex;
     }
-    threadIndex = Math.max(0, Math.min(threadIndex, Math.max(0, threads.length - 1)));
-    selectedThreadId = threads[threadIndex]?.id ?? null;
+    streamIndex = Math.max(0, Math.min(streamIndex, Math.max(0, streams.length - 1)));
+    selectedStreamId = streams[streamIndex]?.id ?? null;
     clear(listScroll);
-    if (threads.length === 0) {
-      listScroll.add(
-        new core.TextRenderable(renderer, {
-          id: "empty-threads",
-          content:
-            "No threads are loaded in AgentVoice's app-server.\n\nThe list updates every two seconds.",
-          fg: TONES.muted,
-          wrapMode: "word",
-        }),
-      );
-    }
-    threads.forEach((card, index) => {
-      const selected = index === threadIndex;
+    streams.forEach((stream, index) => {
+      const selected = index === streamIndex;
       const box = new core.BoxRenderable(renderer, {
-        id: `thread-card-${card.id}`,
+        id: streamCardId(stream),
         width: "100%",
         minHeight: 5,
         marginBottom: 1,
@@ -385,14 +409,14 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
         borderStyle: "heavy",
         borderColor: selected ? TONES.accent : TONES.line,
         onMouseUp: () => {
-          threadIndex = index;
-          selectedThreadId = card.id;
+          streamIndex = index;
+          selectedStreamId = stream.id;
           openDetail();
         },
       });
       box.add(
         new core.TextRenderable(renderer, {
-          content: cardText(card),
+          content: streamCardText(stream),
           fg: selected ? TONES.text : TONES.muted,
           wrapMode: "word",
         }),
@@ -403,20 +427,47 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     renderer.requestRender();
   }
 
-  function eventCode(event: RawFrameEvent): string {
-    if (expanded.has(event.sequence)) return JSON.stringify(event.payload, null, 2);
-    return truncate(JSON.stringify(event.payload), 260);
+  function eventValue(event: RawStreamEvent): Record<string, unknown> {
+    if (event.kind === "thread") return event.payload;
+    const observation = event.observation;
+    if (observation.kind === "event") return observation.payload;
+    if (observation.kind === "lifecycle") {
+      return {
+        state: observation.state,
+        ...(observation.reason ? { reason: observation.reason } : {}),
+      };
+    }
+    return {
+      fromSequence: observation.fromSequence,
+      toSequence: observation.toSequence,
+      dropped: observation.dropped,
+    };
   }
 
-  function eventTone(event: RawFrameEvent): string {
+  function eventCode(event: RawStreamEvent): string {
+    const value = eventValue(event);
+    if (expanded.has(event.sequence)) return JSON.stringify(value, null, 2);
+    return truncate(JSON.stringify(value), 260);
+  }
+
+  function eventTone(event: RawStreamEvent): string {
+    if (event.kind === "voice") {
+      if (event.observation.kind === "gap") return TONES.danger;
+      if (event.observation.kind === "lifecycle") {
+        return event.observation.state === "ended" ? TONES.danger : TONES.accent;
+      }
+      return TONES.upstream;
+    }
     if (event.owner === "client") return TONES.client;
     return event.direction === "fromAppServer" ? TONES.upstream : TONES.downstream;
   }
 
-  function createEventWidget(event: RawFrameEvent): void {
+  function createEventWidget(event: RawStreamEvent): void {
     const selected = event.sequence === selectedEventSequence;
-    const arrow = event.direction === "fromAppServer" ? "←" : "→";
-    const label = `${arrow} ${event.owner} · ${eventLabel(event)} · ${timeLabel(event.receivedAt)}`;
+    const label =
+      event.kind === "voice"
+        ? `← voice · ${eventLabel(event)} · ${timeLabel(event.observedAt)}`
+        : `${event.direction === "fromAppServer" ? "←" : "→"} ${event.owner} · ${eventLabel(event)} · ${timeLabel(event.receivedAt)}`;
     const box = new core.BoxRenderable(renderer, {
       id: `event-${event.sequence}`,
       width: "100%",
@@ -431,7 +482,8 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       borderStyle: selected ? "heavy" : "single",
       borderColor: selected ? TONES.accent : eventTone(event),
       onMouseUp: () => {
-        const events = selectedThreadId ? (options.model.events.get(selectedThreadId) ?? []) : [];
+        const stream = selectedStream();
+        const events = stream ? options.model.eventsFor(stream) : [];
         const liveIndex = events.findIndex((candidate) => candidate.sequence === event.sequence);
         if (liveIndex < 0) return;
         const wasSelected = selectedEventSequence === event.sequence;
@@ -465,26 +517,63 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     eventBoxes.set(event.sequence, { box, code });
   }
 
+  function createVoiceSessionHeading(session: VoiceSession): void {
+    const heading = new core.BoxRenderable(renderer, {
+      id: `voice-session-${session.id}`,
+      width: "100%",
+      marginTop: 1,
+      marginBottom: 1,
+      paddingLeft: 1,
+      flexDirection: "column",
+      backgroundColor: TONES.canvas,
+    });
+    heading.add(
+      new core.TextRenderable(renderer, {
+        content: `VOICE SESSION  ${session.id}`,
+        fg: TONES.accent,
+        wrapMode: "word",
+      }),
+    );
+    heading.add(
+      new core.TextRenderable(renderer, {
+        content: `LIFECYCLE ${session.state.toUpperCase()}${session.reason ? ` / ${session.reason}` : ""}   THREAD ${session.threadId}`,
+        fg: TONES.muted,
+        wrapMode: "word",
+      }),
+    );
+    eventScroll.add(heading);
+  }
+
   function rebuildEvents(): void {
     clear(eventScroll);
     eventBoxes.clear();
     emptyEvents = null;
     droppedEvents = null;
-    const thread = selectedThread();
-    const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
+    const stream = selectedStream();
+    const events = stream ? options.model.eventsFor(stream) : [];
     eventIndex = events.length === 0 ? -1 : Math.min(Math.max(eventIndex, 0), events.length - 1);
     selectedEventSequence = events[eventIndex]?.sequence ?? null;
     if (events.length === 0) {
       emptyEvents = new core.TextRenderable(renderer, {
         id: "empty-events",
-        content: "Waiting for this thread's next app-server frame…",
+        content:
+          stream?.kind === "voice"
+            ? "Waiting for a voice-session lifecycle or raw event…"
+            : "Waiting for this thread's next app-server frame…",
         fg: TONES.muted,
       });
       eventScroll.add(emptyEvents);
     } else {
-      events.forEach(createEventWidget);
+      if (stream?.kind === "voice") {
+        for (const session of options.model.voiceSessionList) {
+          createVoiceSessionHeading(session);
+          session.observations.forEach(createEventWidget);
+        }
+      } else {
+        events.forEach(createEventWidget);
+      }
     }
-    const dropped = thread ? (options.model.droppedEvents.get(thread.id) ?? 0) : 0;
+    const dropped = stream ? options.model.droppedEventsFor(stream) : 0;
     if (dropped > 0) {
       droppedEvents = new core.TextRenderable(renderer, {
         id: "dropped-events",
@@ -499,9 +588,25 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   }
 
   function updateDetailHeader(): void {
-    const thread = selectedThread();
-    if (!thread) return;
+    const stream = selectedStream();
+    if (!stream) return;
     const width = renderer.width || process.stdout.columns || 100;
+    if (stream.kind === "voice") {
+      detailHeader.height = 6;
+      detailTitle.content = stream.name;
+      detailState.content = "LIVE";
+      detailFacts.content = new core.StyledText([
+        core.fg(TONES.faint)("RETENTION  "),
+        core.fg(TONES.text)("latest 8 sessions"),
+        core.fg(TONES.faint)("    EVENTS     "),
+        core.fg(TONES.text)("300 / session"),
+        core.fg(TONES.text)("\n"),
+        core.fg(TONES.faint)("PAYLOAD    "),
+        core.fg(TONES.text)("parsed raw events (audio excluded; no replay)"),
+      ]);
+      return;
+    }
+    const thread = stream.thread;
     const optional = [
       ...(thread.parentThreadId ? [["PARENT", shortId(thread.parentThreadId)] as const] : []),
     ];
@@ -529,15 +634,15 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   }
 
   function openDetail(): void {
-    const threads = options.model.sortedThreads;
-    const thread = threads[threadIndex];
-    if (!thread) return;
-    selectedThreadId = thread.id;
+    const streams = options.model.sortedStreams;
+    const stream = streams[streamIndex];
+    if (!stream) return;
+    selectedStreamId = stream.id;
     view = "detail";
     listScroll.visible = false;
     detail.visible = true;
     followTail = true;
-    const events = options.model.events.get(thread.id) ?? [];
+    const events = options.model.eventsFor(stream);
     eventIndex = events.length - 1;
     updateDetailHeader();
     rebuildEvents();
@@ -548,22 +653,23 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     detail.visible = false;
     listScroll.visible = true;
     rebuildThreadList();
-    const id = selectedThreadId;
-    if (id) listScroll.scrollChildIntoView(`thread-card-${id}`);
+    const stream = selectedStream();
+    if (stream) listScroll.scrollChildIntoView(streamCardId(stream));
   }
 
   function updateThreadSelection(delta: number): void {
-    const threads = options.model.sortedThreads;
-    if (threads.length === 0) return;
-    threadIndex = Math.max(0, Math.min(threads.length - 1, threadIndex + delta));
-    selectedThreadId = threads[threadIndex]?.id ?? null;
+    const streams = options.model.sortedStreams;
+    if (streams.length === 0) return;
+    streamIndex = Math.max(0, Math.min(streams.length - 1, streamIndex + delta));
+    selectedStreamId = streams[streamIndex]?.id ?? null;
     rebuildThreadList();
-    if (selectedThreadId) listScroll.scrollChildIntoView(`thread-card-${selectedThreadId}`);
+    const stream = selectedStream();
+    if (stream) listScroll.scrollChildIntoView(streamCardId(stream));
   }
 
   function selectEventIndex(nextIndex: number): void {
-    const thread = selectedThread();
-    const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
+    const stream = selectedStream();
+    const events = stream ? options.model.eventsFor(stream) : [];
     if (events.length === 0) return;
     const previousSequence = selectedEventSequence;
     eventIndex = Math.max(0, Math.min(events.length - 1, nextIndex));
@@ -587,8 +693,8 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   }
 
   function updateEventSelection(delta = 0): void {
-    const thread = selectedThread();
-    const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
+    const stream = selectedStream();
+    const events = stream ? options.model.eventsFor(stream) : [];
     if (events.length === 0) return;
     const currentIndex = selectedEventSequence
       ? events.findIndex((event) => event.sequence === selectedEventSequence)
@@ -620,8 +726,8 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   }
 
   function toggleExpanded(): void {
-    const thread = selectedThread();
-    const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
+    const stream = selectedStream();
+    const events = stream ? options.model.eventsFor(stream) : [];
     const event = events.find((candidate) => candidate.sequence === selectedEventSequence);
     if (!event) return;
     if (expanded.has(event.sequence)) expanded.delete(event.sequence);
@@ -631,10 +737,16 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     renderer.requestRender();
   }
 
-  function onNewEvent(event: RawFrameEvent): void {
-    const threadId = event.threadId;
-    if (!threadId || view !== "detail" || threadId !== selectedThreadId) return;
-    const events = options.model.events.get(threadId) ?? [];
+  function onNewEvent(event: RawStreamEvent): void {
+    const streamId = event.kind === "voice" ? VOICE_STREAM_ID : event.threadId;
+    if (!streamId || view !== "detail" || streamId !== selectedStreamId) return;
+    const stream = selectedStream();
+    if (!stream) return;
+    if (stream.kind === "voice") {
+      rebuildEvents();
+      return;
+    }
+    const events = options.model.eventsFor(stream);
     const retained = new Set(events.map((candidate) => candidate.sequence));
     for (const [sequence, widget] of eventBoxes) {
       if (retained.has(sequence)) continue;
@@ -650,7 +762,7 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     }
     if (!eventBoxes.has(event.sequence)) createEventWidget(event);
 
-    const dropped = options.model.droppedEvents.get(threadId) ?? 0;
+    const dropped = options.model.droppedEventsFor(stream);
     if (dropped > 0 && !droppedEvents) {
       droppedEvents = new core.TextRenderable(renderer, {
         id: "dropped-events",
@@ -697,7 +809,7 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       await options.refreshThreads(reread);
       connectionError = null;
       if (view === "list") rebuildThreadList();
-      else if (selectedThread()) updateDetailHeader();
+      else if (selectedStream()) updateDetailHeader();
       else closeDetail();
     } catch (error) {
       connectionError = error instanceof Error ? error.message : String(error);

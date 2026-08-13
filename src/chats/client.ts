@@ -1,6 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
+import { AGENTVOICE_VOICE_OBSERVATION_METHOD, APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
 
 export interface GatewayFrameHandlers {
   onFrame(params: Record<string, unknown>): void;
@@ -165,7 +165,9 @@ export class ChatsConnection {
     }
     await preflightGateway(url);
     if (!url.searchParams.has("token")) url.searchParams.set("token", this.options.token);
-    if (!url.searchParams.has("observe")) url.searchParams.set("observe", "agentvoice");
+    const observations = url.searchParams.getAll("observe");
+    if (!observations.includes("agentvoice")) url.searchParams.append("observe", "agentvoice");
+    if (!observations.includes("voice")) url.searchParams.append("observe", "voice");
     const safeUrl = displayUrl(url);
     const ws = new WebSocket(url);
     this.ws = ws;
@@ -271,6 +273,11 @@ export class ChatsConnection {
     if (method === "agentvoice/frame") {
       const params = isRecord(value["params"]) ? value["params"] : {};
       this.options.onFrame(params);
+      return;
+    }
+    if (method === AGENTVOICE_VOICE_OBSERVATION_METHOD) {
+      const params = isRecord(value["params"]) ? value["params"] : {};
+      this.options.onNotification?.(method, params);
       return;
     }
     this.recordLocal(

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { AGENTVOICE_THREAD_IDENTITIES_METHOD } from "../src/protocol.ts";
+import {
+  AGENTVOICE_THREAD_IDENTITIES_METHOD,
+  AGENTVOICE_VOICE_OBSERVATION_METHOD,
+} from "../src/protocol.ts";
 import {
   AppServerGateway,
   type GatewayPeer,
@@ -47,7 +50,10 @@ class Upstream implements GatewayUpstream {
   }
 }
 
-function fixture(immediate = true): {
+function fixture(
+  immediate = true,
+  onVoiceObservationChanged?: (observed: boolean) => void,
+): {
   gateway: AppServerGateway;
   upstreams: Upstream[];
 } {
@@ -58,6 +64,7 @@ function fixture(immediate = true): {
       upstreams.push(upstream);
       return upstream;
     },
+    onVoiceObservationChanged,
   });
   gateway.setAppServer({ alive: true, socketPath: "/private/app-server.sock" });
   return { gateway, upstreams };
@@ -141,6 +148,122 @@ describe("AppServerGateway", () => {
       params: { direction: "fromAppServer", owner: "appServer", payload },
     });
     expect(upstreams[0]?.sent).toEqual([]);
+  });
+
+  test("requests voice events while voice observers exist and relays only to them", async () => {
+    const observation: boolean[] = [];
+    const { gateway, upstreams } = fixture(true, (observed) => observation.push(observed));
+    const first = new Peer();
+    const second = new Peer();
+    const envelopeOnly = new Peer();
+    const native = new Peer();
+    gateway.add(first, { observeVoice: true });
+    gateway.add(second, { observeAgentVoice: true, observeVoice: true });
+    gateway.add(envelopeOnly, { observeAgentVoice: true });
+    gateway.add(native);
+    await Promise.resolve();
+
+    expect(gateway.observesVoiceEvents).toBe(true);
+    expect(observation).toEqual([true]);
+    const event = {
+      kind: "event" as const,
+      voiceSessionId: "voice-1",
+      threadId: "thread-1",
+      sequence: 1,
+      observedAt: 1_234,
+      payload: {
+        type: "response.audio_transcript.delta",
+        response_id: "response-1",
+        delta: "raw",
+        future: { untouched: true },
+      },
+    };
+    gateway.voiceEvent(event);
+
+    expect(JSON.parse(first.frames.at(-1)!)).toEqual({
+      jsonrpc: "2.0",
+      method: AGENTVOICE_VOICE_OBSERVATION_METHOD,
+      params: event,
+    });
+    expect(JSON.parse(second.frames.at(-1)!)).toEqual({
+      jsonrpc: "2.0",
+      method: AGENTVOICE_VOICE_OBSERVATION_METHOD,
+      params: event,
+    });
+    expect(envelopeOnly.frames).toEqual([]);
+    expect(native.frames).toEqual([]);
+    expect(upstreams.every((upstream) => upstream.sent.length === 0)).toBe(true);
+
+    gateway.remove(first);
+    expect(observation).toEqual([true]);
+    gateway.remove(second);
+    expect(gateway.observesVoiceEvents).toBe(false);
+    expect(observation).toEqual([true, false]);
+  });
+
+  test("replays only the current lifecycle fact, never raw events or ended sessions", async () => {
+    const { gateway } = fixture();
+    const starting = {
+      kind: "lifecycle" as const,
+      voiceSessionId: "voice-1",
+      threadId: "thread-1",
+      state: "starting" as const,
+      observedAt: 100,
+    };
+    gateway.voiceLifecycle(starting);
+    gateway.voiceEvent({
+      kind: "event",
+      voiceSessionId: "voice-1",
+      threadId: "thread-1",
+      sequence: 1,
+      observedAt: 101,
+      payload: { type: "session.created" },
+    });
+
+    const first = new Peer();
+    gateway.add(first, { observeVoice: true });
+    await Promise.resolve();
+    expect(first.frames.map((frame) => JSON.parse(frame).params)).toEqual([starting]);
+
+    const active = { ...starting, state: "active" as const, observedAt: 102 };
+    gateway.voiceLifecycle(active);
+    const second = new Peer();
+    gateway.add(second, { observeVoice: true });
+    await Promise.resolve();
+    expect(second.frames.map((frame) => JSON.parse(frame).params)).toEqual([active]);
+
+    gateway.voiceLifecycle({
+      ...active,
+      state: "ended",
+      observedAt: 103,
+      reason: "upstream-closed",
+    });
+    const afterEnd = new Peer();
+    gateway.add(afterEnd, { observeVoice: true });
+    await Promise.resolve();
+    expect(afterEnd.frames).toEqual([]);
+  });
+
+  test("relays explicit gaps with their complete session identity", async () => {
+    const { gateway } = fixture();
+    const observer = new Peer();
+    gateway.add(observer, { observeVoice: true });
+    await Promise.resolve();
+    const gap = {
+      kind: "gap" as const,
+      voiceSessionId: "voice-1",
+      threadId: "thread-1",
+      fromSequence: 4,
+      toSequence: 8,
+      dropped: 5,
+      observedAt: 1_234,
+    };
+    gateway.voiceGap(gap);
+    expect(JSON.parse(observer.frames.at(-1)!)).toEqual({
+      jsonrpc: "2.0",
+      method: AGENTVOICE_VOICE_OBSERVATION_METHOD,
+      params: gap,
+    });
   });
 
   test("replays and updates AgentVoice-owned thread identities only for observers", async () => {

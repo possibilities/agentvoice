@@ -12,8 +12,10 @@ transcripts, and mute controls.
 
 `agentvoice chats` is the companion thread browser. It connects to the same
 server, lists the threads currently loaded in AgentVoice's App-server, and
-shows a live, syntax-highlighted stream of their raw JSON frames without
-subscribing to or retaining a thread.
+shows live, syntax-highlighted streams of their raw JSON frames without
+subscribing to or retaining a thread. Its separate **VOICE SESSIONS** view
+mirrors live realtime control events, lifecycle, and explicit loss gaps by
+voice-session UUID; it never treats a voice session as a thread.
 
 There are two agents. The **voice agent** is the realtime speech model you
 actually talk to; the **orchestrator agent** is the Codex thread that does the
@@ -398,8 +400,8 @@ waits and reconnects automatically when the Client is not running or restarts.
 
 ## Client API
 
-Voice protocol version **1**. `GET /` returns the voice protocol plus
-`"appServerGateway":{"path":"/app-server","protocol":2}` as a
+Voice protocol version **2**. `GET /` returns the voice protocol plus
+`"appServerGateway":{"path":"/app-server","protocol":3}` as a
 health/discovery check. Voice WebSocket endpoint:
 `ws://127.0.0.1:<port>/ws?token=<token>`, where the token is the contents of
 `~/.local/state/agentvoice/token` on the server machine. The bundled
@@ -475,15 +477,47 @@ requests on a peer's native connection are the peer's responsibility, just as
 they are when connecting directly. `agentvoice chats` adds the opt-in itself
 and uses the snapshot only as a role overlay on its cards.
 
+Raw realtime control events are a second, independent opt-in. Add the
+repeatable query capability `observe=voice` (for example,
+`?token=…&observe=agentvoice&observe=voice`) to receive
+`agentvoice/voice-observation` notifications. The first voice observer asks
+the Client to relay its parsed `oai-events` data-channel objects; the last
+observer leaving turns that relay off. Peers without `observe=voice` receive
+none of these notifications, and native App-server traffic is unchanged.
+
+An observation is one of three shapes:
+
+```json
+{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"event","voiceSessionId":"92d7…","threadId":"019f…","sequence":17,"observedAt":1770000000000,"payload":{"type":"response.audio_transcript.delta","delta":"…"}}}
+{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"lifecycle","voiceSessionId":"92d7…","threadId":"019f…","state":"active","observedAt":1770000000000}}
+{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"gap","voiceSessionId":"92d7…","threadId":"019f…","fromSequence":18,"toSequence":24,"dropped":7,"observedAt":1770000000001}}
+```
+
+The server authoritatively adds `threadId`; the Client assigns a UUID to each
+offer before applying its answer, so late events from a superseded peer retain
+their original session identity. A newly joined observer receives only the
+current `starting` or `active` lifecycle fact. Raw events, ended sessions, and
+gaps are never replayed or persisted.
+
+This is a sensitive live view: raw payloads may contain transcripts, model
+context, tool arguments, and tool results. The connection token grants access,
+but consumers must still opt in with `observe=voice`. Audio never enters this
+path; it remains peer-to-peer between the Client and voice agent.
+
 The 16 MiB WebSocket frame and backpressure limits accommodate raw App-server
-payloads while closing a client that cannot keep up. Frame observation is
-fail-isolated from AgentVoice's own physical traffic.
+payloads while closing a gateway client that cannot keep up. The Client gives
+voice control priority: above 1 MiB of control-WebSocket backpressure it skips
+raw events, coalesces their per-session sequence range, and emits one `gap`
+observation when writable again. Frame and voice observation are fail-isolated
+from AgentVoice's own physical traffic.
 
 ### Messages: client → server
 
 | Message | Shape |
 |---|---|
 | `offer` | `{"type":"offer","sdp":"<complete SDP offer>"}` |
+| `oai-event` | `{"type":"oai-event","voiceSessionId":…,"sequence":17,"observedAt":…,"payload":{…}}` — sent only while the server requests observation |
+| `oai-event-gap` | `{"type":"oai-event-gap","voiceSessionId":…,"fromSequence":18,"toSequence":24,"dropped":7,"observedAt":…}` — reports raw events skipped under Client backpressure |
 
 An offer is accepted any time after the most recent `ready`. Sending a new
 offer while a session is running **supersedes** it (this is how you renew) —
@@ -494,8 +528,9 @@ gets a non-fatal `error`.
 
 | Message | Shape | Meaning |
 |---|---|---|
-| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart) or the active voice changes. `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
-| `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
+| `ready` | `{"type":"ready","protocol":2,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart) or the active voice changes. `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
+| `answer` | `{"type":"answer","sdp":…,"voiceSessionId":"92d7…"}` | Bind the UUID to the pending peer before applying the WebRTC answer with `setRemoteDescription`. |
+| `observe-oai-events` | `{"type":"observe-oai-events","enabled":true}` | Enable or disable the lossy raw-event mirror. Additive and driven by the first/last authenticated `observe=voice` gateway peer. |
 | `redial` | `{"type":"redial","reason":"voice-name-changed"}` | Negotiate a replacement voice session while retaining the WebSocket and orchestrator thread. The bundled client keeps the current audio peer until its successor connects. |
 | `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |

@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { tokenPath } from "../paths.ts";
-import { AGENTVOICE_THREAD_IDENTITIES_METHOD } from "../protocol.ts";
+import {
+  AGENTVOICE_THREAD_IDENTITIES_METHOD,
+  AGENTVOICE_VOICE_OBSERVATION_METHOD,
+} from "../protocol.ts";
 import { ChatsConnection, ChatsConnectionError } from "./client.ts";
-import { ChatsModel, type RawFrameEvent } from "./model.ts";
+import { ChatsModel, type RawStreamEvent } from "./model.ts";
 import { runChatsUi } from "./ui.ts";
 
 export interface ChatsConfig {
@@ -33,7 +36,7 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export async function runChats(config: ChatsConfig): Promise<void> {
   const model = new ChatsModel();
-  let eventHandler: ((event: RawFrameEvent) => void) | null = null;
+  let eventHandler: ((event: RawStreamEvent) => void) | null = null;
   let connected = false;
   const connection = new ChatsConnection({
     url: config.url,
@@ -46,6 +49,9 @@ export async function runChats(config: ChatsConfig): Promise<void> {
     onNotification(method, params) {
       if (method === AGENTVOICE_THREAD_IDENTITIES_METHOD) {
         model.replaceAgentVoiceThreadIdentities(params["data"]);
+      } else if (method === AGENTVOICE_VOICE_OBSERVATION_METHOD) {
+        const event = model.recordVoiceObservation(params);
+        if (event) eventHandler?.(event);
       }
     },
     onClosed() {

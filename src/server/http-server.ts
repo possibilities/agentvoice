@@ -12,6 +12,7 @@ export interface SocketData {
   authorized: boolean;
   channel: "voice" | "app-server";
   observeAgentVoice: boolean;
+  observeVoice: boolean;
 }
 
 export type AgentVoiceSocket = ServerWebSocket<SocketData>;
@@ -64,7 +65,10 @@ export function startHttpServer(
             channel: url.pathname === "/ws" ? "voice" : "app-server",
             observeAgentVoice:
               url.pathname === APP_SERVER_GATEWAY_PATH &&
-              url.searchParams.get("observe") === "agentvoice",
+              url.searchParams.getAll("observe").includes("agentvoice"),
+            observeVoice:
+              url.pathname === APP_SERVER_GATEWAY_PATH &&
+              url.searchParams.getAll("observe").includes("voice"),
           },
         })
           ? undefined
@@ -101,6 +105,7 @@ export function startHttpServer(
         if (ws.data.channel === "app-server") {
           options.appServerGateway.add(ws, {
             observeAgentVoice: ws.data.observeAgentVoice,
+            observeVoice: ws.data.observeVoice,
           });
           options.debug?.("app-server client connected");
           return;

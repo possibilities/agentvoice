@@ -91,7 +91,12 @@ export async function runServer(
   let restartFailures = 0;
   let shuttingDown = false;
   let activeVoiceName = config.voice.name;
-  const appServerGateway = new AppServerGateway({ debug: debugLog });
+  const appServerGateway = new AppServerGateway({
+    debug: debugLog,
+    onVoiceObservationChanged(enabled) {
+      send({ type: "observe-oai-events", enabled });
+    },
+  });
 
   // Account balancing state. The active account is fixed per child; rotation
   // is a supervised restart at an idle boundary onto the balancer's next pick.
@@ -143,7 +148,7 @@ export async function runServer(
   }
 
   const sessions = new VoiceSessionManager({
-    sendAnswer: (sdp) => send({ type: "answer", sdp }),
+    sendAnswer: (voiceSessionId, sdp) => send({ type: "answer", sdp, voiceSessionId }),
     sendClosed: (reason) => send({ type: "closed", ...(reason ? { reason } : {}) }),
     sendFailed: (message) => send({ type: "error", code: "realtime-failed", message, fatal: true }),
     sendReady,
@@ -169,6 +174,17 @@ export async function runServer(
         return Promise.reject(new AppServerError("app-server is not running"));
       }
       return appServer.request("thread/realtime/stop", { threadId }).then(() => {});
+    },
+    publishLifecycle(voiceSessionId, state, reason) {
+      if (!threadId) return;
+      appServerGateway.voiceLifecycle({
+        kind: "lifecycle",
+        voiceSessionId,
+        threadId,
+        state,
+        observedAt: Date.now(),
+        ...(reason ? { reason } : {}),
+      });
     },
     debug: debugLog,
   });
@@ -335,11 +351,11 @@ export async function runServer(
   ): void {
     if (appServer !== server) return; // an instance we already replaced or tore down
     appServer = null;
-    appServerGateway.setAppServer(null);
     threadReady = false;
     orchestratorTurnActive = false;
     const hadSession = sessions.hasSession;
     sessions.reset(); // every session died with the child
+    appServerGateway.setAppServer(null);
     workers?.reset(); // running workers died with it too — marked lost, not resumed
     if (shuttingDown || expected) return;
     if (hadSession) send({ type: "closed", reason: "app-server-exited" });
@@ -465,6 +481,33 @@ export async function runServer(
       send({ type: "error", code: parsed.code, message: parsed.error, fatal: false });
       return;
     }
+    if (parsed.message.type === "oai-event") {
+      if (appServerGateway.observesVoiceEvents && threadId) {
+        appServerGateway.voiceEvent({
+          kind: "event",
+          voiceSessionId: parsed.message.voiceSessionId,
+          threadId,
+          sequence: parsed.message.sequence,
+          observedAt: parsed.message.observedAt,
+          payload: parsed.message.payload,
+        });
+      }
+      return;
+    }
+    if (parsed.message.type === "oai-event-gap") {
+      if (appServerGateway.observesVoiceEvents && threadId) {
+        appServerGateway.voiceGap({
+          kind: "gap",
+          voiceSessionId: parsed.message.voiceSessionId,
+          threadId,
+          fromSequence: parsed.message.fromSequence,
+          toSequence: parsed.message.toSequence,
+          dropped: parsed.message.dropped,
+          observedAt: parsed.message.observedAt,
+        });
+      }
+      return;
+    }
     if (!threadReady || !appServer || !threadId) {
       send({
         type: "error",
@@ -502,6 +545,7 @@ export async function runServer(
         client = ws;
         debugLog?.("client connected");
         sendReady();
+        send({ type: "observe-oai-events", enabled: appServerGateway.observesVoiceEvents });
         // Replay worker state so a UI joining mid-run starts complete.
         for (const worker of workers?.snapshots() ?? []) send({ type: "worker", worker });
       },
@@ -572,15 +616,15 @@ export async function runServer(
     shuttingDown = true;
     configWatcher?.stop();
     console.error("shutting down");
+    await Promise.race([
+      sessions.shutdown(),
+      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
+    ]);
     try {
       client?.close(1001, "server shutting down");
     } catch {
       // client may already be gone
     }
-    await Promise.race([
-      sessions.shutdown(),
-      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
-    ]);
     httpServer.stop(true);
     if (appServer) await appServer.stop().catch(() => {});
   }

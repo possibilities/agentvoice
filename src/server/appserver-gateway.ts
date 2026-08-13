@@ -1,4 +1,12 @@
-import { AGENTVOICE_THREAD_IDENTITIES_METHOD, type AgentVoiceThreadIdentity } from "../protocol.ts";
+import {
+  AGENTVOICE_THREAD_IDENTITIES_METHOD,
+  AGENTVOICE_VOICE_OBSERVATION_METHOD,
+  type AgentVoiceThreadIdentity,
+  type VoiceEventObservation,
+  type VoiceGapObservation,
+  type VoiceLifecycleObservation,
+  type VoiceObservation,
+} from "../protocol.ts";
 import type { AppServer } from "./appserver.ts";
 import { UnixWebSocket } from "./unix-websocket.ts";
 
@@ -29,11 +37,13 @@ export interface GatewayUpstreamCallbacks {
 export interface AppServerGatewayOptions {
   connect?(socketPath: string, callbacks: GatewayUpstreamCallbacks): GatewayUpstream;
   debug?(line: string): void;
+  onVoiceObservationChanged?(observed: boolean): void;
 }
 
 interface PeerState {
   upstream: GatewayUpstream;
   observeAgentVoice: boolean;
+  observeVoice: boolean;
   connecting: boolean;
   queued: string[];
   queuedBytes: number;
@@ -58,10 +68,16 @@ export class AppServerGateway {
   private readonly options: AppServerGatewayOptions;
   private readonly peers = new Map<GatewayPeer, PeerState>();
   private readonly threadIdentities = new Map<string, AgentVoiceThreadIdentity["role"]>();
+  private readonly voiceLifecycles = new Map<string, VoiceLifecycleObservation>();
   private socketPath: string | null = null;
+  private voiceObserved = false;
 
   constructor(options: AppServerGatewayOptions = {}) {
     this.options = options;
+  }
+
+  get observesVoiceEvents(): boolean {
+    return this.voiceObserved;
   }
 
   setAppServer(appServer: Pick<AppServer, "alive" | "socketPath"> | null): void {
@@ -72,6 +88,7 @@ export class AppServerGateway {
     for (const peer of [...this.peers.keys()]) {
       this.disconnect(peer, 1012, "AgentVoice app-server changed");
     }
+    this.voiceLifecycles.clear();
   }
 
   replaceThreadIdentities(identities: readonly AgentVoiceThreadIdentity[]): void {
@@ -93,7 +110,10 @@ export class AppServerGateway {
     this.broadcastThreadIdentities();
   }
 
-  add(peer: GatewayPeer, options: { observeAgentVoice?: boolean } = {}): void {
+  add(
+    peer: GatewayPeer,
+    options: { observeAgentVoice?: boolean; observeVoice?: boolean } = {},
+  ): void {
     const socketPath = this.socketPath;
     if (!socketPath) {
       peer.close(1013, "AgentVoice app-server is not running");
@@ -108,15 +128,18 @@ export class AppServerGateway {
     const state: PeerState = {
       upstream,
       observeAgentVoice: options.observeAgentVoice === true,
+      observeVoice: options.observeVoice === true,
       connecting: true,
       queued: [],
       queuedBytes: 0,
       removed: false,
     };
     this.peers.set(peer, state);
+    this.updateVoiceObservation();
     if (state.observeAgentVoice && this.threadIdentities.size > 0) {
       this.sendThreadIdentities(peer);
     }
+    if (state.observeVoice) this.sendVoiceLifecycleSnapshot(peer);
     void upstream
       .connect()
       .then(() => {
@@ -144,6 +167,7 @@ export class AppServerGateway {
     if (!state) return;
     state.removed = true;
     this.peers.delete(peer);
+    this.updateVoiceObservation();
     state.upstream.close(1000, "gateway peer disconnected");
   }
 
@@ -188,6 +212,21 @@ export class AppServerGateway {
     }
   }
 
+  /** Relay one raw parsed oai-events message only to explicit voice observers. */
+  voiceEvent(observation: VoiceEventObservation): void {
+    this.broadcastVoiceObservation(observation);
+  }
+
+  voiceGap(observation: VoiceGapObservation): void {
+    this.broadcastVoiceObservation(observation);
+  }
+
+  voiceLifecycle(observation: VoiceLifecycleObservation): void {
+    if (observation.state === "ended") this.voiceLifecycles.delete(observation.voiceSessionId);
+    else this.voiceLifecycles.set(observation.voiceSessionId, observation);
+    this.broadcastVoiceObservation(observation);
+  }
+
   private broadcastThreadIdentities(): void {
     for (const [peer, state] of this.peers) {
       if (state.observeAgentVoice) this.sendThreadIdentities(peer);
@@ -208,11 +247,42 @@ export class AppServerGateway {
     );
   }
 
+  private sendVoiceLifecycleSnapshot(peer: GatewayPeer): void {
+    for (const observation of [...this.voiceLifecycles.values()].sort(
+      (left, right) => left.observedAt - right.observedAt,
+    )) {
+      this.sendVoiceObservation(peer, observation);
+    }
+  }
+
+  private broadcastVoiceObservation(observation: VoiceObservation): void {
+    const envelope = JSON.stringify({
+      jsonrpc: "2.0",
+      method: AGENTVOICE_VOICE_OBSERVATION_METHOD,
+      params: observation,
+    });
+    for (const [peer, state] of this.peers) {
+      if (state.observeVoice) this.sendText(peer, envelope);
+    }
+  }
+
+  private sendVoiceObservation(peer: GatewayPeer, observation: VoiceObservation): void {
+    this.sendText(
+      peer,
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: AGENTVOICE_VOICE_OBSERVATION_METHOD,
+        params: observation,
+      }),
+    );
+  }
+
   private disconnect(peer: GatewayPeer, code: number, reason: string): void {
     const state = this.peers.get(peer);
     if (!state) return;
     state.removed = true;
     this.peers.delete(peer);
+    this.updateVoiceObservation();
     state.upstream.close(code, reason);
     try {
       peer.close(code, reason);
@@ -228,5 +298,12 @@ export class AppServerGateway {
     } catch {
       this.remove(peer);
     }
+  }
+
+  private updateVoiceObservation(): void {
+    const observed = [...this.peers.values()].some((state) => state.observeVoice);
+    if (observed === this.voiceObserved) return;
+    this.voiceObserved = observed;
+    this.options.onVoiceObservationChanged?.(observed);
   }
 }

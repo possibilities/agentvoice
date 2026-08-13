@@ -40,8 +40,29 @@ handoff between them happens inside app-server. _Avoid_: "voice model",
 "realtime model", "backend" (upstream's word for the orchestrator, not ours).
 
 **Voice session** — One realtime (WebRTC) session connecting the client to the
-voice agent, created per client offer and superseded by the next offer.
+voice agent, created per client offer, identified by an AgentVoice UUID before
+its answer is applied, and superseded by the next offer. Late raw events remain
+associated with the UUID of the peer that produced them.
 _Avoid_: "call", "realtime conversation".
+
+**Voice observation** — The live-only `agentvoice/voice-observation` gateway
+notification enabled independently by `observe=voice`. It carries an exact
+parsed realtime control payload, a lifecycle fact, or an explicit loss gap,
+all associated with a voice-session UUID and the server-authoritative
+orchestrator thread id. It is never persisted, and it never carries audio.
+_Avoid_: "audio stream", "voice frame", "thread event".
+
+**Voice observation lifecycle** — A `starting`, `active`, or `ended` fact for
+one voice session. The gateway retains only the current starting/active fact
+for a newly attached observer; ended facts are live transitions, not replayed
+history. _Avoid_: "connection status" (the Client control socket and WebRTC
+peer have distinct lifecycles).
+
+**Voice observation gap** — One bounded loss record naming a contiguous range
+of per-session raw-event sequence numbers skipped when Client control-WebSocket
+backpressure exceeded 1 MiB. It makes loss visible without allowing telemetry
+to delay offers or session control. _Avoid_: "dropped frame" (no audio or
+App-server frame was dropped).
 
 **Prompt file** — A conventionally named `SHOUTCASE.md` in the config
 directory that primes one agent, discovered by name rather than referenced from

@@ -1,4 +1,10 @@
-import type { AgentVoiceThreadIdentity } from "../protocol.ts";
+import {
+  type AgentVoiceThreadIdentity,
+  parseVoiceObservation,
+  type VoiceLifecycleReason,
+  type VoiceLifecycleState,
+  type VoiceObservation,
+} from "../protocol.ts";
 
 export interface ThreadCard {
   id: string;
@@ -16,6 +22,7 @@ export interface ThreadCard {
 }
 
 export interface RawFrameEvent {
+  kind: "thread";
   sequence: number;
   receivedAt: number;
   direction: "toAppServer" | "fromAppServer";
@@ -24,7 +31,55 @@ export interface RawFrameEvent {
   payload: Record<string, unknown>;
 }
 
+export const VOICE_STREAM_ID = "voice-sessions";
+
+export interface VoiceStream {
+  kind: "voice";
+  id: typeof VOICE_STREAM_ID;
+  name: "Voice Sessions";
+}
+
+export interface ThreadStream {
+  kind: "thread";
+  id: string;
+  thread: ThreadCard;
+}
+
+export type ChatsStream = VoiceStream | ThreadStream;
+
+export interface RawVoiceEvent {
+  kind: "voice";
+  sequence: number;
+  receivedAt: number;
+  voiceSessionId: string;
+  threadId: string;
+  observedAt: number;
+  observation: VoiceObservation;
+}
+
+export interface VoiceSession {
+  id: string;
+  threadId: string;
+  state: VoiceLifecycleState | "unknown";
+  reason?: VoiceLifecycleReason;
+  firstObservedAt: number;
+  lastObservedAt: number;
+  observations: RawVoiceEvent[];
+  droppedEvents: number;
+}
+
+export type RawStreamEvent = RawFrameEvent | RawVoiceEvent;
+
+export const VOICE_STREAM: VoiceStream = {
+  kind: "voice",
+  id: VOICE_STREAM_ID,
+  name: "Voice Sessions",
+};
+
 export const MAX_EVENTS_PER_THREAD = 300;
+export const MAX_VOICE_EVENTS_PER_SESSION = 300;
+export const MAX_VOICE_SESSIONS = 8;
+const MAX_VOICE_STATUS_ROWS_PER_SESSION = 64;
 const MAX_PENDING_CORRELATIONS = 1_024;
 const CORRELATION_TTL_MS = 60_000;
 
@@ -125,6 +180,7 @@ export class ChatsModel {
   readonly threads = new Map<string, ThreadCard>();
   readonly events = new Map<string, RawFrameEvent[]>();
   readonly droppedEvents = new Map<string, number>();
+  readonly voiceSessions = new Map<string, VoiceSession>();
   private readonly threadByWireId = new Map<string, { threadId: string; expiresAt: number }>();
   private readonly agentVoiceRoles = new Map<string, AgentVoiceThreadIdentity["role"]>();
   private sequence = 0;
@@ -170,6 +226,112 @@ export class ChatsModel {
     );
   }
 
+  get sortedStreams(): ChatsStream[] {
+    return [
+      VOICE_STREAM,
+      ...this.sortedThreads.map(
+        (thread): ThreadStream => ({
+          kind: "thread",
+          id: thread.id,
+          thread,
+        }),
+      ),
+    ];
+  }
+
+  eventsFor(stream: ChatsStream): readonly RawStreamEvent[] {
+    return stream.kind === "voice"
+      ? this.voiceSessionList.flatMap((session) => session.observations)
+      : (this.events.get(stream.id) ?? []);
+  }
+
+  droppedEventsFor(stream: ChatsStream): number {
+    return stream.kind === "voice"
+      ? this.voiceSessionList.reduce((total, session) => total + session.droppedEvents, 0)
+      : (this.droppedEvents.get(stream.id) ?? 0);
+  }
+
+  get voiceSessionList(): VoiceSession[] {
+    return [...this.voiceSessions.values()].sort(
+      (a, b) =>
+        a.firstObservedAt - b.firstObservedAt ||
+        a.lastObservedAt - b.lastObservedAt ||
+        a.id.localeCompare(b.id),
+    );
+  }
+
+  recordVoiceObservation(value: unknown, receivedAt = Date.now()): RawVoiceEvent | null {
+    const observation = parseVoiceObservation(value);
+    if (!observation) return null;
+    const event: RawVoiceEvent = {
+      kind: "voice",
+      sequence: ++this.sequence,
+      receivedAt,
+      voiceSessionId: observation.voiceSessionId,
+      threadId: observation.threadId,
+      observedAt: observation.observedAt,
+      observation,
+    };
+
+    const existing = this.voiceSessions.get(observation.voiceSessionId);
+    const session: VoiceSession = existing ?? {
+      id: observation.voiceSessionId,
+      threadId: observation.threadId,
+      state: "unknown",
+      firstObservedAt: observation.observedAt,
+      lastObservedAt: observation.observedAt,
+      observations: [],
+      droppedEvents: 0,
+    };
+    session.threadId = observation.threadId;
+    session.firstObservedAt = Math.min(session.firstObservedAt, observation.observedAt);
+    session.lastObservedAt = Math.max(session.lastObservedAt, observation.observedAt);
+    if (observation.kind === "lifecycle") {
+      session.state = observation.state;
+      if (observation.reason) session.reason = observation.reason;
+      else delete session.reason;
+    }
+    session.observations.push(event);
+    session.observations.sort(
+      (left, right) => left.observedAt - right.observedAt || left.sequence - right.sequence,
+    );
+    this.pruneVoiceSession(session);
+
+    // Map order is the live recency order used to retain only the latest sessions.
+    if (existing) this.voiceSessions.delete(session.id);
+    this.voiceSessions.set(session.id, session);
+    while (this.voiceSessions.size > MAX_VOICE_SESSIONS) {
+      const oldest = this.voiceSessions.keys().next().value;
+      if (oldest === undefined) break;
+      this.voiceSessions.delete(oldest);
+    }
+    return event;
+  }
+
+  private pruneVoiceSession(session: VoiceSession): void {
+    let eventRows = session.observations.filter(
+      (event) => event.observation.kind === "event",
+    ).length;
+    let statusRows = session.observations.length - eventRows;
+    if (
+      eventRows <= MAX_VOICE_EVENTS_PER_SESSION &&
+      statusRows <= MAX_VOICE_STATUS_ROWS_PER_SESSION
+    )
+      return;
+    session.observations = session.observations.filter((event) => {
+      if (event.observation.kind === "event" && eventRows > MAX_VOICE_EVENTS_PER_SESSION) {
+        eventRows -= 1;
+        session.droppedEvents += 1;
+        return false;
+      }
+      if (event.observation.kind !== "event" && statusRows > MAX_VOICE_STATUS_ROWS_PER_SESSION) {
+        statusRows -= 1;
+        return false;
+      }
+      return true;
+    });
+  }
+
   recordEnvelope(value: unknown, receivedAt = Date.now()): RawFrameEvent | null {
     if (!isRecord(value)) return null;
     const direction = value["direction"];
@@ -203,6 +365,7 @@ export class ChatsModel {
     if (!threadId) return null;
 
     const event: RawFrameEvent = {
+      kind: "thread",
       sequence: ++this.sequence,
       receivedAt,
       direction,
