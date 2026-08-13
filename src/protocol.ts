@@ -4,15 +4,7 @@
  * shapes — both sides import it, and the README's protocol tables mirror it.
  */
 
-export const PROTOCOL_VERSION = 2;
-export const APP_SERVER_GATEWAY_PROTOCOL = 3;
-export const AGENTVOICE_THREAD_IDENTITIES_METHOD = "agentvoice/thread/identities";
-export const AGENTVOICE_VOICE_OBSERVATION_METHOD = "agentvoice/voice-observation";
-
-export interface AgentVoiceThreadIdentity {
-  threadId: string;
-  role: "orchestrator" | "worker";
-}
+export const PROTOCOL_VERSION = 1;
 /** Close code sent to a second concurrent client. */
 export const CLOSE_BUSY = 4429;
 /** Close code for a handshake with a missing or wrong connection token. */
@@ -27,38 +19,11 @@ export interface OfferMessage {
   sdp: string;
 }
 
-/** A parsed oai-events data-channel message, preserved as the relay payload. */
-export interface OaiEventMessage {
-  type: "oai-event";
-  voiceSessionId: string;
-  sequence: number;
-  observedAt: number;
-  payload: Record<string, unknown>;
-}
-
-/** A contiguous range skipped by the Client's bounded relay queue. */
-export interface OaiEventGapMessage {
-  type: "oai-event-gap";
-  voiceSessionId: string;
-  fromSequence: number;
-  toSequence: number;
-  dropped: number;
-  observedAt: number;
-}
-
-export type ClientMessage = OfferMessage | OaiEventMessage | OaiEventGapMessage;
+export type ClientMessage = OfferMessage;
 
 export type ClientParseResult =
   | { ok: true; message: ClientMessage }
-  | {
-      ok: false;
-      code: "bad-message" | "bad-offer" | "bad-oai-event" | "bad-oai-event-gap" | "unknown-message";
-      error: string;
-    };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+  | { ok: false; code: "bad-message" | "bad-offer" | "unknown-message"; error: string };
 
 export function parseClientMessage(text: string): ClientParseResult {
   let parsed: unknown;
@@ -67,7 +32,7 @@ export function parseClientMessage(text: string): ClientParseResult {
   } catch {
     return { ok: false, code: "bad-message", error: "messages must be JSON" };
   }
-  const message = isRecord(parsed) ? parsed : null;
+  const message = parsed as Record<string, unknown> | null;
   const type = message?.["type"];
   if (type === "offer") {
     const sdp = message?.["sdp"];
@@ -75,73 +40,6 @@ export function parseClientMessage(text: string): ClientParseResult {
       return { ok: false, code: "bad-offer", error: "offer requires a non-empty sdp string" };
     }
     return { ok: true, message: { type: "offer", sdp } };
-  }
-  if (type === "oai-event") {
-    const voiceSessionId = message?.["voiceSessionId"];
-    const sequence = message?.["sequence"];
-    const observedAt = message?.["observedAt"];
-    const payload = message?.["payload"];
-    if (
-      typeof voiceSessionId !== "string" ||
-      voiceSessionId.length === 0 ||
-      !Number.isSafeInteger(sequence) ||
-      (sequence as number) < 1 ||
-      typeof observedAt !== "number" ||
-      !Number.isFinite(observedAt) ||
-      !isRecord(payload)
-    ) {
-      return {
-        ok: false,
-        code: "bad-oai-event",
-        error: "oai-event requires a session id, positive sequence, timestamp, and object payload",
-      };
-    }
-    return {
-      ok: true,
-      message: {
-        type: "oai-event",
-        voiceSessionId,
-        sequence: sequence as number,
-        observedAt,
-        payload,
-      },
-    };
-  }
-  if (type === "oai-event-gap") {
-    const voiceSessionId = message?.["voiceSessionId"];
-    const fromSequence = message?.["fromSequence"];
-    const toSequence = message?.["toSequence"];
-    const dropped = message?.["dropped"];
-    const observedAt = message?.["observedAt"];
-    if (
-      typeof voiceSessionId !== "string" ||
-      voiceSessionId.length === 0 ||
-      !Number.isSafeInteger(fromSequence) ||
-      !Number.isSafeInteger(toSequence) ||
-      !Number.isSafeInteger(dropped) ||
-      (fromSequence as number) < 1 ||
-      (toSequence as number) < (fromSequence as number) ||
-      dropped !== (toSequence as number) - (fromSequence as number) + 1 ||
-      typeof observedAt !== "number" ||
-      !Number.isFinite(observedAt)
-    ) {
-      return {
-        ok: false,
-        code: "bad-oai-event-gap",
-        error: "oai-event-gap requires one valid contiguous skipped sequence range",
-      };
-    }
-    return {
-      ok: true,
-      message: {
-        type: "oai-event-gap",
-        voiceSessionId,
-        fromSequence: fromSequence as number,
-        toSequence: toSequence as number,
-        dropped: dropped as number,
-        observedAt,
-      },
-    };
   }
   return {
     ok: false,
@@ -172,7 +70,6 @@ export interface ReadyMessage {
 export interface AnswerMessage {
   type: "answer";
   sdp: string;
-  voiceSessionId: string;
 }
 
 /** The voice session ended; wait for the next ready, then re-offer if desired. */
@@ -191,8 +88,6 @@ export type ErrorCode =
   | "not-ready"
   | "bad-message"
   | "bad-offer"
-  | "bad-oai-event"
-  | "bad-oai-event-gap"
   | "unknown-message"
   | "realtime-failed";
 
@@ -225,20 +120,13 @@ export interface WorkerUpdateMessage {
   worker: WorkerSnapshot;
 }
 
-/** Whether the client should relay parsed oai-events messages to observers. */
-export interface ObserveOaiEventsMessage {
-  type: "observe-oai-events";
-  enabled: boolean;
-}
-
 export type ServerMessage =
   | ReadyMessage
   | AnswerMessage
   | ClosedMessage
   | RedialMessage
   | ErrorMessage
-  | WorkerUpdateMessage
-  | ObserveOaiEventsMessage;
+  | WorkerUpdateMessage;
 
 /** Lenient parse for the client: null for anything unrecognized. */
 export function parseServerMessage(text: string): ServerMessage | null {
@@ -266,9 +154,7 @@ export function parseServerMessage(text: string): ServerMessage | null {
           : [],
       };
     case "answer":
-      return typeof message["sdp"] === "string" && typeof message["voiceSessionId"] === "string"
-        ? { type: "answer", sdp: message["sdp"], voiceSessionId: message["voiceSessionId"] }
-        : null;
+      return typeof message["sdp"] === "string" ? { type: "answer", sdp: message["sdp"] } : null;
     case "closed":
       return {
         type: "closed",
@@ -301,141 +187,7 @@ export function parseServerMessage(text: string): ServerMessage | null {
         },
       };
     }
-    case "observe-oai-events":
-      return typeof message["enabled"] === "boolean"
-        ? { type: "observe-oai-events", enabled: message["enabled"] }
-        : null;
     default:
       return null;
   }
-}
-
-// ---------------------------------------------------------------------------
-// App-server gateway additive voice observation protocol
-// ---------------------------------------------------------------------------
-
-export type VoiceLifecycleState = "starting" | "active" | "ended";
-export type VoiceLifecycleReason =
-  | "superseded"
-  | "upstream-closed"
-  | "upstream-error"
-  | "client-gone"
-  | "app-server-reset"
-  | "shutdown";
-
-interface VoiceObservationBase {
-  voiceSessionId: string;
-  threadId: string;
-  observedAt: number;
-}
-
-export interface VoiceEventObservation extends VoiceObservationBase {
-  kind: "event";
-  sequence: number;
-  payload: Record<string, unknown>;
-}
-
-export interface VoiceLifecycleObservation extends VoiceObservationBase {
-  kind: "lifecycle";
-  state: VoiceLifecycleState;
-  reason?: VoiceLifecycleReason;
-}
-
-export interface VoiceGapObservation extends VoiceObservationBase {
-  kind: "gap";
-  fromSequence: number;
-  toSequence: number;
-  dropped: number;
-}
-
-export type VoiceObservation =
-  | VoiceEventObservation
-  | VoiceLifecycleObservation
-  | VoiceGapObservation;
-
-const VOICE_LIFECYCLE_REASONS = new Set<VoiceLifecycleReason>([
-  "superseded",
-  "upstream-closed",
-  "upstream-error",
-  "client-gone",
-  "app-server-reset",
-  "shutdown",
-]);
-
-/** Strict validation for additive gateway notifications and Chats ingestion. */
-export function parseVoiceObservation(value: unknown): VoiceObservation | null {
-  if (!isRecord(value)) return null;
-  const voiceSessionId = value["voiceSessionId"];
-  const threadId = value["threadId"];
-  const observedAt = value["observedAt"];
-  if (
-    typeof voiceSessionId !== "string" ||
-    voiceSessionId.length === 0 ||
-    typeof threadId !== "string" ||
-    threadId.length === 0 ||
-    typeof observedAt !== "number" ||
-    !Number.isFinite(observedAt)
-  ) {
-    return null;
-  }
-  if (value["kind"] === "event") {
-    const sequence = value["sequence"];
-    const payload = value["payload"];
-    if (!Number.isSafeInteger(sequence) || (sequence as number) < 1 || !isRecord(payload))
-      return null;
-    return {
-      kind: "event",
-      voiceSessionId,
-      threadId,
-      sequence: sequence as number,
-      observedAt,
-      payload,
-    };
-  }
-  if (value["kind"] === "gap") {
-    const fromSequence = value["fromSequence"];
-    const toSequence = value["toSequence"];
-    const dropped = value["dropped"];
-    if (
-      !Number.isSafeInteger(fromSequence) ||
-      !Number.isSafeInteger(toSequence) ||
-      !Number.isSafeInteger(dropped) ||
-      (fromSequence as number) < 1 ||
-      (toSequence as number) < (fromSequence as number) ||
-      dropped !== (toSequence as number) - (fromSequence as number) + 1
-    )
-      return null;
-    return {
-      kind: "gap",
-      voiceSessionId,
-      threadId,
-      fromSequence: fromSequence as number,
-      toSequence: toSequence as number,
-      dropped: dropped as number,
-      observedAt,
-    };
-  }
-  if (value["kind"] === "lifecycle") {
-    const state = value["state"];
-    const reason = value["reason"];
-    if (state !== "starting" && state !== "active" && state !== "ended") return null;
-    if (state === "ended") {
-      if (
-        typeof reason !== "string" ||
-        !VOICE_LIFECYCLE_REASONS.has(reason as VoiceLifecycleReason)
-      )
-        return null;
-      return {
-        kind: "lifecycle",
-        voiceSessionId,
-        threadId,
-        state,
-        observedAt,
-        reason: reason as VoiceLifecycleReason,
-      };
-    }
-    if (reason !== undefined) return null;
-    return { kind: "lifecycle", voiceSessionId, threadId, state, observedAt };
-  }
-  return null;
 }

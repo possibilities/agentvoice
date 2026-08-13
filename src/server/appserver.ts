@@ -1,18 +1,16 @@
 /**
- * Supervised Codex App-server plus AgentVoice's owning connection.
+ * Newline-delimited JSON-RPC 2.0 client for a `codex app-server` child process.
  *
- * The child listens on a private Unix socket. AgentVoice and every gateway
- * peer connect independently, preserving App-server's native connection-scoped
- * initialization, subscriptions, approvals, and disconnect cleanup.
+ * Three gates make the realtime surface work at all: the child must be spawned
+ * with `--enable realtime_conversation`, `initialize` must declare
+ * `experimentalApi: true`, and `thread/realtime/start` must carry an explicit
+ * webrtc transport. Verified against codex-cli 0.147.0.
  */
 import type { Subprocess } from "bun";
-import { UnixWebSocket } from "./unix-websocket.ts";
 
 export const REALTIME_FEATURE = "realtime_conversation";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const STDERR_TAIL_LINES = 100;
-const CONNECT_TIMEOUT_MS = 5_000;
-const CONNECT_RETRY_MS = 25;
 
 export class AppServerError extends Error {
   readonly code?: number;
@@ -23,6 +21,10 @@ export class AppServerError extends Error {
     this.timedOut = timedOut;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pure framing helpers
+// ---------------------------------------------------------------------------
 
 export interface ParsedFrames {
   frames: unknown[];
@@ -39,7 +41,7 @@ export function parseFrames(buffer: string): ParsedFrames {
     try {
       frames.push(JSON.parse(trimmed));
     } catch {
-      // Compatibility helper for newline transports and fixtures.
+      // app-server occasionally logs non-JSON lines to stdout; drop them.
     }
   }
   return { frames, rest };
@@ -57,12 +59,19 @@ export function frameResponse(id: number | string, result: unknown): string {
   return `${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`;
 }
 
+/**
+ * Fail-closed answers for approval-bearing server→client requests. The server
+ * runs unattended, so an unanswered request would park the agent turn forever;
+ * every request gets an immediate denial (or `{}` when the method is unknown).
+ */
 export function buildDenialResponse(method: string): Record<string, unknown> {
   switch (method) {
     case "execCommandApproval":
     case "applyPatchApproval":
       return {
-        decision: { denied: { rejection: "agentvoice runs unattended and never approves" } },
+        decision: {
+          denied: { rejection: "agentvoice runs unattended and never approves" },
+        },
       };
     case "item/commandExecution/requestApproval":
     case "item/fileChange/requestApproval":
@@ -77,16 +86,13 @@ export function buildDenialResponse(method: string): Record<string, unknown> {
   }
 }
 
-export function spawnArgv(codexBin: string, socketPath?: string): string[] {
-  return [
-    codexBin,
-    "app-server",
-    "--enable",
-    REALTIME_FEATURE,
-    "--listen",
-    socketPath === undefined ? "stdio://" : `unix://${socketPath}`,
-  ];
+export function spawnArgv(codexBin: string): string[] {
+  return [codexBin, "app-server", "--enable", REALTIME_FEATURE, "--listen", "stdio://"];
 }
+
+// ---------------------------------------------------------------------------
+// Child process client
+// ---------------------------------------------------------------------------
 
 interface PendingRequest {
   resolve(value: unknown): void;
@@ -95,56 +101,104 @@ interface PendingRequest {
   method: string;
 }
 
-export interface AppServerConnectionOptions {
-  socketPath: string;
+export interface AppServerOptions {
+  codexBin: string;
+  /**
+   * Directory the child process runs in. app-server re-reads its own process
+   * cwd on every thread/start; if that directory is unlinked mid-run, thread
+   * starts fail with a cryptic config-load error, so this must be a stable
+   * directory that outlives the child.
+   */
+  processCwd: string;
+  /**
+   * CODEX_HOME for the child — an account profile when balancing, absent for
+   * the canonical home. Auth is process-scoped, so this is fixed for the
+   * child's lifetime; switching accounts is a child restart.
+   */
+  codexHome?: string;
+  clientVersion: string;
   onNotification(method: string, params: Record<string, unknown>): void;
+  /**
+   * Optional answerer for server→client requests. Return a promise resolving
+   * to the response payload, or null (or reject) to fall back to the
+   * fail-closed denial. Absent means every request is denied.
+   */
   onRequest?(
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> | null;
-  onClose?(): void;
-  onFrame?(
-    direction: "toAppServer" | "fromAppServer",
-    owner: "agentvoice" | "appServer",
-    frame: Record<string, unknown>,
-  ): void;
+  /** Called once when the child exits, after all pending requests were rejected. */
+  onExit(info: { code: number | null; expected: boolean }): void;
   debug?(line: string): void;
 }
 
-/** One real App-server connection and its own request-id namespace. */
-export class AppServerConnection {
-  private readonly options: AppServerConnectionOptions;
-  private socket: UnixWebSocket | null = null;
+export class AppServer {
+  private readonly options: AppServerOptions;
+  private child: Subprocess<"pipe", "pipe", "pipe"> | null = null;
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
+  private stdoutBuffer = "";
+  private readonly stderrTail: string[] = [];
   private stopping = false;
+  readonly spawnedAt = Date.now();
 
-  constructor(options: AppServerConnectionOptions) {
+  constructor(options: AppServerOptions) {
     this.options = options;
   }
 
   get alive(): boolean {
-    return this.socket?.isOpen === true;
+    return this.child !== null;
   }
 
-  async connect(timeoutMs = CONNECT_TIMEOUT_MS): Promise<void> {
-    const socket = new UnixWebSocket({
-      socketPath: this.options.socketPath,
-      onText: (text) => this.dispatchText(text),
-      onClose: () => this.handleClose(),
-      onError: (error) => this.options.debug?.(`[app-server connection] ${error.message}`),
-    });
-    this.socket = socket;
+  get recentStderr(): string {
+    return this.stderrTail.slice(-8).join("\n");
+  }
+
+  async start(): Promise<void> {
+    let child: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      await socket.connect(timeoutMs);
+      child = Bun.spawn(spawnArgv(this.options.codexBin), {
+        cwd: this.options.processCwd,
+        ...(this.options.codexHome !== undefined
+          ? { env: { ...process.env, CODEX_HOME: this.options.codexHome } }
+          : {}),
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
     } catch (error) {
-      if (this.socket === socket) this.socket = null;
       throw new AppServerError(
-        `failed to connect to app-server socket ${this.options.socketPath}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `failed to spawn "${this.options.codexBin}": ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    this.child = child;
+
+    // The child must not outlive the parent even on an abrupt exit.
+    const killGuard = () => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+    };
+    process.on("exit", killGuard);
+    void child.exited.then((code) => {
+      process.off("exit", killGuard);
+      this.handleExit(code);
+    });
+
+    void this.pumpStdout(child.stdout);
+    void this.pumpStderr(child.stderr);
+
+    await this.request("initialize", {
+      clientInfo: {
+        name: "agentvoice",
+        title: "AgentVoice",
+        version: this.options.clientVersion,
+      },
+      capabilities: { experimentalApi: true, requestAttestation: false },
+    });
+    this.notify("initialized", {});
   }
 
   request<T = unknown>(
@@ -152,8 +206,8 @@ export class AppServerConnection {
     params: unknown,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   ): Promise<T> {
-    if (!this.alive) {
-      return Promise.reject(new AppServerError(`${method}: app-server is not connected`));
+    if (!this.child) {
+      return Promise.reject(new AppServerError(`${method}: app-server is not running`));
     }
     const id = this.nextRequestId++;
     return new Promise<T>((resolve, reject) => {
@@ -168,7 +222,7 @@ export class AppServerConnection {
         method,
       });
       try {
-        this.writeMessage({ jsonrpc: "2.0", id, method, params });
+        this.write(frameRequest(id, method, params));
       } catch (error) {
         this.pending.delete(id);
         clearTimeout(timer);
@@ -182,45 +236,88 @@ export class AppServerConnection {
   }
 
   notify(method: string, params: unknown): void {
-    this.writeMessage({ jsonrpc: "2.0", method, params });
+    this.write(frameNotification(method, params));
   }
 
-  close(): void {
-    if (this.stopping) return;
+  /** Bounded teardown: stdin EOF, then SIGTERM, then SIGKILL. */
+  async stop(): Promise<void> {
+    const child = this.child;
+    if (!child) return;
     this.stopping = true;
-    this.socket?.close(1000, "connection closed");
-    this.socket = null;
-    this.rejectPending("app-server connection closed before responding");
-  }
-
-  private writeMessage(message: Record<string, unknown>): void {
-    const socket = this.socket;
-    if (!socket?.isOpen) throw new AppServerError("app-server is not connected");
-    const text = JSON.stringify(message);
-    this.options.debug?.(`-> ${text}`);
-    socket.sendText(text);
-    this.emitFrame("toAppServer", "agentvoice", message);
-  }
-
-  private dispatchText(text: string): void {
-    let frame: unknown;
     try {
-      frame = JSON.parse(text);
+      child.stdin.end();
     } catch {
-      this.options.debug?.("[app-server connection] dropped non-JSON WebSocket message");
-      return;
+      // stdin may already be closed
     }
-    if (typeof frame !== "object" || frame === null || Array.isArray(frame)) return;
+    if ((await this.waitForExit(child, 3_000)) !== null) return;
+    child.kill("SIGTERM");
+    if ((await this.waitForExit(child, 2_000)) !== null) return;
+    child.kill("SIGKILL");
+    await child.exited;
+  }
+
+  private async waitForExit(
+    child: Subprocess<"pipe", "pipe", "pipe">,
+    timeoutMs: number,
+  ): Promise<number | null> {
+    return Promise.race([
+      child.exited,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+  }
+
+  private write(text: string): void {
+    const child = this.child;
+    if (!child) throw new AppServerError("app-server is not running");
+    this.options.debug?.(`-> ${text.trimEnd()}`);
+    child.stdin.write(text);
+    child.stdin.flush();
+  }
+
+  private async pumpStdout(stream: ReadableStream<Uint8Array>): Promise<void> {
+    const decoder = new TextDecoder();
+    try {
+      for await (const chunk of stream) {
+        this.stdoutBuffer += decoder.decode(chunk, { stream: true });
+        const { frames, rest } = parseFrames(this.stdoutBuffer);
+        this.stdoutBuffer = rest;
+        for (const frame of frames) this.dispatch(frame);
+      }
+    } catch {
+      // The stream ends when the child exits; handleExit owns cleanup.
+    }
+  }
+
+  private async pumpStderr(stream: ReadableStream<Uint8Array>): Promise<void> {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      for await (const chunk of stream) {
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim().length === 0) continue;
+          this.stderrTail.push(line);
+          if (this.stderrTail.length > STDERR_TAIL_LINES) this.stderrTail.shift();
+          this.options.debug?.(`[app-server stderr] ${line}`);
+        }
+      }
+    } catch {
+      // ignore; child exit handles the rest
+    }
+  }
+
+  private dispatch(frame: unknown): void {
+    if (typeof frame !== "object" || frame === null) return;
     const message = frame as Record<string, unknown>;
     this.options.debug?.(`<- ${JSON.stringify(message)}`);
     const { id, method } = message;
-    const pending =
-      typeof id === "number" && method === undefined ? this.pending.get(id) : undefined;
-    this.emitFrame("fromAppServer", pending ? "agentvoice" : "appServer", message);
 
-    if (typeof id === "number" && method === undefined) {
+    if (id !== undefined && method === undefined) {
+      const pending = this.pending.get(id as number);
       if (!pending) return;
-      this.pending.delete(id);
+      this.pending.delete(id as number);
       clearTimeout(pending.timer);
       const error = message["error"] as { code?: number; message?: string } | undefined;
       if (error) {
@@ -236,32 +333,23 @@ export class AppServerConnection {
       return;
     }
 
-    if ((typeof id === "number" || typeof id === "string") && typeof method === "string") {
-      const requestId = id;
+    if (id !== undefined && typeof method === "string") {
+      // Server→client request. A handler may answer it (dispatch tool calls);
+      // everything else — and a handler that declines or throws — fail-closes
+      // with an immediate denial so no request ever parks a turn.
+      const requestId = id as number | string;
       const params = (message["params"] ?? {}) as Record<string, unknown>;
       const handled = this.options.onRequest?.(method, params);
       if (handled) {
         handled
-          .then((response) =>
-            this.writeMessage({
-              jsonrpc: "2.0",
-              id: requestId,
-              result: response ?? buildDenialResponse(method),
-            }),
-          )
-          .catch(() =>
-            this.writeMessage({
-              jsonrpc: "2.0",
-              id: requestId,
-              result: buildDenialResponse(method),
-            }),
-          );
+          .then((response) => {
+            this.write(frameResponse(requestId, response ?? buildDenialResponse(method)));
+          })
+          .catch(() => {
+            this.write(frameResponse(requestId, buildDenialResponse(method)));
+          });
       } else {
-        this.writeMessage({
-          jsonrpc: "2.0",
-          id: requestId,
-          result: buildDenialResponse(method),
-        });
+        this.write(frameResponse(requestId, buildDenialResponse(method)));
       }
       return;
     }
@@ -271,213 +359,14 @@ export class AppServerConnection {
     }
   }
 
-  private emitFrame(
-    direction: "toAppServer" | "fromAppServer",
-    owner: "agentvoice" | "appServer",
-    message: Record<string, unknown>,
-  ): void {
-    try {
-      this.options.onFrame?.(direction, owner, message);
-    } catch (error) {
-      this.options.debug?.(
-        `[app-server frame observer] ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  private handleClose(): void {
-    this.socket = null;
-    this.rejectPending("app-server connection closed before responding");
-    if (!this.stopping) this.options.onClose?.();
-  }
-
-  private rejectPending(message: string): void {
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(new AppServerError(`${pending.method}: ${message}`));
-    }
-    this.pending.clear();
-  }
-}
-
-export interface AppServerOptions {
-  codexBin: string;
-  processCwd: string;
-  socketPath: string;
-  codexHome?: string;
-  clientVersion: string;
-  onNotification(method: string, params: Record<string, unknown>): void;
-  onRequest?(
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<Record<string, unknown> | null> | null;
-  onExit(info: { code: number | null; expected: boolean }): void;
-  onFrame?(
-    direction: "toAppServer" | "fromAppServer",
-    owner: "agentvoice" | "appServer",
-    frame: Record<string, unknown>,
-  ): void;
-  debug?(line: string): void;
-}
-
-export class AppServer {
-  private readonly options: AppServerOptions;
-  private child: Subprocess<"ignore", "pipe", "pipe"> | null = null;
-  private connection: AppServerConnection | null = null;
-  private readonly stderrTail: string[] = [];
-  private stopping = false;
-  readonly spawnedAt = Date.now();
-
-  constructor(options: AppServerOptions) {
-    this.options = options;
-  }
-
-  get alive(): boolean {
-    return this.child !== null && this.connection?.alive === true;
-  }
-
-  get recentStderr(): string {
-    return this.stderrTail.slice(-8).join("\n");
-  }
-
-  get socketPath(): string {
-    return this.options.socketPath;
-  }
-
-  async start(): Promise<void> {
-    let child: Subprocess<"ignore", "pipe", "pipe">;
-    try {
-      child = Bun.spawn(spawnArgv(this.options.codexBin, this.options.socketPath), {
-        cwd: this.options.processCwd,
-        ...(this.options.codexHome !== undefined
-          ? { env: { ...process.env, CODEX_HOME: this.options.codexHome } }
-          : {}),
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-    } catch (error) {
-      throw new AppServerError(
-        `failed to spawn "${this.options.codexBin}": ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    this.child = child;
-    const killGuard = () => {
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // already gone
-      }
-    };
-    process.on("exit", killGuard);
-    void child.exited.then((code) => {
-      process.off("exit", killGuard);
-      this.handleExit(code);
-    });
-    void this.pumpOutput(child.stdout, false);
-    void this.pumpOutput(child.stderr, true);
-
-    const deadline = Date.now() + CONNECT_TIMEOUT_MS;
-    let lastError: unknown = null;
-    while (Date.now() < deadline && this.child === child) {
-      const connection = new AppServerConnection({
-        socketPath: this.options.socketPath,
-        onNotification: this.options.onNotification,
-        ...(this.options.onRequest ? { onRequest: this.options.onRequest } : {}),
-        onFrame: this.options.onFrame,
-        onClose: () => {
-          if (!this.stopping && this.child === child) child.kill("SIGTERM");
-        },
-        debug: this.options.debug,
-      });
-      try {
-        await connection.connect(Math.min(500, Math.max(1, deadline - Date.now())));
-        this.connection = connection;
-        await connection.request("initialize", {
-          clientInfo: {
-            name: "agentvoice",
-            title: "AgentVoice",
-            version: this.options.clientVersion,
-          },
-          capabilities: { experimentalApi: true, requestAttestation: false },
-        });
-        connection.notify("initialized", {});
-        return;
-      } catch (error) {
-        lastError = error;
-        connection.close();
-        if (this.child !== child) break;
-        await Bun.sleep(CONNECT_RETRY_MS);
-      }
-    }
-    throw new AppServerError(
-      `app-server socket did not become ready: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-    );
-  }
-
-  request<T = unknown>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
-    const connection = this.connection;
-    if (!connection) {
-      return Promise.reject(new AppServerError(`${method}: app-server is not running`));
-    }
-    return connection.request<T>(method, params, timeoutMs);
-  }
-
-  notify(method: string, params: unknown): void {
-    const connection = this.connection;
-    if (!connection) throw new AppServerError("app-server is not running");
-    connection.notify(method, params);
-  }
-
-  async stop(): Promise<void> {
-    const child = this.child;
-    if (!child) return;
-    this.stopping = true;
-    this.connection?.close();
-    this.connection = null;
-    child.kill("SIGTERM");
-    if ((await this.waitForExit(child, 2_000)) !== null) return;
-    child.kill("SIGKILL");
-    await child.exited;
-  }
-
-  private async waitForExit(
-    child: Subprocess<"ignore", "pipe", "pipe">,
-    timeoutMs: number,
-  ): Promise<number | null> {
-    return Promise.race([
-      child.exited,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-    ]);
-  }
-
-  private async pumpOutput(stream: ReadableStream<Uint8Array>, stderr: boolean): Promise<void> {
-    const decoder = new TextDecoder();
-    let buffer = "";
-    try {
-      for await (const chunk of stream) {
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim().length === 0) continue;
-          if (stderr) {
-            this.stderrTail.push(line);
-            if (this.stderrTail.length > STDERR_TAIL_LINES) this.stderrTail.shift();
-          }
-          this.options.debug?.(`[app-server ${stderr ? "stderr" : "stdout"}] ${line}`);
-        }
-      }
-    } catch {
-      // Child exit owns lifecycle cleanup.
-    }
-  }
-
   private handleExit(code: number | null): void {
     const expected = this.stopping;
     this.child = null;
-    this.connection?.close();
-    this.connection = null;
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new AppServerError(`${pending.method}: app-server exited before responding`));
+    }
+    this.pending.clear();
     this.options.onExit({ code, expected });
   }
 }

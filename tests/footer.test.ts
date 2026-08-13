@@ -4,7 +4,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { createFleetFooter, type FleetFooterAction, footerCopy } from "../src/tui/footer.ts";
 
 const actions: FleetFooterAction[] = [
-  { id: "back", key: "ESC", label: "chats", onPress() {} },
+  { id: "back", key: "ESC", label: "back", onPress() {} },
   { id: "previous", key: "↑", label: "previous", shortLabel: "prev", onPress() {} },
   { id: "next", key: "↓", label: "next", onPress() {} },
   { id: "expand", key: "ENTER", label: "expand", onPress() {} },
@@ -14,7 +14,7 @@ const actions: FleetFooterAction[] = [
 describe("fleet footer copy", () => {
   test("keeps full labels when they fit", () => {
     expect(footerCopy({ actions, mode: "FOLLOW", width: 100 })).toEqual({
-      labels: ["chats", "previous", "next", "expand", "follow"],
+      labels: ["back", "previous", "next", "expand", "follow"],
       mode: "FOLLOW",
     });
   });

@@ -10,15 +10,6 @@ lets a single voice client hold a full-duplex WebRTC conversation with it.
 `agentvoice client` is that client: a terminal UI with live meters,
 transcripts, and mute controls.
 
-`agentvoice chats` is the companion thread browser. It connects to the same
-server, lists the threads currently loaded in AgentVoice's App-server, and
-opens a coding-agent-style Harness view of each Codex transcript without
-subscribing to or retaining a thread. Every projected item keeps its raw
-App-server payload, and the exact connection-level JSON remains available in
-the alternate Frames view. Its separate **VOICE SESSIONS** view
-mirrors live realtime control events, lifecycle, and explicit loss gaps by
-voice-session UUID; it never treats a voice session as a thread.
-
 There are two agents. The **voice agent** is the realtime speech model you
 actually talk to; the **orchestrator agent** is the Codex thread that does the
 work. Audio flows peer-to-peer between the client and the voice agent, and the
@@ -43,7 +34,6 @@ bun install
 bun run setup                        # one-time: verifies bun/codex, builds duplex audio
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
-agentvoice chats                     # in another terminal: loaded Codex transcripts
 bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 ```
 
@@ -258,17 +248,17 @@ under the realtime surface; see AGENTS.md invariant 10).
 ## Security posture
 
 The server binds `127.0.0.1` only — hardcoded, not configurable — and accepts
-one voice Client plus independent App-server gateway clients. Loopback alone
-is not a boundary: a web page can open a WebSocket to 127.0.0.1 (the handshake
-is exempt from the same-origin policy), and other local users share the
-interface. So every request also passes a three-part handshake gate:
+one client. Loopback alone is not a boundary: a web page can open a WebSocket
+to 127.0.0.1 (the handshake is exempt from the same-origin policy), and other
+local users share the interface. So every request also passes a three-part
+handshake gate:
 
 - **Connection token.** Created at first boot as
   `~/.local/state/agentvoice/token` (mode 0600) and required on every
-  WebSocket handshake (`/ws?token=…` and `/app-server?token=…`). The bundled
-  clients read the same file automatically, so same-machine use needs no
-  setup; a missing or wrong token is closed with code **4401**. File
-  permissions are the boundary between local users.
+  WebSocket handshake (`/ws?token=…`). The bundled client reads the same file
+  automatically, so same-machine use needs no setup; a missing or wrong token
+  is closed with code **4401**. File permissions are the boundary between
+  local users.
 - **Origin rejection.** Any request carrying an `Origin` header is refused
   (403). Browsers attach one to every WebSocket handshake, so this closes the
   drive-by class outright — malicious pages and injected captive-portal
@@ -284,12 +274,6 @@ answer them; the agent is told no and adapts instead of hanging), so the
 `never` runs an unattended, unrestricted agent with your user permissions in
 the workspace — what makes hands-free "install it and run the tests" work.
 On untrusted networks (hotel, café), prefer `--sandbox workspace-write`.
-
-The App-server gateway is intentionally powerful: an authenticated native
-client can call arbitrary present or future App-server methods under
-AgentVoice's credentials. It is loopback-only and uses the same gate, token,
-and tunnel guidance as the voice endpoint. `agentvoice chats` itself uses only
-non-subscribing reads.
 
 To talk to your laptop from another device, do **not** expose the port —
 tunnel to loopback and carry the token across once:
@@ -345,51 +329,6 @@ The device is built from source and the client refuses to start without it —
   occupancy, drops, callback-level starvation events, reroutes, and
   interruption counters, plus every upstream event.
 
-## Chats thread browser
-
-`agentvoice chats` opens a full-screen OpenTUI browser for the threads that
-are authoritatively loaded in the running App-server. The list refreshes every
-two seconds. Compact two-row cards show the thread name, runtime state, role,
-home-relative workspace, and provider; conversation previews and full thread
-IDs are deliberately omitted.
-
-Selecting a Codex thread opens its **Harness view**, an execution spine that
-renders user and agent prose as Markdown, reasoning as a collapsed summary,
-commands with bounded output, edits as unified or wide split diffs, and tool,
-plan, collaboration, search, media, wait, system, and error items according to
-their lifecycle. Unknown future item types remain visible as raw fallbacks.
-Each item retains its exact App-server payload; `r` toggles raw JSON for the
-selected item, and `v` switches the whole detail surface between Harness and
-**Frames**. Frames preserves the exact parsed JSON plus direction and owner
-(`agentvoice`, unsolicited `appServer`, or the viewer's own `client` traffic).
-
-```bash
-agentvoice chats
-agentvoice chats --url ws://127.0.0.1:7890/app-server --token <secret>
-```
-
-Use arrow keys or `j`/`k` to move, Return or a click/tap to open and expand,
-Escape or `h` to return, `f` or End to follow the newest item, Page Up/Down to
-scroll, and `q` to quit. Raw JSON is syntax-highlighted, wrapped, complete, and
-selectable. Mouse wheel and terminal touch-as-mouse work through the native
-scroll surface. Every footer action is also a pointer/touch target; at narrow
-widths its single-line rail shortens to keys and scrolls horizontally without
-a visible scrollbar. Each thread retains the latest 300 Frames in the viewer
-and reports any older frames evicted from that local display.
-
-This is a read-only observer by construction: it lists with
-`thread/loaded/list`, reads card metadata with `thread/read`
-`includeTurns:false`, and hydrates an opened Codex transcript with a separate
-`thread/read` `includeTurns:true`. Reads do not load a thread. It never starts,
-resumes, forks, archives, deletes, subscribes to, or unsubscribes a thread, so
-opening the browser cannot load or retain one. Frames arriving on AgentVoice's
-already-owning connection are buffered during hydration and merged with the
-persisted history without regressing a completed lifecycle.
-
-Voice Sessions remain Frames-only. That live-only surface groups raw realtime
-control payloads, lifecycle facts, and explicit loss gaps by voice-session UUID;
-it does not feed the Codex transcript projection and still carries no audio.
-
 ### Phone remote
 
 With the server and Client running on the same machine, SSH into that machine
@@ -415,9 +354,8 @@ waits and reconnects automatically when the Client is not running or restarts.
 
 ## Client API
 
-Voice protocol version **2**. `GET /` returns the voice protocol plus
-`"appServerGateway":{"path":"/app-server","protocol":3}` as a
-health/discovery check. Voice WebSocket endpoint:
+Protocol version **1**. `GET /` returns `{"name":"agentvoice","version":…,"protocol":1}`
+as a health/discovery check. WebSocket endpoint:
 `ws://127.0.0.1:<port>/ws?token=<token>`, where the token is the contents of
 `~/.local/state/agentvoice/token` on the server machine. The bundled
 terminal client speaks exactly this protocol. Requests carrying an `Origin`
@@ -426,113 +364,16 @@ posture](#security-posture)) — build clients on a native WebRTC stack (the
 bundled client uses [werift](https://github.com/shinyoshiaki/werift-webrtc);
 the recipe below uses the standard API names, which those stacks mirror).
 
-One voice Client at a time — a second `/ws` connection is closed with code
-**4429**, and a missing or wrong token with **4401**. On server shutdown the
-Client is closed with **1001**. The server pings; the socket is legitimately
-silent for minutes while audio flows peer-to-peer.
-
-### App-server gateway
-
-`ws://127.0.0.1:<port>/app-server?token=<token>` exposes app-server-shaped
-JSON-RPC over AgentVoice's existing WebSocket server. Any number of gateway
-clients can connect independently; they do not consume the singleton voice
-Client slot. Send `initialize`, wait for its response, then send `initialized`
-as with a direct App-server connection. That is exactly what each peer has:
-one real connection to the same supervised App-server, with its own
-initialization, capabilities, request-id namespace, subscriptions, approvals,
-and server notifications.
-
-All peer frames pass through without parsing, request-id remapping, a method
-schema, or a denylist. Disconnecting closes the corresponding native
-connection, which lets App-server release that connection's subscriptions.
-An App-server restart closes gateway clients with WebSocket code **1012**;
-clients reconnect and initialize a fresh connection. `agentvoice chats` retries
-that automatically on its two-second refresh cadence.
-
-Every exact parsed frame that crosses AgentVoice's separate owning connection
-is available by adding `observe=agentvoice` to the gateway URL. That explicit
-opt-in adds frame envelopes:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "agentvoice/frame",
-  "params": {
-    "direction": "toAppServer",
-    "owner": "agentvoice",
-    "payload": { "jsonrpc": "2.0", "id": 17, "method": "turn/start", "params": {} }
-  }
-}
-```
-
-`direction` is `toAppServer` or `fromAppServer`; `owner` is `agentvoice` for
-responses to AgentVoice requests and `appServer` for unsolicited traffic on
-that owning connection. The same opt-in also replays a current identity
-snapshot and sends a replacement snapshot whenever an owned thread is added or
-retired:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "agentvoice/thread/identities",
-  "params": {
-    "data": [
-      { "threadId": "019f…", "role": "orchestrator" },
-      { "threadId": "019e…", "role": "worker" }
-    ]
-  }
-}
-```
-
-This additive observer metadata names AgentVoice's current ownership without
-rewriting Codex thread objects or repairing their persisted `threadSource`.
-Without the query parameter the peer's protocol stream is exactly native. The
-peer's own App-server protocol remains raw either way. App-server→client
-requests on a peer's native connection are the peer's responsibility, just as
-they are when connecting directly. `agentvoice chats` adds the opt-in itself
-and uses the snapshot only as a role overlay on its cards.
-
-Raw realtime control events are a second, independent opt-in. Add the
-repeatable query capability `observe=voice` (for example,
-`?token=…&observe=agentvoice&observe=voice`) to receive
-`agentvoice/voice-observation` notifications. The first voice observer asks
-the Client to relay its parsed `oai-events` data-channel objects; the last
-observer leaving turns that relay off. Peers without `observe=voice` receive
-none of these notifications, and native App-server traffic is unchanged.
-
-An observation is one of three shapes:
-
-```json
-{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"event","voiceSessionId":"92d7…","threadId":"019f…","sequence":17,"observedAt":1770000000000,"payload":{"type":"response.audio_transcript.delta","delta":"…"}}}
-{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"lifecycle","voiceSessionId":"92d7…","threadId":"019f…","state":"active","observedAt":1770000000000}}
-{"jsonrpc":"2.0","method":"agentvoice/voice-observation","params":{"kind":"gap","voiceSessionId":"92d7…","threadId":"019f…","fromSequence":18,"toSequence":24,"dropped":7,"observedAt":1770000000001}}
-```
-
-The server authoritatively adds `threadId`; the Client assigns a UUID to each
-offer before applying its answer, so late events from a superseded peer retain
-their original session identity. A newly joined observer receives only the
-current `starting` or `active` lifecycle fact. Raw events, ended sessions, and
-gaps are never replayed or persisted.
-
-This is a sensitive live view: raw payloads may contain transcripts, model
-context, tool arguments, and tool results. The connection token grants access,
-but consumers must still opt in with `observe=voice`. Audio never enters this
-path; it remains peer-to-peer between the Client and voice agent.
-
-The 16 MiB WebSocket frame and backpressure limits accommodate raw App-server
-payloads while closing a gateway client that cannot keep up. The Client gives
-voice control priority: above 1 MiB of control-WebSocket backpressure it skips
-raw events, coalesces their per-session sequence range, and emits one `gap`
-observation when writable again. Frame and voice observation are fail-isolated
-from AgentVoice's own physical traffic.
+One client at a time — a second connection is closed with code **4429**, and a
+missing or wrong token with **4401**. On server shutdown the client is closed
+with **1001**. The server pings; the socket is legitimately silent for minutes
+while audio flows peer-to-peer.
 
 ### Messages: client → server
 
 | Message | Shape |
 |---|---|
 | `offer` | `{"type":"offer","sdp":"<complete SDP offer>"}` |
-| `oai-event` | `{"type":"oai-event","voiceSessionId":…,"sequence":17,"observedAt":…,"payload":{…}}` — sent only while the server requests observation |
-| `oai-event-gap` | `{"type":"oai-event-gap","voiceSessionId":…,"fromSequence":18,"toSequence":24,"dropped":7,"observedAt":…}` — reports raw events skipped under Client backpressure |
 
 An offer is accepted any time after the most recent `ready`. Sending a new
 offer while a session is running **supersedes** it (this is how you renew) —
@@ -543,9 +384,8 @@ gets a non-fatal `error`.
 
 | Message | Shape | Meaning |
 |---|---|---|
-| `ready` | `{"type":"ready","protocol":2,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart) or the active voice changes. `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
-| `answer` | `{"type":"answer","sdp":…,"voiceSessionId":"92d7…"}` | Bind the UUID to the pending peer before applying the WebRTC answer with `setRemoteDescription`. |
-| `observe-oai-events` | `{"type":"observe-oai-events","enabled":true}` | Enable or disable the lossy raw-event mirror. Additive and driven by the first/last authenticated `observe=voice` gateway peer. |
+| `ready` | `{"type":"ready","protocol":1,"threadId":…,"workspace":…,"model":…,"effort":…,"voiceModel":…,"voice":…,"prompts":[…]}` | Offers are accepted now. Sent on connect and re-sent whenever offers reopen (after `closed`, after a fatal `error`, after an internal restart) or the active voice changes. `null` fields mean "codex default"; `prompts` lists the prompt filenames priming the agents. |
+| `answer` | `{"type":"answer","sdp":…}` | The WebRTC answer; apply with `setRemoteDescription`. |
 | `redial` | `{"type":"redial","reason":"voice-name-changed"}` | Negotiate a replacement voice session while retaining the WebSocket and orchestrator thread. The bundled client keeps the current audio peer until its successor connects. |
 | `closed` | `{"type":"closed","reason"?:…}` | The voice session ended (`transport_closed` at the upstream ceiling, `app-server-exited` on an internal restart, …). Wait for the next `ready`, then re-offer if desired. |
 | `error` | `{"type":"error","message":…,"code"?:…,"fatal":bool}` | `fatal:true` (code `realtime-failed`): the session is dead — **stop your microphone tracks and close the peer**, then wait for `ready` to try again. `fatal:false` is informational (`not-ready`, `bad-offer`, `unknown-message`, `bad-message`). |

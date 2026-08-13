@@ -20,6 +20,12 @@ describe("parseFrames", () => {
     expect(frames).toEqual([{ ok: true }]);
     expect(rest).toBe("");
   });
+
+  test("handles empty input and blank/CRLF lines", () => {
+    expect(parseFrames("")).toEqual({ frames: [], rest: "" });
+    const { frames } = parseFrames('\n\r\n{"x":1}\r\n');
+    expect(frames).toEqual([{ x: 1 }]);
+  });
 });
 
 describe("framing", () => {
@@ -34,13 +40,14 @@ describe("framing", () => {
     });
   });
 
-  test("notification and response helpers preserve their JSON-RPC shapes", () => {
-    expect(JSON.parse(frameNotification("initialized", {}))).toEqual({
-      jsonrpc: "2.0",
-      method: "initialized",
-      params: {},
-    });
-    expect(JSON.parse(frameResponse(3, { decision: "decline" }))).toEqual({
+  test("notification frames carry no id", () => {
+    const frame = JSON.parse(frameNotification("initialized", {}));
+    expect(frame).toEqual({ jsonrpc: "2.0", method: "initialized", params: {} });
+  });
+
+  test("response frames answer by id", () => {
+    const frame = JSON.parse(frameResponse(3, { decision: "decline" }));
+    expect(frame).toEqual({
       jsonrpc: "2.0",
       id: 3,
       result: { decision: "decline" },
@@ -49,7 +56,7 @@ describe("framing", () => {
 });
 
 describe("buildDenialResponse", () => {
-  test("denies approval-bearing requests and never leaves an unknown request parked", () => {
+  test("denies command approvals in the shape app-server expects", () => {
     expect(buildDenialResponse("item/commandExecution/requestApproval")).toEqual({
       decision: "decline",
     });
@@ -59,25 +66,17 @@ describe("buildDenialResponse", () => {
       scope: "turn",
     });
     expect(buildDenialResponse("tool/requestUserInput")).toEqual({ answers: {} });
+  });
+
+  test("answers unknown methods with an empty object so turns never park", () => {
     expect(buildDenialResponse("some/future/request")).toEqual({});
   });
 });
 
 describe("spawnArgv", () => {
-  test("uses the private native listener for supervised App-server children", () => {
-    expect(spawnArgv("/usr/local/bin/codex", "/state/app-server/control.sock")).toEqual([
+  test("enables the realtime feature and pins stdio transport", () => {
+    expect(spawnArgv("/usr/local/bin/codex")).toEqual([
       "/usr/local/bin/codex",
-      "app-server",
-      "--enable",
-      "realtime_conversation",
-      "--listen",
-      "unix:///state/app-server/control.sock",
-    ]);
-  });
-
-  test("retains stdio for standalone upstream-semantics probes", () => {
-    expect(spawnArgv("codex")).toEqual([
-      "codex",
       "app-server",
       "--enable",
       "realtime_conversation",

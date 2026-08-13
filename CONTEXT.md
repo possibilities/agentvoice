@@ -1,45 +1,8 @@
 # Glossary
 
-**App-server** — The `codex app-server` child process this server supervises on
-an owner-only Unix listener. AgentVoice and each gateway peer have independent
-native connections to it. _Avoid_: "codex process", "backend server".
-
-**App-server gateway** — The authenticated `/app-server` WebSocket surface
-that gives every peer its own native App-server connection and forwards its raw
-JSON-RPC frames without method translation. Closing a peer closes that physical
-connection and releases its connection-scoped subscriptions. _Avoid_: "shared
-connection", "virtual connection".
-
-**Frame envelope** — The `agentvoice/frame` notification emitted by the
-App-server gateway for every JSON frame crossing AgentVoice's own connection:
-exact parsed payload plus direction and owner. A gateway peer's own native
-frames remain ordinary App-server traffic, and the envelope stream is an
-explicit `observe=agentvoice` opt-in. _Avoid_: "event" without
-qualification (the payload may be a request, response, or notification), "chat
-message".
-
-**Codex transcript** — The per-thread semantic projection `agentvoice chats`
-builds from a full `thread/read` history plus live Frame envelopes. It preserves
-the raw App-server item on every projected item and never loads, resumes, or
-subscribes to the thread it describes. _Avoid_: "chat messages" (commands,
-diffs, reasoning, tools, and lifecycle are first-class), "voice transcript".
-
-**Harness view** — The default Codex-thread detail surface in `agentvoice
-chats`: a compact execution spine of Codex transcript items with expandable
-content and per-item raw access. The alternate Frames view remains the exact
-connection-level JSON stream; Voice Sessions use Frames only. _Avoid_: "chat
-view", "semantic frames".
-
-**Thread identity snapshot** — The `agentvoice/thread/identities` notification
-replayed and updated for `observe=agentvoice` peers, mapping the currently
-owned root and dispatched Worker thread ids to `orchestrator` or `worker`.
-It is AgentVoice observer metadata layered beside untouched native App-server
-frames, not a replacement for Codex's persisted Thread source. _Avoid_:
-"thread list", "source repair".
-
-**Thread source** — The per-thread `threadSource` ownership tag AgentVoice sets
-to `agentvoice-orchestrator` or `agentvoice-worker`, independent of Codex's
-process-level `source`. _Avoid_: `source`, "session source".
+**App-server** — The `codex app-server` child process this server spawns and
+speaks newline-delimited JSON-RPC to over stdio. _Avoid_: "codex process",
+"backend server".
 
 **Orchestrator agent** — The agent that does the actual work: one Codex thread
 opened at boot, living in the workspace. The thread is its identity and its
@@ -52,29 +15,8 @@ handoff between them happens inside app-server. _Avoid_: "voice model",
 "realtime model", "backend" (upstream's word for the orchestrator, not ours).
 
 **Voice session** — One realtime (WebRTC) session connecting the client to the
-voice agent, created per client offer, identified by an AgentVoice UUID before
-its answer is applied, and superseded by the next offer. Late raw events remain
-associated with the UUID of the peer that produced them.
+voice agent, created per client offer and superseded by the next offer.
 _Avoid_: "call", "realtime conversation".
-
-**Voice observation** — The live-only `agentvoice/voice-observation` gateway
-notification enabled independently by `observe=voice`. It carries an exact
-parsed realtime control payload, a lifecycle fact, or an explicit loss gap,
-all associated with a voice-session UUID and the server-authoritative
-orchestrator thread id. It is never persisted, and it never carries audio.
-_Avoid_: "audio stream", "voice frame", "thread event".
-
-**Voice observation lifecycle** — A `starting`, `active`, or `ended` fact for
-one voice session. The gateway retains only the current starting/active fact
-for a newly attached observer; ended facts are live transitions, not replayed
-history. _Avoid_: "connection status" (the Client control socket and WebRTC
-peer have distinct lifecycles).
-
-**Voice observation gap** — One bounded loss record naming a contiguous range
-of per-session raw-event sequence numbers skipped when Client control-WebSocket
-backpressure exceeded 1 MiB. It makes loss visible without allowing telemetry
-to delay offers or session control. _Avoid_: "dropped frame" (no audio or
-App-server frame was dropped).
 
 **Prompt file** — A conventionally named `SHOUTCASE.md` in the config
 directory that primes one agent, discovered by name rather than referenced from
@@ -153,6 +95,10 @@ a thread id. Its task outcome remains readable after its thread is retired;
 completed turns are archived, while a thread whose first turn was definitively
 rejected is deleted. _Avoid_: subagent (codex's in-thread feature,
 deliberately disabled), background task.
+
+**Thread source** — The per-thread `threadSource` ownership tag AgentVoice sets
+to `agentvoice-orchestrator` or `agentvoice-worker`, independent of Codex's
+process-level `source`. _Avoid_: `source`, "session source".
 
 **Worker cleanup** — retiring a Worker's app-server thread after its task
 settles, tracked and retried separately from the task outcome. Archival

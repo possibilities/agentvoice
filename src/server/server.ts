@@ -12,8 +12,15 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ServerWebSocket } from "bun";
 import { stateDirectory, tokenPath } from "../paths.ts";
-import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage } from "../protocol.ts";
+import {
+  CLOSE_BUSY,
+  CLOSE_UNAUTHORIZED,
+  PROTOCOL_VERSION,
+  parseClientMessage,
+  type ServerMessage,
+} from "../protocol.ts";
 import {
   accountsDirectory,
   balancerCliPresent,
@@ -26,10 +33,9 @@ import {
   selectAccount,
 } from "./accounts.ts";
 import { AppServer, AppServerError } from "./appserver.ts";
-import { APP_SERVER_GATEWAY_PATH, AppServerGateway } from "./appserver-gateway.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
-import { type AgentVoiceSocket, startHttpServer } from "./http-server.ts";
+import { gateRequest, tokenMatches } from "./gate.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
 import {
@@ -38,6 +44,8 @@ import {
   WorkerManager,
   WorkerTurnStartError,
 } from "./workers.ts";
+
+type ClientSocket = ServerWebSocket<{ authorized: boolean }>;
 
 const RESTART_BACKOFF_INITIAL_MS = 500;
 const RESTART_BACKOFF_CAP_MS = 30_000;
@@ -68,7 +76,6 @@ export async function runServer(
 ): Promise<void> {
   const stateDir = stateDirectory(process.env, homedir());
   const appServerCwd = join(stateDir, "app-server");
-  const appServerSocket = join(appServerCwd, "control.sock");
   mkdirSync(appServerCwd, { recursive: true, mode: 0o700 });
   mkdirSync(config.orchestrator.workspace, { recursive: true, mode: 0o700 });
   const tokenFile = tokenPath(process.env, homedir());
@@ -87,16 +94,10 @@ export async function runServer(
   let appServer: AppServer | null = null;
   let threadId: string | null = null;
   let threadReady = false;
-  let client: AgentVoiceSocket | null = null;
+  let client: ClientSocket | null = null;
   let restartFailures = 0;
   let shuttingDown = false;
   let activeVoiceName = config.voice.name;
-  const appServerGateway = new AppServerGateway({
-    debug: debugLog,
-    onVoiceObservationChanged(enabled) {
-      send({ type: "observe-oai-events", enabled });
-    },
-  });
 
   // Account balancing state. The active account is fixed per child; rotation
   // is a supervised restart at an idle boundary onto the balancer's next pick.
@@ -148,7 +149,7 @@ export async function runServer(
   }
 
   const sessions = new VoiceSessionManager({
-    sendAnswer: (voiceSessionId, sdp) => send({ type: "answer", sdp, voiceSessionId }),
+    sendAnswer: (sdp) => send({ type: "answer", sdp }),
     sendClosed: (reason) => send({ type: "closed", ...(reason ? { reason } : {}) }),
     sendFailed: (message) => send({ type: "error", code: "realtime-failed", message, fatal: true }),
     sendReady,
@@ -175,17 +176,6 @@ export async function runServer(
       }
       return appServer.request("thread/realtime/stop", { threadId }).then(() => {});
     },
-    publishLifecycle(voiceSessionId, state, reason) {
-      if (!threadId) return;
-      appServerGateway.voiceLifecycle({
-        kind: "lifecycle",
-        voiceSessionId,
-        threadId,
-        state,
-        observedAt: Date.now(),
-        ...(reason ? { reason } : {}),
-      });
-    },
     debug: debugLog,
   });
 
@@ -207,7 +197,6 @@ export async function runServer(
             const workerThreadId = extractThreadId(
               await appServer.request("thread/start", workerThreadParams(config)),
             );
-            appServerGateway.setThreadIdentity(workerThreadId, "worker");
             return { threadId: workerThreadId };
           },
           async startWorkerTurn(workerThreadId, brief) {
@@ -245,7 +234,6 @@ export async function runServer(
               (method, params) => server.request(method, params),
               workerThreadId,
             );
-            appServerGateway.removeThreadIdentity(workerThreadId);
           },
           async deleteWorker(workerThreadId) {
             const server = appServer;
@@ -254,7 +242,6 @@ export async function runServer(
               (method, params) => server.request(method, params),
               workerThreadId,
             );
-            appServerGateway.removeThreadIdentity(workerThreadId);
           },
           scheduleCleanupRetry(run, delayMs) {
             setTimeout(run, delayMs).unref();
@@ -314,12 +301,10 @@ export async function runServer(
     const server = new AppServer({
       codexBin: config.codex,
       processCwd: appServerCwd,
-      socketPath: appServerSocket,
       ...(choice.codexHome !== undefined ? { codexHome: choice.codexHome } : {}),
       clientVersion: version,
       onNotification: handleNotification,
       onRequest: handleAppServerRequest,
-      onFrame: (direction, owner, frame) => appServerGateway.frame(direction, owner, frame),
       onExit: (info) => handleAppServerExit(server, info),
       debug: debugLog,
     });
@@ -329,11 +314,8 @@ export async function runServer(
     try {
       await server.start();
       threadId = await openThread(server);
-      appServerGateway.setAppServer(server);
-      appServerGateway.replaceThreadIdentities([{ threadId, role: "orchestrator" }]);
     } catch (error) {
       appServer = null;
-      appServerGateway.setAppServer(null);
       const stderr = server.recentStderr;
       await server.stop().catch(() => {});
       if (error instanceof AppServerError && stderr) {
@@ -355,7 +337,6 @@ export async function runServer(
     orchestratorTurnActive = false;
     const hadSession = sessions.hasSession;
     sessions.reset(); // every session died with the child
-    appServerGateway.setAppServer(null);
     workers?.reset(); // running workers died with it too — marked lost, not resumed
     if (shuttingDown || expected) return;
     if (hadSession) send({ type: "closed", reason: "app-server-exited" });
@@ -481,33 +462,6 @@ export async function runServer(
       send({ type: "error", code: parsed.code, message: parsed.error, fatal: false });
       return;
     }
-    if (parsed.message.type === "oai-event") {
-      if (appServerGateway.observesVoiceEvents && threadId) {
-        appServerGateway.voiceEvent({
-          kind: "event",
-          voiceSessionId: parsed.message.voiceSessionId,
-          threadId,
-          sequence: parsed.message.sequence,
-          observedAt: parsed.message.observedAt,
-          payload: parsed.message.payload,
-        });
-      }
-      return;
-    }
-    if (parsed.message.type === "oai-event-gap") {
-      if (appServerGateway.observesVoiceEvents && threadId) {
-        appServerGateway.voiceGap({
-          kind: "gap",
-          voiceSessionId: parsed.message.voiceSessionId,
-          threadId,
-          fromSequence: parsed.message.fromSequence,
-          toSequence: parsed.message.toSequence,
-          dropped: parsed.message.dropped,
-          observedAt: parsed.message.observedAt,
-        });
-      }
-      return;
-    }
     if (!threadReady || !appServer || !threadId) {
       send({
         type: "error",
@@ -534,25 +488,63 @@ export async function runServer(
   // Boot fails fast: the operator is present. Later child exits are supervised.
   await connectAppServer();
 
-  const httpServer = startHttpServer({
+  const httpServer = Bun.serve<{ authorized: boolean }>({
+    hostname: "127.0.0.1",
     port: config.port,
-    token,
-    version,
-    appServerGateway,
-    debug: debugLog,
-    voice: {
-      open(ws) {
+    fetch(request, server) {
+      const url = new URL(request.url);
+      const verdict = gateRequest(
+        request.headers.get("origin"),
+        request.headers.get("host"),
+        config.port,
+      );
+      if (!verdict.ok) return new Response(verdict.reason, { status: verdict.status });
+      if (url.pathname === "/ws") {
+        // A bad token still upgrades, then closes with 4401: a plain HTTP 401
+        // reaches the client as an anonymous handshake failure, the close code
+        // as a diagnosable error.
+        const authorized = tokenMatches(url.searchParams.get("token"), token);
+        return server.upgrade(request, { data: { authorized } })
+          ? undefined
+          : new Response("websocket upgrade required", { status: 426 });
+      }
+      if (url.pathname === "/") {
+        return Response.json({
+          name: "agentvoice",
+          version,
+          protocol: PROTOCOL_VERSION,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    },
+    websocket: {
+      // Audio flows peer-to-peer, so the socket is legitimately silent for
+      // minutes; a short idle timeout would sever healthy sessions.
+      idleTimeout: 120,
+      sendPings: true,
+      maxPayloadLength: 1 << 20,
+      open(ws: ClientSocket) {
+        // Auth before busy: an unauthorized caller learns nothing about the slot.
+        if (!ws.data.authorized) {
+          ws.close(CLOSE_UNAUTHORIZED, "missing or wrong connection token");
+          return;
+        }
+        if (client) {
+          ws.close(CLOSE_BUSY, "another client is connected");
+          return;
+        }
         client = ws;
         debugLog?.("client connected");
         sendReady();
-        send({ type: "observe-oai-events", enabled: appServerGateway.observesVoiceEvents });
         // Replay worker state so a UI joining mid-run starts complete.
         for (const worker of workers?.snapshots() ?? []) send({ type: "worker", worker });
       },
-      message(_ws, text) {
-        handleClientMessage(text);
+      message(ws: ClientSocket, raw: string | Buffer) {
+        if (ws !== client) return;
+        handleClientMessage(typeof raw === "string" ? raw : raw.toString());
       },
-      close() {
+      close(ws: ClientSocket) {
+        if (ws !== client) return;
         client = null;
         debugLog?.("client disconnected");
         sessions.handleClientGone();
@@ -581,7 +573,6 @@ export async function runServer(
   const orDefault = (value: string | undefined) => value ?? "(codex default)";
   const { orchestrator, voice } = config;
   console.log(`agentvoice server listening on ws://127.0.0.1:${config.port}/ws`);
-  console.log(`  app-server API  ws://127.0.0.1:${config.port}${APP_SERVER_GATEWAY_PATH}`);
   console.log(`  token           ${tokenFile}`);
   console.log(`  workspace       ${orchestrator.workspace}`);
   console.log(`  thread          ${threadId}`);
@@ -616,15 +607,15 @@ export async function runServer(
     shuttingDown = true;
     configWatcher?.stop();
     console.error("shutting down");
-    await Promise.race([
-      sessions.shutdown(),
-      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
-    ]);
     try {
       client?.close(1001, "server shutting down");
     } catch {
       // client may already be gone
     }
+    await Promise.race([
+      sessions.shutdown(),
+      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
+    ]);
     httpServer.stop(true);
     if (appServer) await appServer.stop().catch(() => {});
   }
