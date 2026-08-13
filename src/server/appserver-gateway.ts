@@ -1,3 +1,4 @@
+import { AGENTVOICE_THREAD_IDENTITIES_METHOD, type AgentVoiceThreadIdentity } from "../protocol.ts";
 import type { AppServer } from "./appserver.ts";
 import { UnixWebSocket } from "./unix-websocket.ts";
 
@@ -56,6 +57,7 @@ function unixUpstream(socketPath: string, callbacks: GatewayUpstreamCallbacks): 
 export class AppServerGateway {
   private readonly options: AppServerGatewayOptions;
   private readonly peers = new Map<GatewayPeer, PeerState>();
+  private readonly threadIdentities = new Map<string, AgentVoiceThreadIdentity["role"]>();
   private socketPath: string | null = null;
 
   constructor(options: AppServerGatewayOptions = {}) {
@@ -66,9 +68,29 @@ export class AppServerGateway {
     const next = appServer?.alive === true ? appServer.socketPath : null;
     if (this.socketPath === next) return;
     this.socketPath = next;
+    this.threadIdentities.clear();
     for (const peer of [...this.peers.keys()]) {
       this.disconnect(peer, 1012, "AgentVoice app-server changed");
     }
+  }
+
+  replaceThreadIdentities(identities: readonly AgentVoiceThreadIdentity[]): void {
+    this.threadIdentities.clear();
+    for (const identity of identities) {
+      this.threadIdentities.set(identity.threadId, identity.role);
+    }
+    this.broadcastThreadIdentities();
+  }
+
+  setThreadIdentity(threadId: string, role: AgentVoiceThreadIdentity["role"]): void {
+    if (this.threadIdentities.get(threadId) === role) return;
+    this.threadIdentities.set(threadId, role);
+    this.broadcastThreadIdentities();
+  }
+
+  removeThreadIdentity(threadId: string): void {
+    if (!this.threadIdentities.delete(threadId)) return;
+    this.broadcastThreadIdentities();
   }
 
   add(peer: GatewayPeer, options: { observeAgentVoice?: boolean } = {}): void {
@@ -92,6 +114,9 @@ export class AppServerGateway {
       removed: false,
     };
     this.peers.set(peer, state);
+    if (state.observeAgentVoice && this.threadIdentities.size > 0) {
+      this.sendThreadIdentities(peer);
+    }
     void upstream
       .connect()
       .then(() => {
@@ -161,6 +186,26 @@ export class AppServerGateway {
     for (const [peer, state] of this.peers) {
       if (state.observeAgentVoice) this.sendText(peer, envelope);
     }
+  }
+
+  private broadcastThreadIdentities(): void {
+    for (const [peer, state] of this.peers) {
+      if (state.observeAgentVoice) this.sendThreadIdentities(peer);
+    }
+  }
+
+  private sendThreadIdentities(peer: GatewayPeer): void {
+    const data = [...this.threadIdentities]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([threadId, role]) => ({ threadId, role }));
+    this.sendText(
+      peer,
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: AGENTVOICE_THREAD_IDENTITIES_METHOD,
+        params: { data },
+      }),
+    );
   }
 
   private disconnect(peer: GatewayPeer, code: number, reason: string): void {

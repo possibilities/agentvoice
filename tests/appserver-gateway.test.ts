@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { AGENTVOICE_THREAD_IDENTITIES_METHOD } from "../src/protocol.ts";
 import {
   AppServerGateway,
   type GatewayPeer,
@@ -140,6 +141,33 @@ describe("AppServerGateway", () => {
       params: { direction: "fromAppServer", owner: "appServer", payload },
     });
     expect(upstreams[0]?.sent).toEqual([]);
+  });
+
+  test("replays and updates AgentVoice-owned thread identities only for observers", async () => {
+    const { gateway } = fixture();
+    gateway.replaceThreadIdentities([{ threadId: "root", role: "orchestrator" }]);
+    const observer = new Peer();
+    const native = new Peer();
+    gateway.add(observer, { observeAgentVoice: true });
+    gateway.add(native);
+    await Promise.resolve();
+
+    expect(JSON.parse(observer.frames.at(-1)!)).toEqual({
+      jsonrpc: "2.0",
+      method: AGENTVOICE_THREAD_IDENTITIES_METHOD,
+      params: { data: [{ threadId: "root", role: "orchestrator" }] },
+    });
+    expect(native.frames).toEqual([]);
+
+    gateway.setThreadIdentity("worker", "worker");
+    expect(JSON.parse(observer.frames.at(-1)!).params.data).toEqual([
+      { threadId: "root", role: "orchestrator" },
+      { threadId: "worker", role: "worker" },
+    ]);
+    gateway.removeThreadIdentity("worker");
+    expect(JSON.parse(observer.frames.at(-1)!).params.data).toEqual([
+      { threadId: "root", role: "orchestrator" },
+    ]);
   });
 
   test("keeps the default gateway stream exactly native", async () => {

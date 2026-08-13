@@ -22,7 +22,7 @@ describe("chats thread model", () => {
       {
         id: "older",
         name: null,
-        preview: "Older task",
+        preview: "Older conversation text that must not become a title",
         status: { type: "idle" },
         threadSource: "agentvoice-worker",
         modelProvider: "openai",
@@ -49,9 +49,10 @@ describe("chats thread model", () => {
     expect(cards[0]).toMatchObject({
       name: "Named thread",
       role: "orchestrator",
-      status: "active · waitingOnApproval",
+      status: "active / waitingOnApproval",
     });
-    expect(cards[1]).toMatchObject({ name: "Older task", role: "worker" });
+    expect(cards[1]).toMatchObject({ name: "worker older", role: "worker" });
+    expect(cards[1]?.name).not.toContain("conversation text");
   });
 
   test("falls back safely for partial future thread shapes", () => {
@@ -62,6 +63,11 @@ describe("chats thread model", () => {
     });
     expect(threadCard({ nope: true })).toBeNull();
     expect(displayRole({ agentRole: "reviewer" })).toBe("reviewer");
+    expect(displayRole({ source: { subAgent: { other: "guardian" } } })).toBe("guardian");
+    expect(displayRole({ source: { subagent: { other: "guardian" } } })).toBe("guardian");
+    expect(displayRole({ source: { subAgent: { threadSpawn: { agentRole: "explorer" } } } })).toBe(
+      "explorer",
+    );
     expect(displayStatus("idle")).toBe("idle");
   });
 
@@ -76,6 +82,30 @@ describe("chats thread model", () => {
     );
     model.replaceThreads([]);
     expect(model.events.has("thread-a")).toBe(false);
+  });
+
+  test("overlays AgentVoice-owned roles without changing raw App-server metadata", () => {
+    const model = new ChatsModel();
+    model.replaceThreads([
+      {
+        id: "root-thread",
+        name: null,
+        threadSource: null,
+        source: "appServer",
+      },
+    ]);
+    expect(model.threads.get("root-thread")?.role).toBe("thread");
+
+    model.replaceAgentVoiceThreadIdentities([
+      { threadId: "root-thread", role: "orchestrator" },
+      { threadId: "ignored", role: "guardian" },
+    ]);
+
+    expect(model.threads.get("root-thread")).toMatchObject({
+      name: "orchestrator root-thr",
+      role: "orchestrator",
+    });
+    expect(model.threads.get("root-thread")?.raw["threadSource"]).toBeNull();
   });
 });
 
@@ -179,7 +209,7 @@ describe("chats raw event model", () => {
     );
     expect(model.threads.get("thread-a")).toMatchObject({
       name: "New",
-      status: "active · waiting",
+      status: "active / waiting",
     });
   });
 

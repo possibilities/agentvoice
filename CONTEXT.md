@@ -18,6 +18,17 @@ explicit `observe=agentvoice` opt-in. _Avoid_: "event" without
 qualification (the payload may be a request, response, or notification), "chat
 message".
 
+**Thread identity snapshot** — The `agentvoice/thread/identities` notification
+replayed and updated for `observe=agentvoice` peers, mapping the currently
+owned root and dispatched Worker thread ids to `orchestrator` or `worker`.
+It is AgentVoice observer metadata layered beside untouched native App-server
+frames, not a replacement for Codex's persisted Thread source. _Avoid_:
+"thread list", "source repair".
+
+**Thread source** — The per-thread `threadSource` ownership tag AgentVoice sets
+to `agentvoice-orchestrator` or `agentvoice-worker`, independent of Codex's
+process-level `source`. _Avoid_: `source`, "session source".
+
 **Orchestrator agent** — The agent that does the actual work: one Codex thread
 opened at boot, living in the workspace. The thread is its identity and its
 persistent state; the voice session is layered onto it inside app-server.

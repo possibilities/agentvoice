@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SignalField, signalFieldText } from "../src/client/signal-field.ts";
+import { boundedViewportExtent, boundedViewportSize } from "../src/client/signal-field-ui.ts";
 
 function countTone(field: ReturnType<SignalField["render"]>, tone: string): number {
   return field.rows.flat().filter((cell) => cell.tone === tone).length;
@@ -14,6 +15,16 @@ function changedCells(left: string, right: string): number {
 }
 
 describe("signal field", () => {
+  test("bounds transient layout geometry to the terminal viewport", () => {
+    expect(boundedViewportSize(103, 14_680_069, 103, 19)).toEqual({ width: 103, height: 19 });
+    expect(boundedViewportSize(Number.POSITIVE_INFINITY, Number.NaN, 49, 46)).toEqual({
+      width: 1,
+      height: 1,
+    });
+    expect(boundedViewportExtent(18.9, 10.8)).toBe(10);
+    expect(boundedViewportExtent(-5, 19)).toBe(1);
+  });
+
   test("renders exact requested dimensions at narrow and wide widths", () => {
     const field = new SignalField({ seed: 7 });
     for (const [width, height] of [

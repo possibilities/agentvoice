@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { createFleetFooter } from "../tui/footer.ts";
 import type { ChatsConnection } from "./client.ts";
 import type { ChatsModel, RawFrameEvent, ThreadCard } from "./model.ts";
 
@@ -43,13 +45,9 @@ function shortId(id: string): string {
   return id.length <= 12 ? id : `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
 
-function sourceLabel(source: unknown): string {
-  if (typeof source === "string") return source;
-  if (typeof source === "object" && source !== null) {
-    const [key, value] = Object.entries(source)[0] ?? [];
-    if (key) return typeof value === "string" ? `${key}:${value}` : key;
-  }
-  return "unknown";
+export function homeRelativePath(path: string, home = homedir()): string {
+  if (path === home) return "~";
+  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
 }
 
 function eventLabel(event: RawFrameEvent): string {
@@ -118,11 +116,15 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     id: "chats-title",
     content: "▎ AGENTVOICE / CHATS",
     fg: TONES.accent,
+    flexShrink: 0,
+    wrapMode: "none",
   });
   const headerStatus = new core.TextRenderable(renderer, {
     id: "chats-status",
     content: "",
     fg: TONES.muted,
+    flexShrink: 0,
+    wrapMode: "none",
   });
   header.add(headerTitle);
   header.add(headerStatus);
@@ -160,7 +162,7 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   const detailHeader = new core.BoxRenderable(renderer, {
     id: "detail-header",
     width: "100%",
-    minHeight: 5,
+    height: 6,
     paddingTop: 1,
     paddingBottom: 1,
     paddingLeft: 2,
@@ -170,11 +172,38 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     borderColor: TONES.line,
     flexDirection: "column",
   });
+  const detailHeadline = new core.BoxRenderable(renderer, {
+    id: "detail-headline",
+    width: "100%",
+    height: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: TONES.field,
+  });
+  const backButton = new core.BoxRenderable(renderer, {
+    id: "detail-back",
+    height: 1,
+    paddingRight: 3,
+    backgroundColor: TONES.field,
+    onMouseUp: () => closeDetail(),
+  });
+  backButton.add(
+    new core.TextRenderable(renderer, {
+      id: "detail-back-label",
+      content: new core.StyledText([core.bold(core.fg(TONES.accent)("← CHATS"))]),
+    }),
+  );
   const detailTitle = new core.TextRenderable(renderer, {
     id: "detail-title",
     content: "",
     fg: TONES.text,
-    wrapMode: "word",
+    flexGrow: 1,
+    wrapMode: "none",
+  });
+  const detailState = new core.TextRenderable(renderer, {
+    id: "detail-state",
+    content: "",
+    fg: TONES.muted,
   });
   const detailFacts = new core.TextRenderable(renderer, {
     id: "detail-facts",
@@ -182,7 +211,10 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     fg: TONES.muted,
     wrapMode: "word",
   });
-  detailHeader.add(detailTitle);
+  detailHeadline.add(backButton);
+  detailHeadline.add(detailTitle);
+  detailHeadline.add(detailState);
+  detailHeader.add(detailHeadline);
   detailHeader.add(detailFacts);
   detail.add(detailHeader);
 
@@ -202,32 +234,13 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   detail.add(eventScroll);
   main.add(detail);
 
-  const footer = new core.BoxRenderable(renderer, {
-    id: "chats-footer",
-    width: "100%",
-    height: 3,
-    paddingLeft: 2,
-    paddingRight: 2,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: TONES.field,
-    border: ["top"],
-    borderColor: TONES.line,
+  const footer = createFleetFooter(core, renderer, "chats-footer", {
+    field: TONES.field,
+    line: TONES.line,
+    accent: TONES.accent,
+    muted: TONES.muted,
   });
-  const footerKeys = new core.TextRenderable(renderer, {
-    id: "footer-keys",
-    content: "",
-    fg: TONES.muted,
-  });
-  const footerMode = new core.TextRenderable(renderer, {
-    id: "footer-mode",
-    content: "LIVE",
-    fg: TONES.accent,
-  });
-  footer.add(footerKeys);
-  footer.add(footerMode);
-  root.add(footer);
+  root.add(footer.root);
 
   let view: "list" | "detail" = "list";
   let threadIndex = 0;
@@ -261,35 +274,77 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
 
   function updateChrome(): void {
     const threads = options.model.sortedThreads;
+    const width = renderer.width || process.stdout.columns || 100;
     if (view === "list") {
       headerTitle.content = "▎ AGENTVOICE / CHATS";
       headerStatus.content = connectionError
-        ? `DISCONNECTED · ${compact(connectionError, 42)}`
-        : refreshing
-          ? "REFRESHING"
-          : `${threads.length} LOADED`;
+        ? `DISCONNECTED / ${compact(connectionError, 42)}`
+        : `${threads.length} LOADED`;
       headerStatus.fg = connectionError ? TONES.danger : TONES.muted;
-      footerKeys.content = "[↑↓/jk] select  [enter] open  [r] refresh  [q] quit";
-      footerMode.content = "LIVE · 2s";
+      footer.update({
+        width,
+        mode: "LIVE / 2s",
+        actions: [
+          {
+            id: "previous",
+            key: "↑",
+            label: "previous",
+            shortLabel: "prev",
+            onPress: () => updateThreadSelection(-1),
+          },
+          { id: "next", key: "↓", label: "next", onPress: () => updateThreadSelection(1) },
+          { id: "open", key: "ENTER", label: "open", onPress: () => openDetail() },
+          { id: "refresh", key: "R", label: "refresh", onPress: () => void refresh(true) },
+          { id: "quit", key: "Q", label: "quit", onPress: () => shutdown() },
+        ],
+      });
     } else {
       const thread = selectedThread();
       const events = thread ? (options.model.events.get(thread.id) ?? []) : [];
-      headerTitle.content = `▎ CHATS / ${thread ? compact(thread.name.toUpperCase(), 42) : "THREAD"}`;
-      headerStatus.content = `${events.length} EVENTS${followTail ? " · FOLLOW" : ""}`;
+      headerTitle.content = "▎ AGENTVOICE / CHATS";
+      headerStatus.content = `${events.length} EVENTS${followTail ? "  FOLLOW" : ""}`;
       headerStatus.fg = TONES.muted;
-      footerKeys.content =
-        "[esc/h] threads  [↑↓/jk] event  [enter] expand  [pg↑↓] scroll  [f] follow";
-      footerMode.content = followTail ? "FOLLOW" : "HOLD";
-      footerMode.fg = followTail ? TONES.accent : TONES.downstream;
+      footer.update({
+        width,
+        mode: followTail ? "FOLLOW" : "HOLD",
+        actions: [
+          { id: "back", key: "ESC", label: "chats", onPress: () => closeDetail() },
+          {
+            id: "previous",
+            key: "↑",
+            label: "previous",
+            shortLabel: "prev",
+            onPress: () => selectPreviousEvent(),
+          },
+          { id: "next", key: "↓", label: "next", onPress: () => selectNextEvent() },
+          { id: "expand", key: "ENTER", label: "expand", onPress: () => toggleExpanded() },
+          {
+            id: "page-up",
+            key: "PG↑",
+            label: "scroll up",
+            shortLabel: "up",
+            onPress: () => scrollEvents(-12),
+          },
+          {
+            id: "page-down",
+            key: "PG↓",
+            label: "scroll down",
+            shortLabel: "down",
+            onPress: () => scrollEvents(12),
+          },
+          { id: "follow", key: "F", label: "follow", onPress: () => followEvents() },
+          { id: "quit", key: "Q", label: "quit", onPress: () => shutdown() },
+        ],
+      });
     }
   }
 
   function cardText(card: ThreadCard): string {
-    const parent = card.parentThreadId ? `  parent ${shortId(card.parentThreadId)}` : "";
+    const parent = card.parentThreadId ? `   PARENT ${shortId(card.parentThreadId)}` : "";
     return [
-      compact(card.name, 88),
-      `${card.role}  ·  ${card.status}  ·  ${card.modelProvider}${parent}`,
-      `${shortId(card.id)}  ·  ${compact(card.cwd, 72)}  ·  ${sourceLabel(card.source)}`,
+      card.role.toUpperCase(),
+      `ROLE ${card.role}   STATE ${card.status}   PROVIDER ${card.modelProvider}${parent}`,
+      `THREAD ${shortId(card.id)}   WORKSPACE ${compact(homeRelativePath(card.cwd), 72)}`,
     ].join("\n");
   }
 
@@ -446,12 +501,31 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   function updateDetailHeader(): void {
     const thread = selectedThread();
     if (!thread) return;
-    detailTitle.content = thread.name;
-    detailFacts.content = [
-      `${thread.role}  ·  ${thread.status}  ·  ${thread.modelProvider}`,
-      `${thread.id}  ·  ${thread.cwd}`,
-      `source ${sourceLabel(thread.source)}${thread.parentThreadId ? `  ·  parent ${thread.parentThreadId}` : ""}`,
-    ].join("\n");
+    const width = renderer.width || process.stdout.columns || 100;
+    const optional = [
+      ...(thread.parentThreadId ? [["PARENT", shortId(thread.parentThreadId)] as const] : []),
+    ];
+    detailHeader.height = optional.length > 0 ? 7 : 6;
+    detailTitle.content = compact(thread.name, Math.max(12, width - 26));
+    detailState.content = thread.status.toUpperCase();
+    const chunks = [
+      core.fg(TONES.faint)("ROLE       "),
+      core.fg(TONES.text)(thread.role),
+      core.fg(TONES.faint)("    PROVIDER   "),
+      core.fg(TONES.text)(thread.modelProvider),
+      core.fg(TONES.text)("\n"),
+      core.fg(TONES.faint)("WORKSPACE  "),
+      core.fg(TONES.text)(homeRelativePath(thread.cwd)),
+    ];
+    if (optional.length > 0) {
+      chunks.push(core.fg(TONES.text)("\n"));
+      optional.forEach(([label, value], index) => {
+        chunks.push(core.fg(TONES.faint)(label.padEnd(11)));
+        chunks.push(core.fg(TONES.text)(value));
+        if (index < optional.length - 1) chunks.push(core.fg(TONES.faint)("    "));
+      });
+    }
+    detailFacts.content = new core.StyledText(chunks);
   }
 
   function openDetail(): void {
@@ -520,6 +594,29 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       ? events.findIndex((event) => event.sequence === selectedEventSequence)
       : eventIndex;
     selectEventIndex(Math.max(currentIndex, 0) + delta);
+  }
+
+  function selectPreviousEvent(): void {
+    followTail = false;
+    updateEventSelection(-1);
+  }
+
+  function selectNextEvent(): void {
+    followTail = false;
+    updateEventSelection(1);
+  }
+
+  function scrollEvents(delta: number): void {
+    followTail = false;
+    eventScroll.scrollBy({ x: 0, y: delta });
+    updateChrome();
+    renderer.requestRender();
+  }
+
+  function followEvents(): void {
+    followTail = true;
+    eventScroll.scrollTop = Number.MAX_SAFE_INTEGER;
+    updateEventSelection(Number.MAX_SAFE_INTEGER);
   }
 
   function toggleExpanded(): void {
@@ -596,7 +693,6 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   const refresh = async (reread = false): Promise<void> => {
     if (refreshing) return;
     refreshing = true;
-    updateChrome();
     try {
       await options.refreshThreads(reread);
       connectionError = null;
@@ -632,27 +728,21 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     if (name === "escape" || name === "backspace" || name === "left" || name === "h") {
       closeDetail();
     } else if (name === "j" || name === "down") {
-      followTail = false;
-      updateEventSelection(1);
+      selectNextEvent();
     } else if (name === "k" || name === "up") {
-      followTail = false;
-      updateEventSelection(-1);
+      selectPreviousEvent();
     } else if (name === "return" || name === "enter" || name === "space") {
       toggleExpanded();
     } else if (name === "pagedown") {
-      followTail = false;
-      eventScroll.scrollBy({ x: 0, y: 12 });
+      scrollEvents(12);
     } else if (name === "pageup") {
-      followTail = false;
-      eventScroll.scrollBy({ x: 0, y: -12 });
+      scrollEvents(-12);
     } else if (name === "g" || name === "home") {
       followTail = false;
       eventScroll.scrollTop = 0;
       updateEventSelection(-Number.MAX_SAFE_INTEGER);
     } else if (name === "G" || name === "end" || name === "f") {
-      followTail = true;
-      eventScroll.scrollTop = Number.MAX_SAFE_INTEGER;
-      updateEventSelection(Number.MAX_SAFE_INTEGER);
+      followEvents();
     }
   });
 

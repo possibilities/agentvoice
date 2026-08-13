@@ -1,3 +1,5 @@
+import type { AgentVoiceThreadIdentity } from "../protocol.ts";
+
 export interface ThreadCard {
   id: string;
   name: string;
@@ -41,27 +43,46 @@ export function displayStatus(value: unknown): string {
   const flags = Array.isArray(value["activeFlags"])
     ? value["activeFlags"].filter((flag): flag is string => typeof flag === "string")
     : [];
-  return flags.length > 0 ? `${type} · ${flags.join(", ")}` : type;
+  return flags.length > 0 ? `${type} / ${flags.join(", ")}` : type;
 }
 
 export function displayRole(thread: Record<string, unknown>): string {
   const source = stringAt(thread, "threadSource");
   if (source === "agentvoice-orchestrator") return "orchestrator";
   if (source === "agentvoice-worker") return "worker";
-  return stringAt(thread, "agentRole") ?? source ?? "thread";
+  const agentRole = stringAt(thread, "agentRole")?.trim();
+  if (agentRole) return agentRole;
+  const sessionSource = thread["source"];
+  if (isRecord(sessionSource)) {
+    const subagent = sessionSource["subAgent"] ?? sessionSource["subagent"];
+    if (isRecord(subagent)) {
+      const other = stringAt(subagent, "other")?.trim();
+      if (other) return other;
+      const spawn = subagent["threadSpawn"] ?? subagent["thread_spawn"];
+      if (isRecord(spawn)) {
+        const spawnedRole =
+          stringAt(spawn, "agentRole")?.trim() ?? stringAt(spawn, "agent_role")?.trim();
+        if (spawnedRole) return spawnedRole;
+        return "worker";
+      }
+    }
+  }
+  if (source === "subagent") return "worker";
+  return source ?? "thread";
 }
 
-export function threadCard(value: unknown): ThreadCard | null {
+export function threadCard(value: unknown, roleOverride?: string): ThreadCard | null {
   if (!isRecord(value)) return null;
   const id = stringAt(value, "id");
   if (!id) return null;
   const preview = stringAt(value, "preview") ?? "";
-  const name = stringAt(value, "name")?.trim() || preview.trim() || `thread ${id.slice(0, 8)}`;
+  const role = roleOverride?.trim() || displayRole(value);
+  const name = stringAt(value, "name")?.trim() || `${role} ${id.slice(0, 8)}`;
   return {
     id,
     name,
     preview,
-    role: displayRole(value),
+    role,
     status: displayStatus(value["status"]),
     modelProvider: stringAt(value, "modelProvider") ?? "unknown",
     cwd: stringAt(value, "cwd") ?? "unknown",
@@ -105,12 +126,32 @@ export class ChatsModel {
   readonly events = new Map<string, RawFrameEvent[]>();
   readonly droppedEvents = new Map<string, number>();
   private readonly threadByWireId = new Map<string, { threadId: string; expiresAt: number }>();
+  private readonly agentVoiceRoles = new Map<string, AgentVoiceThreadIdentity["role"]>();
   private sequence = 0;
+
+  replaceAgentVoiceThreadIdentities(values: unknown): void {
+    this.agentVoiceRoles.clear();
+    if (Array.isArray(values)) {
+      for (const value of values) {
+        if (!isRecord(value)) continue;
+        const threadId = stringAt(value, "threadId");
+        const role = stringAt(value, "role");
+        if (threadId && (role === "orchestrator" || role === "worker")) {
+          this.agentVoiceRoles.set(threadId, role);
+        }
+      }
+    }
+    for (const [id, current] of this.threads) {
+      const updated = threadCard(current.raw, this.agentVoiceRoles.get(id));
+      if (updated) this.threads.set(id, updated);
+    }
+  }
 
   replaceThreads(values: unknown[]): ThreadCard[] {
     const next = new Map<string, ThreadCard>();
     for (const value of values) {
-      const card = threadCard(value);
+      const id = isRecord(value) ? stringAt(value, "id") : null;
+      const card = threadCard(value, id ? this.agentVoiceRoles.get(id) : undefined);
       if (card) next.set(card.id, card);
     }
     this.threads.clear();

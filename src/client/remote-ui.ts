@@ -6,12 +6,18 @@ import {
   createCliRenderer,
   fg,
   type ParsedKey,
+  ScrollBoxRenderable,
   StyledText,
   TextRenderable,
 } from "@opentui/core";
+import { createFleetFooter } from "../tui/footer.ts";
 import { encodeRemoteMessage, parseRemoteState, type RemoteState } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
-import { styledSignalField } from "./signal-field-ui.ts";
+import {
+  boundedViewportExtent,
+  boundedViewportSize,
+  styledSignalField,
+} from "./signal-field-ui.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 
 const RECONNECT_MS = 750;
@@ -19,14 +25,21 @@ const PALETTE = VOICE_TONES;
 
 export class RemoteError extends Error {}
 
-export async function runRemote(socketPath: string): Promise<void> {
-  const renderer: CliRenderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    targetFps: 30,
-    screenMode: "alternate-screen",
-    backgroundColor: PALETTE.bg,
-  });
+export interface RemoteUiOptions {
+  createRenderer?(): Promise<CliRenderer>;
+}
+
+export async function runRemote(socketPath: string, options: RemoteUiOptions = {}): Promise<void> {
+  const renderer: CliRenderer = options.createRenderer
+    ? await options.createRenderer()
+    : await createCliRenderer({
+        exitOnCtrlC: false,
+        targetFps: 30,
+        screenMode: "alternate-screen",
+        backgroundColor: PALETTE.bg,
+      });
   const root = new BoxRenderable(renderer, {
+    id: "remote-root",
     width: "100%",
     height: "100%",
     flexDirection: "column",
@@ -35,6 +48,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   renderer.root.add(root);
 
   const header = new BoxRenderable(renderer, {
+    id: "remote-header",
     width: "100%",
     height: 3,
     border: ["bottom"],
@@ -63,6 +77,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   root.add(header);
 
   const main = new BoxRenderable(renderer, {
+    id: "remote-main",
     width: "100%",
     flexGrow: 1,
     flexDirection: "column",
@@ -73,6 +88,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   root.add(main);
 
   const rails = new BoxRenderable(renderer, {
+    id: "remote-rails",
     width: "100%",
     flexGrow: 1,
     flexDirection: "column",
@@ -90,6 +106,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   });
   const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
   const fieldCanvas = new TextRenderable(renderer, {
+    id: "remote-field-canvas",
     content: "",
     flexGrow: 1,
     wrapMode: "none",
@@ -107,6 +124,7 @@ export async function runRemote(socketPath: string): Promise<void> {
   main.add(rails);
 
   const controls = new BoxRenderable(renderer, {
+    id: "remote-controls",
     width: "100%",
     height: "42%",
     minHeight: 7,
@@ -142,19 +160,73 @@ export async function runRemote(socketPath: string): Promise<void> {
   const micControl = makeControl("mic", "MIC", PALETTE.you);
   const speakerControl = makeControl("speaker", "SPEAKER", PALETTE.agent);
 
+  const footer = createFleetFooter(
+    {
+      BoxRenderable,
+      ScrollBoxRenderable,
+      TextRenderable,
+      StyledText,
+      bold,
+      fg,
+    } as typeof import("@opentui/core"),
+    renderer,
+    "remote-footer",
+    {
+      field: PALETTE.field,
+      line: PALETTE.border,
+      accent: PALETTE.accent,
+      muted: PALETTE.dim,
+    },
+  );
+  root.add(footer.root);
+
   let latest: RemoteState | null = null;
   let socket: Socket | null = null;
   let connected = false;
   let closed = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let layoutWidth = 0;
+  let layoutHeight = 0;
   const signalField = new SignalField({ seed: 0x2e6d_07e });
 
   const paint = (): void => {
+    if (closed) return;
     const width = renderer.width || process.stdout.columns || 40;
+    const height = renderer.height || process.stdout.rows || 24;
     layoutWidth = width;
+    layoutHeight = height;
     const compact = width < 34;
+    // The fixed header and footer leave too little room for the normal
+    // seven-row regions below 23 rows. Keep both touch targets useful while
+    // allowing the signal field to absorb the remaining height.
+    const short = height < 23;
+    main.paddingTop = short ? 0 : 1;
+    main.paddingBottom = short ? 0 : 1;
+    rails.minHeight = short ? 4 : 7;
+    controls.height = short ? 6 : "42%";
+    controls.minHeight = short ? 6 : 7;
     controls.flexDirection = width < 26 ? "column" : "row";
+    footer.update({
+      width,
+      mode: "REMOTE",
+      actions: [
+        {
+          id: "mic",
+          key: "M",
+          label: `mic ${latest?.mic.muted ? "muted" : "live"}`,
+          shortLabel: "mic",
+          onPress: () => toggle("mic"),
+        },
+        {
+          id: "speaker",
+          key: "S",
+          label: `speaker ${latest?.speaker.muted ? "muted" : "live"}`,
+          shortLabel: "speaker",
+          onPress: () => toggle("speaker"),
+        },
+        { id: "quit", key: "Q", label: "quit", onPress: shutdown },
+      ],
+    });
     brand.content = new StyledText([
       fg(PALETTE.accent)(SIGNAL_GLYPHS.rail),
       bold(fg(PALETTE.text)(compact ? " AV" : " AGENTVOICE")),
@@ -217,6 +289,10 @@ export async function runRemote(socketPath: string): Promise<void> {
     closed = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     socket?.destroy();
+    process.off("SIGINT", shutdown);
+    process.off("SIGTERM", shutdown);
+    renderer.removeFrameCallback(frameCallback);
+    renderer.dropLive();
     renderer.destroy();
     resolveDone();
   };
@@ -228,8 +304,10 @@ export async function runRemote(socketPath: string): Promise<void> {
   });
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
-  renderer.setFrameCallback(async (deltaMs) => {
-    if (renderer.width !== layoutWidth) paint();
+  const frameCallback = async (deltaMs: number): Promise<void> => {
+    if (renderer.width !== layoutWidth || renderer.height !== layoutHeight) paint();
+    const viewportWidth = renderer.width || process.stdout.columns || 40;
+    const viewportHeight = renderer.height || process.stdout.rows || 24;
     const micMuted = latest?.mic.muted ?? false;
     const agentMuted = latest?.speaker.muted ?? false;
     signalField.step(deltaMs / 1000, {
@@ -238,14 +316,16 @@ export async function runRemote(socketPath: string): Promise<void> {
       youMuted: micMuted,
       agentMuted,
     });
-    const frame = signalField.render(
-      Math.max(1, fieldCanvas.width),
-      Math.max(1, fieldCanvas.height),
-      {
-        you: micMuted,
-        agent: agentMuted,
-      },
+    const fieldSize = boundedViewportSize(
+      fieldCanvas.width,
+      fieldCanvas.height,
+      viewportWidth,
+      viewportHeight,
     );
+    const frame = signalField.render(fieldSize.width, fieldSize.height, {
+      you: micMuted,
+      agent: agentMuted,
+    });
     const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldCanvas.content = styledSignalField(frame, {
@@ -256,21 +336,22 @@ export async function runRemote(socketPath: string): Promise<void> {
       contact: PALETTE.contact,
     });
     fieldLabels.content = remoteFieldLabels(
-      Math.max(1, fieldLabels.width),
+      boundedViewportExtent(fieldLabels.width, viewportWidth),
       micMuted,
       agentMuted,
       youColor,
       agentColor,
     );
     fieldReadout.content = remoteFieldReadout(
-      Math.max(1, fieldReadout.width),
+      boundedViewportExtent(fieldReadout.width, viewportWidth),
       latest?.mic.level ?? 0,
       latest?.speaker.level ?? 0,
       frame.contact,
       youColor,
       agentColor,
     );
-  });
+  };
+  renderer.setFrameCallback(frameCallback);
   renderer.requestLive();
   paint();
   connect();

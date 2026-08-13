@@ -18,13 +18,18 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import { clientControlSocketPath, stateDirectory, tokenPath } from "../paths.ts";
+import { createFleetFooter } from "../tui/footer.ts";
 import { formatClock, levelFromDb, shortId } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer } from "./remote-control.ts";
 import { REMOTE_PROTOCOL_VERSION } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
-import { styledSignalField } from "./signal-field-ui.ts";
+import {
+  boundedViewportExtent,
+  boundedViewportSize,
+  styledSignalField,
+} from "./signal-field-ui.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
@@ -86,15 +91,6 @@ function styledFacts(rows: ReadonlyArray<readonly [label: string, value: string]
     chunks.push(fg(PALETTE.dim)(label.padEnd(11)));
     chunks.push(fg(PALETTE.text)(value));
     if (index < rows.length - 1) chunks.push(fg(PALETTE.text)("\n"));
-  });
-  return new StyledText(chunks);
-}
-
-function styledKeybar(entries: ReadonlyArray<readonly [key: string, label: string]>): StyledText {
-  const chunks: ReturnType<typeof bold>[] = [];
-  entries.forEach(([key, label], index) => {
-    chunks.push(bold(fg(PALETTE.accent)(`[${key}]`)));
-    chunks.push(fg(PALETTE.dim)(` ${label}${index < entries.length - 1 ? "  " : ""}`));
   });
   return new StyledText(chunks);
 }
@@ -453,24 +449,25 @@ export async function runClient(config: ClientConfig): Promise<void> {
   const eventRows: TextRenderable[] = [];
   main.add(eventBox);
 
-  const footer = new BoxRenderable(renderer, {
-    width: "100%",
-    height: 3,
-    border: ["top"],
-    borderStyle: "single",
-    borderColor: PALETTE.border,
-    backgroundColor: PALETTE.field,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingLeft: 2,
-    paddingRight: 2,
-  });
-  const footerText = new TextRenderable(renderer, { content: "", fg: PALETTE.dim });
-  const footerMode = new TextRenderable(renderer, { content: "DUPLEX / 48 KHZ", fg: PALETTE.dim });
-  footer.add(footerText);
-  footer.add(footerMode);
-  root.add(footer);
+  const footer = createFleetFooter(
+    {
+      BoxRenderable,
+      ScrollBoxRenderable,
+      TextRenderable,
+      StyledText,
+      bold,
+      fg,
+    } as typeof import("@opentui/core"),
+    renderer,
+    "client-footer",
+    {
+      field: PALETTE.field,
+      line: PALETTE.border,
+      accent: PALETTE.accent,
+      muted: PALETTE.dim,
+    },
+  );
+  root.add(footer.root);
 
   // ---- view refresh -------------------------------------------------------
   let layoutWidth = 0;
@@ -484,7 +481,28 @@ export async function runClient(config: ClientConfig): Promise<void> {
     sessionBox.height = narrow ? 7 : 5;
     sessionBox.gap = narrow ? 0 : 4;
     contextText.content = width >= 72 ? " / LIVE AUDIO" : "";
-    footerMode.content = width >= 92 ? "DUPLEX / 48 KHZ" : "";
+    footer.update({
+      width,
+      mode: "DUPLEX / 48 KHZ",
+      actions: [
+        {
+          id: "mic",
+          key: "M",
+          label: `mic ${audio.micMuted ? "muted" : "live"}`,
+          shortLabel: "mic",
+          onPress: toggleMic,
+        },
+        {
+          id: "speaker",
+          key: "S",
+          label: `speaker ${audio.speakerMuted ? "muted" : "live"}`,
+          shortLabel: "speaker",
+          onPress: toggleSpeaker,
+        },
+        { id: "redial", key: "R", label: "redial", onPress: () => transport.redial("manual") },
+        { id: "quit", key: "Q", label: "quit", onPress: () => void shutdown() },
+      ],
+    });
 
     const info = transport.readyInfo;
     const orDefault = (value: string | null) => value ?? "codex default";
@@ -532,12 +550,6 @@ export async function runClient(config: ClientConfig): Promise<void> {
       row.content = event === undefined ? "" : `${SIGNAL_GLYPHS.event} ${event.text}`;
       row.fg = event?.color ?? PALETTE.faint;
     });
-    footerText.content = styledKeybar([
-      ["M", narrow ? "mic" : `mic ${audio.micMuted ? "muted" : "live"}`],
-      ["S", narrow ? "speaker" : `speaker ${audio.speakerMuted ? "muted" : "live"}`],
-      ["R", "redial"],
-      ["Q", "quit"],
-    ]);
     const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldLabels.content = styledFieldLabels(
@@ -562,6 +574,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
     const dt = deltaMs / 1000;
     pulse += dt;
     if (renderer.width !== layoutWidth) refreshStatic();
+    const viewportWidth = renderer.width || process.stdout.columns || 100;
+    const viewportHeight = renderer.height || process.stdout.rows || 24;
 
     const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
@@ -571,9 +585,13 @@ export async function runClient(config: ClientConfig): Promise<void> {
       youMuted: audio.micMuted,
       agentMuted: audio.speakerMuted,
     });
-    const fieldWidth = Math.max(1, fieldCanvas.width);
-    const fieldHeight = Math.max(1, fieldCanvas.height);
-    const fieldFrame = signalField.render(fieldWidth, fieldHeight, {
+    const fieldSize = boundedViewportSize(
+      fieldCanvas.width,
+      fieldCanvas.height,
+      viewportWidth,
+      viewportHeight,
+    );
+    const fieldFrame = signalField.render(fieldSize.width, fieldSize.height, {
       you: audio.micMuted,
       agent: audio.speakerMuted,
     });
@@ -585,14 +603,14 @@ export async function runClient(config: ClientConfig): Promise<void> {
       contact: PALETTE.contact,
     });
     fieldLabels.content = styledFieldLabels(
-      Math.max(1, fieldLabels.width),
+      boundedViewportExtent(fieldLabels.width, viewportWidth),
       audio.micMuted,
       audio.speakerMuted,
       youColor,
       agentColor,
     );
     fieldReadout.content = styledFieldReadout(
-      Math.max(1, fieldReadout.width),
+      boundedViewportExtent(fieldReadout.width, viewportWidth),
       mic.db,
       agent.db,
       fieldFrame.contact,

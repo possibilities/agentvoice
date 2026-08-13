@@ -191,6 +191,7 @@ export async function runServer(
             const workerThreadId = extractThreadId(
               await appServer.request("thread/start", workerThreadParams(config)),
             );
+            appServerGateway.setThreadIdentity(workerThreadId, "worker");
             return { threadId: workerThreadId };
           },
           async startWorkerTurn(workerThreadId, brief) {
@@ -228,6 +229,7 @@ export async function runServer(
               (method, params) => server.request(method, params),
               workerThreadId,
             );
+            appServerGateway.removeThreadIdentity(workerThreadId);
           },
           async deleteWorker(workerThreadId) {
             const server = appServer;
@@ -236,6 +238,7 @@ export async function runServer(
               (method, params) => server.request(method, params),
               workerThreadId,
             );
+            appServerGateway.removeThreadIdentity(workerThreadId);
           },
           scheduleCleanupRetry(run, delayMs) {
             setTimeout(run, delayMs).unref();
@@ -311,6 +314,7 @@ export async function runServer(
       await server.start();
       threadId = await openThread(server);
       appServerGateway.setAppServer(server);
+      appServerGateway.replaceThreadIdentities([{ threadId, role: "orchestrator" }]);
     } catch (error) {
       appServer = null;
       appServerGateway.setAppServer(null);

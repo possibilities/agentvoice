@@ -148,6 +148,11 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - Comments state constraints the code can't show; no narration.
 - `Record<string, unknown>` access uses bracket keys (hence Biome's
   `useLiteralKeys` is off).
+- Full-screen TUI footers are three rows with a top divider and one centered,
+  non-wrapping horizontal action rail. Keys are bold accent, labels muted,
+  passive mode right-aligned only when it fits; narrow rails scroll by
+  wheel/touch gestures with both scrollbars hidden, and every advertised
+  action is directly tappable.
 - State on disk under `~/.local/state/agentvoice/` (`$XDG_STATE_HOME`
   honored): `workspace` (agent cwd), `app-server` (stable child cwd — must
   outlive the child; it re-reads its own cwd on every thread start), `token`

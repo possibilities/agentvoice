@@ -9,6 +9,30 @@ export interface SignalFieldColors {
   contact: string;
 }
 
+export interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+/** OpenTUI geometry may be transiently invalid while an over-constrained layout resizes. */
+export function boundedViewportSize(
+  width: number,
+  height: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): ViewportSize {
+  return {
+    width: boundedViewportExtent(width, viewportWidth),
+    height: boundedViewportExtent(height, viewportHeight),
+  };
+}
+
+export function boundedViewportExtent(value: number, viewportExtent: number): number {
+  const limit = Number.isFinite(viewportExtent) ? Math.max(1, Math.floor(viewportExtent)) : 1;
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(limit, Math.floor(value)));
+}
+
 /** Coalesce adjacent cells with one tone to keep OpenTUI chunk counts bounded. */
 export function styledSignalField(frame: SignalFieldFrame, colors: SignalFieldColors): StyledText {
   const chunks: TextChunk[] = [];

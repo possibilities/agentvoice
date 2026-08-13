@@ -361,8 +361,12 @@ Escape or `h` to return, `f` or End to follow the tail, Page Up/Down to scroll,
 and `q` to quit. JSON is compact by default, syntax-highlighted and wrapped;
 expansion exposes the complete pretty-printed payload, which remains
 selectable. Mouse wheel and terminal touch-as-mouse work through the native
-scroll surface. Each thread retains the latest 300 frames in the viewer and
-reports any older frames evicted from that local display.
+scroll surface. Every footer action is also a pointer/touch target; at narrow
+widths the single-line action rail scrolls horizontally without showing a
+scrollbar. Cards identify threads by role, state, provider, short ID, and
+home-relative workspace; conversation previews are deliberately omitted.
+Each thread retains the latest 300 frames in the viewer and reports any older
+frames evicted from that local display.
 
 This is a read-only observer by construction: it lists with
 `thread/loaded/list` and reads metadata with `thread/read` using
@@ -446,11 +450,30 @@ opt-in adds frame envelopes:
 
 `direction` is `toAppServer` or `fromAppServer`; `owner` is `agentvoice` for
 responses to AgentVoice requests and `appServer` for unsolicited traffic on
-that owning connection. This observation notification is the only extension;
-without the query parameter the peer's protocol stream is exactly native. The
+that owning connection. The same opt-in also replays a current identity
+snapshot and sends a replacement snapshot whenever an owned thread is added or
+retired:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agentvoice/thread/identities",
+  "params": {
+    "data": [
+      { "threadId": "019f…", "role": "orchestrator" },
+      { "threadId": "019e…", "role": "worker" }
+    ]
+  }
+}
+```
+
+This additive observer metadata names AgentVoice's current ownership without
+rewriting Codex thread objects or repairing their persisted `threadSource`.
+Without the query parameter the peer's protocol stream is exactly native. The
 peer's own App-server protocol remains raw either way. App-server→client
 requests on a peer's native connection are the peer's responsibility, just as
-they are when connecting directly. `agentvoice chats` adds the opt-in itself.
+they are when connecting directly. `agentvoice chats` adds the opt-in itself
+and uses the snapshot only as a role overlay on its cards.
 
 The 16 MiB WebSocket frame and backpressure limits accommodate raw App-server
 payloads while closing a client that cannot keep up. Frame observation is

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { tokenPath } from "../paths.ts";
+import { AGENTVOICE_THREAD_IDENTITIES_METHOD } from "../protocol.ts";
 import { ChatsConnection, ChatsConnectionError } from "./client.ts";
 import { ChatsModel, type RawFrameEvent } from "./model.ts";
 import { runChatsUi } from "./ui.ts";
@@ -41,6 +42,11 @@ export async function runChats(config: ChatsConfig): Promise<void> {
     onFrame(params) {
       const event = model.recordEnvelope(params);
       if (event) eventHandler?.(event);
+    },
+    onNotification(method, params) {
+      if (method === AGENTVOICE_THREAD_IDENTITIES_METHOD) {
+        model.replaceAgentVoiceThreadIdentities(params["data"]);
+      }
     },
     onClosed() {
       connected = false;
