@@ -37,6 +37,22 @@ const CAPTURE_POLL_MS = 5;
 const MAX_CAPTURE_CHUNKS_PER_POLL = 32;
 const DEBUG_LOG_INTERVAL_MS = 1_000;
 const PCM_BYTES_PER_SECOND = DUPLEX_SAMPLE_RATE * DUPLEX_PLAYBACK_CHANNELS * 2;
+/** Muting must preserve uplink cadence or the remote service suspends downlink RTP. */
+const MUTED_CAPTURE_FRAME = Buffer.alloc(FRAME_SAMPLES * 2);
+
+interface FrameEncoder {
+  encode(frame: Buffer, frameSize: number): Buffer;
+}
+
+export function sendCapturedFrame(
+  encoder: FrameEncoder,
+  capturedFrame: Buffer,
+  micMuted: boolean,
+  sendFrame: (frame: Buffer) => void,
+): void {
+  const input = micMuted ? MUTED_CAPTURE_FRAME : capturedFrame;
+  sendFrame(Buffer.from(encoder.encode(input, FRAME_SAMPLES)));
+}
 
 interface DownlinkWindow {
   startedAt: number;
@@ -243,10 +259,9 @@ export class DuplexVoiceAudio {
       this.warnedSilence = false;
     }
 
-    if (this.micMuted || !this.encoder) return;
+    if (!this.encoder) return;
     try {
-      const encoded = this.encoder.encode(frame, FRAME_SAMPLES);
-      this.options.sendFrame(Buffer.from(encoded));
+      sendCapturedFrame(this.encoder, frame, this.micMuted, this.options.sendFrame);
     } catch (error) {
       this.options.debug?.(`opus encode failed: ${message(error)}`);
     }
