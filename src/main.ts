@@ -113,7 +113,8 @@ Options:
   --url <ws-url>    Raw app-server gateway (default: ${DEFAULT_CHATS_URL})
   --token <secret>  Connection token (default: the server-written token file)
 
-Keys: [↑↓/jk] select · [enter] open/expand · [esc] back · [f] follow · [q] quit
+Keys: [↑↓/jk] select · [enter] open/expand · [v] harness/frames · [r] raw item
+      [esc] back · [f] follow · [q] quit
 `;
 
 export interface FlagSpec {

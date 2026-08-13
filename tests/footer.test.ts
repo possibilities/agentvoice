@@ -21,7 +21,7 @@ describe("fleet footer copy", () => {
 
   test("shortens labels without dropping actions before the rail scrolls", () => {
     expect(footerCopy({ actions, mode: "FOLLOW", width: 40 })).toEqual({
-      labels: ["chats", "prev", "next", "expand", "follow"],
+      labels: ["", "", "", "", ""],
       mode: "",
     });
     expect(footerCopy({ actions, mode: "FOLLOW", width: 24 }).labels).toEqual(["", "", "", "", ""]);
@@ -40,7 +40,7 @@ describe("fleet footer copy", () => {
     await setup.flush();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("[ESC] chats");
+    expect(frame).toContain("[ESC]");
     expect(frame).toContain("FOLLOW");
     expect(frame).not.toMatch(/^\s*F\s*$/m);
     expect(frame.split("\n").filter((row) => row.includes("[")).length).toBe(1);

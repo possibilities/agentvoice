@@ -5,10 +5,15 @@ import {
   type ChatsModel,
   type ChatsStream,
   type RawStreamEvent,
-  type ThreadCard,
   VOICE_STREAM_ID,
   type VoiceSession,
 } from "./model.ts";
+import type { TranscriptSource } from "./transcript-source.ts";
+import {
+  TranscriptHarnessView,
+  type TranscriptViewState,
+  transcriptRows,
+} from "./transcript-ui.ts";
 
 interface RendererFactoryResult {
   renderer: Awaited<ReturnType<typeof import("@opentui/core")["createCliRenderer"]>>;
@@ -27,12 +32,15 @@ const TONES = {
   upstream: "#7fb9e8",
   downstream: "#e2b56f",
   client: "#b09ce8",
+  ok: "#82cb9a",
+  hot: "#e6965b",
   danger: "#ee7e89",
 } as const;
 
 export interface ChatsUiOptions {
-  connection: ChatsConnection;
+  connection: Pick<ChatsConnection, "close">;
   model: ChatsModel;
+  transcripts: TranscriptSource;
   refreshThreads(reread?: boolean): Promise<void>;
   setEventHandler(handler: (event: RawStreamEvent) => void): void;
   onClosed(): void;
@@ -141,8 +149,10 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     id: "chats-status",
     content: "",
     fg: TONES.muted,
+    maxWidth: "48%",
     flexShrink: 0,
     wrapMode: "none",
+    truncate: true,
   });
   header.add(headerTitle);
   header.add(headerStatus);
@@ -247,9 +257,24 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     backgroundColor: TONES.canvas,
     viewportCulling: true,
     stickyScroll: true,
-    stickyStart: "bottom",
+    stickyStart: "top",
   });
   detail.add(eventScroll);
+  const harnessScroll = new core.ScrollBoxRenderable(renderer, {
+    id: "harness-stream",
+    width: "100%",
+    flexGrow: 1,
+    paddingTop: 1,
+    paddingBottom: 1,
+    paddingLeft: 2,
+    paddingRight: 2,
+    backgroundColor: TONES.canvas,
+    viewportCulling: true,
+    stickyScroll: true,
+    stickyStart: "top",
+    visible: false,
+  });
+  detail.add(harnessScroll);
   main.add(detail);
 
   const footer = createFleetFooter(core, renderer, "chats-footer", {
@@ -266,6 +291,13 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   let eventIndex = -1;
   let selectedEventSequence: number | null = null;
   let followTail = true;
+  let detailMode: "harness" | "frames" = "harness";
+  let transcriptLoading = false;
+  let transcriptError: string | null = null;
+  let transcriptLoadEpoch = 0;
+  let selectedTranscriptKey: string | null = null;
+  const expandedTranscriptKeys = new Set<string>();
+  const rawTranscriptKeys = new Set<string>();
   let refreshing = false;
   let connectionError: string | null = null;
   const expanded = new Set<number>();
@@ -278,6 +310,34 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   >();
   let emptyEvents: InstanceType<typeof core.TextRenderable> | null = null;
   let droppedEvents: InstanceType<typeof core.TextRenderable> | null = null;
+  const harnessView = new TranscriptHarnessView(
+    core,
+    renderer,
+    harnessScroll,
+    syntaxStyle,
+    {
+      canvas: TONES.canvas,
+      panel: TONES.panel,
+      selected: TONES.selected,
+      line: TONES.line,
+      text: TONES.text,
+      muted: TONES.muted,
+      faint: TONES.faint,
+      accent: TONES.accent,
+      local: TONES.downstream,
+      remote: TONES.upstream,
+      ok: TONES.ok,
+      hot: TONES.hot,
+      danger: TONES.danger,
+    },
+    (key) => {
+      const alreadySelected = selectedTranscriptKey === key;
+      followTail = false;
+      selectedTranscriptKey = key;
+      if (alreadySelected) toggleTranscriptExpanded();
+      else rebuildHarness();
+    },
+  );
 
   function clear(container: InstanceType<typeof core.ScrollBoxRenderable>): void {
     for (const child of container.getChildren()) {
@@ -321,12 +381,21 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     } else {
       const stream = selectedStream();
       const events = stream ? options.model.eventsFor(stream) : [];
+      const rows =
+        stream?.kind === "thread" ? transcriptRows(options.transcripts.get(stream.id)) : [];
+      const harness = stream?.kind === "thread" && detailMode === "harness";
       headerTitle.content = "▎ AGENTVOICE / CHATS";
-      headerStatus.content = `${events.length} EVENTS${followTail ? "  FOLLOW" : ""}`;
-      headerStatus.fg = TONES.muted;
+      headerStatus.content = transcriptError
+        ? `FAILED / ${compact(transcriptError, 42)}`
+        : transcriptLoading && harness
+          ? "LOADING HISTORY"
+          : `${harness ? rows.length : events.length} ${harness ? "ITEMS" : "EVENTS"}${
+              followTail && width >= 56 ? "  FOLLOW" : ""
+            }`;
+      headerStatus.fg = transcriptError ? TONES.danger : TONES.muted;
       footer.update({
         width,
-        mode: followTail ? "FOLLOW" : "HOLD",
+        mode: `${harness ? "HARNESS" : "FRAMES"} / ${followTail ? "FOLLOW" : "HOLD"}`,
         actions: [
           { id: "back", key: "ESC", label: "chats", onPress: () => closeDetail() },
           {
@@ -334,10 +403,30 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
             key: "↑",
             label: "previous",
             shortLabel: "prev",
-            onPress: () => selectPreviousEvent(),
+            onPress: () => selectPreviousDetailItem(),
           },
-          { id: "next", key: "↓", label: "next", onPress: () => selectNextEvent() },
-          { id: "expand", key: "ENTER", label: "expand", onPress: () => toggleExpanded() },
+          { id: "next", key: "↓", label: "next", onPress: () => selectNextDetailItem() },
+          { id: "expand", key: "ENTER", label: "expand", onPress: () => toggleDetailExpanded() },
+          ...(stream?.kind === "thread"
+            ? [
+                {
+                  id: "view",
+                  key: "V",
+                  label: harness ? "frames" : "harness",
+                  onPress: () => toggleDetailMode(),
+                },
+                ...(harness
+                  ? [
+                      {
+                        id: "raw",
+                        key: "R",
+                        label: "raw",
+                        onPress: () => toggleTranscriptRaw(),
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
           {
             id: "page-up",
             key: "PG↑",
@@ -352,35 +441,79 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
             shortLabel: "down",
             onPress: () => scrollEvents(12),
           },
-          { id: "follow", key: "F", label: "follow", onPress: () => followEvents() },
+          { id: "follow", key: "F", label: "follow", onPress: () => followDetail() },
           { id: "quit", key: "Q", label: "quit", onPress: () => shutdown() },
         ],
       });
     }
   }
 
-  function cardText(card: ThreadCard): string {
-    const parent = card.parentThreadId ? `   PARENT ${shortId(card.parentThreadId)}` : "";
-    return [
-      card.role.toUpperCase(),
-      `ROLE ${card.role}   STATE ${card.status}   PROVIDER ${card.modelProvider}${parent}`,
-      `THREAD ${shortId(card.id)}   WORKSPACE ${compact(homeRelativePath(card.cwd), 72)}`,
-    ].join("\n");
-  }
-
   function streamCardId(stream: ChatsStream): string {
     return stream.kind === "voice" ? "voice-stream-card" : `thread-card-${stream.id}`;
   }
 
-  function streamCardText(stream: ChatsStream): string {
-    if (stream.kind === "thread") return cardText(stream.thread);
-    const sessions = options.model.voiceSessionList;
-    const latest = sessions.at(-1);
-    return [
-      "VOICE SESSIONS",
-      `SESSIONS ${sessions.length}   LATEST ${latest?.state.toUpperCase() ?? "WAITING"}`,
-      "RAW PARSED EVENTS   AUDIO EXCLUDED",
-    ].join("\n");
+  function cardStateTone(status: string): string {
+    if (/failed|error|declined/i.test(status)) return TONES.danger;
+    if (/active|running|progress|waiting/i.test(status)) return TONES.hot;
+    return TONES.muted;
+  }
+
+  function addStreamCardContent(
+    box: InstanceType<typeof core.BoxRenderable>,
+    stream: ChatsStream,
+    selected: boolean,
+  ): void {
+    const first = new core.BoxRenderable(renderer, {
+      width: "100%",
+      height: 1,
+      flexDirection: "row",
+      backgroundColor: selected ? TONES.selected : TONES.canvas,
+    });
+    const title = stream.kind === "voice" ? stream.name : stream.thread.name;
+    const status =
+      stream.kind === "voice"
+        ? (options.model.voiceSessionList.at(-1)?.state.toUpperCase() ?? "WAITING")
+        : stream.thread.status.toUpperCase();
+    first.add(
+      new core.TextRenderable(renderer, {
+        id: `${streamCardId(stream)}-name`,
+        content: compact(title, Math.max(14, (renderer.width || 100) - 30)),
+        fg: TONES.text,
+        attributes: selected ? 1 : 0,
+        flexGrow: 1,
+        flexShrink: 1,
+        wrapMode: "none",
+      }),
+    );
+    first.add(
+      new core.TextRenderable(renderer, {
+        id: `${streamCardId(stream)}-state`,
+        content: status,
+        fg: stream.kind === "voice" ? TONES.upstream : cardStateTone(status),
+        flexShrink: 0,
+        wrapMode: "none",
+      }),
+    );
+    box.add(first);
+
+    const metadata =
+      stream.kind === "voice"
+        ? `${options.model.voiceSessionList.length} sessions    raw live events    audio excluded`
+        : [
+            stream.thread.role.toUpperCase(),
+            homeRelativePath(stream.thread.cwd),
+            stream.thread.modelProvider,
+          ]
+            .filter(Boolean)
+            .join("    ");
+    box.add(
+      new core.TextRenderable(renderer, {
+        id: `${streamCardId(stream)}-metadata`,
+        content: compact(metadata, Math.max(14, (renderer.width || 100) - 8)),
+        fg: TONES.muted,
+        wrapMode: "none",
+      }),
+    );
   }
 
   function rebuildThreadList(): void {
@@ -398,29 +531,22 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       const box = new core.BoxRenderable(renderer, {
         id: streamCardId(stream),
         width: "100%",
-        minHeight: 5,
+        height: 2,
         marginBottom: 1,
-        paddingTop: 1,
-        paddingBottom: 1,
-        paddingLeft: 2,
-        paddingRight: 2,
-        backgroundColor: selected ? TONES.selected : TONES.panel,
+        paddingLeft: 1,
+        paddingRight: 1,
+        flexDirection: "column",
+        backgroundColor: selected ? TONES.selected : TONES.canvas,
         border: ["left"],
         borderStyle: "heavy",
-        borderColor: selected ? TONES.accent : TONES.line,
+        borderColor: selected ? TONES.accent : TONES.faint,
         onMouseUp: () => {
           streamIndex = index;
           selectedStreamId = stream.id;
           openDetail();
         },
       });
-      box.add(
-        new core.TextRenderable(renderer, {
-          content: streamCardText(stream),
-          fg: selected ? TONES.text : TONES.muted,
-          wrapMode: "word",
-        }),
-      );
+      addStreamCardContent(box, stream, selected);
       listScroll.add(box);
     });
     updateChrome();
@@ -463,13 +589,14 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
   }
 
   function createEventWidget(event: RawStreamEvent): void {
+    const eventId = `${event.kind}-event-${event.sequence}`;
     const selected = event.sequence === selectedEventSequence;
     const label =
       event.kind === "voice"
         ? `← voice · ${eventLabel(event)} · ${timeLabel(event.observedAt)}`
         : `${event.direction === "fromAppServer" ? "←" : "→"} ${event.owner} · ${eventLabel(event)} · ${timeLabel(event.receivedAt)}`;
     const box = new core.BoxRenderable(renderer, {
-      id: `event-${event.sequence}`,
+      id: eventId,
       width: "100%",
       marginBottom: 1,
       paddingTop: 1,
@@ -500,7 +627,7 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       }),
     );
     const code = new core.CodeRenderable(renderer, {
-      id: `event-code-${event.sequence}`,
+      id: `${event.kind}-event-code-${event.sequence}`,
       content: eventCode(event),
       filetype: "json",
       syntaxStyle,
@@ -587,36 +714,115 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     renderer.requestRender();
   }
 
+  function transcriptViewState(): TranscriptViewState {
+    return {
+      selectedKey: selectedTranscriptKey,
+      expanded: expandedTranscriptKeys,
+      raw: rawTranscriptKeys,
+      width: renderer.width || process.stdout.columns || 100,
+    };
+  }
+
+  function rebuildHarness(): void {
+    const stream = selectedStream();
+    const transcript = stream?.kind === "thread" ? options.transcripts.get(stream.id) : null;
+    const rows = harnessView.sync(transcript, transcriptViewState());
+    if (rows.length === 0) selectedTranscriptKey = null;
+    else if (!rows.some((row) => row.key === selectedTranscriptKey)) {
+      selectedTranscriptKey = rows.at(-1)?.key ?? null;
+      harnessView.sync(transcript, transcriptViewState());
+    }
+    if (followTail && selectedTranscriptKey) {
+      harnessView.scrollIntoView(selectedTranscriptKey);
+    }
+    updateChrome();
+    renderer.requestRender();
+  }
+
+  function showDetailSurface(): void {
+    const stream = selectedStream();
+    const harness = stream?.kind === "thread" && detailMode === "harness";
+    harnessScroll.visible = harness;
+    eventScroll.visible = !harness;
+    if (harness) rebuildHarness();
+    else rebuildEvents();
+  }
+
+  async function hydrateSelectedTranscript(force = false): Promise<void> {
+    const stream = selectedStream();
+    if (stream?.kind !== "thread") return;
+    const epoch = ++transcriptLoadEpoch;
+    transcriptLoading = true;
+    transcriptError = null;
+    updateChrome();
+    try {
+      await options.transcripts.hydrate(stream.id, force);
+      if (
+        epoch === transcriptLoadEpoch &&
+        view === "detail" &&
+        selectedStreamId === stream.id &&
+        detailMode === "harness"
+      ) {
+        rebuildHarness();
+      }
+    } catch (error) {
+      if (epoch === transcriptLoadEpoch) {
+        transcriptError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      if (epoch === transcriptLoadEpoch) {
+        transcriptLoading = false;
+        updateChrome();
+        renderer.requestRender();
+      }
+    }
+  }
+
   function updateDetailHeader(): void {
     const stream = selectedStream();
     if (!stream) return;
     const width = renderer.width || process.stdout.columns || 100;
     if (stream.kind === "voice") {
-      detailHeader.height = 6;
+      const narrow = width < 64;
+      detailHeader.height = narrow ? 8 : 6;
       detailTitle.content = stream.name;
       detailState.content = "LIVE";
-      detailFacts.content = new core.StyledText([
-        core.fg(TONES.faint)("RETENTION  "),
-        core.fg(TONES.text)("latest 8 sessions"),
-        core.fg(TONES.faint)("    EVENTS     "),
-        core.fg(TONES.text)("300 / session"),
-        core.fg(TONES.text)("\n"),
-        core.fg(TONES.faint)("PAYLOAD    "),
-        core.fg(TONES.text)("parsed raw events (audio excluded; no replay)"),
-      ]);
+      detailFacts.content = new core.StyledText(
+        narrow
+          ? [
+              core.fg(TONES.faint)("RETENTION  "),
+              core.fg(TONES.text)("latest 8 sessions\n"),
+              core.fg(TONES.faint)("EVENTS     "),
+              core.fg(TONES.text)("300 / session\n"),
+              core.fg(TONES.faint)("PAYLOAD    "),
+              core.fg(TONES.text)("parsed raw events\n"),
+              core.fg(TONES.faint)("AUDIO      "),
+              core.fg(TONES.text)("excluded; no replay"),
+            ]
+          : [
+              core.fg(TONES.faint)("RETENTION  "),
+              core.fg(TONES.text)("latest 8 sessions"),
+              core.fg(TONES.faint)("    EVENTS     "),
+              core.fg(TONES.text)("300 / session"),
+              core.fg(TONES.text)("\n"),
+              core.fg(TONES.faint)("PAYLOAD    "),
+              core.fg(TONES.text)("parsed raw events (audio excluded; no replay)"),
+            ],
+      );
       return;
     }
     const thread = stream.thread;
     const optional = [
       ...(thread.parentThreadId ? [["PARENT", shortId(thread.parentThreadId)] as const] : []),
     ];
-    detailHeader.height = optional.length > 0 ? 7 : 6;
-    detailTitle.content = compact(thread.name, Math.max(12, width - 26));
+    const narrow = width < 64;
+    detailHeader.height = optional.length > 0 ? (narrow ? 8 : 7) : narrow ? 7 : 6;
+    detailTitle.content = compact(thread.name, Math.max(12, width - 27));
     detailState.content = thread.status.toUpperCase();
     const chunks = [
       core.fg(TONES.faint)("ROLE       "),
       core.fg(TONES.text)(thread.role),
-      core.fg(TONES.faint)("    PROVIDER   "),
+      core.fg(TONES.faint)(narrow ? "\nPROVIDER   " : "    PROVIDER   "),
       core.fg(TONES.text)(thread.modelProvider),
       core.fg(TONES.text)("\n"),
       core.fg(TONES.faint)("WORKSPACE  "),
@@ -644,14 +850,26 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     followTail = true;
     const events = options.model.eventsFor(stream);
     eventIndex = events.length - 1;
+    detailMode = stream.kind === "thread" ? "harness" : "frames";
+    transcriptError = null;
+    if (stream.kind === "thread") {
+      const rows = transcriptRows(options.transcripts.get(stream.id));
+      selectedTranscriptKey = rows.at(-1)?.key ?? null;
+    }
     updateDetailHeader();
-    rebuildEvents();
+    showDetailSurface();
+    if (stream.kind === "thread") void hydrateSelectedTranscript();
   }
 
   function closeDetail(): void {
+    transcriptLoadEpoch += 1;
+    transcriptLoading = false;
+    transcriptError = null;
     view = "list";
     detail.visible = false;
     listScroll.visible = true;
+    harnessScroll.visible = false;
+    eventScroll.visible = false;
     rebuildThreadList();
     const stream = selectedStream();
     if (stream) listScroll.scrollChildIntoView(streamCardId(stream));
@@ -687,7 +905,7 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       widget.box.borderStyle = selected ? "heavy" : "single";
     }
     const event = events[eventIndex];
-    if (event) eventScroll.scrollChildIntoView(`event-${event.sequence}`);
+    if (event) eventScroll.scrollChildIntoView(`${event.kind}-event-${event.sequence}`);
     updateChrome();
     renderer.requestRender();
   }
@@ -712,17 +930,69 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     updateEventSelection(1);
   }
 
+  function selectTranscriptIndex(nextIndex: number): void {
+    const stream = selectedStream();
+    if (stream?.kind !== "thread") return;
+    const rows = transcriptRows(options.transcripts.get(stream.id));
+    if (rows.length === 0) return;
+    const currentIndex = Math.max(
+      0,
+      rows.findIndex((row) => row.key === selectedTranscriptKey),
+    );
+    const index = Math.max(0, Math.min(rows.length - 1, nextIndex));
+    selectedTranscriptKey = rows[index]?.key ?? rows[currentIndex]?.key ?? null;
+    rebuildHarness();
+    if (selectedTranscriptKey) harnessView.scrollIntoView(selectedTranscriptKey);
+  }
+
+  function updateTranscriptSelection(delta: number): void {
+    const stream = selectedStream();
+    if (stream?.kind !== "thread") return;
+    const rows = transcriptRows(options.transcripts.get(stream.id));
+    const index = rows.findIndex((row) => row.key === selectedTranscriptKey);
+    selectTranscriptIndex(Math.max(index, 0) + delta);
+  }
+
+  function selectPreviousDetailItem(): void {
+    const stream = selectedStream();
+    if (stream?.kind === "thread" && detailMode === "harness") {
+      followTail = false;
+      updateTranscriptSelection(-1);
+    } else selectPreviousEvent();
+  }
+
+  function selectNextDetailItem(): void {
+    const stream = selectedStream();
+    if (stream?.kind === "thread" && detailMode === "harness") {
+      followTail = false;
+      updateTranscriptSelection(1);
+    } else selectNextEvent();
+  }
+
   function scrollEvents(delta: number): void {
     followTail = false;
-    eventScroll.scrollBy({ x: 0, y: delta });
+    const stream = selectedStream();
+    const scroll =
+      stream?.kind === "thread" && detailMode === "harness" ? harnessScroll : eventScroll;
+    scroll.scrollBy({ x: 0, y: delta });
     updateChrome();
     renderer.requestRender();
   }
 
   function followEvents(): void {
     followTail = true;
-    eventScroll.scrollTop = Number.MAX_SAFE_INTEGER;
     updateEventSelection(Number.MAX_SAFE_INTEGER);
+    eventScroll.scrollTop = Number.MAX_SAFE_INTEGER;
+  }
+
+  function followDetail(): void {
+    const stream = selectedStream();
+    if (stream?.kind === "thread" && detailMode === "harness") {
+      followTail = true;
+      const rows = transcriptRows(options.transcripts.get(stream.id));
+      selectedTranscriptKey = rows.at(-1)?.key ?? null;
+      rebuildHarness();
+    } else followEvents();
   }
 
   function toggleExpanded(): void {
@@ -737,6 +1007,36 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     renderer.requestRender();
   }
 
+  function toggleTranscriptExpanded(): void {
+    if (!selectedTranscriptKey) return;
+    if (expandedTranscriptKeys.has(selectedTranscriptKey)) {
+      expandedTranscriptKeys.delete(selectedTranscriptKey);
+    } else expandedTranscriptKeys.add(selectedTranscriptKey);
+    rebuildHarness();
+  }
+
+  function toggleTranscriptRaw(): void {
+    if (!selectedTranscriptKey) return;
+    if (rawTranscriptKeys.has(selectedTranscriptKey))
+      rawTranscriptKeys.delete(selectedTranscriptKey);
+    else rawTranscriptKeys.add(selectedTranscriptKey);
+    rebuildHarness();
+  }
+
+  function toggleDetailExpanded(): void {
+    const stream = selectedStream();
+    if (stream?.kind === "thread" && detailMode === "harness") toggleTranscriptExpanded();
+    else toggleExpanded();
+  }
+
+  function toggleDetailMode(): void {
+    const stream = selectedStream();
+    if (stream?.kind !== "thread") return;
+    detailMode = detailMode === "harness" ? "frames" : "harness";
+    showDetailSurface();
+    updateChrome();
+  }
+
   function onNewEvent(event: RawStreamEvent): void {
     const streamId = event.kind === "voice" ? VOICE_STREAM_ID : event.threadId;
     if (!streamId || view !== "detail" || streamId !== selectedStreamId) return;
@@ -744,6 +1044,10 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     if (!stream) return;
     if (stream.kind === "voice") {
       rebuildEvents();
+      return;
+    }
+    if (detailMode === "harness") {
+      rebuildHarness();
       return;
     }
     const events = options.model.eventsFor(stream);
@@ -809,8 +1113,12 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
       await options.refreshThreads(reread);
       connectionError = null;
       if (view === "list") rebuildThreadList();
-      else if (selectedStream()) updateDetailHeader();
-      else closeDetail();
+      else if (selectedStream()) {
+        updateDetailHeader();
+        if (selectedStream()?.kind === "thread" && reread) {
+          await hydrateSelectedTranscript(true);
+        }
+      } else closeDetail();
     } catch (error) {
       connectionError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -840,22 +1148,38 @@ export async function runChatsUi(options: ChatsUiOptions): Promise<void> {
     if (name === "escape" || name === "backspace" || name === "left" || name === "h") {
       closeDetail();
     } else if (name === "j" || name === "down") {
-      selectNextEvent();
+      selectNextDetailItem();
     } else if (name === "k" || name === "up") {
-      selectPreviousEvent();
+      selectPreviousDetailItem();
     } else if (name === "return" || name === "enter" || name === "space") {
-      toggleExpanded();
+      toggleDetailExpanded();
+    } else if (name === "v") {
+      toggleDetailMode();
+    } else if (name === "r" && selectedStream()?.kind === "thread" && detailMode === "harness") {
+      toggleTranscriptRaw();
     } else if (name === "pagedown") {
       scrollEvents(12);
     } else if (name === "pageup") {
       scrollEvents(-12);
     } else if (name === "g" || name === "home") {
       followTail = false;
-      eventScroll.scrollTop = 0;
-      updateEventSelection(-Number.MAX_SAFE_INTEGER);
+      if (selectedStream()?.kind === "thread" && detailMode === "harness") {
+        harnessScroll.scrollTop = 0;
+        selectTranscriptIndex(0);
+      } else {
+        eventScroll.scrollTop = 0;
+        updateEventSelection(-Number.MAX_SAFE_INTEGER);
+      }
     } else if (name === "G" || name === "end" || name === "f") {
-      followEvents();
+      followDetail();
     }
+  });
+
+  renderer.on("resize", () => {
+    if (view === "list") rebuildThreadList();
+    else if (selectedStream()?.kind === "thread" && detailMode === "harness") rebuildHarness();
+    updateDetailHeader();
+    updateChrome();
   });
 
   process.once("SIGTERM", shutdown);

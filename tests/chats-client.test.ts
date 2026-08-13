@@ -104,6 +104,42 @@ describe("ChatsConnection", () => {
     connection.close();
   });
 
+  test("keeps additive AgentVoice metadata out of native app-server frames", async () => {
+    const frames: Record<string, unknown>[] = [];
+    const notifications: Array<[string, Record<string, unknown>]> = [];
+    const connection = new ChatsConnection({
+      url: fixture(),
+      token: "secret",
+      version: "test",
+      onFrame(frame) {
+        frames.push(frame);
+      },
+      onNotification(method, params) {
+        notifications.push([method, params]);
+      },
+    });
+    await connection.connect();
+    frames.length = 0;
+    notifications.length = 0;
+    const ws = (connection as unknown as { ws: WebSocket }).ws;
+    ws.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "agentvoice/thread/identities",
+          params: { data: [{ threadId: "thread-a", role: "worker" }] },
+        }),
+      }),
+    );
+
+    expect(notifications).toContainEqual([
+      "agentvoice/thread/identities",
+      { data: [{ threadId: "thread-a", role: "worker" }] },
+    ]);
+    expect(frames.some((frame) => frame["payload"] !== undefined)).toBe(false);
+    connection.close();
+  });
+
   test("reports an unauthorized close and does not leave a usable connection", async () => {
     const connection = new ChatsConnection({
       url: fixture(),

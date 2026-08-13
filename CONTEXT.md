@@ -18,6 +18,18 @@ explicit `observe=agentvoice` opt-in. _Avoid_: "event" without
 qualification (the payload may be a request, response, or notification), "chat
 message".
 
+**Codex transcript** — The per-thread semantic projection `agentvoice chats`
+builds from a full `thread/read` history plus live Frame envelopes. It preserves
+the raw App-server item on every projected item and never loads, resumes, or
+subscribes to the thread it describes. _Avoid_: "chat messages" (commands,
+diffs, reasoning, tools, and lifecycle are first-class), "voice transcript".
+
+**Harness view** — The default Codex-thread detail surface in `agentvoice
+chats`: a compact execution spine of Codex transcript items with expandable
+content and per-item raw access. The alternate Frames view remains the exact
+connection-level JSON stream; Voice Sessions use Frames only. _Avoid_: "chat
+view", "semantic frames".
+
 **Thread identity snapshot** — The `agentvoice/thread/identities` notification
 replayed and updated for `observe=agentvoice` peers, mapping the currently
 owned root and dispatched Worker thread ids to `orchestrator` or `worker`.

@@ -12,8 +12,10 @@ transcripts, and mute controls.
 
 `agentvoice chats` is the companion thread browser. It connects to the same
 server, lists the threads currently loaded in AgentVoice's App-server, and
-shows live, syntax-highlighted streams of their raw JSON frames without
-subscribing to or retaining a thread. Its separate **VOICE SESSIONS** view
+opens a coding-agent-style Harness view of each Codex transcript without
+subscribing to or retaining a thread. Every projected item keeps its raw
+App-server payload, and the exact connection-level JSON remains available in
+the alternate Frames view. Its separate **VOICE SESSIONS** view
 mirrors live realtime control events, lifecycle, and explicit loss gaps by
 voice-session UUID; it never treats a voice session as a thread.
 
@@ -41,7 +43,7 @@ bun install
 bun run setup                        # one-time: verifies bun/codex, builds duplex audio
 bun run server                       # all defaults
 bun run client                       # in another terminal: the voice TUI
-agentvoice chats                     # in another terminal: loaded threads + raw frames
+agentvoice chats                     # in another terminal: loaded Codex transcripts
 bun run src/main.ts server --model gpt-5.6-sol --effort high --voice cove
 ```
 
@@ -347,11 +349,19 @@ The device is built from source and the client refuses to start without it —
 
 `agentvoice chats` opens a full-screen OpenTUI browser for the threads that
 are authoritatively loaded in the running App-server. The list refreshes every
-two seconds. Selecting a compact thread card opens its raw frame stream; each
-frame retains the exact parsed JSON payload and is marked by direction and
-owner (`agentvoice` or unsolicited `appServer` traffic on AgentVoice's owning
-connection). The viewer's own request/response traffic arrives as ordinary raw
-App-server frames marked `client`.
+two seconds. Compact two-row cards show the thread name, runtime state, role,
+home-relative workspace, and provider; conversation previews and full thread
+IDs are deliberately omitted.
+
+Selecting a Codex thread opens its **Harness view**, an execution spine that
+renders user and agent prose as Markdown, reasoning as a collapsed summary,
+commands with bounded output, edits as unified or wide split diffs, and tool,
+plan, collaboration, search, media, wait, system, and error items according to
+their lifecycle. Unknown future item types remain visible as raw fallbacks.
+Each item retains its exact App-server payload; `r` toggles raw JSON for the
+selected item, and `v` switches the whole detail surface between Harness and
+**Frames**. Frames preserves the exact parsed JSON plus direction and owner
+(`agentvoice`, unsolicited `appServer`, or the viewer's own `client` traffic).
 
 ```bash
 agentvoice chats
@@ -359,21 +369,26 @@ agentvoice chats --url ws://127.0.0.1:7890/app-server --token <secret>
 ```
 
 Use arrow keys or `j`/`k` to move, Return or a click/tap to open and expand,
-Escape or `h` to return, `f` or End to follow the tail, Page Up/Down to scroll,
-and `q` to quit. JSON is compact by default, syntax-highlighted and wrapped;
-expansion exposes the complete pretty-printed payload, which remains
+Escape or `h` to return, `f` or End to follow the newest item, Page Up/Down to
+scroll, and `q` to quit. Raw JSON is syntax-highlighted, wrapped, complete, and
 selectable. Mouse wheel and terminal touch-as-mouse work through the native
 scroll surface. Every footer action is also a pointer/touch target; at narrow
-widths the single-line action rail scrolls horizontally without showing a
-scrollbar. Cards identify threads by role, state, provider, short ID, and
-home-relative workspace; conversation previews are deliberately omitted.
-Each thread retains the latest 300 frames in the viewer and reports any older
-frames evicted from that local display.
+widths its single-line rail shortens to keys and scrolls horizontally without
+a visible scrollbar. Each thread retains the latest 300 Frames in the viewer
+and reports any older frames evicted from that local display.
 
 This is a read-only observer by construction: it lists with
-`thread/loaded/list` and reads metadata with `thread/read` using
-`includeTurns:false`. It never starts, resumes, forks, archives, deletes, or
-unsubscribes a thread, so opening the browser cannot load or retain one.
+`thread/loaded/list`, reads card metadata with `thread/read`
+`includeTurns:false`, and hydrates an opened Codex transcript with a separate
+`thread/read` `includeTurns:true`. Reads do not load a thread. It never starts,
+resumes, forks, archives, deletes, subscribes to, or unsubscribes a thread, so
+opening the browser cannot load or retain one. Frames arriving on AgentVoice's
+already-owning connection are buffered during hydration and merged with the
+persisted history without regressing a completed lifecycle.
+
+Voice Sessions remain Frames-only. That live-only surface groups raw realtime
+control payloads, lifecycle facts, and explicit loss gaps by voice-session UUID;
+it does not feed the Codex transcript projection and still carries no audio.
 
 ### Phone remote
 

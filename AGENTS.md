@@ -61,8 +61,11 @@ the server and the client use it; if only one does, it goes in that directory.
     `scripts/account-profiles-probe.ts`
   - `server.ts` — wiring: process supervision, thread, worker threads,
     WebSocket, account rotation at idle
-- `src/chats/` — `agentvoice chats`: gateway connection, loaded-thread and raw
-  frame model, orchestration, and the OpenTUI thread browser/event stream
+- `src/chats/` — `agentvoice chats`: gateway connection and loaded-thread/raw
+  Frame model; `transcript.ts` + `transcript-source.ts` provide the pure
+  history/live Codex transcript projection without loading threads;
+  `transcript-ui.ts` + `ui.ts` render the OpenTUI browser, Harness view, Frames
+  view, and the separate raw-only Voice Sessions surface
 - `src/client/` — terminal client: `transport.ts` (WebSocket + werift WebRTC,
   two-peer redial), `duplex-audio.ts` + `duplex-device.ts` + `native/` (the
   duplex audio device — the only audio path), `dsp.ts` (pure audio math,

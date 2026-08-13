@@ -50,12 +50,15 @@ export function footerCopy(state: FleetFooterState): FooterCopy {
   if (fullWidth <= actionWidth) {
     return { labels: state.actions.map((action) => action.label), mode: visibleMode };
   }
-  if (innerWidth >= 32) {
-    return {
-      labels: state.actions.map((action) => action.shortLabel ?? action.label),
-      mode: visibleMode,
-    };
-  }
+  const shortLabels = state.actions.map((action) => action.shortLabel ?? action.label);
+  const shortWidth = state.actions.reduce(
+    (sum, action, index) => sum + action.key.length + (shortLabels[index]?.length ?? 0) + 5,
+    0,
+  );
+  if (shortWidth <= actionWidth) return { labels: shortLabels, mode: visibleMode };
+
+  const keyWidth = state.actions.reduce((sum, action) => sum + action.key.length + 4, 0);
+  if (keyWidth <= actionWidth) return { labels: state.actions.map(() => ""), mode: visibleMode };
   return { labels: state.actions.map(() => ""), mode: "" };
 }
 

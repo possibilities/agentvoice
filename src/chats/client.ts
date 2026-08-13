@@ -1,6 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { AGENTVOICE_VOICE_OBSERVATION_METHOD, APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
+import { APP_SERVER_GATEWAY_PROTOCOL } from "../protocol.ts";
 
 export interface GatewayFrameHandlers {
   onFrame(params: Record<string, unknown>): void;
@@ -275,7 +275,7 @@ export class ChatsConnection {
       this.options.onFrame(params);
       return;
     }
-    if (method === AGENTVOICE_VOICE_OBSERVATION_METHOD) {
+    if (typeof method === "string" && method.startsWith("agentvoice/")) {
       const params = isRecord(value["params"]) ? value["params"] : {};
       this.options.onNotification?.(method, params);
       return;

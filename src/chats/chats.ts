@@ -7,6 +7,7 @@ import {
 } from "../protocol.ts";
 import { ChatsConnection, ChatsConnectionError } from "./client.ts";
 import { ChatsModel, type RawStreamEvent } from "./model.ts";
+import { TranscriptSource } from "./transcript-source.ts";
 import { runChatsUi } from "./ui.ts";
 
 export interface ChatsConfig {
@@ -36,6 +37,7 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export async function runChats(config: ChatsConfig): Promise<void> {
   const model = new ChatsModel();
+  let transcripts: TranscriptSource | null = null;
   let eventHandler: ((event: RawStreamEvent) => void) | null = null;
   let connected = false;
   const connection = new ChatsConnection({
@@ -44,7 +46,10 @@ export async function runChats(config: ChatsConfig): Promise<void> {
     version: config.version,
     onFrame(params) {
       const event = model.recordEnvelope(params);
-      if (event) eventHandler?.(event);
+      if (event) {
+        if (event.kind === "thread") transcripts?.record(event);
+        eventHandler?.(event);
+      }
     },
     onNotification(method, params) {
       if (method === AGENTVOICE_THREAD_IDENTITIES_METHOD) {
@@ -58,6 +63,7 @@ export async function runChats(config: ChatsConfig): Promise<void> {
       connected = false;
     },
   });
+  transcripts = new TranscriptSource(connection);
   const ensureConnected = async (): Promise<void> => {
     if (connected) return;
     await connection.connect();
@@ -108,6 +114,7 @@ export async function runChats(config: ChatsConfig): Promise<void> {
       if (id && thread) known.set(id, thread);
     }
     model.replaceThreads(ids.flatMap((id) => (known.has(id) ? [known.get(id)] : [])));
+    transcripts?.retain(ids);
   };
 
   try {
@@ -115,6 +122,7 @@ export async function runChats(config: ChatsConfig): Promise<void> {
     await runChatsUi({
       connection,
       model,
+      transcripts,
       refreshThreads,
       setEventHandler(handler) {
         eventHandler = handler;
