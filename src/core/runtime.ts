@@ -42,8 +42,8 @@ import { HerdrSurface } from "./surface.ts";
 import {
   archiveWorkerThread,
   deleteWorkerThread,
-  parsePersistedWorkers,
   type PersistedWorker,
+  parsePersistedWorkers,
   WorkerManager,
   type WorkerSnapshot,
   WorkerTurnStartError,
@@ -463,8 +463,7 @@ export class VoiceRuntime {
       this.workers = null;
       return;
     }
-    const persisted =
-      this.workers?.persistenceRecords() ?? this.loadPersistedWorkers();
+    const persisted = this.workers?.persistenceRecords() ?? this.loadPersistedWorkers();
     const manager = this.buildWorkerManager();
     this.workers = manager;
     // Register ownership before any RPC: once the thread below is resumed, a
