@@ -18,7 +18,13 @@
  */
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
-import { defaultConfigPath, type Environ, expandTilde, stateDirectory } from "../paths.ts";
+import {
+  defaultConfigPath,
+  type Environ,
+  expandTilde,
+  stateDirectory,
+  surfaceSocketPath,
+} from "../paths.ts";
 import {
   ACCOUNTS_KEYS,
   type AccountsValues,
@@ -38,6 +44,8 @@ import {
   SANDBOX_MODES,
   type SandboxMode,
   SERVER_KEYS,
+  SURFACE_KEYS,
+  type SurfaceValues,
   VOICE_KEYS,
   type VoiceValues,
 } from "./config-schema.ts";
@@ -53,6 +61,7 @@ export type {
   Personality,
   RealtimeVersion,
   SandboxMode,
+  SurfaceValues,
   VoiceValues,
 } from "./config-schema.ts";
 export {
@@ -68,6 +77,7 @@ export {
   REALTIME_VERSIONS,
   SANDBOX_MODES,
   SERVER_KEYS,
+  SURFACE_KEYS,
   VOICE_KEYS,
 } from "./config-schema.ts";
 
@@ -125,6 +135,20 @@ export interface AccountsConfig {
   switchThreshold: number;
 }
 
+/**
+ * The surface — the shared runtime where placed workers run in the open;
+ * herdr is the reference implementation. Wake wiring only: the orchestrator
+ * drives the surface itself through its CLI.
+ */
+export interface SurfaceConfig {
+  /** Push `<surface_report>` turns at the orchestrator on worker lifecycle events. */
+  events: boolean;
+  /** The surface server's unix socket. */
+  socket: string;
+  /** The pane metadata token key that marks a pane as a placed worker. */
+  token: string;
+}
+
 export interface ServerConfig {
   codex: string;
   debug: boolean;
@@ -133,6 +157,7 @@ export interface ServerConfig {
   accounts: AccountsConfig;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
+  surface: SurfaceConfig;
 }
 
 export class ConfigError extends Error {}
@@ -222,11 +247,12 @@ function unknownKeyMessage(path: string, known: readonly string[]): string {
 // Parsing — zod issues rendered as the loader's own error prose
 // ---------------------------------------------------------------------------
 
-/** The four strict objects, by dotted path, for unknown-key messages. */
+/** The strict section objects, by dotted path, for unknown-key messages. */
 const KNOWN_KEYS: Record<string, readonly string[]> = {
   accounts: ACCOUNTS_KEYS,
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
+  surface: SURFACE_KEYS,
 };
 
 /**
@@ -425,6 +451,8 @@ export function resolveConfig(
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
     cli.voice?.[key] ?? file.voice?.[key];
+  const pickSurface = <K extends keyof SurfaceValues>(key: K): SurfaceValues[K] =>
+    cli.surface?.[key] ?? file.surface?.[key];
 
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
@@ -495,5 +523,10 @@ export function resolveConfig(
     },
     orchestrator,
     voice,
+    surface: {
+      events: pickSurface("events") ?? false,
+      socket: expandTilde(pickSurface("socket") ?? surfaceSocketPath(env, home), home),
+      token: pickSurface("token") ?? "worker",
+    },
   };
 }

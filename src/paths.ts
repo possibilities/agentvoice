@@ -53,6 +53,19 @@ export function defaultConfigPath(env: Environ, home: string): string {
   return join(base, "agentvoice", "server.json");
 }
 
+/**
+ * The surface server's unix socket (herdr, the reference implementation),
+ * resolved the way herdr itself resolves it: the env override verbatim, else
+ * the XDG config home.
+ */
+export function surfaceSocketPath(env: Environ, home: string): string {
+  const override = env["HERDR_SOCKET_PATH"];
+  if (override) return override;
+  const xdg = env["XDG_CONFIG_HOME"];
+  const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".config");
+  return join(base, "herdr", "herdr.sock");
+}
+
 export function expandTilde(path: string, home: string): string {
   if (path === "~") return home;
   if (path.startsWith("~/")) return join(home, path.slice(2));

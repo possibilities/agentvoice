@@ -83,6 +83,7 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 | `orchestrator.dispatch` | orchestrator | `thread/start dynamicTools` | per thread (start-only; upstream restores tools on resume) |
 | `orchestrator.dispatch-reports` | orchestrator | the tools' descriptions + pushed `turn/start` reports | per thread (default off: pull-only via `check_workers`) |
 | `orchestrator.extra:` | orchestrator | merged into `thread/start` | per thread |
+| `surface.events` / `socket` / `token` | the console | herdr `events.subscribe` + pushed `<surface_report>` turns | console lifetime (see [surface wakes](#surface-wakes-herdr)) |
 | `ORCHESTRATOR_BASE.md` | orchestrator | `baseInstructions` | **every model request** (immune to compaction) |
 | `ORCHESTRATOR.md` | orchestrator | `developerInstructions` | in-history developer item, re-injected after compaction |
 | `ORCHESTRATOR_SESSION_START.md` / `_END.md` | orchestrator | `realtimeStartInstructions` / `realtimeEndInstructions` on the **realtime** call | on voice open/close **transitions** only (see below) |
@@ -459,6 +460,39 @@ file to preserve or delete *(source, probe)*.
 Orchestrator roots carry `threadSource: "agentvoice-orchestrator"`; worker
 roots carry `threadSource: "agentvoice-worker"`. These app-owned labels are
 persisted scalar metadata for later inventory without heuristics *(source)*.
+
+### Surface wakes (herdr)
+
+Distinct from app-server worker threads: the fleet's orchestrator doctrine
+also places workers on **the surface** — the shared runtime where coding
+agents run in the open, watchable and joinable by the human; herdr is its
+reference implementation. The orchestrator drives the surface itself through
+the herdr CLI in its own thread (place, steer, read, attach); agentvoice's
+only job is the wake wiring, and `surface.events: true` turns it on.
+
+The console holds a long-lived `events.subscribe` NDJSON stream on herdr's
+unix socket (`surface.socket`, default `$HERDR_SOCKET_PATH` else
+`~/.config/herdr/herdr.sock`), watching the global pane lifecycle kinds.
+Correlation is by pane metadata token: the doctrine has the orchestrator tag
+each placed worker's pane (`herdr pane report-metadata --token
+worker=<name>`; the key is `surface.token`), and only tagged panes wake. A
+tagged worker that transitions to `blocked` (an approval or question UI) or
+`done` (finished, unseen), or whose pane dies, becomes a `<surface_report>`
+turn on the orchestrator's thread through the same fire-and-forget channel
+as `<worker_report>` — steered into a running turn by upstream admission.
+`idle`, `working`, and `unknown` never wake, and `unknown` does not update
+the tracked state, so a screen-detection flap cannot re-arm a wake.
+
+herdr replays nothing (its event hub is a small ring), so every (re)connect
+reconciles against `agent.list` before trusting the stream: missed
+transitions wake late rather than never, and a worker that vanished while
+the console was away reports `gone`. Wakes that arrive while the console is
+detached from the resident are dropped with a status line — the doctrine's
+recovery is status on demand (`herdr agent list`), not a replay. One
+fidelity caveat inherited from herdr: claude and codex panes are
+screen-detected (their integrations report session identity only; pi is a
+lifecycle authority), so `blocked`/`done` for those workers is a
+classification, not a report.
 
 ### The ambient surface: MCP, skills, hooks, memory
 

@@ -252,6 +252,36 @@ export const voiceValuesSchema = z
     description: "Primes the voice agent — the realtime speech model the user talks to.",
   });
 
+export const surfaceValuesSchema = z
+  .strictObject({
+    events: z
+      .boolean()
+      .meta({
+        description:
+          "Subscribe to the surface's event stream and push a <surface_report> turn at the orchestrator when a placed worker blocks on an approval or question, finishes unseen, or leaves the surface. The orchestrator drives the surface itself through its CLI; this is only the wake wiring. Default: false.",
+        default: false,
+      })
+      .optional(),
+    socket: z
+      .string()
+      .describe(
+        "The surface server's unix socket. Tilde-expanded. Default: $HERDR_SOCKET_PATH, else ~/.config/herdr/herdr.sock ($XDG_CONFIG_HOME honored).",
+      )
+      .optional(),
+    token: z
+      .string()
+      .meta({
+        description:
+          "The pane metadata token key that marks a pane as a placed worker (set by the orchestrator with `herdr pane report-metadata --token <key>=<name>`; the value is the worker's speakable handle). Only tagged panes wake.",
+        default: "worker",
+      })
+      .optional(),
+  })
+  .meta({
+    description:
+      "The surface — the shared runtime where placed workers run in the open, per the orchestrator doctrine. herdr is the reference implementation; these keys wire its lifecycle events into orchestrator wakes.",
+  });
+
 const serverShape = {
   codex: z
     .string()
@@ -262,6 +292,7 @@ const serverShape = {
   accounts: accountsValuesSchema.optional(),
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
+  surface: surfaceValuesSchema.optional(),
 };
 
 /** What the loader validates: `server.json` contents with `$schema` already stripped. */
@@ -279,9 +310,11 @@ export const configFileSchema = z.strictObject({
 export type AccountsValues = z.infer<typeof accountsValuesSchema>;
 export type OrchestratorValues = z.infer<typeof orchestratorValuesSchema>;
 export type VoiceValues = z.infer<typeof voiceValuesSchema>;
+export type SurfaceValues = z.infer<typeof surfaceValuesSchema>;
 export type ConfigValues = z.infer<typeof configValuesSchema>;
 
 export const SERVER_KEYS: ReadonlyArray<string> = Object.keys(serverShape);
 export const ACCOUNTS_KEYS: ReadonlyArray<string> = Object.keys(accountsValuesSchema.shape);
 export const ORCHESTRATOR_KEYS: ReadonlyArray<string> = Object.keys(orchestratorValuesSchema.shape);
 export const VOICE_KEYS: ReadonlyArray<string> = Object.keys(voiceValuesSchema.shape);
+export const SURFACE_KEYS: ReadonlyArray<string> = Object.keys(surfaceValuesSchema.shape);

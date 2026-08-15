@@ -208,6 +208,27 @@
         }
       },
       "additionalProperties": false
+    },
+    "surface": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "boolean",
+          "description": "Subscribe to the surface's event stream and push a <surface_report> turn at the orchestrator when a placed worker blocks on an approval or question, finishes unseen, or leaves the surface. The orchestrator drives the surface itself through its CLI; this is only the wake wiring. Default: false.",
+          "default": false
+        },
+        "socket": {
+          "type": "string",
+          "description": "The surface server's unix socket. Tilde-expanded. Default: $HERDR_SOCKET_PATH, else ~/.config/herdr/herdr.sock ($XDG_CONFIG_HOME honored)."
+        },
+        "token": {
+          "type": "string",
+          "description": "The pane metadata token key that marks a pane as a placed worker (set by the orchestrator with `herdr pane report-metadata --token <key>=<name>`; the value is the worker's speakable handle). Only tagged panes wake.",
+          "default": "worker"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The surface — the shared runtime where placed workers run in the open, per the orchestrator doctrine. herdr is the reference implementation; these keys wire its lifecycle events into orchestrator wakes."
     }
   },
   "additionalProperties": false
