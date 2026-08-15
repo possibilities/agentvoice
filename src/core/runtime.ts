@@ -400,6 +400,7 @@ export class VoiceRuntime {
   private async openThread(attachment: ResidentAttachment): Promise<string> {
     if (this.threadId) {
       const previous = this.threadId;
+      this.events.onStatus(`resuming the orchestrator agent (${previous.slice(0, 8)}…)`);
       try {
         return extractThreadId(
           await attachment.request("thread/resume", {
@@ -419,6 +420,7 @@ export class VoiceRuntime {
         }
       }
     }
+    this.events.onStatus("starting a fresh orchestrator agent…");
     return extractThreadId(
       await attachment.request("thread/start", threadParams(this.config, this.prompts, "start")),
     );
@@ -466,6 +468,9 @@ export class VoiceRuntime {
     const persisted = this.workers?.persistenceRecords() ?? this.loadPersistedWorkers();
     const manager = this.buildWorkerManager();
     this.workers = manager;
+    if (persisted.length > 0) {
+      this.events.onStatus(`reconciling ${persisted.length} persisted worker(s)…`);
+    }
     // Register ownership before any RPC: once the thread below is resumed, a
     // completion can arrive in the same socket batch as the read response and
     // would be dropped if ownsThread were still false.

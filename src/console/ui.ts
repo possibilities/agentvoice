@@ -211,11 +211,13 @@ export async function runConsole(
     );
   }
 
-  // The runtime boots before the TUI so failures land as plain text. Its
-  // events buffer until the transport and screen exist, except ready — the
-  // transport pulls the current ready state when it starts.
+  // The runtime boots before the TUI so failures land as plain text — and so
+  // does its progress: each stage prints as it starts, so a slow or wedged
+  // resident is visible mid-stage instead of a silent blank screen. The same
+  // lines buffer for the event feed once the screen exists.
   const sink: { transport: VoiceTransport | null } = { transport: null };
   const bufferedStatus: string[] = [];
+  console.log("agentvoice: attaching to the resident app-server…");
   let runtime: VoiceRuntime;
   try {
     runtime = await VoiceRuntime.start(
@@ -229,8 +231,12 @@ export async function runConsole(
         onError: (text, fatal) => sink.transport?.handleError(text, fatal),
         onWorker: (worker) => sink.transport?.handleWorker(worker),
         onStatus: (line) => {
-          if (sink.transport) feed(line);
-          else bufferedStatus.push(line);
+          if (sink.transport) {
+            feed(line);
+          } else {
+            console.log(`agentvoice: ${line}`);
+            bufferedStatus.push(line);
+          }
         },
         debug: debugLog,
       },
