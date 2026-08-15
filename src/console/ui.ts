@@ -109,22 +109,15 @@ function styledFieldReadout(
   width: number,
   youDb: number,
   agentDb: number,
-  contact: number,
   youColor: string,
   agentColor: string,
 ): StyledText {
   const left = dbText(youDb);
   const right = dbText(agentDb);
-  const contactText = contact > 0.12 ? ` CONTACT ${Math.min(99, Math.round(contact * 100))}` : "";
-  const spare = Math.max(0, width - left.length - right.length);
-  const middle = contactText.length + 2 <= spare ? contactText : "";
-  const leftGap = Math.max(1, Math.floor((spare - middle.length) / 2));
-  const rightGap = Math.max(0, spare - middle.length - leftGap);
+  const spare = Math.max(1, width - left.length - right.length);
   return new StyledText([
     fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(leftGap)),
-    ...(middle ? [fg(PALETTE.contact)(middle)] : []),
-    fg(PALETTE.faint)(" ".repeat(rightGap)),
+    fg(PALETTE.faint)(" ".repeat(spare)),
     fg(agentColor)(right),
   ]);
 }
@@ -614,7 +607,6 @@ export async function runConsole(
       dim: PALETTE.dim,
       you: youColor,
       agent: agentColor,
-      contact: PALETTE.contact,
     });
     fieldLabels.content = styledFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
@@ -627,7 +619,6 @@ export async function runConsole(
       boundedViewportExtent(fieldReadout.width, viewportWidth),
       mic.db,
       agent.db,
-      fieldFrame.contact,
       youColor,
       agentColor,
     );

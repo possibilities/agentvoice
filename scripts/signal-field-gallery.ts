@@ -115,8 +115,8 @@ const scenarios = [
     },
   },
   {
-    name: "04 CONTACT FAULT / INTERRUPTION",
-    short: "04 CONTACT",
+    name: "04 CROSSTALK / INTERRUPTION",
+    short: "04 CROSSTALK",
     sample: (t: number) => ({ you: pulse(t, 0.91), agent: pulse(t + 0.19, 0.86) }),
   },
   {
@@ -132,7 +132,7 @@ let scenario = 0;
 let autoplay = true;
 let switchedAt = 0;
 
-function renderChrome(you: number, agent: number, contact: number): void {
+function renderChrome(you: number, agent: number): void {
   const terminalWidth = renderer.width || process.stdout.columns || 80;
   const compact = terminalWidth < 60;
   galleryTitle.content = new StyledText(
@@ -176,13 +176,13 @@ function renderChrome(you: number, agent: number, contact: number): void {
   const r = `${Math.round(agent * 100)
     .toString()
     .padStart(3)}%`;
-  const mid = contact > 0.12 ? `CONTACT ${Math.min(99, Math.round(contact * 100))}` : "NO CARRIER";
+  const mid = you + agent < 0.05 ? "NO CARRIER" : "";
   const spare = Math.max(2, width - l.length - r.length - mid.length);
   const gap = Math.floor(spare / 2);
   readout.content = new StyledText([
     fg(TONE.you)(l),
     fg(TONE.faint)(" ".repeat(gap)),
-    fg(contact > 0.12 ? TONE.contact : TONE.faint)(mid),
+    fg(TONE.faint)(mid),
     fg(TONE.faint)(" ".repeat(Math.max(1, spare - gap))),
     fg(TONE.agent)(r),
   ]);
@@ -205,9 +205,8 @@ const frame = async (deltaMs: number): Promise<void> => {
     dim: TONE.dim,
     you: TONE.you,
     agent: TONE.agent,
-    contact: TONE.contact,
   });
-  renderChrome(image.you, image.agent, image.contact);
+  renderChrome(image.you, image.agent);
 };
 
 function move(by: number): void {

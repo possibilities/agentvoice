@@ -1,12 +1,18 @@
-import { fg, StyledText, type TextChunk } from "@opentui/core";
-import type { SignalFieldFrame, SignalFieldTone } from "./signal-field.ts";
+import { bg, fg, StyledText, type TextChunk } from "@opentui/core";
+import {
+  type SignalFieldFrame,
+  type SignalFieldTone,
+  signalFieldWashColor,
+} from "./signal-field.ts";
+import { VOICE_TONES } from "./theme.ts";
 
 export interface SignalFieldColors {
   faint: string;
   dim: string;
   you: string;
   agent: string;
-  contact: string;
+  /** The color the field canvas sits on; washes are mixed up from it. */
+  base?: string;
 }
 
 export interface ViewportSize {
@@ -33,21 +39,35 @@ export function boundedViewportExtent(value: number, viewportExtent: number): nu
   return Math.max(1, Math.min(limit, Math.floor(value)));
 }
 
-/** Coalesce adjacent cells with one tone to keep OpenTUI chunk counts bounded. */
+/** Coalesce adjacent cells with one (tone, wash) pair to keep OpenTUI chunk counts bounded. */
 export function styledSignalField(frame: SignalFieldFrame, colors: SignalFieldColors): StyledText {
+  const base = colors.base ?? VOICE_TONES.panel;
+  const washCache = new Map<number, string>();
+  const washColor = (step: number): string => {
+    let color = washCache.get(step);
+    if (color === undefined) {
+      color = signalFieldWashColor(step, base, colors);
+      washCache.set(step, color);
+    }
+    return color;
+  };
+
   const chunks: TextChunk[] = [];
   frame.rows.forEach((row, rowIndex) => {
     let tone: SignalFieldTone | undefined;
+    let wash: number | undefined;
     let text = "";
     const flush = (): void => {
       if (tone === undefined || text.length === 0) return;
-      chunks.push(fg(colors[tone])(text));
+      const styled = fg(colors[tone])(text);
+      chunks.push(wash === undefined ? styled : bg(washColor(wash))(styled));
       text = "";
     };
     for (const cell of row) {
-      if (cell.tone !== tone) {
+      if (cell.tone !== tone || cell.wash !== wash) {
         flush();
         tone = cell.tone;
+        wash = cell.wash;
       }
       text += cell.char;
     }

@@ -1,13 +1,40 @@
 import { describe, expect, test } from "bun:test";
-import { SignalField, signalFieldText } from "../src/console/signal-field.ts";
+import {
+  mixHex,
+  SignalField,
+  signalFieldText,
+  signalFieldWashColor,
+  WASH_STEPS,
+} from "../src/console/signal-field.ts";
 import { boundedViewportExtent, boundedViewportSize } from "../src/console/signal-field-ui.ts";
+
+const CLASH_GLYPHS = ["╳", "┼", "┿", "╬", "※", "#"];
 
 function countTone(field: ReturnType<SignalField["render"]>, tone: string): number {
   return field.rows.flat().filter((cell) => cell.tone === tone).length;
 }
 
-function countOccupied(field: ReturnType<SignalField["render"]>): number {
-  return field.rows.flat().filter((cell) => cell.char !== " ").length;
+function countWashed(field: ReturnType<SignalField["render"]>): number {
+  return field.rows.flat().filter((cell) => cell.wash !== undefined).length;
+}
+
+function washText(field: ReturnType<SignalField["render"]>): string {
+  return field.rows
+    .flat()
+    .map((cell) => (cell.wash === undefined ? "." : cell.wash.toString(36)))
+    .join("");
+}
+
+function maxHorizontalStepDelta(field: ReturnType<SignalField["render"]>): number {
+  let max = 0;
+  for (const row of field.rows) {
+    for (let x = 1; x < row.length; x++) {
+      const left = row[x - 1]?.wash ?? 0;
+      const right = row[x]?.wash ?? 0;
+      max = Math.max(max, Math.abs(right - left));
+    }
+  }
+  return max;
 }
 
 function changedCells(left: string, right: string): number {
@@ -54,35 +81,48 @@ describe("signal field", () => {
     expect(left.render(48, 6)).toEqual(right.render(48, 6));
   });
 
-  test("idle has sparse raked contours that drift instead of flickering", () => {
-    const field = new SignalField({ seed: 41 });
-    const initialFrame = field.render(72, 9);
-    const initial = signalFieldText(initialFrame);
-    const area = 72 * 9;
-    expect(countOccupied(initialFrame)).toBeGreaterThan(area * 0.18);
-    expect(countOccupied(initialFrame)).toBeLessThan(area * 0.5);
-    expect(new Set(initial.replaceAll("\n", ""))).toEqual(new Set([" ", "·", "╴", "─", "┄", "┈"]));
+  test("standby is a glyphless undulation, smooth in space and continuous in time", () => {
+    for (const standby of ["swell", "pond", "weave"] as const) {
+      const field = new SignalField({ seed: 41, standby });
+      const initialFrame = field.render(72, 9);
+      const area = 72 * 9;
+      expect(signalFieldText(initialFrame).replaceAll("\n", "")).toBe(" ".repeat(area));
+      expect(countWashed(initialFrame)).toBeGreaterThan(area * 0.3);
+      expect(maxHorizontalStepDelta(initialFrame)).toBeLessThanOrEqual(2);
 
-    for (let i = 0; i < 6; i++) field.step(1 / 30, { you: 0, agent: 0 });
-    const soon = signalFieldText(field.render(72, 9));
-    expect(changedCells(initial, soon)).toBeLessThan(area * 0.04);
+      const initial = washText(initialFrame);
+      for (let i = 0; i < 6; i++) field.step(1 / 30, { you: 0, agent: 0 });
+      const soon = washText(field.render(72, 9));
+      expect(changedCells(initial, soon)).toBeGreaterThan(0);
+      expect(changedCells(initial, soon)).toBeLessThan(area * 0.4);
 
-    for (let i = 0; i < 150; i++) field.step(1 / 30, { you: 0, agent: 0 });
-    const later = signalFieldText(field.render(72, 9));
-    expect(changedCells(initial, later)).toBeGreaterThan(area * 0.015);
+      for (let i = 0; i < 150; i++) field.step(1 / 30, { you: 0, agent: 0 });
+      const later = washText(field.render(72, 9));
+      expect(changedCells(initial, later)).toBeGreaterThan(changedCells(initial, soon));
+    }
   });
 
-  test("voice onset clears the idle grooves", () => {
-    const field = new SignalField({ seed: 11 });
-    const idle = field.render(60, 7);
-    for (let i = 0; i < 12; i++) field.step(1 / 30, { you: 1, agent: 0 });
-    const active = field.render(60, 7);
+  test("voice lays over the undulating floor without clearing it", () => {
+    const silent = new SignalField({ seed: 11 });
+    const speaking = new SignalField({ seed: 11 });
+    for (let i = 0; i < 12; i++) {
+      silent.step(1 / 30, { you: 0, agent: 0 });
+      speaking.step(1 / 30, { you: 1, agent: 0 });
+    }
+    const idle = silent.render(60, 7);
+    const active = speaking.render(60, 7);
     const neutralActive = active.rows
       .flat()
       .filter((cell) => cell.char !== " " && (cell.tone === "faint" || cell.tone === "dim"));
-    expect(countOccupied(idle)).toBeGreaterThan(0);
+    expect(countWashed(idle)).toBeGreaterThan(0);
+    expect(countWashed(active)).toBeGreaterThan(0);
+    expect(washText(active)).not.toBe(washText(idle));
     expect(neutralActive).toHaveLength(0);
     expect(countTone(active, "you")).toBeGreaterThan(0);
+    const strandsOnFloor = active.rows
+      .flat()
+      .filter((cell) => cell.tone === "you" && cell.wash !== undefined);
+    expect(strandsOnFloor.length).toBeGreaterThan(0);
   });
 
   test("keeps speaker identity on its originating side", () => {
@@ -99,18 +139,29 @@ describe("signal field", () => {
     );
   });
 
-  test("overlap creates a visible contact fault", () => {
-    const solo = new SignalField({ seed: 19 });
+  test("simultaneous voices share the field gently, with nothing marking the overlap", () => {
     const overlap = new SignalField({ seed: 19 });
-    for (let i = 0; i < 40; i++) {
-      solo.step(1 / 30, { you: 1, agent: 0 });
-      overlap.step(1 / 30, { you: 1, agent: 1 });
+    for (let i = 0; i < 40; i++) overlap.step(1 / 30, { you: 1, agent: 1 });
+    const frame = overlap.render(64, 7);
+    expect(frame.dominant).toBe("contact");
+    expect(frame.contact).toBeGreaterThan(0.9);
+    const chars = new Set(signalFieldText(frame));
+    for (const clash of CLASH_GLYPHS) expect(chars.has(clash)).toBe(false);
+    expect(countTone(frame, "you")).toBeGreaterThan(0);
+    expect(countTone(frame, "agent")).toBeGreaterThan(0);
+    const tones = new Set(frame.rows.flat().map((cell) => cell.tone));
+    expect([...tones].every((tone) => ["faint", "dim", "you", "agent"].includes(tone))).toBe(true);
+  });
+
+  test("wash colors ramp smoothly up from the field base", () => {
+    expect(mixHex("#000000", "#ffffff", 0.5)).toBe("#808080");
+    expect(mixHex("#131a1e", "#4b575e", 0)).toBe("#131a1e");
+    const palette = { faint: "#4b575e" };
+    const colors = new Set<string>();
+    for (let step = 1; step <= WASH_STEPS; step++) {
+      colors.add(signalFieldWashColor(step, "#131a1e", palette));
     }
-    const soloFrame = solo.render(64, 7);
-    const overlapFrame = overlap.render(64, 7);
-    expect(overlapFrame.dominant).toBe("contact");
-    expect(overlapFrame.contact).toBeGreaterThan(0.9);
-    expect(countTone(overlapFrame, "contact")).toBeGreaterThan(countTone(soloFrame, "contact"));
+    expect(colors.size).toBeGreaterThan(WASH_STEPS * 0.6);
   });
 
   test("releases toward quiet instead of freezing the last loud frame", () => {

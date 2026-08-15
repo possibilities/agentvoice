@@ -333,7 +333,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       dim: PALETTE.dim,
       you: youColor,
       agent: agentColor,
-      contact: PALETTE.contact,
     });
     fieldLabels.content = remoteFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
@@ -346,7 +345,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       boundedViewportExtent(fieldReadout.width, viewportWidth),
       latest?.mic.level ?? 0,
       latest?.speaker.level ?? 0,
-      frame.contact,
       youColor,
       agentColor,
     );
@@ -388,7 +386,6 @@ function remoteFieldReadout(
   width: number,
   you: number,
   agent: number,
-  contact: number,
   youColor: string,
   agentColor: string,
 ): StyledText {
@@ -398,15 +395,10 @@ function remoteFieldReadout(
   const right = `${Math.round(agent * 100)
     .toString()
     .padStart(3)}%`;
-  const middle = contact > 0.12 && width >= 24 ? "CONTACT" : "";
-  const spare = Math.max(0, width - left.length - right.length - middle.length);
-  const leftGap = Math.max(1, Math.floor(spare / 2));
-  const rightGap = Math.max(0, spare - leftGap);
+  const spare = Math.max(1, width - left.length - right.length);
   return new StyledText([
     fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(leftGap)),
-    ...(middle ? [fg(PALETTE.contact)(middle)] : []),
-    fg(PALETTE.faint)(" ".repeat(rightGap)),
+    fg(PALETTE.faint)(" ".repeat(spare)),
     fg(agentColor)(right),
   ]);
 }

@@ -44,6 +44,17 @@ describe("Remote console layout", () => {
       expect(rows.length).toBeLessThanOrEqual(height);
       expect(rows.every((row) => row.length <= width)).toBe(true);
     };
+    // The signal field animates continuously, so frames are never visually
+    // idle; a resize has settled when the bottom-anchored footer lands at the
+    // new viewport height.
+    const settled = (width: number, height: number): boolean => {
+      const footer = setup.renderer.root.findDescendantById("remote-footer");
+      return (
+        setup.renderer.width === width &&
+        footer instanceof BoxRenderable &&
+        footer.y + footer.height === height
+      );
+    };
     const expectRegionsWithinViewport = (height: number): void => {
       const header = box("remote-header");
       const main = box("remote-main");
@@ -67,7 +78,7 @@ describe("Remote console layout", () => {
       expect((footer as ScrollBoxRenderable).verticalScrollBar.visible).toBe(false);
 
       setup.resize(103, 19);
-      await setup.flush();
+      await setup.waitFor(() => settled(103, 19));
       expect(box("remote-rails").height).toBeGreaterThanOrEqual(4);
       expect(box("remote-controls").height).toBe(6);
       expect(text("remote-field-canvas").height).toBeGreaterThanOrEqual(2);
@@ -75,13 +86,13 @@ describe("Remote console layout", () => {
       expectFieldWithin(103, 19);
 
       setup.resize(103, 22);
-      await setup.flush();
+      await setup.waitFor(() => settled(103, 22));
       expect(box("remote-controls").height).toBe(6);
       expectRegionsWithinViewport(22);
       expectFieldWithin(103, 22);
 
       setup.resize(49, 46);
-      await setup.flush();
+      await setup.waitFor(() => settled(49, 46));
       expect(box("remote-rails").height).toBeGreaterThan(7);
       expectRegionsWithinViewport(46);
       expectFieldWithin(49, 46);
