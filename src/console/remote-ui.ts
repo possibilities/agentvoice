@@ -6,11 +6,10 @@ import {
   createCliRenderer,
   fg,
   type ParsedKey,
-  ScrollBoxRenderable,
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import { createFleetFooter } from "../tui/footer.ts";
+import { createCommandPalette } from "../tui/palette.ts";
 import { encodeRemoteMessage, parseRemoteState, type RemoteState } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
@@ -46,35 +45,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     backgroundColor: PALETTE.bg,
   });
   renderer.root.add(root);
-
-  const header = new BoxRenderable(renderer, {
-    id: "remote-header",
-    width: "100%",
-    height: 3,
-    border: ["bottom"],
-    borderStyle: "single",
-    borderColor: PALETTE.border,
-    backgroundColor: PALETTE.field,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingLeft: 1,
-    paddingRight: 1,
-    // Signal Room headers reserve the first row and put the divider directly
-    // below the title row; direct Text children otherwise round upward here.
-    paddingTop: 1,
-  });
-  const brand = new TextRenderable(renderer, {
-    content: new StyledText([
-      fg(PALETTE.accent)(SIGNAL_GLYPHS.rail),
-      bold(fg(PALETTE.text)(" AGENTVOICE")),
-      fg(PALETTE.dim)(" / REMOTE"),
-    ]),
-  });
-  const status = new TextRenderable(renderer, { content: "○ WAITING", fg: PALETTE.warn });
-  header.add(brand);
-  header.add(status);
-  root.add(header);
 
   const main = new BoxRenderable(renderer, {
     id: "remote-main",
@@ -160,25 +130,25 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   const micControl = makeControl("mic", "MIC", PALETTE.you);
   const speakerControl = makeControl("speaker", "SPEAKER", PALETTE.agent);
 
-  const footer = createFleetFooter(
+  const palette = createCommandPalette(
     {
       BoxRenderable,
-      ScrollBoxRenderable,
       TextRenderable,
       StyledText,
       bold,
       fg,
     } as typeof import("@opentui/core"),
     renderer,
-    "remote-footer",
+    "remote-palette",
     {
-      field: PALETTE.field,
+      panel: PALETTE.panel,
       line: PALETTE.border,
       accent: PALETTE.accent,
       muted: PALETTE.dim,
+      text: PALETTE.text,
     },
   );
-  root.add(footer.root);
+  renderer.root.add(palette.root);
 
   let latest: RemoteState | null = null;
   let socket: Socket | null = null;
@@ -195,48 +165,35 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     const height = renderer.height || process.stdout.rows || 24;
     layoutWidth = width;
     layoutHeight = height;
-    const compact = width < 34;
-    // The fixed header and footer leave too little room for the normal
-    // seven-row regions below 23 rows. Keep both touch targets useful while
-    // allowing the signal field to absorb the remaining height.
-    const short = height < 23;
+    // With no chrome rows, the normal seven-row regions fit until the
+    // terminal is genuinely shallow; below that the signal field absorbs
+    // the remaining height while both touch targets stay useful.
+    const short = height < 17;
     main.paddingTop = short ? 0 : 1;
     main.paddingBottom = short ? 0 : 1;
     rails.minHeight = short ? 4 : 7;
     controls.height = short ? 6 : "42%";
     controls.minHeight = short ? 6 : 7;
     controls.flexDirection = width < 26 ? "column" : "row";
-    footer.update({
+    palette.update({
       width,
-      mode: "REMOTE",
-      actions: [
+      height,
+      commands: [
         {
           id: "mic",
           key: "M",
-          label: `mic ${latest?.mic.muted ? "muted" : "live"}`,
-          shortLabel: "mic",
-          onPress: () => toggle("mic"),
+          label: `mic — ${latest?.mic.muted ? "unmute" : "mute"}`,
+          onRun: () => toggle("mic"),
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker ${latest?.speaker.muted ? "muted" : "live"}`,
-          shortLabel: "speaker",
-          onPress: () => toggle("speaker"),
+          label: `speaker — ${latest?.speaker.muted ? "unmute" : "mute"}`,
+          onRun: () => toggle("speaker"),
         },
-        { id: "quit", key: "Q", label: "quit", onPress: shutdown },
+        { id: "quit", key: "Q", label: "quit", onRun: shutdown },
       ],
     });
-    brand.content = new StyledText([
-      fg(PALETTE.accent)(SIGNAL_GLYPHS.rail),
-      bold(fg(PALETTE.text)(compact ? " AV" : " AGENTVOICE")),
-      ...(compact ? [] : [fg(PALETTE.dim)(" / REMOTE")]),
-    ]);
-    const phase = latest?.phase;
-    status.content = connected
-      ? `${phase === "live" ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${phaseLabel(phase)}`
-      : `${SIGNAL_GLYPHS.idle} WAITING`;
-    status.fg = phase === "live" ? PALETTE.ok : connected ? PALETTE.warn : PALETTE.dim;
 
     paintControl(micControl, "MIC", latest?.mic.muted, connected);
     paintControl(speakerControl, "SPEAKER", latest?.speaker.muted, connected);
@@ -297,6 +254,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     resolveDone();
   };
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
+    if (palette.handleKey(key)) return;
     if (key.eventType === "release") return;
     if (key.name === "q" || (key.ctrl && key.name === "c")) shutdown();
     else if (key.name === "m") toggle("mic");
@@ -334,12 +292,22 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       you: youColor,
       agent: agentColor,
     });
+    // The former masthead signals live in the signal panel: connection
+    // phase centered on the label row, the palette affordance on the
+    // readout row, both dropped before they can collide with the rails.
+    const phase = latest?.phase;
     fieldLabels.content = remoteFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
       micMuted,
       agentMuted,
       youColor,
       agentColor,
+      {
+        text: connected
+          ? `${phase === "live" ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${phaseLabel(phase)}`
+          : `${SIGNAL_GLYPHS.idle} WAITING`,
+        color: phase === "live" ? PALETTE.ok : connected ? PALETTE.warn : PALETTE.dim,
+      },
     );
     fieldReadout.content = remoteFieldReadout(
       boundedViewportExtent(fieldReadout.width, viewportWidth),
@@ -347,6 +315,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       latest?.speaker.level ?? 0,
       youColor,
       agentColor,
+      "⌃K commands",
     );
   };
   renderer.setFrameCallback(frameCallback);
@@ -369,15 +338,29 @@ function remoteFieldLabels(
   agentMuted: boolean,
   youColor: string,
   agentColor: string,
+  status?: { text: string; color: string },
 ): StyledText {
   const left = width < 30 ? "YOU ▷" : `YOU ${youMuted ? "× MUTED" : "▷ INPUT"}`;
   const right = width < 30 ? "◁ AGT" : `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
   const availableRight = Math.max(0, width - Math.min(left.length, width) - 1);
   const clippedRight = right.slice(Math.max(0, right.length - availableRight));
   const clippedLeft = left.slice(0, Math.max(0, width - clippedRight.length - 1));
+  const spare = Math.max(1, width - clippedLeft.length - clippedRight.length);
+  const center = status !== undefined && spare >= status.text.length + 4 ? status : undefined;
+  if (center === undefined) {
+    return new StyledText([
+      bold(fg(youColor)(clippedLeft)),
+      fg(PALETTE.faint)(" ".repeat(spare)),
+      bold(fg(agentColor)(clippedRight)),
+    ]);
+  }
+  const before = Math.max(1, Math.floor((width - center.text.length) / 2) - clippedLeft.length);
+  const after = Math.max(1, spare - before - center.text.length);
   return new StyledText([
     bold(fg(youColor)(clippedLeft)),
-    fg(PALETTE.faint)(" ".repeat(Math.max(1, width - clippedLeft.length - clippedRight.length))),
+    fg(PALETTE.faint)(" ".repeat(before)),
+    fg(center.color)(center.text),
+    fg(PALETTE.faint)(" ".repeat(after)),
     bold(fg(agentColor)(clippedRight)),
   ]);
 }
@@ -388,6 +371,7 @@ function remoteFieldReadout(
   agent: number,
   youColor: string,
   agentColor: string,
+  hint = "",
 ): StyledText {
   const left = `${Math.round(you * 100)
     .toString()
@@ -396,9 +380,21 @@ function remoteFieldReadout(
     .toString()
     .padStart(3)}%`;
   const spare = Math.max(1, width - left.length - right.length);
+  const center = hint.length > 0 && spare >= hint.length + 4 ? hint : "";
+  if (center.length === 0) {
+    return new StyledText([
+      fg(youColor)(left),
+      fg(PALETTE.faint)(" ".repeat(spare)),
+      fg(agentColor)(right),
+    ]);
+  }
+  const before = Math.max(1, Math.floor((width - center.length) / 2) - left.length);
+  const after = Math.max(1, spare - before - center.length);
   return new StyledText([
     fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(spare)),
+    fg(PALETTE.faint)(" ".repeat(before)),
+    fg(PALETTE.dim)(center),
+    fg(PALETTE.faint)(" ".repeat(after)),
     fg(agentColor)(right),
   ]);
 }

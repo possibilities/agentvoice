@@ -191,11 +191,12 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
 - Comments state constraints the code can't show; no narration.
 - `Record<string, unknown>` access uses bracket keys (hence Biome's
   `useLiteralKeys` is off).
-- Full-screen TUI footers are three rows with a top divider and one centered,
-  non-wrapping horizontal action rail. Keys are bold accent, labels muted,
-  passive mode right-aligned only when it fits; narrow rails scroll by
-  wheel/touch gestures with both scrollbars hidden, and every advertised
-  action is directly tappable.
+- Full-screen TUIs are chromeless: no header or footer rows. Critical
+  signals (phase, timer, mode) live in body panels — here, centered on the
+  signal panel's label and readout rows — and every action lives in the
+  ctrl+k command palette (`src/tui/palette.ts`: type to filter, enter to
+  run, rows tappable), which is also the key reference. Direct hotkeys
+  stay bound while it is closed; ctrl+c always falls through.
 - State on disk under `~/.local/state/agentvoice/` (`$XDG_STATE_HOME`
   honored): `workspace` (agent cwd), `app-server` (stable resident cwd — must
   outlive the process; it re-reads its own cwd on every thread start),
