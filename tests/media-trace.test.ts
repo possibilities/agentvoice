@@ -4,7 +4,7 @@ import {
   packetAgeMs,
   shouldReportRtpStall,
   webRtcMediaSnapshot,
-} from "../src/client/media-trace.ts";
+} from "../src/console/media-trace.ts";
 
 describe("WebRTC media tracing", () => {
   test("separates encrypted transport progress from decrypted RTP progress", () => {

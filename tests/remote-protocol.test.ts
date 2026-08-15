@@ -4,7 +4,7 @@ import {
   parseRemoteCommand,
   parseRemoteState,
   REMOTE_PROTOCOL_VERSION,
-} from "../src/client/remote-protocol.ts";
+} from "../src/console/remote-protocol.ts";
 
 describe("remote protocol", () => {
   test("round-trips compact state metadata", () => {

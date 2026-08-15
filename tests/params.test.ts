@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type ConfigValues, type Prompts, resolveConfig } from "../src/server/config.ts";
-import { realtimeParams, threadParams, workerThreadParams } from "../src/server/params.ts";
+import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
+import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
 
 const HOME = "/home/tester";
 

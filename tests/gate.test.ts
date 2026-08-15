@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gateRequest, tokenMatches } from "../src/server/gate.ts";
+import { gateRequest, tokenMatches } from "../src/core/gate.ts";
 
 describe("gateRequest", () => {
   test("accepts a plain local request", () => {

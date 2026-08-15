@@ -21,7 +21,7 @@ import {
   frameResponse,
   parseFrames,
   spawnArgv,
-} from "../src/server/appserver.ts";
+} from "../src/core/appserver.ts";
 
 const CODEX_HOME = process.env["CODEX_HOME"] ?? join(process.env["HOME"] ?? "", ".codex");
 const TURN_TIMEOUT_MS = 120_000;

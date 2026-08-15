@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { SignalField, signalFieldText } from "../src/client/signal-field.ts";
-import { boundedViewportExtent, boundedViewportSize } from "../src/client/signal-field-ui.ts";
+import { SignalField, signalFieldText } from "../src/console/signal-field.ts";
+import { boundedViewportExtent, boundedViewportSize } from "../src/console/signal-field-ui.ts";
 
 function countTone(field: ReturnType<SignalField["render"]>, tone: string): number {
   return field.rows.flat().filter((cell) => cell.tone === tone).length;

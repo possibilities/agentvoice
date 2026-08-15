@@ -27,7 +27,7 @@ import {
   reconcileFarm,
   selectAccount,
   suggestSlug,
-} from "../src/server/accounts.ts";
+} from "../src/core/accounts.ts";
 
 function fakeAuthJson(email: string, accountId = "acct-1", plan = "plus"): string {
   const claims = {

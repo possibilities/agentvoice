@@ -4,9 +4,8 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
-import { RemoteError, runRemote } from "./client/remote-ui.ts";
-import { type ClientConfig, ClientError, runClient } from "./client/ui.ts";
-import { clientControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
+import { RemoteError, runRemote } from "./console/remote-ui.ts";
+import { type ClientConfig, ClientError, runClient } from "./console/ui.ts";
 import {
   AUTH_FILE,
   accountsDirectory,
@@ -14,9 +13,10 @@ import {
   listPoolAccounts,
   onboardingCommands,
   reconcileFarm,
-} from "./server/accounts.ts";
-import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./server/config.ts";
-import { runServer } from "./server/server.ts";
+} from "./core/accounts.ts";
+import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./core/config.ts";
+import { runServer } from "./core/server.ts";
+import { clientControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
 
 export const VERSION: string = packageJson.version;
 const DEFAULT_CLIENT_URL = "ws://127.0.0.1:7890/ws";

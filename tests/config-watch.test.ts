@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ServerConfig } from "../src/server/config.ts";
-import { ConfigWatcher, configWithVoiceName } from "../src/server/config-watch.ts";
-import { realtimeParams } from "../src/server/params.ts";
+import type { ServerConfig } from "../src/core/config.ts";
+import { ConfigWatcher, configWithVoiceName } from "../src/core/config-watch.ts";
+import { realtimeParams } from "../src/core/params.ts";
 
 function config(voiceName: string | undefined, model = "orchestrator-a"): ServerConfig {
   return {

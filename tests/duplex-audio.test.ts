@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { FRAME_SAMPLES } from "../src/client/dsp.ts";
-import { sendCapturedFrame } from "../src/client/duplex-audio.ts";
+import { FRAME_SAMPLES } from "../src/console/dsp.ts";
+import { sendCapturedFrame } from "../src/console/duplex-audio.ts";
 
 function recordingEncoder(encoded: Buffer) {
   const inputs: Array<{ frame: Buffer; frameSize: number }> = [];

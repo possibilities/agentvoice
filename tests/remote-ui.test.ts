@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoxRenderable, ScrollBoxRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer, MouseButtons } from "@opentui/core/testing";
-import { runRemote } from "../src/client/remote-ui.ts";
+import { runRemote } from "../src/console/remote-ui.ts";
 
 function contentText(renderable: TextRenderable): string {
   return renderable.content.chunks.map((chunk) => chunk.text).join("");

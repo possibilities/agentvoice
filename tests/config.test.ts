@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseArgs, parseClientArgs, UsageError } from "../src/main.ts";
 import {
   ConfigError,
   cliToConfigValues,
@@ -11,7 +10,8 @@ import {
   promptFilenames,
   readPrompts,
   resolveConfig,
-} from "../src/server/config.ts";
+} from "../src/core/config.ts";
+import { parseArgs, parseClientArgs, UsageError } from "../src/main.ts";
 
 const HOME = "/home/tester";
 

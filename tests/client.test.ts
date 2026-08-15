@@ -10,9 +10,9 @@ import {
   SAMPLE_RATE,
   shortId,
   sparkline,
-} from "../src/client/dsp.ts";
-import { VoiceTransport } from "../src/client/transport.ts";
-import { voiceActivityHeight } from "../src/client/ui.ts";
+} from "../src/console/dsp.ts";
+import { VoiceTransport } from "../src/console/transport.ts";
+import { voiceActivityHeight } from "../src/console/ui.ts";
 
 describe("client vertical layout", () => {
   test("voice activity keeps one field at both responsive widths", () => {

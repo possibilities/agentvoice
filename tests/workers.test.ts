@@ -7,7 +7,7 @@ import {
   type WorkerEffects,
   WorkerManager,
   WorkerTurnStartError,
-} from "../src/server/workers.ts";
+} from "../src/core/workers.ts";
 
 interface Recorded {
   briefs: string[];

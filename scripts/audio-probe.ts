@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /** Open the real duplex device briefly and report its negotiated format/counters. */
 
-import { FRAME_SAMPLES } from "../src/client/dsp.ts";
-import { NativeDuplexDevice } from "../src/client/duplex-device.ts";
+import { FRAME_SAMPLES } from "../src/console/dsp.ts";
+import { NativeDuplexDevice } from "../src/console/duplex-device.ts";
 
 interface ProbeOptions {
   deviceIndex?: number;

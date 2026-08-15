@@ -12,7 +12,7 @@ import {
   OP_TEXT,
   parseHandshakeResponse,
   websocketAcceptValue,
-} from "../src/server/ws-frame.ts";
+} from "../src/core/ws-frame.ts";
 
 const MASK = new Uint8Array([0x12, 0x34, 0x56, 0x78]);
 

@@ -15,7 +15,7 @@ import {
   SANDBOX_MODES,
   SERVER_KEYS,
   VOICE_KEYS,
-} from "../src/server/config.ts";
+} from "../src/core/config.ts";
 
 describe("server.schema.json", () => {
   test("matches the generator (fix with `bun run generate:schema`)", async () => {

@@ -1,6 +1,6 @@
 /**
  * Generates `server.schema.json` from the zod schema in
- * `src/server/config-schema.ts` — the same schema the loader validates with,
+ * `src/core/config-schema.ts` — the same schema the loader validates with,
  * so the published file cannot drift from what the server accepts. The schema
  * is the config surface's documentation, and this generator refuses to emit an
  * undocumented key.
@@ -10,7 +10,7 @@
  */
 import { join } from "node:path";
 import { z } from "zod";
-import { configFileSchema } from "../src/server/config-schema.ts";
+import { configFileSchema } from "../src/core/config-schema.ts";
 
 const TITLE = "agentvoice server configuration";
 const DESCRIPTION =

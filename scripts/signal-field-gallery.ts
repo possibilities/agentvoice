@@ -7,9 +7,9 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import { SignalField } from "../src/client/signal-field.ts";
-import { styledSignalField } from "../src/client/signal-field-ui.ts";
-import { SIGNAL_GLYPHS, VOICE_TONES as TONE } from "../src/client/theme.ts";
+import { SignalField } from "../src/console/signal-field.ts";
+import { styledSignalField } from "../src/console/signal-field-ui.ts";
+import { SIGNAL_GLYPHS, VOICE_TONES as TONE } from "../src/console/theme.ts";
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
