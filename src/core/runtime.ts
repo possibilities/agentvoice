@@ -354,12 +354,19 @@ export class VoiceRuntime {
    * blip — resuming re-subscribes their notifications instead.
    */
   private async attachOnce(bootAttach: boolean): Promise<void> {
-    const attachment = await ResidentAttachment.connect({
+    // `let` + null guard: a close during the handshake or initialize fires
+    // onClose before connect() resolves — with a `const` binding that
+    // callback would hit the temporal dead zone and throw inside the socket
+    // event handler. The failed connect() rejection is the real signal there.
+    let attachment: ResidentAttachment | null = null;
+    attachment = await ResidentAttachment.connect({
       socketPath: this.socketPath,
       clientVersion: this.version,
       onNotification: (method, params) => this.handleNotification(method, params),
       onRequest: (method, params) => this.handleRequest(method, params),
-      onClose: (info) => this.handleDetached(attachment, info),
+      onClose: (info) => {
+        if (attachment) this.handleDetached(attachment, info);
+      },
       debug: (line) => this.events.debug?.(line),
     }).catch((error) => {
       throw new AppServerError(

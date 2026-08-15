@@ -107,11 +107,17 @@ export class ResidentAttachment {
   static async connect(options: AttachOptions): Promise<ResidentAttachment> {
     const attachment = new ResidentAttachment(options);
     await attachment.open();
-    await attachment.request("initialize", {
-      clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
-      capabilities: { experimentalApi: true, requestAttestation: false },
-    });
-    attachment.notify("initialized", {});
+    try {
+      await attachment.request("initialize", {
+        clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      });
+      attachment.notify("initialized", {});
+    } catch (error) {
+      // A rejected connect() must not strand a live socket behind it.
+      attachment.close();
+      throw error;
+    }
     return attachment;
   }
 
@@ -146,6 +152,11 @@ export class ResidentAttachment {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.handshake = null;
+        try {
+          socket.end();
+        } catch {
+          // already gone; the close handler owns the rest
+        }
         reject(new AppServerError("websocket handshake timed out"));
       }, HANDSHAKE_TIMEOUT_MS);
       this.handshake = {
@@ -237,14 +248,18 @@ export class ResidentAttachment {
         this.handshake = null;
         this.handshakeBuffer = Buffer.alloc(0);
         if (!parsed.ok) {
+          this.socket?.end();
           handshake.reject(new AppServerError(parsed.error));
           return;
         }
-        if (
-          parsed.acceptValue !== null &&
-          parsed.acceptValue !== websocketAcceptValue(handshake.key)
-        ) {
-          handshake.reject(new AppServerError("websocket handshake accept mismatch"));
+        // Require the accept header outright: a non-WebSocket process
+        // answering 101 on the socket must fail here, not by feeding
+        // JSON-RPC frames into an alien protocol until a timeout.
+        if (parsed.acceptValue !== websocketAcceptValue(handshake.key)) {
+          this.socket?.end();
+          handshake.reject(
+            new AppServerError("websocket handshake accept header missing or mismatched"),
+          );
           return;
         }
         handshake.resolve();
