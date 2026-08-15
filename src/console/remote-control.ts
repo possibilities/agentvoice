@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeSync,
+} from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import {
@@ -27,26 +37,35 @@ export class ClientControlServer {
 
   async start(): Promise<void> {
     mkdirSync(dirname(this.options.socketPath), { recursive: true, mode: 0o700 });
-    await removeStaleSocket(this.options.socketPath);
-    const server = createServer((peer) => this.accept(peer));
-    await new Promise<void>((resolve, reject) => {
-      const onError = (error: Error) => reject(error);
-      server.once("error", onError);
-      server.listen(this.options.socketPath, () => {
-        server.off("error", onError);
-        resolve();
+    // The lock serializes stale-cleanup-and-bind: without it, two consoles
+    // racing after a crash can both classify the same inode stale, and the
+    // second unlink removes the winner's freshly bound socket — leaving two
+    // consoles sharing one orchestrator agent.
+    const releaseLock = acquireStartLock(`${this.options.socketPath}.lock`);
+    try {
+      await removeStaleSocket(this.options.socketPath);
+      const server = createServer((peer) => this.accept(peer));
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => reject(error);
+        server.once("error", onError);
+        server.listen(this.options.socketPath, () => {
+          server.off("error", onError);
+          resolve();
+        });
       });
-    });
-    chmodSync(this.options.socketPath, 0o600);
-    const stat = lstatSync(this.options.socketPath);
-    if (!stat.isSocket() || (stat.mode & 0o777) !== 0o600) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      throw new Error("client control socket permissions are unsafe");
+      chmodSync(this.options.socketPath, 0o600);
+      const stat = lstatSync(this.options.socketPath);
+      if (!stat.isSocket() || (stat.mode & 0o777) !== 0o600) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        throw new Error("client control socket permissions are unsafe");
+      }
+      this.identity = { dev: stat.dev, ino: stat.ino };
+      this.server = server;
+      this.timer = setInterval(() => this.publish(), PUBLISH_INTERVAL_MS);
+      this.timer.unref?.();
+    } finally {
+      releaseLock();
     }
-    this.identity = { dev: stat.dev, ino: stat.ino };
-    this.server = server;
-    this.timer = setInterval(() => this.publish(), PUBLISH_INTERVAL_MS);
-    this.timer.unref?.();
   }
 
   publish(): void {
@@ -90,6 +109,57 @@ export class ClientControlServer {
     peer.on("close", () => this.peers.delete(peer));
     peer.on("error", () => this.peers.delete(peer));
     peer.write(encodeRemoteMessage(this.options.state()));
+  }
+}
+
+/**
+ * O_EXCL pid lockfile around the socket's cleanup-and-bind window. A dead
+ * holder's lock is broken by pid liveness; two breakers racing converge —
+ * exactly one recreates the file, the other reads a live pid and refuses.
+ */
+function acquireStartLock(lockPath: string): () => void {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = openSync(lockPath, "wx", 0o600);
+      writeSync(fd, `${process.pid}\n`);
+      closeSync(fd);
+      return () => {
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          // released is released
+        }
+      };
+    } catch (error) {
+      if ((error as { code?: string }).code !== "EEXIST") throw error;
+      let holder: number | null = null;
+      try {
+        holder = Number.parseInt(readFileSync(lockPath, "utf8").trim(), 10);
+      } catch {
+        // unreadable → treat as stale
+      }
+      if (holder !== null && Number.isInteger(holder) && holder > 0 && processAlive(holder)) {
+        throw new Error(
+          `another AgentVoice console is starting (start lock held by pid ${holder})`,
+        );
+      }
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // raced another lock breaker; the retry decides
+      }
+    }
+  }
+  throw new Error("could not acquire the console start lock");
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means it exists under another uid — alive either way.
+    return (error as { code?: string }).code === "EPERM";
   }
 }
 
