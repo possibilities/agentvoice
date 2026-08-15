@@ -226,18 +226,21 @@ export class VoiceRuntime {
   }
 
   /**
-   * Abandon the current orchestrator agent and start a fresh thread. The
-   * running voice session is torn down silently; the console re-offers when
-   * the new thread announces ready.
+   * Abandon the current orchestrator agent and start a fresh thread. The old
+   * voice session's control plane is stopped silently, then the console is
+   * told to redial: the transport negotiates against the new thread while
+   * the old audio keeps its usual best-effort tail — the same
+   * make-before-break every redial gets, so a pending negotiation cannot
+   * strand the new thread behind a stale peer.
    */
   async fresh(): Promise<void> {
     const attachment = this.attachment;
-    if (this.freshInFlight || this.shuttingDown || !attachment || !this.threadReady) return;
+    if (this.freshInFlight || this.rotating || this.shuttingDown) return;
+    if (!attachment || !this.threadReady) return;
     this.freshInFlight = true;
     try {
       this.threadReady = false;
       if (this.sessions.hasSession) this.sessions.handleClientGone();
-      this.events.onClosed("fresh-thread");
       const started = await attachment.request(
         "thread/start",
         threadParams(this.config, this.prompts, "start"),
@@ -247,6 +250,7 @@ export class VoiceRuntime {
       this.threadReady = true;
       this.events.onStatus(`fresh orchestrator agent (${this.threadId.slice(0, 8)}…)`);
       this.emitReady();
+      this.events.onRedial("fresh-thread");
     } catch (error) {
       this.threadReady = this.threadId !== null;
       this.events.onError(
@@ -304,7 +308,7 @@ export class VoiceRuntime {
     }
 
     // Boot fails fast: the operator is present. Later drops are supervised.
-    await this.attachOnce();
+    await this.attachOnce(true);
 
     // The surface outlives any one attachment: its wakes go through the
     // current attachment when one exists and are dropped (with a status
@@ -342,8 +346,14 @@ export class VoiceRuntime {
     }
   }
 
-  /** One attach → thread → reconcile → ready cycle. Throws on failure. */
-  private async attachOnce(): Promise<void> {
+  /**
+   * One attach → thread → reconcile → ready cycle. Throws on failure.
+   * `bootAttach` marks the console's first attachment: only there are
+   * in-flight orchestrator turns stranded (their console is dead). On a
+   * reattach they may be this console's own work surviving an attachment
+   * blip — resuming re-subscribes their notifications instead.
+   */
+  private async attachOnce(bootAttach: boolean): Promise<void> {
     const attachment = await ResidentAttachment.connect({
       socketPath: this.socketPath,
       clientVersion: this.version,
@@ -366,7 +376,7 @@ export class VoiceRuntime {
     try {
       this.threadId = await this.openThread(attachment);
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
-      await this.interruptStrandedTurns(attachment, this.threadId);
+      if (bootAttach) await this.interruptStrandedTurns(attachment, this.threadId);
       await this.reconcileWorkers(attachment);
     } catch (error) {
       this.attachment = null;
@@ -677,7 +687,7 @@ export class VoiceRuntime {
     setTimeout(() => {
       void (async () => {
         try {
-          await this.attachOnce();
+          await this.attachOnce(false);
           this.reattachFailures = 0;
         } catch (error) {
           this.reattachFailures++;
@@ -702,6 +712,7 @@ export class VoiceRuntime {
   private maybeRotate(): void {
     if (this.exhaustedPercent === null || this.rotating || this.shuttingDown) return;
     if (!this.config.accounts.balance || !this.attachment || !this.threadReady) return;
+    if (this.freshInFlight || this.reattaching) return;
     if (this.sessions.hasSession || this.orchestratorTurnActive) return;
     if (this.workers?.hasUnfinishedWork()) return;
     this.rotating = true;
@@ -716,8 +727,13 @@ export class VoiceRuntime {
           this.exhaustedPercent = null; // nothing better; re-armed by the next update
           return;
         }
+        // Re-check every idle gate: the balancer call yielded, and a voice
+        // session, fresh(), or a detachment may have started meanwhile.
         if (
           !this.attachment ||
+          !this.threadReady ||
+          this.freshInFlight ||
+          this.reattaching ||
           this.sessions.hasSession ||
           this.orchestratorTurnActive ||
           this.workers?.hasUnfinishedWork()

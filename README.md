@@ -336,9 +336,9 @@ The device is built from source and the console refuses to start without it —
   connects. It is the escape hatch when the media path dies silently. Renewal
   happens automatically before the ~60-minute upstream ceiling, using the same
   near-seamless swap.
-- **Fresh** abandons the persisted orchestrator agent: the voice session ends,
-  a new thread starts, and the console re-offers against it. Quitting never
-  loses the conversation — only `f`/`--fresh` does, on purpose.
+- **Fresh** abandons the persisted orchestrator agent: a new thread starts and
+  the console redials against it with the usual make-before-break swap.
+  Quitting never loses the conversation — only `f`/`--fresh` does, on purpose.
 - **Headphones recommended**: there is no echo cancellation in this stack, so
   open speakers can let the agent hear itself. `s` is the manual guard.
 - macOS microphone permission belongs to your **terminal app** (System

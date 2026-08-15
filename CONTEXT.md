@@ -37,9 +37,10 @@ the voice agent, created per offer and superseded by the next offer. _Avoid_:
 "call", "realtime conversation".
 
 **Fresh** — Abandoning the persisted orchestrator agent for a new thread:
-`--fresh` at start, or the console's `f` action live. The voice session is
-torn down silently and re-offered against the new thread. _Avoid_: "reset",
-"new conversation" (the thread is the identity, not the session).
+`--fresh` at start, or the console's `f` action live. The old session's
+control plane stops silently and the console redials against the new thread.
+_Avoid_: "reset", "new conversation" (the thread is the identity, not the
+session).
 
 **Prompt file** — A conventionally named `SHOUTCASE.md` in the config
 directory that primes one agent, discovered by name rather than referenced from
