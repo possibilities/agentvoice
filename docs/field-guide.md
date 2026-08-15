@@ -22,16 +22,21 @@ Three actors run every conversation:
 - The **orchestrator agent** — the codex thread that does the work. It never
   hears audio; it receives delegations as ordinary user turns and answers
   through the voice agent.
-- The **app-server** — the codex child process that owns both, performs the
-  handoff between them, and applies almost every knob in this guide.
+- The **app-server** — the codex process (the launchd-kept **resident**) that
+  owns both, performs the handoff between them, and applies almost every knob
+  in this guide.
 
-Four nested lifetimes decide how long anything you inject lasts:
+Four lifetimes decide how long anything you inject lasts — and they nest
+differently than they used to, because the thread now *outlives* console runs:
 
 ```
-server run            one `agentvoice server` process; prompts read once at boot
- └─ app-server child  supervised; a crash is invisible except to voice sessions
-     └─ thread        the orchestrator agent's identity and memory
-         └─ voice session   one WebRTC call; superseded by every redial
+thread                the orchestrator agent's identity and memory; persisted
+                      (thread.json) and resumed by every console run until --fresh
+ ├─ resident          launchd-kept app-server; a crash or rotation restarts it
+ │                    and the console resumes the same thread
+ ├─ console run       one `agentvoice` process; prompts read at its start and
+ │                    re-applied to the thread on attach
+ └─ voice session     one WebRTC call; superseded by every redial
 ```
 
 Behavior flows in through more channels than the config file suggests. In
@@ -40,9 +45,9 @@ collide):
 
 | Channel | Scope | Examples |
 |---|---|---|
-| CLI flags | server run | `--model`, `--voice`, `--effort` |
-| `server.json` named keys | server run | everything in `server.schema.json` |
-| Prompt files | server run (read at boot) | `VOICE.md`, `ORCHESTRATOR.md`, seeds |
+| CLI flags | console run | `--model`, `--voice`, `--effort` |
+| `server.json` named keys | console run | everything in `server.schema.json` |
+| Prompt files | console run (read at start) | `VOICE.md`, `ORCHESTRATOR.md`, seeds |
 | `orchestrator.extra:` / `voice.extra:` | thread / voice session | any RPC field, merged last |
 | `orchestrator.config:` | thread | raw config.toml overrides (SessionFlags layer) |
 | `~/.codex/config.toml` | every codex on the machine | model, effort, MCP servers, hooks pointer, **three keys that outrank your prompts** |
@@ -95,8 +100,8 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 
 Prompt files have three states everywhere: **absent** (codex's built-in
 stands), **present with content** (replace or append per file), **present but
-empty** (the field is sent empty, stripping the built-in). Files are read once
-at server boot — editing one requires a server restart.
+empty** (the field is sent empty, stripping the built-in). Files are read at
+console start — editing one takes effect on the next `agentvoice`.
 
 ## The voice agent
 
@@ -197,7 +202,7 @@ every verified semantic in this guide is v3's). The three upstream versions
 are effectively different products *(source)*: v1 (legacy bidi), v2 (the
 OpenAI Realtime API shape — the only version supporting `outputModality:
 text`, rejected over webrtc), v3 ("frameless bidi", server-side delegation).
-Don't change `version` casually; v2 + the bundled client's webrtc transport is
+Don't change `version` casually; v2 + this console's webrtc transport is
 rejected upstream ("AVAS realtime calls require realtime v1 or v3").
 
 **Voices are version-gated** *(source, probe)*: v3 accepts `cove` (default),
@@ -243,14 +248,14 @@ the mechanism that lets an injected report turn reach the voice agent's ears
   orchestrator works. The filler behavior and text are upstream server-side;
   codex only passes the boolean through. Omitted keeps the upstream default.
 - `client-managed-handoffs: true` — **sharp edge**: suppresses only the
-  return path (delegations still route inward) and expects the client to
-  deliver output via `appendText`/`appendSpeech`. The bundled client never
+  return path (delegations still route inward) and expects the console to
+  deliver output via `appendText`/`appendSpeech`. This console never
   does, so this silently severs orchestrator→voice while letting the user
   keep asking for work *(source)*.
 
 The user's side of the wire is visible to integrators: user speech transcripts
-stream to the server as `thread/realtime/transcript/*` notifications (webrtc
-mode included *(probe)*), and the client's data channel sees the same
+stream over the attachment as `thread/realtime/transcript/*` notifications
+(webrtc mode included *(probe)*), and the console's data channel sees the same
 conversation as v3 frames (`input_transcript.added`, `delegation.created`,
 `turn.delta`, …).
 
@@ -259,14 +264,14 @@ conversation as v3 frames (`input_transcript.added`, `delegation.created`,
 - The ~60-minute ceiling is **service-imposed**; codex 0.147 has no realtime
   timer at all *(source)*. Natural death is `closed("transport_closed")`.
 - A new offer **supersedes** the running session silently; the superseded
-  session's media lingers as a zombie until the client closes it. One
+  session's media lingers as a zombie until the console closes it. One
   upstream error frame on the control leg kills the codex side
   (`error` + `closed("error")`) while the media path keeps talking —
   delegations from a zombie session go nowhere *(probe, accidentally
   demonstrated)*.
 - Because every `thread/realtime/start` re-sends the full voice priming, a
   renewal is also your only *(current)* way to change the voice agent's
-  prompt/seeds/voice mid-conversation: edit files, restart the server, or
+  prompt/seeds/voice mid-conversation: edit files, restart the console, or
   wait — none apply to a live session.
 
 ## The orchestrator agent
@@ -281,7 +286,7 @@ From the bottom up, what the orchestrator's effective system prompt is made of
 2. `~/.codex/config.toml` `instructions` (rare) or `model_instructions_file`
    — wholesale replacements, machine-wide, discouraged upstream.
 3. **`ORCHESTRATOR_BASE.md`** → `baseInstructions` — the top of the stack.
-   Replaces *everything* above, including codex's tool discipline (the server
+   Replaces *everything* above, including codex's tool discipline (the console
    warns at boot). It rides the API `instructions` field on **every** request,
    so it is immune to compaction — but it also **silently disables
    `personality:`** and the config-level replacements.
@@ -338,7 +343,8 @@ For the voice agent's mood, none of this applies — its personality lives in
   supported when using Codex with a ChatGPT account"), failing every turn
   with a `systemError` thread status while the voice agent cheerfully acks
   each request. If turns die instantly and the voice agent stalls after
-  "I'm on it", check the server's stderr for this 400 first.
+  "I'm on it", check the resident log (`~/.local/state/agentvoice/resident/resident.log`)
+  for this 400 first.
 - `orchestrator.effort` — sugar for `config.model_reasoning_effort`
   (`none…ultra`); an explicit `config:` entry wins over the sugar. `ultra`
   additionally unlocks codex's proactive multi-agent behavior (the deprecated
@@ -392,7 +398,7 @@ asks; the sandbox is the only guardrail.
 The interesting middle ground is upstream's **guardian**: `approvals-reviewer:
 auto_review` routes approval requests to a dedicated read-only reviewer
 subagent (catalog model `codex-auto-review`, 90 s timeout, fail-closed,
-denial circuit breakers) instead of the client *(source)*. Two rules decide
+denial circuit breakers) instead of agentvoice *(source)*. Two rules decide
 whether it does anything at all: the guardian engages **only under
 `approval-policy: on-request`** (it is a no-op under `never`), and manual
 re-approval flows don't exist here (no UI). The candidate recipe for a safer
@@ -411,7 +417,7 @@ paths.
 
 ### Worker dispatch
 
-`orchestrator.dispatch: true` is this server's own lever on the surfaces
+`orchestrator.dispatch: true` is agentvoice's own lever on the surfaces
 above: it declares `dispatch_worker` / `check_workers` / `cancel_worker` as
 dynamic tools on the orchestrator's thread and answers their `item/tool/call`
 requests itself. A worker is a sibling thread carrying the orchestrator's
@@ -425,9 +431,12 @@ admission steers into a running turn or opens fresh *(source)* — and the
 descriptions promise that instead, so the model-visible contract always
 matches the wiring. While a voice session is live, a report turn's response
 mirrors to the voice agent like any other output, which is what makes spoken
-announcements of finished work possible. Workers die with the app-server
-child (`lost`, never resumed). Disable codex's in-thread sub-agents
-(`agents.enabled: false`) so the two dispatch surfaces never compete.
+announcements of finished work possible. Workers live in the resident, so
+they survive console restarts: the console re-adopts running workers on
+attach and publishes reports for turns that finished while it was away; only
+a resident restart makes a worker `lost` (never resumed). Disable codex's
+in-thread sub-agents (`agents.enabled: false`) so the two dispatch surfaces
+never compete.
 
 Worker ownership begins after `thread/start` and before `turn/start`, closing
 the fast-completion notification race. A terminal `turn/completed` is first
@@ -495,7 +504,7 @@ sent) > `~/.codex/config.toml` > codex built-in**. Two layered subtleties:
   (so `orchestrator.model` beats a `config: {model: …}` entry) and to
   enterprise/managed requirement layers *(source)*.
 - `extra:` blocks merge **last into the RPC params** — they can override
-  anything the server computed, including fields it owns (`outputModality`,
+  anything agentvoice computed, including fields it owns (`outputModality`,
   `transport`, prompt fields). Powerful, unvalidated (see
   [leniency](#serde-leniency-typos-fail-silently)).
 
@@ -517,7 +526,7 @@ If your `VOICE.md` seems inert, check the first row before anything else.
 Upstream deserialization ignores unknown fields on `thread/start` and
 `thread/realtime/start`. Inside `extra:` (and any hand-rolled client), a
 misspelled key is **dropped without an error**. The named keys in
-`server.json` are validated by this server; everything else is on you. When an
+`server.json` are validated by agentvoice; everything else is on you. When an
 `extra:` knob seems dead, diff the `--debug` frame against the field tables in
 this guide.
 
@@ -586,24 +595,25 @@ reports cumulative usage, not the live context size.
 
 **Two traps**: `compact_prompt` customizes the *local* summarization prompt,
 which OpenAI-auth users never hit (their compaction is remote V2);
-and after an app-server restart resumes an over-limit thread, the first turn
-compacts before doing anything else.
+and when a reattach resumes an over-limit thread, the first turn compacts
+before doing anything else.
 
 ## Lifetimes, restarts, and what re-applies
 
 | Event | Orchestrator thread | Voice session | Prompts/config |
 |---|---|---|---|
 | Voice redial (renewal, `r`, recovery) | unaffected — same thread | superseded silently; new session gets full voice priming again | voice-side files re-sent; session-start text **not** re-delivered (no transition) |
-| App-server crash (within a run) | **resumed** — same thread id, history (compacted state included) restored from rollout; supervised restart with backoff | died with the child; client is told `closed("app-server-exited")` and re-offers | `thread/resume` re-sends config + instructions; changed developer instructions only take effect if the resume point lacks a context anchor — in practice, unchanged (files are read at boot) |
-| Server restart | **fresh thread** — conversation memory gone; workspace files and rollouts remain on disk | gone | prompt files re-read — this is when edits apply |
+| Resident crash / rotation / upgrade | **resumed** — same thread id, history (compacted state included) restored from rollout; launchd restarts the resident, the console reattaches with backoff | died with the resident; the console sees `closed("app-server-detached")` and re-offers | `thread/resume` re-sends config + instructions; changed developer instructions only take effect if the resume point lacks a context anchor — in practice, unchanged (files are read at console start) |
+| Console restart | **resumed** — the persisted threadId (`thread.json`) is the identity; running workers are re-adopted | gone (session lifetime is console lifetime); re-offered on start | prompt files re-read — this is when edits apply |
+| `--fresh` / the `f` key | **fresh thread** — conversation memory gone; workspace files and rollouts remain on disk | torn down silently, re-offered against the new thread | full start priming applies to the new thread |
 | Compaction | same thread, compressed model view; client-visible history unchanged | survives, unaware | base immune; developer/AGENTS re-injected |
 
 The durable substrate across all of it: the **workspace** (files the
 orchestrator wrote), `AGENTS.md` files, prompt files, and codex's rollout
-files under `~/.codex/sessions/` (unless `ephemeral: true`). A fresh server
-run starts a fresh agent brain in the same world — and its startup context's
-"Recent Work" section will show the previous runs' threads, which is the one
-whisper of cross-run continuity the voice agent gets for free.
+files under `~/.codex/sessions/` (unless `ephemeral: true`). A `--fresh`
+start begins a fresh agent brain in the same world — and its startup
+context's "Recent Work" section will show the previous threads, which is the
+one whisper of cross-thread continuity the voice agent gets for free.
 
 ## Gotchas
 
@@ -616,13 +626,13 @@ whisper of cross-run continuity the voice agent gets for free.
 3. **The three config.toml trump cards** override `VOICE.md`, startup
    context, and the session-start default invisibly *(source)*.
 4. **`ORCHESTRATOR_BASE.md` disables `personality:`** and replaces codex's
-   tool discipline; the server's boot warning is earned *(source)*.
+   tool discipline; the console's boot warning is earned *(source)*.
 5. **`personality:` is a no-op on models without catalog support** —
    including 0.147's bundled default `gpt-5.6-sol` *(source)*.
 6. **`approvals-reviewer: auto_review` does nothing under `approval-policy:
    never`** — the default. Guardian needs `on-request` *(source)*.
 7. **`client-managed-handoffs: true` silently severs orchestrator→voice**
-   with the bundled client *(source)*.
+   with this console *(source)*.
 8. **Empty vs absent prompt files are different acts** — empty *strips* a
    built-in (including the session-start/end defaults you may not know
    exist); absent keeps it.
@@ -641,10 +651,10 @@ whisper of cross-run continuity the voice agent gets for free.
     used *(probe)*.
 15. **One malformed control frame kills the codex side of a voice session**
     while the media keeps playing — a zombie that hears and speaks but can't
-    delegate. The client-side symptom: the agent stops doing work but keeps
+    delegate. The console-side symptom: the agent stops doing work but keeps
     talking; redial *(probe)*.
-16. **Editing prompt files does nothing until the next server start** —
-    they're read once at boot.
+16. **Editing prompt files does nothing until the next console start** —
+    they're read once per run.
 
 ## Recipes
 
@@ -694,14 +704,14 @@ early and often; base instructions are immune and developer/AGENTS text
 re-injects, so priming survives. Accept that old tool output and the earliest
 exchanges will be summarized away.
 
-**Snapshot-free demos.** `orchestrator: {ephemeral: true}` (no rollout on
-disk, no resume after an app-server crash) + `include-startup-context: false`
-(no Recent Work leak).
+**Snapshot-free demos.** `--fresh` + `orchestrator: {ephemeral: true}` (no
+rollout on disk, no resume after a resident restart) +
+`include-startup-context: false` (no Recent Work leak).
 
 ## Upstream surfaces agentvoice does not (yet) expose
 
 All verified present in 0.147's app-server protocol; each is a candidate
-lever for a fork or a future version of this server:
+lever for a fork or a future version of agentvoice:
 
 - `thread/inject_items` — append raw Responses API items to a thread's
   model-visible history **without starting a turn** *(source)*: the
@@ -719,7 +729,7 @@ lever for a fork or a future version of this server:
   keyed by source id, typed `application` or `untrusted` *(source)*.
 - `thread/start.dynamicTools` — client-implemented tools declared **at
   thread start** (thread-scoped, so later turns carry them); a model call
-  comes back as an `item/tool/call` server→client request for the client
+  comes back as an `item/tool/call` server→client request for the console
   to execute *(source, probe: full round trip)*. Delegation turns carry
   them too: the v3 delegation path submits through the same user-input
   admission as `turn/start` (`session/mod.rs

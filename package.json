@@ -13,8 +13,7 @@
     "agentvoice": "./src/main.ts"
   },
   "scripts": {
-    "server": "bun run src/main.ts server",
-    "client": "bun run src/main.ts client",
+    "console": "bun run src/main.ts",
     "setup": "bun run scripts/setup.ts",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",

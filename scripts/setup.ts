@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * One-time environment setup: verifies bun and codex, and builds the native
- * duplex audio library the client cannot start without.
+ * duplex audio library the console cannot start without.
  */
 import { dirname, join } from "node:path";
 
@@ -27,13 +27,13 @@ const codex = process.env["CODEX_PATH"] ?? Bun.which("codex");
 if (codex) {
   ok(`codex at ${codex}`);
 } else {
-  warn("codex not found on PATH — the server needs it: https://github.com/openai/codex");
+  warn("codex not found on PATH — the resident needs it: https://github.com/openai/codex");
 }
 
-// native duplex audio — the client's only audio path, built from source
+// native duplex audio — the console's only audio path, built from source
 const compiler = Bun.which("zig") ?? Bun.which("clang") ?? Bun.which("cc");
 if (!compiler) {
-  fail("no C compiler found — the client's duplex audio device is built from source.");
+  fail("no C compiler found — the console's duplex audio device is built from source.");
   fail("Install Zig (https://ziglang.org) or a C11 compiler, then re-run setup.");
   process.exit(1);
 }
@@ -51,4 +51,6 @@ if ((await build.exited) !== 0) {
 }
 ok("duplex audio device built");
 
-console.log("\nready:  bun run server   then, in another terminal:  bun run client");
+console.log(
+  "\nready:  agentvoice resident install   (once)   then:  bun run console   (or `agentvoice`)",
+);

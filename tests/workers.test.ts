@@ -574,3 +574,92 @@ describe("finalAgentMessage", () => {
     ).toBe("last");
   });
 });
+
+describe("adoption after a console restart", () => {
+  const persisted = (over: Partial<import("../src/core/workers.ts").PersistedWorker> = {}) => ({
+    id: "w3",
+    threadId: "th_9",
+    turnId: "tu_9",
+    title: "long job",
+    brief: "keep going",
+    status: "running" as const,
+    startedAt: 100,
+    cleanupPending: true,
+    ...over,
+  });
+
+  test("a running worker is re-adopted live and the handle counter advances", async () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted(), { kind: "running" });
+    expect(workers.ownsThread("th_9")).toBe(true);
+    const listing = text(await workers.handleToolCall("check_workers", {}));
+    expect(listing).toContain('w3 "long job" — running');
+    await workers.handleToolCall("dispatch_worker", { title: "next", brief: "b" });
+    const after = text(await workers.handleToolCall("check_workers", {}));
+    expect(after).toContain('w4 "next"');
+    expect(recorded.reports).toEqual([]);
+  });
+
+  test("a re-adopted running worker completes through the normal path", async () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted(), { kind: "running" });
+    workers.handleTurnCompleted("th_9", {
+      status: "completed",
+      items: [{ type: "agentMessage", text: "done!" }],
+    });
+    const listing = text(await workers.handleToolCall("check_workers", {}));
+    expect(listing).toContain('w3 "long job" — completed');
+    expect(listing).toContain("done!");
+    expect(recorded.archived).toEqual(["th_9"]);
+    expect(recorded.reports.join("\n")).toContain('<worker_report worker="w3"');
+  });
+
+  test("a turn that finished while detached publishes its report from history", () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted(), { kind: "finished", status: "completed", report: "from history" });
+    expect(recorded.reports.join("\n")).toContain("from history");
+    expect(recorded.archived).toEqual(["th_9"]);
+  });
+
+  test("a finished turn with no readable message gets a placeholder report", async () => {
+    const { workers } = manager();
+    workers.adopt(persisted(), { kind: "finished", status: "failed", report: null });
+    const listing = text(await workers.handleToolCall("check_workers", {}));
+    expect(listing).toContain('w3 "long job" — failed');
+    expect(listing).toContain("finished while the console was detached");
+  });
+
+  test("a vanished thread becomes lost", async () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted(), { kind: "lost" });
+    const listing = text(await workers.handleToolCall("check_workers", {}));
+    expect(listing).toContain('w3 "long job" — lost');
+    expect(listing).toContain("lost while the console was detached");
+    expect(recorded.archived).toEqual(["th_9"]);
+  });
+
+  test("a settled persisted worker retries only its owed cleanup", () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted({ status: "completed", report: "kept", finishedAt: 200 }), {
+      kind: "lost", // ignored: the persisted record is already settled
+    });
+    expect(recorded.archived).toEqual(["th_9"]);
+    expect(recorded.reports).toEqual([]); // published before the console died
+  });
+
+  test("persistence records round-trip what adoption needs", async () => {
+    const { workers } = manager();
+    await workers.handleToolCall("dispatch_worker", { title: "job", brief: "brief text" });
+    const records = workers.persistenceRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: "w1",
+      threadId: "th_1",
+      turnId: "tu_1",
+      title: "job",
+      brief: "brief text",
+      status: "running",
+      cleanupPending: true,
+    });
+  });
+});
