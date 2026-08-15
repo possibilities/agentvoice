@@ -372,18 +372,24 @@ export class VoiceRuntime {
 
   private async openThread(attachment: ResidentAttachment): Promise<string> {
     if (this.threadId) {
+      const previous = this.threadId;
       try {
         return extractThreadId(
           await attachment.request("thread/resume", {
-            threadId: this.threadId,
+            threadId: previous,
             excludeTurns: true,
             ...threadParams(this.config, this.prompts, "resume"),
           }),
         );
       } catch (error) {
-        this.events.onStatus(
-          `thread/resume failed (${error instanceof Error ? error.message : String(error)}); starting fresh`,
-        );
+        const detail = error instanceof Error ? error.message : String(error);
+        this.events.onStatus(`thread/resume failed (${detail}); starting fresh`);
+        // A no-rollout thread is definitively pre-turn: it holds nothing and
+        // can never be resumed, but it may still be loaded in the resident.
+        // Delete it so silent console restarts don't accumulate empty threads.
+        if (detail.includes(`no rollout found for thread id ${previous}`)) {
+          attachment.request("thread/delete", { threadId: previous }).catch(() => {});
+        }
       }
     }
     return extractThreadId(
