@@ -88,9 +88,51 @@ function randomMask(): Uint8Array {
   return mask;
 }
 
+/**
+ * Ordered writer over a partial-write socket. Bun's `socket.write` returns
+ * how many bytes the kernel accepted — 8 KiB is the whole unix-socket send
+ * buffer on macOS — and an ignored remainder truncates the WebSocket stream
+ * mid-frame: the peer waits forever for bytes that never come. (This is how
+ * a thread/start carrying a ~9 KiB ORCHESTRATOR.md silently hung the whole
+ * console.) Every write goes through here; the socket's `drain` callback
+ * flushes what the kernel deferred, in order.
+ */
+export class SocketOutbox {
+  private readonly pending: Buffer[] = [];
+
+  constructor(private readonly writeBytes: (data: Buffer) => number) {}
+
+  write(data: Buffer): void {
+    if (this.pending.length > 0) {
+      this.pending.push(data);
+      return;
+    }
+    const written = this.writeBytes(data);
+    if (written < data.length) this.pending.push(data.subarray(Math.max(0, written)));
+  }
+
+  /** Called from the socket's drain event: send what the kernel deferred. */
+  flush(): void {
+    while (this.pending.length > 0) {
+      const head = this.pending[0] as Buffer;
+      const written = this.writeBytes(head);
+      if (written < head.length) {
+        this.pending[0] = head.subarray(Math.max(0, written));
+        return; // still full; the next drain continues
+      }
+      this.pending.shift();
+    }
+  }
+
+  get hasPending(): boolean {
+    return this.pending.length > 0;
+  }
+}
+
 export class ResidentAttachment {
   private readonly options: AttachOptions;
   private socket: Socket | null = null;
+  private outbox: SocketOutbox | null = null;
   private readonly decoder = new FrameDecoder();
   private handshakeBuffer: Buffer = Buffer.alloc(0);
   private handshake: { key: string; resolve(): void; reject(error: Error): void } | null = null;
@@ -136,6 +178,7 @@ export class ResidentAttachment {
         unix: this.options.socketPath,
         socket: {
           data: (_socket, chunk) => this.handleData(chunk),
+          drain: () => this.outbox?.flush(),
           close: () => this.handleClose(),
           error: (_socket, error) => this.fail(error.message),
         },
@@ -148,6 +191,7 @@ export class ResidentAttachment {
       );
     }
     this.socket = socket;
+    this.outbox = new SocketOutbox((data) => socket.write(data));
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -170,7 +214,7 @@ export class ResidentAttachment {
           reject(error);
         },
       };
-      socket.write(buildHandshakeRequest(key));
+      this.writeRaw(Buffer.from(buildHandshakeRequest(key)));
     });
   }
 
@@ -220,7 +264,9 @@ export class ResidentAttachment {
     const socket = this.socket;
     if (!socket || this.closed) return;
     try {
-      socket.write(encodeCloseFrame(1000, randomMask()));
+      this.writeRaw(encodeCloseFrame(1000, randomMask()));
+      // end() with a still-pending outbox truncates the close frame; the
+      // resident then sees EOF, which it treats as the same disconnect.
       socket.end();
     } catch {
       // the close handler owns the rest
@@ -230,11 +276,17 @@ export class ResidentAttachment {
   // -------------------------------------------------------------------------
 
   private send(message: Record<string, unknown>): void {
-    const socket = this.socket;
-    if (!socket || this.closed) throw new AppServerError("not attached to the app-server");
     const text = JSON.stringify(message);
     this.options.debug?.(`-> ${text}`);
-    socket.write(encodeTextFrame(text, randomMask()));
+    this.writeRaw(encodeTextFrame(text, randomMask()));
+  }
+
+  private writeRaw(data: Buffer): void {
+    const outbox = this.outbox;
+    if (!outbox || !this.socket || this.closed) {
+      throw new AppServerError("not attached to the app-server");
+    }
+    outbox.write(data);
   }
 
   private handleData(chunk: Uint8Array): void {
@@ -270,11 +322,11 @@ export class ResidentAttachment {
         if (event.type === "text") {
           this.dispatchText(event.text);
         } else if (event.type === "ping") {
-          this.socket?.write(encodeFrame(OP_PONG, event.payload, randomMask()));
+          this.writeRaw(encodeFrame(OP_PONG, event.payload, randomMask()));
         } else if (event.type === "close") {
           this.closing = true;
           try {
-            this.socket?.write(encodeCloseFrame(1000, randomMask()));
+            this.writeRaw(encodeCloseFrame(1000, randomMask()));
             this.socket?.end();
           } catch {
             // already closing
@@ -380,6 +432,7 @@ export class ResidentAttachment {
     if (this.closed) return;
     this.closed = true;
     this.socket = null;
+    this.outbox = null;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new AppServerError(`${pending.method}: attachment to app-server closed`));

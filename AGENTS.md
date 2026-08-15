@@ -161,7 +161,12 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
     (0700, owned) parent directory; unix socket paths cap at ~104 bytes
     (`SUN_LEN`). No auth policy applies on the unix path — filesystem
     permissions are the boundary — while the TCP `ws://` listener carries
-    Origin rejection and auth requirements upstream.
+    Origin rejection and auth requirements upstream. **`Bun.connect`
+    `socket.write` is a partial write** — the macOS unix-socket send buffer
+    is 8 KiB, and an ignored remainder truncates the stream mid-frame,
+    hanging the peer forever on the declared length (a ~9 KiB
+    `thread/start` carrying ORCHESTRATOR.md did exactly this). Every write
+    goes through `SocketOutbox` in `attach.ts`, flushed on `drain`.
 13. Socket mode is multi-connection and persists across disconnects
     (`single_client_mode` is stdio-only). Each connection runs its own
     `initialize` with `experimentalApi`. Threads and **running turns survive
