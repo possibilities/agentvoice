@@ -2,7 +2,7 @@ type OpenTui = typeof import("@opentui/core");
 
 export interface PaletteCommand {
   id: string;
-  /** Display combo only ("R", "⇧G", "⌃K") — the binding itself stays with the app. */
+  /** Display combo only ("R", "⇧G") — the binding itself stays with the app. */
   key: string;
   label: string;
   onRun(): void;

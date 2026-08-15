@@ -422,7 +422,7 @@ export async function runConsole(
     borderStyle: "single",
     borderColor: PALETTE.border,
     backgroundColor: PALETTE.bg,
-    title: " EVENTS · ⌃K COMMANDS ",
+    title: " EVENTS ",
     titleColor: PALETTE.dim,
     titleAlignment: "left",
     paddingLeft: 2,

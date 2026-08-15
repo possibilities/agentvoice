@@ -292,9 +292,9 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       you: youColor,
       agent: agentColor,
     });
-    // The former masthead signals live in the signal panel: connection
-    // phase centered on the label row, the palette affordance on the
-    // readout row, both dropped before they can collide with the rails.
+    // The former masthead signal lives in the signal panel: connection
+    // phase centered on the label row, dropped before it can collide
+    // with the rails.
     const phase = latest?.phase;
     fieldLabels.content = remoteFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
@@ -315,7 +315,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       latest?.speaker.level ?? 0,
       youColor,
       agentColor,
-      "⌃K commands",
     );
   };
   renderer.setFrameCallback(frameCallback);
@@ -371,7 +370,6 @@ function remoteFieldReadout(
   agent: number,
   youColor: string,
   agentColor: string,
-  hint = "",
 ): StyledText {
   const left = `${Math.round(you * 100)
     .toString()
@@ -380,21 +378,9 @@ function remoteFieldReadout(
     .toString()
     .padStart(3)}%`;
   const spare = Math.max(1, width - left.length - right.length);
-  const center = hint.length > 0 && spare >= hint.length + 4 ? hint : "";
-  if (center.length === 0) {
-    return new StyledText([
-      fg(youColor)(left),
-      fg(PALETTE.faint)(" ".repeat(spare)),
-      fg(agentColor)(right),
-    ]);
-  }
-  const before = Math.max(1, Math.floor((width - center.length) / 2) - left.length);
-  const after = Math.max(1, spare - before - center.length);
   return new StyledText([
     fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(before)),
-    fg(PALETTE.dim)(center),
-    fg(PALETTE.faint)(" ".repeat(after)),
+    fg(PALETTE.faint)(" ".repeat(spare)),
     fg(agentColor)(right),
   ]);
 }

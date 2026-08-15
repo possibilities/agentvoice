@@ -71,14 +71,13 @@ describe("Remote console layout", () => {
         () => setup.renderer.root.findDescendantById("remote-field-canvas") !== undefined,
       );
       expectFieldWithin(49, 46);
-      // The former masthead signals live inside the signal panel now, and
-      // the palette affordance rides the readout row. flush() waits for an
-      // idle the live signal field never reaches; render single frames.
+      // The former masthead signal lives inside the signal panel now.
+      // flush() waits for an idle the live signal field never reaches;
+      // render single frames.
       await setup.renderOnce();
       await setup.renderOnce();
       const frame = setup.captureCharFrame();
       expect(frame).toContain("WAITING");
-      expect(frame).toContain("⌃K commands");
       const palette = setup.renderer.root.findDescendantById("remote-palette");
       expect(palette).toBeInstanceOf(BoxRenderable);
       expect((palette as BoxRenderable).visible).toBe(false);
