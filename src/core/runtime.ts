@@ -40,10 +40,9 @@ import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { HerdrSurface } from "./surface.ts";
 import {
-  type AdoptionOutcome,
   archiveWorkerThread,
   deleteWorkerThread,
-  finalAgentMessage,
+  parsePersistedWorkers,
   type PersistedWorker,
   WorkerManager,
   type WorkerSnapshot,
@@ -102,16 +101,6 @@ function loadThreadState(path: string): string | null {
     return typeof raw["threadId"] === "string" ? raw["threadId"] : null;
   } catch {
     return null;
-  }
-}
-
-function loadPersistedWorkers(path: string): PersistedWorker[] {
-  try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-    const workers = raw["workers"];
-    return Array.isArray(workers) ? (workers as PersistedWorker[]) : [];
-  } catch {
-    return [];
   }
 }
 
@@ -458,50 +447,64 @@ export class VoiceRuntime {
       return;
     }
     const persisted =
-      this.workers?.persistenceRecords() ?? loadPersistedWorkers(this.workersStatePath);
+      this.workers?.persistenceRecords() ?? this.loadPersistedWorkers();
     const manager = this.buildWorkerManager();
     this.workers = manager;
+    // Register ownership before any RPC: once the thread below is resumed, a
+    // completion can arrive in the same socket batch as the read response and
+    // would be dropped if ownsThread were still false.
+    for (const record of persisted) manager.adopt(record);
     for (const record of persisted) {
-      let outcome: AdoptionOutcome = { kind: "lost" };
-      if (record.status === "running") {
-        outcome = await this.classifyWorkerThread(attachment, record.threadId);
-      }
-      manager.adopt(record, outcome);
+      if (record.status !== "running") continue;
+      await this.refineAdoptedWorker(attachment, manager, record.threadId);
     }
     this.persistWorkers();
   }
 
-  /** running / finished / lost, by resuming and reading the worker's thread. */
-  private async classifyWorkerThread(
+  /**
+   * Resume the worker's thread (re-subscribing this attachment to its
+   * notifications) and read its state: still active means the completion will
+   * arrive normally; idle means the turn ended while detached and is
+   * finalized from history; a definitively missing thread is lost. Any other
+   * failure leaves the worker running — attachment trouble is not worker
+   * death, and the next reconcile retries.
+   */
+  private async refineAdoptedWorker(
     attachment: ResidentAttachment,
+    manager: WorkerManager,
     threadId: string,
-  ): Promise<AdoptionOutcome> {
+  ): Promise<void> {
     try {
-      // Resume first: it re-subscribes this connection to the thread, so a
-      // still-running turn's completion notification reaches this console.
       await attachment.request("thread/resume", { threadId, excludeTurns: true });
       const read = (await attachment.request("thread/read", {
         threadId,
         includeTurns: true,
       })) as ThreadReadShape;
-      if (read.thread?.status?.type === "active") return { kind: "running" };
+      if (read.thread?.status?.type === "active") return;
       const turns = read.thread?.turns ?? [];
-      const last = turns[turns.length - 1];
-      if (!last) return { kind: "lost" };
-      const status = last["status"];
-      return {
-        kind: "finished",
-        status:
-          status === "completed"
-            ? "completed"
-            : status === "interrupted"
-              ? "interrupted"
-              : "failed",
-        report: finalAgentMessage(last),
-      };
-    } catch {
-      return { kind: "lost" };
+      manager.handleTurnCompleted(threadId, turns[turns.length - 1] ?? {});
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (detail.includes("thread not found") || detail.includes("no rollout found")) {
+        manager.markLost(threadId);
+        return;
+      }
+      this.events.debug?.(`worker reconcile deferred for ${threadId}: ${detail}`);
     }
+  }
+
+  private loadPersistedWorkers(): PersistedWorker[] {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(this.workersStatePath, "utf8"));
+    } catch {
+      return [];
+    }
+    const { workers, dropped } = parsePersistedWorkers(raw);
+    if (dropped > 0) {
+      this.events.onStatus(`workers.json: dropped ${dropped} malformed record(s)`);
+    }
+    return workers;
   }
 
   private buildWorkerManager(): WorkerManager {

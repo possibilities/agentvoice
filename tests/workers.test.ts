@@ -4,6 +4,7 @@ import {
   deleteWorkerThread,
   dispatchTools,
   finalAgentMessage,
+  parsePersistedWorkers,
   type WorkerEffects,
   WorkerManager,
   WorkerTurnStartError,
@@ -590,7 +591,7 @@ describe("adoption after a console restart", () => {
 
   test("a running worker is re-adopted live and the handle counter advances", async () => {
     const { workers, recorded } = manager();
-    workers.adopt(persisted(), { kind: "running" });
+    workers.adopt(persisted());
     expect(workers.ownsThread("th_9")).toBe(true);
     const listing = text(await workers.handleToolCall("check_workers", {}));
     expect(listing).toContain('w3 "long job" — running');
@@ -600,9 +601,11 @@ describe("adoption after a console restart", () => {
     expect(recorded.reports).toEqual([]);
   });
 
-  test("a re-adopted running worker completes through the normal path", async () => {
+  test("adoption registers ownership before any refinement, so a racing completion routes", async () => {
     const { workers, recorded } = manager();
-    workers.adopt(persisted(), { kind: "running" });
+    workers.adopt(persisted());
+    // A turn/completed arriving between adopt and the reconcile reads must
+    // land — this is the whole point of adopt-before-RPC.
     workers.handleTurnCompleted("th_9", {
       status: "completed",
       items: [{ type: "agentMessage", text: "done!" }],
@@ -614,35 +617,42 @@ describe("adoption after a console restart", () => {
     expect(recorded.reports.join("\n")).toContain('<worker_report worker="w3"');
   });
 
-  test("a turn that finished while detached publishes its report from history", () => {
+  test("a turn that finished while detached finalizes through handleTurnCompleted", async () => {
     const { workers, recorded } = manager();
-    workers.adopt(persisted(), { kind: "finished", status: "completed", report: "from history" });
-    expect(recorded.reports.join("\n")).toContain("from history");
-    expect(recorded.archived).toEqual(["th_9"]);
-  });
-
-  test("a finished turn with no readable message gets a placeholder report", async () => {
-    const { workers } = manager();
-    workers.adopt(persisted(), { kind: "finished", status: "failed", report: null });
+    workers.adopt(persisted());
+    workers.handleTurnCompleted("th_9", {
+      status: "failed",
+      items: [],
+    });
     const listing = text(await workers.handleToolCall("check_workers", {}));
     expect(listing).toContain('w3 "long job" — failed');
-    expect(listing).toContain("finished while the console was detached");
+    expect(listing).toContain("no final message");
+    expect(recorded.archived).toEqual(["th_9"]);
   });
 
-  test("a vanished thread becomes lost", async () => {
+  test("markLost settles a running worker and archives its thread", async () => {
     const { workers, recorded } = manager();
-    workers.adopt(persisted(), { kind: "lost" });
+    workers.adopt(persisted());
+    workers.markLost("th_9");
     const listing = text(await workers.handleToolCall("check_workers", {}));
     expect(listing).toContain('w3 "long job" — lost');
-    expect(listing).toContain("lost while the console was detached");
+    expect(listing).toContain("lost with a resident restart");
     expect(recorded.archived).toEqual(["th_9"]);
+  });
+
+  test("markLost is a no-op on settled and unknown threads", async () => {
+    const { workers, recorded } = manager();
+    workers.adopt(persisted({ status: "completed", report: "kept", finishedAt: 200 }));
+    workers.markLost("th_9");
+    workers.markLost("th_unknown");
+    const listing = text(await workers.handleToolCall("check_workers", {}));
+    expect(listing).toContain('w3 "long job" — completed');
+    expect(recorded.archived).toEqual(["th_9"]); // the owed cleanup, not a loss
   });
 
   test("a settled persisted worker retries only its owed cleanup", () => {
     const { workers, recorded } = manager();
-    workers.adopt(persisted({ status: "completed", report: "kept", finishedAt: 200 }), {
-      kind: "lost", // ignored: the persisted record is already settled
-    });
+    workers.adopt(persisted({ status: "completed", report: "kept", finishedAt: 200 }));
     expect(recorded.archived).toEqual(["th_9"]);
     expect(recorded.reports).toEqual([]); // published before the console died
   });
@@ -661,5 +671,38 @@ describe("adoption after a console restart", () => {
       status: "running",
       cleanupPending: true,
     });
+  });
+});
+
+describe("parsePersistedWorkers", () => {
+  const valid = {
+    id: "w2",
+    threadId: "th",
+    title: "t",
+    brief: "b",
+    status: "running",
+    startedAt: 1,
+    cleanupPending: false,
+  };
+
+  test("accepts a valid document and reports nothing dropped", () => {
+    expect(parsePersistedWorkers({ workers: [valid] })).toEqual({
+      workers: [valid as import("../src/core/workers.ts").PersistedWorker],
+      dropped: 0,
+    });
+  });
+
+  test("drops malformed records instead of wedging adoption", () => {
+    const { workers, dropped } = parsePersistedWorkers({
+      workers: [valid, {}, { id: "nope" }, { ...valid, status: "exploded" }, null, 42],
+    });
+    expect(workers).toEqual([valid as import("../src/core/workers.ts").PersistedWorker]);
+    expect(dropped).toBe(5);
+  });
+
+  test("tolerates junk documents entirely", () => {
+    expect(parsePersistedWorkers(null)).toEqual({ workers: [], dropped: 0 });
+    expect(parsePersistedWorkers("garbage")).toEqual({ workers: [], dropped: 0 });
+    expect(parsePersistedWorkers({ workers: "nope" })).toEqual({ workers: [], dropped: 0 });
   });
 });
