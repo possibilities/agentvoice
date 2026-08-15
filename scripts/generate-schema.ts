@@ -12,9 +12,9 @@ import { join } from "node:path";
 import { z } from "zod";
 import { configFileSchema } from "../src/core/config-schema.ts";
 
-const TITLE = "agentvoice server configuration";
+const TITLE = "agentvoice configuration";
 const DESCRIPTION =
-  "Configuration for `agentvoice server`, read once at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.";
+  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The console reads it at start and the resident's wrapper reads it at every spawn. Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.";
 
 type Schema = Record<string, unknown>;
 
@@ -27,34 +27,6 @@ function properties(node: unknown, name: string): Schema {
   const props = node["properties"];
   if (!isObject(props)) throw new Error(`schema node "${name}" has no properties`);
   return props;
-}
-
-/**
- * zod emits the number-or-string port union as `anyOf`; the published schema
- * keeps the historical flat form, `type: ["integer", "string"]` with the
- * 1-65535 bounds alongside. The parse layer deliberately accepts any number
- * or string (bounds apply at resolution, after CLI precedence, where string
- * ports go through Number.parseInt), so the bounds are documentation of the
- * resolved contract — exactly what the hand-written schema published before.
- */
-function flattenPort(top: Schema): void {
-  const port = top["port"];
-  if (!isObject(port) || !Array.isArray(port["anyOf"]) || port["anyOf"].length !== 2) {
-    throw new Error("port is no longer the expected number-or-string union");
-  }
-  const [numeric, text] = port["anyOf"] as [unknown, unknown];
-  if (
-    !isObject(numeric) ||
-    numeric["type"] !== "number" ||
-    Object.keys(numeric).length !== 1 ||
-    !isObject(text) ||
-    text["type"] !== "string" ||
-    Object.keys(text).length !== 1
-  ) {
-    throw new Error("port is no longer the expected number-or-string union");
-  }
-  const { anyOf: _branches, ...annotations } = port;
-  top["port"] = { type: ["integer", "string"], minimum: 1, maximum: 65535, ...annotations };
 }
 
 /**
@@ -125,7 +97,6 @@ export function buildSchema(): Schema {
   const schema: Schema = { $schema, title: TITLE, description: DESCRIPTION, ...rest };
 
   const top = properties(schema, "top level");
-  flattenPort(top);
   for (const section of ["accounts", "orchestrator", "voice"]) hoistDescription(top, section);
   const orchestrator = properties(top["orchestrator"], "orchestrator");
   const voice = properties(top["voice"], "voice");

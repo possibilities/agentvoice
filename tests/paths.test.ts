@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-  clientControlSocketPath,
+  consoleControlSocketPath,
   defaultConfigPath,
   expandTilde,
+  residentDirectory,
+  residentSocketPath,
+  residentStateFilePath,
   stateDirectory,
-  tokenPath,
+  threadStateFilePath,
+  workersStateFilePath,
 } from "../src/paths.ts";
 
 const HOME = "/home/tester";
@@ -19,9 +23,19 @@ describe("paths", () => {
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
       "/etc/xdg/agentvoice/server.json",
     );
-    expect(tokenPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/token");
-    expect(clientControlSocketPath({}, HOME)).toBe(
-      "/home/tester/.local/state/agentvoice/client.sock",
+    expect(consoleControlSocketPath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/console.sock",
+    );
+    expect(residentDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoice/resident");
+    expect(residentSocketPath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/resident/app-server.sock",
+    );
+    expect(residentStateFilePath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/resident/resident.json",
+    );
+    expect(threadStateFilePath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/thread.json");
+    expect(workersStateFilePath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/workers.json",
     );
   });
 

@@ -83,11 +83,9 @@ function parseChannel(value: unknown): { muted: boolean; level: number } | null 
 
 function isPhase(value: unknown): value is TransportPhase {
   return (
-    value === "connecting" ||
     value === "waiting-ready" ||
     value === "negotiating" ||
     value === "live" ||
-    value === "reconnecting" ||
     value === "failed" ||
     value === "stopped"
   );

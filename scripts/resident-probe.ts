@@ -20,8 +20,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters } from "werift";
-import { REALTIME_FEATURE } from "../src/core/appserver.ts";
 import { ResidentAttachment } from "../src/core/attach.ts";
+import { REALTIME_FEATURE } from "../src/resident/contract.ts";
 
 const RPC_TIMEOUT_MS = 30_000;
 const TURN_TIMEOUT_MS = 120_000;

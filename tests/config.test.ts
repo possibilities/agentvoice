@@ -11,14 +11,13 @@ import {
   readPrompts,
   resolveConfig,
 } from "../src/core/config.ts";
-import { parseArgs, parseClientArgs, UsageError } from "../src/main.ts";
+import { parseArgs, parseConsoleCommand, UsageError } from "../src/main.ts";
 
 const HOME = "/home/tester";
 
 describe("resolveConfig", () => {
   test("applies defaults when nothing is set", () => {
     const config = resolveConfig({}, {}, {}, HOME);
-    expect(config.port).toBe(7890);
     expect(config.codex).toBe("codex");
     expect(config.orchestrator.sandbox).toBe("danger-full-access");
     expect(config.orchestrator.approvalPolicy).toBe("never");
@@ -33,11 +32,11 @@ describe("resolveConfig", () => {
 
   test("CLI beats file beats default, per leaf", () => {
     const config = resolveConfig(
-      { orchestrator: { model: "cli-model" }, port: "9000" },
+      { orchestrator: { model: "cli-model" }, codex: "/cli/codex" },
       {
         orchestrator: { model: "file-model", effort: "high", personality: "pragmatic" },
         voice: { name: "marin" },
-        port: 9999,
+        codex: "/file/codex",
       },
       {},
       HOME,
@@ -46,7 +45,7 @@ describe("resolveConfig", () => {
     expect(config.orchestrator.effort).toBe("high");
     expect(config.orchestrator.personality).toBe("pragmatic");
     expect(config.voice.name).toBe("marin");
-    expect(config.port).toBe(9000);
+    expect(config.codex).toBe("/cli/codex");
   });
 
   test("keeps false apart from unset", () => {
@@ -87,11 +86,6 @@ describe("resolveConfig", () => {
     expect(config.codex).toBe("/home/tester/bin/codex");
   });
 
-  test("rejects an invalid port", () => {
-    expect(() => resolveConfig({ port: "0" }, {}, {}, HOME)).toThrow(ConfigError);
-    expect(() => resolveConfig({ port: "nope" }, {}, {}, HOME)).toThrow(ConfigError);
-  });
-
   test("rejects permissions combined with sandbox", () => {
     expect(() =>
       resolveConfig({}, { orchestrator: { permissions: "p", sandbox: "read-only" } }, {}, HOME),
@@ -127,7 +121,7 @@ describe("parseJsonConfig", () => {
   test("parses nested sections", () => {
     const values = parseJsonConfig(
       JSON.stringify({
-        port: 9001,
+        codex: "~/bin/codex",
         orchestrator: {
           model: "gpt-5.3-codex",
           personality: "friendly",
@@ -144,7 +138,7 @@ describe("parseJsonConfig", () => {
       "server.json",
     );
     expect(values).toEqual({
-      port: 9001,
+      codex: "~/bin/codex",
       orchestrator: {
         model: "gpt-5.3-codex",
         personality: "friendly",
@@ -228,7 +222,7 @@ describe("parseJsonConfig", () => {
   // language and would not create the own property this exercises.
   test("a __proto__ key is an unknown option at every strict level", () => {
     expect(() => parseJsonConfig('{"__proto__": {"polluted": true}}', "server.json")).toThrow(
-      /unknown option "__proto__"; known keys: port, codex, accounts, orchestrator, voice/,
+      /unknown option "__proto__"; known keys: codex, accounts, orchestrator, voice/,
     );
     expect(() =>
       parseJsonConfig('{"codex": "codex", "__proto__": {"polluted": true}}', "server.json"),
@@ -307,11 +301,9 @@ describe("cliToConfigValues", () => {
         workspace: "/w",
         "voice-model": "vm",
         voice: "marin",
-        port: "9000",
         codex: "/bin/codex",
       }),
     ).toEqual({
-      port: "9000",
       codex: "/bin/codex",
       orchestrator: { model: "m", effort: "high", workspace: "/w" },
       voice: { model: "vm", name: "marin" },
@@ -415,17 +407,10 @@ describe("parseJsonConfig characterization", () => {
 
   test("tolerates $schema alongside real keys, whatever its value", () => {
     expect(
-      parseJsonConfig('{"$schema": "./server.schema.json", "port": 9001}', "server.json"),
-    ).toEqual({ port: 9001 });
+      parseJsonConfig('{"$schema": "./server.schema.json", "codex": "c"}', "server.json"),
+    ).toEqual({ codex: "c" });
     // The value is never inspected; even a non-string is ignored.
     expect(parseJsonConfig('{"$schema": 123}', "server.json")).toEqual({});
-  });
-
-  test("port passes through as number or string; other types are named", () => {
-    expect(parseJsonConfig('{"port": 9001}', "server.json")).toEqual({ port: 9001 });
-    expect(parseJsonConfig('{"port": "9001"}', "server.json")).toEqual({ port: "9001" });
-    expect(() => parseJsonConfig('{"port": true}', "server.json")).toThrow(/port/);
-    expect(() => parseJsonConfig('{"port": null}', "server.json")).toThrow(/port/);
   });
 
   test("codex must be a string, named on rejection", () => {
@@ -696,24 +681,6 @@ describe("resolveConfig characterization", () => {
     for (const key of voiceLeaves) expect(voice[key]).toBeUndefined();
   });
 
-  test("port bounds at resolution, with port named", () => {
-    expect(resolveConfig({ port: 1 }, {}, {}, HOME).port).toBe(1);
-    expect(resolveConfig({ port: 65535 }, {}, {}, HOME).port).toBe(65535);
-    for (const bad of [0, 65536, 1.5, "-1", "nope"]) {
-      expect(() => resolveConfig({ port: bad }, {}, {}, HOME)).toThrow(ConfigError);
-    }
-    expect(() => resolveConfig({ port: 65536 }, {}, {}, HOME)).toThrow(/port/);
-  });
-
-  test("string ports go through parseInt, which tolerates trailing junk", () => {
-    // Current behavior (Number.parseInt): "7890junk" resolves to 7890 and
-    // "1.5" to 1, while the number 1.5 is rejected above. The zod port may
-    // deliberately tighten this; this pin makes that a decision, not an
-    // accident.
-    expect(resolveConfig({ port: "7890junk" }, {}, {}, HOME).port).toBe(7890);
-    expect(resolveConfig({ port: "1.5" }, {}, {}, HOME).port).toBe(1);
-  });
-
   test("dispatch-reports: false needs no dispatch", () => {
     const config = resolveConfig({}, { orchestrator: { "dispatch-reports": false } }, {}, HOME);
     expect(config.orchestrator.dispatchReports).toBe(false);
@@ -746,8 +713,11 @@ describe("loadConfigFile characterization", () => {
 
   test("reads and parses an existing file, naming it in errors", async () => {
     const good = join(directory, "good-server.json");
-    writeFileSync(good, '{"port": 9001, "voice": {"name": "marin"}}');
-    expect(await loadConfigFile(good, false)).toEqual({ port: 9001, voice: { name: "marin" } });
+    writeFileSync(good, '{"codex": "/bin/codex", "voice": {"name": "marin"}}');
+    expect(await loadConfigFile(good, false)).toEqual({
+      codex: "/bin/codex",
+      voice: { name: "marin" },
+    });
 
     const bad = join(directory, "bad-server.json");
     writeFileSync(bad, '{"voice": {"nope": 1}}');
@@ -762,53 +732,50 @@ describe("parseArgs characterization", () => {
   });
 });
 
-describe("parseClientArgs", () => {
-  test("defaults to system devices", () => {
-    expect(parseClientArgs([])).toEqual({
+describe("parseConsoleCommand", () => {
+  test("defaults to system devices, resume, and no debug", () => {
+    expect(parseConsoleCommand([])).toEqual({
       help: false,
-      config: {
-        url: "ws://127.0.0.1:7890/ws",
-        debug: false,
-      },
+      options: { debug: false, fresh: false },
+      parsed: { values: {}, debug: false, fresh: false, help: false },
     });
   });
 
-  test("parses both device indices", () => {
-    expect(
-      parseClientArgs([
-        "--url=ws://voice.test/ws",
-        "--token",
-        "secret",
-        "--device",
-        "1",
-        "--output-device=2",
-        "--debug",
-      ]),
-    ).toEqual({
-      help: false,
-      config: {
-        url: "ws://voice.test/ws",
-        token: "secret",
-        deviceIndex: 1,
-        outputDeviceIndex: 2,
-        debug: true,
-      },
+  test("parses device indices, fresh, and debug; devices stay console-side", () => {
+    const command = parseConsoleCommand([
+      "--device",
+      "1",
+      "--output-device=2",
+      "--fresh",
+      "--debug",
+      "--model",
+      "m",
+    ]);
+    if (command.help) throw new Error("expected a non-help parse");
+    expect(command.options).toEqual({
+      deviceIndex: 1,
+      outputDeviceIndex: 2,
+      debug: true,
+      fresh: true,
     });
+    expect(command.parsed.values).toEqual({ model: "m" });
   });
 
-  test("rejects the removed backend selector", () => {
-    expect(() => parseClientArgs(["--audio-backend", "duplex"])).toThrow(UsageError);
+  test("rejects the removed two-app flags", () => {
+    for (const flag of ["--url", "--token", "--port"]) {
+      expect(() => parseConsoleCommand([`${flag}=x`])).toThrow(UsageError);
+    }
   });
 
   test("rejects malformed and out-of-range device indices", () => {
     for (const value of ["1junk", "1.5", "-1", "+1", "", "2147483648"]) {
-      expect(() => parseClientArgs([`--device=${value}`])).toThrow(
+      expect(() => parseConsoleCommand([`--device=${value}`])).toThrow(
         /must be a non-negative 32-bit integer/,
       );
     }
   });
 
   test("lets --help bypass value validation after syntax is parsed", () => {
-    expect(parseClientArgs(["--device=bad", "--help"])).toEqual({ help: true });
+    expect(parseConsoleCommand(["--device=bad", "--help"])).toEqual({ help: true });
   });
 });

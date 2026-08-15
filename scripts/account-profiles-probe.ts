@@ -14,14 +14,42 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import {
-  buildDenialResponse,
-  frameNotification,
-  frameRequest,
-  frameResponse,
-  parseFrames,
-  spawnArgv,
-} from "../src/core/appserver.ts";
+import { buildDenialResponse } from "../src/core/attach.ts";
+import { REALTIME_FEATURE } from "../src/resident/contract.ts";
+
+// The probe still exercises the stdio transport — profile mechanics are
+// transport-independent, and stdio needs no socket scaffolding here.
+function spawnArgv(codexBin: string): string[] {
+  return [codexBin, "app-server", "--enable", REALTIME_FEATURE, "--listen", "stdio://"];
+}
+
+function frameRequest(id: number, method: string, params: unknown): string {
+  return `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`;
+}
+
+function frameNotification(method: string, params: unknown): string {
+  return `${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`;
+}
+
+function frameResponse(id: number | string, result: unknown): string {
+  return `${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`;
+}
+
+function parseFrames(buffer: string): { frames: unknown[]; rest: string } {
+  const lines = buffer.split("\n");
+  const rest = lines.pop() ?? "";
+  const frames: unknown[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      frames.push(JSON.parse(trimmed));
+    } catch {
+      // app-server occasionally logs non-JSON lines to stdout; drop them.
+    }
+  }
+  return { frames, rest };
+}
 
 const CODEX_HOME = process.env["CODEX_HOME"] ?? join(process.env["HOME"] ?? "", ".codex");
 const TURN_TIMEOUT_MS = 120_000;

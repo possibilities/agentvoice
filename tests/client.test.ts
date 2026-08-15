@@ -117,11 +117,11 @@ describe("shortId", () => {
   });
 });
 
-describe("voice transport server messages", () => {
-  test("routes a config change to the existing make-before-break redial", async () => {
+describe("voice transport runtime events", () => {
+  test("routes a config change to the existing make-before-break redial", () => {
     const reasons: string[] = [];
     const transport = new VoiceTransport({
-      url: "ws://127.0.0.1/ws",
+      runtime: { offer() {}, currentReady: null },
       onPhase() {},
       onReady() {},
       onRemoteTrack() {},
@@ -131,9 +131,7 @@ describe("voice transport server messages", () => {
     });
     transport.redial = (reason) => reasons.push(reason);
 
-    await (
-      transport as unknown as { handleServerMessage(text: string): Promise<void> }
-    ).handleServerMessage(JSON.stringify({ type: "redial", reason: "voice-name-changed" }));
+    transport.handleRedial("voice-name-changed");
 
     expect(reasons).toEqual(["voice-name-changed"]);
   });

@@ -6,7 +6,6 @@
  * loss surfaced through `onClose` for the runtime to redial.
  */
 import type { Socket } from "bun";
-import { AppServerError, buildDenialResponse, DEFAULT_REQUEST_TIMEOUT_MS } from "./appserver.ts";
 import {
   buildHandshakeRequest,
   encodeCloseFrame,
@@ -19,6 +18,44 @@ import {
 } from "./ws-frame.ts";
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export class AppServerError extends Error {
+  readonly code?: number;
+  readonly timedOut: boolean;
+  constructor(message: string, code?: number, timedOut = false) {
+    super(message);
+    this.code = code;
+    this.timedOut = timedOut;
+  }
+}
+
+/**
+ * Fail-closed answers for approval-bearing server→client requests. The console
+ * runs unattended, so an unanswered request would park the agent turn forever;
+ * every request gets an immediate denial (or `{}` when the method is unknown).
+ */
+export function buildDenialResponse(method: string): Record<string, unknown> {
+  switch (method) {
+    case "execCommandApproval":
+    case "applyPatchApproval":
+      return {
+        decision: {
+          denied: { rejection: "agentvoice runs unattended and never approves" },
+        },
+      };
+    case "item/commandExecution/requestApproval":
+    case "item/fileChange/requestApproval":
+      return { decision: "decline" };
+    case "item/permissions/requestApproval":
+      return { permissions: {}, scope: "turn" };
+    case "item/tool/requestUserInput":
+    case "tool/requestUserInput":
+      return { answers: {} };
+    default:
+      return {};
+  }
+}
 
 interface PendingRequest {
   resolve(value: unknown): void;

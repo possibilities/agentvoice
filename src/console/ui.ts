@@ -3,7 +3,7 @@
  * signal rails, live sub-cell meters, session facts, and an event feed.
  */
 
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,7 +17,10 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import { clientControlSocketPath, stateDirectory, tokenPath } from "../paths.ts";
+import type { ServerConfig } from "../core/config.ts";
+import type { WatchedConfigSource } from "../core/config-watch.ts";
+import { VoiceRuntime } from "../core/runtime.ts";
+import { consoleControlSocketPath, stateDirectory } from "../paths.ts";
 import { createFleetFooter } from "../tui/footer.ts";
 import { formatClock, levelFromDb, shortId } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
@@ -33,44 +36,30 @@ import {
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
-export interface ClientConfig {
-  url: string;
-  /** Connection token; defaults to the server-written token file. */
-  token?: string;
+export interface ConsoleOptions {
   deviceIndex?: number;
   outputDeviceIndex?: number;
   debug: boolean;
+  /** Abandon the persisted orchestrator agent and start a fresh thread. */
+  fresh: boolean;
 }
 
-export class ClientError extends Error {}
-
-function readTokenFile(): string | undefined {
-  try {
-    const token = readFileSync(tokenPath(process.env, homedir()), "utf8").trim();
-    return token.length > 0 ? token : undefined;
-  } catch {
-    return undefined;
-  }
-}
+export class ConsoleError extends Error {}
 
 const PALETTE = VOICE_TONES;
 
 const PHASE_LABEL: Record<TransportPhase, string> = {
-  connecting: "CONNECTING",
-  "waiting-ready": "WAITING FOR SERVER",
+  "waiting-ready": "WAITING FOR AGENT",
   negotiating: "NEGOTIATING VOICE",
   live: "LIVE",
-  reconnecting: "RECONNECTING",
   failed: "FAILED · R REDIAL",
   stopped: "STOPPED",
 };
 
 const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
-  connecting: "CONNECT",
   "waiting-ready": "WAITING",
   negotiating: "NEGOTIATE",
   live: "LIVE",
-  reconnecting: "RECONNECT",
   failed: "FAILED",
   stopped: "STOPPED",
 };
@@ -144,53 +133,30 @@ function dbText(db: number): string {
   return Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
 }
 
-export async function runClient(config: ClientConfig): Promise<void> {
+export async function runConsole(
+  config: ServerConfig,
+  options: ConsoleOptions,
+  version: string,
+  configSource?: WatchedConfigSource,
+): Promise<void> {
   // ---- preflights: fail with plain text before any screen takeover --------
   const availabilityError = duplexAudioAvailabilityError();
-  if (availabilityError) throw new ClientError(availabilityError);
-  let origin: string;
-  let wsUrl: string;
-  try {
-    const url = new URL(config.url);
-    if (url.protocol !== "ws:" && url.protocol !== "wss:") {
-      throw new Error(`unsupported protocol ${url.protocol}`);
-    }
-    origin = `${url.protocol === "wss:" ? "https:" : "http:"}//${url.host}/`;
-    // Missing token is not an error here: the server answers 4401 with a
-    // message that says what to do, and older servers ignore the parameter.
-    const token = config.token ?? readTokenFile();
-    if (token !== undefined && !url.searchParams.has("token")) {
-      url.searchParams.set("token", token);
-    }
-    wsUrl = url.toString();
-  } catch (error) {
-    throw new ClientError(
-      `invalid --url ${JSON.stringify(config.url)}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  try {
-    const response = await fetch(origin, { signal: AbortSignal.timeout(1_500) });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  } catch {
-    throw new ClientError(
-      `voice server not reachable at ${config.url} — start it with: agentvoice server`,
-    );
-  }
+  if (availabilityError) throw new ConsoleError(availabilityError);
 
   // ---- debug log ----------------------------------------------------------
   let debugLog: ((line: string) => void) | undefined;
-  if (config.debug) {
+  if (options.debug) {
     const stateDir = stateDirectory(process.env, homedir());
     mkdirSync(stateDir, { recursive: true });
-    const path = join(stateDir, "client-debug.log");
+    const path = join(stateDir, "console-debug.log");
     debugLog = (line: string) => {
       try {
         appendFileSync(path, `${new Date().toISOString()} ${line}\n`);
       } catch {
-        // debug logging must never break the client
+        // debug logging must never break the console
       }
     };
-    debugLog(`client start url=${config.url}`);
+    debugLog("console start");
   }
 
   // ---- state --------------------------------------------------------------
@@ -198,7 +164,8 @@ export async function runClient(config: ClientConfig): Promise<void> {
   const agent: Meter = { db: -Infinity };
   const signalField = new SignalField();
   const events: { text: string; color: string }[] = [];
-  let phase: TransportPhase = "connecting";
+  let phase: TransportPhase = "waiting-ready";
+  let uiReady = false;
   let shuttingDown = false;
   let resolveDone: () => void;
   const done = new Promise<void>((resolve) => {
@@ -209,13 +176,13 @@ export async function runClient(config: ClientConfig): Promise<void> {
     events.push({ text, color });
     if (events.length > 50) events.shift();
     debugLog?.(`feed: ${text}`);
-    refreshStatic();
+    if (uiReady) refreshStatic();
   };
 
-  // ---- wiring: audio <-> transport ---------------------------------------
+  // ---- wiring: audio <-> runtime <-> transport ----------------------------
   const audio = new DuplexVoiceAudio({
-    deviceIndex: config.deviceIndex,
-    outputDeviceIndex: config.outputDeviceIndex,
+    deviceIndex: options.deviceIndex,
+    outputDeviceIndex: options.outputDeviceIndex,
     sendFrame: (frame) => transport.sendOpusFrame(frame),
     onMicLevel: (db) => {
       mic.db = db;
@@ -227,8 +194,62 @@ export async function runClient(config: ClientConfig): Promise<void> {
     debug: debugLog,
   });
 
+  // Bind the control socket before the runtime: it doubles as the
+  // single-console lock, so a second console fails here — with plain text —
+  // before it can touch the shared orchestrator agent.
+  let remoteSequence = 0;
+  const remoteControl = new ClientControlServer({
+    socketPath: consoleControlSocketPath(process.env, homedir()),
+    state: () => ({
+      type: "state",
+      protocol: REMOTE_PROTOCOL_VERSION,
+      sequence: remoteSequence++,
+      phase,
+      mic: { muted: audio.micMuted, level: levelFromDb(mic.db) },
+      speaker: { muted: audio.speakerMuted, level: levelFromDb(agent.db) },
+    }),
+    onCommand: (command) => setMuted(command.target, command.muted),
+  });
+  try {
+    await remoteControl.start();
+  } catch (error) {
+    throw new ConsoleError(
+      `could not open the console control socket: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  // The runtime boots before the TUI so failures land as plain text. Its
+  // events buffer until the transport and screen exist, except ready — the
+  // transport pulls the current ready state when it starts.
+  const sink: { transport: VoiceTransport | null } = { transport: null };
+  const bufferedStatus: string[] = [];
+  let runtime: VoiceRuntime;
+  try {
+    runtime = await VoiceRuntime.start(
+      config,
+      version,
+      {
+        onReady: (info) => sink.transport?.handleReady(info),
+        onAnswer: (sdp) => void sink.transport?.handleAnswer(sdp),
+        onClosed: (reason) => sink.transport?.handleClosed(reason),
+        onRedial: (reason) => sink.transport?.handleRedial(reason),
+        onError: (text, fatal) => sink.transport?.handleError(text, fatal),
+        onWorker: (worker) => sink.transport?.handleWorker(worker),
+        onStatus: (line) => {
+          if (sink.transport) feed(line);
+          else bufferedStatus.push(line);
+        },
+        debug: debugLog,
+      },
+      { fresh: options.fresh, ...(configSource ? { configSource } : {}) },
+    );
+  } catch (error) {
+    await remoteControl.close().catch(() => {});
+    throw new ConsoleError(error instanceof Error ? error.message : String(error));
+  }
+
   const transport = new VoiceTransport({
-    url: wsUrl,
+    runtime,
     debug: debugLog,
     onPhase: (next) => {
       phase = next;
@@ -272,20 +293,6 @@ export async function runClient(config: ClientConfig): Promise<void> {
     },
     onInfo: (line) => feed(line),
     onError: (line) => feed(line, PALETTE.err),
-  });
-
-  let remoteSequence = 0;
-  const remoteControl = new ClientControlServer({
-    socketPath: clientControlSocketPath(process.env, homedir()),
-    state: () => ({
-      type: "state",
-      protocol: REMOTE_PROTOCOL_VERSION,
-      sequence: remoteSequence++,
-      phase,
-      mic: { muted: audio.micMuted, level: levelFromDb(mic.db) },
-      speaker: { muted: audio.speakerMuted, level: levelFromDb(agent.db) },
-    }),
-    onCommand: (command) => setMuted(command.target, command.muted),
   });
 
   // ---- UI -----------------------------------------------------------------
@@ -500,6 +507,13 @@ export async function runClient(config: ClientConfig): Promise<void> {
           onPress: toggleSpeaker,
         },
         { id: "redial", key: "R", label: "redial", onPress: () => transport.redial("manual") },
+        {
+          id: "fresh",
+          key: "F",
+          label: "fresh thread",
+          shortLabel: "fresh",
+          onPress: () => void runtime.fresh(),
+        },
         { id: "quit", key: "Q", label: "quit", onPress: () => void shutdown() },
       ],
     });
@@ -618,11 +632,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
       agentColor,
     );
 
-    const busy =
-      phase === "connecting" ||
-      phase === "waiting-ready" ||
-      phase === "negotiating" ||
-      phase === "reconnecting";
+    const busy = phase === "waiting-ready" || phase === "negotiating";
     const dotOn = !busy || Math.sin(pulse * 6) > 0;
     const color =
       phase === "live"
@@ -665,12 +675,13 @@ export async function runClient(config: ClientConfig): Promise<void> {
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
-    debugLog?.("client shutdown");
+    debugLog?.("console shutdown");
     renderer.removeFrameCallback(frameCallback);
     renderer.dropLive();
     await remoteControl.close().catch(() => {});
     await audio.stop().catch(() => {});
     await transport.stop().catch(() => {});
+    await runtime.shutdown().catch(() => {});
     renderer.destroy();
     resolveDone();
   }
@@ -684,6 +695,7 @@ export async function runClient(config: ClientConfig): Promise<void> {
     if (key.name === "m") toggleMic();
     else if (key.name === "s") toggleSpeaker();
     else if (key.name === "r") transport.redial("manual");
+    else if (key.name === "f") void runtime.fresh();
   });
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
@@ -691,25 +703,20 @@ export async function runClient(config: ClientConfig): Promise<void> {
   // ---- go -----------------------------------------------------------------
   renderer.setFrameCallback(frameCallback);
   renderer.requestLive();
+  uiReady = true;
   refreshStatic();
-
-  try {
-    await remoteControl.start();
-  } catch (error) {
-    await shutdown();
-    throw new ClientError(
-      `could not open client control socket: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  sink.transport = transport;
+  for (const line of bufferedStatus) feed(line);
+  bufferedStatus.length = 0;
+  for (const worker of runtime.workerSnapshots()) transport.handleWorker(worker);
 
   try {
     await audio.start();
   } catch (error) {
     await shutdown();
-    throw new ClientError(error instanceof Error ? error.message : String(error));
+    throw new ConsoleError(error instanceof Error ? error.message : String(error));
   }
   transport.start();
-  feed("connecting to voice server");
 
   await done;
 }

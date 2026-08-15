@@ -361,7 +361,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
 function phaseLabel(phase: RemoteState["phase"] | undefined): string {
   if (phase === "live") return "LIVE";
   if (phase === "failed") return "FAILED";
-  if (phase === "reconnecting") return "RECONNECT";
   if (phase === "negotiating") return "CONNECT";
   return "WAITING";
 }

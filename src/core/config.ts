@@ -126,7 +126,6 @@ export interface AccountsConfig {
 }
 
 export interface ServerConfig {
-  port: number;
   codex: string;
   debug: boolean;
   /** Directory prompt files are discovered in. */
@@ -367,9 +366,6 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
 
   for (const [key, value] of Object.entries(values)) {
     switch (key) {
-      case "port":
-        config.port = value;
-        break;
       case "codex":
         config.codex = value;
         break;
@@ -429,12 +425,6 @@ export function resolveConfig(
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
     cli.voice?.[key] ?? file.voice?.[key];
-
-  const portRaw = pickTop("port") ?? 7890;
-  const port = typeof portRaw === "number" ? portRaw : Number.parseInt(portRaw, 10);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new ConfigError(`port must be an integer between 1 and 65535; got "${portRaw}"`);
-  }
 
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
@@ -496,7 +486,6 @@ export function resolveConfig(
   };
 
   return {
-    port,
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     debug: options.debug ?? false,
     configDir: options.configDir ?? dirname(defaultConfigPath(env, home)),

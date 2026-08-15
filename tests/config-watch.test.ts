@@ -5,7 +5,6 @@ import { realtimeParams } from "../src/core/params.ts";
 
 function config(voiceName: string | undefined, model = "orchestrator-a"): ServerConfig {
   return {
-    port: 7890,
     codex: "codex",
     debug: false,
     configDir: "/config",

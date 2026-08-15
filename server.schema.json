@@ -1,19 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "agentvoice server configuration",
-  "description": "Configuration for `agentvoice server`, read once at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+  "title": "agentvoice configuration",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The console reads it at start and the resident's wrapper reads it at every spawn. Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Reserved for editor tooling; agentvoice ignores it."
-    },
-    "port": {
-      "type": ["integer", "string"],
-      "minimum": 1,
-      "maximum": 65535,
-      "description": "WebSocket port, bound to 127.0.0.1 only.",
-      "default": 7890
     },
     "codex": {
       "type": "string",

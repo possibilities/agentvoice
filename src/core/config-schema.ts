@@ -252,20 +252,7 @@ export const voiceValuesSchema = z
     description: "Primes the voice agent — the realtime speech model the user talks to.",
   });
 
-/**
- * Parse-faithful: any JSON number or string passes the file parse. The 1-65535
- * integer bounds are resolution's job — they apply only after CLI precedence
- * (a CLI --port masks an out-of-range file port), and a string port goes
- * through Number.parseInt there. The published schema still documents the
- * bounds; the generator's flattenPort carries them.
- */
-const portSchema = z.union([z.number(), z.string()]).meta({
-  description: "WebSocket port, bound to 127.0.0.1 only.",
-  default: 7890,
-});
-
 const serverShape = {
-  port: portSchema.optional(),
   codex: z
     .string()
     .describe(

@@ -11,15 +11,26 @@
  * started as a turn on the orchestrator's thread — upstream admission steers
  * it into a running turn or opens a fresh one (verified against 0.147).
  *
- * Workers are in-memory, scoped to one app-server child: when the child dies,
- * running workers are marked lost rather than resumed — the orchestrator
- * learns that from its next check or dispatch, not from a ghost report. A
+ * Workers live in the resident app-server, so they survive a console restart:
+ * the registry is persisted and re-adopted on attach (`adopt`), with turns
+ * that ended while detached finalized from thread history. Only a resident
+ * restart makes a worker `lost` — running workers die with that process. A
  * Worker's task outcome and thread cleanup are deliberately separate: a
  * terminal outcome is preserved for check/report while archival retries until
  * app-server confirms the live thread has been retired.
  */
 
-import type { WorkerSnapshot } from "../protocol.ts";
+/** A dispatched worker's lifecycle, for progress UIs. */
+export interface WorkerSnapshot {
+  /** Speakable handle (w1, w2, …), stable for the worker's lifetime. */
+  id: string;
+  title: string;
+  status: "running" | "completed" | "failed" | "interrupted" | "cancelled" | "lost";
+  startedAt: number;
+  finishedAt?: number;
+  /** The worker's final message, trimmed; present once finished. */
+  report?: string;
+}
 
 export type WorkerStatus = WorkerSnapshot["status"];
 
@@ -117,6 +128,27 @@ export interface WorkerRecord {
   cancellation: CancellationStatus;
   cleanup: WorkerCleanup;
 }
+
+/** What survives a console restart: enough to reconcile against the resident. */
+export interface PersistedWorker {
+  id: string;
+  threadId: string;
+  turnId?: string;
+  title: string;
+  brief: string;
+  status: WorkerStatus;
+  startedAt: number;
+  finishedAt?: number;
+  report?: string;
+  /** Cleanup still owed when the console died. */
+  cleanupPending: boolean;
+}
+
+/** The runtime's verdict on a persisted running worker, read from the resident. */
+export type AdoptionOutcome =
+  | { kind: "running" }
+  | { kind: "finished"; status: "completed" | "failed" | "interrupted"; report: string | null }
+  | { kind: "lost" };
 
 type CleanupDisposition = "archive" | "delete";
 type CleanupStatus = "idle" | "pending" | "running" | "complete";
@@ -459,6 +491,82 @@ export class WorkerManager {
   /** Every worker this run, for replaying state to a connecting client. */
   snapshots(): WorkerSnapshot[] {
     return [...this.workers.values()].map(snapshot);
+  }
+
+  /** What survives a console restart, written on every transition. */
+  persistenceRecords(): PersistedWorker[] {
+    return [...this.workers.values()].map((worker) => ({
+      id: worker.id,
+      threadId: worker.threadId,
+      ...(worker.turnId === undefined ? {} : { turnId: worker.turnId }),
+      title: worker.title,
+      brief: worker.brief,
+      status: worker.status,
+      startedAt: worker.startedAt,
+      ...(worker.finishedAt === undefined ? {} : { finishedAt: worker.finishedAt }),
+      ...(worker.report === undefined ? {} : { report: worker.report }),
+      cleanupPending: worker.cleanup.status !== "complete",
+    }));
+  }
+
+  /**
+   * Re-adopt a worker persisted by a previous console run. The runtime has
+   * already read the resident: `running` means the thread's turn is still in
+   * flight (its notifications flow again once the thread is re-resumed);
+   * `finished` carries the outcome of a turn that ended while detached — its
+   * report still publishes, so evented reports survive a console restart;
+   * `lost` means the thread is gone (the resident restarted underneath).
+   */
+  adopt(persisted: PersistedWorker, outcome: AdoptionOutcome): void {
+    const numeric = Number.parseInt(persisted.id.replace(/^w/, ""), 10);
+    if (Number.isInteger(numeric) && numeric >= this.nextWorker) this.nextWorker = numeric + 1;
+    const settled = persisted.status !== "running";
+    const worker: WorkerRecord = {
+      id: persisted.id,
+      threadId: persisted.threadId,
+      ...(persisted.turnId === undefined ? {} : { turnId: persisted.turnId }),
+      title: persisted.title,
+      brief: persisted.brief,
+      status: persisted.status,
+      startedAt: persisted.startedAt,
+      ...(persisted.finishedAt === undefined ? {} : { finishedAt: persisted.finishedAt }),
+      ...(persisted.report === undefined ? {} : { report: persisted.report }),
+      terminalObserved: settled,
+      taskSettled: settled,
+      terminalPublished: settled,
+      cancellation: "none",
+      cleanup: { status: persisted.cleanupPending ? "idle" : "complete", attempts: 0 },
+    };
+    this.workers.set(worker.id, worker);
+
+    if (settled) {
+      if (persisted.cleanupPending) this.requestCleanup(worker, "archive");
+      this.effects.onWorkerUpdate?.(snapshot(worker));
+      return;
+    }
+    switch (outcome.kind) {
+      case "running":
+        this.effects.onWorkerUpdate?.(snapshot(worker));
+        return;
+      case "finished":
+        worker.terminalObserved = true;
+        worker.taskSettled = true;
+        worker.terminalStatus = outcome.status;
+        worker.report = trimReport(
+          outcome.report ?? "(finished while the console was detached; no final message read)",
+        );
+        this.requestCleanup(worker, "archive");
+        this.publishTerminal(worker);
+        return;
+      case "lost":
+        worker.status = "lost";
+        worker.finishedAt = this.effects.now();
+        worker.report = "lost while the console was detached";
+        worker.taskSettled = true;
+        this.effects.onWorkerUpdate?.(snapshot(worker));
+        this.requestCleanup(worker, "archive");
+        return;
+    }
   }
 
   private requestCleanup(worker: WorkerRecord, disposition: CleanupDisposition): void {
