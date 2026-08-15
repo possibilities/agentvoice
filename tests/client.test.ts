@@ -12,16 +12,6 @@ import {
   sparkline,
 } from "../src/console/dsp.ts";
 import { VoiceTransport } from "../src/console/transport.ts";
-import { voiceActivityHeight } from "../src/console/ui.ts";
-
-describe("client vertical layout", () => {
-  test("voice activity keeps one field at both responsive widths", () => {
-    expect(voiceActivityHeight(100)).toBe(9);
-    expect(voiceActivityHeight(68)).toBe(9);
-    expect(voiceActivityHeight(67)).toBe(9);
-    expect(voiceActivityHeight(40)).toBe(9);
-  });
-});
 
 describe("frame constants", () => {
   test("one frame is 20ms at the session rate", () => {

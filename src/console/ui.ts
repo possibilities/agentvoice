@@ -1,6 +1,8 @@
 /**
- * The terminal UI: a Signal Room instrument panel with local and remote
- * signal rails, live sub-cell meters, session facts, and an event feed.
+ * The terminal UI: the audio display only — one full-viewport Signal Room
+ * panel with the live signal field, phase and timer centered on its rows,
+ * and every action in the ctrl+k command palette. Narrative events go to
+ * the debug log, not the screen.
  */
 
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -13,7 +15,6 @@ import {
   createCliRenderer,
   fg,
   type ParsedKey,
-  ScrollBoxRenderable,
   StyledText,
   TextRenderable,
 } from "@opentui/core";
@@ -22,7 +23,7 @@ import type { WatchedConfigSource } from "../core/config-watch.ts";
 import { VoiceRuntime } from "../core/runtime.ts";
 import { consoleControlSocketPath, stateDirectory } from "../paths.ts";
 import { createCommandPalette } from "../tui/palette.ts";
-import { formatClock, levelFromDb, shortId } from "./dsp.ts";
+import { formatClock, levelFromDb } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer } from "./remote-control.ts";
@@ -66,22 +67,6 @@ const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
 
 interface Meter {
   db: number;
-}
-
-export const VOICE_ACTIVITY_PANEL_HEIGHT = 9;
-
-export function voiceActivityHeight(_width: number): number {
-  return VOICE_ACTIVITY_PANEL_HEIGHT;
-}
-
-function styledFacts(rows: ReadonlyArray<readonly [label: string, value: string]>): StyledText {
-  const chunks: ReturnType<typeof bold>[] = [];
-  rows.forEach(([label, value], index) => {
-    chunks.push(fg(PALETTE.dim)(label.padEnd(11)));
-    chunks.push(fg(PALETTE.text)(value));
-    if (index < rows.length - 1) chunks.push(fg(PALETTE.text)("\n"));
-  });
-  return new StyledText(chunks);
 }
 
 function styledFieldLabels(
@@ -182,20 +167,17 @@ export async function runConsole(
   const mic: Meter = { db: -Infinity };
   const agent: Meter = { db: -Infinity };
   const signalField = new SignalField();
-  const events: { text: string; color: string }[] = [];
   let phase: TransportPhase = "waiting-ready";
-  let uiReady = false;
   let shuttingDown = false;
   let resolveDone: () => void;
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
   });
 
-  const feed = (text: string, color: string = PALETTE.dim): void => {
-    events.push({ text, color });
-    if (events.length > 50) events.shift();
+  // The TUI is the audio display only; narrative events go to the debug
+  // log, never the screen.
+  const feed = (text: string, _color: string = PALETTE.dim): void => {
     debugLog?.(`feed: ${text}`);
-    if (uiReady) refreshStatic();
   };
 
   // ---- wiring: audio <-> runtime <-> transport ----------------------------
@@ -240,7 +222,7 @@ export async function runConsole(
   // The runtime boots before the TUI so failures land as plain text — and so
   // does its progress: each stage prints as it starts, so a slow or wedged
   // resident is visible mid-stage instead of a silent blank screen. The same
-  // lines buffer for the event feed once the screen exists.
+  // lines replay into the debug log once the screen exists.
   const sink: { transport: VoiceTransport | null } = { transport: null };
   const bufferedStatus: string[] = [];
   console.log("agentvoice: attaching to the resident app-server…");
@@ -347,8 +329,8 @@ export async function runConsole(
   root.add(main);
 
   const meters = new BoxRenderable(renderer, {
-    height: voiceActivityHeight(renderer.width || process.stdout.columns || 100),
-    flexShrink: 0,
+    flexGrow: 1,
+    flexShrink: 1,
     flexDirection: "column",
     border: ["left"],
     borderStyle: "single",
@@ -381,61 +363,6 @@ export async function runConsole(
   meters.add(fieldCanvas);
   meters.add(fieldReadout);
 
-  const sessionBox = new BoxRenderable(renderer, {
-    width: "100%",
-    height: 5,
-    border: ["top"],
-    borderStyle: "single",
-    borderColor: PALETTE.border,
-    backgroundColor: PALETTE.field,
-    title: " SESSION ",
-    titleColor: PALETTE.dim,
-    titleAlignment: "left",
-    flexDirection: "row",
-    paddingLeft: 2,
-    paddingRight: 2,
-    paddingTop: 1,
-    gap: 4,
-  });
-  const sessionLeft = new TextRenderable(renderer, {
-    content: "",
-    fg: PALETTE.dim,
-    flexGrow: 1,
-    flexBasis: 1,
-  });
-  const sessionRight = new TextRenderable(renderer, {
-    content: "",
-    fg: PALETTE.dim,
-    flexGrow: 1,
-    flexBasis: 1,
-  });
-  sessionBox.add(sessionLeft);
-  sessionBox.add(sessionRight);
-  main.add(sessionBox);
-
-  const eventBox = new ScrollBoxRenderable(renderer, {
-    width: "100%",
-    flexGrow: 1,
-    flexShrink: 1,
-    minHeight: 3,
-    border: ["top"],
-    borderStyle: "single",
-    borderColor: PALETTE.border,
-    backgroundColor: PALETTE.bg,
-    title: " EVENTS ",
-    titleColor: PALETTE.dim,
-    titleAlignment: "left",
-    paddingLeft: 2,
-    paddingRight: 2,
-    paddingTop: 1,
-    stickyScroll: true,
-    stickyStart: "bottom",
-    scrollX: false,
-    scrollY: true,
-  });
-  const eventRows: TextRenderable[] = [];
-  main.add(eventBox);
-
   const palette = createCommandPalette(
     {
       BoxRenderable,
@@ -462,11 +389,6 @@ export async function runConsole(
   function refreshStatic(): void {
     const width = renderer.width || process.stdout.columns || 100;
     layoutWidth = width;
-    const narrow = width < 104;
-    meters.height = voiceActivityHeight(width);
-    sessionBox.flexDirection = narrow ? "column" : "row";
-    sessionBox.height = narrow ? 7 : 5;
-    sessionBox.gap = narrow ? 0 : 4;
     palette.update({
       width,
       height: renderer.height || process.stdout.rows || 24,
@@ -489,52 +411,6 @@ export async function runConsole(
       ],
     });
 
-    const info = transport.readyInfo;
-    const orDefault = (value: string | null) => value ?? "codex default";
-    const primed =
-      info && info.prompts.length > 0 ? ` · ${plural(info.prompts.length, "prompt")}` : "";
-    sessionLeft.content = styledFacts(
-      info
-        ? [
-            ["thread", `${shortId(info.threadId)}${primed}`],
-            ["workspace", tail(info.workspace, narrow ? Math.max(20, width - 20) : 34)],
-          ]
-        : [
-            ["thread", "—"],
-            ["workspace", "—"],
-          ],
-    );
-    const renew = transport.renewInMs;
-    sessionRight.content = styledFacts(
-      info
-        ? [
-            ["model", `${orDefault(info.model)} · effort ${orDefault(info.effort)}`],
-            [
-              "voice",
-              `${orDefault(info.voiceModel)}${info.voice ? ` · ${info.voice}` : ""}${renew !== null ? ` · renew in ${formatClock(renew)}` : ""}`,
-            ],
-          ]
-        : [],
-    );
-    const rowCount = Math.max(1, events.length);
-    while (eventRows.length > rowCount) {
-      const row = eventRows.pop();
-      if (row) eventBox.remove(row);
-    }
-    while (eventRows.length < rowCount) {
-      const row = new TextRenderable(renderer, {
-        id: `event-${eventRows.length}`,
-        content: "",
-        fg: PALETTE.dim,
-      });
-      eventRows.push(row);
-      eventBox.add(row);
-    }
-    eventRows.forEach((row, index) => {
-      const event = events[index];
-      row.content = event === undefined ? "" : `${SIGNAL_GLYPHS.event} ${event.text}`;
-      row.fg = event?.color ?? PALETTE.faint;
-    });
     const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldLabels.content = styledFieldLabels(
@@ -545,14 +421,6 @@ export async function runConsole(
       agentColor,
       "DUPLEX / 48 KHZ",
     );
-  }
-
-  function tail(path: string, max: number): string {
-    return path.length <= max ? path : `…${path.slice(-max + 1)}`;
-  }
-
-  function plural(count: number, noun: string): string {
-    return `${count} ${noun}${count === 1 ? "" : "s"}`;
   }
 
   let pulse = 0;
@@ -621,7 +489,6 @@ export async function runConsole(
       },
     );
 
-    if (transport.renewInMs !== null && Math.floor(pulse) % 5 === 0) refreshStatic();
   };
 
   // ---- controls -----------------------------------------------------------
@@ -640,6 +507,9 @@ export async function runConsole(
       `${target === "mic" ? "microphone" : "speaker"} ${muted ? "muted" : "live"}`,
       target === "mic" ? PALETTE.you : PALETTE.agent,
     );
+    // The palette's mute/unmute labels live in refreshStatic, which no
+    // longer runs on every feed line.
+    refreshStatic();
     remoteControl.publish();
   }
 
@@ -675,7 +545,6 @@ export async function runConsole(
   // ---- go -----------------------------------------------------------------
   renderer.setFrameCallback(frameCallback);
   renderer.requestLive();
-  uiReady = true;
   refreshStatic();
   sink.transport = transport;
   for (const line of bufferedStatus) feed(line);
