@@ -229,7 +229,19 @@ export async function restartResident(): Promise<number> {
 }
 
 export async function uninstallResident(): Promise<number> {
-  await launchctl(["bootout", `${guiDomain()}/${RESIDENT_LABEL}`]);
+  const domain = guiDomain();
+  const bootout = await launchctl(["bootout", `${domain}/${RESIDENT_LABEL}`]);
+  if (bootout.code !== 0) {
+    // bootout also fails when the job simply isn't loaded; only a job that
+    // is verifiably still loaded makes deleting its plist unsafe — launchd
+    // would keep a KeepAlive process running with no management file.
+    const print = await launchctl(["print", `${domain}/${RESIDENT_LABEL}`]);
+    if (print.code === 0) {
+      throw new ResidentError(
+        `launchctl bootout failed while the job is still loaded: ${bootout.output.trim()}`,
+      );
+    }
+  }
   rmSync(plistPath(), { force: true });
   console.log(`resident uninstalled (${RESIDENT_LABEL}); state directory left in place`);
   return 0;

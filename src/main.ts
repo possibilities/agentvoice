@@ -295,7 +295,13 @@ async function runResidentCommand(argv: string[]): Promise<number> {
   const { configPath, loadResolvedConfig } = configLoader(parsed);
   switch (subcommand) {
     case "install":
-      return installResident(await loadResolvedConfig(), configPath);
+      // Bake --config into the wrapper only when the operator gave one: the
+      // default path resolves at every spawn, so a config created later is
+      // picked up — and a missing default never errors the pick.
+      return installResident(
+        await loadResolvedConfig(),
+        parsed.configPath !== undefined ? configPath : undefined,
+      );
     case "status":
       return residentStatus();
     case "restart":
