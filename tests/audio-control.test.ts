@@ -58,7 +58,6 @@ describe("audio-control keyboard input", () => {
     expect(releaseCommitsClick(10, 10 + AUDIO_CONTROL_CLICK_MS)).toBe(true);
     expect(releaseCommitsClick(10, 11 + AUDIO_CONTROL_CLICK_MS)).toBe(false);
   });
-
 });
 
 describe("MuteGate", () => {

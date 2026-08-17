@@ -1,6 +1,11 @@
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
 import { formatClock } from "./dsp.ts";
-import { type SignalFieldFrame, signalFieldWashColor } from "./signal-field.ts";
+import {
+  type SignalFieldCell,
+  type SignalFieldFrame,
+  signalFieldWashColor,
+  WASH_STEPS,
+} from "./signal-field.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import type { TransportPhase } from "./transport.ts";
 
@@ -90,6 +95,8 @@ export interface InstrumentTextRun {
   text: string;
   color: string;
   bold?: boolean;
+  /** Re-draw this run's ─ and │ per cell from the field's energy, so the line flows with it. */
+  flow?: boolean;
 }
 
 export interface InstrumentVoice {
@@ -107,7 +114,7 @@ export function pttRowCount(height: number): number {
   return Math.max(1, Math.min(height - 4, 5));
 }
 
-/** A rounded box-drawing outline, one run per horizontal edge and per side cell. */
+/** A rounded box-drawing outline, one run per horizontal edge and per side cell; its lines flow. */
 function outlineRuns(
   x0: number,
   y0: number,
@@ -118,12 +125,12 @@ function outlineRuns(
   if (x1 - x0 < 1 || y1 - y0 < 1) return [];
   const inner = "─".repeat(x1 - x0 - 1);
   const runs: InstrumentTextRun[] = [
-    { x: x0, y: y0, text: `╭${inner}╮`, color },
-    { x: x0, y: y1, text: `╰${inner}╯`, color },
+    { x: x0, y: y0, text: `╭${inner}╮`, color, flow: true },
+    { x: x0, y: y1, text: `╰${inner}╯`, color, flow: true },
   ];
   for (let y = y0 + 1; y < y1; y++) {
-    runs.push({ x: x0, y, text: "│", color });
-    runs.push({ x: x1, y, text: "│", color });
+    runs.push({ x: x0, y, text: "│", color, flow: true });
+    runs.push({ x: x1, y, text: "│", color, flow: true });
   }
   return runs;
 }
@@ -222,6 +229,21 @@ interface OverlayCell {
   char: string;
   color: string;
   bold: boolean;
+  flow: boolean;
+}
+
+const FLOW_HORIZONTAL = ["┄", "╌", "─", "━"] as const;
+const FLOW_VERTICAL = ["┆", "╎", "│", "┃"] as const;
+
+/** Outline weight follows the field: dashed in the wash troughs, solid at crests, heavy under a strand. */
+function flowGlyph(char: string, cell: SignalFieldCell): string {
+  const ramp = char === "─" ? FLOW_HORIZONTAL : char === "│" ? FLOW_VERTICAL : null;
+  if (ramp === null) return char;
+  if (cell.tone === "you" || cell.tone === "agent") return ramp[ramp.length - 1]!;
+  const step = cell.wash ?? 0;
+  return ramp[
+    Math.min(ramp.length - 2, Math.floor((step / (WASH_STEPS + 1)) * (ramp.length - 1)))
+  ]!;
 }
 
 /**
@@ -260,7 +282,12 @@ export function styledInstrumentField(
     for (let i = 0; i < chars.length; i++) {
       const x = run.x + i;
       if (x < 0 || x >= width) continue;
-      cells[x] = { char: chars[i]!, color: run.color, bold: run.bold === true };
+      cells[x] = {
+        char: chars[i]!,
+        color: run.color,
+        bold: run.bold === true,
+        flow: run.flow === true,
+      };
     }
   }
 
@@ -288,7 +315,7 @@ export function styledInstrumentField(
         boldText = cellBold;
         wash = cell.wash;
       }
-      text += over === undefined ? cell.char : over.char;
+      text += over === undefined ? cell.char : over.flow ? flowGlyph(over.char, cell) : over.char;
     });
     flush();
     if (rowIndex < height - 1) chunks.push(fg(colors.faint)("\n"));

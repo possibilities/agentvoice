@@ -248,6 +248,26 @@ describe("signal field", () => {
     expect(rows[1]).toBe(signalFieldText(frame).split("\n")[1]);
   });
 
+  test("outline runs flow with the field instead of framing it rigidly", () => {
+    const colors = { faint: "#4b575e", dim: "#7d8a91", you: "#e2b56f", agent: "#7fb9e8" };
+    const run = [{ x: 0, y: 2, text: "─".repeat(48), color: "#4b575e", flow: true }];
+    const field = new SignalField({ seed: 41 });
+    const idleRows = styledInstrumentField(field.render(48, 5), colors, run)
+      .chunks.map((chunk) => chunk.text)
+      .join("")
+      .split("\n");
+    const idleLine = idleRows[2] ?? "";
+    expect([...idleLine].every((char) => ["┄", "╌", "─", "━"].includes(char))).toBe(true);
+    expect(new Set(idleLine).size).toBeGreaterThan(1);
+
+    for (let i = 0; i < 30; i++) field.step(1 / 30, { you: 1, agent: 0 });
+    const loudRows = styledInstrumentField(field.render(48, 5), colors, run)
+      .chunks.map((chunk) => chunk.text)
+      .join("")
+      .split("\n");
+    expect(loudRows[2]?.includes("━")).toBe(true);
+  });
+
   test("releases toward quiet instead of freezing the last loud frame", () => {
     const field = new SignalField({ seed: 5 });
     for (let i = 0; i < 20; i++) field.step(1 / 30, { you: 1, agent: 0 });
