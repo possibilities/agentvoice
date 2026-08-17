@@ -248,30 +248,6 @@ describe("signal field", () => {
     expect(rows[1]).toBe(signalFieldText(frame).split("\n")[1]);
   });
 
-  test("outlines sit on transparent cells \u2014 strands pass through them", () => {
-    const colors = { faint: "#4b575e", dim: "#7d8a91", you: "#e2b56f", agent: "#7fb9e8" };
-    const runs = [{ x: 0, y: 2, text: "\u2500".repeat(48), color: "#2a343a", transparent: true }];
-    const rowText = (styled: { chunks: { text: string }[] }): string =>
-      styled.chunks
-        .map((chunk) => chunk.text)
-        .join("")
-        .split("\n")[2] ?? "";
-
-    const field = new SignalField({ seed: 41 });
-    expect(new Set(rowText(styledInstrumentField(field.render(48, 5), colors, runs)))).toEqual(
-      new Set(["\u2500"]),
-    );
-
-    for (let i = 0; i < 30; i++) field.step(1 / 30, { you: 1, agent: 0 });
-    const frame = field.render(48, 5);
-    const loudLine = [...rowText(styledInstrumentField(frame, colors, runs))];
-    const strandCells = frame.rows[2]!.map((cell) => cell.tone === "you" || cell.tone === "agent");
-    expect(strandCells.some(Boolean)).toBe(true);
-    loudLine.forEach((char, x) => {
-      expect(char).toBe(strandCells[x] ? frame.rows[2]![x]!.char : "\u2500");
-    });
-  });
-
   test("releases toward quiet instead of freezing the last loud frame", () => {
     const field = new SignalField({ seed: 5 });
     for (let i = 0; i < 20; i++) field.step(1 / 30, { you: 1, agent: 0 });

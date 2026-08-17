@@ -90,8 +90,6 @@ export interface InstrumentTextRun {
   text: string;
   color: string;
   bold?: boolean;
-  /** Drawn on a transparent cell: a strand in the same cell shows instead of this glyph. */
-  transparent?: boolean;
 }
 
 export interface InstrumentVoice {
@@ -109,7 +107,7 @@ export function pttRowCount(height: number): number {
   return Math.max(1, Math.min(height - 4, 5));
 }
 
-/** A rounded outline on transparent cells — strands crossing it show through, never crop. */
+/** A rounded box-drawing outline, one run per horizontal edge and per side cell. */
 function outlineRuns(
   x0: number,
   y0: number,
@@ -120,12 +118,12 @@ function outlineRuns(
   if (x1 - x0 < 1 || y1 - y0 < 1) return [];
   const inner = "─".repeat(x1 - x0 - 1);
   const runs: InstrumentTextRun[] = [
-    { x: x0, y: y0, text: `╭${inner}╮`, color, transparent: true },
-    { x: x0, y: y1, text: `╰${inner}╯`, color, transparent: true },
+    { x: x0, y: y0, text: `╭${inner}╮`, color },
+    { x: x0, y: y1, text: `╰${inner}╯`, color },
   ];
   for (let y = y0 + 1; y < y1; y++) {
-    runs.push({ x: x0, y, text: "│", color, transparent: true });
-    runs.push({ x: x1, y, text: "│", color, transparent: true });
+    runs.push({ x: x0, y, text: "│", color });
+    runs.push({ x: x1, y, text: "│", color });
   }
   return runs;
 }
@@ -224,7 +222,6 @@ interface OverlayCell {
   char: string;
   color: string;
   bold: boolean;
-  transparent: boolean;
 }
 
 /**
@@ -263,12 +260,7 @@ export function styledInstrumentField(
     for (let i = 0; i < chars.length; i++) {
       const x = run.x + i;
       if (x < 0 || x >= width) continue;
-      cells[x] = {
-        char: chars[i]!,
-        color: run.color,
-        bold: run.bold === true,
-        transparent: run.transparent === true,
-      };
+      cells[x] = { char: chars[i]!, color: run.color, bold: run.bold === true };
     }
   }
 
@@ -287,9 +279,7 @@ export function styledInstrumentField(
       text = "";
     };
     row.forEach((cell, x) => {
-      const stamped = overlay?.[x];
-      const strand = cell.tone === "you" || cell.tone === "agent";
-      const over = stamped?.transparent && strand ? undefined : stamped;
+      const over = overlay?.[x];
       const cellColor = over === undefined ? colors[cell.tone] : over.color;
       const cellBold = over === undefined ? false : over.bold;
       if (cellColor !== color || cellBold !== boldText || cell.wash !== wash) {
