@@ -55,13 +55,32 @@ the files that task produces. _Avoid_: "cwd" (reserved for the resident's own
 working directory), "scratch directory".
 
 **Remote console** — The phone-sized terminal control surface started with
-`agentvoice remote` after SSHing into the console's machine. It attaches to
-the console through owner-only local IPC (`console.sock`) and carries mute
-state, persistent assignments, source-owned unmute holds, dB signal readings,
-voice-session status, Redial, and Fresh—never audio. It and the Console host
-the same TUI implementation. Both ship together, so the private IPC advances
-in lockstep without compatibility shims. _Avoid_: "remote client" (the console
-remains the sole media peer), "phone app".
+`agentvoice remote`, on the console's machine or on another one. It attaches
+to the console over the control attachment and carries mute state, persistent
+assignments, source-owned unmute holds, dB signal readings, voice-session
+status, Redial, and Fresh—never audio. It and the Console host the same TUI
+implementation. Both ship together, so the protocol advances in lockstep
+without compatibility shims. _Avoid_: "remote client" (the console remains the
+sole media peer), "phone app".
+
+**Control attachment** — A Remote console's link to the Console, one JSON
+protocol over either of two listeners: the owner-only unix socket
+(`console.sock`) for the console's own machine, and a tailnet WebSocket
+(`remote.listen`) for any other. Both are first-class; the unix socket is not
+a legacy path. _Avoid_: "control socket" (names only one of the two), "remote
+IPC" (it is no longer only local).
+
+**Attachment token** — The pre-shared secret (`remote.token`) a Remote console
+presents to attach over the network listener. It replaces file permissions as
+the admission check the moment the link leaves the machine, and it grants
+microphone control. _Avoid_: "password", "api key", and confusion with
+`surface.token`, which is a herdr pane metadata key.
+
+**Heartbeat deadline** — How long the Console will keep honoring a network
+Remote console's unmute holds without hearing from it. Past it the holds are
+released without waiting for a close, because a dead peer's TCP close can lag
+by minutes and a stranded hold means a live microphone nobody is holding.
+_Avoid_: "timeout" (the attachment itself may still recover), "keepalive".
 
 **Duplex audio device** — The console's client-owned miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw

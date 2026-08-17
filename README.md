@@ -285,12 +285,20 @@ under the realtime surface; see AGENTS.md invariant 10).
 
 ## Security posture
 
-Nothing listens on the network. The resident serves a unix socket created
-mode 0600 inside a 0700 directory; the console's control socket
+By default nothing listens on the network. The resident serves a unix socket
+created mode 0600 inside a 0700 directory; the console's control socket
 (`console.sock`) is owner-only too — **file permissions are the boundary
 between local users**, and there is no port for a browser or another machine
 to probe. The console control socket doubles as the single-console lock: a
 second `agentvoice` refuses to start while one is running.
+
+Setting `remote.listen` opts into one exception, and moves the boundary with
+it: a Remote console on another machine reaches the Console over a tailnet
+port, where file permissions mean nothing and `remote.token` is the whole
+admission check. That token grants microphone control, so treat it like a
+credential — `server.json` mode 0600, and a fresh token if it ever leaks. The
+range restriction on `remote.listen` exists to keep that port on a network
+WireGuard is already authenticating.
 
 That decides who reaches the agent; it cannot constrain what the agent then
 does. Approval requests are always **auto-denied** (there is no UI to answer
@@ -362,8 +370,9 @@ The device is built from source and the console refuses to start without it —
 
 ### Phone remote
 
-With the console running, SSH into its machine from a phone and open the
-narrow Remote console:
+With the console running, open the narrow Remote console — from a terminal on
+the Console's own machine (SSH in from a phone, or just another tab), or from
+any machine on the tailnet once `remote.listen` is configured below:
 
 ```bash
 ssh laptop
@@ -384,15 +393,51 @@ shows TALKING only for a sustained hold. Otherwise `m`/`s` remain toggles and
 and Remote console run the same TUI implementation; only their state/action
 hosts differ.
 
-The Remote console connects to the Console — not the resident — through
-`~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It
-carries only dB signal readings, persistent and effective mute state,
-voice-session phase and elapsed time, source-owned unmute holds, Redial, and
-Fresh. Audio stays on the Console's machine and needs no SSH forwarding. For
-the intended setup, that machine's Bluetooth audio remains the listening path.
-The private IPC is a lockstep contract rather than a compatibility surface;
-restart both processes after upgrading. The Remote console waits and
-reconnects automatically when the Console is not running or restarts.
+The Remote console connects to the Console — not the resident. It carries only
+dB signal readings, persistent and effective mute state, voice-session phase
+and elapsed time, source-owned unmute holds, Redial, and Fresh. Audio always
+stays on the Console's machine; for the intended setup, that machine's
+Bluetooth audio remains the listening path. The protocol is a lockstep
+contract rather than a compatibility surface — a version mismatch is refused
+in words, so restart both processes after upgrading. The Remote console waits
+and reconnects automatically when the Console is not running or restarts.
+
+Two listeners carry that identical protocol.
+
+**On the Console's own machine**, `agentvoice remote` attaches through
+`~/.local/state/agentvoice/console.sock`, an owner-only Unix socket, with no
+configuration at all.
+
+**From another machine**, the Console additionally serves a WebSocket over the
+tailnet. Set both keys in `server.json` on the Console's machine:
+
+```jsonc
+{
+  "remote": {
+    "listen": "100.114.244.89",           // `tailscale ip -4` on this machine
+    "token": "<openssl rand -hex 24>"
+  }
+}
+```
+
+then, from the other machine, `agentvoice remote --host 100.114.244.89
+--token …` (or `$AGENTVOICE_REMOTE_TOKEN`). No SSH and no port forwarding.
+
+Tailscale is load-bearing here, not incidental: **agentvoice adds no transport
+encryption of its own**, so WireGuard is what supplies the encryption and
+machine identity, and the token is only the Console's admission check on top.
+`remote.listen` therefore refuses any address outside `100.64.0.0/10`,
+`fd7a:115c:a1e0::/48`, and loopback unless `remote.allow-any-address` is set —
+that token grants microphone control, so keep `server.json` mode 0600. Expect
+tailnet round-trips when Tailscale negotiates a direct path and noticeably
+more when it falls back to a DERP relay; `tailscale status` says which you
+have.
+
+A network Remote console beats every 1.5 s. If the Console stops hearing it
+for 4 s, it releases that Remote console's unmute holds — a dead peer's TCP
+close can lag by minutes, and until it lands the Console would still believe a
+push-to-talk hold were open, leaving the microphone live with nobody holding
+it.
 
 ## State on disk
 
@@ -407,7 +452,9 @@ reconnects automatically when the Console is not running or restarts.
 - `~/.local/state/agentvoice/workers.json` — the persisted worker registry,
   reconciled against the resident on attach.
 - `~/.local/state/agentvoice/console.sock` — ephemeral owner-only IPC between
-  the running console and any local Remote consoles. It never carries audio.
+  the running console and any same-machine Remote consoles, and the
+  single-console lock. It never carries audio. Remote consoles on other
+  machines arrive over the `remote.listen` port instead, never through here.
 - `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
   multi-account balancing: a real `auth.json` and private app-server control
   directory per account, with session/config state symlinked to `~/.codex`.

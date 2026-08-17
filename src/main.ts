@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
-import { RemoteError, runRemote } from "./console/remote-ui.ts";
+import { RemoteError, type RemoteTarget, runRemote } from "./console/remote-ui.ts";
 import { ConsoleError, type ConsoleOptions, runConsole } from "./console/ui.ts";
 import {
   AUTH_FILE,
@@ -15,7 +15,13 @@ import {
   onboardingCommands,
   reconcileFarm,
 } from "./core/accounts.ts";
-import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./core/config.ts";
+import {
+  ConfigError,
+  cliToConfigValues,
+  DEFAULT_REMOTE_PORT,
+  loadConfigFile,
+  resolveConfig,
+} from "./core/config.ts";
 import { consoleControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
 import {
   installResident,
@@ -111,14 +117,23 @@ Usage:
                                                   balancer's CODEX_HOME pick
 `;
 
-const REMOTE_USAGE = `agentvoice remote — control the local voice console over SSH
+const REMOTE_USAGE = `agentvoice remote — the phone-sized control surface for a running Console
 
 Usage:
-  agentvoice remote
+  agentvoice remote                          attach on this machine
+  agentvoice remote --host <addr> [--port N] attach across the tailnet
 
-The Remote console attaches to the running Console on this machine. It carries
-mute controls, Redial, Fresh, and signal state; audio remains on the Console's
-device.
+Options:
+  --host <address>  The Console's tailnet address (\`tailscale ip -4\` on that
+                    machine). Omitted, the Remote console attaches through the
+                    owner-only unix socket on this machine.
+  --port <port>     Defaults to ${DEFAULT_REMOTE_PORT}; must match remote.port there.
+  --token <secret>  Must match remote.token in the Console's server.json.
+                    Defaults to $AGENTVOICE_REMOTE_TOKEN. Required with --host.
+
+The Remote console carries mute controls, Redial, Fresh, and signal state;
+audio remains on the Console's own device. Serving --host needs remote.listen
+and remote.token set in the Console's server.json.
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
 `;
@@ -318,13 +333,49 @@ async function runResidentCommand(argv: string[]): Promise<number> {
   }
 }
 
+/**
+ * Which Console a Remote console attaches to: a unix socket path on this
+ * machine, or a network Console. Returns null for `--help`.
+ */
+export function parseRemoteTarget(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+  home: string,
+): RemoteTarget | null {
+  const parsed = parseArgs(argv, {
+    value: new Set(["--host", "--port", "--token"]),
+    bool: new Set(["--help"]),
+  });
+  if (parsed.help) return null;
+  // parseArgs keys values by the bare flag name, without the leading dashes.
+  const host = parsed.values["host"];
+  if (host === undefined) {
+    if (parsed.values["port"] !== undefined || parsed.values["token"] !== undefined) {
+      throw new UsageError("--port and --token only apply with --host");
+    }
+    return consoleControlSocketPath(env, home);
+  }
+  const token = parsed.values["token"] ?? env["AGENTVOICE_REMOTE_TOKEN"];
+  if (token === undefined || token === "") {
+    throw new UsageError(
+      "--host needs --token (or $AGENTVOICE_REMOTE_TOKEN); it must match remote.token in the Console's server.json",
+    );
+  }
+  const rawPort = parsed.values["port"];
+  const port = rawPort === undefined ? DEFAULT_REMOTE_PORT : Number(rawPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new UsageError(`--port must be a port number, got "${rawPort}"`);
+  }
+  return { host, port, token };
+}
+
 async function runRemoteCommand(argv: string[]): Promise<number> {
-  const parsed = parseArgs(argv, { value: new Set(), bool: new Set(["--help"]) });
-  if (parsed.help) {
+  const target = parseRemoteTarget(argv, process.env, homedir());
+  if (target === null) {
     console.log(REMOTE_USAGE);
     return 0;
   }
-  await runRemote(consoleControlSocketPath(process.env, homedir()));
+  await runRemote(target);
   return 0;
 }
 

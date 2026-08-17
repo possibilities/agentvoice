@@ -28,13 +28,16 @@ import {
   type ConfigValues,
   configValuesSchema,
   DEFAULT_REALTIME_VERSION,
+  DEFAULT_REMOTE_PORT,
   DEFAULT_SWITCH_THRESHOLD,
   type HandoffMode,
   type HistoryMode,
   ORCHESTRATOR_KEYS,
   type OrchestratorValues,
   type Personality,
+  REMOTE_KEYS,
   type RealtimeVersion,
+  type RemoteValues,
   SANDBOX_MODES,
   type SandboxMode,
   SERVER_KEYS,
@@ -54,6 +57,7 @@ export type {
   OrchestratorValues,
   Personality,
   RealtimeVersion,
+  RemoteValues,
   SandboxMode,
   SurfaceValues,
   VoiceValues,
@@ -63,12 +67,14 @@ export {
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
   DEFAULT_REALTIME_VERSION,
+  DEFAULT_REMOTE_PORT,
   DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
   PERSONALITIES,
   REALTIME_VERSIONS,
+  REMOTE_KEYS,
   SANDBOX_MODES,
   SERVER_KEYS,
   SURFACE_KEYS,
@@ -143,6 +149,20 @@ export interface SurfaceConfig {
   token: string;
 }
 
+/**
+ * Where Remote consoles attach. The unix socket under the state directory
+ * always serves same-machine Remote consoles and needs no configuration; these
+ * values add the cross-machine listener, which exists only when `listen` is set.
+ */
+export interface RemoteConfig {
+  /** Bound address for cross-machine Remote consoles; null serves none. */
+  listen: string | null;
+  port: number;
+  /** Required whenever `listen` is set — it is the only admission check. */
+  token: string | null;
+  allowAnyAddress: boolean;
+}
+
 export interface ServerConfig {
   codex: string;
   debug: boolean;
@@ -152,6 +172,27 @@ export interface ServerConfig {
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
   surface: SurfaceConfig;
+  remote: RemoteConfig;
+}
+
+/**
+ * Tailscale's own ranges plus loopback. agentvoice adds no transport
+ * encryption of its own, so binding outside them puts the token — and the
+ * microphone it unlocks — on a network nothing is authenticating.
+ */
+export function isPrivateRemoteAddress(host: string): boolean {
+  const address = host.trim().toLowerCase();
+  if (address === "localhost" || address === "127.0.0.1" || address === "::1") return true;
+  const ipv4 = address.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (ipv4) {
+    const first = Number(ipv4[1]);
+    const second = Number(ipv4[2]);
+    if (first === 127) return true;
+    // Tailscale's CGNAT allocation, 100.64.0.0/10.
+    return first === 100 && second >= 64 && second <= 127;
+  }
+  // Tailscale's ULA allocation, fd7a:115c:a1e0::/48.
+  return address.startsWith("fd7a:115c:a1e0:");
 }
 
 export class ConfigError extends Error {}
@@ -247,6 +288,7 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
   surface: SURFACE_KEYS,
+  remote: REMOTE_KEYS,
 };
 
 /**
@@ -447,6 +489,8 @@ export function resolveConfig(
     cli.voice?.[key] ?? file.voice?.[key];
   const pickSurface = <K extends keyof SurfaceValues>(key: K): SurfaceValues[K] =>
     cli.surface?.[key] ?? file.surface?.[key];
+  const pickRemote = <K extends keyof RemoteValues>(key: K): RemoteValues[K] =>
+    cli.remote?.[key] ?? file.remote?.[key];
 
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
@@ -505,6 +549,26 @@ export function resolveConfig(
     extra: pickVoice("extra"),
   };
 
+  const listen = pickRemote("listen") ?? null;
+  const remoteToken = pickRemote("token") ?? null;
+  const allowAnyAddress = pickRemote("allow-any-address") ?? false;
+  if (listen !== null && remoteToken === null) {
+    throw new ConfigError(
+      `remote.listen serves Remote consoles on other machines, where file permissions are no longer the boundary; set remote.token too (generate one with \`openssl rand -hex 24\`)`,
+    );
+  }
+  if (listen !== null && !allowAnyAddress && !isPrivateRemoteAddress(listen)) {
+    throw new ConfigError(
+      `remote.listen "${listen}" is neither a Tailscale address (100.64.0.0/10, fd7a:115c:a1e0::/48) nor loopback; agentvoice adds no transport encryption of its own, so binding it would expose the token — print this machine's address with \`tailscale ip -4\`, or set remote.allow-any-address to override`,
+    );
+  }
+  const remote: RemoteConfig = {
+    listen,
+    port: pickRemote("port") ?? DEFAULT_REMOTE_PORT,
+    token: remoteToken,
+    allowAnyAddress,
+  };
+
   return {
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     debug: options.debug ?? false,
@@ -520,5 +584,6 @@ export function resolveConfig(
       socket: expandTilde(pickSurface("socket") ?? surfaceSocketPath(env, home), home),
       token: pickSurface("token") ?? "worker",
     },
+    remote,
   };
 }

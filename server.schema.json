@@ -229,6 +229,36 @@
       },
       "additionalProperties": false,
       "description": "The surface — the shared runtime where placed workers run in the open, per the orchestrator doctrine. herdr is the reference implementation; these keys wire its lifecycle events into orchestrator wakes."
+    },
+    "remote": {
+      "type": "object",
+      "properties": {
+        "listen": {
+          "type": "string",
+          "description": "Address the Console binds so Remote consoles on OTHER machines can attach (`agentvoice remote --host <this address>`). Print this machine's with `tailscale ip -4`. Must be a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48) or loopback unless `allow-any-address` is set — the tailnet is what supplies encryption and machine identity here. Default: unset, and only same-machine Remote consoles can attach.",
+          "default": null
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port for the network listener. Ignored unless `listen` is set.",
+          "default": 8473
+        },
+        "token": {
+          "type": "string",
+          "minLength": 16,
+          "description": "Shared secret a network Remote console presents to attach (`--token`, or $AGENTVOICE_REMOTE_TOKEN on the remote machine). Required whenever `listen` is set: crossing machines retires file permissions as the boundary, and this token grants microphone control. Generate one with `openssl rand -hex 24` and keep server.json 0600.",
+          "default": null
+        },
+        "allow-any-address": {
+          "type": "boolean",
+          "description": "Permit `listen` to bind an address outside the tailnet and loopback. Off by default because agentvoice adds no transport encryption of its own — turning this on exposes the token, and with it the microphone, to whatever network the address reaches.",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Where Remote consoles attach. The unix socket under the state directory always serves same-machine Remote consoles; these keys additionally serve them across machines over a tailnet."
     }
   },
   "additionalProperties": false

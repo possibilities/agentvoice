@@ -43,6 +43,11 @@ export const DEFAULT_REALTIME_VERSION: RealtimeVersion = "v3";
 
 export const DEFAULT_SWITCH_THRESHOLD = 95;
 
+export const DEFAULT_REMOTE_PORT = 8473;
+
+/** Short enough to guess is short enough to reject at load. */
+export const MINIMUM_REMOTE_TOKEN_LENGTH = 16;
+
 /** An object whose contents forward verbatim — never recursed or validated. */
 const passthrough = (description: string) => z.looseObject({}).describe(description);
 
@@ -282,6 +287,48 @@ export const surfaceValuesSchema = z
       "The surface — the shared runtime where placed workers run in the open, per the orchestrator doctrine. herdr is the reference implementation; these keys wire its lifecycle events into orchestrator wakes.",
   });
 
+export const remoteValuesSchema = z
+  .strictObject({
+    listen: z
+      .string()
+      .meta({
+        description:
+          "Address the Console binds so Remote consoles on OTHER machines can attach (`agentvoice remote --host <this address>`). Print this machine's with `tailscale ip -4`. Must be a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48) or loopback unless `allow-any-address` is set — the tailnet is what supplies encryption and machine identity here. Default: unset, and only same-machine Remote consoles can attach.",
+        default: null,
+      })
+      .optional(),
+    port: z
+      .int()
+      .min(1)
+      .max(65535)
+      .meta({
+        description: "Port for the network listener. Ignored unless `listen` is set.",
+        default: DEFAULT_REMOTE_PORT,
+      })
+      .optional(),
+    token: z
+      .string()
+      .min(MINIMUM_REMOTE_TOKEN_LENGTH)
+      .meta({
+        description:
+          "Shared secret a network Remote console presents to attach (`--token`, or $AGENTVOICE_REMOTE_TOKEN on the remote machine). Required whenever `listen` is set: crossing machines retires file permissions as the boundary, and this token grants microphone control. Generate one with `openssl rand -hex 24` and keep server.json 0600.",
+        default: null,
+      })
+      .optional(),
+    "allow-any-address": z
+      .boolean()
+      .meta({
+        description:
+          "Permit `listen` to bind an address outside the tailnet and loopback. Off by default because agentvoice adds no transport encryption of its own — turning this on exposes the token, and with it the microphone, to whatever network the address reaches.",
+        default: false,
+      })
+      .optional(),
+  })
+  .meta({
+    description:
+      "Where Remote consoles attach. The unix socket under the state directory always serves same-machine Remote consoles; these keys additionally serve them across machines over a tailnet.",
+  });
+
 const serverShape = {
   codex: z
     .string()
@@ -293,6 +340,7 @@ const serverShape = {
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
   surface: surfaceValuesSchema.optional(),
+  remote: remoteValuesSchema.optional(),
 };
 
 /** What the loader validates: `server.json` contents with `$schema` already stripped. */
@@ -311,6 +359,7 @@ export type AccountsValues = z.infer<typeof accountsValuesSchema>;
 export type OrchestratorValues = z.infer<typeof orchestratorValuesSchema>;
 export type VoiceValues = z.infer<typeof voiceValuesSchema>;
 export type SurfaceValues = z.infer<typeof surfaceValuesSchema>;
+export type RemoteValues = z.infer<typeof remoteValuesSchema>;
 export type ConfigValues = z.infer<typeof configValuesSchema>;
 
 export const SERVER_KEYS: ReadonlyArray<string> = Object.keys(serverShape);
@@ -318,3 +367,4 @@ export const ACCOUNTS_KEYS: ReadonlyArray<string> = Object.keys(accountsValuesSc
 export const ORCHESTRATOR_KEYS: ReadonlyArray<string> = Object.keys(orchestratorValuesSchema.shape);
 export const VOICE_KEYS: ReadonlyArray<string> = Object.keys(voiceValuesSchema.shape);
 export const SURFACE_KEYS: ReadonlyArray<string> = Object.keys(surfaceValuesSchema.shape);
+export const REMOTE_KEYS: ReadonlyArray<string> = Object.keys(remoteValuesSchema.shape);

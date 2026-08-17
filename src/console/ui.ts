@@ -108,6 +108,15 @@ export async function runConsole(
   let remoteSequence = 0;
   const remoteControl = new ClientControlServer({
     socketPath: consoleControlSocketPath(process.env, homedir()),
+    ...(config.remote.listen !== null && config.remote.token !== null
+      ? {
+          network: {
+            host: config.remote.listen,
+            port: config.remote.port,
+            token: config.remote.token,
+          },
+        }
+      : {}),
     state: () => ({
       type: "state",
       protocol: REMOTE_PROTOCOL_VERSION,
@@ -150,8 +159,12 @@ export async function runConsole(
     await remoteControl.start();
   } catch (error) {
     throw new ConsoleError(
-      `could not open the console control socket: ${error instanceof Error ? error.message : String(error)}`,
+      `could not open the Remote-console listeners: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+  const networkAddress = remoteControl.networkAddress();
+  if (networkAddress) {
+    console.log(`agentvoice: Remote consoles may attach at ${networkAddress}`);
   }
 
   // Runtime progress remains plain text until the alternate screen is ready.
@@ -194,6 +207,8 @@ export async function runConsole(
     onPhase: (next) => {
       phase = next;
       tui?.refresh();
+      // Phase is discrete: a Remote console should not wait out the meter tick.
+      remoteControl.publish();
     },
     onReady: () => tui?.refresh(),
     onRemoteTrack: (track) => audio.attachRemote(track),

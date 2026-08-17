@@ -17,6 +17,7 @@ function config(voiceName: string | undefined, model = "orchestrator-a"): Server
     },
     voice: { version: "v3", name: voiceName },
     surface: { events: false, socket: "/config/herdr.sock", token: "worker" },
+    remote: { listen: null, port: 8473, token: null, allowAnyAddress: false },
   };
 }
 

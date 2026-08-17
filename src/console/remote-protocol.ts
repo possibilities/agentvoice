@@ -1,6 +1,6 @@
 import type { TransportPhase } from "./transport.ts";
 
-export const REMOTE_PROTOCOL_VERSION = 6;
+export const REMOTE_PROTOCOL_VERSION = 7;
 
 export type RemoteAudioTarget = "mic" | "speaker";
 export type RemoteUnmuteInput = "pointer" | "key" | "space";
@@ -51,14 +51,44 @@ export interface FreshCommand {
   type: "fresh";
 }
 
+/**
+ * First frame on a network attachment. `protocol` is carried as a plain number
+ * rather than the pinned literal so a mismatched Remote console is told what
+ * happened instead of being dropped without a word.
+ */
+export interface HelloCommand {
+  type: "hello";
+  protocol: number;
+  token: string;
+}
+
+/**
+ * Liveness beat. A network peer that stops beating has its unmute holds
+ * released — a TCP close can lag a dead Remote console by minutes, and a
+ * stranded hold leaves the microphone open.
+ */
+export interface PingCommand {
+  type: "ping";
+}
+
 export type RemoteCommand =
   | SetMutedCommand
   | HoldUnmutedCommand
   | ReleaseUnmutedCommand
   | RedialCommand
-  | FreshCommand;
+  | FreshCommand
+  | HelloCommand
+  | PingCommand;
 
-export function encodeRemoteMessage(message: RemoteState | RemoteCommand): string {
+/** Refusal of a network attachment; the Remote console surfaces it and exits. */
+export interface RemoteReject {
+  type: "reject";
+  reason: string;
+}
+
+export type RemoteMessage = RemoteState | RemoteReject;
+
+export function encodeRemoteMessage(message: RemoteMessage | RemoteCommand): string {
   return `${JSON.stringify(message)}\n`;
 }
 
@@ -98,9 +128,22 @@ export function parseRemoteCommand(line: string): RemoteCommand | null {
       commit: value["commit"],
     };
   }
+  if (value?.["type"] === "hello") {
+    if (!Number.isSafeInteger(value["protocol"]) || typeof value["token"] !== "string") {
+      return null;
+    }
+    return { type: "hello", protocol: value["protocol"] as number, token: value["token"] };
+  }
+  if (value?.["type"] === "ping") return { type: "ping" };
   if (value?.["type"] === "redial") return { type: "redial" };
   if (value?.["type"] === "fresh") return { type: "fresh" };
   return null;
+}
+
+export function parseRemoteReject(line: string): RemoteReject | null {
+  const value = parseRecord(line);
+  if (value?.["type"] !== "reject" || typeof value["reason"] !== "string") return null;
+  return { type: "reject", reason: value["reason"] };
 }
 
 export function parseRemoteState(line: string): RemoteState | null {

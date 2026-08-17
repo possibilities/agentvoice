@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   encodeRemoteMessage,
   parseRemoteCommand,
+  parseRemoteReject,
   parseRemoteState,
   REMOTE_PROTOCOL_VERSION,
 } from "../src/console/remote-protocol.ts";
@@ -49,25 +50,51 @@ describe("remote protocol", () => {
   });
 
   test("rejects incompatible and out-of-range state", () => {
+    // Interpolated, not literal: a version bump must not silently turn these
+    // into version-mismatch cases and stop testing what they name.
+    const current = REMOTE_PROTOCOL_VERSION;
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":5,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        `{"type":"state","protocol":${current - 1},"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}`,
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":1},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        `{"type":"state","protocol":${current},"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":1},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}`,
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":-1,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        `{"type":"state","protocol":${current},"sequence":1,"phase":"live","liveForMs":-1,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}`,
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        `{"type":"state","protocol":${current},"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}`,
       ),
     ).toBeNull();
+  });
+
+  test("carries the network attachment's hello, beat, and refusal", () => {
+    // hello's protocol is a plain number so a mismatched Remote console can be
+    // told its version rather than dropped without a word.
+    expect(parseRemoteCommand('{"type":"hello","protocol":1,"token":"abc"}')).toEqual({
+      type: "hello",
+      protocol: 1,
+      token: "abc",
+    });
+    expect(parseRemoteCommand('{"type":"hello","protocol":7}')).toBeNull();
+    expect(parseRemoteCommand('{"type":"hello","token":"abc"}')).toBeNull();
+    expect(parseRemoteCommand('{"type":"hello","protocol":"7","token":"abc"}')).toBeNull();
+    expect(parseRemoteCommand('{"type":"ping"}')).toEqual({ type: "ping" });
+
+    const reject = { type: "reject" as const, reason: "token rejected" };
+    expect(parseRemoteReject(encodeRemoteMessage(reject).trim())).toEqual(reject);
+    expect(parseRemoteReject('{"type":"reject"}')).toBeNull();
+    expect(parseRemoteReject('{"type":"state"}')).toBeNull();
+    // The two directions never collide: a refusal is not a command, and a
+    // command is not a refusal.
+    expect(parseRemoteCommand(encodeRemoteMessage(reject).trim())).toBeNull();
+    expect(parseRemoteReject('{"type":"ping"}')).toBeNull();
   });
 });

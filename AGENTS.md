@@ -69,7 +69,10 @@ everything else belongs to exactly one layer.
   `native/` (the duplex audio device — the only audio path), `dsp.ts` (pure
   audio math, tested), `tui.ts` (the one OpenTUI instrument shared by both
   modes), `ui.ts` (the Console host), `remote-ui.ts` (the Remote-console host),
-  and the remaining `remote-*` files (their owner-only IPC)
+  and the remaining `remote-*` files (the control attachment: one JSON
+  protocol over an owner-only unix socket for same-machine Remote consoles and
+  an opt-in tailnet WebSocket, `remote.listen`, for other machines — see
+  `docs/adr/0003-*`)
 - `src/resident/` — the resident bundle: `contract.ts` (spawn contract,
   socket, account state file), `install.ts` (wrapper + LaunchAgent rendering,
   install/status/restart/uninstall, and the wrapper's per-spawn `pick-home`)
@@ -211,7 +214,8 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
   `resident.json` account state), `thread.json` (the persisted orchestrator
   threadId, resumed on attach), `workers.json` (the persisted worker
   registry, reconciled on attach), `console.sock` (owner-only IPC between the
-  console and Remote consoles — also the single-console lock),
+  console and same-machine Remote consoles — also the single-console lock, so
+  it stays bound even when `remote.listen` serves other machines too),
   `accounts/<slug>` (account profiles: a real `auth.json`, a private
   `app-server-control/`, and a symlink farm over shared canonical `~/.codex`
   state, reconciled at every pick).

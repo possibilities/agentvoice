@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { BoxRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { AUDIO_CONTROL_CLICK_MS, MuteGate } from "../src/console/audio-control.ts";
+import { ClientControlServer } from "../src/console/remote-control.ts";
 import {
   encodeRemoteMessage,
   parseRemoteCommand,
@@ -30,6 +31,51 @@ async function closeServer(server: Server, sockets: Set<Socket>): Promise<void> 
     server.close((error) => (error ? reject(error) : resolve()));
   });
 }
+
+describe("Remote console network attachment", () => {
+  test("says hello, mirrors the Console's state, and lands a command", async () => {
+    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+    const socketPath = join(tmpdir(), `av-remote-net-${process.pid}-${Date.now()}.sock`);
+    const token = "0123456789abcdef0123";
+    const received: string[] = [];
+    let sequence = 0;
+    const server = new ClientControlServer({
+      socketPath,
+      network: { host: "127.0.0.1", port: 0, token },
+      state: () => ({
+        type: "state",
+        protocol: REMOTE_PROTOCOL_VERSION,
+        sequence: sequence++,
+        phase: "live",
+        liveForMs: 4_250,
+        mic: { muted: true, effectiveMuted: true, db: -42.4 },
+        speaker: { muted: false, effectiveMuted: false, db: -18.7 },
+      }),
+      onCommand: (command) => received.push(command.type),
+    });
+    await server.start();
+    const [host, port] = server.networkAddress()!.split(":");
+    const remote = runRemote(
+      { host: host!, port: Number(port), token },
+      { createRenderer: async () => setup.renderer },
+    );
+
+    try {
+      // Nothing renders until hello clears: the Console sends no state first.
+      await setup.waitFor(() => setup.captureCharFrame().includes("● LIVE 00:04"));
+      expect(setup.captureCharFrame()).toContain("-42.4 dB");
+      expect(setup.captureCharFrame()).toContain("-18.7 dB");
+      setup.mockInput.pressKey("r");
+      await setup.waitFor(() => received.includes("redial"));
+      // The beat is not mistaken for an action.
+      expect(received).toEqual(["redial"]);
+    } finally {
+      setup.mockInput.pressKey("q");
+      await remote;
+      await server.close();
+    }
+  });
+});
 
 describe("Remote console shared TUI", () => {
   test("uses one full-height signal field across portrait, landscape, and shallow viewports", async () => {
