@@ -279,16 +279,35 @@ describe("Remote console layout", () => {
         { type: "release-unmuted", target: "speaker", input: "key", commit: true },
       ]);
 
-      // Kitty Space remains a dedicated, non-committing push-to-talk source.
+      // A long Space hold opens the muted microphone only until release.
       await setup.waitFor(() => setup.captureCharFrame().includes("YOU × MUTED"));
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
       await setup.waitFor(() => mic.holding);
+      clock += AUDIO_CONTROL_CLICK_MS + 1;
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:3u"));
       await setup.waitFor(() => mic.effectiveMuted);
       await expectCommands([
         { type: "hold-unmuted", target: "mic", input: "space" },
         { type: "release-unmuted", target: "mic", input: "space", commit: false },
       ]);
+
+      // A quick Space click commits the unmute like the pointer control.
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
+      await setup.waitFor(() => mic.holding);
+      clock += AUDIO_CONTROL_CLICK_MS;
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:3u"));
+      await setup.waitFor(() => !mic.muted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "mic", input: "space" },
+        { type: "release-unmuted", target: "mic", input: "space", commit: true },
+      ]);
+
+      // Space leaves a live microphone alone until release, then mutes it.
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
+      clock += AUDIO_CONTROL_CLICK_MS + 1;
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:3u"));
+      await setup.waitFor(() => mic.muted);
+      await expectCommands([{ type: "set-muted", target: "mic", muted: true }]);
     } finally {
       setup.mockInput.pressKey("q");
       await remote;

@@ -7,12 +7,12 @@ export type AudioControlKeyAction = {
   target: AudioTarget;
   action: "begin" | "renew" | "end" | "toggle";
 };
-export type PushToTalkKeyAction = "renew" | "end";
+export type SpaceControlKeyAction = "begin" | "renew" | "end";
 
 export const AUDIO_CONTROL_CLICK_MS = 250;
 
 // Printable keys need all-keys encoding for terminals to report both halves
-// of a press/release gesture, including the dedicated Space hold.
+// of a press/release gesture, including the Space microphone control.
 export const AUDIO_CONTROL_KITTY_KEYBOARD = {
   events: true,
   allKeysAsEscapes: true,
@@ -48,16 +48,17 @@ export function audioControlKeyAction(
   return null;
 }
 
-export function pushToTalkKeyAction(
+export function spaceControlKeyAction(
   key: ControlKey,
   paletteOpen: boolean,
-): PushToTalkKeyAction | null {
+): SpaceControlKeyAction | null {
   if (key.name !== "space" || key.source !== "kitty") return null;
   // A release must close an existing hold even if the palette opened while
   // Space was down; presses belong to the palette while it is modal.
   if (key.eventType === "release") return "end";
   if (paletteOpen) return null;
-  return key.eventType === "press" || key.eventType === "repeat" ? "renew" : null;
+  if (key.eventType === "press") return "begin";
+  return key.eventType === "repeat" ? "renew" : null;
 }
 
 export function releaseCommitsClick(startedAt: number, releasedAt: number): boolean {

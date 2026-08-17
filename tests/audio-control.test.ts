@@ -5,8 +5,8 @@ import {
   AUDIO_CONTROL_KITTY_KEYBOARD,
   audioControlKeyAction,
   MuteGate,
-  pushToTalkKeyAction,
   releaseCommitsClick,
+  spaceControlKeyAction,
 } from "../src/console/audio-control.ts";
 
 describe("audio-control keyboard input", () => {
@@ -36,21 +36,21 @@ describe("audio-control keyboard input", () => {
     ).toBeNull();
   });
 
-  test("keeps Space dedicated to push-to-talk", () => {
+  test("classifies Space as a release-capable microphone control", () => {
     expect(
-      pushToTalkKeyAction({ name: "space", source: "raw", eventType: "press" }, false),
+      spaceControlKeyAction({ name: "space", source: "raw", eventType: "press" }, false),
     ).toBeNull();
-    expect(pushToTalkKeyAction({ name: "space", source: "kitty", eventType: "press" }, false)).toBe(
-      "renew",
-    );
     expect(
-      pushToTalkKeyAction({ name: "space", source: "kitty", eventType: "repeat" }, false),
+      spaceControlKeyAction({ name: "space", source: "kitty", eventType: "press" }, false),
+    ).toBe("begin");
+    expect(
+      spaceControlKeyAction({ name: "space", source: "kitty", eventType: "repeat" }, false),
     ).toBe("renew");
     expect(
-      pushToTalkKeyAction({ name: "space", source: "kitty", eventType: "press" }, true),
+      spaceControlKeyAction({ name: "space", source: "kitty", eventType: "press" }, true),
     ).toBeNull();
     expect(
-      pushToTalkKeyAction({ name: "space", source: "kitty", eventType: "release" }, true),
+      spaceControlKeyAction({ name: "space", source: "kitty", eventType: "release" }, true),
     ).toBe("end");
   });
 

@@ -15,8 +15,8 @@ import {
   type AudioTarget,
   audioControlKeyAction,
   KEY_HOLD_LEASE_MS,
-  pushToTalkKeyAction,
   releaseCommitsClick,
+  spaceControlKeyAction,
 } from "./audio-control.ts";
 import {
   encodeRemoteMessage,
@@ -152,7 +152,12 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       lease: ReturnType<typeof setTimeout>;
     }
   >();
-  let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
+  let spaceGesture: {
+    startedAt: number;
+    startedMuted: boolean;
+    clickEligible: boolean;
+    lease: ReturnType<typeof setTimeout>;
+  } | null = null;
   let layoutWidth = 0;
   let layoutHeight = 0;
   const signalField = new SignalField({ seed: 0x2e6d_07e });
@@ -305,26 +310,43 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     }
   }
 
-  function renewKeyboardTalk(): void {
-    if (latest?.mic.muted !== true) return;
-    beginUnmute("mic", "space");
-    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
-    keyboardTalkLease = setTimeout(() => {
-      keyboardTalkLease = null;
-      releaseUnmute("mic", "space");
-    }, KEY_HOLD_LEASE_MS);
-    keyboardTalkLease.unref?.();
+  function renewSpaceControl(clickEligible: boolean): void {
+    if (spaceGesture) {
+      clearTimeout(spaceGesture.lease);
+      spaceGesture.lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
+      spaceGesture.lease.unref?.();
+      return;
+    }
+    const muted = persistentMuted("mic");
+    if (muted === null) return;
+    if (muted) beginUnmute("mic", "space");
+    const lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
+    lease.unref?.();
+    spaceGesture = {
+      startedAt: now(),
+      startedMuted: muted,
+      clickEligible,
+      lease,
+    };
   }
 
-  function endKeyboardTalk(): void {
-    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
-    keyboardTalkLease = null;
-    releaseUnmute("mic", "space");
+  function endSpaceControl(classifyClick = true): void {
+    const gesture = spaceGesture;
+    if (!gesture) return;
+    spaceGesture = null;
+    clearTimeout(gesture.lease);
+    if (gesture.startedMuted) {
+      const commit =
+        classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
+      releaseUnmute("mic", "space", commit);
+    } else if (classifyClick && gesture.clickEligible) {
+      setMuted("mic", true);
+    }
   }
 
   function clearInputs(): void {
-    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
-    keyboardTalkLease = null;
+    if (spaceGesture) clearTimeout(spaceGesture.lease);
+    spaceGesture = null;
     pointerGesture = null;
     for (const gesture of keyControlGestures.values()) clearTimeout(gesture.lease);
     keyControlGestures.clear();
@@ -348,10 +370,10 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     resolveDone();
   };
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
-    const talkAction = pushToTalkKeyAction(key, palette.isOpen());
+    const spaceAction = spaceControlKeyAction(key, palette.isOpen());
     const controlAction = audioControlKeyAction(key, palette.isOpen());
-    if (talkAction === "end") {
-      endKeyboardTalk();
+    if (spaceAction === "end") {
+      endSpaceControl();
       return;
     }
     if (controlAction?.action === "end") {
@@ -359,8 +381,8 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       return;
     }
     if (palette.handleKey(key)) return;
-    if (talkAction === "renew") {
-      renewKeyboardTalk();
+    if (spaceAction) {
+      renewSpaceControl(spaceAction === "begin");
       return;
     }
     if (controlAction) {
@@ -377,7 +399,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
   renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
-    if (pushToTalkKeyAction(key, palette.isOpen()) === "end") endKeyboardTalk();
+    if (spaceControlKeyAction(key, palette.isOpen()) === "end") endSpaceControl();
     const controlAction = audioControlKeyAction(key, palette.isOpen());
     if (controlAction?.action === "end") endControlKey(controlAction.target);
   });
