@@ -7,6 +7,7 @@ import {
   MuteGate,
   releaseCommitsClick,
   spaceControlKeyAction,
+  UnmuteHoldLabel,
 } from "../src/console/audio-control.ts";
 
 describe("audio-control keyboard input", () => {
@@ -57,6 +58,25 @@ describe("audio-control keyboard input", () => {
   test("classifies the click boundary without delaying the held state", () => {
     expect(releaseCommitsClick(10, 10 + AUDIO_CONTROL_CLICK_MS)).toBe(true);
     expect(releaseCommitsClick(10, 11 + AUDIO_CONTROL_CLICK_MS)).toBe(false);
+  });
+
+  test("keeps the muted label through the click window", () => {
+    const label = new UnmuteHoldLabel();
+
+    expect(label.state(true, true, 1_000)).toEqual({ muted: true, talking: false });
+    expect(label.state(true, false, 1_010)).toEqual({ muted: true, talking: false });
+    expect(label.state(true, false, 1_010 + AUDIO_CONTROL_CLICK_MS)).toEqual({
+      muted: true,
+      talking: false,
+    });
+    expect(label.state(true, false, 1_011 + AUDIO_CONTROL_CLICK_MS)).toEqual({
+      muted: false,
+      talking: true,
+    });
+    expect(label.state(false, false, 1_020 + AUDIO_CONTROL_CLICK_MS)).toEqual({
+      muted: false,
+      talking: false,
+    });
   });
 });
 

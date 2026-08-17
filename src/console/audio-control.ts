@@ -65,6 +65,29 @@ export function releaseCommitsClick(startedAt: number, releasedAt: number): bool
   return releasedAt - startedAt <= AUDIO_CONTROL_CLICK_MS;
 }
 
+export interface UnmuteHoldLabelState {
+  muted: boolean;
+  talking: boolean;
+}
+
+export class UnmuteHoldLabel {
+  private activeSince: number | null = null;
+
+  constructor(private readonly delayMs = AUDIO_CONTROL_CLICK_MS) {}
+
+  state(muted: boolean, effectiveMuted: boolean, now: number): UnmuteHoldLabelState {
+    const holdingOpen = muted && !effectiveMuted;
+    if (!holdingOpen) {
+      this.activeSince = null;
+      return { muted: effectiveMuted, talking: false };
+    }
+
+    this.activeSince ??= now;
+    const talking = now - this.activeSince > this.delayMs;
+    return { muted: !talking, talking };
+  }
+}
+
 export interface MuteState {
   /** The persistent mute assignment controlled by clicks and palette actions. */
   muted: boolean;

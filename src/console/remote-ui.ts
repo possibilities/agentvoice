@@ -17,6 +17,7 @@ import {
   KEY_HOLD_LEASE_MS,
   releaseCommitsClick,
   spaceControlKeyAction,
+  UnmuteHoldLabel,
 } from "./audio-control.ts";
 import {
   encodeRemoteMessage,
@@ -161,6 +162,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   let layoutWidth = 0;
   let layoutHeight = 0;
   const signalField = new SignalField({ seed: 0x2e6d_07e });
+  const micHoldLabel = new UnmuteHoldLabel();
 
   const paint = (): void => {
     if (closed) return;
@@ -408,7 +410,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     const viewportWidth = renderer.width || process.stdout.columns || 40;
     const viewportHeight = renderer.height || process.stdout.rows || 24;
     const micMuted = latest?.mic.effectiveMuted ?? false;
-    const micTalking = latest?.mic.muted === true && !micMuted;
+    const micLabel = micHoldLabel.state(latest?.mic.muted ?? false, micMuted, now());
     const agentMuted = latest?.speaker.effectiveMuted ?? false;
     signalField.step(deltaMs / 1000, {
       you: connected ? (latest?.mic.level ?? 0) : 0,
@@ -427,6 +429,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       agent: agentMuted,
     });
     const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
+    const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldCanvas.content = styledSignalField(frame, {
       faint: PALETTE.faint,
@@ -440,10 +443,10 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     const phase = latest?.phase;
     fieldLabels.content = remoteFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
-      micMuted,
-      micTalking,
+      micLabel.muted,
+      micLabel.talking,
       agentMuted,
-      youColor,
+      youLabelColor,
       agentColor,
       {
         text: connected

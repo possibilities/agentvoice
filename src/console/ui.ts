@@ -31,6 +31,7 @@ import {
   MuteGate,
   releaseCommitsClick,
   spaceControlKeyAction,
+  UnmuteHoldLabel,
   type UnmuteHoldSource,
 } from "./audio-control.ts";
 import { formatClock, levelFromDb } from "./dsp.ts";
@@ -216,6 +217,7 @@ export async function runConsole(
     lease: ReturnType<typeof setTimeout>;
   } | null = null;
   const signalField = new SignalField();
+  const micHoldLabel = new UnmuteHoldLabel();
   let phase: TransportPhase = "waiting-ready";
   let shuttingDown = false;
   let resolveDone: () => void;
@@ -497,15 +499,18 @@ export async function runConsole(
       ],
     });
 
-    const youMuted = microphone.effectiveMuted;
-    const youTalking = microphone.muted && !youMuted;
-    const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
+    const micLabel = micHoldLabel.state(
+      microphone.muted,
+      microphone.effectiveMuted,
+      performance.now(),
+    );
+    const youColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentMuted = speaker.effectiveMuted;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldLabels.content = styledFieldLabels(
       Math.max(1, fieldLabels.width),
-      youMuted,
-      youTalking,
+      micLabel.muted,
+      micLabel.talking,
       agentMuted,
       youColor,
       agentColor,
@@ -522,8 +527,9 @@ export async function runConsole(
     const viewportHeight = renderer.height || process.stdout.rows || 24;
 
     const youMuted = microphone.effectiveMuted;
-    const youTalking = microphone.muted && !youMuted;
     const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
+    const micLabel = micHoldLabel.state(microphone.muted, youMuted, performance.now());
+    const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentMuted = speaker.effectiveMuted;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     signalField.step(dt, {
@@ -550,10 +556,10 @@ export async function runConsole(
     });
     fieldLabels.content = styledFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
-      youMuted,
-      youTalking,
+      micLabel.muted,
+      micLabel.talking,
       agentMuted,
-      youColor,
+      youLabelColor,
       agentColor,
       "DUPLEX / 48 KHZ",
     );

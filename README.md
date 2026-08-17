@@ -336,8 +336,10 @@ The device is built from source and the console refuses to start without it —
   performs the ordinary toggle to muted. On YOU, the unmute hold is
   push-to-talk. Release-capable terminals give `m` and `s` the same behavior;
   `Space` gives the microphone the same quick-click toggle and held
-  push-to-talk behavior. Terminals without key-release reporting keep `m`/`s`
-  as ordinary toggles and leave `Space` inert rather than risk a stuck-open
+  push-to-talk behavior. The audio path opens immediately, but the YOU label
+  stays muted through the quick-click window and shows TALKING only for a
+  sustained hold. Terminals without key-release reporting keep `m`/`s` as
+  ordinary toggles and leave `Space` inert rather than risk a stuck-open
   microphone. `r` redials voice · `f` starts fresh · `q` quits.
 - **Redial** negotiates a fresh voice session against the same conversation
   while the old one keeps playing; audio swaps the moment the new session
@@ -376,8 +378,9 @@ how long it was held. On YOU, the unmute hold is push-to-talk; AGENT follows
 the same rule for playback. It is designed around a portrait terminal while
 still adapting to other sizes. On terminals with key-release reporting, `m`
 and `s` mirror the pointer behavior, while `Space` applies that behavior to
-the microphone; otherwise `m`/`s` remain toggles and `Space` stays inert. `q`
-exits.
+the microphone. The YOU label stays muted through the quick-click window and
+shows TALKING only for a sustained hold. Otherwise `m`/`s` remain toggles and
+`Space` stays inert. `q` exits.
 
 The Remote console connects to the voice console — not the resident — through
 `~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It

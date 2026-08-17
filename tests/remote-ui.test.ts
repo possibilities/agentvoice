@@ -205,8 +205,11 @@ describe("Remote console layout", () => {
       // A muted microphone opens immediately, then a long release restores mute.
       await setup.mockMouse.pressDown(leftX, y);
       await setup.waitFor(() => mic.holding);
-      await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("YOU × MUTED");
+      expect(setup.captureCharFrame()).not.toContain("TALKING");
       clock += AUDIO_CONTROL_CLICK_MS + 1;
+      await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
       await setup.mockMouse.release(rightX, y);
       await setup.waitFor(() => mic.effectiveMuted);
       await expectCommands([
@@ -217,9 +220,14 @@ describe("Remote console layout", () => {
       // A quick release commits that unmute persistently.
       await setup.mockMouse.pressDown(leftX, y);
       await setup.waitFor(() => mic.holding);
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("YOU × MUTED");
+      expect(setup.captureCharFrame()).not.toContain("TALKING");
       clock += AUDIO_CONTROL_CLICK_MS;
       await setup.mockMouse.release(leftX, y);
       await setup.waitFor(() => !mic.muted);
+      await setup.waitFor(() => setup.captureCharFrame().includes("YOU ▷ INPUT"));
+      expect(setup.captureCharFrame()).not.toContain("TALKING");
       await expectCommands([
         { type: "hold-unmuted", target: "mic", input: "pointer" },
         { type: "release-unmuted", target: "mic", input: "pointer", commit: true },
