@@ -87,7 +87,7 @@ describe("signal field", () => {
       const initialFrame = field.render(72, 9);
       const area = 72 * 9;
       const idleChars = new Set(signalFieldText(initialFrame).replaceAll("\n", ""));
-      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "╂", "┿"];
+      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "╂", "┿", "▕", "▏", "▁", "▔"];
       expect([...idleChars].every((char) => paperChars.includes(char))).toBe(true);
       expect(countTone(initialFrame, "you")).toBe(0);
       expect(countTone(initialFrame, "agent")).toBe(0);
@@ -198,6 +198,25 @@ describe("signal field", () => {
     expect(countTone(loud, "you")).toBeGreaterThan(0);
     expect(countTone(loud, "grid")).toBeGreaterThan(0);
     expect(countTone(loud, "grid")).toBeLessThan(countTone(idle, "grid"));
+  });
+
+  test("axes straddle the center boundary at even sizes, landing on the true pixel center", () => {
+    const field = new SignalField({ seed: 23 });
+    const even = field.render(60, 8);
+    expect(even.rows[1]?.[29]?.char).toBe("▕");
+    expect(even.rows[1]?.[30]?.char).toBe("▏");
+    expect(even.rows[3]?.[7]?.char).toBe("▁");
+    expect(even.rows[4]?.[7]?.char).toBe("▔");
+    expect(even.rows[3]?.[29]?.char).toBe("▕");
+    expect(even.rows[4]?.[30]?.char).toBe("▏");
+
+    const evenHeightOnly = field.render(61, 8);
+    expect(evenHeightOnly.rows[3]?.[30]?.char).toBe("┃");
+    expect(evenHeightOnly.rows[3]?.[7]?.char).toBe("▁");
+
+    const evenWidthOnly = field.render(60, 7);
+    expect(evenWidthOnly.rows[3]?.[29]?.char).toBe("━");
+    expect(evenWidthOnly.rows[2]?.[29]?.char).toBe("▕");
   });
 
   test("releases toward quiet instead of freezing the last loud frame", () => {

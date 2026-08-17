@@ -66,20 +66,45 @@ export const GRID_GLYPHS = {
   axisHorizontal: "━",
   axisVerticalCross: "╂",
   axisHorizontalCross: "┿",
+  /** Edge-eighth blocks, named by which cell of the straddling pair carries them. */
+  pairLeft: "▕",
+  pairRight: "▏",
+  pairUpper: "▁",
+  pairLower: "▔",
 } as const;
 
 /**
  * Graph-paper rules with heavy center axes — a plotting surface, anchored at
- * field center so the paper stays symmetric under the voices.
+ * field center so the paper stays symmetric under the voices. The axes land
+ * on the true pixel center of each dimension: an odd extent has a center cell
+ * (heavy box lines), an even one has a center boundary, straddled by two
+ * edge-eighth blocks meeting exactly on it. No glyph joins a straddled axis
+ * to a crossing line, so minor rules — and the other, cell-exact axis — pass
+ * under it with a gap, as ink drawn over the paper would.
  */
 export function gridGlyph(x: number, y: number, width: number, height: number): string | undefined {
   const centerX = Math.floor((width - 1) / 2);
   const centerY = Math.floor((height - 1) / 2);
+  const evenWidth = width % 2 === 0;
+  const evenHeight = height % 2 === 0;
+  const onAxisColumn = x === centerX || (evenWidth && x === centerX + 1);
+  const onAxisRow = y === centerY || (evenHeight && y === centerY + 1);
   const onColumn = (x - centerX) % GRID_COLUMNS === 0;
   const onRow = (y - centerY) % GRID_ROWS === 0;
-  if (x === centerX && y === centerY) return GRID_GLYPHS.origin;
-  if (x === centerX) return onRow ? GRID_GLYPHS.axisVerticalCross : GRID_GLYPHS.axisVertical;
-  if (y === centerY) return onColumn ? GRID_GLYPHS.axisHorizontalCross : GRID_GLYPHS.axisHorizontal;
+  if (onAxisColumn && onAxisRow) {
+    if (!evenWidth && !evenHeight) return GRID_GLYPHS.origin;
+    if (!evenWidth) return GRID_GLYPHS.axisVertical;
+    if (!evenHeight) return GRID_GLYPHS.axisHorizontal;
+    return x === centerX ? GRID_GLYPHS.pairLeft : GRID_GLYPHS.pairRight;
+  }
+  if (onAxisColumn) {
+    if (evenWidth) return x === centerX ? GRID_GLYPHS.pairLeft : GRID_GLYPHS.pairRight;
+    return onRow ? GRID_GLYPHS.axisVerticalCross : GRID_GLYPHS.axisVertical;
+  }
+  if (onAxisRow) {
+    if (evenHeight) return y === centerY ? GRID_GLYPHS.pairUpper : GRID_GLYPHS.pairLower;
+    return onColumn ? GRID_GLYPHS.axisHorizontalCross : GRID_GLYPHS.axisHorizontal;
+  }
   if (onColumn && onRow) return GRID_GLYPHS.cross;
   if (onColumn) return GRID_GLYPHS.vertical;
   if (onRow) return GRID_GLYPHS.horizontal;
