@@ -32,11 +32,8 @@ import type { TransportPhase } from "./transport.ts";
 
 const PALETTE = VOICE_TONES;
 
-/** The instrument text starts near-opaque and settles mostly transparent after a few idle seconds. */
-const OVERLAY_ALPHA_ACTIVE = 0.88;
-const OVERLAY_ALPHA_IDLE = 0.32;
-const OVERLAY_FADE_AFTER_MS = 4_000;
-const OVERLAY_FADE_RATE = 3;
+/** The instrument text renders translucent over the field — fixed, never fading. */
+const OVERLAY_ALPHA = 0.75;
 
 export type VoiceTuiInput = "pointer" | "key" | "space";
 
@@ -99,8 +96,8 @@ export async function createVoiceTui(
     height: "100%",
     flexDirection: "column",
     backgroundColor: PALETTE.bg,
-    onMouseUp: () => endPointerControl(),
-    onMouseDragEnd: () => endPointerControl(),
+    onMouseUp: () => endPushToTalk(),
+    onMouseDragEnd: () => endPushToTalk(),
   });
   renderer.root.add(root);
 
@@ -113,8 +110,9 @@ export async function createVoiceTui(
   });
   root.add(main);
 
-  // Three invisible touch zones tile the whole field: the bottom band is
-  // push-to-talk (a mic hold), everything above splits mic-left/speaker-right.
+  // Three touch zones tile the whole field, one function each: the bottom
+  // band holds the mic open (push-to-talk, never a toggle), everything above
+  // splits into the mic and speaker mute toggles.
   const rails = new BoxRenderable(renderer, {
     id: "voice-rails",
     width: "100%",
@@ -126,14 +124,14 @@ export async function createVoiceTui(
     onMouseDown: (event) => {
       const height = Math.max(1, rails.height);
       if (event.y >= rails.y + height - pttRowCount(height)) {
-        beginPointerControl("mic");
+        beginPushToTalk();
         return;
       }
       const middle = rails.x + rails.width / 2;
-      beginPointerControl(event.x < middle ? "mic" : "speaker");
+      toggle(event.x < middle ? "mic" : "speaker");
     },
-    onMouseUp: () => endPointerControl(),
-    onMouseDragEnd: () => endPointerControl(),
+    onMouseUp: () => endPushToTalk(),
+    onMouseDragEnd: () => endPushToTalk(),
   });
   const fieldCanvas = new TextRenderable(renderer, {
     id: "voice-field-canvas",
@@ -165,11 +163,7 @@ export async function createVoiceTui(
   );
   renderer.root.add(palette.root);
 
-  let pointerGesture: {
-    target: AudioTarget;
-    startedAt: number;
-    startedMuted: boolean;
-  } | null = null;
+  let pttHeld = false;
   const keyControlGestures = new Map<
     AudioTarget,
     {
@@ -188,9 +182,6 @@ export async function createVoiceTui(
   let layoutWidth = 0;
   let layoutHeight = 0;
   let pulse = 0;
-  let overlayAlpha = OVERLAY_ALPHA_ACTIVE;
-  let lastActivityAt = now();
-  let lastPhase: TransportPhase | null = null;
   let closed = false;
   let shutdownPromise: Promise<void> | null = null;
   const signalField = new SignalField();
@@ -242,10 +233,6 @@ export async function createVoiceTui(
     renderer.requestRender();
   }
 
-  function touchOverlay(): void {
-    lastActivityAt = now();
-  }
-
   function persistentMuted(target: AudioTarget): boolean | null {
     const state = host.state();
     if (!state.available) return null;
@@ -253,33 +240,25 @@ export async function createVoiceTui(
   }
 
   function toggle(target: AudioTarget): void {
-    touchOverlay();
     const muted = persistentMuted(target);
     if (muted === null) return;
     host.setMuted(target, !muted);
     refresh();
   }
 
-  function beginPointerControl(target: AudioTarget): void {
-    touchOverlay();
-    if (pointerGesture) endPointerControl(false);
-    const muted = persistentMuted(target);
-    if (muted === null) return;
-    pointerGesture = { target, startedAt: now(), startedMuted: muted };
-    if (muted) host.beginUnmute(target, "pointer");
+  /** The push-to-talk band only holds a muted mic open; release never commits a toggle. */
+  function beginPushToTalk(): void {
+    if (pttHeld) return;
+    if (persistentMuted("mic") !== true) return;
+    pttHeld = true;
+    host.beginUnmute("mic", "pointer");
     refresh();
   }
 
-  function endPointerControl(classifyClick = true): void {
-    const gesture = pointerGesture;
-    if (!gesture) return;
-    pointerGesture = null;
-    if (gesture.startedMuted) {
-      const commit = classifyClick && releaseCommitsClick(gesture.startedAt, now());
-      host.releaseUnmute(gesture.target, "pointer", commit);
-    } else if (classifyClick) {
-      host.setMuted(gesture.target, true);
-    }
+  function endPushToTalk(): void {
+    if (!pttHeld) return;
+    pttHeld = false;
+    host.releaseUnmute("mic", "pointer", false);
     refresh();
   }
 
@@ -358,7 +337,7 @@ export async function createVoiceTui(
 
   function cancelInputs(): void {
     if (spaceGesture) endSpaceControl(false);
-    if (pointerGesture) endPointerControl(false);
+    endPushToTalk();
     for (const target of [...keyControlGestures.keys()]) endControlKey(target, false);
   }
 
@@ -391,23 +370,13 @@ export async function createVoiceTui(
     const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
     const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
-    if (state.phase !== lastPhase) {
-      lastPhase = state.phase;
-      touchOverlay();
-    }
-    if (pointerGesture !== null || spaceGesture !== null || keyControlGestures.size > 0) {
-      lastActivityAt = now();
-    }
-    const alphaTarget =
-      now() - lastActivityAt < OVERLAY_FADE_AFTER_MS ? OVERLAY_ALPHA_ACTIVE : OVERLAY_ALPHA_IDLE;
-    overlayAlpha += (alphaTarget - overlayAlpha) * (1 - Math.exp(-OVERLAY_FADE_RATE * dt));
     const runs = instrumentRuns(
       fieldSize.width,
       fieldSize.height,
       signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
       { muted: micLabel.muted, talking: micLabel.talking, color: youLabelColor, db: state.mic.db },
       { muted: agentMuted, color: agentColor, db: state.speaker.db },
-    ).map((run) => ({ ...run, color: mixHex(PALETTE.panel, run.color, overlayAlpha) }));
+    ).map((run) => ({ ...run, color: mixHex(PALETTE.panel, run.color, OVERLAY_ALPHA) }));
     fieldCanvas.content = styledInstrumentField(
       frame,
       { faint: PALETTE.faint, dim: PALETTE.dim, you: youColor, agent: agentColor },
@@ -438,7 +407,6 @@ export async function createVoiceTui(
   };
 
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
-    touchOverlay();
     const spaceAction = spaceControlKeyAction(key, palette.isOpen());
     const controlAction = audioControlKeyAction(key, palette.isOpen());
     if (spaceAction === "end") {

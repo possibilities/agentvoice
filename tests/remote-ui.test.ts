@@ -237,61 +237,46 @@ describe("Remote console shared TUI", () => {
       const rightX = target.x + target.width - 2;
       const y = target.y + Math.max(1, Math.floor(target.height / 2));
 
-      // A muted microphone opens immediately, then a long release restores mute.
+      // The mic button is a plain toggle: the press flips mute, release does nothing.
       await setup.mockMouse.pressDown(leftX, y);
+      await setup.waitFor(() => !mic.muted);
+      await setup.mockMouse.release(leftX, y);
+      await expectCommands([{ type: "set-muted", target: "mic", muted: false }]);
+      await setup.waitFor(() => setup.captureCharFrame().includes("YOU \u25b7 INPUT"));
+
+      await setup.mockMouse.pressDown(leftX, y);
+      await setup.waitFor(() => mic.muted);
+      await setup.mockMouse.release(leftX, y);
+      await expectCommands([{ type: "set-muted", target: "mic", muted: true }]);
+
+      // The speaker button toggles the same way, one function per button.
+      await setup.mockMouse.pressDown(rightX, y);
+      await setup.waitFor(() => speaker.muted);
+      await setup.mockMouse.release(rightX, y);
+      await expectCommands([{ type: "set-muted", target: "speaker", muted: true }]);
+
+      // The bottom band holds the muted mic open; a long release never commits.
+      const pttY = target.y + target.height - 2;
+      await setup.mockMouse.pressDown(leftX, pttY);
       await setup.waitFor(() => mic.holding);
-      await setup.renderOnce();
-      expect(setup.captureCharFrame()).toContain("YOU × MUTED");
-      expect(setup.captureCharFrame()).not.toContain("TALKING");
       clock += AUDIO_CONTROL_CLICK_MS + 1;
       await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
-      await setup.mockMouse.release(rightX, y);
+      await setup.mockMouse.release(leftX, pttY);
       await setup.waitFor(() => mic.effectiveMuted);
       await expectCommands([
         { type: "hold-unmuted", target: "mic", input: "pointer" },
         { type: "release-unmuted", target: "mic", input: "pointer", commit: false },
       ]);
 
-      // A quick release commits that unmute persistently.
-      await setup.mockMouse.pressDown(leftX, y);
+      // Even a quick tap on push-to-talk stays a hold, never a toggle.
+      await setup.mockMouse.pressDown(leftX, pttY);
       await setup.waitFor(() => mic.holding);
-      await setup.renderOnce();
-      expect(setup.captureCharFrame()).toContain("YOU × MUTED");
-      expect(setup.captureCharFrame()).not.toContain("TALKING");
       clock += AUDIO_CONTROL_CLICK_MS;
-      await setup.mockMouse.release(leftX, y);
-      await setup.waitFor(() => !mic.muted);
-      await setup.waitFor(() => setup.captureCharFrame().includes("YOU ▷ INPUT"));
-      expect(setup.captureCharFrame()).not.toContain("TALKING");
+      await setup.mockMouse.release(leftX, pttY);
+      await setup.waitFor(() => mic.effectiveMuted);
       await expectCommands([
         { type: "hold-unmuted", target: "mic", input: "pointer" },
-        { type: "release-unmuted", target: "mic", input: "pointer", commit: true },
-      ]);
-
-      // A live microphone stays live while pressed and toggles only on release.
-      await setup.mockMouse.pressDown(leftX, y);
-      clock += AUDIO_CONTROL_CLICK_MS + 1;
-      await setup.mockMouse.release(leftX, y);
-      await setup.waitFor(() => mic.muted);
-      await expectCommands([{ type: "set-muted", target: "mic", muted: true }]);
-
-      // The live speaker follows the same release-toggle behavior.
-      await setup.mockMouse.pressDown(rightX, y);
-      clock += AUDIO_CONTROL_CLICK_MS + 1;
-      await setup.mockMouse.release(rightX, y);
-      await setup.waitFor(() => speaker.muted);
-      await expectCommands([{ type: "set-muted", target: "speaker", muted: true }]);
-
-      // A muted speaker can be held open without changing its assignment.
-      await setup.mockMouse.pressDown(rightX, y);
-      await setup.waitFor(() => speaker.holding);
-      await setup.waitFor(() => setup.captureCharFrame().includes("OUTPUT"));
-      clock += AUDIO_CONTROL_CLICK_MS + 1;
-      await setup.mockMouse.release(rightX, y);
-      await setup.waitFor(() => speaker.effectiveMuted);
-      await expectCommands([
-        { type: "hold-unmuted", target: "speaker", input: "pointer" },
-        { type: "release-unmuted", target: "speaker", input: "pointer", commit: false },
+        { type: "release-unmuted", target: "mic", input: "pointer", commit: false },
       ]);
 
       // Kitty M mirrors muted click and live release-toggle behavior.

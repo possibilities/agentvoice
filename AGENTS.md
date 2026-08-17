@@ -194,8 +194,8 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
   `useLiteralKeys` is off).
 - Full-screen TUIs are chromeless: no header or footer rows. Critical
   signals (phase, timer, mode) float over the full-bleed signal field as a
-  fading overlay — status top-center, each voice's label and readout over
-  its outlined touch zone, push-to-talk over the bottom band — and every
+  translucent overlay — status top-center, each voice's label and readout
+  over its outlined touch zone, push-to-talk over the bottom band — and every
   action lives in the ctrl+k command palette (`src/tui/palette.ts`: type to
   filter, enter to run, rows tappable), which is also the key reference.
   Direct hotkeys stay bound while it is closed; ctrl+c always falls

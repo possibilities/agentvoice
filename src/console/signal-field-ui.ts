@@ -159,7 +159,7 @@ export function instrumentRuns(
   }
 
   const boxTop = 1;
-  const boxBottom = pttTop - 2;
+  const boxBottom = pttTop - 1;
   runs.push(...outlineRuns(0, boxTop, center - 1, boxBottom, VOICE_TONES.youDim));
   runs.push(...outlineRuns(center + 1, boxTop, width - 1, boxBottom, VOICE_TONES.agentDim));
   runs.push(...outlineRuns(0, pttTop, width - 1, height - 1, VOICE_TONES.faint));
