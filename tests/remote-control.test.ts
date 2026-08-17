@@ -23,8 +23,9 @@ describe("Remote console control server", () => {
         protocol: REMOTE_PROTOCOL_VERSION,
         sequence: 0,
         phase: "live",
-        mic: { muted: true, effectiveMuted: true, level: 0 },
-        speaker: { muted: false, effectiveMuted: false, level: 0 },
+        liveForMs: 0,
+        mic: { muted: true, effectiveMuted: true, db: null },
+        speaker: { muted: false, effectiveMuted: false, db: null },
       }),
       onCommand: (command, peer) => {
         if (command.type !== "hold-unmuted") return;

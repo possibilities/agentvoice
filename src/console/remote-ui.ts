@@ -19,6 +19,7 @@ import {
   spaceControlKeyAction,
   UnmuteHoldLabel,
 } from "./audio-control.ts";
+import { levelFromDb } from "./dsp.ts";
 import {
   encodeRemoteMessage,
   parseRemoteState,
@@ -29,9 +30,12 @@ import { SignalField } from "./signal-field.ts";
 import {
   boundedViewportExtent,
   boundedViewportSize,
+  signalFieldStatus,
   styledSignalField,
+  styledSignalLabels,
+  styledSignalReadout,
 } from "./signal-field-ui.ts";
-import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
+import { VOICE_TONES } from "./theme.ts";
 
 const RECONNECT_MS = 750;
 const PALETTE = VOICE_TONES;
@@ -163,6 +167,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   let layoutHeight = 0;
   const signalField = new SignalField({ seed: 0x2e6d_07e });
   const micHoldLabel = new UnmuteHoldLabel();
+  let pulse = 0;
 
   const paint = (): void => {
     if (closed) return;
@@ -406,15 +411,19 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     if (controlAction?.action === "end") endControlKey(controlAction.target);
   });
   const frameCallback = async (deltaMs: number): Promise<void> => {
+    const dt = deltaMs / 1000;
+    pulse += dt;
     if (renderer.width !== layoutWidth || renderer.height !== layoutHeight) paint();
     const viewportWidth = renderer.width || process.stdout.columns || 40;
     const viewportHeight = renderer.height || process.stdout.rows || 24;
+    const micDb = latest?.mic.db ?? -Infinity;
+    const agentDb = latest?.speaker.db ?? -Infinity;
     const micMuted = latest?.mic.effectiveMuted ?? false;
     const micLabel = micHoldLabel.state(latest?.mic.muted ?? false, micMuted, now());
     const agentMuted = latest?.speaker.effectiveMuted ?? false;
-    signalField.step(deltaMs / 1000, {
-      you: connected ? (latest?.mic.level ?? 0) : 0,
-      agent: connected ? (latest?.speaker.level ?? 0) : 0,
+    signalField.step(dt, {
+      you: connected ? levelFromDb(micDb) : 0,
+      agent: connected ? levelFromDb(agentDb) : 0,
       youMuted: micMuted,
       agentMuted,
     });
@@ -437,30 +446,22 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       you: youColor,
       agent: agentColor,
     });
-    // The former masthead signal lives in the signal panel: connection
-    // phase centered on the label row, dropped before it can collide
-    // with the rails.
-    const phase = latest?.phase;
-    fieldLabels.content = remoteFieldLabels(
+    const phase = latest?.phase ?? "waiting-ready";
+    fieldLabels.content = styledSignalLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
       micLabel.muted,
       micLabel.talking,
       agentMuted,
       youLabelColor,
       agentColor,
-      {
-        text: connected
-          ? `${phase === "live" ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${phaseLabel(phase)}`
-          : `${SIGNAL_GLYPHS.idle} WAITING`,
-        color: phase === "live" ? PALETTE.ok : connected ? PALETTE.warn : PALETTE.dim,
-      },
     );
-    fieldReadout.content = remoteFieldReadout(
+    fieldReadout.content = styledSignalReadout(
       boundedViewportExtent(fieldReadout.width, viewportWidth),
-      latest?.mic.level ?? 0,
-      latest?.speaker.level ?? 0,
+      micDb,
+      agentDb,
       youColor,
       agentColor,
+      signalFieldStatus(phase, latest?.liveForMs ?? null, renderer.width, pulse),
     );
   };
   renderer.setFrameCallback(frameCallback);
@@ -468,69 +469,4 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   paint();
   connect();
   await done;
-}
-
-function phaseLabel(phase: RemoteState["phase"] | undefined): string {
-  if (phase === "live") return "LIVE";
-  if (phase === "failed") return "FAILED";
-  if (phase === "negotiating") return "CONNECT";
-  return "WAITING";
-}
-
-function remoteFieldLabels(
-  width: number,
-  youMuted: boolean,
-  youTalking: boolean,
-  agentMuted: boolean,
-  youColor: string,
-  agentColor: string,
-  status?: { text: string; color: string },
-): StyledText {
-  const left =
-    width < 30
-      ? `YOU ${youTalking ? SIGNAL_GLYPHS.live : "▷"}`
-      : `YOU ${youTalking ? `${SIGNAL_GLYPHS.live} TALKING` : youMuted ? "× MUTED" : "▷ INPUT"}`;
-  const right = width < 30 ? "◁ AGT" : `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
-  const availableRight = Math.max(0, width - Math.min(left.length, width) - 1);
-  const clippedRight = right.slice(Math.max(0, right.length - availableRight));
-  const clippedLeft = left.slice(0, Math.max(0, width - clippedRight.length - 1));
-  const spare = Math.max(1, width - clippedLeft.length - clippedRight.length);
-  const center = status !== undefined && spare >= status.text.length + 4 ? status : undefined;
-  if (center === undefined) {
-    return new StyledText([
-      bold(fg(youColor)(clippedLeft)),
-      fg(PALETTE.faint)(" ".repeat(spare)),
-      bold(fg(agentColor)(clippedRight)),
-    ]);
-  }
-  const before = Math.max(1, Math.floor((width - center.text.length) / 2) - clippedLeft.length);
-  const after = Math.max(1, spare - before - center.text.length);
-  return new StyledText([
-    bold(fg(youColor)(clippedLeft)),
-    fg(PALETTE.faint)(" ".repeat(before)),
-    fg(center.color)(center.text),
-    fg(PALETTE.faint)(" ".repeat(after)),
-    bold(fg(agentColor)(clippedRight)),
-  ]);
-}
-
-function remoteFieldReadout(
-  width: number,
-  you: number,
-  agent: number,
-  youColor: string,
-  agentColor: string,
-): StyledText {
-  const left = `${Math.round(you * 100)
-    .toString()
-    .padStart(3)}%`;
-  const right = `${Math.round(agent * 100)
-    .toString()
-    .padStart(3)}%`;
-  const spare = Math.max(1, width - left.length - right.length);
-  return new StyledText([
-    fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(spare)),
-    fg(agentColor)(right),
-  ]);
 }

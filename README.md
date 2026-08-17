@@ -382,13 +382,14 @@ the microphone. The YOU label stays muted through the quick-click window and
 shows TALKING only for a sustained hold. Otherwise `m`/`s` remain toggles and
 `Space` stays inert. `q` exits.
 
-The Remote console connects to the voice console — not the resident — through
+The Remote console connects to the Console — not the resident — through
 `~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It
-carries only normalized levels, persistent and effective mute state,
-connection phase, and source-owned unmute holds. Audio stays on the console's
-machine and needs no SSH forwarding; for the intended setup, that machine's
-Bluetooth audio remains the listening path. The Remote console waits and
-reconnects automatically when the voice console is not running or restarts.
+carries only dB signal readings, persistent and effective mute state,
+voice-session phase and elapsed time, and source-owned unmute holds. Its label
+and readout rows mirror the Console; audio stays on the Console's machine and
+needs no SSH forwarding. For the intended setup, that machine's Bluetooth
+audio remains the listening path. The Remote console waits and reconnects
+automatically when the Console is not running or restarts.
 
 ## State on disk
 

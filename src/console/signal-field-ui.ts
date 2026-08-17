@@ -1,10 +1,30 @@
-import { bg, fg, StyledText, type TextChunk } from "@opentui/core";
+import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
+import { formatClock } from "./dsp.ts";
 import {
   type SignalFieldFrame,
   type SignalFieldTone,
   signalFieldWashColor,
 } from "./signal-field.ts";
-import { VOICE_TONES } from "./theme.ts";
+import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
+import type { TransportPhase } from "./transport.ts";
+
+const PHASE_LABEL: Record<TransportPhase, string> = {
+  "waiting-ready": "WAITING FOR AGENT",
+  negotiating: "NEGOTIATING VOICE",
+  live: "LIVE",
+  failed: "FAILED · R REDIAL",
+  stopped: "STOPPED",
+};
+
+const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
+  "waiting-ready": "WAITING",
+  negotiating: "NEGOTIATE",
+  live: "LIVE",
+  failed: "FAILED",
+  stopped: "STOPPED",
+};
+
+const SIGNAL_MODE = "DUPLEX / 48 KHZ";
 
 export interface SignalFieldColors {
   faint: string;
@@ -18,6 +38,11 @@ export interface SignalFieldColors {
 export interface ViewportSize {
   width: number;
   height: number;
+}
+
+export interface SignalFieldStatus {
+  text: string;
+  color: string;
 }
 
 /** OpenTUI geometry may be transiently invalid while an over-constrained layout resizes. */
@@ -37,6 +62,97 @@ export function boundedViewportExtent(value: number, viewportExtent: number): nu
   const limit = Number.isFinite(viewportExtent) ? Math.max(1, Math.floor(viewportExtent)) : 1;
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(limit, Math.floor(value)));
+}
+
+export function signalFieldStatus(
+  phase: TransportPhase,
+  liveForMs: number | null,
+  width: number,
+  pulse: number,
+): SignalFieldStatus {
+  const busy = phase === "waiting-ready" || phase === "negotiating";
+  const dotOn = !busy || Math.sin(pulse * 6) > 0;
+  const color =
+    phase === "live"
+      ? VOICE_TONES.ok
+      : phase === "failed"
+        ? VOICE_TONES.err
+        : busy
+          ? VOICE_TONES.warn
+          : VOICE_TONES.dim;
+  const label = width < 64 ? COMPACT_PHASE_LABEL[phase] : PHASE_LABEL[phase];
+  return {
+    text: `${dotOn ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${label}${liveForMs === null ? "" : ` ${formatClock(liveForMs)}`}`,
+    color,
+  };
+}
+
+export function styledSignalLabels(
+  width: number,
+  youMuted: boolean,
+  youTalking: boolean,
+  agentMuted: boolean,
+  youColor: string,
+  agentColor: string,
+): StyledText {
+  const left = `YOU ${youTalking ? `${SIGNAL_GLYPHS.live} TALKING` : youMuted ? "× MUTED" : "▷ INPUT"}`;
+  const right = `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
+  const clippedRight = right.slice(
+    Math.max(0, right.length - Math.max(0, width - left.length - 1)),
+  );
+  const clippedLeft = left.slice(0, Math.max(0, width - 1));
+  const spare = Math.max(1, width - Math.min(left.length, width - 1) - clippedRight.length);
+  const center = spare >= SIGNAL_MODE.length + 4 ? SIGNAL_MODE : "";
+  if (center.length === 0) {
+    return new StyledText([
+      bold(fg(youColor)(clippedLeft)),
+      fg(VOICE_TONES.faint)(" ".repeat(spare)),
+      bold(fg(agentColor)(clippedRight)),
+    ]);
+  }
+  const before = Math.max(1, Math.floor((width - center.length) / 2) - clippedLeft.length);
+  const after = Math.max(1, spare - before - center.length);
+  return new StyledText([
+    bold(fg(youColor)(clippedLeft)),
+    fg(VOICE_TONES.faint)(" ".repeat(before)),
+    fg(VOICE_TONES.dim)(center),
+    fg(VOICE_TONES.faint)(" ".repeat(after)),
+    bold(fg(agentColor)(clippedRight)),
+  ]);
+}
+
+export function styledSignalReadout(
+  width: number,
+  youDb: number,
+  agentDb: number,
+  youColor: string,
+  agentColor: string,
+  status: SignalFieldStatus,
+): StyledText {
+  const left = dbText(youDb);
+  const right = dbText(agentDb);
+  const spare = Math.max(1, width - left.length - right.length);
+  const center = spare >= status.text.length + 4 ? status : undefined;
+  if (center === undefined) {
+    return new StyledText([
+      fg(youColor)(left),
+      fg(VOICE_TONES.faint)(" ".repeat(spare)),
+      fg(agentColor)(right),
+    ]);
+  }
+  const before = Math.max(1, Math.floor((width - center.text.length) / 2) - left.length);
+  const after = Math.max(1, spare - before - center.text.length);
+  return new StyledText([
+    fg(youColor)(left),
+    fg(VOICE_TONES.faint)(" ".repeat(before)),
+    fg(center.color)(center.text),
+    fg(VOICE_TONES.faint)(" ".repeat(after)),
+    fg(agentColor)(right),
+  ]);
+}
+
+function dbText(db: number): string {
+  return Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
 }
 
 /** Coalesce adjacent cells with one (tone, wash) pair to keep OpenTUI chunk counts bounded. */

@@ -68,6 +68,7 @@ describe("Remote console layout", () => {
         setup.renderer.width === width &&
         main instanceof BoxRenderable &&
         main.y === 0 &&
+        main.width === width &&
         main.height === height
       );
     };
@@ -89,17 +90,33 @@ describe("Remote console layout", () => {
       await setup.renderOnce();
       await setup.renderOnce();
       expect(setup.captureCharFrame()).toContain("WAITING");
+      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("-∞  dB");
       expectFieldFillsMain(46);
       expectFieldWithin(49, 46);
       const palette = setup.renderer.root.findDescendantById("remote-palette");
       expect(palette).toBeInstanceOf(BoxRenderable);
       expect((palette as BoxRenderable).visible).toBe(false);
 
-      setup.resize(103, 19);
-      await setup.waitFor(() => settled(103, 19));
+      setup.resize(120, 19);
+      await setup.waitFor(() => settled(120, 19));
       expect(box("remote-rails").height).toBeGreaterThanOrEqual(7);
       expectFieldFillsMain(19);
-      expectFieldWithin(103, 19);
+      expectFieldWithin(120, 19);
+      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+
+      setup.resize(80, 19);
+      await setup.waitFor(() => settled(80, 19));
+      expectFieldFillsMain(19);
+      expectFieldWithin(80, 19);
+      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+
+      setup.resize(40, 19);
+      await setup.waitFor(() => settled(40, 19));
+      expectFieldFillsMain(19);
+      expectFieldWithin(40, 19);
+      expect(setup.captureCharFrame()).not.toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("WAITING");
 
       setup.resize(103, 7);
       await setup.waitFor(() => settled(103, 7));
@@ -147,11 +164,12 @@ describe("Remote console layout", () => {
             protocol: REMOTE_PROTOCOL_VERSION,
             sequence: sequence++,
             phase: "live",
-            mic: { muted: mic.muted, effectiveMuted: mic.effectiveMuted, level: 0 },
+            liveForMs: 4_250,
+            mic: { muted: mic.muted, effectiveMuted: mic.effectiveMuted, db: -42.4 },
             speaker: {
               muted: speaker.muted,
               effectiveMuted: speaker.effectiveMuted,
-              level: 0,
+              db: -18.7,
             },
           }),
         );
@@ -195,6 +213,11 @@ describe("Remote console layout", () => {
       );
       await setup.renderOnce();
       await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
+      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("-42.4 dB");
+      expect(setup.captureCharFrame()).toContain("● LIVE 00:04");
+      expect(setup.captureCharFrame()).toContain("-18.7 dB");
+      expect(setup.captureCharFrame()).not.toContain("%");
       const rails = setup.renderer.root.findDescendantById("remote-rails");
       expect(rails).toBeInstanceOf(BoxRenderable);
       const target = rails as BoxRenderable;

@@ -1,6 +1,6 @@
 import type { TransportPhase } from "./transport.ts";
 
-export const REMOTE_PROTOCOL_VERSION = 4;
+export const REMOTE_PROTOCOL_VERSION = 5;
 
 export type RemoteAudioTarget = "mic" | "speaker";
 export type RemoteUnmuteInput = "pointer" | "key" | "space";
@@ -10,7 +10,8 @@ export interface RemoteChannelState {
   muted: boolean;
   /** The assignment currently applied after active unmute holds. */
   effectiveMuted: boolean;
-  level: number;
+  /** RMS in dBFS; null represents digital silence. */
+  db: number | null;
 }
 
 export interface RemoteState {
@@ -18,6 +19,7 @@ export interface RemoteState {
   protocol: typeof REMOTE_PROTOCOL_VERSION;
   sequence: number;
   phase: TransportPhase;
+  liveForMs: number | null;
   mic: RemoteChannelState;
   speaker: RemoteChannelState;
 }
@@ -92,7 +94,8 @@ export function parseRemoteState(line: string): RemoteState | null {
     value?.["type"] !== "state" ||
     value["protocol"] !== REMOTE_PROTOCOL_VERSION ||
     !Number.isSafeInteger(value["sequence"]) ||
-    !isPhase(value["phase"])
+    !isPhase(value["phase"]) ||
+    !isLiveDuration(value["liveForMs"])
   ) {
     return null;
   }
@@ -104,6 +107,7 @@ export function parseRemoteState(line: string): RemoteState | null {
     protocol: REMOTE_PROTOCOL_VERSION,
     sequence: value["sequence"] as number,
     phase: value["phase"],
+    liveForMs: value["liveForMs"] as number | null,
     mic,
     speaker,
   };
@@ -126,18 +130,23 @@ function parseChannel(value: unknown): RemoteChannelState | null {
   if (
     typeof channel["muted"] !== "boolean" ||
     typeof channel["effectiveMuted"] !== "boolean" ||
-    typeof channel["level"] !== "number"
+    !isDb(channel["db"])
   ) {
-    return null;
-  }
-  if (!Number.isFinite(channel["level"]) || channel["level"] < 0 || channel["level"] > 1) {
     return null;
   }
   return {
     muted: channel["muted"],
     effectiveMuted: channel["effectiveMuted"],
-    level: channel["level"],
+    db: channel["db"] as number | null,
   };
+}
+
+function isDb(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value <= 0);
+}
+
+function isLiveDuration(value: unknown): value is number | null {
+  return value === null || (Number.isSafeInteger(value) && (value as number) >= 0);
 }
 
 function isAudioTarget(value: unknown): value is RemoteAudioTarget {

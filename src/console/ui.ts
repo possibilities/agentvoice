@@ -34,7 +34,7 @@ import {
   UnmuteHoldLabel,
   type UnmuteHoldSource,
 } from "./audio-control.ts";
-import { formatClock, levelFromDb } from "./dsp.ts";
+import { levelFromDb } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer, type RemoteControlPeer } from "./remote-control.ts";
@@ -43,9 +43,12 @@ import { SignalField } from "./signal-field.ts";
 import {
   boundedViewportExtent,
   boundedViewportSize,
+  signalFieldStatus,
   styledSignalField,
+  styledSignalLabels,
+  styledSignalReadout,
 } from "./signal-field-ui.ts";
-import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
+import { VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
 
 export interface ConsoleOptions {
@@ -60,22 +63,6 @@ export class ConsoleError extends Error {}
 
 const PALETTE = VOICE_TONES;
 
-const PHASE_LABEL: Record<TransportPhase, string> = {
-  "waiting-ready": "WAITING FOR AGENT",
-  negotiating: "NEGOTIATING VOICE",
-  live: "LIVE",
-  failed: "FAILED · R REDIAL",
-  stopped: "STOPPED",
-};
-
-const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
-  "waiting-ready": "WAITING",
-  negotiating: "NEGOTIATE",
-  live: "LIVE",
-  failed: "FAILED",
-  stopped: "STOPPED",
-};
-
 interface Meter {
   db: number;
 }
@@ -88,75 +75,6 @@ const REMOTE_UNMUTE_INPUTS = [
 
 function remoteUnmuteSource(peer: RemoteControlPeer, input: RemoteUnmuteInput): string {
   return `remote:${peer.id}:${input}`;
-}
-
-function styledFieldLabels(
-  width: number,
-  youMuted: boolean,
-  youTalking: boolean,
-  agentMuted: boolean,
-  youColor: string,
-  agentColor: string,
-  mode = "",
-): StyledText {
-  const left = `YOU ${youTalking ? `${SIGNAL_GLYPHS.live} TALKING` : youMuted ? "× MUTED" : "▷ INPUT"}`;
-  const right = `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
-  const clippedRight = right.slice(
-    Math.max(0, right.length - Math.max(0, width - left.length - 1)),
-  );
-  const clippedLeft = left.slice(0, Math.max(0, width - 1));
-  const spare = Math.max(1, width - Math.min(left.length, width - 1) - clippedRight.length);
-  const center = mode.length > 0 && spare >= mode.length + 4 ? mode : "";
-  if (center.length === 0) {
-    return new StyledText([
-      bold(fg(youColor)(clippedLeft)),
-      fg(PALETTE.faint)(" ".repeat(spare)),
-      bold(fg(agentColor)(clippedRight)),
-    ]);
-  }
-  const before = Math.max(1, Math.floor((width - center.length) / 2) - clippedLeft.length);
-  const after = Math.max(1, spare - before - center.length);
-  return new StyledText([
-    bold(fg(youColor)(clippedLeft)),
-    fg(PALETTE.faint)(" ".repeat(before)),
-    fg(PALETTE.dim)(center),
-    fg(PALETTE.faint)(" ".repeat(after)),
-    bold(fg(agentColor)(clippedRight)),
-  ]);
-}
-
-function styledFieldReadout(
-  width: number,
-  youDb: number,
-  agentDb: number,
-  youColor: string,
-  agentColor: string,
-  status?: { text: string; color: string },
-): StyledText {
-  const left = dbText(youDb);
-  const right = dbText(agentDb);
-  const spare = Math.max(1, width - left.length - right.length);
-  const center = status !== undefined && spare >= status.text.length + 4 ? status : undefined;
-  if (center === undefined) {
-    return new StyledText([
-      fg(youColor)(left),
-      fg(PALETTE.faint)(" ".repeat(spare)),
-      fg(agentColor)(right),
-    ]);
-  }
-  const before = Math.max(1, Math.floor((width - center.text.length) / 2) - left.length);
-  const after = Math.max(1, spare - before - center.text.length);
-  return new StyledText([
-    fg(youColor)(left),
-    fg(PALETTE.faint)(" ".repeat(before)),
-    fg(center.color)(center.text),
-    fg(PALETTE.faint)(" ".repeat(after)),
-    fg(agentColor)(right),
-  ]);
-}
-
-function dbText(db: number): string {
-  return Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
 }
 
 export async function runConsole(
@@ -219,6 +137,7 @@ export async function runConsole(
   const signalField = new SignalField();
   const micHoldLabel = new UnmuteHoldLabel();
   let phase: TransportPhase = "waiting-ready";
+  let transportForRemote: VoiceTransport | null = null;
   let shuttingDown = false;
   let resolveDone: () => void;
   const done = new Promise<void>((resolve) => {
@@ -257,15 +176,16 @@ export async function runConsole(
       protocol: REMOTE_PROTOCOL_VERSION,
       sequence: remoteSequence++,
       phase,
+      liveForMs: transportForRemote?.liveForMs ?? null,
       mic: {
         muted: microphone.muted,
         effectiveMuted: microphone.effectiveMuted,
-        level: levelFromDb(mic.db),
+        db: Number.isFinite(mic.db) ? mic.db : null,
       },
       speaker: {
         muted: speaker.muted,
         effectiveMuted: speaker.effectiveMuted,
-        level: levelFromDb(agent.db),
+        db: Number.isFinite(agent.db) ? agent.db : null,
       },
     }),
     onCommand: (command, peer) => {
@@ -375,6 +295,7 @@ export async function runConsole(
     onInfo: (line) => feed(line),
     onError: (line) => feed(line, PALETTE.err),
   });
+  transportForRemote = transport;
 
   // ---- UI -----------------------------------------------------------------
   const renderer: CliRenderer = await createCliRenderer({
@@ -507,14 +428,13 @@ export async function runConsole(
     const youColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentMuted = speaker.effectiveMuted;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
-    fieldLabels.content = styledFieldLabels(
+    fieldLabels.content = styledSignalLabels(
       Math.max(1, fieldLabels.width),
       micLabel.muted,
       micLabel.talking,
       agentMuted,
       youColor,
       agentColor,
-      "DUPLEX / 48 KHZ",
     );
   }
 
@@ -554,39 +474,24 @@ export async function runConsole(
       you: youColor,
       agent: agentColor,
     });
-    fieldLabels.content = styledFieldLabels(
+    fieldLabels.content = styledSignalLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
       micLabel.muted,
       micLabel.talking,
       agentMuted,
       youLabelColor,
       agentColor,
-      "DUPLEX / 48 KHZ",
     );
     // With no masthead, the phase and live timer read out from the signal
     // panel itself — the one region already repainting every frame.
-    const busy = phase === "waiting-ready" || phase === "negotiating";
-    const dotOn = !busy || Math.sin(pulse * 6) > 0;
-    const color =
-      phase === "live"
-        ? PALETTE.ok
-        : phase === "failed"
-          ? PALETTE.err
-          : busy
-            ? PALETTE.warn
-            : PALETTE.dim;
-    const phaseLabel = renderer.width < 64 ? COMPACT_PHASE_LABEL[phase] : PHASE_LABEL[phase];
-    const live = transport.liveForMs;
-    fieldReadout.content = styledFieldReadout(
+    const status = signalFieldStatus(phase, transport.liveForMs, renderer.width, pulse);
+    fieldReadout.content = styledSignalReadout(
       boundedViewportExtent(fieldReadout.width, viewportWidth),
       mic.db,
       agent.db,
       youColor,
       agentColor,
-      {
-        text: `${dotOn ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${phaseLabel}${live !== null ? ` ${formatClock(live)}` : ""}`,
-        color,
-      },
+      status,
     );
   };
 

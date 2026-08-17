@@ -57,9 +57,10 @@ working directory), "scratch directory".
 **Remote console** — The phone-sized terminal control surface started with
 `agentvoice remote` after SSHing into the console's machine. It attaches to
 the console through owner-only local IPC (`console.sock`) and carries mute
-state, persistent assignments, source-owned unmute holds, and normalized
-activity levels—never audio. _Avoid_: "remote client" (the console remains
-the sole media peer), "phone app".
+state, persistent assignments, source-owned unmute holds, dB signal readings,
+and voice-session status—never audio. Its signal labels and readout mirror the
+Console. _Avoid_: "remote client" (the console remains the sole media peer),
+"phone app".
 
 **Duplex audio device** — The console's client-owned miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw
