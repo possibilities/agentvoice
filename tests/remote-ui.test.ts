@@ -123,7 +123,7 @@ describe("Remote console layout", () => {
     }
   });
 
-  test("clicks persist and holds restore both signal-field channels", async () => {
+  test("holds only unmute while live presses toggle on release", async () => {
     const setup = await createTestRenderer({
       width: 49,
       height: 28,
@@ -169,8 +169,8 @@ describe("Remote console layout", () => {
           commands.push(command);
           const gate = command.target === "mic" ? mic : speaker;
           if (command.type === "set-muted") gate.setMuted(command.muted);
-          else if (command.type === "hold-muted") gate.hold(command.input, command.muted);
-          else gate.release(command.input, command.commit);
+          else if (command.type === "hold-unmuted") gate.beginUnmute(command.input);
+          else gate.releaseUnmute(command.input, command.commit);
           sendState();
         }
       });
@@ -182,8 +182,12 @@ describe("Remote console layout", () => {
       now: () => clock,
     });
 
-    const count = (type: RemoteCommand["type"]): number =>
-      commands.filter((command) => command.type === type).length;
+    let commandCursor = 0;
+    const expectCommands = async (expected: RemoteCommand[]): Promise<void> => {
+      await setup.waitFor(() => commands.length >= commandCursor + expected.length);
+      expect(commands.slice(commandCursor)).toEqual(expected);
+      commandCursor += expected.length;
+    };
 
     try {
       await setup.waitFor(
@@ -198,115 +202,93 @@ describe("Remote console layout", () => {
       const rightX = target.x + target.width - 2;
       const y = target.y + Math.max(1, Math.floor(target.height / 2));
 
-      // A microphone hold opens immediately and restores the mute assignment.
+      // A muted microphone opens immediately, then a long release restores mute.
       await setup.mockMouse.pressDown(leftX, y);
-      await setup.waitFor(() => count("hold-muted") === 1);
+      await setup.waitFor(() => mic.holding);
       await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
       clock += AUDIO_CONTROL_CLICK_MS + 1;
       await setup.mockMouse.release(rightX, y);
-      await setup.waitFor(() => count("release-muted") === 1);
-      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
-      expect(commands.slice(0, 2)).toEqual([
-        { type: "hold-muted", target: "mic", input: "pointer", muted: false },
-        { type: "release-muted", target: "mic", input: "pointer", commit: false },
+      await setup.waitFor(() => mic.effectiveMuted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "mic", input: "pointer" },
+        { type: "release-unmuted", target: "mic", input: "pointer", commit: false },
       ]);
 
-      // A quick microphone click commits the same open state persistently.
+      // A quick release commits that unmute persistently.
       await setup.mockMouse.pressDown(leftX, y);
-      await setup.waitFor(() => count("hold-muted") === 2);
+      await setup.waitFor(() => mic.holding);
       clock += AUDIO_CONTROL_CLICK_MS;
       await setup.mockMouse.release(leftX, y);
-      await setup.waitFor(() => count("release-muted") === 2);
-      await setup.waitFor(() => setup.captureCharFrame().includes("INPUT"));
-      expect(mic.state()).toEqual({ muted: false, holding: false, effectiveMuted: false });
+      await setup.waitFor(() => !mic.muted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "mic", input: "pointer" },
+        { type: "release-unmuted", target: "mic", input: "pointer", commit: true },
+      ]);
 
-      // Holding the live microphone closes it, then restores it on release.
+      // A live microphone stays live while pressed and toggles only on release.
       await setup.mockMouse.pressDown(leftX, y);
-      await setup.waitFor(() => count("hold-muted") === 3);
-      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
       clock += AUDIO_CONTROL_CLICK_MS + 1;
       await setup.mockMouse.release(leftX, y);
-      await setup.waitFor(() => count("release-muted") === 3);
-      await setup.waitFor(() => setup.captureCharFrame().includes("INPUT"));
-      expect(mic.muted).toBe(false);
+      await setup.waitFor(() => mic.muted);
+      await expectCommands([{ type: "set-muted", target: "mic", muted: true }]);
 
-      // The speaker half follows the same click-versus-hold contract.
+      // The live speaker follows the same release-toggle behavior.
       await setup.mockMouse.pressDown(rightX, y);
-      await setup.waitFor(() => count("hold-muted") === 4);
-      clock += AUDIO_CONTROL_CLICK_MS;
+      clock += AUDIO_CONTROL_CLICK_MS + 1;
       await setup.mockMouse.release(rightX, y);
-      await setup.waitFor(() => count("release-muted") === 4);
-      expect(speaker.state()).toEqual({ muted: true, holding: false, effectiveMuted: true });
+      await setup.waitFor(() => speaker.muted);
+      await expectCommands([{ type: "set-muted", target: "speaker", muted: true }]);
+
+      // A muted speaker can be held open without changing its assignment.
       await setup.mockMouse.pressDown(rightX, y);
-      await setup.waitFor(() => count("hold-muted") === 5);
+      await setup.waitFor(() => speaker.holding);
       await setup.waitFor(() => setup.captureCharFrame().includes("OUTPUT"));
       clock += AUDIO_CONTROL_CLICK_MS + 1;
       await setup.mockMouse.release(rightX, y);
-      await setup.waitFor(() => count("release-muted") === 5);
-      expect(speaker.state()).toEqual({ muted: true, holding: false, effectiveMuted: true });
+      await setup.waitFor(() => speaker.effectiveMuted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "speaker", input: "pointer" },
+        { type: "release-unmuted", target: "speaker", input: "pointer", commit: false },
+      ]);
 
-      // Kitty M and S use the same click-versus-hold contract as the field.
+      // Kitty M mirrors muted click and live release-toggle behavior.
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[109;1:1u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) =>
-            command.type === "hold-muted" &&
-            command.target === "mic" &&
-            command.input === "key" &&
-            command.muted,
-        ),
-      );
+      await setup.waitFor(() => mic.holding);
       clock += AUDIO_CONTROL_CLICK_MS;
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[109;1:3u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) =>
-            command.type === "release-muted" &&
-            command.target === "mic" &&
-            command.input === "key" &&
-            command.commit,
-        ),
-      );
-      expect(mic.state()).toEqual({ muted: true, holding: false, effectiveMuted: true });
+      await setup.waitFor(() => !mic.muted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "mic", input: "key" },
+        { type: "release-unmuted", target: "mic", input: "key", commit: true },
+      ]);
 
-      setup.renderer.stdin.emit("data", Buffer.from("\x1b[115;1:1u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) =>
-            command.type === "hold-muted" &&
-            command.target === "speaker" &&
-            command.input === "key" &&
-            !command.muted,
-        ),
-      );
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[109;1:1u"));
       clock += AUDIO_CONTROL_CLICK_MS + 1;
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[109;1:3u"));
+      await setup.waitFor(() => mic.muted);
+      await expectCommands([{ type: "set-muted", target: "mic", muted: true }]);
+
+      // Kitty S can likewise commit an unmute with a quick release.
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[115;1:1u"));
+      await setup.waitFor(() => speaker.holding);
+      clock += AUDIO_CONTROL_CLICK_MS;
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[115;1:3u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) =>
-            command.type === "release-muted" &&
-            command.target === "speaker" &&
-            command.input === "key" &&
-            !command.commit,
-        ),
-      );
-      expect(speaker.state()).toEqual({ muted: true, holding: false, effectiveMuted: true });
+      await setup.waitFor(() => !speaker.muted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "speaker", input: "key" },
+        { type: "release-unmuted", target: "speaker", input: "key", commit: true },
+      ]);
 
       // Kitty Space remains a dedicated, non-committing push-to-talk source.
       await setup.waitFor(() => setup.captureCharFrame().includes("YOU × MUTED"));
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) => command.type === "hold-muted" && command.input === "space" && !command.muted,
-        ),
-      );
+      await setup.waitFor(() => mic.holding);
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:3u"));
-      await setup.waitFor(() =>
-        commands.some(
-          (command) =>
-            command.type === "release-muted" && command.input === "space" && !command.commit,
-        ),
-      );
+      await setup.waitFor(() => mic.effectiveMuted);
+      await expectCommands([
+        { type: "hold-unmuted", target: "mic", input: "space" },
+        { type: "release-unmuted", target: "mic", input: "space", commit: false },
+      ]);
     } finally {
       setup.mockInput.pressKey("q");
       await remote;

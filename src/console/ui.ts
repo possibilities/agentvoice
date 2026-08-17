@@ -28,15 +28,15 @@ import {
   audioControlKeyAction,
   KEY_HOLD_LEASE_MS,
   MuteGate,
-  type MuteHoldSource,
   pushToTalkKeyAction,
   releaseCommitsClick,
+  type UnmuteHoldSource,
 } from "./audio-control.ts";
 import { formatClock, levelFromDb } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer, type RemoteControlPeer } from "./remote-control.ts";
-import { REMOTE_PROTOCOL_VERSION, type RemoteHoldInput } from "./remote-protocol.ts";
+import { REMOTE_PROTOCOL_VERSION, type RemoteUnmuteInput } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
   boundedViewportExtent,
@@ -78,13 +78,13 @@ interface Meter {
   db: number;
 }
 
-const REMOTE_HOLD_INPUTS = [
+const REMOTE_UNMUTE_INPUTS = [
   "pointer",
   "key",
   "space",
-] as const satisfies readonly RemoteHoldInput[];
+] as const satisfies readonly RemoteUnmuteInput[];
 
-function remoteHoldSource(peer: RemoteControlPeer, input: RemoteHoldInput): string {
+function remoteUnmuteSource(peer: RemoteControlPeer, input: RemoteUnmuteInput): string {
   return `remote:${peer.id}:${input}`;
 }
 
@@ -194,10 +194,19 @@ export async function runConsole(
     mic: Symbol("console-mic-key"),
     speaker: Symbol("console-speaker-key"),
   };
-  let pointerGesture: { target: AudioTarget; startedAt: number } | null = null;
+  let pointerGesture: {
+    target: AudioTarget;
+    startedAt: number;
+    startedMuted: boolean;
+  } | null = null;
   const keyControlGestures = new Map<
     AudioTarget,
-    { startedAt: number; clickEligible: boolean; lease: ReturnType<typeof setTimeout> }
+    {
+      startedAt: number;
+      startedMuted: boolean;
+      clickEligible: boolean;
+      lease: ReturnType<typeof setTimeout>;
+    }
   >();
   let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
   const signalField = new SignalField();
@@ -254,17 +263,17 @@ export async function runConsole(
     onCommand: (command, peer) => {
       if (command.type === "set-muted") {
         setMuted(command.target, command.muted);
-      } else if (command.type === "hold-muted") {
-        holdMuted(command.target, remoteHoldSource(peer, command.input), command.muted);
+      } else if (command.type === "hold-unmuted") {
+        beginUnmute(command.target, remoteUnmuteSource(peer, command.input));
       } else {
-        releaseMuted(command.target, remoteHoldSource(peer, command.input), command.commit);
+        releaseUnmute(command.target, remoteUnmuteSource(peer, command.input), command.commit);
       }
     },
     onPeerClose: (peer) => {
-      for (const input of REMOTE_HOLD_INPUTS) {
-        const source = remoteHoldSource(peer, input);
-        releaseMuted("mic", source);
-        releaseMuted("speaker", source);
+      for (const input of REMOTE_UNMUTE_INPUTS) {
+        const source = remoteUnmuteSource(peer, input);
+        releaseUnmute("mic", source);
+        releaseUnmute("speaker", source);
       }
     },
   });
@@ -457,13 +466,13 @@ export async function runConsole(
         {
           id: "mic",
           key: "M",
-          label: `mic — ${microphone.muted ? "unmute · hold M/Space" : "mute · hold M"}`,
+          label: `mic — ${microphone.muted ? "unmute · hold M/Space" : "mute on release"}`,
           onRun: toggleMic,
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker — ${speaker.muted ? "unmute" : "mute"} · hold S`,
+          label: `speaker — ${speaker.muted ? "unmute · hold S" : "mute on release"}`,
           onRun: toggleSpeaker,
         },
         {
@@ -582,11 +591,11 @@ export async function runConsole(
   function setMuted(target: AudioTarget, muted: boolean): void {
     publishMuteChange(target, muteGate(target).setMuted(muted));
   }
-  function holdMuted(target: AudioTarget, source: MuteHoldSource, muted: boolean): void {
-    publishMuteChange(target, muteGate(target).hold(source, muted));
+  function beginUnmute(target: AudioTarget, source: UnmuteHoldSource): void {
+    publishMuteChange(target, muteGate(target).beginUnmute(source));
   }
-  function releaseMuted(target: AudioTarget, source: MuteHoldSource, commit = false): void {
-    publishMuteChange(target, muteGate(target).release(source, commit));
+  function releaseUnmute(target: AudioTarget, source: UnmuteHoldSource, commit = false): void {
+    publishMuteChange(target, muteGate(target).releaseUnmute(source, commit));
   }
   function publishMuteChange(target: AudioTarget, changed: boolean): void {
     if (!changed) return;
@@ -604,16 +613,21 @@ export async function runConsole(
 
   function beginPointerControl(target: AudioTarget): void {
     if (pointerGesture) endPointerControl(false);
-    pointerGesture = { target, startedAt: performance.now() };
-    holdMuted(target, pointerControl, !muteGate(target).muted);
+    const startedMuted = muteGate(target).muted;
+    pointerGesture = { target, startedAt: performance.now(), startedMuted };
+    if (startedMuted) beginUnmute(target, pointerControl);
   }
 
   function endPointerControl(classifyClick = true): void {
     const gesture = pointerGesture;
     if (!gesture) return;
     pointerGesture = null;
-    const commit = classifyClick && releaseCommitsClick(gesture.startedAt, performance.now());
-    releaseMuted(gesture.target, pointerControl, commit);
+    if (gesture.startedMuted) {
+      const commit = classifyClick && releaseCommitsClick(gesture.startedAt, performance.now());
+      releaseUnmute(gesture.target, pointerControl, commit);
+    } else if (classifyClick) {
+      setMuted(gesture.target, true);
+    }
   }
 
   function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
@@ -624,11 +638,13 @@ export async function runConsole(
       existing.lease.unref?.();
       return;
     }
-    holdMuted(target, keyControlSources[target], !muteGate(target).muted);
+    const startedMuted = muteGate(target).muted;
+    if (startedMuted) beginUnmute(target, keyControlSources[target]);
     const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
     lease.unref?.();
     keyControlGestures.set(target, {
       startedAt: performance.now(),
+      startedMuted,
       clickEligible,
       lease,
     });
@@ -639,20 +655,24 @@ export async function runConsole(
     if (!gesture) return;
     keyControlGestures.delete(target);
     clearTimeout(gesture.lease);
-    const commit =
-      classifyClick &&
-      gesture.clickEligible &&
-      releaseCommitsClick(gesture.startedAt, performance.now());
-    releaseMuted(target, keyControlSources[target], commit);
+    if (gesture.startedMuted) {
+      const commit =
+        classifyClick &&
+        gesture.clickEligible &&
+        releaseCommitsClick(gesture.startedAt, performance.now());
+      releaseUnmute(target, keyControlSources[target], commit);
+    } else if (classifyClick && gesture.clickEligible) {
+      setMuted(target, true);
+    }
   }
 
   function renewKeyboardTalk(): void {
     if (!microphone.muted) return;
-    holdMuted("mic", keyboardTalk, false);
+    beginUnmute("mic", keyboardTalk);
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = setTimeout(() => {
       keyboardTalkLease = null;
-      releaseMuted("mic", keyboardTalk);
+      releaseUnmute("mic", keyboardTalk);
     }, KEY_HOLD_LEASE_MS);
     keyboardTalkLease.unref?.();
   }
@@ -660,7 +680,7 @@ export async function runConsole(
   function endKeyboardTalk(): void {
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
-    releaseMuted("mic", keyboardTalk);
+    releaseUnmute("mic", keyboardTalk);
   }
 
   async function shutdown(): Promise<void> {

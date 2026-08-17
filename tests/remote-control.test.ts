@@ -6,7 +6,7 @@ import { ClientControlServer, type RemoteControlPeer } from "../src/console/remo
 import { encodeRemoteMessage, REMOTE_PROTOCOL_VERSION } from "../src/console/remote-protocol.ts";
 
 describe("Remote console control server", () => {
-  test("identifies a mute-hold source and releases it when the peer disconnects", async () => {
+  test("identifies an unmute-hold source and releases it when the peer disconnects", async () => {
     const socketPath = join(tmpdir(), `av-control-${process.pid}-${Date.now()}.sock`);
     let resolveCommand!: (peer: RemoteControlPeer) => void;
     let resolveClose!: (peer: RemoteControlPeer) => void;
@@ -27,7 +27,7 @@ describe("Remote console control server", () => {
         speaker: { muted: false, effectiveMuted: false, level: 0 },
       }),
       onCommand: (command, peer) => {
-        if (command.type !== "hold-muted" || command.muted) return;
+        if (command.type !== "hold-unmuted") return;
         resolveCommand(peer);
       },
       onPeerClose: resolveClose,
@@ -42,10 +42,9 @@ describe("Remote console control server", () => {
       });
       socket.write(
         encodeRemoteMessage({
-          type: "hold-muted",
+          type: "hold-unmuted",
           target: "mic",
           input: "pointer",
-          muted: false,
         }),
       );
       const commandPeer = await commandReceived;

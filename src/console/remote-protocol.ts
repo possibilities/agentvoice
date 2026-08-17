@@ -1,14 +1,14 @@
 import type { TransportPhase } from "./transport.ts";
 
-export const REMOTE_PROTOCOL_VERSION = 3;
+export const REMOTE_PROTOCOL_VERSION = 4;
 
 export type RemoteAudioTarget = "mic" | "speaker";
-export type RemoteHoldInput = "pointer" | "key" | "space";
+export type RemoteUnmuteInput = "pointer" | "key" | "space";
 
 export interface RemoteChannelState {
   /** The persistent mute assignment. */
   muted: boolean;
-  /** The assignment currently applied after ordered mute holds. */
+  /** The assignment currently applied after active unmute holds. */
   effectiveMuted: boolean;
   level: number;
 }
@@ -28,21 +28,20 @@ export interface SetMutedCommand {
   muted: boolean;
 }
 
-export interface HoldMutedCommand {
-  type: "hold-muted";
+export interface HoldUnmutedCommand {
+  type: "hold-unmuted";
   target: RemoteAudioTarget;
-  input: RemoteHoldInput;
-  muted: boolean;
+  input: RemoteUnmuteInput;
 }
 
-export interface ReleaseMutedCommand {
-  type: "release-muted";
+export interface ReleaseUnmutedCommand {
+  type: "release-unmuted";
   target: RemoteAudioTarget;
-  input: RemoteHoldInput;
+  input: RemoteUnmuteInput;
   commit: boolean;
 }
 
-export type RemoteCommand = SetMutedCommand | HoldMutedCommand | ReleaseMutedCommand;
+export type RemoteCommand = SetMutedCommand | HoldUnmutedCommand | ReleaseUnmutedCommand;
 
 export function encodeRemoteMessage(message: RemoteState | RemoteCommand): string {
   return `${JSON.stringify(message)}\n`;
@@ -59,22 +58,17 @@ export function parseRemoteCommand(line: string): RemoteCommand | null {
     }
     return { type: "set-muted", target: value["target"], muted: value["muted"] };
   }
-  if (value?.["type"] === "hold-muted") {
-    if (
-      !isAudioTarget(value["target"]) ||
-      !isHoldInput(value["input"]) ||
-      typeof value["muted"] !== "boolean"
-    ) {
+  if (value?.["type"] === "hold-unmuted") {
+    if (!isAudioTarget(value["target"]) || !isHoldInput(value["input"])) {
       return null;
     }
     return {
-      type: "hold-muted",
+      type: "hold-unmuted",
       target: value["target"],
       input: value["input"],
-      muted: value["muted"],
     };
   }
-  if (value?.["type"] === "release-muted") {
+  if (value?.["type"] === "release-unmuted") {
     if (
       !isAudioTarget(value["target"]) ||
       !isHoldInput(value["input"]) ||
@@ -83,7 +77,7 @@ export function parseRemoteCommand(line: string): RemoteCommand | null {
       return null;
     }
     return {
-      type: "release-muted",
+      type: "release-unmuted",
       target: value["target"],
       input: value["input"],
       commit: value["commit"],
@@ -150,7 +144,7 @@ function isAudioTarget(value: unknown): value is RemoteAudioTarget {
   return value === "mic" || value === "speaker";
 }
 
-function isHoldInput(value: unknown): value is RemoteHoldInput {
+function isHoldInput(value: unknown): value is RemoteUnmuteInput {
   return value === "pointer" || value === "key" || value === "space";
 }
 

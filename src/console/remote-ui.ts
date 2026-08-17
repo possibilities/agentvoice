@@ -20,8 +20,8 @@ import {
 import {
   encodeRemoteMessage,
   parseRemoteState,
-  type RemoteHoldInput,
   type RemoteState,
+  type RemoteUnmuteInput,
 } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
@@ -137,10 +137,19 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   let connected = false;
   let closed = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let pointerGesture: { target: AudioTarget; startedAt: number } | null = null;
+  let pointerGesture: {
+    target: AudioTarget;
+    startedAt: number;
+    startedMuted: boolean;
+  } | null = null;
   const keyControlGestures = new Map<
     AudioTarget,
-    { startedAt: number; clickEligible: boolean; lease: ReturnType<typeof setTimeout> }
+    {
+      startedAt: number;
+      startedMuted: boolean;
+      clickEligible: boolean;
+      lease: ReturnType<typeof setTimeout>;
+    }
   >();
   let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
   let layoutWidth = 0;
@@ -166,13 +175,13 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
         {
           id: "mic",
           key: "M",
-          label: `mic — ${latest?.mic.muted ? "unmute · hold M/Space" : "mute · hold M"}`,
+          label: `mic — ${latest?.mic.muted ? "unmute · hold M/Space" : "mute on release"}`,
           onRun: () => toggle("mic"),
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker — ${latest?.speaker.muted ? "unmute" : "mute"} · hold S`,
+          label: `speaker — ${latest?.speaker.muted ? "unmute · hold S" : "mute on release"}`,
           onRun: () => toggle("speaker"),
         },
         { id: "quit", key: "Q", label: "quit", onRun: shutdown },
@@ -217,7 +226,12 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   function toggle(target: AudioTarget): void {
     if (!connected || !socket || !latest) return;
     const muted = target === "mic" ? latest.mic.muted : latest.speaker.muted;
-    socket.write(encodeRemoteMessage({ type: "set-muted", target, muted: !muted }));
+    setMuted(target, !muted);
+  }
+
+  function setMuted(target: AudioTarget, muted: boolean): void {
+    if (!connected || !socket || !latest) return;
+    socket.write(encodeRemoteMessage({ type: "set-muted", target, muted }));
   }
 
   function persistentMuted(target: AudioTarget): boolean | null {
@@ -225,30 +239,34 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     return target === "mic" ? latest.mic.muted : latest.speaker.muted;
   }
 
-  function holdMuted(target: AudioTarget, input: RemoteHoldInput, muted: boolean): void {
+  function beginUnmute(target: AudioTarget, input: RemoteUnmuteInput): void {
     if (!connected || !socket || !latest) return;
-    socket.write(encodeRemoteMessage({ type: "hold-muted", target, input, muted }));
+    socket.write(encodeRemoteMessage({ type: "hold-unmuted", target, input }));
   }
 
-  function releaseMuted(target: AudioTarget, input: RemoteHoldInput, commit = false): void {
+  function releaseUnmute(target: AudioTarget, input: RemoteUnmuteInput, commit = false): void {
     if (!connected || !socket || !latest) return;
-    socket.write(encodeRemoteMessage({ type: "release-muted", target, input, commit }));
+    socket.write(encodeRemoteMessage({ type: "release-unmuted", target, input, commit }));
   }
 
   function beginPointerControl(target: AudioTarget): void {
     if (pointerGesture) endPointerControl(false);
     const muted = persistentMuted(target);
     if (muted === null) return;
-    pointerGesture = { target, startedAt: now() };
-    holdMuted(target, "pointer", !muted);
+    pointerGesture = { target, startedAt: now(), startedMuted: muted };
+    if (muted) beginUnmute(target, "pointer");
   }
 
   function endPointerControl(classifyClick = true): void {
     const gesture = pointerGesture;
     if (!gesture) return;
     pointerGesture = null;
-    const commit = classifyClick && releaseCommitsClick(gesture.startedAt, now());
-    releaseMuted(gesture.target, "pointer", commit);
+    if (gesture.startedMuted) {
+      const commit = classifyClick && releaseCommitsClick(gesture.startedAt, now());
+      releaseUnmute(gesture.target, "pointer", commit);
+    } else if (classifyClick) {
+      setMuted(gesture.target, true);
+    }
   }
 
   function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
@@ -261,11 +279,12 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     }
     const muted = persistentMuted(target);
     if (muted === null) return;
-    holdMuted(target, "key", !muted);
+    if (muted) beginUnmute(target, "key");
     const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
     lease.unref?.();
     keyControlGestures.set(target, {
       startedAt: now(),
+      startedMuted: muted,
       clickEligible,
       lease,
     });
@@ -276,18 +295,22 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     if (!gesture) return;
     keyControlGestures.delete(target);
     clearTimeout(gesture.lease);
-    const commit =
-      classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
-    releaseMuted(target, "key", commit);
+    if (gesture.startedMuted) {
+      const commit =
+        classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
+      releaseUnmute(target, "key", commit);
+    } else if (classifyClick && gesture.clickEligible) {
+      setMuted(target, true);
+    }
   }
 
   function renewKeyboardTalk(): void {
     if (latest?.mic.muted !== true) return;
-    holdMuted("mic", "space", false);
+    beginUnmute("mic", "space");
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = setTimeout(() => {
       keyboardTalkLease = null;
-      releaseMuted("mic", "space");
+      releaseUnmute("mic", "space");
     }, KEY_HOLD_LEASE_MS);
     keyboardTalkLease.unref?.();
   }
@@ -295,7 +318,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   function endKeyboardTalk(): void {
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
-    releaseMuted("mic", "space");
+    releaseUnmute("mic", "space");
   }
 
   function clearInputs(): void {

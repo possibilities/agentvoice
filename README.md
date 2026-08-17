@@ -330,14 +330,15 @@ The device is built from source and the console refuses to start without it —
 `bun run setup` builds it, and `bun run native:build` rebuilds after editing
 `src/console/native/`.
 
-- **Audio controls**: quickly click either half of the signal field to
-  persistently toggle YOU or AGENT; hold either half to apply the opposite
-  value only until release. On a persistently muted YOU channel that hold is
-  push-to-talk. Release-capable terminals give `m` and `s` the same
-  tap-versus-hold behavior; `Space` remains dedicated push-to-talk while
-  muted. Terminals without key-release reporting keep `m`/`s` as ordinary
-  toggles and leave `Space` inert rather than risk a stuck-open microphone.
-  `r` redials voice · `f` starts fresh · `q` quits.
+- **Audio controls**: pressing a muted half of the signal field opens that
+  channel immediately; a quick release leaves it live, while a held release
+  restores mute. Pressing a live half changes nothing until release, which
+  performs the ordinary toggle to muted. On YOU, the unmute hold is
+  push-to-talk. Release-capable terminals give `m` and `s` the same behavior;
+  `Space` remains dedicated push-to-talk while muted. Terminals without
+  key-release reporting keep `m`/`s` as ordinary toggles and leave `Space`
+  inert rather than risk a stuck-open microphone. `r` redials voice · `f`
+  starts fresh · `q` quits.
 - **Redial** negotiates a fresh voice session against the same conversation
   while the old one keeps playing; audio swaps the moment the new session
   connects. It is the escape hatch when the media path dies silently. Renewal
@@ -368,19 +369,20 @@ agentvoice remote
 ```
 
 The Remote console is one full-height signal field split into large `YOU` and
-`AGENT` touch targets. Quickly tap either half to persistently toggle that
-channel; hold either half to apply the opposite value only until release. A
-YOU hold while persistently muted is push-to-talk, while a YOU hold while live
-is push-to-mute; AGENT behaves the same way for playback. It is designed
-around a portrait terminal while still adapting to other sizes. On terminals
-with key-release reporting, `m` and `s` mirror the tap-versus-hold behavior and
-`Space` remains dedicated push-to-talk; otherwise `m`/`s` remain toggles and
-`Space` stays inert. `q` exits.
+`AGENT` touch targets. Pressing a muted half opens it immediately; a quick
+release commits the unmute, while a held release restores mute. Pressing a
+live half leaves it live until release, then toggles it to muted regardless of
+how long it was held. On YOU, the unmute hold is push-to-talk; AGENT follows
+the same rule for playback. It is designed around a portrait terminal while
+still adapting to other sizes. On terminals with key-release reporting, `m`
+and `s` mirror the pointer behavior and `Space` remains dedicated
+push-to-talk; otherwise `m`/`s` remain toggles and `Space` stays inert. `q`
+exits.
 
 The Remote console connects to the voice console — not the resident — through
 `~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It
 carries only normalized levels, persistent and effective mute state,
-connection phase, and source-owned mute holds. Audio stays on the console's
+connection phase, and source-owned unmute holds. Audio stays on the console's
 machine and needs no SSH forwarding; for the intended setup, that machine's
 Bluetooth audio remains the listening path. The Remote console waits and
 reconnects automatically when the voice console is not running or restarts.

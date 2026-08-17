@@ -8,7 +8,7 @@ import {
 } from "../src/console/audio-control.ts";
 
 describe("audio-control keyboard input", () => {
-  test("uses release-capable M and S for holds while raw keys remain toggles", () => {
+  test("uses release-capable M and S for gestures while raw keys remain toggles", () => {
     expect(audioControlKeyAction({ name: "m", source: "raw", eventType: "press" }, false)).toEqual({
       target: "mic",
       action: "toggle",
@@ -60,54 +60,48 @@ describe("MuteGate", () => {
     });
   });
 
-  test("holds either value without changing the persistent assignment", () => {
-    const mic = new MuteGate(true);
-    const speaker = new MuteGate(false);
+  test("opens only a persistently muted channel and restores it on release", () => {
+    const gate = new MuteGate(true);
 
-    expect(mic.hold("pointer", false)).toBe(true);
-    expect(mic.state()).toEqual({ muted: true, holding: true, effectiveMuted: false });
-    expect(speaker.hold("pointer", true)).toBe(true);
-    expect(speaker.state()).toEqual({ muted: false, holding: true, effectiveMuted: true });
+    expect(gate.beginUnmute("pointer")).toBe(true);
+    expect(gate.state()).toEqual({ muted: true, holding: true, effectiveMuted: false });
+    expect(gate.releaseUnmute("pointer")).toBe(true);
+    expect(gate.state()).toEqual({ muted: true, holding: false, effectiveMuted: true });
 
-    mic.release("pointer");
-    speaker.release("pointer");
-    expect(mic.effectiveMuted).toBe(true);
-    expect(speaker.effectiveMuted).toBe(false);
+    gate.setMuted(false);
+    expect(gate.beginUnmute("pointer")).toBe(false);
+    expect(gate.state()).toEqual({ muted: false, holding: false, effectiveMuted: false });
   });
 
-  test("lets the newest source win and reveals older holds on release", () => {
-    const gate = new MuteGate(false);
+  test("keeps independent unmute holds open until the last source releases", () => {
+    const gate = new MuteGate(true);
 
-    gate.hold("first", true);
-    gate.hold("second", false);
+    expect(gate.beginUnmute("first")).toBe(true);
+    expect(gate.beginUnmute("second")).toBe(false);
     expect(gate.effectiveMuted).toBe(false);
-    expect(gate.release("second")).toBe(true);
+    expect(gate.releaseUnmute("first")).toBe(false);
+    expect(gate.effectiveMuted).toBe(false);
+    expect(gate.releaseUnmute("second")).toBe(true);
     expect(gate.effectiveMuted).toBe(true);
-    expect(gate.release("first")).toBe(true);
-    expect(gate.effectiveMuted).toBe(false);
   });
 
-  test("commits a click atomically while a hold release restores the assignment", () => {
+  test("commits a quick unmute without retaining its hold", () => {
     const gate = new MuteGate(true);
 
-    gate.hold("click", false);
-    expect(gate.release("click", true)).toBe(true);
-    expect(gate.state()).toEqual({ muted: false, holding: false, effectiveMuted: false });
-
-    gate.hold("hold", true);
-    expect(gate.release("hold", false)).toBe(true);
+    gate.beginUnmute("click");
+    expect(gate.releaseUnmute("click", true)).toBe(true);
     expect(gate.state()).toEqual({ muted: false, holding: false, effectiveMuted: false });
   });
 
-  test("keeps a persistent change underneath an active hold", () => {
+  test("keeps a persistent change underneath an active unmute hold", () => {
     const gate = new MuteGate(true);
-    gate.hold("remote", false);
+    gate.beginUnmute("remote");
 
     expect(gate.setMuted(false)).toBe(true);
     expect(gate.effectiveMuted).toBe(false);
     expect(gate.setMuted(true)).toBe(true);
     expect(gate.effectiveMuted).toBe(false);
-    expect(gate.release("remote")).toBe(true);
+    expect(gate.releaseUnmute("remote")).toBe(true);
     expect(gate.effectiveMuted).toBe(true);
   });
 });

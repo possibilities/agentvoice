@@ -1,5 +1,5 @@
 export type AudioTarget = "mic" | "speaker";
-export type MuteHoldSource = object | symbol | string | number;
+export type UnmuteHoldSource = object | symbol | string | number;
 
 export type AudioControlKeyAction = {
   target: AudioTarget;
@@ -26,7 +26,7 @@ export function audioControlKeyAction(
   const target = key.name === "m" ? "mic" : key.name === "s" ? "speaker" : null;
   if (!target) return null;
 
-  // Releases close a hold even if the palette opened while the key was down.
+  // Releases finish a gesture even if the palette opened while the key was down.
   if (key.source === "kitty" && key.eventType === "release") {
     return { target, action: "end" };
   }
@@ -58,19 +58,19 @@ export function releaseCommitsClick(startedAt: number, releasedAt: number): bool
 export interface MuteState {
   /** The persistent mute assignment controlled by clicks and palette actions. */
   muted: boolean;
-  /** At least one source currently carries a momentary mute assignment. */
+  /** At least one source is momentarily opening a persistently muted channel. */
   holding: boolean;
-  /** The newest hold's assignment, or the persistent assignment without a hold. */
+  /** The assignment currently applied after active unmute holds. */
   effectiveMuted: boolean;
 }
 
 /**
- * Persistent mute and ordered momentary assignments are separate so every
- * input source releases only its own hold. The newest active hold wins.
+ * Persistent mute and momentary unmute holds are separate so every input
+ * source releases only its own hold. The last release closes the channel.
  */
 export class MuteGate {
   private mutedValue: boolean;
-  private readonly holds = new Map<MuteHoldSource, boolean>();
+  private readonly holds = new Set<UnmuteHoldSource>();
 
   constructor(muted = false) {
     this.mutedValue = muted;
@@ -85,9 +85,7 @@ export class MuteGate {
   }
 
   get effectiveMuted(): boolean {
-    let effective = this.mutedValue;
-    for (const heldMuted of this.holds.values()) effective = heldMuted;
-    return effective;
+    return this.mutedValue && !this.holding;
   }
 
   state(): MuteState {
@@ -104,21 +102,17 @@ export class MuteGate {
     return changed(before, this.state());
   }
 
-  hold(source: MuteHoldSource, muted: boolean): boolean {
+  beginUnmute(source: UnmuteHoldSource): boolean {
+    if (!this.mutedValue) return false;
     const before = this.state();
-    const existing = this.holds.get(source);
-    if (existing === muted) return false;
-    // Reassigning an existing source is a new override and therefore newest.
-    this.holds.delete(source);
-    this.holds.set(source, muted);
+    this.holds.add(source);
     return changed(before, this.state());
   }
 
-  release(source: MuteHoldSource, commit = false): boolean {
+  releaseUnmute(source: UnmuteHoldSource, commit = false): boolean {
     const before = this.state();
-    const heldMuted = this.holds.get(source);
-    if (heldMuted === undefined) return false;
-    if (commit) this.mutedValue = heldMuted;
+    if (!this.holds.has(source)) return false;
+    if (commit) this.mutedValue = false;
     this.holds.delete(source);
     return changed(before, this.state());
   }
