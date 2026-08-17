@@ -248,6 +248,27 @@ describe("signal field", () => {
     expect(rows[1]).toBe(signalFieldText(frame).split("\n")[1]);
   });
 
+  test("a strand-free row suppresses voices but keeps the wash", () => {
+    const colors = { faint: "#4b575e", dim: "#7d8a91", you: "#e2b56f", agent: "#7fb9e8" };
+    const field = new SignalField({ seed: 11 });
+    for (let i = 0; i < 30; i++) field.step(1 / 30, { you: 1, agent: 0 });
+    const frame = field.render(48, 5);
+    expect(frame.rows[0]?.some((cell) => cell.tone === "you")).toBe(true);
+    const styled = styledInstrumentField(frame, colors, [], [0]);
+    const rows = styled.chunks
+      .map((chunk) => chunk.text)
+      .join("")
+      .split("\n");
+    expect(rows[0]).toBe(" ".repeat(48));
+    expect(rows[2]?.trim().length).toBeGreaterThan(0);
+    const firstRowChunks: typeof styled.chunks = [];
+    for (const chunk of styled.chunks) {
+      if (chunk.text.includes("\n")) break;
+      firstRowChunks.push(chunk);
+    }
+    expect(firstRowChunks.some((chunk) => chunk.bg !== undefined)).toBe(true);
+  });
+
   test("releases toward quiet instead of freezing the last loud frame", () => {
     const field = new SignalField({ seed: 5 });
     for (let i = 0; i < 20; i++) field.step(1 / 30, { you: 1, agent: 0 });

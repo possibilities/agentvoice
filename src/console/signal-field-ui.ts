@@ -227,13 +227,16 @@ interface OverlayCell {
 /**
  * The whole instrument on one canvas: the field runs edge to edge, with the
  * instrument text floated over it at each run's cell — the wash keeps
- * flowing under the text. Adjacent cells sharing one (color, bold, wash)
- * triple coalesce to keep OpenTUI chunk counts bounded.
+ * flowing under the text. A strand-free row suppresses voice strands while
+ * the wash flows on — the status row is the one calm strip. Adjacent cells
+ * sharing one (color, bold, wash) triple coalesce to keep OpenTUI chunk
+ * counts bounded.
  */
 export function styledInstrumentField(
   frame: SignalFieldFrame,
   colors: SignalFieldColors,
   runs: InstrumentTextRun[],
+  strandFreeRows: readonly number[] = [],
 ): StyledText {
   const base = colors.base ?? VOICE_TONES.panel;
   const washCache = new Map<number, string>();
@@ -267,6 +270,7 @@ export function styledInstrumentField(
   const chunks: TextChunk[] = [];
   frame.rows.forEach((row, rowIndex) => {
     const overlay = overlays.get(rowIndex);
+    const strandFree = strandFreeRows.includes(rowIndex);
     let color: string | undefined;
     let boldText = false;
     let wash: number | undefined;
@@ -280,7 +284,10 @@ export function styledInstrumentField(
     };
     row.forEach((cell, x) => {
       const over = overlay?.[x];
-      const cellColor = over === undefined ? colors[cell.tone] : over.color;
+      const muteStrand = strandFree && (cell.tone === "you" || cell.tone === "agent");
+      const fieldTone = muteStrand ? "faint" : cell.tone;
+      const fieldChar = muteStrand ? " " : cell.char;
+      const cellColor = over === undefined ? colors[fieldTone] : over.color;
       const cellBold = over === undefined ? false : over.bold;
       if (cellColor !== color || cellBold !== boldText || cell.wash !== wash) {
         flush();
@@ -288,7 +295,7 @@ export function styledInstrumentField(
         boldText = cellBold;
         wash = cell.wash;
       }
-      text += over === undefined ? cell.char : over.char;
+      text += over === undefined ? fieldChar : over.char;
     });
     flush();
     if (rowIndex < height - 1) chunks.push(fg(colors.faint)("\n"));

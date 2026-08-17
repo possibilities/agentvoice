@@ -385,6 +385,7 @@ export async function createVoiceTui(
       frame,
       { faint: PALETTE.faint, dim: PALETTE.dim, you: youFieldColor, agent: agentFieldColor },
       runs,
+      [0],
     );
   };
 
