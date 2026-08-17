@@ -2,9 +2,8 @@
  * Pure two-envelope text-mode animation shared by the Console and Remote
  * console. It renders energy, persistence, and turn overlap — never frequency.
  *
- * Two layers per cell: a glyph (the voice strands, or the graph-paper rules
- * where no strand reaches) and a wash (a background tint on a fine luminance
- * ramp). The floor is a continuously undulating calm that dims a touch while
+ * Two layers per cell: a glyph (the voice strands) and a wash (a background
+ * tint on a fine luminance ramp). The floor is a continuously undulating calm that dims a touch while
  * anyone speaks; the strands lay over it. When both voices sound at once —
  * rare and brief in practice — their strands simply share the field, the
  * stronger one showing per cell: they touch, they never clash, and nothing
@@ -12,7 +11,7 @@
  */
 
 export type SignalFieldChannel = "you" | "agent";
-export type SignalFieldTone = "faint" | "dim" | "grid" | "axis" | "you" | "agent";
+export type SignalFieldTone = "faint" | "dim" | "you" | "agent";
 
 /** Quantization of the wash ramp; steps are ~1 RGB unit apart, so seams stay invisible. */
 export const WASH_STEPS = 14;
@@ -52,70 +51,6 @@ interface VoiceState {
 const YOU_GLYPHS = ["·", "╴", "─", "━", "┅", "┉"] as const;
 const AGENT_GLYPHS = ["·", "╶", "─", "━", "┄", "┈"] as const;
 const MUTED_GLYPHS = ["·", "┄", "┈"] as const;
-
-/** ~Square paper at the usual 1:2 terminal cell aspect. */
-const GRID_COLUMNS = 6;
-const GRID_ROWS = 3;
-
-export const GRID_GLYPHS = {
-  cross: "┼",
-  vertical: "│",
-  horizontal: "─",
-  origin: "╋",
-  axisVertical: "┃",
-  axisHorizontal: "━",
-  /** Edge-eighth blocks, named by which cell of the straddling pair carries them. */
-  pairLeft: "▕",
-  pairRight: "▏",
-  pairUpper: "▁",
-  pairLower: "▔",
-} as const;
-
-/** Everything but these three is axis ink, toned a step brighter than the minor rules. */
-const MINOR_RULE_GLYPHS: ReadonlySet<string> = new Set([
-  GRID_GLYPHS.cross,
-  GRID_GLYPHS.vertical,
-  GRID_GLYPHS.horizontal,
-]);
-
-/**
- * Graph-paper rules with heavy center axes — a plotting surface, anchored at
- * field center so the paper stays symmetric under the voices. The axes land
- * on the true pixel center of each dimension: an odd extent has a center cell
- * (heavy box lines), an even one has a center boundary, straddled by two
- * edge-eighth blocks meeting exactly on it. No glyph joins an axis to what
- * crosses it — minor rules, and a cell-exact axis meeting a straddled one,
- * pass under with a gap, as under drawn-over ink; only the origin marks the
- * axes' own crossing.
- */
-export function gridGlyph(x: number, y: number, width: number, height: number): string | undefined {
-  const centerX = Math.floor((width - 1) / 2);
-  const centerY = Math.floor((height - 1) / 2);
-  const evenWidth = width % 2 === 0;
-  const evenHeight = height % 2 === 0;
-  const onAxisColumn = x === centerX || (evenWidth && x === centerX + 1);
-  const onAxisRow = y === centerY || (evenHeight && y === centerY + 1);
-  const onColumn = (x - centerX) % GRID_COLUMNS === 0;
-  const onRow = (y - centerY) % GRID_ROWS === 0;
-  if (onAxisColumn && onAxisRow) {
-    if (!evenWidth && !evenHeight) return GRID_GLYPHS.origin;
-    if (!evenWidth) return GRID_GLYPHS.axisVertical;
-    if (!evenHeight) return GRID_GLYPHS.axisHorizontal;
-    return x === centerX ? GRID_GLYPHS.pairLeft : GRID_GLYPHS.pairRight;
-  }
-  if (onAxisColumn) {
-    if (evenWidth) return x === centerX ? GRID_GLYPHS.pairLeft : GRID_GLYPHS.pairRight;
-    return GRID_GLYPHS.axisVertical;
-  }
-  if (onAxisRow) {
-    if (evenHeight) return y === centerY ? GRID_GLYPHS.pairUpper : GRID_GLYPHS.pairLower;
-    return GRID_GLYPHS.axisHorizontal;
-  }
-  if (onColumn && onRow) return GRID_GLYPHS.cross;
-  if (onColumn) return GRID_GLYPHS.vertical;
-  if (onRow) return GRID_GLYPHS.horizontal;
-  return undefined;
-}
 
 export class SignalField {
   standby: StandbyVariant;
@@ -225,13 +160,7 @@ export class SignalField {
     const wash = this.washAt(nx, ny);
     const threshold = 0.065;
     const strongest = Math.max(youStrength, agentStrength);
-    if (strongest < threshold) {
-      const paper = gridGlyph(x, y, width, height);
-      if (paper !== undefined) {
-        return { char: paper, tone: MINOR_RULE_GLYPHS.has(paper) ? "grid" : "axis", wash };
-      }
-      return { char: " ", tone: "faint", wash };
-    }
+    if (strongest < threshold) return { char: " ", tone: "faint", wash };
     if (youStrength >= agentStrength) {
       return voiceCell(youStrength + hash * 0.08, "you", YOU_GLYPHS, muted.you === true, wash);
     }

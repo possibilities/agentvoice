@@ -87,17 +87,12 @@ describe("signal field", () => {
     expect(left.render(48, 6)).toEqual(right.render(48, 6));
   });
 
-  test("standby is paper and undulation — no voice glyphs, smooth in space, continuous in time", () => {
+  test("standby is a glyphless undulation, smooth in space and continuous in time", () => {
     for (const standby of ["swell", "pond", "weave"] as const) {
       const field = new SignalField({ seed: 41, standby });
       const initialFrame = field.render(72, 9);
       const area = 72 * 9;
-      const idleChars = new Set(signalFieldText(initialFrame).replaceAll("\n", ""));
-      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "▕", "▏", "▁", "▔"];
-      expect([...idleChars].every((char) => paperChars.includes(char))).toBe(true);
-      expect(countTone(initialFrame, "you")).toBe(0);
-      expect(countTone(initialFrame, "agent")).toBe(0);
-      expect(countTone(initialFrame, "grid")).toBeGreaterThan(0);
+      expect(signalFieldText(initialFrame).replaceAll("\n", "")).toBe(" ".repeat(area));
       expect(countWashed(initialFrame)).toBeGreaterThan(area * 0.3);
       expect(maxHorizontalStepDelta(initialFrame)).toBeLessThanOrEqual(2);
 
@@ -156,19 +151,12 @@ describe("signal field", () => {
     const frame = overlap.render(64, 7);
     expect(frame.dominant).toBe("contact");
     expect(frame.contact).toBeGreaterThan(0.9);
-    const voiceChars = new Set(
-      frame.rows
-        .flat()
-        .filter((cell) => cell.tone !== "grid")
-        .map((cell) => cell.char),
-    );
-    for (const clash of CLASH_GLYPHS) expect(voiceChars.has(clash)).toBe(false);
+    const chars = new Set(signalFieldText(frame));
+    for (const clash of CLASH_GLYPHS) expect(chars.has(clash)).toBe(false);
     expect(countTone(frame, "you")).toBeGreaterThan(0);
     expect(countTone(frame, "agent")).toBeGreaterThan(0);
     const tones = new Set(frame.rows.flat().map((cell) => cell.tone));
-    expect(
-      [...tones].every((tone) => ["faint", "dim", "grid", "axis", "you", "agent"].includes(tone)),
-    ).toBe(true);
+    expect([...tones].every((tone) => ["faint", "dim", "you", "agent"].includes(tone))).toBe(true);
   });
 
   test("wash colors ramp smoothly up from the field base", () => {
@@ -180,49 +168,6 @@ describe("signal field", () => {
       colors.add(signalFieldWashColor(step, "#131a1e", palette));
     }
     expect(colors.size).toBeGreaterThan(WASH_STEPS * 0.6);
-  });
-
-  test("graph paper rules the empty field, centered, and yields to strands", () => {
-    const field = new SignalField({ seed: 23 });
-    const idle = field.render(61, 7);
-    expect(idle.rows[3]?.[30]).toMatchObject({ char: "╋", tone: "axis" });
-    expect(idle.rows[2]?.[30]?.char).toBe("┃");
-    expect(idle.rows[3]?.[31]?.char).toBe("━");
-    expect(idle.rows[3]?.[24]?.char).toBe("━");
-    expect(idle.rows[0]?.[30]?.char).toBe("┃");
-    expect(idle.rows[0]?.[24]).toMatchObject({ char: "┼", tone: "grid" });
-    expect(idle.rows[1]?.[24]?.char).toBe("│");
-    expect(idle.rows[0]?.[23]?.char).toBe("─");
-    expect(idle.rows[1]?.[1]?.char).toBe(" ");
-    const paperOnFloor = idle.rows
-      .flat()
-      .filter((cell) => cell.tone === "grid" && cell.wash !== undefined);
-    expect(paperOnFloor.length).toBeGreaterThan(0);
-
-    for (let i = 0; i < 30; i++) field.step(1 / 30, { you: 1, agent: 0 });
-    const loud = field.render(61, 7);
-    expect(countTone(loud, "you")).toBeGreaterThan(0);
-    expect(countTone(loud, "grid")).toBeGreaterThan(0);
-    expect(countTone(loud, "grid")).toBeLessThan(countTone(idle, "grid"));
-  });
-
-  test("axes straddle the center boundary at even sizes, landing on the true pixel center", () => {
-    const field = new SignalField({ seed: 23 });
-    const even = field.render(60, 8);
-    expect(even.rows[1]?.[29]).toMatchObject({ char: "▕", tone: "axis" });
-    expect(even.rows[1]?.[30]?.char).toBe("▏");
-    expect(even.rows[3]?.[7]?.char).toBe("▁");
-    expect(even.rows[4]?.[7]?.char).toBe("▔");
-    expect(even.rows[3]?.[29]?.char).toBe("▕");
-    expect(even.rows[4]?.[30]?.char).toBe("▏");
-
-    const evenHeightOnly = field.render(61, 8);
-    expect(evenHeightOnly.rows[3]?.[30]?.char).toBe("┃");
-    expect(evenHeightOnly.rows[3]?.[7]?.char).toBe("▁");
-
-    const evenWidthOnly = field.render(60, 7);
-    expect(evenWidthOnly.rows[3]?.[29]?.char).toBe("━");
-    expect(evenWidthOnly.rows[2]?.[29]?.char).toBe("▕");
   });
 
   test("label and readout runs pin left, right, and a center that yields when narrow", () => {
@@ -247,8 +192,6 @@ describe("signal field", () => {
       {
         faint: "#4b575e",
         dim: "#7d8a91",
-        grid: "#2a343a",
-        axis: "#4b575e",
         you: "#e2b56f",
         agent: "#7fb9e8",
       },

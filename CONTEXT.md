@@ -173,9 +173,10 @@ _Avoid_: "failover", "account switch" (suggests in-place switching, which
 codex cannot do).
 
 **Signal field** — The shared text-mode visualization in the console and
-Remote console: each activity envelope drawn as voice strands laid over faint
-graph-paper rules and a continuously undulating background wash that dims
-while anyone speaks. It
+Remote console: each activity envelope drawn as voice strands over a
+continuously undulating background wash that dims while anyone speaks; the
+instrument's labels and readout float over the field, which runs the full
+panel. It
 visualizes energy and turn-taking, not frequency content; simultaneous voices
 simply share the field, and nothing marks the overlap. _Avoid_: "spectrum",
 "spectrogram", "equalizer" (the Duplex audio device does not expose frequency

@@ -203,8 +203,6 @@ const frame = async (deltaMs: number): Promise<void> => {
   canvas.content = styledSignalField(image, {
     faint: TONE.faint,
     dim: TONE.dim,
-    grid: TONE.border,
-    axis: TONE.faint,
     you: TONE.you,
     agent: TONE.agent,
   });
