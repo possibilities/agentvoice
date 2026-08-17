@@ -332,6 +332,9 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   });
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+  renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
+    if (pushToTalkKeyAction(key, palette.isOpen()) === "end") endKeyboardTalk();
+  });
   const frameCallback = async (deltaMs: number): Promise<void> => {
     if (renderer.width !== layoutWidth || renderer.height !== layoutHeight) paint();
     const viewportWidth = renderer.width || process.stdout.columns || 40;

@@ -123,8 +123,13 @@ describe("Remote console layout", () => {
     }
   });
 
-  test("holds the YOU rail to talk and taps MIC to unmute", async () => {
-    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+  test("releases pointer and Space holds before tapping MIC to unmute", async () => {
+    const setup = await createTestRenderer({
+      width: 49,
+      height: 28,
+      exitOnCtrlC: false,
+      kittyKeyboard: true,
+    });
     const socketPath = join(tmpdir(), `av-remote-talk-${process.pid}-${Date.now()}.sock`);
     const sockets = new Set<Socket>();
     const commands: RemoteCommand[] = [];
@@ -187,13 +192,18 @@ describe("Remote console layout", () => {
       const talkTarget = rails as BoxRenderable;
       const talkX = talkTarget.x + 2;
       const talkY = talkTarget.y + Math.max(1, Math.floor(talkTarget.height / 2));
+      const mic = setup.renderer.root.findDescendantById("remote-control-mic");
+      expect(mic).toBeInstanceOf(BoxRenderable);
+      const muteTarget = mic as BoxRenderable;
+      const muteX = muteTarget.x + Math.max(1, Math.floor(muteTarget.width / 2));
+      const muteY = muteTarget.y + Math.max(1, Math.floor(muteTarget.height / 2));
 
       await setup.mockMouse.pressDown(talkX, talkY);
       await setup.waitFor(() =>
         commands.some((command) => command.type === "push-to-talk" && command.active),
       );
       await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
-      await setup.mockMouse.release(talkX, talkY);
+      await setup.mockMouse.release(muteX, muteY);
       await setup.waitFor(() =>
         commands.some((command) => command.type === "push-to-talk" && !command.active),
       );
@@ -205,11 +215,22 @@ describe("Remote console layout", () => {
           .map((command) => command.active),
       ).toEqual([true, false]);
 
-      const mic = setup.renderer.root.findDescendantById("remote-control-mic");
-      expect(mic).toBeInstanceOf(BoxRenderable);
-      const muteTarget = mic as BoxRenderable;
-      const muteX = muteTarget.x + Math.max(1, Math.floor(muteTarget.width / 2));
-      const muteY = muteTarget.y + Math.max(1, Math.floor(muteTarget.height / 2));
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
+      await setup.waitFor(
+        () => commands.filter((command) => command.type === "push-to-talk").length === 3,
+      );
+      await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:3u"));
+      await setup.waitFor(
+        () => commands.filter((command) => command.type === "push-to-talk").length === 4,
+      );
+      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
+      expect(
+        commands
+          .filter((command) => command.type === "push-to-talk")
+          .map((command) => command.active),
+      ).toEqual([true, false, true, false]);
+
       await setup.mockMouse.click(muteX, muteY);
       await setup.waitFor(() =>
         commands.some(

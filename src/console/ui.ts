@@ -335,6 +335,7 @@ export async function runConsole(
     height: "100%",
     flexDirection: "column",
     backgroundColor: PALETTE.bg,
+    onMouseUp: () => setPushToTalk(pointerTalk, false),
   });
   renderer.root.add(root);
 
@@ -623,6 +624,9 @@ export async function runConsole(
   });
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
+  renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
+    if (pushToTalkKeyAction(key, palette.isOpen()) === "end") endKeyboardTalk();
+  });
 
   // ---- go -----------------------------------------------------------------
   renderer.setFrameCallback(frameCallback);
