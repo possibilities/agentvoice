@@ -6,7 +6,13 @@ import {
   signalFieldWashColor,
   WASH_STEPS,
 } from "../src/console/signal-field.ts";
-import { boundedViewportExtent, boundedViewportSize } from "../src/console/signal-field-ui.ts";
+import {
+  boundedViewportExtent,
+  boundedViewportSize,
+  signalLabelRuns,
+  signalReadoutRuns,
+  styledInstrumentField,
+} from "../src/console/signal-field-ui.ts";
 
 const CLASH_GLYPHS = ["╳", "┼", "┿", "╬", "※", "#"];
 
@@ -217,6 +223,49 @@ describe("signal field", () => {
     const evenWidthOnly = field.render(60, 7);
     expect(evenWidthOnly.rows[3]?.[29]?.char).toBe("━");
     expect(evenWidthOnly.rows[2]?.[29]?.char).toBe("▕");
+  });
+
+  test("label and readout runs pin left, right, and a center that yields when narrow", () => {
+    const labels = signalLabelRuns(49, false, false, false, "#e2b56f", "#7fb9e8");
+    expect(labels[0]).toMatchObject({ x: 0, text: "YOU ▷ INPUT", bold: true });
+    expect(labels[1]).toMatchObject({ x: 49 - "OUTPUT ◁ AGENT".length, text: "OUTPUT ◁ AGENT" });
+    expect(labels[2]?.text).toBe("DUPLEX / 48 KHZ");
+    expect(signalLabelRuns(40, false, false, false, "#e2b56f", "#7fb9e8")).toHaveLength(2);
+
+    const status = { text: "● LIVE 0:12", color: "#82cb9a" };
+    const readout = signalReadoutRuns(60, Number.NEGATIVE_INFINITY, -18.7, "#a", "#b", status);
+    expect(readout[0]).toMatchObject({ x: 0, text: "  -∞  dB" });
+    expect(readout[1]).toMatchObject({ x: 60 - " -18.7 dB".length, text: " -18.7 dB" });
+    expect(readout[2]).toMatchObject({ text: "● LIVE 0:12", color: "#82cb9a" });
+  });
+
+  test("instrument overlays float on the field's top and bottom rows", () => {
+    const field = new SignalField({ seed: 23 });
+    const frame = field.render(40, 5);
+    const styled = styledInstrumentField(
+      frame,
+      {
+        faint: "#4b575e",
+        dim: "#7d8a91",
+        grid: "#2a343a",
+        axis: "#4b575e",
+        you: "#e2b56f",
+        agent: "#7fb9e8",
+      },
+      {
+        top: [{ x: 0, text: "YOU", color: "#e2b56f", bold: true }],
+        bottom: [{ x: 37, text: "END", color: "#7fb9e8" }],
+      },
+    );
+    const rows = styled.chunks
+      .map((chunk) => chunk.text)
+      .join("")
+      .split("\n");
+    expect(rows).toHaveLength(5);
+    expect(rows.every((row) => row.length === 40)).toBe(true);
+    expect(rows[0]?.startsWith("YOU")).toBe(true);
+    expect(rows[4]?.endsWith("END")).toBe(true);
+    expect(rows[1]).toBe(signalFieldText(frame).split("\n")[1]);
   });
 
   test("releases toward quiet instead of freezing the last loud frame", () => {

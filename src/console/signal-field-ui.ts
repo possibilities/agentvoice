@@ -1,10 +1,6 @@
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
 import { formatClock } from "./dsp.ts";
-import {
-  type SignalFieldFrame,
-  type SignalFieldTone,
-  signalFieldWashColor,
-} from "./signal-field.ts";
+import { type SignalFieldFrame, signalFieldWashColor } from "./signal-field.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
 import type { TransportPhase } from "./transport.ts";
 
@@ -91,76 +87,112 @@ export function signalFieldStatus(
   };
 }
 
-export function styledSignalLabels(
+/** A piece of instrument text floated over the field at a fixed column. */
+export interface InstrumentTextRun {
+  x: number;
+  text: string;
+  color: string;
+  bold?: boolean;
+}
+
+/** The rows floated over the field: labels on the top row, readout on the bottom. */
+export interface InstrumentOverlays {
+  top: InstrumentTextRun[];
+  bottom: InstrumentTextRun[];
+}
+
+export function signalLabelRuns(
   width: number,
   youMuted: boolean,
   youTalking: boolean,
   agentMuted: boolean,
   youColor: string,
   agentColor: string,
-): StyledText {
+): InstrumentTextRun[] {
   const left = `YOU ${youTalking ? `${SIGNAL_GLYPHS.live} TALKING` : youMuted ? "× MUTED" : "▷ INPUT"}`;
   const right = `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
-  const clippedRight = right.slice(
-    Math.max(0, right.length - Math.max(0, width - left.length - 1)),
-  );
   const clippedLeft = left.slice(0, Math.max(0, width - 1));
-  const spare = Math.max(1, width - Math.min(left.length, width - 1) - clippedRight.length);
-  const center = spare >= SIGNAL_MODE.length + 4 ? SIGNAL_MODE : "";
-  if (center.length === 0) {
-    return new StyledText([
-      bold(fg(youColor)(clippedLeft)),
-      fg(VOICE_TONES.faint)(" ".repeat(spare)),
-      bold(fg(agentColor)(clippedRight)),
-    ]);
+  const clippedRight = right.slice(
+    Math.max(0, right.length - Math.max(0, width - clippedLeft.length - 1)),
+  );
+  const runs: InstrumentTextRun[] = [
+    { x: 0, text: clippedLeft, color: youColor, bold: true },
+    { x: width - clippedRight.length, text: clippedRight, color: agentColor, bold: true },
+  ];
+  const spare = width - clippedLeft.length - clippedRight.length;
+  if (spare >= SIGNAL_MODE.length + 4) {
+    runs.push({
+      x: Math.max(clippedLeft.length + 1, Math.floor((width - SIGNAL_MODE.length) / 2)),
+      text: SIGNAL_MODE,
+      color: VOICE_TONES.dim,
+    });
   }
-  const before = Math.max(1, Math.floor((width - center.length) / 2) - clippedLeft.length);
-  const after = Math.max(1, spare - before - center.length);
-  return new StyledText([
-    bold(fg(youColor)(clippedLeft)),
-    fg(VOICE_TONES.faint)(" ".repeat(before)),
-    fg(VOICE_TONES.dim)(center),
-    fg(VOICE_TONES.faint)(" ".repeat(after)),
-    bold(fg(agentColor)(clippedRight)),
-  ]);
+  return runs;
 }
 
-export function styledSignalReadout(
+export function signalReadoutRuns(
   width: number,
   youDb: number,
   agentDb: number,
   youColor: string,
   agentColor: string,
   status: SignalFieldStatus,
-): StyledText {
+): InstrumentTextRun[] {
   const left = dbText(youDb);
   const right = dbText(agentDb);
-  const spare = Math.max(1, width - left.length - right.length);
-  const center = spare >= status.text.length + 4 ? status : undefined;
-  if (center === undefined) {
-    return new StyledText([
-      fg(youColor)(left),
-      fg(VOICE_TONES.faint)(" ".repeat(spare)),
-      fg(agentColor)(right),
-    ]);
+  const runs: InstrumentTextRun[] = [
+    { x: 0, text: left, color: youColor },
+    { x: width - right.length, text: right, color: agentColor },
+  ];
+  const spare = width - left.length - right.length;
+  if (spare >= status.text.length + 4) {
+    runs.push({
+      x: Math.max(left.length + 1, Math.floor((width - status.text.length) / 2)),
+      text: status.text,
+      color: status.color,
+    });
   }
-  const before = Math.max(1, Math.floor((width - center.text.length) / 2) - left.length);
-  const after = Math.max(1, spare - before - center.text.length);
-  return new StyledText([
-    fg(youColor)(left),
-    fg(VOICE_TONES.faint)(" ".repeat(before)),
-    fg(center.color)(center.text),
-    fg(VOICE_TONES.faint)(" ".repeat(after)),
-    fg(agentColor)(right),
-  ]);
+  return runs;
 }
 
 function dbText(db: number): string {
   return Number.isFinite(db) ? `${db.toFixed(1).padStart(6)} dB` : "  -∞  dB";
 }
 
-/** Coalesce adjacent cells with one (tone, wash) pair to keep OpenTUI chunk counts bounded. */
 export function styledSignalField(frame: SignalFieldFrame, colors: SignalFieldColors): StyledText {
+  return styledInstrumentField(frame, colors, { top: [], bottom: [] });
+}
+
+interface OverlayCell {
+  char: string;
+  color: string;
+  bold: boolean;
+}
+
+function overlayCells(runs: InstrumentTextRun[], width: number): (OverlayCell | undefined)[] {
+  const cells: (OverlayCell | undefined)[] = new Array(width);
+  for (const run of runs) {
+    const chars = [...run.text];
+    for (let i = 0; i < chars.length; i++) {
+      const x = run.x + i;
+      if (x < 0 || x >= width) continue;
+      cells[x] = { char: chars[i]!, color: run.color, bold: run.bold === true };
+    }
+  }
+  return cells;
+}
+
+/**
+ * The whole instrument on one canvas: the field runs edge to edge, with the
+ * label and readout rows floated over its top and bottom rows — the wash
+ * keeps flowing under the text. Adjacent cells sharing one (color, bold,
+ * wash) triple coalesce to keep OpenTUI chunk counts bounded.
+ */
+export function styledInstrumentField(
+  frame: SignalFieldFrame,
+  colors: SignalFieldColors,
+  overlays: InstrumentOverlays,
+): StyledText {
   const base = colors.base ?? VOICE_TONES.panel;
   const washCache = new Map<number, string>();
   const washColor = (step: number): string => {
@@ -172,27 +204,47 @@ export function styledSignalField(frame: SignalFieldFrame, colors: SignalFieldCo
     return color;
   };
 
+  const height = frame.rows.length;
+  const width = frame.rows[0]?.length ?? 0;
+  const top = overlayCells(overlays.top, width);
+  const bottom = overlayCells(overlays.bottom, width);
+  const overlayFor = (rowIndex: number): (OverlayCell | undefined)[] | undefined => {
+    if (rowIndex === 0 && rowIndex === height - 1) {
+      return top.map((cell, x) => bottom[x] ?? cell);
+    }
+    if (rowIndex === 0) return top;
+    if (rowIndex === height - 1) return bottom;
+    return undefined;
+  };
+
   const chunks: TextChunk[] = [];
   frame.rows.forEach((row, rowIndex) => {
-    let tone: SignalFieldTone | undefined;
+    const overlay = overlayFor(rowIndex);
+    let color: string | undefined;
+    let boldText = false;
     let wash: number | undefined;
     let text = "";
     const flush = (): void => {
-      if (tone === undefined || text.length === 0) return;
-      const styled = fg(colors[tone])(text);
-      chunks.push(wash === undefined ? styled : bg(washColor(wash))(styled));
+      if (color === undefined || text.length === 0) return;
+      const styled = fg(color)(text);
+      const weighted = boldText ? bold(styled) : styled;
+      chunks.push(wash === undefined ? weighted : bg(washColor(wash))(weighted));
       text = "";
     };
-    for (const cell of row) {
-      if (cell.tone !== tone || cell.wash !== wash) {
+    row.forEach((cell, x) => {
+      const over = overlay?.[x];
+      const cellColor = over === undefined ? colors[cell.tone] : over.color;
+      const cellBold = over === undefined ? false : over.bold;
+      if (cellColor !== color || cellBold !== boldText || cell.wash !== wash) {
         flush();
-        tone = cell.tone;
+        color = cellColor;
+        boldText = cellBold;
         wash = cell.wash;
       }
-      text += cell.char;
-    }
+      text += over === undefined ? cell.char : over.char;
+    });
     flush();
-    if (rowIndex < frame.rows.length - 1) chunks.push(fg(colors.faint)("\n"));
+    if (rowIndex < height - 1) chunks.push(fg(colors.faint)("\n"));
   });
   return new StyledText(chunks);
 }

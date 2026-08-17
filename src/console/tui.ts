@@ -21,12 +21,11 @@ import {
 import { levelFromDb } from "./dsp.ts";
 import { SignalField } from "./signal-field.ts";
 import {
-  boundedViewportExtent,
   boundedViewportSize,
   signalFieldStatus,
-  styledSignalField,
-  styledSignalLabels,
-  styledSignalReadout,
+  signalLabelRuns,
+  signalReadoutRuns,
+  styledInstrumentField,
 } from "./signal-field-ui.ts";
 import { VOICE_TONES } from "./theme.ts";
 import type { TransportPhase } from "./transport.ts";
@@ -127,7 +126,6 @@ export async function createVoiceTui(
     onMouseUp: () => endPointerControl(),
     onMouseDragEnd: () => endPointerControl(),
   });
-  const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
   const fieldCanvas = new TextRenderable(renderer, {
     id: "voice-field-canvas",
     content: "",
@@ -135,15 +133,7 @@ export async function createVoiceTui(
     wrapMode: "none",
     fg: PALETTE.faint,
   });
-  const fieldReadout = new TextRenderable(renderer, {
-    content: "",
-    height: 1,
-    wrapMode: "none",
-    fg: PALETTE.dim,
-  });
-  rails.add(fieldLabels);
   rails.add(fieldCanvas);
-  rails.add(fieldReadout);
   main.add(rails);
 
   const palette = createCommandPalette(
@@ -386,29 +376,34 @@ export async function createVoiceTui(
     const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
     const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
     const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
-    fieldCanvas.content = styledSignalField(frame, {
-      faint: PALETTE.faint,
-      dim: PALETTE.dim,
-      grid: PALETTE.border,
-      axis: PALETTE.faint,
-      you: youColor,
-      agent: agentColor,
-    });
-    fieldLabels.content = styledSignalLabels(
-      boundedViewportExtent(fieldLabels.width, viewportWidth),
-      micLabel.muted,
-      micLabel.talking,
-      agentMuted,
-      youLabelColor,
-      agentColor,
-    );
-    fieldReadout.content = styledSignalReadout(
-      boundedViewportExtent(fieldReadout.width, viewportWidth),
-      state.mic.db,
-      state.speaker.db,
-      youColor,
-      agentColor,
-      signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
+    fieldCanvas.content = styledInstrumentField(
+      frame,
+      {
+        faint: PALETTE.faint,
+        dim: PALETTE.dim,
+        grid: PALETTE.border,
+        axis: PALETTE.faint,
+        you: youColor,
+        agent: agentColor,
+      },
+      {
+        top: signalLabelRuns(
+          fieldSize.width,
+          micLabel.muted,
+          micLabel.talking,
+          agentMuted,
+          youLabelColor,
+          agentColor,
+        ),
+        bottom: signalReadoutRuns(
+          fieldSize.width,
+          state.mic.db,
+          state.speaker.db,
+          youColor,
+          agentColor,
+          signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
+        ),
+      },
     );
   };
 
