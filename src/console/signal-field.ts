@@ -54,6 +54,14 @@ const YOU_GLYPHS = ["·", "╴", "─", "━", "┅", "┉"] as const;
 const AGENT_GLYPHS = ["·", "╶", "─", "━", "┄", "┈"] as const;
 const MUTED_GLYPHS = ["·", "┄", "┈"] as const;
 
+/**
+ * The field's vertical profile spans ny ∈ [-1, 1]; the viewport shows only
+ * its middle band, as if the animation ran on past the top and bottom edges.
+ * Extreme rows land at ±overscan — inside the echo strands' territory — so
+ * the bleed stays alive at the layout's extremities.
+ */
+const VERTICAL_OVERSCAN = 0.65;
+
 export class SignalField {
   standby: StandbyVariant;
 
@@ -129,7 +137,7 @@ export class SignalField {
     const center = (width - 1) / 2;
     const half = Math.max(1, center);
     const nx = (x - center) / half;
-    const ny = height === 1 ? 0 : (y / (height - 1)) * 2 - 1;
+    const ny = height === 1 ? 0 : ((y / (height - 1)) * 2 - 1) * VERTICAL_OVERSCAN;
     const fromYou = (x + 0.5) / width;
     const fromAgent = (width - x - 0.5) / width;
     const hash = noise(x, y, this.frame, this.seed);
