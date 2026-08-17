@@ -77,6 +77,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       if (event.x < middle) setTalkInput("pointer", true);
       else toggle("speaker");
     },
+    onMouseUp: () => setTalkInput("pointer", false),
   });
   const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
   const fieldCanvas = new TextRenderable(renderer, {
@@ -121,13 +122,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       justifyContent: "center",
       alignItems: "center",
       gap: 1,
-      onMouseDown: () => {
-        if (target === "mic") setTalkInput("pointer", true);
-        else toggle("speaker");
-      },
-      onMouseUp: () => {
-        if (target === "mic") setTalkInput("pointer", false);
-      },
+      onMouseDown: () => toggle(target),
     });
     const title = new TextRenderable(renderer, {
       content: new StyledText([bold(fg(color)(label))]),

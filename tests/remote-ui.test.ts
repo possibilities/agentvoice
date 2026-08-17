@@ -123,7 +123,7 @@ describe("Remote console layout", () => {
     }
   });
 
-  test("holds the MIC control to talk and releases it on pointer up", async () => {
+  test("holds the YOU rail to talk and taps MIC to unmute", async () => {
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
     const socketPath = join(tmpdir(), `av-remote-talk-${process.pid}-${Date.now()}.sock`);
     const sockets = new Set<Socket>();
@@ -132,20 +132,22 @@ describe("Remote console layout", () => {
       sockets.add(socket);
       let buffered = "";
       let sequence = 0;
-      const sendState = (talking: boolean): void => {
+      let micMuted = true;
+      let micTalking = false;
+      const sendState = (): void => {
         socket.write(
           encodeRemoteMessage({
             type: "state",
             protocol: REMOTE_PROTOCOL_VERSION,
             sequence: sequence++,
             phase: "live",
-            mic: { muted: true, talking, level: 0 },
+            mic: { muted: micMuted, talking: micTalking, level: 0 },
             speaker: { muted: false, level: 0 },
           }),
         );
       };
       socket.setEncoding("utf8");
-      sendState(false);
+      sendState();
       socket.on("data", (chunk: string) => {
         buffered += chunk;
         for (;;) {
@@ -155,7 +157,14 @@ describe("Remote console layout", () => {
           buffered = buffered.slice(newline + 1);
           if (command) {
             commands.push(command);
-            if (command.type === "push-to-talk") sendState(command.active);
+            if (command.type === "push-to-talk") {
+              micTalking = command.active;
+              sendState();
+            } else if (command.target === "mic") {
+              micMuted = command.muted;
+              if (!micMuted) micTalking = false;
+              sendState();
+            }
           }
         }
       });
@@ -173,18 +182,18 @@ describe("Remote console layout", () => {
       );
       await setup.renderOnce();
       await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
-      const mic = setup.renderer.root.findDescendantById("remote-control-mic");
-      expect(mic).toBeInstanceOf(BoxRenderable);
-      const target = mic as BoxRenderable;
-      const x = target.x + Math.max(1, Math.floor(target.width / 2));
-      const y = target.y + Math.max(1, Math.floor(target.height / 2));
+      const rails = setup.renderer.root.findDescendantById("remote-rails");
+      expect(rails).toBeInstanceOf(BoxRenderable);
+      const talkTarget = rails as BoxRenderable;
+      const talkX = talkTarget.x + 2;
+      const talkY = talkTarget.y + Math.max(1, Math.floor(talkTarget.height / 2));
 
-      await setup.mockMouse.pressDown(x, y);
+      await setup.mockMouse.pressDown(talkX, talkY);
       await setup.waitFor(() =>
         commands.some((command) => command.type === "push-to-talk" && command.active),
       );
       await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
-      await setup.mockMouse.release(x, y);
+      await setup.mockMouse.release(talkX, talkY);
       await setup.waitFor(() =>
         commands.some((command) => command.type === "push-to-talk" && !command.active),
       );
@@ -195,6 +204,19 @@ describe("Remote console layout", () => {
           .filter((command) => command.type === "push-to-talk")
           .map((command) => command.active),
       ).toEqual([true, false]);
+
+      const mic = setup.renderer.root.findDescendantById("remote-control-mic");
+      expect(mic).toBeInstanceOf(BoxRenderable);
+      const muteTarget = mic as BoxRenderable;
+      const muteX = muteTarget.x + Math.max(1, Math.floor(muteTarget.width / 2));
+      const muteY = muteTarget.y + Math.max(1, Math.floor(muteTarget.height / 2));
+      await setup.mockMouse.click(muteX, muteY);
+      await setup.waitFor(() =>
+        commands.some(
+          (command) => command.type === "set-muted" && command.target === "mic" && !command.muted,
+        ),
+      );
+      await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
     } finally {
       setup.mockInput.pressKey("q");
       await remote;

@@ -366,9 +366,10 @@ agentvoice remote
 ```
 
 The console shows live `YOU` and `AGENT` activity rails and two large audio
-controls. Press and hold MIC for push-to-talk while the microphone is muted;
-SPEAKER remains a toggle. It is designed around a portrait terminal, while
-still adapting to other terminal sizes. `m` persistently mutes or unmutes the
+controls. Tap MIC to persistently mute or unmute; press and hold the YOU side
+of the activity rail for push-to-talk while the microphone is muted. SPEAKER
+remains a toggle. It is designed around a portrait terminal, while still
+adapting to other terminal sizes. `m` persistently mutes or unmutes the
 microphone, `s` toggles the speaker, hold `Space` for keyboard push-to-talk,
 and `q` exits.
 
