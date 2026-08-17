@@ -9,8 +9,8 @@ import {
 import {
   boundedViewportExtent,
   boundedViewportSize,
-  signalLabelRuns,
-  signalReadoutRuns,
+  instrumentRuns,
+  pttRowCount,
   styledInstrumentField,
 } from "../src/console/signal-field-ui.ts";
 
@@ -170,44 +170,55 @@ describe("signal field", () => {
     expect(colors.size).toBeGreaterThan(WASH_STEPS * 0.6);
   });
 
-  test("label and readout runs pin left, right, and a center that yields when narrow", () => {
-    const labels = signalLabelRuns(49, false, false, false, "#e2b56f", "#7fb9e8");
-    expect(labels[0]).toMatchObject({ x: 0, text: "YOU ▷ INPUT", bold: true });
-    expect(labels[1]).toMatchObject({ x: 49 - "OUTPUT ◁ AGENT".length, text: "OUTPUT ◁ AGENT" });
-    expect(labels[2]?.text).toBe("DUPLEX / 48 KHZ");
-    expect(signalLabelRuns(40, false, false, false, "#e2b56f", "#7fb9e8")).toHaveLength(2);
+  test("instrument runs place status, zone outlines, voice text, and push-to-talk", () => {
+    const status = { text: "\u25cf LIVE 0:12", color: "#82cb9a" };
+    const you = { muted: false, talking: false, color: "#e2b56f", db: Number.NEGATIVE_INFINITY };
+    const agent = { muted: true, color: "#7fb9e8", db: -18.7 };
+    const runs = instrumentRuns(60, 19, status, you, agent);
+    const texts = runs.map((run) => run.text);
+    expect(texts).toContain("YOU \u25b7 INPUT");
+    expect(texts).toContain("AGENT \u00d7 MUTED");
+    expect(texts).toContain("PUSH TO TALK");
+    expect(texts).toContain(" / 48 KHZ");
+    expect(texts).toContain("-\u221e  dB");
+    expect(texts).toContain("-18.7 dB");
+    expect(runs.find((run) => run.text === status.text)?.y).toBe(0);
+    const ptt = runs.find((run) => run.text === "PUSH TO TALK");
+    expect(ptt?.y).toBeGreaterThanOrEqual(19 - pttRowCount(19));
+    const corners = runs.filter((run) => run.text.startsWith("\u256d"));
+    expect(corners).toHaveLength(3);
 
-    const status = { text: "● LIVE 0:12", color: "#82cb9a" };
-    const readout = signalReadoutRuns(60, Number.NEGATIVE_INFINITY, -18.7, "#a", "#b", status);
-    expect(readout[0]).toMatchObject({ x: 0, text: "  -∞  dB" });
-    expect(readout[1]).toMatchObject({ x: 60 - " -18.7 dB".length, text: " -18.7 dB" });
-    expect(readout[2]).toMatchObject({ text: "● LIVE 0:12", color: "#82cb9a" });
+    const narrow = instrumentRuns(40, 19, status, you, agent).map((run) => run.text);
+    expect(narrow).not.toContain(" / 48 KHZ");
+
+    const talking = instrumentRuns(60, 19, status, { ...you, talking: true }, agent).map(
+      (run) => run.text,
+    );
+    expect(talking).toContain("YOU \u25cf TALKING");
+    expect(talking).toContain("\u25cf TALKING");
   });
 
-  test("instrument overlays float on the field's top and bottom rows", () => {
+  test("instrument runs float over the field at their cells", () => {
     const field = new SignalField({ seed: 23 });
-    const frame = field.render(40, 5);
+    const frame = field.render(40, 7);
     const styled = styledInstrumentField(
       frame,
-      {
-        faint: "#4b575e",
-        dim: "#7d8a91",
-        you: "#e2b56f",
-        agent: "#7fb9e8",
-      },
-      {
-        top: [{ x: 0, text: "YOU", color: "#e2b56f", bold: true }],
-        bottom: [{ x: 37, text: "END", color: "#7fb9e8" }],
-      },
+      { faint: "#4b575e", dim: "#7d8a91", you: "#e2b56f", agent: "#7fb9e8" },
+      [
+        { x: 0, y: 0, text: "TOP", color: "#e2b56f", bold: true },
+        { x: 18, y: 3, text: "MID", color: "#d8e2e7" },
+        { x: 37, y: 6, text: "END", color: "#7fb9e8" },
+      ],
     );
     const rows = styled.chunks
       .map((chunk) => chunk.text)
       .join("")
       .split("\n");
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(7);
     expect(rows.every((row) => row.length === 40)).toBe(true);
-    expect(rows[0]?.startsWith("YOU")).toBe(true);
-    expect(rows[4]?.endsWith("END")).toBe(true);
+    expect(rows[0]?.startsWith("TOP")).toBe(true);
+    expect(rows[3]?.slice(18, 21)).toBe("MID");
+    expect(rows[6]?.endsWith("END")).toBe(true);
     expect(rows[1]).toBe(signalFieldText(frame).split("\n")[1]);
   });
 

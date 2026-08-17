@@ -90,7 +90,7 @@ describe("Remote console shared TUI", () => {
       await setup.renderOnce();
       await setup.renderOnce();
       expect(setup.captureCharFrame()).toContain("WAITING");
-      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
       expect(setup.captureCharFrame()).toContain("-∞  dB");
       expectFieldFillsMain(46);
       expectFieldWithin(49, 46);
@@ -103,19 +103,19 @@ describe("Remote console shared TUI", () => {
       expect(box("voice-rails").height).toBeGreaterThanOrEqual(7);
       expectFieldFillsMain(19);
       expectFieldWithin(120, 19);
-      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
 
       setup.resize(80, 19);
       await setup.waitFor(() => settled(80, 19));
       expectFieldFillsMain(19);
       expectFieldWithin(80, 19);
-      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
 
       setup.resize(40, 19);
       await setup.waitFor(() => settled(40, 19));
       expectFieldFillsMain(19);
       expectFieldWithin(40, 19);
-      expect(setup.captureCharFrame()).not.toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).not.toContain("/ 48 KHZ");
       expect(setup.captureCharFrame()).toContain("WAITING");
 
       setup.resize(103, 7);
@@ -221,7 +221,7 @@ describe("Remote console shared TUI", () => {
       );
       await setup.renderOnce();
       await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
-      expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
+      expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
       expect(setup.captureCharFrame()).toContain("-42.4 dB");
       expect(setup.captureCharFrame()).toContain("● LIVE 00:04");
       expect(setup.captureCharFrame()).toContain("-18.7 dB");

@@ -175,8 +175,8 @@ codex cannot do).
 **Signal field** — The shared text-mode visualization in the console and
 Remote console: each activity envelope drawn as voice strands over a
 continuously undulating background wash that dims while anyone speaks; the
-instrument's labels and readout float over the field, which runs the full
-panel. It
+field runs full-bleed, and the instrument's text floats over it as a fading
+overlay marking its three touch zones (mic, speaker, push-to-talk). It
 visualizes energy and turn-taking, not frequency content; simultaneous voices
 simply share the field, and nothing marks the overlap. _Avoid_: "spectrum",
 "spectrogram", "equalizer" (the Duplex audio device does not expose frequency
