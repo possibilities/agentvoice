@@ -81,12 +81,16 @@ describe("signal field", () => {
     expect(left.render(48, 6)).toEqual(right.render(48, 6));
   });
 
-  test("standby is a glyphless undulation, smooth in space and continuous in time", () => {
+  test("standby is paper and undulation — no voice glyphs, smooth in space, continuous in time", () => {
     for (const standby of ["swell", "pond", "weave"] as const) {
       const field = new SignalField({ seed: 41, standby });
       const initialFrame = field.render(72, 9);
       const area = 72 * 9;
-      expect(signalFieldText(initialFrame).replaceAll("\n", "")).toBe(" ".repeat(area));
+      const idleChars = new Set(signalFieldText(initialFrame).replaceAll("\n", ""));
+      expect([...idleChars].every((char) => [" ", "│", "─", "┼"].includes(char))).toBe(true);
+      expect(countTone(initialFrame, "you")).toBe(0);
+      expect(countTone(initialFrame, "agent")).toBe(0);
+      expect(countTone(initialFrame, "grid")).toBeGreaterThan(0);
       expect(countWashed(initialFrame)).toBeGreaterThan(area * 0.3);
       expect(maxHorizontalStepDelta(initialFrame)).toBeLessThanOrEqual(2);
 
@@ -145,12 +149,19 @@ describe("signal field", () => {
     const frame = overlap.render(64, 7);
     expect(frame.dominant).toBe("contact");
     expect(frame.contact).toBeGreaterThan(0.9);
-    const chars = new Set(signalFieldText(frame));
-    for (const clash of CLASH_GLYPHS) expect(chars.has(clash)).toBe(false);
+    const voiceChars = new Set(
+      frame.rows
+        .flat()
+        .filter((cell) => cell.tone !== "grid")
+        .map((cell) => cell.char),
+    );
+    for (const clash of CLASH_GLYPHS) expect(voiceChars.has(clash)).toBe(false);
     expect(countTone(frame, "you")).toBeGreaterThan(0);
     expect(countTone(frame, "agent")).toBeGreaterThan(0);
     const tones = new Set(frame.rows.flat().map((cell) => cell.tone));
-    expect([...tones].every((tone) => ["faint", "dim", "you", "agent"].includes(tone))).toBe(true);
+    expect(
+      [...tones].every((tone) => ["faint", "dim", "grid", "you", "agent"].includes(tone)),
+    ).toBe(true);
   });
 
   test("wash colors ramp smoothly up from the field base", () => {
@@ -162,6 +173,26 @@ describe("signal field", () => {
       colors.add(signalFieldWashColor(step, "#131a1e", palette));
     }
     expect(colors.size).toBeGreaterThan(WASH_STEPS * 0.6);
+  });
+
+  test("graph paper rules the empty field, centered, and yields to strands", () => {
+    const field = new SignalField({ seed: 23 });
+    const idle = field.render(61, 7);
+    expect(idle.rows[3]?.[30]).toMatchObject({ char: "┼", tone: "grid" });
+    expect(idle.rows[3]?.[24]?.char).toBe("┼");
+    expect(idle.rows[2]?.[30]?.char).toBe("│");
+    expect(idle.rows[3]?.[31]?.char).toBe("─");
+    expect(idle.rows[1]?.[1]?.char).toBe(" ");
+    const paperOnFloor = idle.rows
+      .flat()
+      .filter((cell) => cell.tone === "grid" && cell.wash !== undefined);
+    expect(paperOnFloor.length).toBeGreaterThan(0);
+
+    for (let i = 0; i < 30; i++) field.step(1 / 30, { you: 1, agent: 0 });
+    const loud = field.render(61, 7);
+    expect(countTone(loud, "you")).toBeGreaterThan(0);
+    expect(countTone(loud, "grid")).toBeGreaterThan(0);
+    expect(countTone(loud, "grid")).toBeLessThan(countTone(idle, "grid"));
   });
 
   test("releases toward quiet instead of freezing the last loud frame", () => {

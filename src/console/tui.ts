@@ -392,6 +392,7 @@ export async function createVoiceTui(
     fieldCanvas.content = styledSignalField(frame, {
       faint: PALETTE.faint,
       dim: PALETTE.dim,
+      grid: PALETTE.border,
       you: youColor,
       agent: agentColor,
     });

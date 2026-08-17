@@ -168,6 +168,7 @@ function paint(): void {
   const tones: Record<SignalFieldTone, string> = {
     faint: VOICE_TONES.faint,
     dim: VOICE_TONES.dim,
+    grid: VOICE_TONES.border,
     you: VOICE_TONES.you,
     agent: VOICE_TONES.agent,
   };

@@ -29,6 +29,8 @@ const SIGNAL_MODE = "DUPLEX / 48 KHZ";
 export interface SignalFieldColors {
   faint: string;
   dim: string;
+  /** The graph-paper rules under the strands. */
+  grid: string;
   you: string;
   agent: string;
   /** The color the field canvas sits on; washes are mixed up from it. */

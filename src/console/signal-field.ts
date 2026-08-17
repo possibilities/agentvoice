@@ -2,16 +2,17 @@
  * Pure two-envelope text-mode animation shared by the Console and Remote
  * console. It renders energy, persistence, and turn overlap — never frequency.
  *
- * Two layers per cell: a glyph (the voice strands) and a wash (a background
- * tint on a fine luminance ramp). The floor is a continuously undulating calm
- * that dims a touch while anyone speaks; the strands lay over it. When both
- * voices sound at once — rare and brief in practice — their strands simply
- * share the field, the stronger one showing per cell: they touch, they never
- * clash, and nothing marks the overlap specially.
+ * Two layers per cell: a glyph (the voice strands, or the graph-paper rules
+ * where no strand reaches) and a wash (a background tint on a fine luminance
+ * ramp). The floor is a continuously undulating calm that dims a touch while
+ * anyone speaks; the strands lay over it. When both voices sound at once —
+ * rare and brief in practice — their strands simply share the field, the
+ * stronger one showing per cell: they touch, they never clash, and nothing
+ * marks the overlap specially.
  */
 
 export type SignalFieldChannel = "you" | "agent";
-export type SignalFieldTone = "faint" | "dim" | "you" | "agent";
+export type SignalFieldTone = "faint" | "dim" | "grid" | "you" | "agent";
 
 /** Quantization of the wash ramp; steps are ~1 RGB unit apart, so seams stay invisible. */
 export const WASH_STEPS = 14;
@@ -51,6 +52,22 @@ interface VoiceState {
 const YOU_GLYPHS = ["·", "╴", "─", "━", "┅", "┉"] as const;
 const AGENT_GLYPHS = ["·", "╶", "─", "━", "┄", "┈"] as const;
 const MUTED_GLYPHS = ["·", "┄", "┈"] as const;
+
+/** ~Square paper at the usual 1:2 terminal cell aspect. */
+const GRID_COLUMNS = 6;
+const GRID_ROWS = 3;
+
+export const GRID_GLYPHS = { cross: "┼", vertical: "│", horizontal: "─" } as const;
+
+/** Graph-paper rules, anchored at field center so the paper stays symmetric under the voices. */
+export function gridGlyph(x: number, y: number, width: number, height: number): string | undefined {
+  const onColumn = (x - Math.floor((width - 1) / 2)) % GRID_COLUMNS === 0;
+  const onRow = (y - Math.floor((height - 1) / 2)) % GRID_ROWS === 0;
+  if (onColumn && onRow) return GRID_GLYPHS.cross;
+  if (onColumn) return GRID_GLYPHS.vertical;
+  if (onRow) return GRID_GLYPHS.horizontal;
+  return undefined;
+}
 
 export class SignalField {
   standby: StandbyVariant;
@@ -160,7 +177,11 @@ export class SignalField {
     const wash = this.washAt(nx, ny);
     const threshold = 0.065;
     const strongest = Math.max(youStrength, agentStrength);
-    if (strongest < threshold) return { char: " ", tone: "faint", wash };
+    if (strongest < threshold) {
+      const paper = gridGlyph(x, y, width, height);
+      if (paper !== undefined) return { char: paper, tone: "grid", wash };
+      return { char: " ", tone: "faint", wash };
+    }
     if (youStrength >= agentStrength) {
       return voiceCell(youStrength + hash * 0.08, "you", YOU_GLYPHS, muted.you === true, wash);
     }
