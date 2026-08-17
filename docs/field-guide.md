@@ -416,6 +416,11 @@ default writable roots, so "outside the workspace" is not automatically
 "outside the sandbox" — escalations only trigger for genuinely protected
 paths.
 
+The workspace defaults to the user's home directory, which makes
+`workspace-write` write-anything-you-own — nearly as wide as
+`danger-full-access`. Pair it with an `orchestrator.workspace` narrowed to
+the directory the work actually belongs in, or the mode buys nothing.
+
 ### Worker dispatch
 
 `orchestrator.dispatch: true` is agentvoice's own lever on the surfaces

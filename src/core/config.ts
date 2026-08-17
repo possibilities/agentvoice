@@ -18,13 +18,7 @@
  */
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
-import {
-  defaultConfigPath,
-  type Environ,
-  expandTilde,
-  stateDirectory,
-  surfaceSocketPath,
-} from "../paths.ts";
+import { defaultConfigPath, type Environ, expandTilde, surfaceSocketPath } from "../paths.ts";
 import {
   ACCOUNTS_KEYS,
   type AccountsValues,
@@ -470,12 +464,10 @@ export function resolveConfig(
     );
   }
 
-  const workspace = resolve(
-    expandTilde(
-      pickOrchestrator("workspace") ?? join(stateDirectory(env, home), "workspace"),
-      home,
-    ),
-  );
+  // The orchestrator agent lives in the user's home directory: it is an
+  // assistant on this machine, not a process penned into a scratch dir. It
+  // makes its own working directories for the files a task produces.
+  const workspace = resolve(expandTilde(pickOrchestrator("workspace") ?? home, home));
   const roots = pickOrchestrator("runtime-workspace-roots");
 
   const orchestrator: OrchestratorConfig = {

@@ -21,7 +21,7 @@ describe("resolveConfig", () => {
     expect(config.codex).toBe("codex");
     expect(config.orchestrator.sandbox).toBe("danger-full-access");
     expect(config.orchestrator.approvalPolicy).toBe("never");
-    expect(config.orchestrator.workspace).toBe("/home/tester/.local/state/agentvoice/workspace");
+    expect(config.orchestrator.workspace).toBe("/home/tester");
     expect(config.orchestrator.model).toBeUndefined();
     expect(config.orchestrator.effort).toBeUndefined();
     expect(config.orchestrator.personality).toBeUndefined();
@@ -60,7 +60,7 @@ describe("resolveConfig", () => {
     expect(config.voice.clientManagedHandoffs).toBeUndefined();
   });
 
-  test("honors CODEX_PATH and XDG_STATE_HOME", () => {
+  test("honors CODEX_PATH; XDG_STATE_HOME does not move the workspace", () => {
     const config = resolveConfig(
       {},
       {},
@@ -68,7 +68,9 @@ describe("resolveConfig", () => {
       HOME,
     );
     expect(config.codex).toBe("/opt/codex");
-    expect(config.orchestrator.workspace).toBe("/var/state/agentvoice/workspace");
+    // The workspace is the home directory, not a state path: XDG_STATE_HOME
+    // moves the state directory without moving the agent.
+    expect(config.orchestrator.workspace).toBe("/home/tester");
   });
 
   test("expands tilde in workspace, roots, and codex paths", () => {

@@ -197,8 +197,12 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
   ctrl+k command palette (`src/tui/palette.ts`: type to filter, enter to
   run, rows tappable), which is also the key reference. Direct hotkeys
   stay bound while it is closed; ctrl+c always falls through.
+- The orchestrator agent's cwd is the user's home directory by default
+  (`orchestrator.workspace` overrides it); it is expected to make its own
+  per-task working directories rather than write there directly. Nothing
+  under the state dir is the agent's workspace.
 - State on disk under `~/.local/state/agentvoice/` (`$XDG_STATE_HOME`
-  honored): `workspace` (agent cwd), `app-server` (stable resident cwd — must
+  honored): `app-server` (stable resident cwd — must
   outlive the process; it re-reads its own cwd on every thread start),
   `resident/` (0700: the app-server socket, rendered wrapper, pick log, and
   `resident.json` account state), `thread.json` (the persisted orchestrator

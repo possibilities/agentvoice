@@ -48,8 +48,11 @@ directory that primes one agent, discovered by name rather than referenced from
 "system prompt" (ambiguous across the two agents).
 
 **Workspace** — The directory the orchestrator agent operates in (codex thread
-`cwd`); defaults to an agent-owned empty directory under the state dir.
-_Avoid_: "cwd" (reserved for the resident's own working directory).
+`cwd`), shared by its workers; defaults to the user's home directory, so the
+agent starts where the user's work already lives rather than in a pen of its
+own. It is not scratch space: the agent makes a working directory per task for
+the files that task produces. _Avoid_: "cwd" (reserved for the resident's own
+working directory), "scratch directory".
 
 **Remote console** — The phone-sized terminal control surface started with
 `agentvoice remote` after SSHing into the console's machine. It attaches to

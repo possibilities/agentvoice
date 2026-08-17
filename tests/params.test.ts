@@ -23,7 +23,7 @@ function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
 describe("threadParams", () => {
   test("sends nothing beyond the server's own defaults", () => {
     expect(thread()).toEqual({
-      cwd: "/home/tester/.local/state/agentvoice/workspace",
+      cwd: "/home/tester",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       threadSource: "agentvoice-orchestrator",
@@ -245,7 +245,7 @@ describe("workerThreadParams", () => {
         },
       }),
     );
-    expect(params["cwd"]).toBe("/home/tester/.local/state/agentvoice/workspace");
+    expect(params["cwd"]).toBe("/home/tester");
     expect(params["sandbox"]).toBe("workspace-write");
     expect(params["approvalPolicy"]).toBe("on-request");
     expect(params["threadSource"]).toBe("agentvoice-worker");

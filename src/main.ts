@@ -73,7 +73,7 @@ and server.schema.json):
   --voice-model <id>       Voice agent model (default: codex config)
   --voice <name>           Voice timbre (default: upstream default)
   --workspace <dir>        Orchestrator agent working directory
-                           (default: ~/.local/state/agentvoice/workspace)
+                           (default: your home directory)
   --sandbox <mode>         read-only | workspace-write | danger-full-access
                            (default: danger-full-access)
   --approval-policy <p>    never | on-request | untrusted (default: never)

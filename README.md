@@ -69,7 +69,7 @@ lives in the config file.
 | `--effort <level>` | codex config | Orchestrator agent reasoning effort (`none…ultra`); think-time per turn |
 | `--voice-model <id>` | codex config | Voice agent model — conversational front-end only |
 | `--voice <name>` | upstream | Voice timbre (e.g. `marin`, `cove`) |
-| `--workspace <dir>` | `~/.local/state/agentvoice/workspace` | Directory the orchestrator agent operates in |
+| `--workspace <dir>` | your home directory | Directory the orchestrator agent operates in (an `AGENTS.md` there primes it) |
 | `--sandbox <mode>` | `danger-full-access` | `read-only` \| `workspace-write` \| `danger-full-access` |
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
 | `--codex <path>` | `$CODEX_PATH` or `codex` | Codex binary the resident runs |
@@ -297,8 +297,10 @@ does. Approval requests are always **auto-denied** (there is no UI to answer
 them; the agent is told no and adapts instead of hanging), so the **sandbox is
 the only real guardrail**. The default `danger-full-access` + `never` runs an
 unattended, unrestricted agent with your user permissions in the workspace —
-what makes hands-free "install it and run the tests" work. On untrusted
-machines, prefer `--sandbox workspace-write`.
+what makes hands-free "install it and run the tests" work. Since the workspace
+defaults to your home directory, that is your whole account. `--sandbox
+workspace-write` narrows writes to the workspace, which at the default is no
+narrower; pair it with `--workspace <dir>` to make it mean something.
 
 To control a session from another device, SSH in and use the
 [Remote console](#phone-remote) — audio stays on the console's machine.
@@ -376,8 +378,6 @@ voice console is not running or restarts.
 
 ## State on disk
 
-- `~/.local/state/agentvoice/workspace` — default orchestrator workspace.
-  An `AGENTS.md` here reaches the orchestrator agent the ordinary codex way.
 - `~/.local/state/agentvoice/app-server` — stable working directory for the
   resident (it re-reads its own cwd on every thread start; leave it in
   place). `$XDG_STATE_HOME` is honored.

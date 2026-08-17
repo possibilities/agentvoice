@@ -76,7 +76,7 @@ export const orchestratorValuesSchema = z
     workspace: z
       .string()
       .describe(
-        "The agent's working directory (its cwd; an AGENTS.md there applies). Tilde-expanded. Default: ~/.local/state/agentvoice/workspace.",
+        "The agent's working directory (its cwd; an AGENTS.md there applies). Tilde-expanded. Default: the user's home directory.",
       )
       .optional(),
     dispatch: z
