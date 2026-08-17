@@ -10,8 +10,19 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import { createCommandPalette } from "../tui/palette.ts";
-import { PUSH_TO_TALK_KEY_LEASE_MS, pushToTalkKeyAction } from "./push-to-talk.ts";
-import { encodeRemoteMessage, parseRemoteState, type RemoteState } from "./remote-protocol.ts";
+import {
+  type AudioTarget,
+  audioControlKeyAction,
+  KEY_HOLD_LEASE_MS,
+  pushToTalkKeyAction,
+  releaseCommitsClick,
+} from "./audio-control.ts";
+import {
+  encodeRemoteMessage,
+  parseRemoteState,
+  type RemoteHoldInput,
+  type RemoteState,
+} from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
   boundedViewportExtent,
@@ -27,9 +38,11 @@ export class RemoteError extends Error {}
 
 export interface RemoteUiOptions {
   createRenderer?(): Promise<CliRenderer>;
+  now?(): number;
 }
 
 export async function runRemote(socketPath: string, options: RemoteUiOptions = {}): Promise<void> {
+  const now = options.now ?? (() => performance.now());
   const renderer: CliRenderer = options.createRenderer
     ? await options.createRenderer()
     : await createCliRenderer({
@@ -45,7 +58,8 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     height: "100%",
     flexDirection: "column",
     backgroundColor: PALETTE.bg,
-    onMouseUp: () => setTalkInput("pointer", false),
+    onMouseUp: () => endPointerControl(),
+    onMouseDragEnd: () => endPointerControl(),
   });
   renderer.root.add(root);
 
@@ -74,10 +88,10 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     backgroundColor: PALETTE.panel,
     onMouseDown: (event) => {
       const middle = rails.x + rails.width / 2;
-      if (event.x < middle) setTalkInput("pointer", true);
-      else toggle("speaker");
+      beginPointerControl(event.x < middle ? "mic" : "speaker");
     },
-    onMouseUp: () => setTalkInput("pointer", false),
+    onMouseUp: () => endPointerControl(),
+    onMouseDragEnd: () => endPointerControl(),
   });
   const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
   const fieldCanvas = new TextRenderable(renderer, {
@@ -97,44 +111,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   rails.add(fieldCanvas);
   rails.add(fieldReadout);
   main.add(rails);
-
-  const controls = new BoxRenderable(renderer, {
-    id: "remote-controls",
-    width: "100%",
-    height: "42%",
-    minHeight: 7,
-    flexDirection: "row",
-    gap: 1,
-    backgroundColor: PALETTE.bg,
-  });
-  main.add(controls);
-
-  const makeControl = (target: "mic" | "speaker", label: string, color: string) => {
-    const panel = new BoxRenderable(renderer, {
-      id: `remote-control-${target}`,
-      flexGrow: 1,
-      flexBasis: 1,
-      border: true,
-      borderStyle: "single",
-      borderColor: color,
-      backgroundColor: PALETTE.panel,
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      gap: 1,
-      onMouseDown: () => toggle(target),
-    });
-    const title = new TextRenderable(renderer, {
-      content: new StyledText([bold(fg(color)(label))]),
-    });
-    const state = new TextRenderable(renderer, { content: "—", fg: PALETTE.dim });
-    panel.add(title);
-    panel.add(state);
-    controls.add(panel);
-    return { panel, title, state, color };
-  };
-  const micControl = makeControl("mic", "MIC", PALETTE.you);
-  const speakerControl = makeControl("speaker", "SPEAKER", PALETTE.agent);
 
   const palette = createCommandPalette(
     {
@@ -161,8 +137,11 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   let connected = false;
   let closed = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  const talkInputs = new Set<"keyboard" | "pointer">();
-  let sentPushToTalk = false;
+  let pointerGesture: { target: AudioTarget; startedAt: number } | null = null;
+  const keyControlGestures = new Map<
+    AudioTarget,
+    { startedAt: number; clickEligible: boolean; lease: ReturnType<typeof setTimeout> }
+  >();
   let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
   let layoutWidth = 0;
   let layoutHeight = 0;
@@ -174,16 +153,12 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     const height = renderer.height || process.stdout.rows || 24;
     layoutWidth = width;
     layoutHeight = height;
-    // With no chrome rows, the normal seven-row regions fit until the
-    // terminal is genuinely shallow; below that the signal field absorbs
-    // the remaining height while both touch targets stay useful.
-    const short = height < 17;
+    // The signal field is the whole instrument and its channel halves are
+    // the two large pointer targets.
+    const short = height < 9;
     main.paddingTop = short ? 0 : 1;
     main.paddingBottom = short ? 0 : 1;
     rails.minHeight = short ? 4 : 7;
-    controls.height = short ? 6 : "42%";
-    controls.minHeight = short ? 6 : 7;
-    controls.flexDirection = width < 26 ? "column" : "row";
     palette.update({
       width,
       height,
@@ -191,21 +166,19 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
         {
           id: "mic",
           key: "M",
-          label: `mic — ${latest?.mic.muted ? "unmute · hold Space to talk" : "mute"}`,
+          label: `mic — ${latest?.mic.muted ? "unmute · hold M/Space" : "mute · hold M"}`,
           onRun: () => toggle("mic"),
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker — ${latest?.speaker.muted ? "unmute" : "mute"}`,
+          label: `speaker — ${latest?.speaker.muted ? "unmute" : "mute"} · hold S`,
           onRun: () => toggle("speaker"),
         },
         { id: "quit", key: "Q", label: "quit", onRun: shutdown },
       ],
     });
 
-    paintControl(micControl, "MIC", latest?.mic.muted, connected, latest?.mic.talking);
-    paintControl(speakerControl, "SPEAKER", latest?.speaker.muted, connected);
     renderer.requestRender();
   };
 
@@ -217,7 +190,6 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     next.setEncoding("utf8");
     next.on("connect", () => {
       connected = true;
-      sentPushToTalk = false;
       paint();
     });
     next.on("data", (chunk: string) => {
@@ -227,12 +199,8 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
         if (newline === -1) break;
         const parsed = parseRemoteState(buffered.slice(0, newline));
         buffered = buffered.slice(newline + 1);
-        if (parsed) {
-          latest = parsed;
-          if (!parsed.mic.muted && talkInputs.size > 0) clearTalkInputs();
-        }
+        if (parsed) latest = parsed;
       }
-      syncPushToTalk();
       paint();
     });
     next.on("error", () => {});
@@ -240,58 +208,102 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       if (socket === next) socket = null;
       connected = false;
       latest = null;
-      sentPushToTalk = false;
-      clearTalkInputs();
+      clearInputs();
       paint();
       if (!closed) reconnectTimer = setTimeout(connect, RECONNECT_MS);
     });
   };
 
-  function toggle(target: "mic" | "speaker"): void {
+  function toggle(target: AudioTarget): void {
     if (!connected || !socket || !latest) return;
     const muted = target === "mic" ? latest.mic.muted : latest.speaker.muted;
     socket.write(encodeRemoteMessage({ type: "set-muted", target, muted: !muted }));
   }
 
-  function setTalkInput(source: "keyboard" | "pointer", active: boolean): void {
-    if (active) {
-      if (latest?.mic.muted !== true) return;
-      talkInputs.add(source);
-    } else {
-      talkInputs.delete(source);
-    }
-    syncPushToTalk();
+  function persistentMuted(target: AudioTarget): boolean | null {
+    if (!latest) return null;
+    return target === "mic" ? latest.mic.muted : latest.speaker.muted;
   }
 
-  function syncPushToTalk(): void {
+  function holdMuted(target: AudioTarget, input: RemoteHoldInput, muted: boolean): void {
     if (!connected || !socket || !latest) return;
-    const active = latest.mic.muted && talkInputs.size > 0;
-    if (active === sentPushToTalk) return;
-    socket.write(encodeRemoteMessage({ type: "push-to-talk", active }));
-    sentPushToTalk = active;
+    socket.write(encodeRemoteMessage({ type: "hold-muted", target, input, muted }));
+  }
+
+  function releaseMuted(target: AudioTarget, input: RemoteHoldInput, commit = false): void {
+    if (!connected || !socket || !latest) return;
+    socket.write(encodeRemoteMessage({ type: "release-muted", target, input, commit }));
+  }
+
+  function beginPointerControl(target: AudioTarget): void {
+    if (pointerGesture) endPointerControl(false);
+    const muted = persistentMuted(target);
+    if (muted === null) return;
+    pointerGesture = { target, startedAt: now() };
+    holdMuted(target, "pointer", !muted);
+  }
+
+  function endPointerControl(classifyClick = true): void {
+    const gesture = pointerGesture;
+    if (!gesture) return;
+    pointerGesture = null;
+    const commit = classifyClick && releaseCommitsClick(gesture.startedAt, now());
+    releaseMuted(gesture.target, "pointer", commit);
+  }
+
+  function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
+    const existing = keyControlGestures.get(target);
+    if (existing) {
+      clearTimeout(existing.lease);
+      existing.lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
+      existing.lease.unref?.();
+      return;
+    }
+    const muted = persistentMuted(target);
+    if (muted === null) return;
+    holdMuted(target, "key", !muted);
+    const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
+    lease.unref?.();
+    keyControlGestures.set(target, {
+      startedAt: now(),
+      clickEligible,
+      lease,
+    });
+  }
+
+  function endControlKey(target: AudioTarget, classifyClick = true): void {
+    const gesture = keyControlGestures.get(target);
+    if (!gesture) return;
+    keyControlGestures.delete(target);
+    clearTimeout(gesture.lease);
+    const commit =
+      classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
+    releaseMuted(target, "key", commit);
   }
 
   function renewKeyboardTalk(): void {
     if (latest?.mic.muted !== true) return;
-    setTalkInput("keyboard", true);
+    holdMuted("mic", "space", false);
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = setTimeout(() => {
       keyboardTalkLease = null;
-      setTalkInput("keyboard", false);
-    }, PUSH_TO_TALK_KEY_LEASE_MS);
+      releaseMuted("mic", "space");
+    }, KEY_HOLD_LEASE_MS);
     keyboardTalkLease.unref?.();
   }
 
   function endKeyboardTalk(): void {
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
-    setTalkInput("keyboard", false);
+    releaseMuted("mic", "space");
   }
 
-  function clearTalkInputs(): void {
+  function clearInputs(): void {
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
-    talkInputs.clear();
+    pointerGesture = null;
+    for (const gesture of keyControlGestures.values()) clearTimeout(gesture.lease);
+    keyControlGestures.clear();
   }
 
   let resolveDone!: () => void;
@@ -302,7 +314,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
     if (closed) return;
     closed = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    clearTalkInputs();
+    clearInputs();
     socket?.destroy();
     process.off("SIGINT", shutdown);
     process.off("SIGTERM", shutdown);
@@ -313,8 +325,13 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
   };
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
     const talkAction = pushToTalkKeyAction(key, palette.isOpen());
+    const controlAction = audioControlKeyAction(key, palette.isOpen());
     if (talkAction === "end") {
       endKeyboardTalk();
+      return;
+    }
+    if (controlAction?.action === "end") {
+      endControlKey(controlAction.target);
       return;
     }
     if (palette.handleKey(key)) return;
@@ -322,26 +339,31 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
       renewKeyboardTalk();
       return;
     }
+    if (controlAction) {
+      if (controlAction.action === "toggle") toggle(controlAction.target);
+      else renewControlKey(controlAction.target, controlAction.action === "begin");
+      return;
+    }
     if (key.name === "space") {
       return;
     }
     if (key.eventType !== "press") return;
     if (key.name === "q" || (key.ctrl && key.name === "c")) shutdown();
-    else if (key.name === "m") toggle("mic");
-    else if (key.name === "s") toggle("speaker");
   });
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
   renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
     if (pushToTalkKeyAction(key, palette.isOpen()) === "end") endKeyboardTalk();
+    const controlAction = audioControlKeyAction(key, palette.isOpen());
+    if (controlAction?.action === "end") endControlKey(controlAction.target);
   });
   const frameCallback = async (deltaMs: number): Promise<void> => {
     if (renderer.width !== layoutWidth || renderer.height !== layoutHeight) paint();
     const viewportWidth = renderer.width || process.stdout.columns || 40;
     const viewportHeight = renderer.height || process.stdout.rows || 24;
-    const micTalking = latest?.mic.talking ?? false;
-    const micMuted = (latest?.mic.muted ?? false) && !micTalking;
-    const agentMuted = latest?.speaker.muted ?? false;
+    const micMuted = latest?.mic.effectiveMuted ?? false;
+    const micTalking = latest?.mic.muted === true && !micMuted;
+    const agentMuted = latest?.speaker.effectiveMuted ?? false;
     signalField.step(deltaMs / 1000, {
       you: connected ? (latest?.mic.level ?? 0) : 0,
       agent: connected ? (latest?.speaker.level ?? 0) : 0,
@@ -462,20 +484,4 @@ function remoteFieldReadout(
     fg(PALETTE.faint)(" ".repeat(spare)),
     fg(agentColor)(right),
   ]);
-}
-
-function paintControl(
-  control: { panel: BoxRenderable; title: TextRenderable; state: TextRenderable; color: string },
-  label: string,
-  muted: boolean | undefined,
-  connected: boolean,
-  talking = false,
-): void {
-  const active = connected && muted !== undefined;
-  const color = active ? (muted && !talking ? PALETTE.dim : control.color) : PALETTE.faint;
-  control.panel.borderColor = color;
-  control.panel.backgroundColor = active && muted && !talking ? PALETTE.field : PALETTE.panel;
-  control.title.content = new StyledText([bold(fg(color)(label))]);
-  control.state.content = active ? (talking ? "TALKING" : muted ? "MUTED" : "LIVE") : "—";
-  control.state.fg = color;
 }

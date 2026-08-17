@@ -6,7 +6,7 @@ import { ClientControlServer, type RemoteControlPeer } from "../src/console/remo
 import { encodeRemoteMessage, REMOTE_PROTOCOL_VERSION } from "../src/console/remote-protocol.ts";
 
 describe("Remote console control server", () => {
-  test("identifies a push-to-talk source and releases it when the peer disconnects", async () => {
+  test("identifies a mute-hold source and releases it when the peer disconnects", async () => {
     const socketPath = join(tmpdir(), `av-control-${process.pid}-${Date.now()}.sock`);
     let resolveCommand!: (peer: RemoteControlPeer) => void;
     let resolveClose!: (peer: RemoteControlPeer) => void;
@@ -23,11 +23,11 @@ describe("Remote console control server", () => {
         protocol: REMOTE_PROTOCOL_VERSION,
         sequence: 0,
         phase: "live",
-        mic: { muted: true, talking: false, level: 0 },
-        speaker: { muted: false, level: 0 },
+        mic: { muted: true, effectiveMuted: true, level: 0 },
+        speaker: { muted: false, effectiveMuted: false, level: 0 },
       }),
       onCommand: (command, peer) => {
-        if (command.type !== "push-to-talk" || !command.active) return;
+        if (command.type !== "hold-muted" || command.muted) return;
         resolveCommand(peer);
       },
       onPeerClose: resolveClose,
@@ -40,7 +40,14 @@ describe("Remote console control server", () => {
         socket.once("connect", resolve);
         socket.once("error", reject);
       });
-      socket.write(encodeRemoteMessage({ type: "push-to-talk", active: true }));
+      socket.write(
+        encodeRemoteMessage({
+          type: "hold-muted",
+          target: "mic",
+          input: "pointer",
+          muted: false,
+        }),
+      );
       const commandPeer = await commandReceived;
 
       socket.destroy();

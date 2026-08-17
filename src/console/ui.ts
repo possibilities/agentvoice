@@ -23,17 +23,20 @@ import type { WatchedConfigSource } from "../core/config-watch.ts";
 import { VoiceRuntime } from "../core/runtime.ts";
 import { consoleControlSocketPath, stateDirectory } from "../paths.ts";
 import { createCommandPalette } from "../tui/palette.ts";
+import {
+  type AudioTarget,
+  audioControlKeyAction,
+  KEY_HOLD_LEASE_MS,
+  MuteGate,
+  type MuteHoldSource,
+  pushToTalkKeyAction,
+  releaseCommitsClick,
+} from "./audio-control.ts";
 import { formatClock, levelFromDb } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
-import {
-  PUSH_TO_TALK_KEY_LEASE_MS,
-  PushToTalkGate,
-  type PushToTalkSource,
-  pushToTalkKeyAction,
-} from "./push-to-talk.ts";
 import { ClientControlServer, type RemoteControlPeer } from "./remote-control.ts";
-import { REMOTE_PROTOCOL_VERSION } from "./remote-protocol.ts";
+import { REMOTE_PROTOCOL_VERSION, type RemoteHoldInput } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
   boundedViewportExtent,
@@ -73,6 +76,16 @@ const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
 
 interface Meter {
   db: number;
+}
+
+const REMOTE_HOLD_INPUTS = [
+  "pointer",
+  "key",
+  "space",
+] as const satisfies readonly RemoteHoldInput[];
+
+function remoteHoldSource(peer: RemoteControlPeer, input: RemoteHoldInput): string {
+  return `remote:${peer.id}:${input}`;
 }
 
 function styledFieldLabels(
@@ -173,9 +186,19 @@ export async function runConsole(
   // ---- state --------------------------------------------------------------
   const mic: Meter = { db: -Infinity };
   const agent: Meter = { db: -Infinity };
-  const microphone = new PushToTalkGate();
+  const microphone = new MuteGate();
+  const speaker = new MuteGate();
   const keyboardTalk = Symbol("console-keyboard");
-  const pointerTalk = Symbol("console-pointer");
+  const pointerControl = Symbol("console-pointer");
+  const keyControlSources: Record<AudioTarget, symbol> = {
+    mic: Symbol("console-mic-key"),
+    speaker: Symbol("console-speaker-key"),
+  };
+  let pointerGesture: { target: AudioTarget; startedAt: number } | null = null;
+  const keyControlGestures = new Map<
+    AudioTarget,
+    { startedAt: number; clickEligible: boolean; lease: ReturnType<typeof setTimeout> }
+  >();
   let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
   const signalField = new SignalField();
   let phase: TransportPhase = "waiting-ready";
@@ -219,16 +242,31 @@ export async function runConsole(
       phase,
       mic: {
         muted: microphone.muted,
-        talking: microphone.talking,
+        effectiveMuted: microphone.effectiveMuted,
         level: levelFromDb(mic.db),
       },
-      speaker: { muted: audio.speakerMuted, level: levelFromDb(agent.db) },
+      speaker: {
+        muted: speaker.muted,
+        effectiveMuted: speaker.effectiveMuted,
+        level: levelFromDb(agent.db),
+      },
     }),
     onCommand: (command, peer) => {
-      if (command.type === "set-muted") setMuted(command.target, command.muted);
-      else setPushToTalk(peer, command.active);
+      if (command.type === "set-muted") {
+        setMuted(command.target, command.muted);
+      } else if (command.type === "hold-muted") {
+        holdMuted(command.target, remoteHoldSource(peer, command.input), command.muted);
+      } else {
+        releaseMuted(command.target, remoteHoldSource(peer, command.input), command.commit);
+      }
     },
-    onPeerClose: (peer) => setPushToTalk(peer, false),
+    onPeerClose: (peer) => {
+      for (const input of REMOTE_HOLD_INPUTS) {
+        const source = remoteHoldSource(peer, input);
+        releaseMuted("mic", source);
+        releaseMuted("speaker", source);
+      }
+    },
   });
   try {
     await remoteControl.start();
@@ -335,7 +373,8 @@ export async function runConsole(
     height: "100%",
     flexDirection: "column",
     backgroundColor: PALETTE.bg,
-    onMouseUp: () => setPushToTalk(pointerTalk, false),
+    onMouseUp: () => endPointerControl(),
+    onMouseDragEnd: () => endPointerControl(),
   });
   renderer.root.add(root);
 
@@ -361,10 +400,10 @@ export async function runConsole(
     paddingRight: 2,
     onMouseDown: (event) => {
       const middle = meters.x + meters.width / 2;
-      if (event.x < middle) setPushToTalk(pointerTalk, true);
-      else toggleSpeaker();
+      beginPointerControl(event.x < middle ? "mic" : "speaker");
     },
-    onMouseUp: () => setPushToTalk(pointerTalk, false),
+    onMouseUp: () => endPointerControl(),
+    onMouseDragEnd: () => endPointerControl(),
   });
   main.add(meters);
 
@@ -418,13 +457,13 @@ export async function runConsole(
         {
           id: "mic",
           key: "M",
-          label: `mic — ${microphone.muted ? "unmute · hold Space to talk" : "mute"}`,
+          label: `mic — ${microphone.muted ? "unmute · hold M/Space" : "mute · hold M"}`,
           onRun: toggleMic,
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker — ${audio.speakerMuted ? "unmute" : "mute"}`,
+          label: `speaker — ${speaker.muted ? "unmute" : "mute"} · hold S`,
           onRun: toggleSpeaker,
         },
         {
@@ -444,13 +483,15 @@ export async function runConsole(
     });
 
     const youMuted = microphone.effectiveMuted;
+    const youTalking = microphone.muted && !youMuted;
     const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
-    const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
+    const agentMuted = speaker.effectiveMuted;
+    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldLabels.content = styledFieldLabels(
       Math.max(1, fieldLabels.width),
       youMuted,
-      microphone.talking,
-      audio.speakerMuted,
+      youTalking,
+      agentMuted,
       youColor,
       agentColor,
       "DUPLEX / 48 KHZ",
@@ -466,13 +507,15 @@ export async function runConsole(
     const viewportHeight = renderer.height || process.stdout.rows || 24;
 
     const youMuted = microphone.effectiveMuted;
+    const youTalking = microphone.muted && !youMuted;
     const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
-    const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
+    const agentMuted = speaker.effectiveMuted;
+    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     signalField.step(dt, {
       you: levelFromDb(mic.db),
       agent: levelFromDb(agent.db),
       youMuted,
-      agentMuted: audio.speakerMuted,
+      agentMuted,
     });
     const fieldSize = boundedViewportSize(
       fieldCanvas.width,
@@ -482,7 +525,7 @@ export async function runConsole(
     );
     const fieldFrame = signalField.render(fieldSize.width, fieldSize.height, {
       you: youMuted,
-      agent: audio.speakerMuted,
+      agent: agentMuted,
     });
     fieldCanvas.content = styledSignalField(fieldFrame, {
       faint: PALETTE.faint,
@@ -493,8 +536,8 @@ export async function runConsole(
     fieldLabels.content = styledFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
       youMuted,
-      microphone.talking,
-      audio.speakerMuted,
+      youTalking,
+      agentMuted,
       youColor,
       agentColor,
       "DUPLEX / 48 KHZ",
@@ -531,54 +574,93 @@ export async function runConsole(
     setMuted("mic", !microphone.muted);
   }
   function toggleSpeaker(): void {
-    setMuted("speaker", !audio.speakerMuted);
+    setMuted("speaker", !speaker.muted);
   }
-  function setMuted(target: "mic" | "speaker", muted: boolean): void {
-    const previous = target === "mic" ? microphone.muted : audio.speakerMuted;
-    if (previous === muted) return;
-    if (target === "mic") {
-      microphone.setMuted(muted);
-      audio.micMuted = microphone.effectiveMuted;
-    } else {
-      audio.speakerMuted = muted;
-    }
+  function muteGate(target: AudioTarget): MuteGate {
+    return target === "mic" ? microphone : speaker;
+  }
+  function setMuted(target: AudioTarget, muted: boolean): void {
+    publishMuteChange(target, muteGate(target).setMuted(muted));
+  }
+  function holdMuted(target: AudioTarget, source: MuteHoldSource, muted: boolean): void {
+    publishMuteChange(target, muteGate(target).hold(source, muted));
+  }
+  function releaseMuted(target: AudioTarget, source: MuteHoldSource, commit = false): void {
+    publishMuteChange(target, muteGate(target).release(source, commit));
+  }
+  function publishMuteChange(target: AudioTarget, changed: boolean): void {
+    if (!changed) return;
+    const gate = muteGate(target);
+    if (target === "mic") audio.micMuted = gate.effectiveMuted;
+    else audio.speakerMuted = gate.effectiveMuted;
+    const talking = target === "mic" && gate.muted && !gate.effectiveMuted;
     feed(
-      `${target === "mic" ? "microphone" : "speaker"} ${muted ? "muted" : "live"}`,
+      `${target === "mic" ? "microphone" : "speaker"} ${talking ? "talking" : gate.effectiveMuted ? "muted" : "live"}`,
       target === "mic" ? PALETTE.you : PALETTE.agent,
     );
-    // The palette's mute/unmute labels live in refreshStatic, which no
-    // longer runs on every feed line.
     refreshStatic();
     remoteControl.publish();
   }
 
-  function setPushToTalk(source: PushToTalkSource | RemoteControlPeer, active: boolean): void {
-    const changed = active ? microphone.begin(source) : microphone.end(source);
-    if (!changed) return;
-    audio.micMuted = microphone.effectiveMuted;
-    feed(
-      `microphone ${microphone.talking ? "talking" : microphone.effectiveMuted ? "muted" : "live"}`,
-      PALETTE.you,
-    );
-    refreshStatic();
-    remoteControl.publish();
+  function beginPointerControl(target: AudioTarget): void {
+    if (pointerGesture) endPointerControl(false);
+    pointerGesture = { target, startedAt: performance.now() };
+    holdMuted(target, pointerControl, !muteGate(target).muted);
+  }
+
+  function endPointerControl(classifyClick = true): void {
+    const gesture = pointerGesture;
+    if (!gesture) return;
+    pointerGesture = null;
+    const commit = classifyClick && releaseCommitsClick(gesture.startedAt, performance.now());
+    releaseMuted(gesture.target, pointerControl, commit);
+  }
+
+  function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
+    const existing = keyControlGestures.get(target);
+    if (existing) {
+      clearTimeout(existing.lease);
+      existing.lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
+      existing.lease.unref?.();
+      return;
+    }
+    holdMuted(target, keyControlSources[target], !muteGate(target).muted);
+    const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
+    lease.unref?.();
+    keyControlGestures.set(target, {
+      startedAt: performance.now(),
+      clickEligible,
+      lease,
+    });
+  }
+
+  function endControlKey(target: AudioTarget, classifyClick = true): void {
+    const gesture = keyControlGestures.get(target);
+    if (!gesture) return;
+    keyControlGestures.delete(target);
+    clearTimeout(gesture.lease);
+    const commit =
+      classifyClick &&
+      gesture.clickEligible &&
+      releaseCommitsClick(gesture.startedAt, performance.now());
+    releaseMuted(target, keyControlSources[target], commit);
   }
 
   function renewKeyboardTalk(): void {
     if (!microphone.muted) return;
-    setPushToTalk(keyboardTalk, true);
+    holdMuted("mic", keyboardTalk, false);
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = setTimeout(() => {
       keyboardTalkLease = null;
-      setPushToTalk(keyboardTalk, false);
-    }, PUSH_TO_TALK_KEY_LEASE_MS);
+      releaseMuted("mic", keyboardTalk);
+    }, KEY_HOLD_LEASE_MS);
     keyboardTalkLease.unref?.();
   }
 
   function endKeyboardTalk(): void {
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
-    setPushToTalk(keyboardTalk, false);
+    releaseMuted("mic", keyboardTalk);
   }
 
   async function shutdown(): Promise<void> {
@@ -586,6 +668,8 @@ export async function runConsole(
     shuttingDown = true;
     if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
     keyboardTalkLease = null;
+    for (const target of ["mic", "speaker"] as const) endControlKey(target, false);
+    endPointerControl(false);
     audio.micMuted = true;
     debugLog?.("console shutdown");
     renderer.removeFrameCallback(frameCallback);
@@ -600,13 +684,27 @@ export async function runConsole(
 
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
     const talkAction = pushToTalkKeyAction(key, palette.isOpen());
+    const controlAction = audioControlKeyAction(key, palette.isOpen());
     if (talkAction === "end") {
       endKeyboardTalk();
+      return;
+    }
+    if (controlAction?.action === "end") {
+      endControlKey(controlAction.target);
       return;
     }
     if (palette.handleKey(key)) return;
     if (talkAction === "renew") {
       renewKeyboardTalk();
+      return;
+    }
+    if (controlAction) {
+      if (controlAction.action === "toggle") {
+        const gate = muteGate(controlAction.target);
+        setMuted(controlAction.target, !gate.muted);
+      } else {
+        renewControlKey(controlAction.target, controlAction.action === "begin");
+      }
       return;
     }
     if (key.name === "space") {
@@ -617,15 +715,15 @@ export async function runConsole(
       void shutdown();
       return;
     }
-    if (key.name === "m") toggleMic();
-    else if (key.name === "s") toggleSpeaker();
-    else if (key.name === "r") transport.redial("manual");
+    if (key.name === "r") transport.redial("manual");
     else if (key.name === "f") void runtime.fresh();
   });
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
   renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
     if (pushToTalkKeyAction(key, palette.isOpen()) === "end") endKeyboardTalk();
+    const controlAction = audioControlKeyAction(key, palette.isOpen());
+    if (controlAction?.action === "end") endControlKey(controlAction.target);
   });
 
   // ---- go -----------------------------------------------------------------

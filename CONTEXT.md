@@ -57,9 +57,9 @@ working directory), "scratch directory".
 **Remote console** — The phone-sized terminal control surface started with
 `agentvoice remote` after SSHing into the console's machine. It attaches to
 the console through owner-only local IPC (`console.sock`) and carries mute
-state, mute assignments, push-to-talk holds, and normalized activity
-levels—never audio. _Avoid_: "remote client" (the console remains the sole
-media peer), "phone app".
+state, persistent assignments, source-owned mute holds, and normalized
+activity levels—never audio. _Avoid_: "remote client" (the console remains
+the sole media peer), "phone app".
 
 **Duplex audio device** — The console's client-owned miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw
@@ -71,6 +71,12 @@ hold from the Console or a Remote console is active. The persistent mute
 assignment does not change; releasing the hold or losing its input source
 closes the microphone again. _Avoid_: "talk mode" (there is no separate mode),
 "temporary unmute".
+
+**Mute hold** — A source-owned momentary mute assignment layered over a
+channel's persistent assignment. The newest active hold wins; releasing it
+reveals the previous hold or the persistent assignment. Push-to-talk is the
+microphone-opening case. _Avoid_: "temporary toggle" (a hold never changes the
+persistent assignment).
 
 **Redial** — Negotiating a replacement voice session against the same
 orchestrator agent while the current one keeps playing; audio swaps when the
