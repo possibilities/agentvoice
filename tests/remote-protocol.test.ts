@@ -20,7 +20,7 @@ describe("remote protocol", () => {
     expect(parseRemoteState(encodeRemoteMessage(state).trim())).toEqual(state);
   });
 
-  test("accepts persistent assignments and source-owned unmute holds", () => {
+  test("accepts shared TUI actions", () => {
     expect(parseRemoteCommand('{"type":"set-muted","target":"mic","muted":true}')).toEqual({
       type: "set-muted",
       target: "mic",
@@ -34,6 +34,8 @@ describe("remote protocol", () => {
         '{"type":"release-unmuted","target":"speaker","input":"pointer","commit":false}',
       ),
     ).toEqual({ type: "release-unmuted", target: "speaker", input: "pointer", commit: false });
+    expect(parseRemoteCommand('{"type":"redial"}')).toEqual({ type: "redial" });
+    expect(parseRemoteCommand('{"type":"fresh"}')).toEqual({ type: "fresh" });
     expect(parseRemoteCommand('{"type":"toggle","target":"mic"}')).toBeNull();
     expect(parseRemoteCommand('{"type":"set-muted","target":"server","muted":true}')).toBeNull();
     expect(
@@ -49,22 +51,22 @@ describe("remote protocol", () => {
   test("rejects incompatible and out-of-range state", () => {
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":4,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        '{"type":"state","protocol":5,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":5,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":1},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"effectiveMuted":false,"db":1},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":5,"sequence":1,"phase":"live","liveForMs":-1,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":-1,"mic":{"muted":false,"effectiveMuted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":5,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
+        '{"type":"state","protocol":6,"sequence":1,"phase":"live","liveForMs":0,"mic":{"muted":false,"db":null},"speaker":{"muted":false,"effectiveMuted":false,"db":null}}',
       ),
     ).toBeNull();
   });

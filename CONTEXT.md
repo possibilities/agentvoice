@@ -58,9 +58,10 @@ working directory), "scratch directory".
 `agentvoice remote` after SSHing into the console's machine. It attaches to
 the console through owner-only local IPC (`console.sock`) and carries mute
 state, persistent assignments, source-owned unmute holds, dB signal readings,
-and voice-session status—never audio. Its signal labels and readout mirror the
-Console. _Avoid_: "remote client" (the console remains the sole media peer),
-"phone app".
+voice-session status, Redial, and Fresh—never audio. It and the Console host
+the same TUI implementation. Both ship together, so the private IPC advances
+in lockstep without compatibility shims. _Avoid_: "remote client" (the console
+remains the sole media peer), "phone app".
 
 **Duplex audio device** — The console's client-owned miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw

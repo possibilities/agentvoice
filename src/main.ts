@@ -116,8 +116,11 @@ const REMOTE_USAGE = `agentvoice remote — control the local voice console over
 Usage:
   agentvoice remote
 
-The remote attaches to the running console on this machine. It carries mute
-commands and activity levels only; audio remains on the console's device.
+The Remote console attaches to the running Console on this machine. It carries
+mute controls, Redial, Fresh, and signal state; audio remains on the Console's
+device.
+
+Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
 `;
 
 export interface FlagSpec {

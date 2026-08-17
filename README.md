@@ -380,16 +380,19 @@ still adapting to other sizes. On terminals with key-release reporting, `m`
 and `s` mirror the pointer behavior, while `Space` applies that behavior to
 the microphone. The YOU label stays muted through the quick-click window and
 shows TALKING only for a sustained hold. Otherwise `m`/`s` remain toggles and
-`Space` stays inert. `q` exits.
+`Space` stays inert. `r` redials, `f` starts Fresh, and `q` exits. The Console
+and Remote console run the same TUI implementation; only their state/action
+hosts differ.
 
 The Remote console connects to the Console — not the resident — through
 `~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It
 carries only dB signal readings, persistent and effective mute state,
-voice-session phase and elapsed time, and source-owned unmute holds. Its label
-and readout rows mirror the Console; audio stays on the Console's machine and
-needs no SSH forwarding. For the intended setup, that machine's Bluetooth
-audio remains the listening path. The Remote console waits and reconnects
-automatically when the Console is not running or restarts.
+voice-session phase and elapsed time, source-owned unmute holds, Redial, and
+Fresh. Audio stays on the Console's machine and needs no SSH forwarding. For
+the intended setup, that machine's Bluetooth audio remains the listening path.
+The private IPC is a lockstep contract rather than a compatibility surface;
+restart both processes after upgrading. The Remote console waits and
+reconnects automatically when the Console is not running or restarts.
 
 ## State on disk
 

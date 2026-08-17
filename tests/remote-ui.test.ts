@@ -31,7 +31,7 @@ async function closeServer(server: Server, sockets: Set<Socket>): Promise<void> 
   });
 }
 
-describe("Remote console layout", () => {
+describe("Remote console shared TUI", () => {
   test("uses one full-height signal field across portrait, landscape, and shallow viewports", async () => {
     const setup = await createTestRenderer({ width: 49, height: 46, exitOnCtrlC: false });
     const socketPath = join(tmpdir(), `av-remote-${process.pid}-${Date.now()}.sock`);
@@ -54,7 +54,7 @@ describe("Remote console layout", () => {
       return renderable as TextRenderable;
     };
     const expectFieldWithin = (width: number, height: number): void => {
-      const canvas = text("remote-field-canvas");
+      const canvas = text("voice-field-canvas");
       const rows = contentText(canvas).split("\n");
       expect(canvas.width).toBeGreaterThan(0);
       expect(canvas.width).toBeLessThanOrEqual(width);
@@ -63,7 +63,7 @@ describe("Remote console layout", () => {
       expect(rows.every((row) => row.length <= width)).toBe(true);
     };
     const settled = (width: number, height: number): boolean => {
-      const main = setup.renderer.root.findDescendantById("remote-main");
+      const main = setup.renderer.root.findDescendantById("voice-main");
       return (
         setup.renderer.width === width &&
         main instanceof BoxRenderable &&
@@ -73,8 +73,8 @@ describe("Remote console layout", () => {
       );
     };
     const expectFieldFillsMain = (height: number): void => {
-      const main = box("remote-main");
-      const rails = box("remote-rails");
+      const main = box("voice-main");
+      const rails = box("voice-rails");
       expect(main.y).toBe(0);
       expect(rails.y + rails.height).toBeLessThanOrEqual(main.y + main.height);
       expect(main.y + main.height).toBeLessThanOrEqual(height);
@@ -85,7 +85,7 @@ describe("Remote console layout", () => {
 
     try {
       await setup.waitFor(
-        () => setup.renderer.root.findDescendantById("remote-field-canvas") !== undefined,
+        () => setup.renderer.root.findDescendantById("voice-field-canvas") !== undefined,
       );
       await setup.renderOnce();
       await setup.renderOnce();
@@ -94,13 +94,13 @@ describe("Remote console layout", () => {
       expect(setup.captureCharFrame()).toContain("-∞  dB");
       expectFieldFillsMain(46);
       expectFieldWithin(49, 46);
-      const palette = setup.renderer.root.findDescendantById("remote-palette");
+      const palette = setup.renderer.root.findDescendantById("voice-palette");
       expect(palette).toBeInstanceOf(BoxRenderable);
       expect((palette as BoxRenderable).visible).toBe(false);
 
       setup.resize(120, 19);
       await setup.waitFor(() => settled(120, 19));
-      expect(box("remote-rails").height).toBeGreaterThanOrEqual(7);
+      expect(box("voice-rails").height).toBeGreaterThanOrEqual(7);
       expectFieldFillsMain(19);
       expectFieldWithin(120, 19);
       expect(setup.captureCharFrame()).toContain("DUPLEX / 48 KHZ");
@@ -120,19 +120,21 @@ describe("Remote console layout", () => {
 
       setup.resize(103, 7);
       await setup.waitFor(() => settled(103, 7));
-      expect(box("remote-rails").height).toBeGreaterThanOrEqual(4);
+      expect(box("voice-rails").height).toBeGreaterThanOrEqual(4);
       expectFieldFillsMain(7);
       expectFieldWithin(103, 7);
 
       setup.resize(49, 46);
       await setup.waitFor(() => settled(49, 46));
-      expect(box("remote-rails").height).toBeGreaterThan(7);
+      expect(box("voice-rails").height).toBeGreaterThan(7);
       expectFieldFillsMain(46);
       expectFieldWithin(49, 46);
     } finally {
       setup.mockInput.pressKey("k", { ctrl: true });
       await setup.renderOnce();
-      const quit = setup.renderer.root.findDescendantById("remote-palette-command-quit");
+      expect(setup.captureCharFrame()).toContain("redial the voice link");
+      expect(setup.captureCharFrame()).toContain("fresh orchestrator thread");
+      const quit = setup.renderer.root.findDescendantById("voice-palette-command-quit");
       expect(quit).toBeInstanceOf(BoxRenderable);
       await setup.mockMouse.click(quit!.x + 2, quit!.y);
       await remote;
@@ -185,10 +187,16 @@ describe("Remote console layout", () => {
           buffered = buffered.slice(newline + 1);
           if (!command) continue;
           commands.push(command);
-          const gate = command.target === "mic" ? mic : speaker;
-          if (command.type === "set-muted") gate.setMuted(command.muted);
-          else if (command.type === "hold-unmuted") gate.beginUnmute(command.input);
-          else gate.releaseUnmute(command.input, command.commit);
+          if (command.type === "set-muted") {
+            const gate = command.target === "mic" ? mic : speaker;
+            gate.setMuted(command.muted);
+          } else if (command.type === "hold-unmuted") {
+            const gate = command.target === "mic" ? mic : speaker;
+            gate.beginUnmute(command.input);
+          } else if (command.type === "release-unmuted") {
+            const gate = command.target === "mic" ? mic : speaker;
+            gate.releaseUnmute(command.input, command.commit);
+          }
           sendState();
         }
       });
@@ -209,7 +217,7 @@ describe("Remote console layout", () => {
 
     try {
       await setup.waitFor(
-        () => setup.renderer.root.findDescendantById("remote-rails") !== undefined,
+        () => setup.renderer.root.findDescendantById("voice-rails") !== undefined,
       );
       await setup.renderOnce();
       await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
@@ -218,7 +226,11 @@ describe("Remote console layout", () => {
       expect(setup.captureCharFrame()).toContain("● LIVE 00:04");
       expect(setup.captureCharFrame()).toContain("-18.7 dB");
       expect(setup.captureCharFrame()).not.toContain("%");
-      const rails = setup.renderer.root.findDescendantById("remote-rails");
+      setup.mockInput.pressKey("r");
+      await expectCommands([{ type: "redial" }]);
+      setup.mockInput.pressKey("f");
+      await expectCommands([{ type: "fresh" }]);
+      const rails = setup.renderer.root.findDescendantById("voice-rails");
       expect(rails).toBeInstanceOf(BoxRenderable);
       const target = rails as BoxRenderable;
       const leftX = target.x + 2;

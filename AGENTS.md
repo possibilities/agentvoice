@@ -67,8 +67,9 @@ everything else belongs to exactly one layer.
 - `src/console/` — the surface: `transport.ts` (werift WebRTC peer, two-peer
   redial, driven by runtime events), `duplex-audio.ts` + `duplex-device.ts` +
   `native/` (the duplex audio device — the only audio path), `dsp.ts` (pure
-  audio math, tested), `ui.ts` (OpenTUI console), `remote-*` (the Remote
-  console and its owner-only IPC)
+  audio math, tested), `tui.ts` (the one OpenTUI instrument shared by both
+  modes), `ui.ts` (the Console host), `remote-ui.ts` (the Remote-console host),
+  and the remaining `remote-*` files (their owner-only IPC)
 - `src/resident/` — the resident bundle: `contract.ts` (spawn contract,
   socket, account state file), `install.ts` (wrapper + LaunchAgent rendering,
   install/status/restart/uninstall, and the wrapper's per-spawn `pick-home`)

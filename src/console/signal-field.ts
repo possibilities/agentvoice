@@ -1,5 +1,5 @@
 /**
- * Pure two-envelope text-mode animation shared by the Client and Remote
+ * Pure two-envelope text-mode animation shared by the Console and Remote
  * console. It renders energy, persistence, and turn overlap — never frequency.
  *
  * Two layers per cell: a glyph (the voice strands) and a wash (a background

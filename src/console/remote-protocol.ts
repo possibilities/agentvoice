@@ -1,6 +1,6 @@
 import type { TransportPhase } from "./transport.ts";
 
-export const REMOTE_PROTOCOL_VERSION = 5;
+export const REMOTE_PROTOCOL_VERSION = 6;
 
 export type RemoteAudioTarget = "mic" | "speaker";
 export type RemoteUnmuteInput = "pointer" | "key" | "space";
@@ -43,7 +43,20 @@ export interface ReleaseUnmutedCommand {
   commit: boolean;
 }
 
-export type RemoteCommand = SetMutedCommand | HoldUnmutedCommand | ReleaseUnmutedCommand;
+export interface RedialCommand {
+  type: "redial";
+}
+
+export interface FreshCommand {
+  type: "fresh";
+}
+
+export type RemoteCommand =
+  | SetMutedCommand
+  | HoldUnmutedCommand
+  | ReleaseUnmutedCommand
+  | RedialCommand
+  | FreshCommand;
 
 export function encodeRemoteMessage(message: RemoteState | RemoteCommand): string {
   return `${JSON.stringify(message)}\n`;
@@ -85,6 +98,8 @@ export function parseRemoteCommand(line: string): RemoteCommand | null {
       commit: value["commit"],
     };
   }
+  if (value?.["type"] === "redial") return { type: "redial" };
+  if (value?.["type"] === "fresh") return { type: "fresh" };
   return null;
 }
 

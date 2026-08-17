@@ -1,55 +1,20 @@
-/**
- * The terminal UI: the audio display only — one full-viewport Signal Room
- * panel with the live signal field, phase and timer centered on its rows,
- * and every action in the ctrl+k command palette. Narrative events go to
- * the debug log, not the screen.
- */
+/** Console host: local audio, runtime, transport, Remote-console IPC, and the shared TUI. */
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  BoxRenderable,
-  bold,
-  type CliRenderer,
-  createCliRenderer,
-  fg,
-  type ParsedKey,
-  StyledText,
-  TextRenderable,
-} from "@opentui/core";
 import type { ServerConfig } from "../core/config.ts";
 import type { WatchedConfigSource } from "../core/config-watch.ts";
 import { VoiceRuntime } from "../core/runtime.ts";
 import { consoleControlSocketPath, stateDirectory } from "../paths.ts";
-import { createCommandPalette } from "../tui/palette.ts";
-import {
-  AUDIO_CONTROL_KITTY_KEYBOARD,
-  type AudioTarget,
-  audioControlKeyAction,
-  KEY_HOLD_LEASE_MS,
-  MuteGate,
-  releaseCommitsClick,
-  spaceControlKeyAction,
-  UnmuteHoldLabel,
-  type UnmuteHoldSource,
-} from "./audio-control.ts";
-import { levelFromDb } from "./dsp.ts";
+import { type AudioTarget, MuteGate, type UnmuteHoldSource } from "./audio-control.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
 import { ClientControlServer, type RemoteControlPeer } from "./remote-control.ts";
 import { REMOTE_PROTOCOL_VERSION, type RemoteUnmuteInput } from "./remote-protocol.ts";
-import { SignalField } from "./signal-field.ts";
-import {
-  boundedViewportExtent,
-  boundedViewportSize,
-  signalFieldStatus,
-  styledSignalField,
-  styledSignalLabels,
-  styledSignalReadout,
-} from "./signal-field-ui.ts";
 import { VOICE_TONES } from "./theme.ts";
 import { type TransportPhase, VoiceTransport } from "./transport.ts";
+import { createVoiceTui, type VoiceTui, type VoiceTuiInput, type VoiceTuiState } from "./tui.ts";
 
 export interface ConsoleOptions {
   deviceIndex?: number;
@@ -83,11 +48,10 @@ export async function runConsole(
   version: string,
   configSource?: WatchedConfigSource,
 ): Promise<void> {
-  // ---- preflights: fail with plain text before any screen takeover --------
+  // Fail before taking over the terminal or touching the resident.
   const availabilityError = duplexAudioAvailabilityError();
   if (availabilityError) throw new ConsoleError(availabilityError);
 
-  // ---- debug log ----------------------------------------------------------
   let debugLog: ((line: string) => void) | undefined;
   if (options.debug) {
     const stateDir = stateDirectory(process.env, homedir());
@@ -97,60 +61,35 @@ export async function runConsole(
       try {
         appendFileSync(path, `${new Date().toISOString()} ${line}\n`);
       } catch {
-        // debug logging must never break the console
+        // Debug logging must never break the Console.
       }
     };
     debugLog("console start");
   }
 
-  // ---- state --------------------------------------------------------------
   const mic: Meter = { db: -Infinity };
   const agent: Meter = { db: -Infinity };
   const microphone = new MuteGate();
   const speaker = new MuteGate();
-  const spaceControlSource = Symbol("console-space");
-  const pointerControl = Symbol("console-pointer");
-  const keyControlSources: Record<AudioTarget, symbol> = {
-    mic: Symbol("console-mic-key"),
-    speaker: Symbol("console-speaker-key"),
+  const localUnmuteSources: Record<VoiceTuiInput, Record<AudioTarget, symbol>> = {
+    pointer: {
+      mic: Symbol("console-mic-pointer"),
+      speaker: Symbol("console-speaker-pointer"),
+    },
+    key: { mic: Symbol("console-mic-key"), speaker: Symbol("console-speaker-key") },
+    space: { mic: Symbol("console-mic-space"), speaker: Symbol("console-speaker-space") },
   };
-  let pointerGesture: {
-    target: AudioTarget;
-    startedAt: number;
-    startedMuted: boolean;
-  } | null = null;
-  const keyControlGestures = new Map<
-    AudioTarget,
-    {
-      startedAt: number;
-      startedMuted: boolean;
-      clickEligible: boolean;
-      lease: ReturnType<typeof setTimeout>;
-    }
-  >();
-  let spaceGesture: {
-    startedAt: number;
-    startedMuted: boolean;
-    clickEligible: boolean;
-    lease: ReturnType<typeof setTimeout>;
-  } | null = null;
-  const signalField = new SignalField();
-  const micHoldLabel = new UnmuteHoldLabel();
   let phase: TransportPhase = "waiting-ready";
   let transportForRemote: VoiceTransport | null = null;
+  let runtimeForRemote: VoiceRuntime | null = null;
+  let tui: VoiceTui | null = null;
   let shuttingDown = false;
-  let resolveDone: () => void;
-  const done = new Promise<void>((resolve) => {
-    resolveDone = resolve;
-  });
 
-  // The TUI is the audio display only; narrative events go to the debug
-  // log, never the screen.
+  // Narrative events stay in the debug log; the TUI is the audio instrument.
   const feed = (text: string, _color: string = PALETTE.dim): void => {
     debugLog?.(`feed: ${text}`);
   };
 
-  // ---- wiring: audio <-> runtime <-> transport ----------------------------
   const audio = new DuplexVoiceAudio({
     deviceIndex: options.deviceIndex,
     outputDeviceIndex: options.outputDeviceIndex,
@@ -165,9 +104,7 @@ export async function runConsole(
     debug: debugLog,
   });
 
-  // Bind the control socket before the runtime: it doubles as the
-  // single-console lock, so a second console fails here — with plain text —
-  // before it can touch the shared orchestrator agent.
+  // Binding first makes console.sock the single-Console lock before shared state is touched.
   let remoteSequence = 0;
   const remoteControl = new ClientControlServer({
     socketPath: consoleControlSocketPath(process.env, homedir()),
@@ -193,8 +130,12 @@ export async function runConsole(
         setMuted(command.target, command.muted);
       } else if (command.type === "hold-unmuted") {
         beginUnmute(command.target, remoteUnmuteSource(peer, command.input));
-      } else {
+      } else if (command.type === "release-unmuted") {
         releaseUnmute(command.target, remoteUnmuteSource(peer, command.input), command.commit);
+      } else if (command.type === "redial") {
+        transportForRemote?.redial("manual");
+      } else {
+        void runtimeForRemote?.fresh();
       }
     },
     onPeerClose: (peer) => {
@@ -213,10 +154,7 @@ export async function runConsole(
     );
   }
 
-  // The runtime boots before the TUI so failures land as plain text — and so
-  // does its progress: each stage prints as it starts, so a slow or wedged
-  // resident is visible mid-stage instead of a silent blank screen. The same
-  // lines replay into the debug log once the screen exists.
+  // Runtime progress remains plain text until the alternate screen is ready.
   const sink: { transport: VoiceTransport | null } = { transport: null };
   const bufferedStatus: string[] = [];
   console.log("agentvoice: attaching to the resident app-server…");
@@ -248,15 +186,16 @@ export async function runConsole(
     await remoteControl.close().catch(() => {});
     throw new ConsoleError(error instanceof Error ? error.message : String(error));
   }
+  runtimeForRemote = runtime;
 
   const transport = new VoiceTransport({
     runtime,
     debug: debugLog,
     onPhase: (next) => {
       phase = next;
-      refreshStatic();
+      tui?.refresh();
     },
-    onReady: () => refreshStatic(),
+    onReady: () => tui?.refresh(),
     onRemoteTrack: (track) => audio.attachRemote(track),
     onOaiEvent: (event) => {
       const type = typeof event["type"] === "string" ? event["type"] : "";
@@ -267,7 +206,6 @@ export async function runConsole(
         feed(`voice session started${model}`);
         return;
       }
-      // The v3 session streams finished turns with role + transcript.
       if (type === "turn.done") {
         const turn = event["turn"] as Record<string, unknown> | undefined;
         const transcript =
@@ -278,9 +216,7 @@ export async function runConsole(
         feed(line, isUser ? PALETTE.you : PALETTE.agent);
         return;
       }
-      if (type === "error") {
-        feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`, PALETTE.err);
-      }
+      if (type === "error") feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`, PALETTE.err);
     },
     onWorker: (worker) => {
       const seconds =
@@ -297,223 +233,32 @@ export async function runConsole(
   });
   transportForRemote = transport;
 
-  // ---- UI -----------------------------------------------------------------
-  const renderer: CliRenderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    targetFps: 30,
-    screenMode: "alternate-screen",
-    useKittyKeyboard: AUDIO_CONTROL_KITTY_KEYBOARD,
-    backgroundColor: PALETTE.bg,
-  });
-
-  const root = new BoxRenderable(renderer, {
-    width: "100%",
-    height: "100%",
-    flexDirection: "column",
-    backgroundColor: PALETTE.bg,
-    onMouseUp: () => endPointerControl(),
-    onMouseDragEnd: () => endPointerControl(),
-  });
-  renderer.root.add(root);
-
-  const main = new BoxRenderable(renderer, {
-    width: "100%",
-    flexGrow: 1,
-    flexDirection: "column",
-    padding: 1,
-    gap: 1,
-    backgroundColor: PALETTE.bg,
-  });
-  root.add(main);
-
-  const meters = new BoxRenderable(renderer, {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexDirection: "column",
-    border: ["left"],
-    borderStyle: "single",
-    borderColor: PALETTE.accent,
-    backgroundColor: PALETTE.panel,
-    paddingLeft: 2,
-    paddingRight: 2,
-    onMouseDown: (event) => {
-      const middle = meters.x + meters.width / 2;
-      beginPointerControl(event.x < middle ? "mic" : "speaker");
-    },
-    onMouseUp: () => endPointerControl(),
-    onMouseDragEnd: () => endPointerControl(),
-  });
-  main.add(meters);
-
-  const fieldLabels = new TextRenderable(renderer, { content: "", height: 1, wrapMode: "none" });
-  const fieldCanvas = new TextRenderable(renderer, {
-    content: "",
-    flexGrow: 1,
-    wrapMode: "none",
-    fg: PALETTE.faint,
-  });
-  const fieldReadout = new TextRenderable(renderer, {
-    content: "",
-    height: 1,
-    wrapMode: "none",
-    fg: PALETTE.dim,
-  });
-  meters.add(fieldLabels);
-  meters.add(fieldCanvas);
-  meters.add(fieldReadout);
-
-  const palette = createCommandPalette(
-    {
-      BoxRenderable,
-      TextRenderable,
-      StyledText,
-      bold,
-      fg,
-    } as typeof import("@opentui/core"),
-    renderer,
-    "client-palette",
-    {
-      panel: PALETTE.panel,
-      line: PALETTE.border,
-      accent: PALETTE.accent,
-      muted: PALETTE.dim,
-      text: PALETTE.text,
-    },
-  );
-  renderer.root.add(palette.root);
-
-  // ---- view refresh -------------------------------------------------------
-  let layoutWidth = 0;
-
-  function refreshStatic(): void {
-    const width = renderer.width || process.stdout.columns || 100;
-    layoutWidth = width;
-    palette.update({
-      width,
-      height: renderer.height || process.stdout.rows || 24,
-      commands: [
-        {
-          id: "mic",
-          key: "M",
-          label: `mic — ${microphone.muted ? "unmute · hold M/Space" : "mute on release"}`,
-          onRun: toggleMic,
-        },
-        {
-          id: "speaker",
-          key: "S",
-          label: `speaker — ${speaker.muted ? "unmute · hold S" : "mute on release"}`,
-          onRun: toggleSpeaker,
-        },
-        {
-          id: "redial",
-          key: "R",
-          label: "redial the voice link",
-          onRun: () => transport.redial("manual"),
-        },
-        {
-          id: "fresh",
-          key: "F",
-          label: "fresh orchestrator thread",
-          onRun: () => void runtime.fresh(),
-        },
-        { id: "quit", key: "Q", label: "quit", onRun: () => void shutdown() },
-      ],
-    });
-
-    const micLabel = micHoldLabel.state(
-      microphone.muted,
-      microphone.effectiveMuted,
-      performance.now(),
-    );
-    const youColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
-    const agentMuted = speaker.effectiveMuted;
-    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
-    fieldLabels.content = styledSignalLabels(
-      Math.max(1, fieldLabels.width),
-      micLabel.muted,
-      micLabel.talking,
-      agentMuted,
-      youColor,
-      agentColor,
-    );
+  function voiceState(): VoiceTuiState {
+    return {
+      available: true,
+      phase,
+      liveForMs: transport.liveForMs,
+      mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted, db: mic.db },
+      speaker: { muted: speaker.muted, effectiveMuted: speaker.effectiveMuted, db: agent.db },
+    };
   }
 
-  let pulse = 0;
-  const frameCallback = async (deltaMs: number): Promise<void> => {
-    const dt = deltaMs / 1000;
-    pulse += dt;
-    if (renderer.width !== layoutWidth) refreshStatic();
-    const viewportWidth = renderer.width || process.stdout.columns || 100;
-    const viewportHeight = renderer.height || process.stdout.rows || 24;
-
-    const youMuted = microphone.effectiveMuted;
-    const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
-    const micLabel = micHoldLabel.state(microphone.muted, youMuted, performance.now());
-    const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
-    const agentMuted = speaker.effectiveMuted;
-    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
-    signalField.step(dt, {
-      you: levelFromDb(mic.db),
-      agent: levelFromDb(agent.db),
-      youMuted,
-      agentMuted,
-    });
-    const fieldSize = boundedViewportSize(
-      fieldCanvas.width,
-      fieldCanvas.height,
-      viewportWidth,
-      viewportHeight,
-    );
-    const fieldFrame = signalField.render(fieldSize.width, fieldSize.height, {
-      you: youMuted,
-      agent: agentMuted,
-    });
-    fieldCanvas.content = styledSignalField(fieldFrame, {
-      faint: PALETTE.faint,
-      dim: PALETTE.dim,
-      you: youColor,
-      agent: agentColor,
-    });
-    fieldLabels.content = styledSignalLabels(
-      boundedViewportExtent(fieldLabels.width, viewportWidth),
-      micLabel.muted,
-      micLabel.talking,
-      agentMuted,
-      youLabelColor,
-      agentColor,
-    );
-    // With no masthead, the phase and live timer read out from the signal
-    // panel itself — the one region already repainting every frame.
-    const status = signalFieldStatus(phase, transport.liveForMs, renderer.width, pulse);
-    fieldReadout.content = styledSignalReadout(
-      boundedViewportExtent(fieldReadout.width, viewportWidth),
-      mic.db,
-      agent.db,
-      youColor,
-      agentColor,
-      status,
-    );
-  };
-
-  // ---- controls -----------------------------------------------------------
-  function toggleMic(): void {
-    setMuted("mic", !microphone.muted);
-  }
-  function toggleSpeaker(): void {
-    setMuted("speaker", !speaker.muted);
-  }
   function muteGate(target: AudioTarget): MuteGate {
     return target === "mic" ? microphone : speaker;
   }
+
   function setMuted(target: AudioTarget, muted: boolean): void {
     publishMuteChange(target, muteGate(target).setMuted(muted));
   }
+
   function beginUnmute(target: AudioTarget, source: UnmuteHoldSource): void {
     publishMuteChange(target, muteGate(target).beginUnmute(source));
   }
+
   function releaseUnmute(target: AudioTarget, source: UnmuteHoldSource, commit = false): void {
     publishMuteChange(target, muteGate(target).releaseUnmute(source, commit));
   }
+
   function publishMuteChange(target: AudioTarget, changed: boolean): void {
     if (!changed) return;
     const gate = muteGate(target);
@@ -524,166 +269,39 @@ export async function runConsole(
       `${target === "mic" ? "microphone" : "speaker"} ${talking ? "talking" : gate.effectiveMuted ? "muted" : "live"}`,
       target === "mic" ? PALETTE.you : PALETTE.agent,
     );
-    refreshStatic();
+    tui?.refresh();
     remoteControl.publish();
   }
 
-  function beginPointerControl(target: AudioTarget): void {
-    if (pointerGesture) endPointerControl(false);
-    const startedMuted = muteGate(target).muted;
-    pointerGesture = { target, startedAt: performance.now(), startedMuted };
-    if (startedMuted) beginUnmute(target, pointerControl);
-  }
-
-  function endPointerControl(classifyClick = true): void {
-    const gesture = pointerGesture;
-    if (!gesture) return;
-    pointerGesture = null;
-    if (gesture.startedMuted) {
-      const commit = classifyClick && releaseCommitsClick(gesture.startedAt, performance.now());
-      releaseUnmute(gesture.target, pointerControl, commit);
-    } else if (classifyClick) {
-      setMuted(gesture.target, true);
-    }
-  }
-
-  function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
-    const existing = keyControlGestures.get(target);
-    if (existing) {
-      clearTimeout(existing.lease);
-      existing.lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
-      existing.lease.unref?.();
-      return;
-    }
-    const startedMuted = muteGate(target).muted;
-    if (startedMuted) beginUnmute(target, keyControlSources[target]);
-    const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
-    lease.unref?.();
-    keyControlGestures.set(target, {
-      startedAt: performance.now(),
-      startedMuted,
-      clickEligible,
-      lease,
-    });
-  }
-
-  function endControlKey(target: AudioTarget, classifyClick = true): void {
-    const gesture = keyControlGestures.get(target);
-    if (!gesture) return;
-    keyControlGestures.delete(target);
-    clearTimeout(gesture.lease);
-    if (gesture.startedMuted) {
-      const commit =
-        classifyClick &&
-        gesture.clickEligible &&
-        releaseCommitsClick(gesture.startedAt, performance.now());
-      releaseUnmute(target, keyControlSources[target], commit);
-    } else if (classifyClick && gesture.clickEligible) {
-      setMuted(target, true);
-    }
-  }
-
-  function renewSpaceControl(clickEligible: boolean): void {
-    if (spaceGesture) {
-      clearTimeout(spaceGesture.lease);
-      spaceGesture.lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
-      spaceGesture.lease.unref?.();
-      return;
-    }
-    const startedMuted = microphone.muted;
-    if (startedMuted) beginUnmute("mic", spaceControlSource);
-    const lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
-    lease.unref?.();
-    spaceGesture = {
-      startedAt: performance.now(),
-      startedMuted,
-      clickEligible,
-      lease,
-    };
-  }
-
-  function endSpaceControl(classifyClick = true): void {
-    const gesture = spaceGesture;
-    if (!gesture) return;
-    spaceGesture = null;
-    clearTimeout(gesture.lease);
-    if (gesture.startedMuted) {
-      const commit =
-        classifyClick &&
-        gesture.clickEligible &&
-        releaseCommitsClick(gesture.startedAt, performance.now());
-      releaseUnmute("mic", spaceControlSource, commit);
-    } else if (classifyClick && gesture.clickEligible) {
-      setMuted("mic", true);
-    }
-  }
-
-  async function shutdown(): Promise<void> {
+  async function shutdownConsole(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
-    endSpaceControl(false);
-    for (const target of ["mic", "speaker"] as const) endControlKey(target, false);
-    endPointerControl(false);
     audio.micMuted = true;
     debugLog?.("console shutdown");
-    renderer.removeFrameCallback(frameCallback);
-    renderer.dropLive();
     await remoteControl.close().catch(() => {});
     await audio.stop().catch(() => {});
     await transport.stop().catch(() => {});
     await runtime.shutdown().catch(() => {});
-    renderer.destroy();
-    resolveDone();
   }
 
-  renderer.keyInput.on("keypress", (key: ParsedKey) => {
-    const spaceAction = spaceControlKeyAction(key, palette.isOpen());
-    const controlAction = audioControlKeyAction(key, palette.isOpen());
-    if (spaceAction === "end") {
-      endSpaceControl();
-      return;
-    }
-    if (controlAction?.action === "end") {
-      endControlKey(controlAction.target);
-      return;
-    }
-    if (palette.handleKey(key)) return;
-    if (spaceAction) {
-      renewSpaceControl(spaceAction === "begin");
-      return;
-    }
-    if (controlAction) {
-      if (controlAction.action === "toggle") {
-        const gate = muteGate(controlAction.target);
-        setMuted(controlAction.target, !gate.muted);
-      } else {
-        renewControlKey(controlAction.target, controlAction.action === "begin");
-      }
-      return;
-    }
-    if (key.name === "space") {
-      return;
-    }
-    if (key.eventType !== "press") return;
-    if (key.name === "q" || (key.ctrl && key.name === "c")) {
-      void shutdown();
-      return;
-    }
-    if (key.name === "r") transport.redial("manual");
-    else if (key.name === "f") void runtime.fresh();
-  });
-  process.once("SIGINT", () => void shutdown());
-  process.once("SIGTERM", () => void shutdown());
-  renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
-    if (spaceControlKeyAction(key, palette.isOpen()) === "end") endSpaceControl();
-    const controlAction = audioControlKeyAction(key, palette.isOpen());
-    if (controlAction?.action === "end") endControlKey(controlAction.target);
-  });
+  try {
+    tui = await createVoiceTui({
+      state: voiceState,
+      setMuted,
+      beginUnmute: (target, input) => beginUnmute(target, localUnmuteSources[input][target]),
+      releaseUnmute: (target, input, commit) =>
+        releaseUnmute(target, localUnmuteSources[input][target], commit),
+      redial: () => transport.redial("manual"),
+      fresh: () => {
+        void runtime.fresh();
+      },
+      shutdown: shutdownConsole,
+    });
+  } catch (error) {
+    await shutdownConsole();
+    throw new ConsoleError(error instanceof Error ? error.message : String(error));
+  }
 
-  // ---- go -----------------------------------------------------------------
-  renderer.setFrameCallback(frameCallback);
-  renderer.requestLive();
-  refreshStatic();
   sink.transport = transport;
   for (const line of bufferedStatus) feed(line);
   bufferedStatus.length = 0;
@@ -692,10 +310,10 @@ export async function runConsole(
   try {
     await audio.start();
   } catch (error) {
-    await shutdown();
+    await tui.shutdown();
     throw new ConsoleError(error instanceof Error ? error.message : String(error));
   }
   transport.start();
 
-  await done;
+  await tui.done;
 }
