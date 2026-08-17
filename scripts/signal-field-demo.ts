@@ -169,6 +169,7 @@ function paint(): void {
     faint: VOICE_TONES.faint,
     dim: VOICE_TONES.dim,
     grid: VOICE_TONES.border,
+    axis: VOICE_TONES.faint,
     you: VOICE_TONES.you,
     agent: VOICE_TONES.agent,
   };

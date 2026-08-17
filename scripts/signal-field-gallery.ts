@@ -204,6 +204,7 @@ const frame = async (deltaMs: number): Promise<void> => {
     faint: TONE.faint,
     dim: TONE.dim,
     grid: TONE.border,
+    axis: TONE.faint,
     you: TONE.you,
     agent: TONE.agent,
   });

@@ -161,7 +161,7 @@ describe("signal field", () => {
     expect(countTone(frame, "agent")).toBeGreaterThan(0);
     const tones = new Set(frame.rows.flat().map((cell) => cell.tone));
     expect(
-      [...tones].every((tone) => ["faint", "dim", "grid", "you", "agent"].includes(tone)),
+      [...tones].every((tone) => ["faint", "dim", "grid", "axis", "you", "agent"].includes(tone)),
     ).toBe(true);
   });
 
@@ -179,12 +179,12 @@ describe("signal field", () => {
   test("graph paper rules the empty field, centered, and yields to strands", () => {
     const field = new SignalField({ seed: 23 });
     const idle = field.render(61, 7);
-    expect(idle.rows[3]?.[30]).toMatchObject({ char: "╋", tone: "grid" });
+    expect(idle.rows[3]?.[30]).toMatchObject({ char: "╋", tone: "axis" });
     expect(idle.rows[2]?.[30]?.char).toBe("┃");
     expect(idle.rows[3]?.[31]?.char).toBe("━");
     expect(idle.rows[3]?.[24]?.char).toBe("┿");
     expect(idle.rows[0]?.[30]?.char).toBe("╂");
-    expect(idle.rows[0]?.[24]?.char).toBe("┼");
+    expect(idle.rows[0]?.[24]).toMatchObject({ char: "┼", tone: "grid" });
     expect(idle.rows[1]?.[24]?.char).toBe("│");
     expect(idle.rows[0]?.[23]?.char).toBe("─");
     expect(idle.rows[1]?.[1]?.char).toBe(" ");
@@ -203,7 +203,7 @@ describe("signal field", () => {
   test("axes straddle the center boundary at even sizes, landing on the true pixel center", () => {
     const field = new SignalField({ seed: 23 });
     const even = field.render(60, 8);
-    expect(even.rows[1]?.[29]?.char).toBe("▕");
+    expect(even.rows[1]?.[29]).toMatchObject({ char: "▕", tone: "axis" });
     expect(even.rows[1]?.[30]?.char).toBe("▏");
     expect(even.rows[3]?.[7]?.char).toBe("▁");
     expect(even.rows[4]?.[7]?.char).toBe("▔");

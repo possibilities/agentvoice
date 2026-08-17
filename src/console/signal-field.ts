@@ -12,7 +12,7 @@
  */
 
 export type SignalFieldChannel = "you" | "agent";
-export type SignalFieldTone = "faint" | "dim" | "grid" | "you" | "agent";
+export type SignalFieldTone = "faint" | "dim" | "grid" | "axis" | "you" | "agent";
 
 /** Quantization of the wash ramp; steps are ~1 RGB unit apart, so seams stay invisible. */
 export const WASH_STEPS = 14;
@@ -72,6 +72,13 @@ export const GRID_GLYPHS = {
   pairUpper: "▁",
   pairLower: "▔",
 } as const;
+
+/** Everything but these three is axis ink, toned a step brighter than the minor rules. */
+const MINOR_RULE_GLYPHS: ReadonlySet<string> = new Set([
+  GRID_GLYPHS.cross,
+  GRID_GLYPHS.vertical,
+  GRID_GLYPHS.horizontal,
+]);
 
 /**
  * Graph-paper rules with heavy center axes — a plotting surface, anchored at
@@ -221,7 +228,9 @@ export class SignalField {
     const strongest = Math.max(youStrength, agentStrength);
     if (strongest < threshold) {
       const paper = gridGlyph(x, y, width, height);
-      if (paper !== undefined) return { char: paper, tone: "grid", wash };
+      if (paper !== undefined) {
+        return { char: paper, tone: MINOR_RULE_GLYPHS.has(paper) ? "grid" : "axis", wash };
+      }
       return { char: " ", tone: "faint", wash };
     }
     if (youStrength >= agentStrength) {

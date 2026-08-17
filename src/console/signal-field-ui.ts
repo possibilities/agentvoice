@@ -31,6 +31,8 @@ export interface SignalFieldColors {
   dim: string;
   /** The graph-paper rules under the strands. */
   grid: string;
+  /** The paper's center axes — ink a step brighter than the minor rules. */
+  axis: string;
   you: string;
   agent: string;
   /** The color the field canvas sits on; washes are mixed up from it. */

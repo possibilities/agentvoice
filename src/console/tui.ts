@@ -393,6 +393,7 @@ export async function createVoiceTui(
       faint: PALETTE.faint,
       dim: PALETTE.dim,
       grid: PALETTE.border,
+      axis: PALETTE.faint,
       you: youColor,
       agent: agentColor,
     });
