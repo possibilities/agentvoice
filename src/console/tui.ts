@@ -16,7 +16,6 @@ import {
   KEY_HOLD_LEASE_MS,
   releaseCommitsClick,
   spaceControlKeyAction,
-  UnmuteHoldLabel,
 } from "./audio-control.ts";
 import { levelFromDb } from "./dsp.ts";
 import { mixHex, SignalField } from "./signal-field.ts";
@@ -187,7 +186,6 @@ export async function createVoiceTui(
   let closed = false;
   let shutdownPromise: Promise<void> | null = null;
   const signalField = new SignalField();
-  const micHoldLabel = new UnmuteHoldLabel();
   let resolveDone!: () => void;
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
@@ -351,7 +349,7 @@ export async function createVoiceTui(
     const viewportHeight = renderer.height || process.stdout.rows || 24;
     const state = host.state();
     const micMuted = state.mic.effectiveMuted;
-    const micLabel = micHoldLabel.state(state.mic.muted, micMuted, now());
+    const micTalking = state.mic.muted && !micMuted;
     const agentMuted = state.speaker.effectiveMuted;
     signalField.step(dt, {
       you: state.available ? levelFromDb(state.mic.db) : 0,
@@ -373,13 +371,13 @@ export async function createVoiceTui(
     const agentFieldColor = agentMuted
       ? mixHex(PALETTE.panel, PALETTE.agentDim, MUTED_STRAND_ALPHA)
       : PALETTE.agent;
-    const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
+    const youLabelColor = micMuted ? PALETTE.youDim : PALETTE.you;
     const agentLabelColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     const runs = instrumentRuns(
       fieldSize.width,
       fieldSize.height,
       signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
-      { muted: micLabel.muted, talking: micLabel.talking, color: youLabelColor, db: state.mic.db },
+      { muted: state.mic.muted, talking: micTalking, color: youLabelColor, db: state.mic.db },
       { muted: agentMuted, color: agentLabelColor, db: state.speaker.db },
       state.mic.muted,
     ).map((run) => ({ ...run, color: mixHex(PALETTE.panel, run.color, OVERLAY_ALPHA) }));
