@@ -64,8 +64,6 @@ export const GRID_GLYPHS = {
   origin: "╋",
   axisVertical: "┃",
   axisHorizontal: "━",
-  axisVerticalCross: "╂",
-  axisHorizontalCross: "┿",
   /** Edge-eighth blocks, named by which cell of the straddling pair carries them. */
   pairLeft: "▕",
   pairRight: "▏",
@@ -85,9 +83,10 @@ const MINOR_RULE_GLYPHS: ReadonlySet<string> = new Set([
  * field center so the paper stays symmetric under the voices. The axes land
  * on the true pixel center of each dimension: an odd extent has a center cell
  * (heavy box lines), an even one has a center boundary, straddled by two
- * edge-eighth blocks meeting exactly on it. No glyph joins a straddled axis
- * to a crossing line, so minor rules — and the other, cell-exact axis — pass
- * under it with a gap, as ink drawn over the paper would.
+ * edge-eighth blocks meeting exactly on it. No glyph joins an axis to what
+ * crosses it — minor rules, and a cell-exact axis meeting a straddled one,
+ * pass under with a gap, as under drawn-over ink; only the origin marks the
+ * axes' own crossing.
  */
 export function gridGlyph(x: number, y: number, width: number, height: number): string | undefined {
   const centerX = Math.floor((width - 1) / 2);
@@ -106,11 +105,11 @@ export function gridGlyph(x: number, y: number, width: number, height: number): 
   }
   if (onAxisColumn) {
     if (evenWidth) return x === centerX ? GRID_GLYPHS.pairLeft : GRID_GLYPHS.pairRight;
-    return onRow ? GRID_GLYPHS.axisVerticalCross : GRID_GLYPHS.axisVertical;
+    return GRID_GLYPHS.axisVertical;
   }
   if (onAxisRow) {
     if (evenHeight) return y === centerY ? GRID_GLYPHS.pairUpper : GRID_GLYPHS.pairLower;
-    return onColumn ? GRID_GLYPHS.axisHorizontalCross : GRID_GLYPHS.axisHorizontal;
+    return GRID_GLYPHS.axisHorizontal;
   }
   if (onColumn && onRow) return GRID_GLYPHS.cross;
   if (onColumn) return GRID_GLYPHS.vertical;

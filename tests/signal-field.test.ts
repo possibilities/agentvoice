@@ -87,7 +87,7 @@ describe("signal field", () => {
       const initialFrame = field.render(72, 9);
       const area = 72 * 9;
       const idleChars = new Set(signalFieldText(initialFrame).replaceAll("\n", ""));
-      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "╂", "┿", "▕", "▏", "▁", "▔"];
+      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "▕", "▏", "▁", "▔"];
       expect([...idleChars].every((char) => paperChars.includes(char))).toBe(true);
       expect(countTone(initialFrame, "you")).toBe(0);
       expect(countTone(initialFrame, "agent")).toBe(0);
@@ -182,8 +182,8 @@ describe("signal field", () => {
     expect(idle.rows[3]?.[30]).toMatchObject({ char: "╋", tone: "axis" });
     expect(idle.rows[2]?.[30]?.char).toBe("┃");
     expect(idle.rows[3]?.[31]?.char).toBe("━");
-    expect(idle.rows[3]?.[24]?.char).toBe("┿");
-    expect(idle.rows[0]?.[30]?.char).toBe("╂");
+    expect(idle.rows[3]?.[24]?.char).toBe("━");
+    expect(idle.rows[0]?.[30]?.char).toBe("┃");
     expect(idle.rows[0]?.[24]).toMatchObject({ char: "┼", tone: "grid" });
     expect(idle.rows[1]?.[24]?.char).toBe("│");
     expect(idle.rows[0]?.[23]?.char).toBe("─");
