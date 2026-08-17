@@ -57,12 +57,29 @@ const MUTED_GLYPHS = ["·", "┄", "┈"] as const;
 const GRID_COLUMNS = 6;
 const GRID_ROWS = 3;
 
-export const GRID_GLYPHS = { cross: "┼", vertical: "│", horizontal: "─" } as const;
+export const GRID_GLYPHS = {
+  cross: "┼",
+  vertical: "│",
+  horizontal: "─",
+  origin: "╋",
+  axisVertical: "┃",
+  axisHorizontal: "━",
+  axisVerticalCross: "╂",
+  axisHorizontalCross: "┿",
+} as const;
 
-/** Graph-paper rules, anchored at field center so the paper stays symmetric under the voices. */
+/**
+ * Graph-paper rules with heavy center axes — a plotting surface, anchored at
+ * field center so the paper stays symmetric under the voices.
+ */
 export function gridGlyph(x: number, y: number, width: number, height: number): string | undefined {
-  const onColumn = (x - Math.floor((width - 1) / 2)) % GRID_COLUMNS === 0;
-  const onRow = (y - Math.floor((height - 1) / 2)) % GRID_ROWS === 0;
+  const centerX = Math.floor((width - 1) / 2);
+  const centerY = Math.floor((height - 1) / 2);
+  const onColumn = (x - centerX) % GRID_COLUMNS === 0;
+  const onRow = (y - centerY) % GRID_ROWS === 0;
+  if (x === centerX && y === centerY) return GRID_GLYPHS.origin;
+  if (x === centerX) return onRow ? GRID_GLYPHS.axisVerticalCross : GRID_GLYPHS.axisVertical;
+  if (y === centerY) return onColumn ? GRID_GLYPHS.axisHorizontalCross : GRID_GLYPHS.axisHorizontal;
   if (onColumn && onRow) return GRID_GLYPHS.cross;
   if (onColumn) return GRID_GLYPHS.vertical;
   if (onRow) return GRID_GLYPHS.horizontal;

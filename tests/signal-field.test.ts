@@ -87,7 +87,8 @@ describe("signal field", () => {
       const initialFrame = field.render(72, 9);
       const area = 72 * 9;
       const idleChars = new Set(signalFieldText(initialFrame).replaceAll("\n", ""));
-      expect([...idleChars].every((char) => [" ", "│", "─", "┼"].includes(char))).toBe(true);
+      const paperChars = [" ", "│", "─", "┼", "┃", "━", "╋", "╂", "┿"];
+      expect([...idleChars].every((char) => paperChars.includes(char))).toBe(true);
       expect(countTone(initialFrame, "you")).toBe(0);
       expect(countTone(initialFrame, "agent")).toBe(0);
       expect(countTone(initialFrame, "grid")).toBeGreaterThan(0);
@@ -178,10 +179,14 @@ describe("signal field", () => {
   test("graph paper rules the empty field, centered, and yields to strands", () => {
     const field = new SignalField({ seed: 23 });
     const idle = field.render(61, 7);
-    expect(idle.rows[3]?.[30]).toMatchObject({ char: "┼", tone: "grid" });
-    expect(idle.rows[3]?.[24]?.char).toBe("┼");
-    expect(idle.rows[2]?.[30]?.char).toBe("│");
-    expect(idle.rows[3]?.[31]?.char).toBe("─");
+    expect(idle.rows[3]?.[30]).toMatchObject({ char: "╋", tone: "grid" });
+    expect(idle.rows[2]?.[30]?.char).toBe("┃");
+    expect(idle.rows[3]?.[31]?.char).toBe("━");
+    expect(idle.rows[3]?.[24]?.char).toBe("┿");
+    expect(idle.rows[0]?.[30]?.char).toBe("╂");
+    expect(idle.rows[0]?.[24]?.char).toBe("┼");
+    expect(idle.rows[1]?.[24]?.char).toBe("│");
+    expect(idle.rows[0]?.[23]?.char).toBe("─");
     expect(idle.rows[1]?.[1]?.char).toBe(" ");
     const paperOnFloor = idle.rows
       .flat()
