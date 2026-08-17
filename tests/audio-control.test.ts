@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { buildKittyKeyboardFlags } from "@opentui/core";
 import {
   AUDIO_CONTROL_CLICK_MS,
+  AUDIO_CONTROL_KITTY_KEYBOARD,
   audioControlKeyAction,
   MuteGate,
   pushToTalkKeyAction,
@@ -8,6 +10,13 @@ import {
 } from "../src/console/audio-control.ts";
 
 describe("audio-control keyboard input", () => {
+  test("requests event reports for printable control keys", () => {
+    const flags = buildKittyKeyboardFlags(AUDIO_CONTROL_KITTY_KEYBOARD);
+
+    expect(flags & 2).toBe(2);
+    expect(flags & 8).toBe(8);
+  });
+
   test("uses release-capable M and S for gestures while raw keys remain toggles", () => {
     expect(audioControlKeyAction({ name: "m", source: "raw", eventType: "press" }, false)).toEqual({
       target: "mic",

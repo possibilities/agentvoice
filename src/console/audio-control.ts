@@ -1,3 +1,5 @@
+import type { KittyKeyboardOptions } from "@opentui/core";
+
 export type AudioTarget = "mic" | "speaker";
 export type UnmuteHoldSource = object | symbol | string | number;
 
@@ -8,6 +10,13 @@ export type AudioControlKeyAction = {
 export type PushToTalkKeyAction = "renew" | "end";
 
 export const AUDIO_CONTROL_CLICK_MS = 250;
+
+// Printable keys need all-keys encoding for terminals to report both halves
+// of a press/release gesture, including the dedicated Space hold.
+export const AUDIO_CONTROL_KITTY_KEYBOARD = {
+  events: true,
+  allKeysAsEscapes: true,
+} satisfies KittyKeyboardOptions;
 
 // Long enough to span the terminal's initial key-repeat delay; repeats renew
 // it, while a lost release still fails closed.

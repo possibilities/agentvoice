@@ -24,6 +24,7 @@ import { VoiceRuntime } from "../core/runtime.ts";
 import { consoleControlSocketPath, stateDirectory } from "../paths.ts";
 import { createCommandPalette } from "../tui/palette.ts";
 import {
+  AUDIO_CONTROL_KITTY_KEYBOARD,
   type AudioTarget,
   audioControlKeyAction,
   KEY_HOLD_LEASE_MS,
@@ -373,7 +374,7 @@ export async function runConsole(
     exitOnCtrlC: false,
     targetFps: 30,
     screenMode: "alternate-screen",
-    useKittyKeyboard: { events: true },
+    useKittyKeyboard: AUDIO_CONTROL_KITTY_KEYBOARD,
     backgroundColor: PALETTE.bg,
   });
 

@@ -11,6 +11,7 @@ import {
 } from "@opentui/core";
 import { createCommandPalette } from "../tui/palette.ts";
 import {
+  AUDIO_CONTROL_KITTY_KEYBOARD,
   type AudioTarget,
   audioControlKeyAction,
   KEY_HOLD_LEASE_MS,
@@ -49,7 +50,7 @@ export async function runRemote(socketPath: string, options: RemoteUiOptions = {
         exitOnCtrlC: false,
         targetFps: 30,
         screenMode: "alternate-screen",
-        useKittyKeyboard: { events: true },
+        useKittyKeyboard: AUDIO_CONTROL_KITTY_KEYBOARD,
         backgroundColor: PALETTE.bg,
       });
   const root = new BoxRenderable(renderer, {
