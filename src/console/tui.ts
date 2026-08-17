@@ -34,6 +34,8 @@ const PALETTE = VOICE_TONES;
 
 /** The instrument text renders translucent over the field — fixed, never fading. */
 const OVERLAY_ALPHA = 0.75;
+/** A muted voice keeps animating, its strands sunk most of the way into the panel. */
+const MUTED_STRAND_ALPHA = 0.55;
 
 export type VoiceTuiInput = "pointer" | "key" | "space";
 
@@ -110,9 +112,9 @@ export async function createVoiceTui(
   });
   root.add(main);
 
-  // Three touch zones tile the whole field, one function each: the bottom
-  // band holds the mic open (push-to-talk, never a toggle), everything above
-  // splits into the mic and speaker mute toggles.
+  // Touch zones tile the whole field, one function each: while the mic is
+  // muted a bottom band holds it open (push-to-talk, never a toggle);
+  // everything else splits into the mic and speaker mute toggles.
   const rails = new BoxRenderable(renderer, {
     id: "voice-rails",
     width: "100%",
@@ -123,7 +125,7 @@ export async function createVoiceTui(
     backgroundColor: PALETTE.panel,
     onMouseDown: (event) => {
       const height = Math.max(1, rails.height);
-      if (event.y >= rails.y + height - pttRowCount(height)) {
+      if (persistentMuted("mic") === true && event.y >= rails.y + height - pttRowCount(height)) {
         beginPushToTalk();
         return;
       }
@@ -354,8 +356,6 @@ export async function createVoiceTui(
     signalField.step(dt, {
       you: state.available ? levelFromDb(state.mic.db) : 0,
       agent: state.available ? levelFromDb(state.speaker.db) : 0,
-      youMuted: micMuted,
-      agentMuted,
     });
     const fieldSize = boundedViewportSize(
       fieldCanvas.width,
@@ -367,19 +367,25 @@ export async function createVoiceTui(
       you: micMuted,
       agent: agentMuted,
     });
-    const youColor = micMuted ? PALETTE.youDim : PALETTE.you;
+    const youFieldColor = micMuted
+      ? mixHex(PALETTE.panel, PALETTE.youDim, MUTED_STRAND_ALPHA)
+      : PALETTE.you;
+    const agentFieldColor = agentMuted
+      ? mixHex(PALETTE.panel, PALETTE.agentDim, MUTED_STRAND_ALPHA)
+      : PALETTE.agent;
     const youLabelColor = micLabel.muted ? PALETTE.youDim : PALETTE.you;
-    const agentColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
+    const agentLabelColor = agentMuted ? PALETTE.agentDim : PALETTE.agent;
     const runs = instrumentRuns(
       fieldSize.width,
       fieldSize.height,
       signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
       { muted: micLabel.muted, talking: micLabel.talking, color: youLabelColor, db: state.mic.db },
-      { muted: agentMuted, color: agentColor, db: state.speaker.db },
+      { muted: agentMuted, color: agentLabelColor, db: state.speaker.db },
+      state.mic.muted,
     ).map((run) => ({ ...run, color: mixHex(PALETTE.panel, run.color, OVERLAY_ALPHA) }));
     fieldCanvas.content = styledInstrumentField(
       frame,
-      { faint: PALETTE.faint, dim: PALETTE.dim, you: youColor, agent: agentColor },
+      { faint: PALETTE.faint, dim: PALETTE.dim, you: youFieldColor, agent: agentFieldColor },
       runs,
     );
   };

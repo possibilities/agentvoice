@@ -174,7 +174,7 @@ describe("signal field", () => {
     const status = { text: "\u25cf LIVE 0:12", color: "#82cb9a" };
     const you = { muted: false, talking: false, color: "#e2b56f", db: Number.NEGATIVE_INFINITY };
     const agent = { muted: true, color: "#7fb9e8", db: -18.7 };
-    const runs = instrumentRuns(60, 19, status, you, agent);
+    const runs = instrumentRuns(60, 19, status, you, agent, true);
     const texts = runs.map((run) => run.text);
     expect(texts).toContain("YOU \u25b7 INPUT");
     expect(texts).toContain("AGENT \u00d7 MUTED");
@@ -184,18 +184,44 @@ describe("signal field", () => {
     expect(texts).toContain("-18.7 dB");
     expect(runs.find((run) => run.text === status.text)?.y).toBe(0);
     const ptt = runs.find((run) => run.text === "PUSH TO TALK");
-    expect(ptt?.y).toBeGreaterThanOrEqual(19 - pttRowCount(19));
+    expect(pttRowCount(19)).toBe(5);
+    expect(ptt?.y).toBe(19 - 5 + 2);
     const corners = runs.filter((run) => run.text.startsWith("\u256d"));
     expect(corners).toHaveLength(3);
 
-    const narrow = instrumentRuns(40, 19, status, you, agent).map((run) => run.text);
+    const narrow = instrumentRuns(40, 19, status, you, agent, true).map((run) => run.text);
     expect(narrow).not.toContain(" / 48 KHZ");
 
-    const talking = instrumentRuns(60, 19, status, { ...you, talking: true }, agent).map(
+    const talking = instrumentRuns(60, 19, status, { ...you, talking: true }, agent, true).map(
       (run) => run.text,
     );
     expect(talking).toContain("YOU \u25cf TALKING");
     expect(talking).toContain("\u25cf TALKING");
+
+    const mutedMic = instrumentRuns(60, 19, status, { ...you, muted: true }, agent, true).map(
+      (run) => run.text,
+    );
+    expect(mutedMic).toContain("YOU \u00d7 PUSH");
+    expect(mutedMic).not.toContain("YOU \u00d7 MUTED");
+
+    const collapsed = instrumentRuns(60, 19, status, you, agent, false);
+    const collapsedTexts = collapsed.map((run) => run.text);
+    expect(collapsedTexts).not.toContain("PUSH TO TALK");
+    expect(collapsed.filter((run) => run.text.startsWith("\u256d"))).toHaveLength(2);
+    expect(collapsed.some((run) => run.y === 18 && run.text.startsWith("\u2570"))).toBe(true);
+  });
+
+  test("a muted voice keeps animating in its own hue, dashed", () => {
+    const field = new SignalField({ seed: 11 });
+    for (let i = 0; i < 12; i++) field.step(1 / 30, { you: 1, agent: 0 });
+    const frame = field.render(60, 7, { you: true });
+    expect(countTone(frame, "you")).toBeGreaterThan(0);
+    expect(countTone(frame, "dim")).toBe(0);
+    const strandChars = frame.rows
+      .flat()
+      .filter((cell) => cell.tone === "you")
+      .map((cell) => cell.char);
+    expect(strandChars.every((char) => ["·", "┄", "┈"].includes(char))).toBe(true);
   });
 
   test("instrument runs float over the field at their cells", () => {

@@ -220,7 +220,7 @@ describe("Remote console shared TUI", () => {
         () => setup.renderer.root.findDescendantById("voice-rails") !== undefined,
       );
       await setup.renderOnce();
-      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
+      await setup.waitFor(() => setup.captureCharFrame().includes("YOU × PUSH"));
       expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
       expect(setup.captureCharFrame()).toContain("-42.4 dB");
       expect(setup.captureCharFrame()).toContain("● LIVE 00:04");
@@ -308,7 +308,7 @@ describe("Remote console shared TUI", () => {
       ]);
 
       // A long Space hold opens the muted microphone only until release.
-      await setup.waitFor(() => setup.captureCharFrame().includes("YOU × MUTED"));
+      await setup.waitFor(() => setup.captureCharFrame().includes("YOU × PUSH"));
       setup.renderer.stdin.emit("data", Buffer.from("\x1b[32;1:1u"));
       await setup.waitFor(() => mic.holding);
       clock += AUDIO_CONTROL_CLICK_MS + 1;

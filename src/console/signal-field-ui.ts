@@ -98,9 +98,13 @@ export interface InstrumentVoice {
   db: number;
 }
 
-/** The push-to-talk band: the bottom ~quarter of the field. */
+/**
+ * The push-to-talk box: a fixed 3-row interior (blank, label, blank) plus its
+ * outlines — the voice boxes above take all remaining height. Shrinks only
+ * when the terminal is too short for the full band.
+ */
 export function pttRowCount(height: number): number {
-  return Math.max(1, Math.min(height - 1, Math.max(2, Math.floor(height * 0.28))));
+  return Math.max(1, Math.min(height - 4, 5));
 }
 
 /** A rounded box-drawing outline, one run per horizontal edge and per side cell. */
@@ -125,11 +129,12 @@ function outlineRuns(
 }
 
 /**
- * The whole instrument as floated text: status top-center, then the three
- * touch zones drawn as inset outlines — mic and speaker side by side, each
- * with its label up top and readout down low, push-to-talk across the bottom
- * band. The hit zones underneath tile the entire field; the outlines only
- * mark them.
+ * The whole instrument as floated text: status top-center, then the touch
+ * zones drawn as inset outlines — mic and speaker side by side, each with
+ * its label up top and readout down low, and push-to-talk across the bottom
+ * band only while the mic is muted (`pttOpen`); otherwise the voice boxes
+ * take the full height. The hit zones underneath tile the entire field; the
+ * outlines only mark them.
  */
 export function instrumentRuns(
   width: number,
@@ -137,8 +142,9 @@ export function instrumentRuns(
   status: SignalFieldStatus,
   you: InstrumentVoice & { talking: boolean },
   agent: InstrumentVoice,
+  pttOpen: boolean,
 ): InstrumentTextRun[] {
-  const pttTop = height - pttRowCount(height);
+  const pttTop = height - (pttOpen ? pttRowCount(height) : 0);
   const center = Math.floor(width / 2);
   const leftCenter = Math.floor(width * 0.25);
   const rightCenter = Math.floor(width * 0.75);
@@ -162,12 +168,12 @@ export function instrumentRuns(
   const boxBottom = pttTop - 1;
   runs.push(...outlineRuns(0, boxTop, center - 1, boxBottom, VOICE_TONES.youDim));
   runs.push(...outlineRuns(center + 1, boxTop, width - 1, boxBottom, VOICE_TONES.agentDim));
-  runs.push(...outlineRuns(0, pttTop, width - 1, height - 1, VOICE_TONES.faint));
+  if (pttOpen) runs.push(...outlineRuns(0, pttTop, width - 1, height - 1, VOICE_TONES.faint));
 
   const labelRow = Math.max(boxTop, Math.min(boxTop + 1, boxBottom - 1));
   const dbRow = boxBottom - 1;
   const pttRow = Math.min(height - 1, pttTop + Math.floor((height - 1 - pttTop) / 2));
-  const youLabel = `YOU ${you.talking ? `${SIGNAL_GLYPHS.live} TALKING` : you.muted ? "× MUTED" : "▷ INPUT"}`;
+  const youLabel = `YOU ${you.talking ? `${SIGNAL_GLYPHS.live} TALKING` : you.muted ? "× PUSH" : "▷ INPUT"}`;
   const agentLabel = `AGENT ${agent.muted ? "× MUTED" : "◁ OUTPUT"}`;
   runs.push({
     x: centered(youLabel, leftCenter),
@@ -191,14 +197,16 @@ export function instrumentRuns(
     runs.push({ x: centered(agentDb, rightCenter), y: dbRow, text: agentDb, color: agent.color });
   }
 
-  const pttLabel = you.talking ? `${SIGNAL_GLYPHS.live} TALKING` : "PUSH TO TALK";
-  runs.push({
-    x: centered(pttLabel, center),
-    y: pttRow,
-    text: pttLabel,
-    color: you.talking ? you.color : VOICE_TONES.dim,
-    bold: true,
-  });
+  if (pttOpen) {
+    const pttLabel = you.talking ? `${SIGNAL_GLYPHS.live} TALKING` : "PUSH TO TALK";
+    runs.push({
+      x: centered(pttLabel, center),
+      y: pttRow,
+      text: pttLabel,
+      color: you.talking ? you.color : VOICE_TONES.dim,
+      bold: true,
+    });
+  }
   return runs;
 }
 

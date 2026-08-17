@@ -7,7 +7,9 @@
  * anyone speaks; the strands lay over it. When both voices sound at once —
  * rare and brief in practice — their strands simply share the field, the
  * stronger one showing per cell: they touch, they never clash, and nothing
- * marks the overlap specially.
+ * marks the overlap specially. A muted voice keeps animating — capture and
+ * downlink meter even while the gate blocks them — drawn as light dashes in
+ * whatever color the host gives that channel.
  */
 
 export type SignalFieldChannel = "you" | "agent";
@@ -70,15 +72,12 @@ export class SignalField {
     this.standby = options.standby ?? "swell";
   }
 
-  step(
-    deltaSeconds: number,
-    input: { you: number; agent: number; youMuted?: boolean; agentMuted?: boolean },
-  ): void {
+  step(deltaSeconds: number, input: { you: number; agent: number }): void {
     const dt = Math.max(0, Math.min(0.2, deltaSeconds));
     this.elapsed += dt;
     this.frame += 1;
-    this.updateVoice(this.you, input.youMuted ? 0 : input.you, dt, 2.7);
-    this.updateVoice(this.agent, input.agentMuted ? 0 : input.agent, dt, 2.05);
+    this.updateVoice(this.you, input.you, dt, 2.7);
+    this.updateVoice(this.agent, input.agent, dt, 2.05);
   }
 
   render(
@@ -245,7 +244,7 @@ function voiceCell(
   const value = clamp01(strength);
   const source = muted ? MUTED_GLYPHS : glyphs;
   const char = source[Math.min(source.length - 1, Math.floor(value * source.length))]!;
-  return { char, tone: muted ? "dim" : tone, wash };
+  return { char, tone, wash };
 }
 
 function strandDistance(y: number, track: number, variation: number): number {
