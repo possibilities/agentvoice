@@ -57,13 +57,20 @@ working directory), "scratch directory".
 **Remote console** — The phone-sized terminal control surface started with
 `agentvoice remote` after SSHing into the console's machine. It attaches to
 the console through owner-only local IPC (`console.sock`) and carries mute
-state, mute assignments, and normalized activity levels—never audio. _Avoid_:
-"remote client" (the console remains the sole media peer), "phone app".
+state, mute assignments, push-to-talk holds, and normalized activity
+levels—never audio. _Avoid_: "remote client" (the console remains the sole
+media peer), "phone app".
 
 **Duplex audio device** — The console's client-owned miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw
 PCM through a capture ring and a playback ring. It is independent of OpenTUI's
 audio engine and stays open across redials. _Avoid_: "OpenTUI audio".
+
+**Push-to-talk** — Momentarily opening an otherwise muted microphone while a
+hold from the Console or a Remote console is active. The persistent mute
+assignment does not change; releasing the hold or losing its input source
+closes the microphone again. _Avoid_: "talk mode" (there is no separate mode),
+"temporary unmute".
 
 **Redial** — Negotiating a replacement voice session against the same
 orchestrator agent while the current one keeps playing; audio swaps when the

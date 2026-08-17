@@ -163,9 +163,7 @@ export function createCommandPalette(
 
     filterText.content = new core.StyledText([
       core.bold(core.fg(tokens.accent)("> ")),
-      filter.length > 0
-        ? core.fg(tokens.text)(filter)
-        : core.fg(tokens.muted)("type to filter"),
+      filter.length > 0 ? core.fg(tokens.text)(filter) : core.fg(tokens.muted)("type to filter"),
     ]);
     for (const child of rowsBox.getChildren()) {
       rowsBox.remove(child);
@@ -194,9 +192,7 @@ export function createCommandPalette(
       row.add(
         new core.TextRenderable(renderer, {
           content: new core.StyledText([
-            isSelected
-              ? core.bold(core.fg(tokens.accent)("▎ "))
-              : core.fg(tokens.panel)("  "),
+            isSelected ? core.bold(core.fg(tokens.accent)("▎ ")) : core.fg(tokens.panel)("  "),
             core.bold(core.fg(tokens.accent)(key)),
             core.fg(isSelected ? tokens.text : tokens.muted)(` ${command.label}`),
           ]),
@@ -212,6 +208,9 @@ export function createCommandPalette(
     handleKey(key) {
       if (key.ctrl && key.name === "c") return false;
       if (key.eventType === "release") return open;
+      // Kitty event reporting makes a held ctrl+k repeat; only a fresh press
+      // may toggle the palette.
+      if (key.eventType === "repeat" && key.ctrl && key.name === "k") return open;
       if (!open) {
         if (key.ctrl && key.name === "k") {
           openPalette();

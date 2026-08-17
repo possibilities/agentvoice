@@ -24,14 +24,20 @@ const PUBLISH_INTERVAL_MS = 100;
 export interface ClientControlServerOptions {
   socketPath: string;
   state(): RemoteState;
-  onCommand(command: RemoteCommand): void;
+  onCommand(command: RemoteCommand, peer: RemoteControlPeer): void;
+  onPeerClose?(peer: RemoteControlPeer): void;
+}
+
+export interface RemoteControlPeer {
+  readonly id: number;
 }
 
 export class ClientControlServer {
-  private readonly peers = new Set<Socket>();
+  private readonly peers = new Map<Socket, RemoteControlPeer>();
   private server: Server | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private identity: { dev: number; ino: number } | null = null;
+  private nextPeerId = 1;
 
   constructor(private readonly options: ClientControlServerOptions) {}
 
@@ -70,7 +76,7 @@ export class ClientControlServer {
 
   publish(): void {
     const frame = encodeRemoteMessage(this.options.state());
-    for (const peer of this.peers) {
+    for (const peer of this.peers.keys()) {
       if (!peer.destroyed && !peer.writableNeedDrain) peer.write(frame);
     }
   }
@@ -78,8 +84,10 @@ export class ClientControlServer {
   async close(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    for (const peer of this.peers) peer.destroy();
-    this.peers.clear();
+    for (const peer of [...this.peers.keys()]) {
+      this.dropPeer(peer);
+      peer.destroy();
+    }
     const server = this.server;
     this.server = null;
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -88,7 +96,8 @@ export class ClientControlServer {
   }
 
   private accept(peer: Socket): void {
-    this.peers.add(peer);
+    const identity = Object.freeze({ id: this.nextPeerId++ });
+    this.peers.set(peer, identity);
     let buffered = "";
     peer.setEncoding("utf8");
     peer.on("data", (chunk: string) => {
@@ -103,12 +112,19 @@ export class ClientControlServer {
         const line = buffered.slice(0, newline);
         buffered = buffered.slice(newline + 1);
         const command = parseRemoteCommand(line);
-        if (command) this.options.onCommand(command);
+        if (command) this.options.onCommand(command, identity);
       }
     });
-    peer.on("close", () => this.peers.delete(peer));
-    peer.on("error", () => this.peers.delete(peer));
+    peer.on("close", () => this.dropPeer(peer));
+    peer.on("error", () => this.dropPeer(peer));
     peer.write(encodeRemoteMessage(this.options.state()));
+  }
+
+  private dropPeer(peer: Socket): void {
+    const identity = this.peers.get(peer);
+    if (!identity) return;
+    this.peers.delete(peer);
+    this.options.onPeerClose?.(identity);
   }
 }
 

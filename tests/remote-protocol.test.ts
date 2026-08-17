@@ -13,7 +13,7 @@ describe("remote protocol", () => {
       protocol: REMOTE_PROTOCOL_VERSION,
       sequence: 4,
       phase: "live" as const,
-      mic: { muted: false, level: 0.75 },
+      mic: { muted: false, talking: false, level: 0.75 },
       speaker: { muted: true, level: 0.25 },
     } as const;
     expect(parseRemoteState(encodeRemoteMessage(state).trim())).toEqual(state);
@@ -27,18 +27,28 @@ describe("remote protocol", () => {
     });
     expect(parseRemoteCommand('{"type":"toggle","target":"mic"}')).toBeNull();
     expect(parseRemoteCommand('{"type":"set-muted","target":"server","muted":true}')).toBeNull();
+    expect(parseRemoteCommand('{"type":"push-to-talk","active":true}')).toEqual({
+      type: "push-to-talk",
+      active: true,
+    });
+    expect(parseRemoteCommand('{"type":"push-to-talk","active":"yes"}')).toBeNull();
     expect(parseRemoteCommand("nope")).toBeNull();
   });
 
   test("rejects incompatible and out-of-range state", () => {
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":2,"sequence":1,"phase":"live","mic":{"muted":false,"level":0},"speaker":{"muted":false,"level":0}}',
+        '{"type":"state","protocol":3,"sequence":1,"phase":"live","mic":{"muted":false,"talking":false,"level":0},"speaker":{"muted":false,"level":0}}',
       ),
     ).toBeNull();
     expect(
       parseRemoteState(
-        '{"type":"state","protocol":1,"sequence":1,"phase":"live","mic":{"muted":false,"level":2},"speaker":{"muted":false,"level":0}}',
+        '{"type":"state","protocol":2,"sequence":1,"phase":"live","mic":{"muted":false,"talking":false,"level":2},"speaker":{"muted":false,"level":0}}',
+      ),
+    ).toBeNull();
+    expect(
+      parseRemoteState(
+        '{"type":"state","protocol":2,"sequence":1,"phase":"live","mic":{"muted":false,"level":0},"speaker":{"muted":false,"level":0}}',
       ),
     ).toBeNull();
   });

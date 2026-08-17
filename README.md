@@ -5,8 +5,8 @@
 Minimal voice system for Codex — talk to a coding agent, hands-free.
 
 `agentvoice` is one voice console: a terminal UI with live meters,
-transcripts, and mute controls that holds a full-duplex WebRTC conversation
-with a Codex agent. The only other process is the **resident** — a bare
+transcripts, mute controls, and push-to-talk that holds a full-duplex WebRTC
+conversation with a Codex agent. The only other process is the **resident** — a bare
 `codex app-server` kept alive by launchd, serving a private unix socket the
 console attaches to. Threads and dispatched workers live in the resident, so
 they survive console restarts; the console resumes the same **orchestrator
@@ -330,9 +330,12 @@ The device is built from source and the console refuses to start without it —
 `bun run setup` builds it, and `bun run native:build` rebuilds after editing
 `src/console/native/`.
 
-- **Keys**: `m` mute mic · `s` mute speaker · `r` redial voice · `f` fresh
-  thread · `q` quit. Clicking the YOU panel toggles the mic; clicking AGENT
-  toggles the speaker.
+- **Keys**: `m` persistently mute/unmute the mic · hold `Space` to talk while
+  muted · `s` mute speaker · `r` redial voice · `f` fresh thread · `q` quit.
+  Press and hold the YOU panel for push-to-talk; clicking AGENT toggles the
+  speaker. Keyboard push-to-talk requires terminal key-release reporting; on
+  terminals without it, `Space` stays inert rather than risking a stuck-open
+  microphone.
 - **Redial** negotiates a fresh voice session against the same conversation
   while the old one keeps playing; audio swaps the moment the new session
   connects. It is the escape hatch when the media path dies silently. Renewal
@@ -362,19 +365,20 @@ ssh laptop
 agentvoice remote
 ```
 
-The console shows live `YOU` and `AGENT` activity rails and two large mute
-controls for the microphone and speaker. It is designed around a portrait
-terminal, while still adapting to other terminal sizes. Terminal mouse events
-toggle the controls when the SSH app forwards them; `m` and `s` are the
-keyboard equivalents, and `q` exits.
+The console shows live `YOU` and `AGENT` activity rails and two large audio
+controls. Press and hold MIC for push-to-talk while the microphone is muted;
+SPEAKER remains a toggle. It is designed around a portrait terminal, while
+still adapting to other terminal sizes. `m` persistently mutes or unmutes the
+microphone, `s` toggles the speaker, hold `Space` for keyboard push-to-talk,
+and `q` exits.
 
 The Remote console connects to the voice console — not the resident — through
 `~/.local/state/agentvoice/console.sock`, an owner-only Unix socket. It
-carries only normalized levels, mute state, connection phase, and mute
-assignments. Audio stays on the console's machine and needs no SSH
-forwarding; for the intended setup, that machine's Bluetooth audio remains the
-listening path. The Remote console waits and reconnects automatically when the
-voice console is not running or restarts.
+carries only normalized levels, mute and push-to-talk state, connection phase,
+mute assignments, and momentary push-to-talk holds. Audio stays on the
+console's machine and needs no SSH forwarding; for the intended setup, that
+machine's Bluetooth audio remains the listening path. The Remote console waits
+and reconnects automatically when the voice console is not running or restarts.
 
 ## State on disk
 

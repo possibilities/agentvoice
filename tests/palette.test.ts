@@ -23,15 +23,26 @@ describe("palette filtering", () => {
     const all = commands();
     expect(paletteMatches(all, "")).toHaveLength(4);
     expect(paletteMatches(all, "mute").map((command) => command.id)).toEqual(["mic", "speaker"]);
-    expect(paletteMatches(all, "r").map((command) => command.id)).toEqual([
-      "speaker",
-      "redial",
-    ]);
+    expect(paletteMatches(all, "r").map((command) => command.id)).toEqual(["speaker", "redial"]);
     expect(paletteMatches(all, "nope")).toHaveLength(0);
   });
 });
 
 describe("command palette", () => {
+  test("does not close again when ctrl+k repeats", async () => {
+    const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+    const palette = createCommandPalette(core, setup.renderer, "repeat-palette", TOKENS);
+    setup.renderer.root.add(palette.root);
+    palette.update({ commands: commands(), width: 80, height: 24 });
+
+    expect(palette.handleKey({ name: "k", ctrl: true, eventType: "press" })).toBe(true);
+    expect(palette.isOpen()).toBe(true);
+    expect(palette.handleKey({ name: "k", ctrl: true, eventType: "repeat" })).toBe(true);
+    expect(palette.isOpen()).toBe(true);
+
+    setup.renderer.destroy();
+  });
+
   test("opens on real ctrl+k input, filters typed text, and runs on enter", async () => {
     const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
     const keys = setup.mockInput;

@@ -1,13 +1,13 @@
 import type { TransportPhase } from "./transport.ts";
 
-export const REMOTE_PROTOCOL_VERSION = 1;
+export const REMOTE_PROTOCOL_VERSION = 2;
 
 export interface RemoteState {
   type: "state";
   protocol: typeof REMOTE_PROTOCOL_VERSION;
   sequence: number;
   phase: TransportPhase;
-  mic: { muted: boolean; level: number };
+  mic: { muted: boolean; talking: boolean; level: number };
   speaker: { muted: boolean; level: number };
 }
 
@@ -17,7 +17,12 @@ export interface SetMutedCommand {
   muted: boolean;
 }
 
-export type RemoteCommand = SetMutedCommand;
+export interface PushToTalkCommand {
+  type: "push-to-talk";
+  active: boolean;
+}
+
+export type RemoteCommand = SetMutedCommand | PushToTalkCommand;
 
 export function encodeRemoteMessage(message: RemoteState | RemoteCommand): string {
   return `${JSON.stringify(message)}\n`;
@@ -25,14 +30,19 @@ export function encodeRemoteMessage(message: RemoteState | RemoteCommand): strin
 
 export function parseRemoteCommand(line: string): RemoteCommand | null {
   const value = parseRecord(line);
-  if (
-    value?.["type"] !== "set-muted" ||
-    (value["target"] !== "mic" && value["target"] !== "speaker") ||
-    typeof value["muted"] !== "boolean"
-  ) {
-    return null;
+  if (value?.["type"] === "set-muted") {
+    if (
+      (value["target"] !== "mic" && value["target"] !== "speaker") ||
+      typeof value["muted"] !== "boolean"
+    ) {
+      return null;
+    }
+    return { type: "set-muted", target: value["target"], muted: value["muted"] };
   }
-  return { type: "set-muted", target: value["target"], muted: value["muted"] };
+  if (value?.["type"] === "push-to-talk" && typeof value["active"] === "boolean") {
+    return { type: "push-to-talk", active: value["active"] };
+  }
+  return null;
 }
 
 export function parseRemoteState(line: string): RemoteState | null {
@@ -45,7 +55,7 @@ export function parseRemoteState(line: string): RemoteState | null {
   ) {
     return null;
   }
-  const mic = parseChannel(value["mic"]);
+  const mic = parseMicChannel(value["mic"]);
   const speaker = parseChannel(value["speaker"]);
   if (!mic || !speaker) return null;
   return {
@@ -56,6 +66,16 @@ export function parseRemoteState(line: string): RemoteState | null {
     mic,
     speaker,
   };
+}
+
+function parseMicChannel(
+  value: unknown,
+): { muted: boolean; talking: boolean; level: number } | null {
+  const channel = parseChannel(value);
+  if (!channel || typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const talking = (value as Record<string, unknown>)["talking"];
+  if (typeof talking !== "boolean") return null;
+  return { ...channel, talking };
 }
 
 function parseRecord(line: string): Record<string, unknown> | null {

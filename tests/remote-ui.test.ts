@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoxRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import {
+  encodeRemoteMessage,
+  parseRemoteCommand,
+  REMOTE_PROTOCOL_VERSION,
+  type RemoteCommand,
+} from "../src/console/remote-protocol.ts";
 import { runRemote } from "../src/console/remote-ui.ts";
 
 function contentText(renderable: TextRenderable): string {
@@ -109,6 +115,88 @@ describe("Remote console layout", () => {
       const quit = setup.renderer.root.findDescendantById("remote-palette-command-quit");
       expect(quit).toBeInstanceOf(BoxRenderable);
       await setup.mockMouse.click(quit!.x + 2, quit!.y);
+      await remote;
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  test("holds the MIC control to talk and releases it on pointer up", async () => {
+    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+    const socketPath = join(tmpdir(), `av-remote-talk-${process.pid}-${Date.now()}.sock`);
+    const sockets = new Set<Socket>();
+    const commands: RemoteCommand[] = [];
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      let buffered = "";
+      let sequence = 0;
+      const sendState = (talking: boolean): void => {
+        socket.write(
+          encodeRemoteMessage({
+            type: "state",
+            protocol: REMOTE_PROTOCOL_VERSION,
+            sequence: sequence++,
+            phase: "live",
+            mic: { muted: true, talking, level: 0 },
+            speaker: { muted: false, level: 0 },
+          }),
+        );
+      };
+      socket.setEncoding("utf8");
+      sendState(false);
+      socket.on("data", (chunk: string) => {
+        buffered += chunk;
+        for (;;) {
+          const newline = buffered.indexOf("\n");
+          if (newline === -1) break;
+          const command = parseRemoteCommand(buffered.slice(0, newline));
+          buffered = buffered.slice(newline + 1);
+          if (command) {
+            commands.push(command);
+            if (command.type === "push-to-talk") sendState(command.active);
+          }
+        }
+      });
+      socket.once("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+    const remote = runRemote(socketPath, { createRenderer: async () => setup.renderer });
+
+    try {
+      await setup.waitFor(
+        () => setup.renderer.root.findDescendantById("remote-control-mic") !== undefined,
+      );
+      await setup.renderOnce();
+      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
+      const mic = setup.renderer.root.findDescendantById("remote-control-mic");
+      expect(mic).toBeInstanceOf(BoxRenderable);
+      const target = mic as BoxRenderable;
+      const x = target.x + Math.max(1, Math.floor(target.width / 2));
+      const y = target.y + Math.max(1, Math.floor(target.height / 2));
+
+      await setup.mockMouse.pressDown(x, y);
+      await setup.waitFor(() =>
+        commands.some((command) => command.type === "push-to-talk" && command.active),
+      );
+      await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
+      await setup.mockMouse.release(x, y);
+      await setup.waitFor(() =>
+        commands.some((command) => command.type === "push-to-talk" && !command.active),
+      );
+      await setup.waitFor(() => setup.captureCharFrame().includes("MUTED"));
+
+      expect(
+        commands
+          .filter((command) => command.type === "push-to-talk")
+          .map((command) => command.active),
+      ).toEqual([true, false]);
+    } finally {
+      setup.mockInput.pressKey("q");
       await remote;
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => {

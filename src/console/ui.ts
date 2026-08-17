@@ -26,7 +26,13 @@ import { createCommandPalette } from "../tui/palette.ts";
 import { formatClock, levelFromDb } from "./dsp.ts";
 import { DuplexVoiceAudio } from "./duplex-audio.ts";
 import { duplexAudioAvailabilityError } from "./duplex-device.ts";
-import { ClientControlServer } from "./remote-control.ts";
+import {
+  PUSH_TO_TALK_KEY_LEASE_MS,
+  PushToTalkGate,
+  type PushToTalkSource,
+  pushToTalkKeyAction,
+} from "./push-to-talk.ts";
+import { ClientControlServer, type RemoteControlPeer } from "./remote-control.ts";
 import { REMOTE_PROTOCOL_VERSION } from "./remote-protocol.ts";
 import { SignalField } from "./signal-field.ts";
 import {
@@ -72,12 +78,13 @@ interface Meter {
 function styledFieldLabels(
   width: number,
   youMuted: boolean,
+  youTalking: boolean,
   agentMuted: boolean,
   youColor: string,
   agentColor: string,
   mode = "",
 ): StyledText {
-  const left = `YOU ${youMuted ? "× MUTED" : "▷ INPUT"}`;
+  const left = `YOU ${youTalking ? `${SIGNAL_GLYPHS.live} TALKING` : youMuted ? "× MUTED" : "▷ INPUT"}`;
   const right = `${agentMuted ? "MUTED ×" : "OUTPUT ◁"} AGENT`;
   const clippedRight = right.slice(
     Math.max(0, right.length - Math.max(0, width - left.length - 1)),
@@ -166,6 +173,10 @@ export async function runConsole(
   // ---- state --------------------------------------------------------------
   const mic: Meter = { db: -Infinity };
   const agent: Meter = { db: -Infinity };
+  const microphone = new PushToTalkGate();
+  const keyboardTalk = Symbol("console-keyboard");
+  const pointerTalk = Symbol("console-pointer");
+  let keyboardTalkLease: ReturnType<typeof setTimeout> | null = null;
   const signalField = new SignalField();
   let phase: TransportPhase = "waiting-ready";
   let shuttingDown = false;
@@ -206,10 +217,18 @@ export async function runConsole(
       protocol: REMOTE_PROTOCOL_VERSION,
       sequence: remoteSequence++,
       phase,
-      mic: { muted: audio.micMuted, level: levelFromDb(mic.db) },
+      mic: {
+        muted: microphone.muted,
+        talking: microphone.talking,
+        level: levelFromDb(mic.db),
+      },
       speaker: { muted: audio.speakerMuted, level: levelFromDb(agent.db) },
     }),
-    onCommand: (command) => setMuted(command.target, command.muted),
+    onCommand: (command, peer) => {
+      if (command.type === "set-muted") setMuted(command.target, command.muted);
+      else setPushToTalk(peer, command.active);
+    },
+    onPeerClose: (peer) => setPushToTalk(peer, false),
   });
   try {
     await remoteControl.start();
@@ -307,6 +326,7 @@ export async function runConsole(
     exitOnCtrlC: false,
     targetFps: 30,
     screenMode: "alternate-screen",
+    useKittyKeyboard: { events: true },
     backgroundColor: PALETTE.bg,
   });
 
@@ -340,9 +360,10 @@ export async function runConsole(
     paddingRight: 2,
     onMouseDown: (event) => {
       const middle = meters.x + meters.width / 2;
-      if (event.x < middle) toggleMic();
+      if (event.x < middle) setPushToTalk(pointerTalk, true);
       else toggleSpeaker();
     },
+    onMouseUp: () => setPushToTalk(pointerTalk, false),
   });
   main.add(meters);
 
@@ -396,7 +417,7 @@ export async function runConsole(
         {
           id: "mic",
           key: "M",
-          label: `mic — ${audio.micMuted ? "unmute" : "mute"}`,
+          label: `mic — ${microphone.muted ? "unmute · hold Space to talk" : "mute"}`,
           onRun: toggleMic,
         },
         {
@@ -405,17 +426,29 @@ export async function runConsole(
           label: `speaker — ${audio.speakerMuted ? "unmute" : "mute"}`,
           onRun: toggleSpeaker,
         },
-        { id: "redial", key: "R", label: "redial the voice link", onRun: () => transport.redial("manual") },
-        { id: "fresh", key: "F", label: "fresh orchestrator thread", onRun: () => void runtime.fresh() },
+        {
+          id: "redial",
+          key: "R",
+          label: "redial the voice link",
+          onRun: () => transport.redial("manual"),
+        },
+        {
+          id: "fresh",
+          key: "F",
+          label: "fresh orchestrator thread",
+          onRun: () => void runtime.fresh(),
+        },
         { id: "quit", key: "Q", label: "quit", onRun: () => void shutdown() },
       ],
     });
 
-    const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
+    const youMuted = microphone.effectiveMuted;
+    const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
     fieldLabels.content = styledFieldLabels(
       Math.max(1, fieldLabels.width),
-      audio.micMuted,
+      youMuted,
+      microphone.talking,
       audio.speakerMuted,
       youColor,
       agentColor,
@@ -431,12 +464,13 @@ export async function runConsole(
     const viewportWidth = renderer.width || process.stdout.columns || 100;
     const viewportHeight = renderer.height || process.stdout.rows || 24;
 
-    const youColor = audio.micMuted ? PALETTE.youDim : PALETTE.you;
+    const youMuted = microphone.effectiveMuted;
+    const youColor = youMuted ? PALETTE.youDim : PALETTE.you;
     const agentColor = audio.speakerMuted ? PALETTE.agentDim : PALETTE.agent;
     signalField.step(dt, {
       you: levelFromDb(mic.db),
       agent: levelFromDb(agent.db),
-      youMuted: audio.micMuted,
+      youMuted,
       agentMuted: audio.speakerMuted,
     });
     const fieldSize = boundedViewportSize(
@@ -446,7 +480,7 @@ export async function runConsole(
       viewportHeight,
     );
     const fieldFrame = signalField.render(fieldSize.width, fieldSize.height, {
-      you: audio.micMuted,
+      you: youMuted,
       agent: audio.speakerMuted,
     });
     fieldCanvas.content = styledSignalField(fieldFrame, {
@@ -457,7 +491,8 @@ export async function runConsole(
     });
     fieldLabels.content = styledFieldLabels(
       boundedViewportExtent(fieldLabels.width, viewportWidth),
-      audio.micMuted,
+      youMuted,
+      microphone.talking,
       audio.speakerMuted,
       youColor,
       agentColor,
@@ -488,21 +523,24 @@ export async function runConsole(
         color,
       },
     );
-
   };
 
   // ---- controls -----------------------------------------------------------
   function toggleMic(): void {
-    setMuted("mic", !audio.micMuted);
+    setMuted("mic", !microphone.muted);
   }
   function toggleSpeaker(): void {
     setMuted("speaker", !audio.speakerMuted);
   }
   function setMuted(target: "mic" | "speaker", muted: boolean): void {
-    const previous = target === "mic" ? audio.micMuted : audio.speakerMuted;
+    const previous = target === "mic" ? microphone.muted : audio.speakerMuted;
     if (previous === muted) return;
-    if (target === "mic") audio.micMuted = muted;
-    else audio.speakerMuted = muted;
+    if (target === "mic") {
+      microphone.setMuted(muted);
+      audio.micMuted = microphone.effectiveMuted;
+    } else {
+      audio.speakerMuted = muted;
+    }
     feed(
       `${target === "mic" ? "microphone" : "speaker"} ${muted ? "muted" : "live"}`,
       target === "mic" ? PALETTE.you : PALETTE.agent,
@@ -513,9 +551,41 @@ export async function runConsole(
     remoteControl.publish();
   }
 
+  function setPushToTalk(source: PushToTalkSource | RemoteControlPeer, active: boolean): void {
+    const changed = active ? microphone.begin(source) : microphone.end(source);
+    if (!changed) return;
+    audio.micMuted = microphone.effectiveMuted;
+    feed(
+      `microphone ${microphone.talking ? "talking" : microphone.effectiveMuted ? "muted" : "live"}`,
+      PALETTE.you,
+    );
+    refreshStatic();
+    remoteControl.publish();
+  }
+
+  function renewKeyboardTalk(): void {
+    if (!microphone.muted) return;
+    setPushToTalk(keyboardTalk, true);
+    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
+    keyboardTalkLease = setTimeout(() => {
+      keyboardTalkLease = null;
+      setPushToTalk(keyboardTalk, false);
+    }, PUSH_TO_TALK_KEY_LEASE_MS);
+    keyboardTalkLease.unref?.();
+  }
+
+  function endKeyboardTalk(): void {
+    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
+    keyboardTalkLease = null;
+    setPushToTalk(keyboardTalk, false);
+  }
+
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
+    if (keyboardTalkLease) clearTimeout(keyboardTalkLease);
+    keyboardTalkLease = null;
+    audio.micMuted = true;
     debugLog?.("console shutdown");
     renderer.removeFrameCallback(frameCallback);
     renderer.dropLive();
@@ -528,8 +598,20 @@ export async function runConsole(
   }
 
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
+    const talkAction = pushToTalkKeyAction(key, palette.isOpen());
+    if (talkAction === "end") {
+      endKeyboardTalk();
+      return;
+    }
     if (palette.handleKey(key)) return;
-    if (key.eventType === "release") return;
+    if (talkAction === "renew") {
+      renewKeyboardTalk();
+      return;
+    }
+    if (key.name === "space") {
+      return;
+    }
+    if (key.eventType !== "press") return;
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
       void shutdown();
       return;
