@@ -187,7 +187,7 @@ describe("resolveConfig", () => {
 describe("parseRemoteTarget", () => {
   test("attaches on this machine unless --host names another", () => {
     expect(parseRemoteTarget([], {}, HOME)).toBe(
-      "/home/tester/.local/state/agentvoice/console.sock",
+      "/home/tester/.local/state/agentvoice/control.sock",
     );
     expect(parseRemoteTarget(["--help"], {}, HOME)).toBeNull();
     expect(
@@ -837,19 +837,16 @@ describe("parseConsoleCommand", () => {
     expect(parseConsoleCommand([])).toEqual({
       help: false,
       options: { debug: false, fresh: false },
-      parsed: { values: {}, debug: false, fresh: false, help: false },
     });
   });
 
-  test("parses device indices, fresh, and debug; devices stay console-side", () => {
+  test("parses device indices, fresh, and debug", () => {
     const command = parseConsoleCommand([
       "--device",
       "1",
       "--output-device=2",
       "--fresh",
       "--debug",
-      "--model",
-      "m",
     ]);
     if (command.help) throw new Error("expected a non-help parse");
     expect(command.options).toEqual({
@@ -858,11 +855,10 @@ describe("parseConsoleCommand", () => {
       debug: true,
       fresh: true,
     });
-    expect(command.parsed.values).toEqual({ model: "m" });
   });
 
-  test("rejects the removed two-app flags", () => {
-    for (const flag of ["--url", "--token", "--port"]) {
+  test("rejects the config-layer flags, which moved to the Server", () => {
+    for (const flag of ["--model", "--config", "--voice", "--url", "--token", "--port"]) {
       expect(() => parseConsoleCommand([`${flag}=x`])).toThrow(UsageError);
     }
   });

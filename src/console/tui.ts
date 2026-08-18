@@ -8,6 +8,7 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
+import type { VoicePhase } from "../core/control-protocol.ts";
 import { createCommandPalette } from "../tui/palette.ts";
 import {
   AUDIO_CONTROL_KITTY_KEYBOARD,
@@ -27,7 +28,6 @@ import {
   styledInstrumentField,
 } from "./signal-field-ui.ts";
 import { VOICE_TONES } from "./theme.ts";
-import type { TransportPhase } from "./transport.ts";
 
 const PALETTE = VOICE_TONES;
 
@@ -45,9 +45,9 @@ export interface VoiceTuiChannelState {
 }
 
 export interface VoiceTuiState {
-  /** False while a Remote console has no current Console state. */
+  /** False while no voice peer's state is in hand — detached, or none exists. */
   available: boolean;
-  phase: TransportPhase;
+  phase: VoicePhase;
   liveForMs: number | null;
   mic: VoiceTuiChannelState;
   speaker: VoiceTuiChannelState;

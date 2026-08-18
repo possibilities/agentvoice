@@ -1,10 +1,10 @@
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
+import type { VoicePhase } from "../core/control-protocol.ts";
 import { formatClock } from "./dsp.ts";
 import { type SignalFieldFrame, signalFieldWashColor } from "./signal-field.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
-import type { TransportPhase } from "./transport.ts";
 
-const PHASE_LABEL: Record<TransportPhase, string> = {
+const PHASE_LABEL: Record<VoicePhase, string> = {
   "waiting-ready": "WAITING FOR AGENT",
   negotiating: "NEGOTIATING VOICE",
   live: "LIVE",
@@ -12,7 +12,7 @@ const PHASE_LABEL: Record<TransportPhase, string> = {
   stopped: "STOPPED",
 };
 
-const COMPACT_PHASE_LABEL: Record<TransportPhase, string> = {
+const COMPACT_PHASE_LABEL: Record<VoicePhase, string> = {
   "waiting-ready": "WAITING",
   negotiating: "NEGOTIATE",
   live: "LIVE",
@@ -61,7 +61,7 @@ export function boundedViewportExtent(value: number, viewportExtent: number): nu
 }
 
 export function signalFieldStatus(
-  phase: TransportPhase,
+  phase: VoicePhase,
   liveForMs: number | null,
   width: number,
   pulse: number,

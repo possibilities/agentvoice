@@ -1,8 +1,8 @@
 /**
- * Voice transport: the werift WebRTC peer against the runtime's coordination
- * surface. Owns session lifecycle — offer/answer, renewal before the upstream
- * ceiling, and manual redial — and hands audio to the pipeline as opaque Opus
- * frames.
+ * Voice transport: the werift WebRTC peer, driven by session signaling that
+ * arrives over the control attachment. Owns session lifecycle — offer/answer,
+ * renewal before the upstream ceiling, and manual redial — and hands audio to
+ * the pipeline as opaque Opus frames.
  *
  * A redial is seamless-ish: the new peer negotiates while the old one keeps
  * playing, and audio swaps when the new peer connects. (The supersede inside
@@ -10,8 +10,7 @@
  * is processed, so the old audio is a best-effort tail, not a guarantee.)
  */
 import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters, RtpBuilder } from "werift";
-import type { ReadyInfo } from "../core/runtime.ts";
-import type { WorkerSnapshot } from "../core/workers.ts";
+import type { SessionReadyInfo, VoicePhase } from "../core/control-protocol.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
 import {
   formatWebRtcMediaTrace,
@@ -21,14 +20,12 @@ import {
   webRtcMediaSnapshot,
 } from "./media-trace.ts";
 
-export type { ReadyInfo } from "../core/runtime.ts";
+export type ReadyInfo = SessionReadyInfo;
+export type TransportPhase = VoicePhase;
 
-export type TransportPhase = "waiting-ready" | "negotiating" | "live" | "failed" | "stopped";
-
-/** The slice of the runtime the transport drives. */
-export interface TransportRuntime {
+/** The upstream half of the control attachment's session signaling. */
+export interface TransportSignal {
   offer(sdp: string): void;
-  readonly currentReady: ReadyInfo | null;
 }
 
 export interface TransportEvents {
@@ -36,8 +33,6 @@ export interface TransportEvents {
   onReady(info: ReadyInfo): void;
   onRemoteTrack(track: MediaStreamTrack): void;
   onOaiEvent(event: Record<string, unknown>): void;
-  /** A dispatched worker changed state (also replayed on attach). */
-  onWorker?(worker: WorkerSnapshot): void;
   /** One-line notices for the event feed. */
   onInfo(line: string): void;
   /** Errors worth surfacing prominently (fatal session failures, …). */
@@ -45,7 +40,7 @@ export interface TransportEvents {
 }
 
 export interface VoiceTransportOptions extends TransportEvents {
-  runtime: TransportRuntime;
+  signal: TransportSignal;
   debug?(line: string): void;
 }
 
@@ -102,10 +97,6 @@ export class VoiceTransport {
     return this.phase;
   }
 
-  get readyInfo(): ReadyInfo | null {
-    return this.ready;
-  }
-
   /** Milliseconds the current session has been live, or null. */
   get liveForMs(): number | null {
     const since = this.live?.liveSince;
@@ -116,11 +107,6 @@ export class VoiceTransport {
   get renewInMs(): number | null {
     const live = this.liveForMs;
     return live === null ? null : Math.max(0, RENEWAL_MS - live);
-  }
-
-  start(): void {
-    const info = this.options.runtime.currentReady;
-    if (info) this.handleReady(info);
   }
 
   /**
@@ -134,7 +120,7 @@ export class VoiceTransport {
     this.options.onInfo(`redial (${reason})`);
     this.clearRetryTimer();
     if (this.ready) this.negotiate();
-    // Not ready means the runtime is rebuilding; handleReady re-offers.
+    // Not ready means the Server is rebuilding; handleReady re-offers.
   }
 
   sendOpusFrame(frame: Buffer): void {
@@ -154,7 +140,7 @@ export class VoiceTransport {
     this.setPhase("stopped");
   }
 
-  // ---- runtime events -----------------------------------------------------
+  // ---- session signaling from the Server ----------------------------------
 
   handleReady(info: ReadyInfo): void {
     if (this.stopping) return;
@@ -193,11 +179,25 @@ export class VoiceTransport {
     this.live = null;
     if (live) this.closePeer(live);
     if (!this.pending) this.setPhase("waiting-ready");
-    // The runtime re-emits ready when offers reopen; wantLive re-offers.
+    // The Server re-emits ready when offers reopen; wantLive re-offers.
   }
 
   handleRedial(reason: string): void {
     this.redial(reason);
+  }
+
+  /**
+   * The control link died: signaling is gone, so both peers are strays and
+   * the failure budget is moot. wantLive survives — the next handleReady
+   * (the Server re-sends ready on reattach) renegotiates.
+   */
+  handleSignalLost(): void {
+    if (this.stopping) return;
+    this.ready = null;
+    this.clearRetryTimer();
+    this.rapidFailures = 0;
+    this.dropPeers();
+    this.setPhase("waiting-ready");
   }
 
   handleError(text: string, fatal: boolean): void {
@@ -211,10 +211,6 @@ export class VoiceTransport {
     if (pending) this.failPending(pending, text);
     else if (live) this.failLive(live, text);
     else this.options.onError(text);
-  }
-
-  handleWorker(worker: WorkerSnapshot): void {
-    this.options.onWorker?.(worker);
   }
 
   // -------------------------------------------------------------------------
@@ -307,7 +303,7 @@ export class VoiceTransport {
         const sdp = pc.localDescription?.sdp;
         if (!sdp) throw new Error("no local description after gathering");
         if (this.pending !== session) return;
-        this.options.runtime.offer(sdp);
+        this.options.signal.offer(sdp);
         this.debug(`offer sent (generation ${generation})`);
       } catch (error) {
         this.failPending(session, `offer failed: ${message(error)}`);

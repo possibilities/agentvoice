@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  consoleControlSocketPath,
+  controlSocketPath,
   defaultConfigPath,
   expandTilde,
   residentDirectory,
@@ -23,9 +23,7 @@ describe("paths", () => {
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
       "/etc/xdg/agentvoice/server.json",
     );
-    expect(consoleControlSocketPath({}, HOME)).toBe(
-      "/home/tester/.local/state/agentvoice/console.sock",
-    );
+    expect(controlSocketPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/control.sock");
     expect(residentDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoice/resident");
     expect(residentSocketPath({}, HOME)).toBe(
       "/home/tester/.local/state/agentvoice/resident/app-server.sock",

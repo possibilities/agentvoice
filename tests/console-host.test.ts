@@ -5,14 +5,14 @@ import { join } from "node:path";
 import { BoxRenderable, type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { AUDIO_CONTROL_CLICK_MS, MuteGate } from "../src/console/audio-control.ts";
-import { ClientControlServer } from "../src/console/remote-control.ts";
+import { runConsoleHost } from "../src/console/host.ts";
 import {
-  encodeRemoteMessage,
-  parseRemoteCommand,
-  REMOTE_PROTOCOL_VERSION,
-  type RemoteCommand,
-} from "../src/console/remote-protocol.ts";
-import { runRemote } from "../src/console/remote-ui.ts";
+  CONTROL_PROTOCOL_VERSION,
+  type ControlCommand,
+  encodeControlFrame,
+  parseControlCommand,
+} from "../src/core/control-protocol.ts";
+import { ControlServer } from "../src/server/control.ts";
 
 function contentText(renderable: TextRenderable): string {
   return renderable.content.chunks.map((chunk) => chunk.text).join("");
@@ -42,36 +42,38 @@ async function closeServer(server: Server, sockets: Set<Socket>): Promise<void> 
   });
 }
 
-describe("Remote console network attachment", () => {
-  test("says hello, mirrors the Console's state, and lands a command", async () => {
+describe("Console host network attachment", () => {
+  test("says hello, mirrors the Server's state, and lands a command", async () => {
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
-    const socketPath = join(tmpdir(), `av-remote-net-${process.pid}-${Date.now()}.sock`);
+    const socketPath = join(tmpdir(), `av-host-net-${process.pid}-${Date.now()}.sock`);
     const token = "0123456789abcdef0123";
     const received: string[] = [];
     let sequence = 0;
-    const server = new ClientControlServer({
+    const server = new ControlServer({
       socketPath,
       network: { host: "127.0.0.1", port: 0, token },
       state: () => ({
         type: "state",
-        protocol: REMOTE_PROTOCOL_VERSION,
+        protocol: CONTROL_PROTOCOL_VERSION,
         sequence: sequence++,
-        phase: "live",
-        liveForMs: 4_250,
-        mic: { muted: true, effectiveMuted: true, db: -42.4 },
-        speaker: { muted: false, effectiveMuted: false, db: -18.7 },
+        voice: {
+          phase: "live",
+          liveForMs: 4_250,
+          mic: { muted: true, effectiveMuted: true, db: -42.4 },
+          speaker: { muted: false, effectiveMuted: false, db: -18.7 },
+        },
       }),
       onCommand: (command) => received.push(command.type),
     });
     await server.start();
     const [host, port] = server.networkAddress()!.split(":");
-    const remote = runRemote(
+    const remote = runConsoleHost(
       { host: host!, port: Number(port), token },
-      { createRenderer: async () => setup.renderer },
+      { tui: { createRenderer: async () => setup.renderer } },
     );
 
     try {
-      // Nothing renders until hello clears: the Console sends no state first.
+      // Nothing renders until hello clears: the Server sends no state first.
       await setup.waitFor(() => setup.captureCharFrame().includes("● LIVE 00:04"));
       expect(setup.captureCharFrame()).toContain("-42.4 dB");
       expect(setup.captureCharFrame()).toContain("-18.7 dB");
@@ -87,17 +89,19 @@ describe("Remote console network attachment", () => {
   });
 });
 
-describe("Remote console shared TUI", () => {
+describe("Console host shared TUI", () => {
   test("uses one full-height signal field across portrait, landscape, and shallow viewports", async () => {
     const setup = await createTestRenderer({ width: 49, height: 46, exitOnCtrlC: false });
-    const socketPath = join(tmpdir(), `av-remote-${process.pid}-${Date.now()}.sock`);
+    const socketPath = join(tmpdir(), `av-host-${process.pid}-${Date.now()}.sock`);
     const sockets = new Set<Socket>();
     const server = createServer((socket) => {
       sockets.add(socket);
       socket.once("close", () => sockets.delete(socket));
     });
     await listen(server, socketPath);
-    const remote = runRemote(socketPath, { createRenderer: async () => setup.renderer });
+    const remote = runConsoleHost(socketPath, {
+      tui: { createRenderer: async () => setup.renderer },
+    });
 
     const box = (id: string): BoxRenderable => {
       const renderable = setup.renderer.root.findDescendantById(id);
@@ -218,9 +222,9 @@ describe("Remote console shared TUI", () => {
       exitOnCtrlC: false,
       kittyKeyboard: true,
     });
-    const socketPath = join(tmpdir(), `av-remote-holds-${process.pid}-${Date.now()}.sock`);
+    const socketPath = join(tmpdir(), `av-host-holds-${process.pid}-${Date.now()}.sock`);
     const sockets = new Set<Socket>();
-    const commands: RemoteCommand[] = [];
+    const commands: ControlCommand[] = [];
     const mic = new MuteGate(true);
     const speaker = new MuteGate(false);
     let sequence = 0;
@@ -230,17 +234,19 @@ describe("Remote console shared TUI", () => {
       let buffered = "";
       const sendState = (): void => {
         socket.write(
-          encodeRemoteMessage({
+          encodeControlFrame({
             type: "state",
-            protocol: REMOTE_PROTOCOL_VERSION,
+            protocol: CONTROL_PROTOCOL_VERSION,
             sequence: sequence++,
-            phase: "live",
-            liveForMs: 4_250,
-            mic: { muted: mic.muted, effectiveMuted: mic.effectiveMuted, db: -42.4 },
-            speaker: {
-              muted: speaker.muted,
-              effectiveMuted: speaker.effectiveMuted,
-              db: -18.7,
+            voice: {
+              phase: "live",
+              liveForMs: 4_250,
+              mic: { muted: mic.muted, effectiveMuted: mic.effectiveMuted, db: -42.4 },
+              speaker: {
+                muted: speaker.muted,
+                effectiveMuted: speaker.effectiveMuted,
+                db: -18.7,
+              },
             },
           }),
         );
@@ -252,9 +258,9 @@ describe("Remote console shared TUI", () => {
         for (;;) {
           const newline = buffered.indexOf("\n");
           if (newline === -1) break;
-          const command = parseRemoteCommand(buffered.slice(0, newline));
+          const command = parseControlCommand(buffered.slice(0, newline));
           buffered = buffered.slice(newline + 1);
-          if (!command) continue;
+          if (!command || command.type === "hello" || command.type === "ping") continue;
           commands.push(command);
           if (command.type === "set-muted") {
             const gate = command.target === "mic" ? mic : speaker;
@@ -272,13 +278,12 @@ describe("Remote console shared TUI", () => {
       socket.once("close", () => sockets.delete(socket));
     });
     await listen(server, socketPath);
-    const remote = runRemote(socketPath, {
-      createRenderer: async () => setup.renderer,
-      now: () => clock,
+    const remote = runConsoleHost(socketPath, {
+      tui: { createRenderer: async () => setup.renderer, now: () => clock },
     });
 
     let commandCursor = 0;
-    const expectCommands = async (expected: RemoteCommand[]): Promise<void> => {
+    const expectCommands = async (expected: ControlCommand[]): Promise<void> => {
       await setup.waitFor(() => commands.length >= commandCursor + expected.length);
       expect(commands.slice(commandCursor)).toEqual(expected);
       commandCursor += expected.length;
@@ -311,7 +316,7 @@ describe("Remote console shared TUI", () => {
       await setup.waitFor(() => !mic.muted);
       await setup.mockMouse.release(leftX, y);
       await expectCommands([{ type: "set-muted", target: "mic", muted: false }]);
-      await setup.waitFor(() => setup.captureCharFrame().includes("YOU \u25b7 INPUT"));
+      await setup.waitFor(() => setup.captureCharFrame().includes("YOU ▷ INPUT"));
 
       await setup.mockMouse.pressDown(leftX, y);
       await setup.waitFor(() => mic.muted);

@@ -72,6 +72,23 @@ function hello(role: "ui" | "voice"): ControlCommand {
   return { type: "hello", protocol: CONTROL_PROTOCOL_VERSION, role };
 }
 
+const TOKEN = "0123456789abcdef0123";
+
+/** Resolves on the first frame, so a test can assert a refusal or a welcome. */
+function dialWs(address: string): Promise<{ socket: WebSocket; first: Promise<string> }> {
+  const socket = new WebSocket(`ws://${address}`);
+  const first = new Promise<string>((resolve, reject) => {
+    socket.addEventListener("message", (event) => resolve(String(event.data)), { once: true });
+    socket.addEventListener("close", () => reject(new Error("closed before any frame")), {
+      once: true,
+    });
+  });
+  return new Promise((resolve, reject) => {
+    socket.addEventListener("open", () => resolve({ socket, first }), { once: true });
+    socket.addEventListener("error", () => reject(new Error("could not dial")), { once: true });
+  });
+}
+
 describe("control server roles", () => {
   test("a unix peer's commands are dropped until its hello lands", async () => {
     const commands: Array<{ command: ControlCommand; peer: ControlPeerHandle }> = [];
@@ -202,6 +219,114 @@ describe("control server roles", () => {
 
       ui.close();
       voice.close();
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("admits a network peer only on a matching token and protocol", async () => {
+    const commands: string[] = [];
+    const server = new ControlServer({
+      socketPath: scratchSocket("auth"),
+      network: { host: "127.0.0.1", port: 0, token: TOKEN },
+      state: emptyState,
+      onCommand: (command) => commands.push(command.type),
+    });
+    await server.start();
+    const address = server.networkAddress();
+    expect(address).not.toBeNull();
+
+    try {
+      // A wrong token is refused in words, and its commands never land.
+      const wrong = await dialWs(address!);
+      wrong.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          token: "nope",
+        }),
+      );
+      const wrongFrame = parseServerFrame(await wrong.first);
+      expect(wrongFrame?.type).toBe("reject");
+      if (wrongFrame?.type === "reject") expect(wrongFrame.reason).toBe("token rejected");
+
+      // So is a mismatched protocol — the two ship together.
+      const stale = await dialWs(address!);
+      stale.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION - 1,
+          role: "ui",
+          token: TOKEN,
+        }),
+      );
+      const staleFrame = parseServerFrame(await stale.first);
+      expect(staleFrame?.type).toBe("reject");
+      if (staleFrame?.type === "reject") expect(staleFrame.reason).toContain("upgrade both");
+
+      // An unauthorized peer's commands are ignored outright: no state is sent
+      // before hello, so nothing precedes the refusal on the wire.
+      const silent = await dialWs(address!);
+      silent.socket.send(encodeControlFrame({ type: "redial" }));
+      silent.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          token: TOKEN,
+        }),
+      );
+      expect(parseServerFrame(await silent.first)?.type).toBe("state");
+      silent.socket.send(encodeControlFrame({ type: "redial" }));
+      await Bun.sleep(50);
+      expect(commands).toEqual(["redial"]);
+      silent.socket.close();
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("releases a silent network peer's holds without waiting for its close", async () => {
+    let clock = 10_000;
+    const closed: number[] = [];
+    const server = new ControlServer({
+      socketPath: scratchSocket("beat"),
+      network: { host: "127.0.0.1", port: 0, token: TOKEN },
+      heartbeatDeadlineMs: 60,
+      now: () => clock,
+      state: emptyState,
+      onCommand: () => {},
+      onPeerClose: (peer) => closed.push(peer.id),
+    });
+    await server.start();
+    const address = server.networkAddress();
+
+    try {
+      const peer = await dialWs(address!);
+      peer.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          token: TOKEN,
+        }),
+      );
+      await peer.first;
+
+      // A beat inside the deadline keeps the hold alive.
+      clock += 40;
+      peer.socket.send(encodeControlFrame({ type: "ping" }));
+      await Bun.sleep(60);
+      expect(closed).toHaveLength(0);
+
+      // Silence past it releases, even though the socket is still open — a
+      // dead Remote console's TCP close can lag by minutes, and until then
+      // the voice peer would still believe a push-to-talk hold were open.
+      clock += 200;
+      await Bun.sleep(120);
+      expect(closed).toHaveLength(1);
+      expect(peer.socket.readyState).not.toBe(WebSocket.OPEN);
     } finally {
       await server.close();
     }

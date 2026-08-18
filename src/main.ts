@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 /** CLI entry: `agentvoice console [options]` is the voice console; sibling
- *  subcommands manage the resident app-server, account profiles, and the
- *  Remote console. */
+ *  subcommands manage the Server, the resident app-server, account profiles,
+ *  and the Remote console. */
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
-import { RemoteError, type RemoteTarget, runRemote } from "./console/remote-ui.ts";
-import { ConsoleError, type ConsoleOptions, runConsole } from "./console/ui.ts";
+import { ConsoleError, type ConsoleTarget, runConsoleHost } from "./console/host.ts";
 import {
   AUTH_FILE,
   accountsDirectory,
@@ -23,7 +22,7 @@ import {
   loadConfigFile,
   resolveConfig,
 } from "./core/config.ts";
-import { consoleControlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
+import { controlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
 import {
   installResident,
   ResidentError,
@@ -77,34 +76,19 @@ const CONSOLE_USAGE = `agentvoice console — open the voice console
 Usage:
   agentvoice console [options]
 
-Attaches to the resident app-server, resumes the persisted orchestrator
-agent (or starts one), and opens a full-duplex voice session against it.
-Requires the resident: agentvoice resident install.
+Attaches to the Server as its voice peer — the owner of the microphone,
+speaker, and voice-session media — and hosts the shared TUI. Requires the
+daemon pair: agentvoice server install. Configuration lives with the
+Server (server.json, or \`agentvoice server install\` flags); the console
+keeps only its device flags.
 
-Options (the full surface lives in server.json; see server.json.example
-and server.schema.json):
-  --config <path>          Config file (default: ~/.config/agentvoice/server.json)
-  --model <id>             Orchestrator agent model (default: codex config)
-  --effort <level>         Orchestrator agent reasoning effort (default: codex config)
-  --voice-model <id>       Voice agent model (default: codex config)
-  --voice <name>           Voice timbre (default: upstream default)
-  --workspace <dir>        Orchestrator agent working directory
-                           (default: your home directory)
-  --sandbox <mode>         read-only | workspace-write | danger-full-access
-                           (default: danger-full-access)
-  --approval-policy <p>    never | on-request | untrusted (default: never)
-  --codex <path>           Codex binary (default: $CODEX_PATH or "codex")
+Options:
   --device <index>         Microphone device index (default: system default)
   --output-device <index>  Speaker device index (default: system default)
   --fresh                  Abandon the persisted agent; start a fresh thread
   --debug                  Write a debug log to the state directory
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
-
-Prompts are files in the config file's directory, all optional:
-  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
-  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md,               prime the orchestrator
-  ORCHESTRATOR_SESSION_{START,END}.md                    agent
 `;
 
 const SERVER_USAGE = `agentvoice server — the launchd-resident coordination Server
@@ -166,23 +150,24 @@ Usage:
                                                   balancer's CODEX_HOME pick
 `;
 
-const REMOTE_USAGE = `agentvoice remote — the phone-sized control surface for a running Console
+const REMOTE_USAGE = `agentvoice remote — the phone-sized control surface for the Server
 
 Usage:
   agentvoice remote                          attach on this machine
   agentvoice remote --host <addr> [--port N] attach across the tailnet
 
 Options:
-  --host <address>  The Console's tailnet address (\`tailscale ip -4\` on that
-                    machine). Omitted, the Remote console attaches through the
+  --host <address>  The Server machine's tailnet address (\`tailscale ip -4\`
+                    there). Omitted, the Remote console attaches through the
                     owner-only unix socket on this machine.
   --port <port>     Defaults to ${DEFAULT_REMOTE_PORT}; must match remote.port there.
-  --token <secret>  Must match remote.token in the Console's server.json.
+  --token <secret>  Must match remote.token in the Server's server.json.
                     Defaults to $AGENTVOICE_REMOTE_TOKEN. Required with --host.
 
 The Remote console carries mute controls, Redial, Fresh, and signal state;
-audio remains on the Console's own device. Serving --host needs remote.listen
-and remote.token set in the Console's server.json.
+audio remains on the Console's own device, and the Server is reachable even
+while no Console is open. Serving --host needs remote.listen and
+remote.token set in the Server's server.json.
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
 `;
@@ -192,20 +177,9 @@ export interface FlagSpec {
   bool: ReadonlySet<string>;
 }
 
+/** Device flags only: the config surface belongs to the Server. */
 const CONSOLE_FLAGS: FlagSpec = {
-  value: new Set([
-    "--config",
-    "--model",
-    "--effort",
-    "--voice-model",
-    "--voice",
-    "--workspace",
-    "--sandbox",
-    "--approval-policy",
-    "--codex",
-    "--device",
-    "--output-device",
-  ]),
+  value: new Set(["--device", "--output-device"]),
   bool: new Set(["--debug", "--fresh", "--help"]),
 };
 
@@ -240,7 +214,7 @@ export interface ParsedArgs {
   help: boolean;
 }
 
-export function parseArgs(argv: string[], spec: FlagSpec = CONSOLE_FLAGS): ParsedArgs {
+export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): ParsedArgs {
   const seen = new Set<string>();
   const values: Record<string, string> = {};
   let configPath: string | undefined;
@@ -325,9 +299,15 @@ async function loadAndResolve(
   });
 }
 
-export type ParsedConsoleCommand =
-  | { help: true }
-  | { help: false; options: ConsoleOptions; parsed: ParsedArgs };
+export interface ConsoleOptions {
+  deviceIndex?: number;
+  outputDeviceIndex?: number;
+  debug: boolean;
+  /** Abandon the persisted orchestrator agent and start a fresh thread. */
+  fresh: boolean;
+}
+
+export type ParsedConsoleCommand = { help: true } | { help: false; options: ConsoleOptions };
 
 export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   const parsed = parseArgs(argv, CONSOLE_FLAGS);
@@ -342,10 +322,7 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
     debug: parsed.debug,
     fresh: parsed.fresh,
   };
-  // Device flags are console-side; keep them out of the config layer.
-  delete parsed.values["device"];
-  delete parsed.values["output-device"];
-  return { help: false, options, parsed };
+  return { help: false, options };
 }
 
 async function runConsoleCommand(argv: string[]): Promise<number> {
@@ -354,12 +331,14 @@ async function runConsoleCommand(argv: string[]): Promise<number> {
     console.log(CONSOLE_USAGE);
     return 0;
   }
-  const { configPath, loadResolvedConfig } = configLoader(command.parsed);
-  // Prompt files live beside the config file, so --config relocates the bundle.
-  const config = await loadResolvedConfig();
-  await runConsole(config, command.options, VERSION, {
-    path: configPath,
-    load: loadResolvedConfig,
+  const { deviceIndex, outputDeviceIndex, debug, fresh } = command.options;
+  await runConsoleHost(controlSocketPath(process.env, homedir()), {
+    media: {
+      ...(deviceIndex === undefined ? {} : { deviceIndex }),
+      ...(outputDeviceIndex === undefined ? {} : { outputDeviceIndex }),
+    },
+    fresh,
+    debug,
   });
   return 0;
 }
@@ -434,14 +413,14 @@ async function runServerCommand(argv: string[]): Promise<number> {
 }
 
 /**
- * Which Console a Remote console attaches to: a unix socket path on this
- * machine, or a network Console. Returns null for `--help`.
+ * Which Server a Remote console attaches to: the unix socket path on this
+ * machine, or a network Server. Returns null for `--help`.
  */
 export function parseRemoteTarget(
   argv: string[],
   env: NodeJS.ProcessEnv,
   home: string,
-): RemoteTarget | null {
+): ConsoleTarget | null {
   const parsed = parseArgs(argv, {
     value: new Set(["--host", "--port", "--token"]),
     bool: new Set(["--help"]),
@@ -453,12 +432,12 @@ export function parseRemoteTarget(
     if (parsed.values["port"] !== undefined || parsed.values["token"] !== undefined) {
       throw new UsageError("--port and --token only apply with --host");
     }
-    return consoleControlSocketPath(env, home);
+    return controlSocketPath(env, home);
   }
   const token = parsed.values["token"] ?? env["AGENTVOICE_REMOTE_TOKEN"];
   if (token === undefined || token === "") {
     throw new UsageError(
-      "--host needs --token (or $AGENTVOICE_REMOTE_TOKEN); it must match remote.token in the Console's server.json",
+      "--host needs --token (or $AGENTVOICE_REMOTE_TOKEN); it must match remote.token in the Server's server.json",
     );
   }
   const rawPort = parsed.values["port"];
@@ -475,7 +454,7 @@ async function runRemoteCommand(argv: string[]): Promise<number> {
     console.log(REMOTE_USAGE);
     return 0;
   }
-  await runRemote(target);
+  await runConsoleHost(target);
   return 0;
 }
 
@@ -608,7 +587,6 @@ async function main(): Promise<number> {
     if (
       error instanceof ConfigError ||
       error instanceof ConsoleError ||
-      error instanceof RemoteError ||
       error instanceof ResidentError ||
       error instanceof ServerError ||
       error instanceof ServerInstallError

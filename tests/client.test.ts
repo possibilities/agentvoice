@@ -111,7 +111,7 @@ describe("voice transport runtime events", () => {
   test("routes a config change to the existing make-before-break redial", () => {
     const reasons: string[] = [];
     const transport = new VoiceTransport({
-      runtime: { offer() {}, currentReady: null },
+      signal: { offer() {} },
       onPhase() {},
       onReady() {},
       onRemoteTrack() {},

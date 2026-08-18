@@ -1,6 +1,6 @@
 /**
- * XDG path resolution for the console and the resident bundle: state files,
- * the resident's socket, and the config location.
+ * XDG path resolution for the Server, the console, and the resident bundle:
+ * state files, the sockets, and the config location.
  */
 import { isAbsolute, join } from "node:path";
 
@@ -23,11 +23,6 @@ export function controlSocketPath(env: Environ, home: string): string {
 /** The Server bundle's private directory: its launchd log. */
 export function serverDirectory(env: Environ, home: string): string {
   return join(stateDirectory(env, home), "server");
-}
-
-/** The pre-split console's own listener; removed with the console rewire. */
-export function consoleControlSocketPath(env: Environ, home: string): string {
-  return join(stateDirectory(env, home), "console.sock");
 }
 
 /**
