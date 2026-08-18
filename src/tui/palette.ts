@@ -91,6 +91,7 @@ export function createCommandPalette(
     content: "",
     height: 1,
     wrapMode: "none",
+    selectable: false,
   });
   const rowsBox = new core.BoxRenderable(renderer, {
     id: `${id}-rows`,
@@ -176,6 +177,7 @@ export function createCommandPalette(
           content: "no matching command",
           fg: tokens.muted,
           height: 1,
+          selectable: false,
         }),
       );
       return;
@@ -197,6 +199,7 @@ export function createCommandPalette(
             core.bold(core.fg(tokens.accent)(key)),
             core.fg(isSelected ? tokens.text : tokens.muted)(` ${command.label}`),
           ]),
+          selectable: false,
         }),
       );
       rowsBox.add(row);

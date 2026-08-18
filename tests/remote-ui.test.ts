@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BoxRenderable, TextRenderable } from "@opentui/core";
+import { BoxRenderable, type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { AUDIO_CONTROL_CLICK_MS, MuteGate } from "../src/console/audio-control.ts";
 import { ClientControlServer } from "../src/console/remote-control.ts";
@@ -16,6 +16,16 @@ import { runRemote } from "../src/console/remote-ui.ts";
 
 function contentText(renderable: TextRenderable): string {
   return renderable.content.chunks.map((chunk) => chunk.text).join("");
+}
+
+function selectableTextIds(root: Renderable): string[] {
+  const ids: string[] = [];
+  const visit = (renderable: Renderable): void => {
+    if (renderable instanceof TextRenderable && renderable.selectable) ids.push(renderable.id);
+    for (const child of renderable.getChildren()) visit(child);
+  };
+  visit(root);
+  return ids.sort();
 }
 
 async function listen(server: Server, socketPath: string): Promise<void> {
@@ -138,6 +148,7 @@ describe("Remote console shared TUI", () => {
       expect(setup.captureCharFrame()).toContain("WAITING");
       expect(setup.captureCharFrame()).toContain("/ 48 KHZ");
       expect(setup.captureCharFrame()).toContain("-∞  dB");
+      expect(selectableTextIds(setup.renderer.root)).toEqual([]);
       expectFieldFillsMain(46);
       expectFieldWithin(49, 46);
       const palette = setup.renderer.root.findDescendantById("voice-palette");
@@ -150,6 +161,7 @@ describe("Remote console shared TUI", () => {
       );
       await setup.renderOnce();
       expect((palette as BoxRenderable).visible).toBe(true);
+      expect(selectableTextIds(setup.renderer.root)).toEqual([]);
       expect(setup.captureCharFrame()).toContain("redial the voice link");
       expect(setup.captureCharFrame()).toContain("fresh orchestrator thread");
       setup.mockInput.pressKey("k", { ctrl: true });
@@ -320,6 +332,7 @@ describe("Remote console shared TUI", () => {
       await setup.waitFor(() => setup.captureCharFrame().includes("TALKING"));
       await setup.mockMouse.release(leftX, pttY);
       await setup.waitFor(() => mic.effectiveMuted);
+      expect(setup.renderer.hasSelection).toBe(false);
       await expectCommands([
         { type: "hold-unmuted", target: "mic", input: "pointer" },
         { type: "release-unmuted", target: "mic", input: "pointer", commit: false },

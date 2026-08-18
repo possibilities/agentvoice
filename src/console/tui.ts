@@ -140,6 +140,7 @@ export async function createVoiceTui(
     flexGrow: 1,
     wrapMode: "none",
     fg: PALETTE.faint,
+    selectable: false,
   });
   rails.add(fieldCanvas);
   main.add(rails);
@@ -193,6 +194,7 @@ export async function createVoiceTui(
       height: 1,
       wrapMode: "none",
       fg: PALETTE.dim,
+      selectable: false,
     }),
   );
   renderer.root.add(commandTrigger);
