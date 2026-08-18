@@ -34,7 +34,7 @@ thread                the orchestrator agent's identity and memory; persisted
                       (thread.json) and resumed by every console run until --fresh
  ├─ resident          launchd-kept app-server; a crash or rotation restarts it
  │                    and the console resumes the same thread
- ├─ console run       one `agentvoice` process; prompts read at its start and
+ ├─ console run       one `agentvoice console` process; prompts read at its start and
  │                    re-applied to the thread on attach
  └─ voice session     one WebRTC call; superseded by every redial
 ```
@@ -102,7 +102,7 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 Prompt files have three states everywhere: **absent** (codex's built-in
 stands), **present with content** (replace or append per file), **present but
 empty** (the field is sent empty, stripping the built-in). Files are read at
-console start — editing one takes effect on the next `agentvoice`.
+console start — editing one takes effect on the next `agentvoice console`.
 
 ## The voice agent
 

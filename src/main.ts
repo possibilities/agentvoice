@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoice [options]` is the voice console; subcommands manage
- *  the resident app-server, account profiles, and the Remote console. */
+/** CLI entry: `agentvoice console [options]` is the voice console; sibling
+ *  subcommands manage the resident app-server, account profiles, and the
+ *  Remote console. */
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -37,13 +38,13 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — talk to a Codex orchestrator agent, hands-free
 
 Usage:
-  agentvoice [options]            Open the voice console (the default)
+  agentvoice console [options]    Open the voice console
   agentvoice resident <command>   Manage the launchd-resident codex app-server
   agentvoice accounts <command>   Manage account profiles for balancing
   agentvoice remote               Open the phone-sized remote console
 
 Run \`agentvoice <command> --help\` for options. First run: install the
-resident with \`agentvoice resident install\`, then run \`agentvoice\`.
+resident with \`agentvoice resident install\`, then run \`agentvoice console\`.
 `;
 
 const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
@@ -62,10 +63,10 @@ The slug is a local label (lowercase letters, digits, hyphens) — pick one
 per ChatGPT account, e.g. "personal" or "work".
 `;
 
-const CONSOLE_USAGE = `agentvoice — open the voice console
+const CONSOLE_USAGE = `agentvoice console — open the voice console
 
 Usage:
-  agentvoice [options]
+  agentvoice console [options]
 
 Attaches to the resident app-server, resumes the persisted orchestrator
 agent (or starts one), and opens a full-duplex voice session against it.
@@ -472,31 +473,33 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const command = argv[0];
-  if (command === "help") {
+  if (command === undefined || command === "help" || command === "--help") {
     console.log(USAGE);
-    return 0;
+    return command === undefined ? 2 : 0;
   }
 
   const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
+    console: { run: runConsoleCommand, usage: CONSOLE_USAGE },
     resident: { run: runResidentCommand, usage: RESIDENT_USAGE },
     remote: { run: runRemoteCommand, usage: REMOTE_USAGE },
     accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
   };
-  const isSubcommand = command !== undefined && !command.startsWith("-");
-  const entry = isSubcommand ? commands[command] : undefined;
-  if (isSubcommand && entry === undefined) {
+  const entry = command.startsWith("-") ? undefined : commands[command];
+  if (entry === undefined) {
     if (command === "server" || command === "client") {
       console.error(
-        `the two-app split is gone: run \`agentvoice\` (the console) after \`agentvoice resident install\`\n`,
+        `the two-app split is gone: run \`agentvoice console\` after \`agentvoice resident install\`\n`,
       );
+    } else if (command.startsWith("-")) {
+      console.error(`the console is a subcommand now: run \`agentvoice console ${command} …\`\n`);
     } else {
       console.error(`unknown command "${command}"\n`);
     }
     console.error(USAGE);
     return 2;
   }
-  const run = entry ? () => entry.run(argv.slice(1)) : () => runConsoleCommand(argv);
-  const usage = entry?.usage ?? CONSOLE_USAGE;
+  const run = () => entry.run(argv.slice(1));
+  const usage = entry.usage;
 
   try {
     return await run();

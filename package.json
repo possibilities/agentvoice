@@ -13,7 +13,7 @@
     "agentvoice": "./src/main.ts"
   },
   "scripts": {
-    "console": "bun run src/main.ts",
+    "console": "bun run src/main.ts console",
     "setup": "bun run scripts/setup.ts",
     "android:package": "droidedtui package .",
     "android:run": "droidedtui run .",

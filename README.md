@@ -37,7 +37,7 @@ bun install
 bun run setup                        # one-time: verifies bun/codex, builds duplex audio
 bun run src/main.ts resident install # one-time: install + start the resident
 bun run console                      # the voice console
-bun run src/main.ts --model gpt-5.6-sol --effort high --voice cove
+bun run src/main.ts console --model gpt-5.6-sol --effort high --voice cove
 ```
 
 ### A global `agentvoice`
@@ -57,7 +57,7 @@ and the resident's rendered wrapper/plist bake absolute paths — rerun
 ```bash
 bun run cli:install
 agentvoice resident install
-agentvoice
+agentvoice console
 ```
 
 Flags cover the handful of things worth changing per run; the full surface
@@ -98,7 +98,7 @@ agentvoice resident uninstall  # unload and remove the LaunchAgent
 
 Because threads live in the resident, quitting the console hangs up the voice
 session but leaves the orchestrator agent and any running workers intact; the
-next `agentvoice` resumes the same thread and re-adopts the workers. `--fresh`
+next `agentvoice console` resumes the same thread and re-adopts the workers. `--fresh`
 (or the `f` key) is the deliberate way to start over.
 
 Logs live in `~/.local/state/agentvoice/resident/`: `resident.log` (the
@@ -290,7 +290,7 @@ created mode 0600 inside a 0700 directory; the console's control socket
 (`console.sock`) is owner-only too — **file permissions are the boundary
 between local users**, and there is no port for a browser or another machine
 to probe. The console control socket doubles as the single-console lock: a
-second `agentvoice` refuses to start while one is running.
+second `agentvoice console` refuses to start while one is running.
 
 Setting `remote.listen` opts into one exception, and moves the boundary with
 it: a Remote console on another machine reaches the Console over a tailnet
@@ -315,7 +315,7 @@ To control a session from another device, SSH in and use the
 
 ## The voice console
 
-`agentvoice` attaches to the resident, resumes (or starts) the orchestrator
+`agentvoice console` attaches to the resident, resumes (or starts) the orchestrator
 agent, and opens a full-duplex voice console. Capture and playback both run on
 one client-owned miniaudio duplex device with bounded PCM rings; audio is
 exchanged as Opus over WebRTC directly with the voice agent, and the console
@@ -323,8 +323,8 @@ renders live meters, sparklines, and finished-turn transcripts
 (`you · …` / `agent · …`).
 
 ```bash
-bun run console                                  # or: agentvoice
-bun run src/main.ts --device 1 --debug
+bun run console                                  # or: agentvoice console
+bun run src/main.ts console --device 1 --debug
 ```
 
 The device requests 48 kHz s16 mono capture and stereo playback from one
@@ -496,4 +496,4 @@ keyboard.
 
 The orchestrator agent persists across console runs (`thread.json`); prompt
 files are read at console start, so editing one takes effect on the next
-`agentvoice`.
+`agentvoice console`.

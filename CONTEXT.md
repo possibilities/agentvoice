@@ -9,7 +9,7 @@ the balancer at every spawn. _Avoid_: "daemon", "service", "backend server".
 as JSON-RPC over WebSocket framing on its unix socket. _Avoid_: "codex
 process".
 
-**Console** — The one agentvoice process (`agentvoice`): TUI, duplex audio,
+**Console** — The one agentvoice process (`agentvoice console`): TUI, duplex audio,
 WebRTC peer, and the coordination runtime, attached to the resident. Audio
 flows console↔voice agent peer-to-peer; only coordination crosses the
 attachment. _Avoid_: "client" (the pre-collapse two-app term), "browser",

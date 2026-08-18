@@ -27,8 +27,8 @@ terms in code, comments, and commit messages.
 One program, three layers. `src/` root holds the entry and shared utilities;
 everything else belongs to exactly one layer.
 
-- `src/main.ts` — CLI entry: the bare command is the console; `resident`,
-  `accounts`, and `remote` are subcommands
+- `src/main.ts` — CLI entry: `console`, `resident`, `accounts`, and `remote`
+  are subcommands; the bare command prints usage
 - `src/paths.ts` — XDG path resolution: state files, the resident socket,
   the config location
 - `src/core/` — the coordination layer (attached to the resident, no UI):

@@ -52,5 +52,5 @@ if ((await build.exited) !== 0) {
 ok("duplex audio device built");
 
 console.log(
-  "\nready:  agentvoice resident install   (once)   then:  bun run console   (or `agentvoice`)",
+  "\nready:  agentvoice resident install   (once)   then:  bun run console   (or `agentvoice console`)",
 );
