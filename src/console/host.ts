@@ -26,9 +26,10 @@ import {
 } from "../core/control-protocol.ts";
 import { stateDirectory } from "../paths.ts";
 import { type AudioTarget, MuteGate, type UnmuteHoldSource } from "./audio-control.ts";
-import { DuplexVoiceAudio } from "./duplex-audio.ts";
-import { duplexAudioAvailabilityError } from "./duplex-device.ts";
-import { type TransportPhase, VoiceTransport } from "./transport.ts";
+// The media engine is imported lazily: the ui role (including the Android
+// Remote console package) must never load werift or the native duplex device.
+import type { DuplexVoiceAudio } from "./duplex-audio.ts";
+import type { TransportPhase, VoiceTransport } from "./transport.ts";
 import {
   createVoiceTui,
   type VoiceTui,
@@ -82,6 +83,7 @@ export async function runConsoleHost(
   const media = options.media ?? null;
   if (media) {
     // Fail before taking over the terminal or touching the Server.
+    const { duplexAudioAvailabilityError } = await import("./duplex-device.ts");
     const availabilityError = duplexAudioAvailabilityError();
     if (availabilityError) throw new ConsoleError(availabilityError);
     if (typeof target === "string" && !(await socketReachable(target))) {
@@ -146,59 +148,62 @@ export async function runConsoleHost(
   let phase: TransportPhase = "waiting-ready";
   let publishTimer: ReturnType<typeof setInterval> | null = null;
 
-  const audio = media
-    ? new DuplexVoiceAudio({
-        deviceIndex: media.deviceIndex,
-        outputDeviceIndex: media.outputDeviceIndex,
-        sendFrame: (frame) => transport?.sendOpusFrame(frame),
-        onMicLevel: (db) => {
-          meters.mic = db;
-        },
-        onAgentLevel: (db) => {
-          meters.agent = db;
-        },
-        onWarning: (line) => feed(line),
-        debug: debugLog,
-      })
-    : null;
-
-  const transport = media
-    ? new VoiceTransport({
-        signal: { offer: (sdp) => send({ type: "offer", sdp }) },
-        debug: debugLog,
-        onPhase: (next) => {
-          phase = next;
-          tui?.refresh();
-          // Phase is discrete: ui peers should not wait out the meter tick.
-          publishVoiceState();
-        },
-        onReady: () => tui?.refresh(),
-        onRemoteTrack: (track) => audio?.attachRemote(track),
-        onOaiEvent: (event) => {
-          const type = typeof event["type"] === "string" ? event["type"] : "";
-          debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`);
-          if (type === "session.started" || type === "session.created") {
-            const session = event["session"] as Record<string, unknown> | undefined;
-            const model = typeof session?.["model"] === "string" ? ` · ${session["model"]}` : "";
-            feed(`voice session started${model}`);
-            return;
-          }
-          if (type === "turn.done") {
-            const turn = event["turn"] as Record<string, unknown> | undefined;
-            const transcript =
-              typeof turn?.["transcript"] === "string" ? turn["transcript"].trim() : "";
-            if (!transcript) return;
-            const isUser = turn?.["role"] === "user";
-            const line = `${isUser ? "you" : "agent"} · ${transcript.length > 70 ? `${transcript.slice(0, 69)}…` : transcript}`;
-            feed(line);
-            return;
-          }
-          if (type === "error") feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`);
-        },
-        onInfo: feed,
-        onError: feed,
-      })
-    : null;
+  let audio: DuplexVoiceAudio | null = null;
+  let transport: VoiceTransport | null = null;
+  if (media) {
+    const [duplexAudio, voiceTransport] = await Promise.all([
+      import("./duplex-audio.ts"),
+      import("./transport.ts"),
+    ]);
+    audio = new duplexAudio.DuplexVoiceAudio({
+      deviceIndex: media.deviceIndex,
+      outputDeviceIndex: media.outputDeviceIndex,
+      sendFrame: (frame) => transport?.sendOpusFrame(frame),
+      onMicLevel: (db) => {
+        meters.mic = db;
+      },
+      onAgentLevel: (db) => {
+        meters.agent = db;
+      },
+      onWarning: (line) => feed(line),
+      debug: debugLog,
+    });
+    transport = new voiceTransport.VoiceTransport({
+      signal: { offer: (sdp) => send({ type: "offer", sdp }) },
+      debug: debugLog,
+      onPhase: (next) => {
+        phase = next;
+        tui?.refresh();
+        // Phase is discrete: ui peers should not wait out the meter tick.
+        publishVoiceState();
+      },
+      onReady: () => tui?.refresh(),
+      onRemoteTrack: (track) => audio?.attachRemote(track),
+      onOaiEvent: (event) => {
+        const type = typeof event["type"] === "string" ? event["type"] : "";
+        debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`);
+        if (type === "session.started" || type === "session.created") {
+          const session = event["session"] as Record<string, unknown> | undefined;
+          const model = typeof session?.["model"] === "string" ? ` · ${session["model"]}` : "";
+          feed(`voice session started${model}`);
+          return;
+        }
+        if (type === "turn.done") {
+          const turn = event["turn"] as Record<string, unknown> | undefined;
+          const transcript =
+            typeof turn?.["transcript"] === "string" ? turn["transcript"].trim() : "";
+          if (!transcript) return;
+          const isUser = turn?.["role"] === "user";
+          const line = `${isUser ? "you" : "agent"} · ${transcript.length > 70 ? `${transcript.slice(0, 69)}…` : transcript}`;
+          feed(line);
+          return;
+        }
+        if (type === "error") feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`);
+      },
+      onInfo: feed,
+      onError: feed,
+    });
+  }
 
   function voiceBody(): VoiceStateBody {
     return {

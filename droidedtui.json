@@ -6,9 +6,9 @@
     "name": "0.1.0",
     "code": 1
   },
-  "entry": "src/console/remote-ui.ts",
+  "entry": "src/console/host.ts",
   "launch": {
-    "export": "runRemote",
+    "export": "runConsoleHost",
     "arguments": [
       {
         "host": { "$env": "AGENTVOICE_REMOTE_HOST" },
