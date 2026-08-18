@@ -33,7 +33,8 @@ import { RESIDENT_LABEL, readResidentState, residentArgv, writeResidentState } f
 
 export class ResidentError extends Error {}
 
-function guiDomain(): string {
+/** Shared by the Server installer, which manages a sibling LaunchAgent. */
+export function guiDomain(): string {
   const uid = process.getuid?.();
   if (uid === undefined) throw new ResidentError("no uid; launchctl needs a gui domain");
   return `gui/${uid}`;
@@ -43,14 +44,18 @@ function plistPath(): string {
   return join(homedir(), "Library", "LaunchAgents", `${RESIDENT_LABEL}.plist`);
 }
 
-async function launchctl(args: string[]): Promise<{ code: number; output: string }> {
+export function residentInstalled(): boolean {
+  return existsSync(plistPath());
+}
+
+export async function launchctl(args: string[]): Promise<{ code: number; output: string }> {
   const child = Bun.spawn(["launchctl", ...args], { stdout: "pipe", stderr: "pipe" });
   const code = await child.exited;
   const output = `${await new Response(child.stdout).text()}${await new Response(child.stderr).text()}`;
   return { code, output };
 }
 
-function xmlEscape(text: string): string {
+export function xmlEscape(text: string): string {
   return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 

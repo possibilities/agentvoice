@@ -14,6 +14,7 @@
   },
   "scripts": {
     "console": "bun run src/main.ts console",
+    "server": "bun run src/main.ts server run",
     "setup": "bun run scripts/setup.ts",
     "android:package": "droidedtui package .",
     "android:run": "droidedtui run .",

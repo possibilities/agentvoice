@@ -216,6 +216,11 @@ export class VoiceRuntime {
     return this.workers?.snapshots() ?? [];
   }
 
+  /** The voice peer detached: a session nobody can hear or mute must not outlive it. */
+  voiceGone(): void {
+    if (this.sessions.hasSession) this.sessions.handleClientGone();
+  }
+
   /** A new offer supersedes whatever voice session is running. */
   offer(sdp: string): void {
     if (!this.threadReady || !this.attachment) {

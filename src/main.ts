@@ -32,6 +32,14 @@ import {
   runPickHome,
   uninstallResident,
 } from "./resident/install.ts";
+import { runServer, ServerError } from "./server/host.ts";
+import {
+  installServer,
+  restartServer,
+  ServerInstallError,
+  serverStatus,
+  uninstallServer,
+} from "./server/install.ts";
 
 export const VERSION: string = packageJson.version;
 
@@ -39,12 +47,13 @@ const USAGE = `agentvoice — talk to a Codex orchestrator agent, hands-free
 
 Usage:
   agentvoice console [options]    Open the voice console
+  agentvoice server <command>     Manage the launchd-resident Server
   agentvoice resident <command>   Manage the launchd-resident codex app-server
   agentvoice accounts <command>   Manage account profiles for balancing
   agentvoice remote               Open the phone-sized remote console
 
 Run \`agentvoice <command> --help\` for options. First run: install the
-resident with \`agentvoice resident install\`, then run \`agentvoice console\`.
+daemon pair with \`agentvoice server install\`, then run \`agentvoice console\`.
 `;
 
 const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
@@ -91,6 +100,45 @@ and server.schema.json):
   --debug                  Write a debug log to the state directory
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
+
+Prompts are files in the config file's directory, all optional:
+  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
+  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md,               prime the orchestrator
+  ORCHESTRATOR_SESSION_{START,END}.md                    agent
+`;
+
+const SERVER_USAGE = `agentvoice server — the launchd-resident coordination Server
+
+The Server owns the attachment to the resident app-server: the persisted
+orchestrator agent, workers, account rotation, and the control listeners
+that the Console and Remote consoles attach to. It runs headless under
+launchd, so the orchestrator stays serviced with no console open. It
+originates no inference of its own.
+
+Usage:
+  agentvoice server install [options]   Render the LaunchAgent (installing
+                                        the resident first when missing),
+                                        load, and start
+  agentvoice server status              Report launchd and socket state
+  agentvoice server restart             Restart the Server
+  agentvoice server uninstall           Unload and remove the LaunchAgent
+  agentvoice server run [options]       Run in the foreground (what the
+                                        LaunchAgent invokes)
+
+Options (install bakes them into the LaunchAgent; run takes the same set;
+the full surface lives in server.json — see server.schema.json):
+  --config <path>          Config file (default: ~/.config/agentvoice/server.json)
+  --model <id>             Orchestrator agent model (default: codex config)
+  --effort <level>         Orchestrator agent reasoning effort (default: codex config)
+  --voice-model <id>       Voice agent model (default: codex config)
+  --voice <name>           Voice timbre (default: upstream default)
+  --workspace <dir>        Orchestrator agent working directory
+                           (default: your home directory)
+  --sandbox <mode>         read-only | workspace-write | danger-full-access
+                           (default: danger-full-access)
+  --approval-policy <p>    never | on-request | untrusted (default: never)
+  --codex <path>           Codex binary (default: $CODEX_PATH or "codex")
+  --debug                  Write a debug log to the state directory
 
 Prompts are files in the config file's directory, all optional:
   VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
@@ -164,6 +212,22 @@ const CONSOLE_FLAGS: FlagSpec = {
 const RESIDENT_FLAGS: FlagSpec = {
   value: new Set(["--config"]),
   bool: new Set(["--help"]),
+};
+
+/** The config-layer flags; device flags stay with the console. */
+const SERVER_FLAGS: FlagSpec = {
+  value: new Set([
+    "--config",
+    "--model",
+    "--effort",
+    "--voice-model",
+    "--voice",
+    "--workspace",
+    "--sandbox",
+    "--approval-policy",
+    "--codex",
+  ]),
+  bool: new Set(["--debug", "--help"]),
 };
 
 export class UsageError extends Error {}
@@ -334,6 +398,41 @@ async function runResidentCommand(argv: string[]): Promise<number> {
   }
 }
 
+async function runServerCommand(argv: string[]): Promise<number> {
+  const subcommand = argv[0];
+  if (subcommand === undefined || subcommand === "--help" || subcommand === "help") {
+    console.log(SERVER_USAGE);
+    return subcommand === undefined ? 2 : 0;
+  }
+  if (subcommand === "status") return serverStatus();
+  if (subcommand === "restart") return restartServer();
+  if (subcommand === "uninstall") return uninstallServer();
+  if (subcommand !== "install" && subcommand !== "run") {
+    throw new UsageError(`unknown server command "${subcommand}"`);
+  }
+  const parsed = parseArgs(argv.slice(1), SERVER_FLAGS);
+  if (parsed.help) {
+    console.log(SERVER_USAGE);
+    return 0;
+  }
+  const { configPath, loadResolvedConfig } = configLoader(parsed);
+  const config = await loadResolvedConfig();
+  if (subcommand === "install") {
+    const runArgs: string[] = [];
+    if (parsed.configPath !== undefined) runArgs.push("--config", configPath);
+    for (const [key, value] of Object.entries(parsed.values)) {
+      runArgs.push(`--${key}`, value);
+    }
+    if (parsed.debug) runArgs.push("--debug");
+    return installServer(config, runArgs, parsed.configPath !== undefined ? configPath : undefined);
+  }
+  await runServer(config, VERSION, {
+    debug: parsed.debug,
+    configSource: { path: configPath, load: loadResolvedConfig },
+  });
+  return 0;
+}
+
 /**
  * Which Console a Remote console attaches to: a unix socket path on this
  * machine, or a network Console. Returns null for `--help`.
@@ -480,17 +579,14 @@ async function main(): Promise<number> {
 
   const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
     console: { run: runConsoleCommand, usage: CONSOLE_USAGE },
+    server: { run: runServerCommand, usage: SERVER_USAGE },
     resident: { run: runResidentCommand, usage: RESIDENT_USAGE },
     remote: { run: runRemoteCommand, usage: REMOTE_USAGE },
     accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
   };
   const entry = command.startsWith("-") ? undefined : commands[command];
   if (entry === undefined) {
-    if (command === "server" || command === "client") {
-      console.error(
-        `the two-app split is gone: run \`agentvoice console\` after \`agentvoice resident install\`\n`,
-      );
-    } else if (command.startsWith("-")) {
+    if (command.startsWith("-")) {
       console.error(`the console is a subcommand now: run \`agentvoice console ${command} …\`\n`);
     } else {
       console.error(`unknown command "${command}"\n`);
@@ -513,7 +609,9 @@ async function main(): Promise<number> {
       error instanceof ConfigError ||
       error instanceof ConsoleError ||
       error instanceof RemoteError ||
-      error instanceof ResidentError
+      error instanceof ResidentError ||
+      error instanceof ServerError ||
+      error instanceof ServerInstallError
     ) {
       console.error(error.message);
       return 1;

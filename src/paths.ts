@@ -12,7 +12,20 @@ export function stateDirectory(env: Environ, home: string): string {
   return join(base, "agentvoice");
 }
 
-/** Owner-only local IPC through which a Remote console attaches to the console. */
+/**
+ * The Server's control socket: owner-only local IPC through which Consoles
+ * and Remote consoles attach. Binding it is the single-Server lock.
+ */
+export function controlSocketPath(env: Environ, home: string): string {
+  return join(stateDirectory(env, home), "control.sock");
+}
+
+/** The Server bundle's private directory: its launchd log. */
+export function serverDirectory(env: Environ, home: string): string {
+  return join(stateDirectory(env, home), "server");
+}
+
+/** The pre-split console's own listener; removed with the console rewire. */
 export function consoleControlSocketPath(env: Environ, home: string): string {
   return join(stateDirectory(env, home), "console.sock");
 }
