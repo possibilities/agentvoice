@@ -439,6 +439,35 @@ close can lag by minutes, and until it lands the Console would still believe a
 push-to-talk hold were open, leaving the microphone live with nobody holding
 it.
 
+### Android Remote console
+
+The tracked `droidedtui.json` packages the Remote console as a native Android
+app while keeping `src/console/remote-ui.ts` as the entire visible
+implementation. DroidedTUI initializes OpenTUI, invokes the exported
+`runRemote` function with bounded package arguments, and supplies the Android
+host, PTY, Ghostty terminal surface, touch translation, lifecycle, and APK.
+There is no WebView or second UI implementation.
+
+Install or link the `droidedtui` command, configure its Android and matching
+Bun toolchains, then supply the network target only to the packaging process:
+
+```sh
+export AGENTVOICE_REMOTE_HOST=100.114.244.89
+export AGENTVOICE_REMOTE_TOKEN='the same value as remote.token'
+
+bun run android:package
+bun run android:run -- --device DEVICE_SERIAL
+```
+
+The environment sentinel keeps the attachment token out of
+`droidedtui.json` and command output, but the compiled APK still contains the
+resolved token. Treat it as a personal controlled build, not an artifact for
+public distribution. The full signal field remains touch-native: tap YOU or
+AGENT for their primary controls, hold the bottom band for push-to-talk when
+the mic is muted, and tap the quiet `···` target at the upper right to open the
+command palette for Redial, Fresh, and Quit. No component requests the Android
+keyboard.
+
 ## State on disk
 
 - `~/.local/state/agentvoice/app-server` — stable working directory for the

@@ -25,6 +25,7 @@ export interface PaletteTokens {
 export interface CommandPalette {
   root: InstanceType<OpenTui["BoxRenderable"]>;
   isOpen(): boolean;
+  open(): void;
   /** First stop for every keypress; true means consumed. ctrl+c always falls through. */
   handleKey(key: {
     name: string;
@@ -205,6 +206,7 @@ export function createCommandPalette(
   return {
     root,
     isOpen: () => open,
+    open: openPalette,
     handleKey(key) {
       if (key.ctrl && key.name === "c") return false;
       if (key.eventType === "release") return open;

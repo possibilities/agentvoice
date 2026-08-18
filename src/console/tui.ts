@@ -164,6 +164,39 @@ export async function createVoiceTui(
   );
   renderer.root.add(palette.root);
 
+  // A quiet, terminal-native touch target exposes the command palette on
+  // pointer-first hosts without turning the ctrl+k convention into chrome.
+  const commandTrigger = new BoxRenderable(renderer, {
+    id: "voice-command-trigger",
+    position: "absolute",
+    zIndex: 20,
+    top: 0,
+    right: 0,
+    width: 7,
+    height: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    onMouseDown: (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      if (!palette.isOpen()) palette.open();
+    },
+    onMouseUp: (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+    },
+  });
+  commandTrigger.add(
+    new TextRenderable(renderer, {
+      id: "voice-command-trigger-mark",
+      content: "···",
+      height: 1,
+      wrapMode: "none",
+      fg: PALETTE.dim,
+    }),
+  );
+  renderer.root.add(commandTrigger);
+
   let pttHeld = false;
   const keyControlGestures = new Map<
     AudioTarget,

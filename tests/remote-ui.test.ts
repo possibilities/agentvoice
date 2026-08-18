@@ -143,6 +143,17 @@ describe("Remote console shared TUI", () => {
       const palette = setup.renderer.root.findDescendantById("voice-palette");
       expect(palette).toBeInstanceOf(BoxRenderable);
       expect((palette as BoxRenderable).visible).toBe(false);
+      const commandTrigger = box("voice-command-trigger");
+      await setup.mockMouse.pressDown(
+        commandTrigger.x + Math.floor(commandTrigger.width / 2),
+        commandTrigger.y + Math.floor(commandTrigger.height / 2),
+      );
+      await setup.renderOnce();
+      expect((palette as BoxRenderable).visible).toBe(true);
+      expect(setup.captureCharFrame()).toContain("redial the voice link");
+      expect(setup.captureCharFrame()).toContain("fresh orchestrator thread");
+      setup.mockInput.pressKey("k", { ctrl: true });
+      expect((palette as BoxRenderable).visible).toBe(false);
 
       setup.resize(120, 19);
       await setup.waitFor(() => settled(120, 19));

@@ -15,6 +15,8 @@
   "scripts": {
     "console": "bun run src/main.ts",
     "setup": "bun run scripts/setup.ts",
+    "android:package": "droidedtui package .",
+    "android:run": "droidedtui run .",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",
     "accounts:probe": "bun run scripts/account-profiles-probe.ts",
@@ -36,7 +38,7 @@
     "bun": ">=1.3.0"
   },
   "dependencies": {
-    "@opentui/core": "^0.5.1",
+    "@opentui/core": "0.5.3",
     "opusscript": "^0.1.1",
     "werift": "^0.24.3",
     "zod": "^4.4.3"
