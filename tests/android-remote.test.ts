@@ -130,8 +130,7 @@ describe("pinned route expansion", () => {
         throw new Error("unresolvable");
       },
     );
-    // Bare-IP URLs are the only shape whose pinned TLS handshake can succeed,
-    // so names resolve to addresses and duplicates collapse.
+    // Names resolve once before concrete interface routes race in parallel.
     expect(routes).toEqual(["100.114.244.89", "fd7a:115c:a1e0::6c3a"]);
     expect(looked.sort()).toEqual(["greybird.example.ts.net", "greybird.local"]);
   });

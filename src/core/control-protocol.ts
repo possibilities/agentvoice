@@ -73,8 +73,8 @@ export interface HelloCommand {
   };
   /**
    * A nonce the Server must sign with its identity key (`auth-proof`) before
-   * the device trusts the link — the Server's half of mutual authentication,
-   * for runtimes whose TLS stack cannot pin the identity certificate.
+   * the device trusts the link — defense in depth beside the pinned TLS
+   * channel and the device's reciprocal proof.
    */
   serverChallenge?: string;
 }

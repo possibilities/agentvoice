@@ -31,6 +31,7 @@ import { type AudioTarget, MuteGate, type UnmuteHoldSource } from "./audio-contr
 // The media engine is imported lazily: the ui role (including the Android
 // Remote console package) must never load werift or the native duplex device.
 import type { DuplexVoiceAudio } from "./duplex-audio.ts";
+import { connectPinnedWebSocket } from "./pinned-websocket.ts";
 import type { TransportPhase, VoiceTransport } from "./transport.ts";
 import {
   createVoiceTui,
@@ -603,34 +604,21 @@ function connectSocket(socketPath: string, handlers: LinkHandlers): ControlLink 
   };
 }
 
-/**
- * Cross-machine attachment. The Server binds a tailnet address, so WireGuard
- * — not an app-level TLS session — is what carries the encryption and machine
- * identity here; the token is the Server's own admission check on top.
- */
+/** Cross-machine attachment over plaintext diagnostics or verified WSS. */
 function connectWebSocket(
   target: NetworkTarget,
   role: "ui" | "voice",
   handlers: LinkHandlers,
 ): ControlLink {
-  const secure = target.secure === true || target.tls !== undefined;
-  const socket = new WebSocket(
-    `${secure ? "wss" : "ws"}://${formatHost(target.host)}:${target.port}`,
-    target.tls
-      ? { tls: { ca: target.tls.ca, serverName: target.tls.serverName } }
-      : secure
-        ? { tls: { rejectUnauthorized: false } }
-        : undefined,
-  );
   let settled = false;
   let proofStarted = false;
-  socket.addEventListener("open", () => {
+  let transport: ControlLink | null = null;
+  const onTransportOpen = (): void => {
     handlers.debug?.(`link open: ${target.host}:${target.port}`);
     if (!target.device) handlers.onOpen();
-  });
-  socket.addEventListener("message", (event: MessageEvent) => {
-    if (typeof event.data !== "string") return;
-    const frame = parseServerFrame(event.data);
+  };
+  const onText = (text: string): void => {
+    const frame = parseServerFrame(text);
     if (target.device && frame?.type === "auth-challenge") {
       if (proofStarted) return;
       proofStarted = true;
@@ -645,35 +633,63 @@ function connectWebSocket(
           }),
         )
         .then((signature) => {
-          if (!settled && socket.readyState === WebSocket.OPEN)
-            handlers.onOpen({ id: device.id, signature });
+          if (!settled) handlers.onOpen({ id: device.id, signature });
         })
-        .catch(() => socket.close());
+        .catch(() => transport?.close());
       return;
     }
-    handlers.onFrame(event.data);
+    handlers.onFrame(text);
     handlers.onBatch();
-  });
-  socket.addEventListener("error", (event: Event) => {
+  };
+  const onTransportClose = (error?: Error): void => {
+    if (settled) return;
+    settled = true;
     handlers.debug?.(
-      `link error: ${target.host}:${target.port} ${(event as { message?: string }).message ?? ""}`,
+      `link closed: ${target.host}:${target.port}${error ? ` ${error.message}` : ""}`,
     );
-    if (settled) return;
-    settled = true;
     handlers.onClose();
-  });
-  socket.addEventListener("close", (event: CloseEvent) => {
-    handlers.debug?.(`link closed: ${target.host}:${target.port} code=${event.code}`);
-    if (settled) return;
-    settled = true;
-    handlers.onClose();
-  });
-  return {
+  };
+
+  if (target.tls) {
+    transport = connectPinnedWebSocket(
+      {
+        host: target.host,
+        port: target.port,
+        ca: target.tls.ca,
+        serverName: target.tls.serverName,
+      },
+      {
+        onOpen: onTransportOpen,
+        onText,
+        onClose: onTransportClose,
+        debug: handlers.debug,
+      },
+    );
+    return transport;
+  }
+
+  const secure = target.secure === true;
+  const socket = new WebSocket(
+    `${secure ? "wss" : "ws"}://${formatHost(target.host)}:${target.port}`,
+    secure ? { tls: { rejectUnauthorized: false } } : undefined,
+  );
+  transport = {
     send: (frame) => {
       if (socket.readyState === WebSocket.OPEN) socket.send(frame);
     },
     close: () => socket.close(),
   };
+  socket.addEventListener("open", onTransportOpen);
+  socket.addEventListener("message", (event: MessageEvent) => {
+    if (typeof event.data === "string") onText(event.data);
+  });
+  socket.addEventListener("error", (event: Event) =>
+    onTransportClose(new Error((event as { message?: string }).message ?? "WebSocket error")),
+  );
+  socket.addEventListener("close", (event: CloseEvent) =>
+    onTransportClose(event.code === 1000 ? undefined : new Error(`WebSocket closed ${event.code}`)),
+  );
+  return transport;
 }
 
 function isTargetResolver(target: ConsoleTarget): target is ConsoleTargetResolver {

@@ -34,6 +34,7 @@ import { containsAsciiControl, containsAsciiControlOrSpace } from "../core/safe-
 import { remoteProfileFilePath, stateDirectory } from "../paths.ts";
 import { AUDIO_CONTROL_KITTY_KEYBOARD } from "./audio-control.ts";
 import { type ConsoleTargetResolver, type NetworkTarget, runConsoleHost } from "./host.ts";
+import { connectPinnedWebSocket, type PinnedWebSocketLink } from "./pinned-websocket.ts";
 import {
   loadRemoteProfile,
   type RemoteProfile,
@@ -410,12 +411,10 @@ class AndroidRouteResolver implements ConsoleTargetResolver {
     }
     const route = await racePinnedRoutes(routes, this.profile, this.debug);
     return {
-      host: route.host,
+      host: route,
       port: this.profile.port,
       secure: true,
-      ...(route.pinned
-        ? { tls: { ca: this.profile.certificate, serverName: this.profile.serverName } }
-        : {}),
+      tls: { ca: this.profile.certificate, serverName: this.profile.serverName },
       device: {
         id: this.profile.deviceId,
         sign: (payload) => signWithIdentity(this.host, payload),
@@ -461,13 +460,7 @@ export type AddressLookup = (name: string) => Promise<string[]>;
 const systemLookup: AddressLookup = async (name) =>
   (await lookup(name, { all: true, verbatim: true })).map((entry) => entry.address);
 
-/**
- * Bun's WebSocket verifies the URL hostname and honors `tls.serverName` only
- * for bare-IP URLs, so a pinned dial to a DNS name always fails its TLS
- * handshake (the identity certificate's one SAN is the fixed server name).
- * Every candidate therefore resolves to addresses before the race; a name
- * that does not resolve on this network is dropped rather than dialed.
- */
+/** Resolve names once so the route race compares concrete interfaces in parallel. */
 export async function expandRouteCandidates(
   candidates: string[],
   lookupAddresses: AddressLookup = systemLookup,
@@ -489,51 +482,24 @@ export async function expandRouteCandidates(
   return routes;
 }
 
-export interface RacedRoute {
-  host: string;
-  /** False when this runtime's TLS stack could not pin the certificate and
-   *  the connection will rely on the in-protocol server proof instead. */
-  pinned: boolean;
-}
-
 /**
- * Pinned TLS is raced first — it authenticates the whole channel. Some
- * runtimes (Bun 1.4-canary on Android, verified live) fail the handshake for
- * every `tls.ca` shape, so when no candidate accepts the pin the race runs
- * again without certificate verification; the mandatory `auth-proof` exchange
- * then authenticates the Server in-protocol, and TLS still blinds passive
- * observers. On the tailnet routes WireGuard authenticates the machines
- * regardless.
+ * Race only routes that complete a WebSocket upgrade over the paired Server's
+ * pinned certificate. `Bun.connect` honors this CA on Android even though the
+ * runtime's native WebSocket client does not.
  */
 async function racePinnedRoutes(
   candidates: string[],
   profile: RemoteProfile,
   debug?: (line: string) => void,
-): Promise<RacedRoute> {
-  try {
-    return { host: await raceRoutes(candidates, profile, true, debug), pinned: true };
-  } catch (error) {
-    debug?.(
-      `${error instanceof Error ? error.message : String(error)}; retrying with unverified TLS — the Server must prove itself in-protocol`,
-    );
-    return { host: await raceRoutes(candidates, profile, false, debug), pinned: false };
-  }
-}
-
-async function raceRoutes(
-  candidates: string[],
-  profile: RemoteProfile,
-  pinned: boolean,
-  debug?: (line: string) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const sockets = new Set<WebSocket>();
+    const links = new Set<PinnedWebSocketLink>();
     let failures = 0;
     let settled = false;
     const finish = (host: string): void => {
       if (settled) return;
       settled = true;
-      for (const socket of sockets) socket.close();
+      for (const link of links) link.close();
       resolve(host);
     };
     const fail = (): void => {
@@ -542,49 +508,38 @@ async function raceRoutes(
         settled = true;
         reject(
           new Error(
-            pinned
-              ? `no paired Server route accepted its pinned certificate (tried ${candidates.join(", ")})`
-              : `no paired Server route is reachable (tried ${candidates.join(", ")})`,
+            `no paired Server route accepted its pinned certificate (tried ${candidates.join(", ")})`,
           ),
         );
       }
     };
     for (const host of candidates) {
-      const socket = new WebSocket(`wss://${formatHost(host)}:${profile.port}`, {
-        tls: pinned
-          ? { ca: profile.certificate, serverName: profile.serverName }
-          : { rejectUnauthorized: false },
-      });
-      sockets.add(socket);
       let finished = false;
-      const timer = setTimeout(() => {
-        if (finished || settled) return;
-        finished = true;
-        socket.close();
-        fail();
-      }, ROUTE_PROBE_TIMEOUT_MS);
-      socket.addEventListener(
-        "open",
-        () => {
-          debug?.(`route ${host}: open`);
-          if (finished || settled) return;
-          finished = true;
-          clearTimeout(timer);
-          finish(host);
+      const link = connectPinnedWebSocket(
+        {
+          host,
+          port: profile.port,
+          ca: profile.certificate,
+          serverName: profile.serverName,
+          handshakeTimeoutMs: ROUTE_PROBE_TIMEOUT_MS,
         },
-        { once: true },
+        {
+          onOpen() {
+            debug?.(`route ${host}: open`);
+            if (finished || settled) return;
+            finished = true;
+            finish(host);
+          },
+          onText() {},
+          onClose(error) {
+            debug?.(`route ${host}: closed${error ? ` ${error.message}` : ""}`);
+            if (finished || settled) return;
+            finished = true;
+            fail();
+          },
+        },
       );
-      const onFailure = (event: Event): void => {
-        debug?.(
-          `route ${host}: ${event.type} ${(event as { message?: string }).message ?? ""} code=${(event as { code?: number }).code ?? ""}`,
-        );
-        if (finished || settled) return;
-        finished = true;
-        clearTimeout(timer);
-        fail();
-      };
-      socket.addEventListener("error", onFailure, { once: true });
-      socket.addEventListener("close", onFailure, { once: true });
+      links.add(link);
     }
   });
 }

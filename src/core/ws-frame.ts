@@ -1,10 +1,11 @@
 /**
- * Client-side RFC 6455 framing for the resident app-server transport. codex
- * serves `--listen unix://` as a WebSocket handshake over the unix stream
- * (tokio-tungstenite `accept_async`), and Bun's native WebSocket cannot dial
- * unix sockets, so the console speaks the framing itself over `Bun.connect`.
- * Pure codec: handshake build/parse and an incremental frame decoder; mask
- * keys are injected so every path is testable.
+ * Client-side RFC 6455 framing for the resident app-server transport and the
+ * pinned network TLS transport. codex serves `--listen unix://` as a WebSocket
+ * handshake over the unix stream (tokio-tungstenite `accept_async`), and Bun's
+ * native WebSocket cannot dial unix sockets or honor Android's custom CA path,
+ * so both transports speak the framing over `Bun.connect`. Pure codec:
+ * handshake build/parse and an incremental frame decoder; mask keys are
+ * injected so every path is testable.
  */
 
 export const OP_CONTINUATION = 0x0;

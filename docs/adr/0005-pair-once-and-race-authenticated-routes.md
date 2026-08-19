@@ -15,16 +15,10 @@ the cache hint is an optimization rather than an authorization boundary. A
 window owns at most one pairing transcript: if that phone disconnects or fails,
 the window closes instead of replacing a code already displayed to either human.
 
-Amended after live device verification: Bun's WebSocket client cannot honor
-the certificate pin everywhere — on desktop Bun a pinned dial to any DNS-name
-URL fails its TLS handshake (the URL hostname is verified, `serverName`
-ignored), and on the Android runtime every `tls.ca` shape fails. Route
-candidates therefore resolve to bare IP addresses before the race, and when
-no candidate accepts the pin the race reruns without certificate verification
-while authentication moves in-protocol: the hello carries a `serverChallenge`
-the Server must sign with its identity key (`auth-proof`), verified against
-the pinned certificate before the device trusts a single frame. TLS still
-blinds passive observers on that path, and the Tailscale routes stay
-machine-authenticated by WireGuard regardless. Restoring a true channel pin
-via a hand-rolled WebSocket over `node:tls` (the `ws-frame` codec already
-exists) is the intended follow-up.
+Amended after live device verification: Bun's native WebSocket client cannot
+honor the custom CA on Android, while its verified `Bun.connect` TLS stream
+does. Paired attachments and route probes therefore speak RFC 6455 over that
+stream using the existing bounded frame codec; they never retry without the
+certificate pin. The hello also carries a `serverChallenge` the Server signs
+with its identity key (`auth-proof`), verified before the device trusts any
+state, as defense in depth alongside TLS and the device's reciprocal proof.
