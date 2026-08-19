@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
+import { rmSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +14,13 @@ import {
   encodeControlFrame,
   parseControlCommand,
 } from "../src/core/control-protocol.ts";
+import {
+  deviceIdFromPublicKey,
+  serverProofPayload,
+  verifyServerSignature,
+} from "../src/core/pairing.ts";
 import { ControlServer } from "../src/server/control.ts";
+import { PairedDeviceStore } from "../src/server/paired-devices.ts";
 
 function contentText(renderable: TextRenderable): string {
   return renderable.content.chunks.map((chunk) => chunk.text).join("");
@@ -85,6 +93,185 @@ describe("Console host network attachment", () => {
       setup.mockInput.pressKey("q");
       await remote;
       await server.close();
+    }
+  });
+
+  test("resolves a route and answers a fresh challenge with the paired device key", async () => {
+    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+    const socketPath = join(tmpdir(), `av-host-paired-${process.pid}-${Date.now()}.sock`);
+    const devicePath = `${socketPath}.devices.json`;
+    const devices = PairedDeviceStore.open(devicePath);
+    const keys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+    const id = deviceIdFromPublicKey(publicKey);
+    devices.pair({ id, name: "Samsung", publicKey, pairedAt: new Date().toISOString() });
+    const server = new ControlServer({
+      socketPath,
+      network: { host: "127.0.0.1", port: 0, devices },
+      state: () => ({
+        type: "state",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        sequence: 1,
+        voice: {
+          phase: "live",
+          liveForMs: 1_000,
+          mic: { muted: true, effectiveMuted: true, db: -40 },
+          speaker: { muted: false, effectiveMuted: false, db: -20 },
+        },
+      }),
+      onCommand: () => {},
+    });
+    await server.start();
+    const [host, port] = server.networkAddress()!.split(":");
+    let resolutions = 0;
+    let signatures = 0;
+    const remote = runConsoleHost(
+      {
+        async resolve() {
+          resolutions += 1;
+          return {
+            host: host!,
+            port: Number(port),
+            device: {
+              id,
+              async sign(payload: Uint8Array) {
+                signatures += 1;
+                return sign("sha256", payload, keys.privateKey).toString("base64url");
+              },
+            },
+          };
+        },
+      },
+      { tui: { createRenderer: async () => setup.renderer } },
+    );
+
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("● LIVE 00:01"));
+      expect(resolutions).toBe(1);
+      expect(signatures).toBe(1);
+    } finally {
+      setup.mockInput.pressKey("q");
+      await remote;
+      await server.close();
+      rmSync(devicePath, { force: true });
+    }
+  });
+});
+
+describe("Console host server proof", () => {
+  const FIXTURE_KEY = `-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIL15dvgxakr7NHcdTklqdfcb4jWZdQuRyxPMkvRQWxd5oAoGCCqGSM49
+AwEHoUQDQgAEr04eS/umr0nk+U2EqcyFG0e0/UAXgvYuj1AzVZMcsIN+A/PFPlye
+eR7k/M8MBCK++I29IzyFtvfczlv2gpmXEw==
+-----END EC PRIVATE KEY-----
+`;
+  const FIXTURE_CERTIFICATE = `-----BEGIN CERTIFICATE-----
+MIIBcDCCARagAwIBAgIJAJZgQYOZ5MB5MAoGCCqGSM49BAMCMBUxEzARBgNVBAMM
+CmFnZW50dm9pY2UwHhcNMjYwODE5MDUzMTU3WhcNNDYwODE0MDUzMTU3WjAVMRMw
+EQYDVQQDDAphZ2VudHZvaWNlMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEr04e
+S/umr0nk+U2EqcyFG0e0/UAXgvYuj1AzVZMcsIN+A/PFPlyeeR7k/M8MBCK++I29
+IzyFtvfczlv2gpmXE6NPME0wFQYDVR0RBA4wDIIKYWdlbnR2b2ljZTAPBgNVHRMB
+Af8EBTADAQH/MA4GA1UdDwEB/wQEAwIChDATBgNVHSUEDDAKBggrBgEFBQcDATAK
+BggqhkjOPQQDAgNIADBFAiEAkIOZ4q4kQCBx2AQXf5lAuBaVlqfQrrzOFuAJRHSU
+f1gCIHvWlCyV0vYJ+b4I3hH48WzzG9jj43CGlyjkltCKzBMv
+-----END CERTIFICATE-----
+`;
+  const SERVER_ID = "fixture-server";
+
+  function proofRig(serverProof: (challenge: string, deviceId: string) => string | null) {
+    const socketPath = join(tmpdir(), `av-host-proof-${process.pid}-${Date.now()}.sock`);
+    const devicePath = `${socketPath}.devices.json`;
+    const devices = PairedDeviceStore.open(devicePath);
+    const keys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+    const id = deviceIdFromPublicKey(publicKey);
+    devices.pair({ id, name: "Samsung", publicKey, pairedAt: new Date().toISOString() });
+    const server = new ControlServer({
+      socketPath,
+      network: { host: "127.0.0.1", port: 0, devices },
+      serverProof,
+      state: () => ({
+        type: "state",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        sequence: 1,
+        voice: {
+          phase: "live",
+          liveForMs: 1_000,
+          mic: { muted: true, effectiveMuted: true, db: -40 },
+          speaker: { muted: false, effectiveMuted: false, db: -20 },
+        },
+      }),
+      onCommand: () => {},
+    });
+    const device = (host: string, port: number) => ({
+      host,
+      port,
+      device: {
+        id,
+        sign: async (payload: Uint8Array) =>
+          sign("sha256", payload, keys.privateKey).toString("base64url"),
+        verifyServer: (challenge: string, signature: string) =>
+          verifyServerSignature(
+            FIXTURE_CERTIFICATE,
+            serverProofPayload({ challenge, serverId: SERVER_ID, deviceId: id }),
+            signature,
+          ),
+      },
+    });
+    return { server, device, id, devicePath };
+  }
+
+  test("trusts the link only after the Server proves its identity", async () => {
+    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+    const rig = proofRig((challenge, deviceId) =>
+      sign(
+        "sha256",
+        serverProofPayload({ challenge, serverId: SERVER_ID, deviceId }),
+        createPrivateKey(FIXTURE_KEY),
+      ).toString("base64url"),
+    );
+    await rig.server.start();
+    const [host, port] = rig.server.networkAddress()!.split(":");
+    const remote = runConsoleHost(
+      {
+        async resolve() {
+          return rig.device(host!, Number(port));
+        },
+      },
+      { tui: { createRenderer: async () => setup.renderer } },
+    );
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("● LIVE 00:01"));
+    } finally {
+      setup.mockInput.pressKey("q");
+      await remote;
+      await rig.server.close();
+      rmSync(rig.devicePath, { force: true });
+    }
+  });
+
+  test("never leaves WAITING behind an impostor's proof", async () => {
+    const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
+    const rig = proofRig(() => "aW1wb3N0b3I");
+    await rig.server.start();
+    const [host, port] = rig.server.networkAddress()!.split(":");
+    const remote = runConsoleHost(
+      {
+        async resolve() {
+          return rig.device(host!, Number(port));
+        },
+      },
+      { tui: { createRenderer: async () => setup.renderer } },
+    );
+    try {
+      await Bun.sleep(600);
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("WAITING");
+    } finally {
+      setup.mockInput.pressKey("q");
+      await remote;
+      await rig.server.close();
+      rmSync(rig.devicePath, { force: true });
     }
   });
 });

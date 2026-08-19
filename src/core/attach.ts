@@ -6,6 +6,7 @@
  * loss surfaced through `onClose` for the runtime to redial.
  */
 import type { Socket } from "bun";
+import { SocketOutbox } from "./socket-outbox.ts";
 import {
   buildHandshakeRequest,
   encodeCloseFrame,
@@ -14,6 +15,7 @@ import {
   FrameDecoder,
   OP_PONG,
   parseHandshakeResponse,
+  randomMaskKey,
   websocketAcceptValue,
 } from "./ws-frame.ts";
 
@@ -80,53 +82,6 @@ export interface AttachOptions {
   /** Called exactly once when the attachment ends, however it ends. */
   onClose(info: { expected: boolean; error?: string }): void;
   debug?(line: string): void;
-}
-
-function randomMask(): Uint8Array {
-  const mask = new Uint8Array(4);
-  crypto.getRandomValues(mask);
-  return mask;
-}
-
-/**
- * Ordered writer over a partial-write socket. Bun's `socket.write` returns
- * how many bytes the kernel accepted — 8 KiB is the whole unix-socket send
- * buffer on macOS — and an ignored remainder truncates the WebSocket stream
- * mid-frame: the peer waits forever for bytes that never come. (This is how
- * a thread/start carrying a ~9 KiB ORCHESTRATOR.md silently hung the whole
- * console.) Every write goes through here; the socket's `drain` callback
- * flushes what the kernel deferred, in order.
- */
-export class SocketOutbox {
-  private readonly pending: Buffer[] = [];
-
-  constructor(private readonly writeBytes: (data: Buffer) => number) {}
-
-  write(data: Buffer): void {
-    if (this.pending.length > 0) {
-      this.pending.push(data);
-      return;
-    }
-    const written = this.writeBytes(data);
-    if (written < data.length) this.pending.push(data.subarray(Math.max(0, written)));
-  }
-
-  /** Called from the socket's drain event: send what the kernel deferred. */
-  flush(): void {
-    while (this.pending.length > 0) {
-      const head = this.pending[0] as Buffer;
-      const written = this.writeBytes(head);
-      if (written < head.length) {
-        this.pending[0] = head.subarray(Math.max(0, written));
-        return; // still full; the next drain continues
-      }
-      this.pending.shift();
-    }
-  }
-
-  get hasPending(): boolean {
-    return this.pending.length > 0;
-  }
 }
 
 export class ResidentAttachment {
@@ -264,7 +219,7 @@ export class ResidentAttachment {
     const socket = this.socket;
     if (!socket || this.closed) return;
     try {
-      this.writeRaw(encodeCloseFrame(1000, randomMask()));
+      this.writeRaw(encodeCloseFrame(1000, randomMaskKey()));
       // end() with a still-pending outbox truncates the close frame; the
       // resident then sees EOF, which it treats as the same disconnect.
       socket.end();
@@ -278,7 +233,7 @@ export class ResidentAttachment {
   private send(message: Record<string, unknown>): void {
     const text = JSON.stringify(message);
     this.options.debug?.(`-> ${text}`);
-    this.writeRaw(encodeTextFrame(text, randomMask()));
+    this.writeRaw(encodeTextFrame(text, randomMaskKey()));
   }
 
   private writeRaw(data: Buffer): void {
@@ -322,11 +277,11 @@ export class ResidentAttachment {
         if (event.type === "text") {
           this.dispatchText(event.text);
         } else if (event.type === "ping") {
-          this.writeRaw(encodeFrame(OP_PONG, event.payload, randomMask()));
+          this.writeRaw(encodeFrame(OP_PONG, event.payload, randomMaskKey()));
         } else if (event.type === "close") {
           this.closing = true;
           try {
-            this.writeRaw(encodeCloseFrame(1000, randomMask()));
+            this.writeRaw(encodeCloseFrame(1000, randomMaskKey()));
             this.socket?.end();
           } catch {
             // already closing

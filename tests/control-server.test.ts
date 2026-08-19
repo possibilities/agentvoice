@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { generateKeyPairSync, sign } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +12,10 @@ import {
   parseServerFrame,
   type ServerFrame,
 } from "../src/core/control-protocol.ts";
+import { controlProofPayload, deviceIdFromPublicKey } from "../src/core/pairing.ts";
 import { type ControlPeerHandle, ControlServer } from "../src/server/control.ts";
+import { PairedDeviceStore } from "../src/server/paired-devices.ts";
+import { ensureServerIdentity } from "../src/server/server-identity.ts";
 
 function scratchSocket(label: string): string {
   return join(tmpdir(), `av-ctrl-${label}-${process.pid}-${Date.now()}.sock`);
@@ -74,20 +79,53 @@ function hello(role: "ui" | "voice"): ControlCommand {
 
 const TOKEN = "0123456789abcdef0123";
 
-/** Resolves on the first frame, so a test can assert a refusal or a welcome. */
-function dialWs(address: string): Promise<{ socket: WebSocket; first: Promise<string> }> {
-  const socket = new WebSocket(`ws://${address}`);
-  const first = new Promise<string>((resolve, reject) => {
-    socket.addEventListener("message", (event) => resolve(String(event.data)), { once: true });
-    socket.addEventListener("close", () => reject(new Error("closed before any frame")), {
-      once: true,
-    });
+interface TestWsPeer {
+  socket: WebSocket;
+  next(): Promise<ServerFrame>;
+}
+
+function dialWs(address: string, tls?: { ca: string; serverName: string }): Promise<TestWsPeer> {
+  const socket = new WebSocket(`${tls ? "wss" : "ws"}://${address}`, tls ? { tls } : undefined);
+  const frames: ServerFrame[] = [];
+  const waiters: Array<(frame: ServerFrame) => void> = [];
+  socket.addEventListener("message", (event) => {
+    const frame = parseServerFrame(String(event.data));
+    if (!frame) return;
+    const waiter = waiters.shift();
+    if (waiter) waiter(frame);
+    else frames.push(frame);
   });
   return new Promise((resolve, reject) => {
-    socket.addEventListener("open", () => resolve({ socket, first }), { once: true });
+    socket.addEventListener(
+      "open",
+      () =>
+        resolve({
+          socket,
+          next: () =>
+            new Promise((nextResolve, nextReject) => {
+              const queued = frames.shift();
+              if (queued) return nextResolve(queued);
+              const timer = setTimeout(
+                () => nextReject(new Error("no WebSocket frame within 2s")),
+                2_000,
+              );
+              waiters.push((frame) => {
+                clearTimeout(timer);
+                nextResolve(frame);
+              });
+            }),
+        }),
+      { once: true },
+    );
     socket.addEventListener("error", () => reject(new Error("could not dial")), { once: true });
   });
 }
+
+const temporaryFiles: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(temporaryFiles.splice(0).map((path) => rm(path, { force: true })));
+});
 
 describe("control server roles", () => {
   test("a unix peer's commands are dropped until its hello lands", async () => {
@@ -239,6 +277,7 @@ describe("control server roles", () => {
     try {
       // A wrong token is refused in words, and its commands never land.
       const wrong = await dialWs(address!);
+      expect((await wrong.next()).type).toBe("auth-challenge");
       wrong.socket.send(
         encodeControlFrame({
           type: "hello",
@@ -247,12 +286,13 @@ describe("control server roles", () => {
           token: "nope",
         }),
       );
-      const wrongFrame = parseServerFrame(await wrong.first);
+      const wrongFrame = await wrong.next();
       expect(wrongFrame?.type).toBe("reject");
       if (wrongFrame?.type === "reject") expect(wrongFrame.reason).toBe("token rejected");
 
       // So is a mismatched protocol — the two ship together.
       const stale = await dialWs(address!);
+      expect((await stale.next()).type).toBe("auth-challenge");
       stale.socket.send(
         encodeControlFrame({
           type: "hello",
@@ -261,13 +301,14 @@ describe("control server roles", () => {
           token: TOKEN,
         }),
       );
-      const staleFrame = parseServerFrame(await stale.first);
+      const staleFrame = await stale.next();
       expect(staleFrame?.type).toBe("reject");
       if (staleFrame?.type === "reject") expect(staleFrame.reason).toContain("upgrade both");
 
       // An unauthorized peer's commands are ignored outright: no state is sent
       // before hello, so nothing precedes the refusal on the wire.
       const silent = await dialWs(address!);
+      expect((await silent.next()).type).toBe("auth-challenge");
       silent.socket.send(encodeControlFrame({ type: "redial" }));
       silent.socket.send(
         encodeControlFrame({
@@ -277,13 +318,107 @@ describe("control server roles", () => {
           token: TOKEN,
         }),
       );
-      expect(parseServerFrame(await silent.first)?.type).toBe("state");
+      expect((await silent.next()).type).toBe("state");
       silent.socket.send(encodeControlFrame({ type: "redial" }));
       await Bun.sleep(50);
       expect(commands).toEqual(["redial"]);
       silent.socket.close();
     } finally {
       await server.close();
+    }
+  });
+
+  test("admits a paired device proof once and rejects replay on a fresh challenge", async () => {
+    const path = `${scratchSocket("devices")}.json`;
+    temporaryFiles.push(path);
+    const devices = PairedDeviceStore.open(path);
+    const keys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const publicKey = keys.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+    const deviceId = deviceIdFromPublicKey(publicKey);
+    devices.pair({ id: deviceId, name: "Samsung", publicKey, pairedAt: new Date().toISOString() });
+    const server = new ControlServer({
+      socketPath: scratchSocket("device-proof"),
+      network: { host: "127.0.0.1", port: 0, devices },
+      state: emptyState,
+      onCommand: () => {},
+    });
+    await server.start();
+    try {
+      const first = await dialWs(server.networkAddress()!);
+      const challenge = await first.next();
+      if (challenge.type !== "auth-challenge") throw new Error("missing challenge");
+      const signature = sign(
+        "sha256",
+        controlProofPayload({
+          challenge: challenge.challenge,
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          deviceId,
+        }),
+        keys.privateKey,
+      ).toString("base64url");
+      first.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          device: { id: deviceId, signature },
+        }),
+      );
+      expect((await first.next()).type).toBe("state");
+
+      const replay = await dialWs(server.networkAddress()!);
+      expect((await replay.next()).type).toBe("auth-challenge");
+      replay.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          device: { id: deviceId, signature },
+        }),
+      );
+      const refusal = await replay.next();
+      expect(refusal).toEqual({ type: "reject", reason: "device or token rejected" });
+      first.socket.close();
+    } finally {
+      await server.close();
+    }
+  });
+
+  test("serves the control attachment over a pinned self-signed TLS identity", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agentvoice-control-tls-"));
+    const identity = ensureServerIdentity(directory);
+    const server = new ControlServer({
+      socketPath: scratchSocket("tls"),
+      network: {
+        host: "127.0.0.1",
+        port: 0,
+        token: TOKEN,
+        tls: { key: identity.privateKey, cert: identity.certificate },
+      },
+      state: emptyState,
+      onCommand: () => {},
+    });
+    await server.start();
+    try {
+      const peer = await dialWs(server.networkAddress()!, {
+        ca: identity.certificate,
+        serverName: identity.serverName,
+      });
+      expect((await peer.next()).type).toBe("auth-challenge");
+      peer.socket.send(
+        encodeControlFrame({
+          type: "hello",
+          protocol: CONTROL_PROTOCOL_VERSION,
+          role: "ui",
+          token: TOKEN,
+        }),
+      );
+      expect((await peer.next()).type).toBe("state");
+      peer.socket.close();
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
@@ -304,6 +439,7 @@ describe("control server roles", () => {
 
     try {
       const peer = await dialWs(address!);
+      expect((await peer.next()).type).toBe("auth-challenge");
       peer.socket.send(
         encodeControlFrame({
           type: "hello",
@@ -312,7 +448,7 @@ describe("control server roles", () => {
           token: TOKEN,
         }),
       );
-      await peer.first;
+      expect((await peer.next()).type).toBe("state");
 
       // A beat inside the deadline keeps the hold alive.
       clock += 40;

@@ -150,15 +150,15 @@ export interface SurfaceConfig {
 }
 
 /**
- * Where Remote consoles attach. The unix socket under the state directory
- * always serves same-machine Remote consoles and needs no configuration; these
- * values add the cross-machine listener, which exists only when `listen` is set.
+ * Network policy for Remote consoles. The owner-only unix socket always serves
+ * same-machine peers; the authenticated WSS listener always serves paired
+ * devices, with `listen` only overriding its default all-interface bind.
  */
 export interface RemoteConfig {
-  /** Bound address for cross-machine Remote consoles; null serves none. */
+  /** WSS bind override; null means all interfaces. */
   listen: string | null;
   port: number;
-  /** Required whenever `listen` is set — it is the only admission check. */
+  /** Optional compatibility credential for manual --host diagnosis. */
   token: string | null;
   allowAnyAddress: boolean;
 }
@@ -176,9 +176,9 @@ export interface ServerConfig {
 }
 
 /**
- * Tailscale's own ranges plus loopback. agentvoice adds no transport
- * encryption of its own, so binding outside them puts the token — and the
- * microphone it unlocks — on a network nothing is authenticating.
+ * Compatibility classifier for the old token-only listener policy. The WSS
+ * listener now accepts arbitrary bind overrides because every peer still needs
+ * a paired-device proof or the optional diagnostic token.
  */
 export function isPrivateRemoteAddress(host: string): boolean {
   const address = host.trim().toLowerCase();
@@ -552,16 +552,6 @@ export function resolveConfig(
   const listen = pickRemote("listen") ?? null;
   const remoteToken = pickRemote("token") ?? null;
   const allowAnyAddress = pickRemote("allow-any-address") ?? false;
-  if (listen !== null && remoteToken === null) {
-    throw new ConfigError(
-      `remote.listen serves Remote consoles on other machines, where file permissions are no longer the boundary; set remote.token too (generate one with \`openssl rand -hex 24\`)`,
-    );
-  }
-  if (listen !== null && !allowAnyAddress && !isPrivateRemoteAddress(listen)) {
-    throw new ConfigError(
-      `remote.listen "${listen}" is neither a Tailscale address (100.64.0.0/10, fd7a:115c:a1e0::/48) nor loopback; agentvoice adds no transport encryption of its own, so binding it would expose the token — print this machine's address with \`tailscale ip -4\`, or set remote.allow-any-address to override`,
-    );
-  }
   const remote: RemoteConfig = {
     listen,
     port: pickRemote("port") ?? DEFAULT_REMOTE_PORT,

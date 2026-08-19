@@ -3,19 +3,13 @@
   "name": "AgentVoice Remote",
   "applicationId": "com.possibilities.agentvoice.remote",
   "version": {
-    "name": "0.1.0",
-    "code": 1
+    "name": "0.2.0",
+    "code": 2
   },
-  "entry": "src/console/host.ts",
+  "entry": "src/console/android-remote.ts",
   "launch": {
-    "export": "runConsoleHost",
-    "arguments": [
-      {
-        "host": { "$env": "AGENTVOICE_REMOTE_HOST" },
-        "port": 8473,
-        "token": { "$env": "AGENTVOICE_REMOTE_TOKEN" }
-      }
-    ]
+    "export": "runAndroidRemote",
+    "arguments": []
   },
   "android": {
     "minSdk": 28,
@@ -23,7 +17,8 @@
     "abis": ["arm64-v8a"],
     "network": {
       "internet": true,
-      "cleartext": true
+      "cleartext": false,
+      "localDiscovery": true
     }
   }
 }

@@ -25,6 +25,26 @@ export function serverDirectory(env: Environ, home: string): string {
   return join(stateDirectory(env, home), "server");
 }
 
+/** The Server identity's private P-256 key; never copied to a Remote console. */
+export function serverIdentityKeyPath(env: Environ, home: string): string {
+  return join(serverDirectory(env, home), "identity-key.pem");
+}
+
+/** The self-signed certificate a paired Remote console pins as its TLS root. */
+export function serverIdentityCertificatePath(env: Environ, home: string): string {
+  return join(serverDirectory(env, home), "identity-cert.pem");
+}
+
+/** Per-device public-key trust entries; each can be revoked independently. */
+export function pairedDevicesFilePath(env: Environ, home: string): string {
+  return join(serverDirectory(env, home), "paired-devices.json");
+}
+
+/** A Remote console's pinned Server identity and remembered route candidates. */
+export function remoteProfileFilePath(env: Environ, home: string): string {
+  return join(stateDirectory(env, home), "remote.json");
+}
+
 /**
  * The resident bundle's private directory: the app-server socket, the wrapper
  * script, the pick log, and the active-account state file. Kept 0700 — codex

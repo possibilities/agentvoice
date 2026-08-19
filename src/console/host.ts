@@ -12,6 +12,7 @@
  * in place: media stops, and the same host continues as a mirror.
  */
 
+import { randomBytes } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
@@ -24,6 +25,7 @@ import {
   parseServerFrame,
   type VoiceStateBody,
 } from "../core/control-protocol.ts";
+import { controlProofPayload } from "../core/pairing.ts";
 import { stateDirectory } from "../paths.ts";
 import { type AudioTarget, MuteGate, type UnmuteHoldSource } from "./audio-control.ts";
 // The media engine is imported lazily: the ui role (including the Android
@@ -47,13 +49,34 @@ const PREFLIGHT_TIMEOUT_MS = 500;
 
 export class ConsoleError extends Error {}
 
-/** A unix socket path on the Server's own machine, or a network Server. */
-export type ConsoleTarget = string | NetworkTarget;
+/** A unix socket path, a fixed network Server, or a route resolver such as Android discovery. */
+export type ConsoleTarget = string | NetworkTarget | ConsoleTargetResolver;
+
+export interface ConsoleTargetResolver {
+  resolve(): Promise<NetworkTarget>;
+  close?(): void | Promise<void>;
+}
 
 export interface NetworkTarget {
   host: string;
   port: number;
-  token: string;
+  token?: string;
+  /** WSS with an unverified certificate is reserved for manual token diagnosis. */
+  secure?: boolean;
+  tls?: {
+    ca: string;
+    serverName: string;
+  };
+  device?: {
+    id: string;
+    sign(payload: Uint8Array): Promise<string>;
+    /**
+     * Verifies the Server's `auth-proof` over this connection's
+     * serverChallenge. Present makes the proof mandatory: no frame is
+     * trusted before it lands, and a bad proof drops the link.
+     */
+    verifyServer?(challenge: string, signature: string): boolean;
+  };
 }
 
 /** Present means this host is the Console: role `voice`, audio in-process. */
@@ -114,12 +137,16 @@ export async function runConsoleHost(
   let latest: ControlState | null = null;
   let link: ControlLink | null = null;
   let connected = false;
+  let serverChallenge: string | null = null;
+  let serverVerified = true;
   let closed = false;
   let fatal: string | null = null;
   let freshQueued = options.fresh === true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let tui: VoiceTui | null = null;
+  let activeTarget: string | NetworkTarget | null = null;
+  let connectAttempt = 0;
 
   const send = (command: ControlCommand): void => {
     if (!connected || !link) return;
@@ -328,6 +355,7 @@ export async function runConsoleHost(
     pingTimer = null;
     publishTimer = null;
     if (audio) audio.micMuted = true;
+    await (isTargetResolver(target) ? target.close?.() : undefined);
     link?.close();
     link = null;
     connected = false;
@@ -366,6 +394,23 @@ export async function runConsoleHost(
   const receive = (line: string): void => {
     const frame = parseServerFrame(line);
     if (!frame) return;
+    if (!serverVerified) {
+      if (frame.type === "auth-proof") {
+        const networkTarget = typeof activeTarget === "object" ? activeTarget : null;
+        const verifier = networkTarget?.device?.verifyServer;
+        if (verifier && serverChallenge && verifier(serverChallenge, frame.signature)) {
+          serverVerified = true;
+          debugLog?.("server identity proven");
+        } else {
+          debugLog?.("server identity proof failed; dropping the link");
+          link?.close();
+        }
+        return;
+      }
+      debugLog?.(`frame dropped before server proof: ${frame.type}`);
+      return;
+    }
+    if (frame.type === "auth-proof") return;
     switch (frame.type) {
       case "state":
         latest = frame;
@@ -423,17 +468,23 @@ export async function runConsoleHost(
     tui?.refresh();
   };
 
-  const onOpen = (): void => {
+  const onOpen = (device?: { id: string; signature: string }): void => {
     connected = true;
+    const networkTarget = typeof activeTarget === "object" ? activeTarget : null;
+    const requireProof = device !== undefined && networkTarget?.device?.verifyServer !== undefined;
+    serverChallenge = requireProof ? randomBytes(24).toString("base64url") : null;
+    serverVerified = !requireProof;
     link?.send(
       encodeControlFrame({
         type: "hello",
         protocol: CONTROL_PROTOCOL_VERSION,
         role: mediaActive ? "voice" : "ui",
-        ...(typeof target === "string" ? {} : { token: target.token }),
+        ...(networkTarget?.token ? { token: networkTarget.token } : {}),
+        ...(device ? { device } : {}),
+        ...(serverChallenge ? { serverChallenge } : {}),
       }),
     );
-    if (typeof target !== "string") {
+    if (networkTarget) {
       pingTimer = setInterval(() => send({ type: "ping" }), PING_INTERVAL_MS);
       pingTimer.unref?.();
     }
@@ -469,10 +520,38 @@ export async function runConsoleHost(
 
   function connect(): void {
     if (closed) return;
-    link =
-      typeof target === "string"
-        ? connectSocket(target, { onOpen, onFrame: receive, onBatch, onClose })
-        : connectWebSocket(target, { onOpen, onFrame: receive, onBatch, onClose });
+    const attempt = ++connectAttempt;
+    const open = (resolved: string | NetworkTarget): void => {
+      if (closed || attempt !== connectAttempt) return;
+      activeTarget = resolved;
+      link =
+        typeof resolved === "string"
+          ? connectSocket(resolved, { onOpen, onFrame: receive, onBatch, onClose })
+          : connectWebSocket(resolved, mediaActive ? "voice" : "ui", {
+              onOpen,
+              onFrame: receive,
+              onBatch,
+              onClose,
+              ...(debugLog ? { debug: debugLog } : {}),
+            });
+    };
+    if (!isTargetResolver(target)) {
+      open(target);
+      return;
+    }
+    void target
+      .resolve()
+      .then((resolved) => {
+        debugLog?.(`route resolved: ${typeof resolved === "string" ? resolved : resolved.host}`);
+        open(resolved);
+      })
+      .catch((error) => {
+        debugLog?.(
+          `route resolution failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        if (!closed && attempt === connectAttempt)
+          reconnectTimer = setTimeout(connect, RECONNECT_MS);
+      });
   }
 
   if (audio) {
@@ -491,11 +570,12 @@ export async function runConsoleHost(
 // ---------------------------------------------------------------------------
 
 interface LinkHandlers {
-  onOpen(): void;
+  onOpen(device?: { id: string; signature: string }): void;
   onFrame(line: string): void;
   /** One redraw per arrival, not per frame in it. */
   onBatch(): void;
   onClose(): void;
+  debug?(line: string): void;
 }
 
 function connectSocket(socketPath: string, handlers: LinkHandlers): ControlLink {
@@ -528,21 +608,62 @@ function connectSocket(socketPath: string, handlers: LinkHandlers): ControlLink 
  * — not an app-level TLS session — is what carries the encryption and machine
  * identity here; the token is the Server's own admission check on top.
  */
-function connectWebSocket(target: NetworkTarget, handlers: LinkHandlers): ControlLink {
-  const socket = new WebSocket(`ws://${formatHost(target.host)}:${target.port}`);
+function connectWebSocket(
+  target: NetworkTarget,
+  role: "ui" | "voice",
+  handlers: LinkHandlers,
+): ControlLink {
+  const secure = target.secure === true || target.tls !== undefined;
+  const socket = new WebSocket(
+    `${secure ? "wss" : "ws"}://${formatHost(target.host)}:${target.port}`,
+    target.tls
+      ? { tls: { ca: target.tls.ca, serverName: target.tls.serverName } }
+      : secure
+        ? { tls: { rejectUnauthorized: false } }
+        : undefined,
+  );
   let settled = false;
-  socket.addEventListener("open", handlers.onOpen);
+  let proofStarted = false;
+  socket.addEventListener("open", () => {
+    handlers.debug?.(`link open: ${target.host}:${target.port}`);
+    if (!target.device) handlers.onOpen();
+  });
   socket.addEventListener("message", (event: MessageEvent) => {
     if (typeof event.data !== "string") return;
+    const frame = parseServerFrame(event.data);
+    if (target.device && frame?.type === "auth-challenge") {
+      if (proofStarted) return;
+      proofStarted = true;
+      const device = target.device;
+      void device
+        .sign(
+          controlProofPayload({
+            challenge: frame.challenge,
+            protocol: CONTROL_PROTOCOL_VERSION,
+            role,
+            deviceId: device.id,
+          }),
+        )
+        .then((signature) => {
+          if (!settled && socket.readyState === WebSocket.OPEN)
+            handlers.onOpen({ id: device.id, signature });
+        })
+        .catch(() => socket.close());
+      return;
+    }
     handlers.onFrame(event.data);
     handlers.onBatch();
   });
-  socket.addEventListener("error", () => {
+  socket.addEventListener("error", (event: Event) => {
+    handlers.debug?.(
+      `link error: ${target.host}:${target.port} ${(event as { message?: string }).message ?? ""}`,
+    );
     if (settled) return;
     settled = true;
     handlers.onClose();
   });
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event: CloseEvent) => {
+    handlers.debug?.(`link closed: ${target.host}:${target.port} code=${event.code}`);
     if (settled) return;
     settled = true;
     handlers.onClose();
@@ -553,6 +674,15 @@ function connectWebSocket(target: NetworkTarget, handlers: LinkHandlers): Contro
     },
     close: () => socket.close(),
   };
+}
+
+function isTargetResolver(target: ConsoleTarget): target is ConsoleTargetResolver {
+  return (
+    typeof target === "object" &&
+    target !== null &&
+    "resolve" in target &&
+    typeof target.resolve === "function"
+  );
 }
 
 /** Bare IPv6 literals need brackets in a URL authority. */

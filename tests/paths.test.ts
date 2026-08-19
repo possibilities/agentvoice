@@ -3,9 +3,13 @@ import {
   controlSocketPath,
   defaultConfigPath,
   expandTilde,
+  pairedDevicesFilePath,
+  remoteProfileFilePath,
   residentDirectory,
   residentSocketPath,
   residentStateFilePath,
+  serverIdentityCertificatePath,
+  serverIdentityKeyPath,
   stateDirectory,
   threadStateFilePath,
   workersStateFilePath,
@@ -24,6 +28,18 @@ describe("paths", () => {
       "/etc/xdg/agentvoice/server.json",
     );
     expect(controlSocketPath({}, HOME)).toBe("/home/tester/.local/state/agentvoice/control.sock");
+    expect(serverIdentityKeyPath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/server/identity-key.pem",
+    );
+    expect(serverIdentityCertificatePath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/server/identity-cert.pem",
+    );
+    expect(pairedDevicesFilePath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/server/paired-devices.json",
+    );
+    expect(remoteProfileFilePath({}, HOME)).toBe(
+      "/home/tester/.local/state/agentvoice/remote.json",
+    );
     expect(residentDirectory({}, HOME)).toBe("/home/tester/.local/state/agentvoice/resident");
     expect(residentSocketPath({}, HOME)).toBe(
       "/home/tester/.local/state/agentvoice/resident/app-server.sock",

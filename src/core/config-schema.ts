@@ -293,7 +293,7 @@ export const remoteValuesSchema = z
       .string()
       .meta({
         description:
-          "Address the Server binds so peers on OTHER machines can attach (`agentvoice remote --host <this address>`). Print this machine's with `tailscale ip -4`. Must be a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48) or loopback unless `allow-any-address` is set — the tailnet is what supplies encryption and machine identity here. Default: unset, and only same-machine peers can attach.",
+          "Optional address override for the authenticated TLS listener. Unset binds all interfaces so paired Remote consoles can race Bonjour LAN and remembered Tailscale routes; every route is treated as hostile and admitted by the pinned Server identity plus per-device proof.",
         default: null,
       })
       .optional(),
@@ -302,7 +302,7 @@ export const remoteValuesSchema = z
       .min(1)
       .max(65535)
       .meta({
-        description: "Port for the network listener. Ignored unless `listen` is set.",
+        description: "Port for the authenticated TLS listener and Bonjour service.",
         default: DEFAULT_REMOTE_PORT,
       })
       .optional(),
@@ -311,7 +311,7 @@ export const remoteValuesSchema = z
       .min(MINIMUM_REMOTE_TOKEN_LENGTH)
       .meta({
         description:
-          "Shared secret a network peer presents to attach (`--token`, or $AGENTVOICE_REMOTE_TOKEN on the remote machine). Required whenever `listen` is set: crossing machines retires file permissions as the boundary, and this token grants microphone control. Generate one with `openssl rand -hex 24` and keep server.json 0600.",
+          "Optional compatibility secret accepted from the manual `agentvoice remote --host` diagnostic path. Normal Android Remote consoles pair once and prove an individual Keystore identity instead.",
         default: null,
       })
       .optional(),
@@ -319,14 +319,14 @@ export const remoteValuesSchema = z
       .boolean()
       .meta({
         description:
-          "Permit `listen` to bind an address outside the tailnet and loopback. Off by default because agentvoice adds no transport encryption of its own — turning this on exposes the token, and with it the microphone, to whatever network the address reaches.",
+          "Retained compatibility setting from the pre-TLS listener; it no longer changes address admission because every network route now uses authenticated TLS and per-peer admission.",
         default: false,
       })
       .optional(),
   })
   .meta({
     description:
-      "Where the Server serves its control peers — Consoles and Remote consoles. The unix socket under the state directory always serves same-machine peers; these keys additionally serve them across machines over a tailnet.",
+      "The authenticated TLS listener used by paired Remote consoles over same-LAN discovery or remembered Tailscale routes, plus the optional manual-token diagnostic path.",
   });
 
 const serverShape = {

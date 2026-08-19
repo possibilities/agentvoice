@@ -49,7 +49,7 @@ everything else belongs to exactly one layer.
     `thread/realtime/start` payloads; tested in `tests/params.test.ts`
   - `ws-frame.ts` — pure RFC 6455 client codec for the resident's socket
     transport; tested in `tests/ws-frame.test.ts`
-  - `control-protocol.ts` — the control attachment's wire protocol (v8),
+  - `control-protocol.ts` — the control attachment's wire protocol (v9),
     pure: peer roles (`ui`/`voice`), state fan-out, routed audio commands,
     and the session-signaling frames that were the in-process
     runtime↔transport interface; tested in `tests/control-protocol.test.ts`
@@ -75,9 +75,10 @@ everything else belongs to exactly one layer.
     at idle
 - `src/server/` — the Server (`com.agentvoice.server`, launchd-resident,
   headless): `control.ts` (both control listeners — the owner-only unix
-  socket, which is also the single-Server lock, and the opt-in tailnet
-  WebSocket `remote.listen` — with peer admission, roles, and voice-peer
-  supersede; see `docs/adr/0003-*` and `0004-*`), `host.ts` (`server run`:
+  socket, which is also the single-Server lock, and the authenticated WSS
+  listener for pinned paired devices plus optional token diagnostics — with
+  peer admission, roles, and voice-peer supersede; see `docs/adr/0003-*`
+  through `0005-*`), `host.ts` (`server run`:
   hosts the runtime, relays session signaling to the voice peer, routes ui
   commands, fans state out; originates no inference), `install.ts` (the
   LaunchAgent: install ensures the resident first, and the config-layer CLI
@@ -232,8 +233,9 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
   `thread.json` (the persisted orchestrator threadId, resumed on attach),
   `workers.json` (the persisted worker registry, reconciled on attach),
   `control.sock` (the Server's owner-only control listener for same-machine
-  Consoles and Remote consoles — also the single-Server lock, so it stays
-  bound even when `remote.listen` serves other machines too),
+  Consoles and Remote consoles — also the single-Server lock),
+  `server/identity-{key,cert}.pem` (the stable Server identity),
+  `server/paired-devices.json` (individually admitted device public keys),
   `accounts/<slug>` (account profiles: a real `auth.json`, a private
   `app-server-control/`, and a symlink farm over shared canonical `~/.codex`
   state, reconciled at every pick).

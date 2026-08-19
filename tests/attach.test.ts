@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SocketOutbox } from "../src/core/attach.ts";
+import { SocketOutbox } from "../src/core/socket-outbox.ts";
 
 /** A socket that accepts at most `cap` bytes per write until drained. */
 function throttledSink(cap: number): {

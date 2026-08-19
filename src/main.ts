@@ -39,6 +39,7 @@ import {
   serverStatus,
   uninstallServer,
 } from "./server/install.ts";
+import { pairWithServer } from "./server/pair.ts";
 
 export const VERSION: string = packageJson.version;
 
@@ -104,6 +105,7 @@ Usage:
                                         the resident first when missing),
                                         load, and start
   agentvoice server status              Report launchd and socket state
+  agentvoice server pair                Open a two-minute phone pairing window
   agentvoice server restart             Restart the Server
   agentvoice server uninstall           Unload and remove the LaunchAgent
   agentvoice server run [options]       Run in the foreground (what the
@@ -154,20 +156,25 @@ const REMOTE_USAGE = `agentvoice remote — the phone-sized control surface for 
 
 Usage:
   agentvoice remote                          attach on this machine
-  agentvoice remote --host <addr> [--port N] attach across the tailnet
+  agentvoice remote --host <addr> [--port N] diagnose a network route
 
 Options:
-  --host <address>  The Server machine's tailnet address (\`tailscale ip -4\`
-                    there). Omitted, the Remote console attaches through the
-                    owner-only unix socket on this machine.
+  --host <address>  A manually selected Server address. Omitted, the Remote
+                    console attaches through the owner-only unix socket on
+                    this machine.
   --port <port>     Defaults to ${DEFAULT_REMOTE_PORT}; must match remote.port there.
   --token <secret>  Must match remote.token in the Server's server.json.
                     Defaults to $AGENTVOICE_REMOTE_TOKEN. Required with --host.
 
+Manual --host uses encrypted WSS but deliberately skips certificate pinning;
+it is a diagnostic path. The generic Android app uses none of these flags: run
+\`agentvoice server pair\` once, then it discovers routes, pins the Server, and
+proves its Android-Keystore identity automatically.
+
 The Remote console carries mute controls, Redial, Fresh, and signal state;
 audio remains on the Console's own device, and the Server is reachable even
-while no Console is open. Serving --host needs remote.listen and
-remote.token set in the Server's server.json.
+while no Console is open. Serving manual --host needs remote.token in the
+Server's server.json; remote.listen is only an optional bind override.
 
 Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
 `;
@@ -384,6 +391,10 @@ async function runServerCommand(argv: string[]): Promise<number> {
     return subcommand === undefined ? 2 : 0;
   }
   if (subcommand === "status") return serverStatus();
+  if (subcommand === "pair") {
+    if (argv.length !== 1) throw new UsageError("server pair takes no options");
+    return pairWithServer(controlSocketPath(process.env, homedir()));
+  }
   if (subcommand === "restart") return restartServer();
   if (subcommand === "uninstall") return uninstallServer();
   if (subcommand !== "install" && subcommand !== "run") {
@@ -445,7 +456,7 @@ export function parseRemoteTarget(
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new UsageError(`--port must be a port number, got "${rawPort}"`);
   }
-  return { host, port, token };
+  return { host, port, token, secure: true };
 }
 
 async function runRemoteCommand(argv: string[]): Promise<number> {

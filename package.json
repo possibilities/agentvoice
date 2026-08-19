@@ -43,5 +43,8 @@
     "opusscript": "^0.1.1",
     "werift": "^0.24.3",
     "zod": "^4.4.3"
+  },
+  "optionalDependencies": {
+    "droidedtui": "file:../droidedtui"
   }
 }

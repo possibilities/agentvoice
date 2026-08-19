@@ -93,8 +93,8 @@ The Server (`com.agentvoice.server`) is the coordination runtime, headless
 under launchd: it holds the attachment to the resident, resumes the
 persisted orchestrator agent, answers worker dispatch, publishes worker
 reports, rotates accounts at idle, and serves the two control listeners —
-the owner-only unix socket (`control.sock`) and the opt-in tailnet
-WebSocket. Consoles and Remote consoles are its peers: at most one **voice
+the owner-only unix socket (`control.sock`) and an authenticated WSS listener
+for paired devices over the LAN or Tailscale. Consoles and Remote consoles are its peers: at most one **voice
 peer** (the Console — it owns the microphone, speaker, and media session;
 a newer console supersedes the incumbent, which keeps running as a mirror)
 and any number of **ui peers** (Remote consoles).
@@ -107,6 +107,7 @@ disappears, so realtime inference never idles along unattended.
 ```bash
 agentvoice server install    # render the LaunchAgent (+ resident if missing), load, start
 agentvoice server status     # launchd state, control socket, resident presence
+agentvoice server pair       # pair one nearby Android Remote console
 agentvoice server restart    # kickstart the Server
 agentvoice server uninstall  # unload and remove the LaunchAgent (resident stays)
 agentvoice server run        # foreground, for development
@@ -322,21 +323,29 @@ under the realtime surface; see AGENTS.md invariant 10).
 
 ## Security posture
 
-By default nothing listens on the network. The resident serves a unix socket
-created mode 0600 inside a 0700 directory; the Server's control socket
-(`control.sock`) is owner-only too — **file permissions are the boundary
-between local users**, and there is no port for a browser or another machine
-to probe. The control socket doubles as the single-Server lock. Consoles are
-arbitrated rather than locked: a second `agentvoice console` supersedes the
-first, which keeps running as an audio-less mirror.
+The resident serves a unix socket created mode 0600 inside a 0700 directory;
+the Server's `control.sock` is owner-only too, and doubles as the
+single-Server lock. **File permissions are the boundary between local
+users.** Consoles are arbitrated rather than locked: a second `agentvoice
+console` supersedes the first, which keeps running as an audio-less mirror.
 
-Setting `remote.listen` opts into one exception, and moves the boundary with
-it: a peer on another machine reaches the Server over a tailnet port, where
-file permissions mean nothing and `remote.token` is the whole admission
-check. That token grants microphone control, so treat it like a
-credential — `server.json` mode 0600, and a fresh token if it ever leaks. The
-range restriction on `remote.listen` exists to keep that port on a network
-WireGuard is already authenticating.
+The Server also listens for Remote consoles over WSS on port 8473 by default
+and publishes a Bonjour service containing only its public identity and route
+hints. A network is never trusted merely because it is local: normal Android
+Remote consoles pin the Server's persistent self-signed certificate and prove
+an individual Android-Keystore key against a fresh challenge on every
+attachment. An unpaired peer is refused. Pairing itself opens only through the
+owner-only socket, lasts two minutes, admits one phone, and requires the same
+transcript-derived six-digit code to be confirmed on both devices. A network
+attacker can observe or relay the exchange, but cannot silently change either
+identity without changing that code.
+
+`remote.listen` is only a bind-address override; unset means all interfaces so
+the same generic APK can race same-LAN Bonjour routes and remembered Tailscale
+routes. `remote.token` optionally enables the manual `agentvoice remote
+--host` diagnostic path. That shared token grants microphone control and the
+manual client does not pin the Server certificate, so keep it out of normal
+Android packaging and rotate it if exposed.
 
 That decides who reaches the agent; it cannot constrain what the agent then
 does. Approval requests are always **auto-denied** (there is no UI to answer
@@ -348,8 +357,8 @@ defaults to your home directory, that is your whole account. `--sandbox
 workspace-write` narrows writes to the workspace, which at the default is no
 narrower; pair it with `--workspace <dir>` to make it mean something.
 
-To control a session from another device, SSH in and use the
-[Remote console](#phone-remote) — audio stays on the Console's machine.
+The [Remote console](#phone-remote) controls the session without moving audio;
+the Console's machine remains the listening and microphone path.
 
 ## The voice console
 
@@ -408,10 +417,9 @@ The device is built from source and the console refuses to start without it —
 
 ### Phone remote
 
-Open the narrow Remote console — from a terminal on the Server's own
-machine (SSH in from a phone, or just another tab), or from any machine on
-the tailnet once `remote.listen` is configured below. The Server is always
-up, so this works even while no Console is open:
+Open the narrow Remote console from a terminal on the Server's own machine
+(SSH in, or use another tab). The Server is always up, so this works even
+while no Console is open:
 
 ```bash
 ssh laptop
@@ -449,30 +457,40 @@ Two listeners carry that identical protocol.
 `~/.local/state/agentvoice/control.sock`, an owner-only Unix socket, with no
 configuration at all.
 
-**From another machine**, the Server additionally serves a WebSocket over the
-tailnet. Set both keys in `server.json` on the Server's machine:
+**On Android**, install the generic AgentVoice Remote APK once. Its first
+launch waits for a deliberately opened pairing window:
+
+```sh
+agentvoice server pair
+```
+
+Keep the app open on the same LAN, compare the six-digit code shown by the Mac
+and phone, answer `y` on the Mac, then tap the phone to confirm. The phone's
+private P-256 key stays non-exportable in Android Keystore; the Server stores
+only that device's public key, while the phone pins the Server certificate and
+remembers safe route candidates. Later launches need no host, token, config,
+or open pairing window. They discover the paired Server over Bonjour when it
+is nearby, race any remembered Tailscale MagicDNS/IP routes, require the pinned
+certificate, sign the Server's fresh challenge, and reconnect automatically
+after either side restarts. Tailscale is optional on the same LAN and becomes
+the automatic away-from-home route when present.
+
+**For command-line diagnosis from another machine**, set an optional token in
+`server.json` on the Server's machine:
 
 ```jsonc
 {
   "remote": {
-    "listen": "100.114.244.89",           // `tailscale ip -4` on this machine
     "token": "<openssl rand -hex 24>"
   }
 }
 ```
 
-then, from the other machine, `agentvoice remote --host 100.114.244.89
---token …` (or `$AGENTVOICE_REMOTE_TOKEN`). No SSH and no port forwarding.
-
-Tailscale is load-bearing here, not incidental: **agentvoice adds no transport
-encryption of its own**, so WireGuard is what supplies the encryption and
-machine identity, and the token is only the Server's admission check on top.
-`remote.listen` therefore refuses any address outside `100.64.0.0/10`,
-`fd7a:115c:a1e0::/48`, and loopback unless `remote.allow-any-address` is set —
-that token grants microphone control, so keep `server.json` mode 0600. Expect
-tailnet round-trips when Tailscale negotiates a direct path and noticeably
-more when it falls back to a DERP relay; `tailscale status` says which you
-have.
+Restart the Server, then run `agentvoice remote --host HOST --token …` (or
+set `$AGENTVOICE_REMOTE_TOKEN`). `remote.listen` may override the default
+`0.0.0.0` bind and `remote.port` may override 8473. This path is encrypted WSS
+but intentionally does not pin the self-signed certificate, so it is for
+connectivity diagnosis—not routine phone use or hostile networks.
 
 A network peer beats every 1.5 s. If the Server stops hearing it for 4 s, it
 releases that peer's unmute holds — a dead peer's TCP close can lag by
@@ -484,32 +502,27 @@ Server drops, it releases every remote-sourced hold locally.
 ### Android Remote console
 
 The tracked `droidedtui.json` packages the Remote console as a native Android
-app while keeping `src/console/host.ts` as the entire visible
-implementation (the media engine is imported lazily, so the package never
-loads it). DroidedTUI initializes OpenTUI, invokes the exported
-`runConsoleHost` function with bounded package arguments, and supplies the Android
-host, PTY, Ghostty terminal surface, touch translation, lifecycle, and APK.
-There is no WebView or second UI implementation.
+app. `src/console/android-remote.ts` owns discovery, pairing, and pinned route
+selection, then hands the renderer to the same `runConsoleHost` and visible
+TUI used everywhere else (the media engine is imported lazily, so the package
+never loads it). DroidedTUI supplies the Android host, PTY, Ghostty terminal
+surface, touch translation, lifecycle, Keystore/NSD Host channel, and APK.
+There is no WebView or second control UI.
 
-Install or link the `droidedtui` command, configure its Android and matching
-Bun toolchains, then supply the network target only to the packaging process:
+Install or link the `droidedtui` command and configure its Android and matching
+Bun toolchains. The APK is generic—no Server address or secret is supplied at
+build time:
 
 ```sh
-export AGENTVOICE_REMOTE_HOST=100.114.244.89
-export AGENTVOICE_REMOTE_TOKEN='the same value as remote.token'
-
 bun run android:package
 bun run android:run -- --device DEVICE_SERIAL
 ```
 
-The environment sentinel keeps the attachment token out of
-`droidedtui.json` and command output, but the compiled APK still contains the
-resolved token. Treat it as a personal controlled build, not an artifact for
-public distribution. The full signal field remains touch-native: tap YOU or
-AGENT for their primary controls, hold the bottom band for push-to-talk when
-the mic is muted, and tap the quiet `···` target at the upper right to open the
-command palette for Redial, Fresh, and Quit. No component requests the Android
-keyboard.
+Pair it with `agentvoice server pair` as described above. The full signal field
+remains touch-native: tap YOU or AGENT for their primary controls, hold the
+bottom band for push-to-talk when the mic is muted, and tap the quiet `···`
+target at the upper right to open the command palette for Redial, Fresh, and
+Quit. No component requests the Android keyboard.
 
 ## State on disk
 
@@ -519,16 +532,17 @@ keyboard.
 - `~/.local/state/agentvoice/resident/` — the resident bundle (0700): the
   app-server unix socket, the rendered wrapper (`run.sh`), `resident.log`,
   `pick.log`, and `resident.json` (the active account pick).
-- `~/.local/state/agentvoice/server/` — the Server bundle (0700):
-  `server.log` and, with `--debug`, `server-debug.log`.
+- `~/.local/state/agentvoice/server/` — the Server bundle (0700): logs, its
+  private P-256 key and self-signed certificate, and `paired-devices.json`
+  containing each admitted phone's public key.
 - `~/.local/state/agentvoice/thread.json` — the persisted orchestrator
   threadId, resumed on attach. Delete it (or use `--fresh`) to start over.
 - `~/.local/state/agentvoice/workers.json` — the persisted worker registry,
   reconciled against the resident on attach.
 - `~/.local/state/agentvoice/control.sock` — the Server's ephemeral
   owner-only control listener for same-machine Consoles and Remote consoles,
-  and the single-Server lock. It never carries audio. Peers on other
-  machines arrive over the `remote.listen` port instead, never through here.
+  and the single-Server lock. It never carries audio. Network peers arrive
+  over the authenticated WSS listener instead, never through here.
 - `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
   multi-account balancing: a real `auth.json` and private app-server control
   directory per account, with session/config state symlinked to `~/.codex`.

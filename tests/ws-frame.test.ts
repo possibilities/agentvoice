@@ -47,6 +47,12 @@ describe("handshake", () => {
     expect(request.endsWith("\r\n\r\n")).toBe(true);
   });
 
+  test("a network handshake carries its explicit authority", () => {
+    expect(buildHandshakeRequest("abc123", "agentvoice:8473")).toContain(
+      "Host: agentvoice:8473\r\n",
+    );
+  });
+
   test("incomplete response asks for more bytes", () => {
     expect(parseHandshakeResponse(Buffer.from("HTTP/1.1 101 Switching"))).toEqual({ done: false });
   });

@@ -7,7 +7,9 @@
  * its media peer disappears.
  */
 
+import { createPrivateKey, sign } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerConfig } from "../core/config.ts";
@@ -18,9 +20,19 @@ import {
   type ControlUnmuteInput,
   type VoiceStateBody,
 } from "../core/control-protocol.ts";
+import { serverProofPayload } from "../core/pairing.ts";
 import { VoiceRuntime } from "../core/runtime.ts";
-import { controlSocketPath, stateDirectory } from "../paths.ts";
+import {
+  controlSocketPath,
+  pairedDevicesFilePath,
+  serverDirectory,
+  stateDirectory,
+} from "../paths.ts";
 import { type ControlPeerHandle, ControlServer } from "./control.ts";
+import { BonjourAdvertiser, defaultBonjourName, discoverTailscaleEndpoints } from "./discovery.ts";
+import { PairedDeviceStore } from "./paired-devices.ts";
+import { PairingCoordinator } from "./pairing-coordinator.ts";
+import { ensureServerIdentity, type ServerIdentity } from "./server-identity.ts";
 
 export class ServerError extends Error {}
 
@@ -64,6 +76,11 @@ export async function runServer(
   let voiceState: VoiceStateBody | null = null;
   let runtime: VoiceRuntime | null = null;
   let shuttingDown = false;
+  let identity: ServerIdentity | null = null;
+  let pairing: PairingCoordinator | null = null;
+  let advertiser: BonjourAdvertiser | null = null;
+  let tailscaleEndpoints: string[] = [];
+  const home = homedir();
 
   const state = (): ControlState => ({
     type: "state",
@@ -75,17 +92,42 @@ export async function runServer(
   // Binding first makes the control socket the single-Server lock before any
   // shared state is touched.
   const control = new ControlServer({
-    socketPath: controlSocketPath(process.env, homedir()),
-    ...(config.remote.listen !== null && config.remote.token !== null
-      ? {
-          network: {
-            host: config.remote.listen,
-            port: config.remote.port,
-            token: config.remote.token,
-          },
-        }
-      : {}),
+    socketPath: controlSocketPath(process.env, home),
+    prepareNetwork: () => {
+      identity = ensureServerIdentity(serverDirectory(process.env, home));
+      const devices = PairedDeviceStore.open(pairedDevicesFilePath(process.env, home));
+      tailscaleEndpoints = discoverTailscaleEndpoints();
+      pairing = new PairingCoordinator({
+        identity,
+        devices,
+        port: config.remote.port,
+        endpoints: () => tailscaleEndpoints,
+        onWindowChange: (open) => advertiser?.update(open),
+      });
+      return {
+        network: {
+          host: config.remote.listen ?? "0.0.0.0",
+          port: config.remote.port,
+          devices,
+          tls: { key: identity.privateKey, cert: identity.certificate },
+          ...(config.remote.token === null ? {} : { token: config.remote.token }),
+        },
+        pairing,
+      };
+    },
     state,
+    serverProof: (challenge, deviceId) => {
+      if (!identity) return null;
+      try {
+        return sign(
+          "sha256",
+          serverProofPayload({ challenge, serverId: identity.serverId, deviceId }),
+          createPrivateKey(identity.privateKey),
+        ).toString("base64url");
+      } catch {
+        return null;
+      }
+    },
     onCommand: (command, peer) => {
       switch (command.type) {
         case "set-muted":
@@ -150,6 +192,7 @@ export async function runServer(
       if (info) control.sendToVoicePeer({ type: "session-ready", info });
       log("voice peer attached");
     },
+    ...(debugLog ? { debug: debugLog } : {}),
     onVoicePeerGone: () => {
       voiceState = null;
       // A session nobody can hear or mute must not outlive its media peer.
@@ -167,7 +210,20 @@ export async function runServer(
     );
   }
   const networkAddress = control.networkAddress();
-  if (networkAddress) log(`network peers may attach at ${networkAddress}`);
+  const activeIdentity = identity as ServerIdentity | null;
+  const activePairing = pairing as PairingCoordinator | null;
+  if (networkAddress && activeIdentity && activePairing) {
+    const tailscaleDnsName = tailscaleEndpoints.find((endpoint) => isIP(endpoint) === 0);
+    advertiser = new BonjourAdvertiser({
+      name: defaultBonjourName(),
+      port: config.remote.port,
+      serverId: activeIdentity.serverId,
+      ...(tailscaleDnsName ? { tailscaleDnsName } : {}),
+    });
+    advertiser.update(activePairing.isOpen());
+    log(`paired network peers may attach securely at wss://${networkAddress}`);
+    if (tailscaleEndpoints.length > 0) log(`Tailscale routes: ${tailscaleEndpoints.join(", ")}`);
+  }
 
   try {
     runtime = await VoiceRuntime.start(
@@ -207,6 +263,8 @@ export async function runServer(
       options.configSource ? { configSource: options.configSource } : {},
     );
   } catch (error) {
+    advertiser?.close();
+    advertiser = null;
     await control.close().catch(() => {});
     throw new ServerError(error instanceof Error ? error.message : String(error));
   }
@@ -218,6 +276,8 @@ export async function runServer(
       shuttingDown = true;
       log("shutting down");
       void (async () => {
+        advertiser?.close();
+        advertiser = null;
         await control.close().catch(() => {});
         await runtime?.shutdown().catch(() => {});
         resolve();

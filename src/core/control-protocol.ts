@@ -10,7 +10,9 @@
  * routes and fans out.
  */
 
-export const CONTROL_PROTOCOL_VERSION = 8;
+import { containsAsciiControl } from "./safe-text.ts";
+
+export const CONTROL_PROTOCOL_VERSION = 9;
 
 export type ControlRole = "ui" | "voice";
 export type ControlAudioTarget = "mic" | "speaker";
@@ -65,6 +67,46 @@ export interface HelloCommand {
   protocol: number;
   role: ControlRole;
   token?: string;
+  device?: {
+    id: string;
+    signature: string;
+  };
+  /**
+   * A nonce the Server must sign with its identity key (`auth-proof`) before
+   * the device trusts the link — the Server's half of mutual authentication,
+   * for runtimes whose TLS stack cannot pin the identity certificate.
+   */
+  serverChallenge?: string;
+}
+
+/** Starts the deliberately opened, human-verified pairing flow from a network peer. */
+export interface PairBeginCommand {
+  type: "pair-begin";
+  protocol: number;
+  deviceId: string;
+  deviceName: string;
+  publicKey: string;
+  clientNonce: string;
+}
+
+export interface PairDeviceConfirmCommand {
+  type: "pair-device-confirm";
+  sessionId: string;
+  signature: string;
+}
+
+/** Local-owner commands: network peers can never open or approve pairing. */
+export interface PairingOpenCommand {
+  type: "pairing-open";
+}
+
+export interface PairingLocalConfirmCommand {
+  type: "pairing-local-confirm";
+  sessionId: string;
+}
+
+export interface PairingCancelCommand {
+  type: "pairing-cancel";
 }
 
 /**
@@ -117,6 +159,11 @@ export interface VoiceStateCommand {
 
 export type ControlCommand =
   | HelloCommand
+  | PairBeginCommand
+  | PairDeviceConfirmCommand
+  | PairingOpenCommand
+  | PairingLocalConfirmCommand
+  | PairingCancelCommand
   | PingCommand
   | SetMutedCommand
   | HoldUnmutedCommand
@@ -129,6 +176,54 @@ export type ControlCommand =
 // ---------------------------------------------------------------------------
 // Server → peer
 // ---------------------------------------------------------------------------
+
+/** The Server's signature over the hello's serverChallenge. */
+export interface AuthProofFrame {
+  type: "auth-proof";
+  signature: string;
+}
+
+/** Fresh per-connection material a paired device signs before its hello is admitted. */
+export interface AuthChallengeFrame {
+  type: "auth-challenge";
+  protocol: typeof CONTROL_PROTOCOL_VERSION;
+  challenge: string;
+}
+
+export interface PairChallengeFrame {
+  type: "pair-challenge";
+  sessionId: string;
+  serverId: string;
+  serverName: string;
+  certificate: string;
+  deviceId: string;
+  clientNonce: string;
+  serverNonce: string;
+  endpoints: string[];
+  port: number;
+}
+
+export type PairingStatus = "open" | "awaiting-confirmation" | "complete" | "failed" | "cancelled";
+
+export interface PairingStateFrame {
+  type: "pairing-state";
+  status: PairingStatus;
+  expiresAt?: number;
+  sessionId?: string;
+  code?: string;
+  deviceName?: string;
+  message?: string;
+}
+
+export interface PairCompleteFrame {
+  type: "pair-complete";
+  serverId: string;
+  serverName: string;
+  certificate: string;
+  deviceId: string;
+  endpoints: string[];
+  port: number;
+}
 
 /** `voice: null` means no voice peer is attached — nothing to hear or mute. */
 export interface ControlState {
@@ -201,6 +296,11 @@ export interface RouteRedialFrame {
 }
 
 export type ServerFrame =
+  | AuthProofFrame
+  | AuthChallengeFrame
+  | PairChallengeFrame
+  | PairingStateFrame
+  | PairCompleteFrame
   | ControlState
   | RejectFrame
   | SessionReadyFrame
@@ -227,10 +327,14 @@ export function parseControlCommand(line: string): ControlCommand | null {
   if (value === null) return null;
   switch (value["type"]) {
     case "hello": {
+      const device = parseDeviceProof(value["device"]);
+      const serverChallenge = value["serverChallenge"];
       if (
         !Number.isSafeInteger(value["protocol"]) ||
         !isRole(value["role"]) ||
-        (value["token"] !== undefined && typeof value["token"] !== "string")
+        (value["token"] !== undefined && typeof value["token"] !== "string") ||
+        (value["device"] !== undefined && device === null) ||
+        (serverChallenge !== undefined && !isChallenge(serverChallenge))
       ) {
         return null;
       }
@@ -239,8 +343,46 @@ export function parseControlCommand(line: string): ControlCommand | null {
         protocol: value["protocol"] as number,
         role: value["role"],
         ...(typeof value["token"] === "string" ? { token: value["token"] } : {}),
+        ...(device ? { device } : {}),
+        ...(isChallenge(serverChallenge) ? { serverChallenge } : {}),
       };
     }
+    case "pair-begin": {
+      if (
+        !Number.isSafeInteger(value["protocol"]) ||
+        !isBoundedString(value["deviceId"], 128) ||
+        !isBoundedString(value["deviceName"], 96) ||
+        !isBoundedString(value["publicKey"], 1024) ||
+        !isBoundedString(value["clientNonce"], 256)
+      ) {
+        return null;
+      }
+      return {
+        type: "pair-begin",
+        protocol: value["protocol"] as number,
+        deviceId: value["deviceId"],
+        deviceName: value["deviceName"],
+        publicKey: value["publicKey"],
+        clientNonce: value["clientNonce"],
+      };
+    }
+    case "pair-device-confirm": {
+      if (!isBoundedString(value["sessionId"], 128) || !isBoundedString(value["signature"], 512))
+        return null;
+      return {
+        type: "pair-device-confirm",
+        sessionId: value["sessionId"],
+        signature: value["signature"],
+      };
+    }
+    case "pairing-open":
+      return { type: "pairing-open" };
+    case "pairing-local-confirm": {
+      if (!isBoundedString(value["sessionId"], 128)) return null;
+      return { type: "pairing-local-confirm", sessionId: value["sessionId"] };
+    }
+    case "pairing-cancel":
+      return { type: "pairing-cancel" };
     case "ping":
       return { type: "ping" };
     case "set-muted": {
@@ -292,6 +434,62 @@ export function parseServerFrame(line: string): ServerFrame | null {
   const value = parseRecord(line);
   if (value === null) return null;
   switch (value["type"]) {
+    case "auth-proof": {
+      if (!isBoundedString(value["signature"], 512)) return null;
+      return { type: "auth-proof", signature: value["signature"] as string };
+    }
+    case "auth-challenge": {
+      if (
+        value["protocol"] !== CONTROL_PROTOCOL_VERSION ||
+        !isBoundedString(value["challenge"], 256)
+      )
+        return null;
+      return {
+        type: "auth-challenge",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        challenge: value["challenge"],
+      };
+    }
+    case "pair-challenge": {
+      const profile = parsePairProfile(value);
+      if (
+        !profile ||
+        !isBoundedString(value["sessionId"], 128) ||
+        !isBoundedString(value["clientNonce"], 256) ||
+        !isBoundedString(value["serverNonce"], 256)
+      ) {
+        return null;
+      }
+      return {
+        type: "pair-challenge",
+        sessionId: value["sessionId"],
+        ...profile,
+        clientNonce: value["clientNonce"],
+        serverNonce: value["serverNonce"],
+      };
+    }
+    case "pairing-state": {
+      if (!isPairingStatus(value["status"])) return null;
+      if (value["expiresAt"] !== undefined && !Number.isSafeInteger(value["expiresAt"]))
+        return null;
+      for (const key of ["sessionId", "code", "deviceName", "message"] as const) {
+        if (value[key] !== undefined && !isBoundedString(value[key], key === "message" ? 512 : 128))
+          return null;
+      }
+      return {
+        type: "pairing-state",
+        status: value["status"],
+        ...(typeof value["expiresAt"] === "number" ? { expiresAt: value["expiresAt"] } : {}),
+        ...(typeof value["sessionId"] === "string" ? { sessionId: value["sessionId"] } : {}),
+        ...(typeof value["code"] === "string" ? { code: value["code"] } : {}),
+        ...(typeof value["deviceName"] === "string" ? { deviceName: value["deviceName"] } : {}),
+        ...(typeof value["message"] === "string" ? { message: value["message"] } : {}),
+      };
+    }
+    case "pair-complete": {
+      const profile = parsePairProfile(value);
+      return profile ? { type: "pair-complete", ...profile } : null;
+    }
     case "state": {
       if (
         value["protocol"] !== CONTROL_PROTOCOL_VERSION ||
@@ -381,6 +579,57 @@ function parseRecord(line: string): Record<string, unknown> | null {
   }
 }
 
+function parseDeviceProof(value: unknown): { id: string; signature: string } | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const proof = value as Record<string, unknown>;
+  if (!isBoundedString(proof["id"], 128) || !isBoundedString(proof["signature"], 512)) return null;
+  return { id: proof["id"], signature: proof["signature"] };
+}
+
+function parsePairProfile(value: Record<string, unknown>): Omit<PairCompleteFrame, "type"> | null {
+  if (
+    !isBoundedString(value["serverId"], 128) ||
+    !isBoundedString(value["serverName"], 253) ||
+    !isBoundedString(value["certificate"], 64 * 1024) ||
+    !isBoundedString(value["deviceId"], 128) ||
+    !Array.isArray(value["endpoints"]) ||
+    value["endpoints"].length > 16 ||
+    !value["endpoints"].every((endpoint) => isBoundedString(endpoint, 253)) ||
+    !Number.isSafeInteger(value["port"]) ||
+    (value["port"] as number) < 1 ||
+    (value["port"] as number) > 65535
+  ) {
+    return null;
+  }
+  return {
+    serverId: value["serverId"],
+    serverName: value["serverName"],
+    certificate: value["certificate"],
+    deviceId: value["deviceId"],
+    endpoints: value["endpoints"] as string[],
+    port: value["port"] as number,
+  };
+}
+
+function isBoundedString(value: unknown, maximum: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    !containsAsciiControl(value, true)
+  );
+}
+
+function isPairingStatus(value: unknown): value is PairingStatus {
+  return (
+    value === "open" ||
+    value === "awaiting-confirmation" ||
+    value === "complete" ||
+    value === "failed" ||
+    value === "cancelled"
+  );
+}
+
 function parseVoiceBody(value: unknown): VoiceStateBody | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
@@ -431,6 +680,10 @@ function parseReadyInfo(value: unknown): SessionReadyInfo | null {
     voice: info["voice"] as string | null,
     prompts: prompts as string[],
   };
+}
+
+function isChallenge(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
 function isRole(value: unknown): value is ControlRole {

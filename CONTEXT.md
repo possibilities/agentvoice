@@ -75,11 +75,17 @@ media peer), "phone app".
 
 **Control attachment** — A peer's link to the Server, one JSON protocol over
 either of two listeners: the owner-only unix socket (`control.sock`) for the
-Server's own machine, and a tailnet WebSocket (`remote.listen`) for any
+Server's own machine, and the authenticated TLS WebSocket listener for any
 other. Every attachment opens with a hello declaring its peer role — `ui`
 (mirror and command) or `voice` (the media owner) — and both listeners are
 first-class; the unix socket is not a legacy path. _Avoid_: "control socket"
 (names only one of the two), "remote IPC" (it is no longer only local).
+
+**Server identity** — The Server's stable P-256 private key and self-signed TLS certificate. A Remote console pins the certificate at pairing; the key stays in the Server's owner-only state directory. _Avoid_: attachment token, Tailscale identity, CA service.
+
+**Paired device** — One Remote console installation admitted by its own Android-Keystore P-256 public key, persisted as an individually revocable trust entry on the Server. Its private key never leaves Android Keystore. _Avoid_: shared client, global token, phone account.
+
+**Pairing window** — A deliberate, two-minute Server state opened only from the owner-only Control attachment. One phone and the Server display the same transcript-derived six-digit code and both must confirm it before the phone becomes a Paired device. _Avoid_: discovery mode, login, permanent pairing listener.
 
 **Voice peer** — The one control-attachment peer holding the `voice` role:
 it owns the Duplex audio device, the WebRTC media session, and both mute
@@ -89,9 +95,9 @@ incumbent, which is demoted to a ui peer; the Server stops the voice session
 the moment its voice peer detaches. _Avoid_: "media client", "audio peer".
 
 **Attachment token** — The pre-shared secret (`remote.token`) a network peer
-presents to attach over the network listener. It replaces file permissions as
-the admission check the moment the link leaves the machine, and it grants
-microphone control. _Avoid_: "password", "api key", and confusion with
+presents to attach over the network listener as a manual diagnostic and
+migration path. Normal Remote consoles use Paired-device proof instead; TLS
+protects either path. _Avoid_: "password", "api key", and confusion with
 `surface.token`, which is a herdr pane metadata key.
 
 **Heartbeat deadline** — How long the Server will keep honoring a network

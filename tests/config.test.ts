@@ -115,7 +115,7 @@ describe("resolveConfig", () => {
     ).toHaveProperty("dispatchReports", undefined);
   });
 
-  test("serves no cross-machine Remote console unless asked", () => {
+  test("leaves the secure listener bind override unset by default", () => {
     const config = resolveConfig({}, {}, {}, HOME);
     expect(config.remote.listen).toBeNull();
     expect(config.remote.token).toBeNull();
@@ -123,21 +123,17 @@ describe("resolveConfig", () => {
     expect(config.remote.allowAnyAddress).toBe(false);
   });
 
-  test("remote.listen requires a token and a private address", () => {
+  test("remote.listen is an optional TLS bind override and token is diagnostic", () => {
     const token = "0123456789abcdef0123";
-    // Crossing machines retires file permissions as the boundary, so the
-    // token is not optional once a network address is bound.
-    expect(() => resolveConfig({}, { remote: { listen: "100.114.244.89" } }, {}, HOME)).toThrow(
-      /set remote.token/,
-    );
-    // Nothing here encrypts the wire, so the address must be one the tailnet
-    // (or loopback) already authenticates.
-    expect(() =>
-      resolveConfig({}, { remote: { listen: "192.168.1.20", token } }, {}, HOME),
-    ).toThrow(/tailscale ip -4/);
-    expect(() => resolveConfig({}, { remote: { listen: "0.0.0.0", token } }, {}, HOME)).toThrow(
-      /neither a Tailscale address/,
-    );
+    expect(
+      resolveConfig({}, { remote: { listen: "100.114.244.89" } }, {}, HOME).remote.token,
+    ).toBeNull();
+    expect(
+      resolveConfig({}, { remote: { listen: "192.168.1.20", token } }, {}, HOME).remote.listen,
+    ).toBe("192.168.1.20");
+    expect(
+      resolveConfig({}, { remote: { listen: "0.0.0.0", token } }, {}, HOME).remote.listen,
+    ).toBe("0.0.0.0");
     const config = resolveConfig(
       {},
       { remote: { listen: "100.114.244.89", port: 9100, token } },
@@ -150,7 +146,6 @@ describe("resolveConfig", () => {
       token,
       allowAnyAddress: false,
     });
-    // The override is the only way past the range check.
     expect(
       resolveConfig(
         {},
@@ -192,14 +187,19 @@ describe("parseRemoteTarget", () => {
     expect(parseRemoteTarget(["--help"], {}, HOME)).toBeNull();
     expect(
       parseRemoteTarget(["--host", "100.64.0.9", "--token", "s3cret-token"], {}, HOME),
-    ).toEqual({ host: "100.64.0.9", port: DEFAULT_REMOTE_PORT, token: "s3cret-token" });
+    ).toEqual({
+      host: "100.64.0.9",
+      port: DEFAULT_REMOTE_PORT,
+      token: "s3cret-token",
+      secure: true,
+    });
     expect(
       parseRemoteTarget(
         ["--host", "greybird", "--port", "9100"],
         { AGENTVOICE_REMOTE_TOKEN: "t" },
         HOME,
       ),
-    ).toEqual({ host: "greybird", port: 9100, token: "t" });
+    ).toEqual({ host: "greybird", port: 9100, token: "t", secure: true });
   });
 
   test("refuses a network attachment it cannot authenticate", () => {

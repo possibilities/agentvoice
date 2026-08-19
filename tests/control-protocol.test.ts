@@ -26,7 +26,7 @@ function roundTripFrame(frame: ServerFrame): ServerFrame | null {
 }
 
 describe("peer → server commands", () => {
-  test("hello round-trips both roles, with and without a token", () => {
+  test("hello round-trips token and per-device proof admission", () => {
     expect(
       roundTripCommand({ type: "hello", protocol: CONTROL_PROTOCOL_VERSION, role: "voice" }),
     ).toEqual({ type: "hello", protocol: CONTROL_PROTOCOL_VERSION, role: "voice" });
@@ -38,6 +38,53 @@ describe("peer → server commands", () => {
         token: "secret",
       }),
     ).toEqual({ type: "hello", protocol: CONTROL_PROTOCOL_VERSION, role: "ui", token: "secret" });
+    expect(
+      roundTripCommand({
+        type: "hello",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        role: "ui",
+        device: { id: "device-id", signature: "signature" },
+      }),
+    ).toEqual({
+      type: "hello",
+      protocol: CONTROL_PROTOCOL_VERSION,
+      role: "ui",
+      device: { id: "device-id", signature: "signature" },
+    });
+  });
+
+  test("pairing commands round-trip and reject malformed identity material", () => {
+    expect(
+      roundTripCommand({
+        type: "pair-begin",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        deviceId: "device",
+        deviceName: "Samsung",
+        publicKey: "public-key",
+        clientNonce: "client-nonce",
+      }),
+    ).toEqual({
+      type: "pair-begin",
+      protocol: CONTROL_PROTOCOL_VERSION,
+      deviceId: "device",
+      deviceName: "Samsung",
+      publicKey: "public-key",
+      clientNonce: "client-nonce",
+    });
+    expect(
+      roundTripCommand({
+        type: "pair-device-confirm",
+        sessionId: "session",
+        signature: "signature",
+      }),
+    ).toEqual({ type: "pair-device-confirm", sessionId: "session", signature: "signature" });
+    expect(roundTripCommand({ type: "pairing-open" })).toEqual({ type: "pairing-open" });
+    expect(roundTripCommand({ type: "pairing-local-confirm", sessionId: "session" })).toEqual({
+      type: "pairing-local-confirm",
+      sessionId: "session",
+    });
+    expect(roundTripCommand({ type: "pairing-cancel" })).toEqual({ type: "pairing-cancel" });
+    expect(parseControlCommand('{"type":"pair-begin","protocol":9,"deviceId":"d"}')).toBeNull();
   });
 
   test("hello without a valid role is refused", () => {
@@ -86,6 +133,64 @@ describe("peer → server commands", () => {
 });
 
 describe("server → peer frames", () => {
+  test("authentication and pairing frames round-trip", () => {
+    expect(
+      roundTripFrame({
+        type: "auth-challenge",
+        protocol: CONTROL_PROTOCOL_VERSION,
+        challenge: "nonce",
+      }),
+    ).toEqual({ type: "auth-challenge", protocol: CONTROL_PROTOCOL_VERSION, challenge: "nonce" });
+    const challenge = {
+      type: "pair-challenge" as const,
+      sessionId: "session",
+      serverId: "server",
+      serverName: "agentvoice",
+      certificate: "certificate",
+      deviceId: "device",
+      clientNonce: "client",
+      serverNonce: "server-nonce",
+      endpoints: ["host.example.ts.net", "100.64.0.1"],
+      port: 8473,
+    };
+    expect(roundTripFrame(challenge)).toEqual(challenge);
+    expect(
+      roundTripFrame({
+        type: "pairing-state",
+        status: "awaiting-confirmation",
+        expiresAt: 1234,
+        sessionId: "session",
+        code: "123 456",
+        deviceName: "Samsung",
+      }),
+    ).toEqual({
+      type: "pairing-state",
+      status: "awaiting-confirmation",
+      expiresAt: 1234,
+      sessionId: "session",
+      code: "123 456",
+      deviceName: "Samsung",
+    });
+    expect(
+      roundTripFrame({
+        type: "pair-complete",
+        serverId: "server",
+        serverName: "agentvoice",
+        certificate: "certificate",
+        deviceId: "device",
+        endpoints: ["host.example.ts.net"],
+        port: 8473,
+      }),
+    ).toEqual({
+      type: "pair-complete",
+      serverId: "server",
+      serverName: "agentvoice",
+      certificate: "certificate",
+      deviceId: "device",
+      endpoints: ["host.example.ts.net"],
+      port: 8473,
+    });
+  });
   test("state round-trips with and without a voice peer", () => {
     const populated: ControlState = {
       type: "state",
@@ -173,5 +278,32 @@ describe("server → peer frames", () => {
     ).toEqual({ type: "route-release", target: "mic", source: "remote:3:key", commit: true });
     expect(roundTripFrame({ type: "route-redial" })).toEqual({ type: "route-redial" });
     expect(roundTripFrame({ type: "voice-superseded" })).toEqual({ type: "voice-superseded" });
+  });
+});
+
+describe("server proof frames", () => {
+  test("hello carries an optional serverChallenge and refuses a malformed one", () => {
+    const hello = parseControlCommand(
+      `{"type":"hello","protocol":${CONTROL_PROTOCOL_VERSION},"role":"ui","serverChallenge":"abc_-123"}`,
+    );
+    expect(hello).toEqual({
+      type: "hello",
+      protocol: CONTROL_PROTOCOL_VERSION,
+      role: "ui",
+      serverChallenge: "abc_-123",
+    });
+    expect(
+      parseControlCommand(
+        `{"type":"hello","protocol":${CONTROL_PROTOCOL_VERSION},"role":"ui","serverChallenge":"bad challenge!"}`,
+      ),
+    ).toBeNull();
+  });
+
+  test("auth-proof round-trips", () => {
+    expect(roundTripFrame({ type: "auth-proof", signature: "c2ln" })).toEqual({
+      type: "auth-proof",
+      signature: "c2ln",
+    });
+    expect(parseServerFrame(`{"type":"auth-proof"}`)).toBeNull();
   });
 });

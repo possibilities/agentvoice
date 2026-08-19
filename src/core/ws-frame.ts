@@ -18,10 +18,16 @@ const ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /** Guards runaway memory on a corrupt length header, far above any real frame. */
 const MAX_MESSAGE_BYTES = 256 * 1024 * 1024;
 
-export function buildHandshakeRequest(key: string): string {
+export function randomMaskKey(): Uint8Array {
+  const mask = new Uint8Array(4);
+  crypto.getRandomValues(mask);
+  return mask;
+}
+
+export function buildHandshakeRequest(key: string, authority = "localhost"): string {
   return [
     "GET / HTTP/1.1",
-    "Host: localhost",
+    `Host: ${authority}`,
     "Upgrade: websocket",
     "Connection: Upgrade",
     `Sec-WebSocket-Key: ${key}`,
