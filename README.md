@@ -4,13 +4,16 @@
 
 Minimal voice system for Codex — talk to a coding agent, hands-free.
 
-`agentvoice` is one voice console: a terminal UI with live meters,
-transcripts, mute controls, and push-to-talk that holds a full-duplex WebRTC
-conversation with a Codex agent. The only other process is the **resident** — a bare
-`codex app-server` kept alive by launchd, serving a private unix socket the
-console attaches to. Threads and dispatched workers live in the resident, so
-they survive console restarts; the console resumes the same **orchestrator
-agent** every time it starts.
+`agentvoice` is a voice console — a terminal UI with live meters, mute
+controls, and push-to-talk that holds a full-duplex WebRTC conversation with
+a Codex agent — in front of two launchd daemons. The **Server** is the
+coordination runtime: it owns the orchestrator thread, workers, account
+rotation, and the control listeners that the console and Remote consoles
+attach to, so the agent stays serviced even with no console open. The
+**resident** is a bare `codex app-server` kept alive by launchd, serving a
+private unix socket the Server attaches to. Threads and dispatched workers
+live in the resident, so they survive everything short of a resident
+restart; the Server resumes the same **orchestrator agent** every time.
 
 There are two agents. The **voice agent** is the realtime speech model you
 actually talk to; the **orchestrator agent** is the Codex thread that does the
@@ -35,9 +38,9 @@ login — **no OpenAI API key**.
 ```bash
 bun install
 bun run setup                        # one-time: verifies bun/codex, builds duplex audio
-bun run src/main.ts resident install # one-time: install + start the resident
+bun run src/main.ts server install   # one-time: install + start the daemon pair
 bun run console                      # the voice console
-bun run src/main.ts console --model gpt-5.6-sol --effort high --voice cove
+bun run src/main.ts server install --model gpt-5.6-sol --effort high --voice cove
 ```
 
 ### A global `agentvoice`
@@ -51,19 +54,27 @@ contract from `~/code/agentvoice` when that checkout exists.
 
 Two exceptions need explicit steps: changes under `src/console/native/`
 require `bun run native:build` (run automatically by `bun run cli:install`),
-and the resident's rendered wrapper/plist bake absolute paths — rerun
-`agentvoice resident install` after moving the checkout, bun, or codex.
+and both daemons' rendered plists bake absolute paths — rerun
+`agentvoice server install` after moving the checkout, bun, or codex.
 
 ```bash
 bun run cli:install
-agentvoice resident install
+agentvoice server install
 agentvoice console
 ```
 
-Flags cover the handful of things worth changing per run; the full surface
-lives in the config file.
+The console keeps only its own device flags; everything that configures the
+agents rides the Server (`agentvoice server install` flags, baked into its
+LaunchAgent, or `server.json`).
 
-| Flag | Default | Meaning |
+| `agentvoice console` flag | Default | Meaning |
+|---|---|---|
+| `--device <index>` | system default | Microphone device index |
+| `--output-device <index>` | system default | Speaker device index |
+| `--fresh` | off | Abandon the persisted orchestrator agent; start a fresh thread |
+| `--debug` | off | Write media traces to the state directory |
+
+| `agentvoice server install` flag | Default | Meaning |
 |---|---|---|
 | `--model <id>` | codex config | Orchestrator agent model — the agent that does the actual work |
 | `--effort <level>` | codex config | Orchestrator agent reasoning effort (`none…ultra`); think-time per turn |
@@ -73,11 +84,36 @@ lives in the config file.
 | `--sandbox <mode>` | `danger-full-access` | `read-only` \| `workspace-write` \| `danger-full-access` |
 | `--approval-policy <p>` | `never` | `never` \| `on-request` \| `untrusted` |
 | `--codex <path>` | `$CODEX_PATH` or `codex` | Codex binary the resident runs |
-| `--device <index>` | system default | Microphone device index |
-| `--output-device <index>` | system default | Speaker device index |
-| `--fresh` | off | Abandon the persisted orchestrator agent; start a fresh thread |
 | `--config <path>` | `~/.config/agentvoice/server.json` | Config file location |
-| `--debug` | off | Write protocol and media traces to the state directory |
+| `--debug` | off | Write a protocol debug log to the state directory |
+
+## The Server
+
+The Server (`com.agentvoice.server`) is the coordination runtime, headless
+under launchd: it holds the attachment to the resident, resumes the
+persisted orchestrator agent, answers worker dispatch, publishes worker
+reports, rotates accounts at idle, and serves the two control listeners —
+the owner-only unix socket (`control.sock`) and the opt-in tailnet
+WebSocket. Consoles and Remote consoles are its peers: at most one **voice
+peer** (the Console — it owns the microphone, speaker, and media session;
+a newer console supersedes the incumbent, which keeps running as a mirror)
+and any number of **ui peers** (Remote consoles).
+
+It originates no inference of its own. Unattended, it only lets work you
+already set in motion finish — dispatched workers complete and their
+reports land — and it stops the voice session the moment its voice peer
+disappears, so realtime inference never idles along unattended.
+
+```bash
+agentvoice server install    # render the LaunchAgent (+ resident if missing), load, start
+agentvoice server status     # launchd state, control socket, resident presence
+agentvoice server restart    # kickstart the Server
+agentvoice server uninstall  # unload and remove the LaunchAgent (resident stays)
+agentvoice server run        # foreground, for development
+```
+
+Its log is `~/.local/state/agentvoice/server/server.log`; `--debug` (baked
+at install) adds `server-debug.log` with protocol frames.
 
 ## The resident
 
@@ -85,7 +121,7 @@ The resident is deliberately vendor-only: launchd runs a rendered wrapper
 script that consults the account balancer (see
 [balancing](#multi-account-balancing)), then `exec`s
 `codex app-server --enable realtime_conversation --listen unix://…`. No
-agentvoice code stays resident, so console-side edits never require touching
+agentvoice code runs inside it, so agentvoice edits never require touching
 it — only codex upgrades or moved paths do (`agentvoice resident install` is
 idempotent; rerun it).
 
@@ -96,10 +132,11 @@ agentvoice resident restart    # kickstart onto a fresh balancer pick
 agentvoice resident uninstall  # unload and remove the LaunchAgent
 ```
 
-Because threads live in the resident, quitting the console hangs up the voice
-session but leaves the orchestrator agent and any running workers intact; the
-next `agentvoice console` resumes the same thread and re-adopts the workers. `--fresh`
-(or the `f` key) is the deliberate way to start over.
+Because threads live in the resident and the Server stays attached, quitting
+the console hangs up the voice session and nothing else: the orchestrator
+agent and any running workers stay serviced around the clock, and the next
+`agentvoice console` walks back into the same conversation. `--fresh` (or
+the `f` key) is the deliberate way to start over.
 
 Logs live in `~/.local/state/agentvoice/resident/`: `resident.log` (the
 app-server's stderr) and `pick.log` (each spawn's account pick and why).
@@ -109,7 +146,7 @@ app-server's stderr) and `pick.log` (each spawn's account pick and why).
 `$XDG_CONFIG_HOME/agentvoice/server.json` (default `~/.config/…`).
 Precedence: **CLI > file > default**. An option left unset is not sent to codex
 at all, so your `~/.codex/config.toml` applies — the defaults add no opinions
-of their own. The console reads the file at start; the resident's wrapper
+of their own. The Server reads the file at start; the resident's wrapper
 reads it at every spawn.
 
 This section is the surface; **[the agent priming field
@@ -164,8 +201,8 @@ applies inside `config` and `extra` to the JSON Schema: it declares them as
 free-form objects, so editor validation ends at their boundary.)
 
 `voice.name` is the only live-watched key. A valid change redials only the
-realtime voice session; the console, attachment, and orchestrator thread stay
-in place. Invalid, unchanged, and unrelated edits are ignored for live
+realtime voice session; the Server's attachment and the orchestrator thread
+stay in place. Invalid, unchanged, and unrelated edits are ignored for live
 reaction. Every other config key remains boot-time configuration.
 
 ### Prompts
@@ -192,11 +229,10 @@ Three states, so you can strip a built-in prompt as well as replace it:
 - **present, empty** — the field is sent empty, stripping the built-in prompt
 
 Seed files become `initialItems` in fixed developer → user → assistant order,
-one item each; for interleaving or repeats use `voice.extra.initialItems`. The
-console shows the prompt count in its session panel.
+one item each; for interleaving or repeats use `voice.extra.initialItems`.
 
 Two cautions. `ORCHESTRATOR_BASE.md` replaces codex's *entire* system prompt
-including its tool discipline — the console warns at boot when it is present
+including its tool discipline — the Server warns at boot when it is present
 (it also silently disables `orchestrator.personality`). And while
 `ORCHESTRATOR_SESSION_START.md` rides on **every** redial, codex delivers it
 to the orchestrator only when a voice session actually opens after being
@@ -208,19 +244,19 @@ while a session is live, so keep it short. Details and verified semantics:
 
 `orchestrator.dispatch: true` declares three dynamic tools on the
 orchestrator's thread — `dispatch_worker`, `check_workers`, `cancel_worker` —
-answered by the console. A dispatched worker is a sibling codex thread with
+answered by the Server. A dispatched worker is a sibling codex thread with
 its own context: it inherits the orchestrator's execution posture (sandbox,
 approvals, model, `config:` layer) but no prompt files and no dispatch tools.
 The orchestrator's turn ends immediately with a speakable handle (`w1`).
 
-Workers live in the resident, so they keep running while the console is away.
-The console persists its registry and reconciles on attach: still-running
-workers are re-adopted (their completions flow again), turns that finished
-while detached publish their reports from thread history, and a turn left
-waiting on a dead console's tool answer is interrupted. Only a resident
-restart makes a worker `lost`.
+Workers live in the resident and the Server answers for them around the
+clock — no console needs to be open. The Server persists its registry and
+reconciles on attach: still-running workers are re-adopted (their
+completions flow again), turns that finished while it was down publish their
+reports from thread history, and a turn left waiting on a dead Server's tool
+answer is interrupted. Only a resident restart makes a worker `lost`.
 
-The console owns each worker thread before starting its turn, then retires it
+The Server owns each worker thread before starting its turn, then retires it
 after the terminal outcome has supplied the status and final message.
 Materialized workers are archived — history remains listable, while the live
 thread and its MCP/runtime resources shut down immediately. A thread whose
@@ -233,7 +269,7 @@ Codex's `threadSource` metadata for durable inventory.
 Completion has two modes, and the tool descriptions promise whichever one is
 on. The default is **pull-only**: nothing is pushed when a worker finishes;
 `check_workers` reads status and results. `orchestrator.dispatch-reports:
-true` turns on the **evented** mode: the console starts a `<worker_report>`
+true` turns on the **evented** mode: the Server starts a `<worker_report>`
 turn on the orchestrator's thread carrying the status and the worker's final
 message — upstream admission steers it into a running turn or opens a fresh
 one, so reports land whether or not a conversation is mid-flight. Evented is
@@ -264,14 +300,15 @@ agentvoice accounts list
 
 Selection runs at every resident spawn (install, crash restarts, rotation).
 When the active account crosses `accounts.switch-threshold` (default 95% of
-either rate-limit window), the console rotates: at the next idle moment — no
+either rate-limit window), the Server rotates: at the next idle moment — no
 voice session, no running turn, no live workers — it kickstarts the resident,
 whose wrapper picks the next account, and reattaches to the same orchestrator
 thread.
 
 Refusal posture: balancing on with codex-swap installed but **no profile
-logged in is a configuration error — the console refuses to boot with the
-exact `accounts add` commands** for the registered pool. Everything else
+logged in is a configuration error — the Server refuses to start, logging the
+exact `accounts add` commands** for the registered pool (`agentvoice server
+status` and `server.log` surface it). Everything else
 degrades: without the balancer CLIs the same config quietly runs the canonical
 `~/.codex` (one config deploys to every machine), and transient refusals at a
 spawn fall back loudly in `pick.log` for that spawn. With balancing off,
@@ -286,16 +323,17 @@ under the realtime surface; see AGENTS.md invariant 10).
 ## Security posture
 
 By default nothing listens on the network. The resident serves a unix socket
-created mode 0600 inside a 0700 directory; the console's control socket
-(`console.sock`) is owner-only too — **file permissions are the boundary
+created mode 0600 inside a 0700 directory; the Server's control socket
+(`control.sock`) is owner-only too — **file permissions are the boundary
 between local users**, and there is no port for a browser or another machine
-to probe. The console control socket doubles as the single-console lock: a
-second `agentvoice console` refuses to start while one is running.
+to probe. The control socket doubles as the single-Server lock. Consoles are
+arbitrated rather than locked: a second `agentvoice console` supersedes the
+first, which keeps running as an audio-less mirror.
 
 Setting `remote.listen` opts into one exception, and moves the boundary with
-it: a Remote console on another machine reaches the Console over a tailnet
-port, where file permissions mean nothing and `remote.token` is the whole
-admission check. That token grants microphone control, so treat it like a
+it: a peer on another machine reaches the Server over a tailnet port, where
+file permissions mean nothing and `remote.token` is the whole admission
+check. That token grants microphone control, so treat it like a
 credential — `server.json` mode 0600, and a fresh token if it ever leaks. The
 range restriction on `remote.listen` exists to keep that port on a network
 WireGuard is already authenticating.
@@ -311,16 +349,16 @@ workspace-write` narrows writes to the workspace, which at the default is no
 narrower; pair it with `--workspace <dir>` to make it mean something.
 
 To control a session from another device, SSH in and use the
-[Remote console](#phone-remote) — audio stays on the console's machine.
+[Remote console](#phone-remote) — audio stays on the Console's machine.
 
 ## The voice console
 
-`agentvoice console` attaches to the resident, resumes (or starts) the orchestrator
-agent, and opens a full-duplex voice console. Capture and playback both run on
-one client-owned miniaudio duplex device with bounded PCM rings; audio is
-exchanged as Opus over WebRTC directly with the voice agent, and the console
-renders live meters, sparklines, and finished-turn transcripts
-(`you · …` / `agent · …`).
+`agentvoice console` attaches to the Server as its voice peer and opens a
+full-duplex voice console against the orchestrator agent the Server keeps
+resumed. Capture and playback both run on one Console-owned miniaudio duplex
+device with bounded PCM rings; audio is exchanged as Opus over WebRTC
+directly with the voice agent — media never touches the Server, which
+carries only signaling and control.
 
 ```bash
 bun run console                                  # or: agentvoice console
@@ -370,9 +408,10 @@ The device is built from source and the console refuses to start without it —
 
 ### Phone remote
 
-With the console running, open the narrow Remote console — from a terminal on
-the Console's own machine (SSH in from a phone, or just another tab), or from
-any machine on the tailnet once `remote.listen` is configured below:
+Open the narrow Remote console — from a terminal on the Server's own
+machine (SSH in from a phone, or just another tab), or from any machine on
+the tailnet once `remote.listen` is configured below. The Server is always
+up, so this works even while no Console is open:
 
 ```bash
 ssh laptop
@@ -393,23 +432,25 @@ shows TALKING only for a sustained hold. Otherwise `m`/`s` remain toggles and
 and Remote console run the same TUI implementation; only their state/action
 hosts differ.
 
-The Remote console connects to the Console — not the resident. It carries only
-dB signal readings, persistent and effective mute state, voice-session phase
-and elapsed time, source-owned unmute holds, Redial, and Fresh. Audio always
-stays on the Console's machine; for the intended setup, that machine's
-Bluetooth audio remains the listening path. The protocol is a lockstep
-contract rather than a compatibility surface — a version mismatch is refused
-in words, so restart both processes after upgrading. The Remote console waits
-and reconnects automatically when the Console is not running or restarts.
+The Remote console connects to the Server — not the resident, and not the
+Console. It carries only dB signal readings, persistent and effective mute
+state, voice-session phase and elapsed time, source-owned unmute holds,
+Redial, and Fresh; with no Console attached it shows the field waiting, and
+Fresh still works. Audio always stays on the Console's machine; for the
+intended setup, that machine's Bluetooth audio remains the listening path.
+The protocol is a lockstep contract rather than a compatibility surface — a
+version mismatch is refused in words, so restart the peers after upgrading.
+The Remote console waits and reconnects automatically when the Server
+restarts.
 
 Two listeners carry that identical protocol.
 
-**On the Console's own machine**, `agentvoice remote` attaches through
-`~/.local/state/agentvoice/console.sock`, an owner-only Unix socket, with no
+**On the Server's own machine**, `agentvoice remote` attaches through
+`~/.local/state/agentvoice/control.sock`, an owner-only Unix socket, with no
 configuration at all.
 
-**From another machine**, the Console additionally serves a WebSocket over the
-tailnet. Set both keys in `server.json` on the Console's machine:
+**From another machine**, the Server additionally serves a WebSocket over the
+tailnet. Set both keys in `server.json` on the Server's machine:
 
 ```jsonc
 {
@@ -425,7 +466,7 @@ then, from the other machine, `agentvoice remote --host 100.114.244.89
 
 Tailscale is load-bearing here, not incidental: **agentvoice adds no transport
 encryption of its own**, so WireGuard is what supplies the encryption and
-machine identity, and the token is only the Console's admission check on top.
+machine identity, and the token is only the Server's admission check on top.
 `remote.listen` therefore refuses any address outside `100.64.0.0/10`,
 `fd7a:115c:a1e0::/48`, and loopback unless `remote.allow-any-address` is set —
 that token grants microphone control, so keep `server.json` mode 0600. Expect
@@ -433,18 +474,20 @@ tailnet round-trips when Tailscale negotiates a direct path and noticeably
 more when it falls back to a DERP relay; `tailscale status` says which you
 have.
 
-A network Remote console beats every 1.5 s. If the Console stops hearing it
-for 4 s, it releases that Remote console's unmute holds — a dead peer's TCP
-close can lag by minutes, and until it lands the Console would still believe a
-push-to-talk hold were open, leaving the microphone live with nobody holding
-it.
+A network peer beats every 1.5 s. If the Server stops hearing it for 4 s, it
+releases that peer's unmute holds — a dead peer's TCP close can lag by
+minutes, and until it lands the Console would still believe a push-to-talk
+hold were open, leaving the microphone live with nobody holding it. The
+Console carries the same doctrine one level down: if its own link to the
+Server drops, it releases every remote-sourced hold locally.
 
 ### Android Remote console
 
 The tracked `droidedtui.json` packages the Remote console as a native Android
-app while keeping `src/console/remote-ui.ts` as the entire visible
-implementation. DroidedTUI initializes OpenTUI, invokes the exported
-`runRemote` function with bounded package arguments, and supplies the Android
+app while keeping `src/console/host.ts` as the entire visible
+implementation (the media engine is imported lazily, so the package never
+loads it). DroidedTUI initializes OpenTUI, invokes the exported
+`runConsoleHost` function with bounded package arguments, and supplies the Android
 host, PTY, Ghostty terminal surface, touch translation, lifecycle, and APK.
 There is no WebView or second UI implementation.
 
@@ -476,24 +519,27 @@ keyboard.
 - `~/.local/state/agentvoice/resident/` — the resident bundle (0700): the
   app-server unix socket, the rendered wrapper (`run.sh`), `resident.log`,
   `pick.log`, and `resident.json` (the active account pick).
+- `~/.local/state/agentvoice/server/` — the Server bundle (0700):
+  `server.log` and, with `--debug`, `server-debug.log`.
 - `~/.local/state/agentvoice/thread.json` — the persisted orchestrator
   threadId, resumed on attach. Delete it (or use `--fresh`) to start over.
 - `~/.local/state/agentvoice/workers.json` — the persisted worker registry,
   reconciled against the resident on attach.
-- `~/.local/state/agentvoice/console.sock` — ephemeral owner-only IPC between
-  the running console and any same-machine Remote consoles, and the
-  single-console lock. It never carries audio. Remote consoles on other
+- `~/.local/state/agentvoice/control.sock` — the Server's ephemeral
+  owner-only control listener for same-machine Consoles and Remote consoles,
+  and the single-Server lock. It never carries audio. Peers on other
   machines arrive over the `remote.listen` port instead, never through here.
 - `~/.local/state/agentvoice/accounts/<slug>` — account profiles for
   multi-account balancing: a real `auth.json` and private app-server control
   directory per account, with session/config state symlinked to `~/.codex`.
   Safe to delete; recreate with
   `agentvoice accounts add`.
-- `~/Library/LaunchAgents/com.agentvoice.resident.plist` — the resident's
-  LaunchAgent, rendered by `agentvoice resident install`.
+- `~/Library/LaunchAgents/com.agentvoice.resident.plist` and
+  `com.agentvoice.server.plist` — the two LaunchAgents, rendered by
+  `agentvoice resident install` and `agentvoice server install`.
 - `~/.config/agentvoice/` — `server.json` (with `server.schema.json` beside
   it for editor validation) and the prompt files beside it.
 
-The orchestrator agent persists across console runs (`thread.json`); prompt
-files are read at console start, so editing one takes effect on the next
-`agentvoice console`.
+The orchestrator agent persists across Server and console runs
+(`thread.json`); prompt files are read at Server start, so editing one takes
+effect on the next `agentvoice server restart`.

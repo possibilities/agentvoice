@@ -293,7 +293,7 @@ export const remoteValuesSchema = z
       .string()
       .meta({
         description:
-          "Address the Console binds so Remote consoles on OTHER machines can attach (`agentvoice remote --host <this address>`). Print this machine's with `tailscale ip -4`. Must be a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48) or loopback unless `allow-any-address` is set — the tailnet is what supplies encryption and machine identity here. Default: unset, and only same-machine Remote consoles can attach.",
+          "Address the Server binds so peers on OTHER machines can attach (`agentvoice remote --host <this address>`). Print this machine's with `tailscale ip -4`. Must be a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48) or loopback unless `allow-any-address` is set — the tailnet is what supplies encryption and machine identity here. Default: unset, and only same-machine peers can attach.",
         default: null,
       })
       .optional(),
@@ -311,7 +311,7 @@ export const remoteValuesSchema = z
       .min(MINIMUM_REMOTE_TOKEN_LENGTH)
       .meta({
         description:
-          "Shared secret a network Remote console presents to attach (`--token`, or $AGENTVOICE_REMOTE_TOKEN on the remote machine). Required whenever `listen` is set: crossing machines retires file permissions as the boundary, and this token grants microphone control. Generate one with `openssl rand -hex 24` and keep server.json 0600.",
+          "Shared secret a network peer presents to attach (`--token`, or $AGENTVOICE_REMOTE_TOKEN on the remote machine). Required whenever `listen` is set: crossing machines retires file permissions as the boundary, and this token grants microphone control. Generate one with `openssl rand -hex 24` and keep server.json 0600.",
         default: null,
       })
       .optional(),
@@ -326,7 +326,7 @@ export const remoteValuesSchema = z
   })
   .meta({
     description:
-      "Where Remote consoles attach. The unix socket under the state directory always serves same-machine Remote consoles; these keys additionally serve them across machines over a tailnet.",
+      "Where the Server serves its control peers — Consoles and Remote consoles. The unix socket under the state directory always serves same-machine peers; these keys additionally serve them across machines over a tailnet.",
   });
 
 const serverShape = {

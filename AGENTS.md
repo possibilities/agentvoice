@@ -1,7 +1,9 @@
 # agentvoice — repository guidance
 
-Minimal voice system for Codex: one voice console attached to a
-launchd-resident `codex app-server` over a private unix socket. Read
+Minimal voice system for Codex: a launchd-resident Server (the
+coordination runtime) attached to a launchd-resident `codex app-server`
+over a private unix socket, with the voice console and Remote consoles as
+control-attachment peers of the Server. Read
 `README.md` for usage, `CONTEXT.md` for the glossary — use its canonical
 terms in code, comments, and commit messages.
 
@@ -10,9 +12,11 @@ terms in code, comments, and commit messages.
 - `bun test` — unit tests (pure logic only; no codex or audio needed)
 - `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
 - `bun run lint` / `bun run format` — Biome check / autofix
-- `bun run console` — the real thing (needs the resident installed:
-  `agentvoice resident install`, codex ≥ 0.147 logged in, a built duplex
+- `bun run console` — the real thing (needs the daemon pair installed:
+  `agentvoice server install`, codex ≥ 0.147 logged in, a built duplex
   device, and a microphone)
+- `bun run server` — the Server in the foreground (what the LaunchAgent
+  invokes; `agentvoice server install` is the daemon form)
 - `bun run native:build` / `bun run audio:probe` — build and exercise the
   duplex audio device (needs Zig or a C11 compiler; the probe needs audio
   hardware). `bun run setup` builds it; the console will not start without it
@@ -24,14 +28,15 @@ terms in code, comments, and commit messages.
 
 ## Map
 
-One program, three layers. `src/` root holds the entry and shared utilities;
+One program, four layers. `src/` root holds the entry and shared utilities;
 everything else belongs to exactly one layer.
 
-- `src/main.ts` — CLI entry: `console`, `resident`, `accounts`, and `remote`
-  are subcommands; the bare command prints usage
+- `src/main.ts` — CLI entry: `console`, `server`, `resident`, `accounts`,
+  and `remote` are subcommands; the bare command prints usage
 - `src/paths.ts` — XDG path resolution: state files, the resident socket,
   the config location
-- `src/core/` — the coordination layer (attached to the resident, no UI):
+- `src/core/` — the coordination layer (attached to the resident, no UI),
+  plus the pure codecs both sides of the control attachment share:
   - `config-schema.ts` — the `server.json` surface as a zod schema, the
     single source of truth: `config.ts` validates files with it, and
     `scripts/generate-schema.ts` generates `server.schema.json` from it.
@@ -44,6 +49,10 @@ everything else belongs to exactly one layer.
     `thread/realtime/start` payloads; tested in `tests/params.test.ts`
   - `ws-frame.ts` — pure RFC 6455 client codec for the resident's socket
     transport; tested in `tests/ws-frame.test.ts`
+  - `control-protocol.ts` — the control attachment's wire protocol (v8),
+    pure: peer roles (`ui`/`voice`), state fan-out, routed audio commands,
+    and the session-signaling frames that were the in-process
+    runtime↔transport interface; tested in `tests/control-protocol.test.ts`
   - `attach.ts` — the attachment: JSON-RPC over WebSocket framing over the
     resident's unix socket; request/notify, notification fan-out, fail-closed
     denial of approval requests (an optional `onRequest` answerer may claim a
@@ -64,15 +73,23 @@ everything else belongs to exactly one layer.
     thread (resume on attach, `fresh` to abandon), stranded-turn interruption
     and worker reconciliation on attach, rotation via `launchctl kickstart`
     at idle
-- `src/console/` — the surface: `transport.ts` (werift WebRTC peer, two-peer
-  redial, driven by runtime events), `duplex-audio.ts` + `duplex-device.ts` +
-  `native/` (the duplex audio device — the only audio path), `dsp.ts` (pure
-  audio math, tested), `tui.ts` (the one OpenTUI instrument shared by both
-  modes), `ui.ts` (the Console host), `remote-ui.ts` (the Remote-console host),
-  and the remaining `remote-*` files (the control attachment: one JSON
-  protocol over an owner-only unix socket for same-machine Remote consoles and
-  an opt-in tailnet WebSocket, `remote.listen`, for other machines — see
-  `docs/adr/0003-*`)
+- `src/server/` — the Server (`com.agentvoice.server`, launchd-resident,
+  headless): `control.ts` (both control listeners — the owner-only unix
+  socket, which is also the single-Server lock, and the opt-in tailnet
+  WebSocket `remote.listen` — with peer admission, roles, and voice-peer
+  supersede; see `docs/adr/0003-*` and `0004-*`), `host.ts` (`server run`:
+  hosts the runtime, relays session signaling to the voice peer, routes ui
+  commands, fans state out; originates no inference), `install.ts` (the
+  LaunchAgent: install ensures the resident first, and the config-layer CLI
+  flags are baked into its spawn contract)
+- `src/console/` — the surface, a control-attachment peer: `host.ts` (the one
+  host for both roles — with a media engine it is the Console/voice peer,
+  without one the Remote console/ui peer; media imports stay lazy so the
+  Android package never loads them), `transport.ts` (werift WebRTC peer,
+  two-peer redial, driven by session frames off the link), `duplex-audio.ts`
+  + `duplex-device.ts` + `native/` (the duplex audio device — the only audio
+  path), `dsp.ts` (pure audio math, tested), and `tui.ts` (the one OpenTUI
+  instrument both roles share)
 - `src/resident/` — the resident bundle: `contract.ts` (spawn contract,
   socket, account state file), `install.ts` (wrapper + LaunchAgent rendering,
   install/status/restart/uninstall, and the wrapper's per-spawn `pick-home`)
@@ -184,7 +201,7 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
     console restarts don't accumulate empty loaded threads.
 15. An **unanswered dynamic tool call parks its turn indefinitely** (thread
     `active`, turn `inProgress`, ≥60 s observed); `turn/interrupt` clears it.
-    The answerable connection dies with the console, so on attach the runtime
+    The answerable connection dies with the Server, so on attach the runtime
     interrupts turns stranded on the orchestrator's thread.
 16. The realtime surface works identically from a socket connection —
     start/sdp answer/started/stop all verified over `unix://` with the
@@ -211,11 +228,12 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
   honored): `app-server` (stable resident cwd — must
   outlive the process; it re-reads its own cwd on every thread start),
   `resident/` (0700: the app-server socket, rendered wrapper, pick log, and
-  `resident.json` account state), `thread.json` (the persisted orchestrator
-  threadId, resumed on attach), `workers.json` (the persisted worker
-  registry, reconciled on attach), `console.sock` (owner-only IPC between the
-  console and same-machine Remote consoles — also the single-console lock, so
-  it stays bound even when `remote.listen` serves other machines too),
+  `resident.json` account state), `server/` (0700: the Server's launchd log),
+  `thread.json` (the persisted orchestrator threadId, resumed on attach),
+  `workers.json` (the persisted worker registry, reconciled on attach),
+  `control.sock` (the Server's owner-only control listener for same-machine
+  Consoles and Remote consoles — also the single-Server lock, so it stays
+  bound even when `remote.listen` serves other machines too),
   `accounts/<slug>` (account profiles: a real `auth.json`, a private
   `app-server-control/`, and a symlink farm over shared canonical `~/.codex`
   state, reconciled at every pick).
@@ -236,7 +254,8 @@ lives in two siblings, and some changes here must cascade:
 - General agent doctrine — collab, build, story, the resource skills — is
   `~/code/agentguidance`; tool-specific runbooks stay here.
 - **LaunchAgent exception:** fleet apps normally keep their plists in
-  AgentStart, but `com.agentvoice.resident` is rendered and owned *here*
-  (`src/resident/install.ts`) — the resident's spawn contract (account pick,
-  socket path, realtime flag) is this repo's load-bearing surface, and the
-  installer bakes absolute paths that must move with this checkout.
+  AgentStart, but `com.agentvoice.resident` (`src/resident/install.ts`) and
+  `com.agentvoice.server` (`src/server/install.ts`) are rendered and owned
+  *here* — the spawn contracts (account pick, socket paths, realtime flag,
+  baked config flags) are this repo's load-bearing surface, and both
+  installers bake absolute paths that must move with this checkout.

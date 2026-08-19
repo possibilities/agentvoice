@@ -9,13 +9,22 @@ the balancer at every spawn. _Avoid_: "daemon", "service", "backend server".
 as JSON-RPC over WebSocket framing on its unix socket. _Avoid_: "codex
 process".
 
-**Console** — The one agentvoice process (`agentvoice console`): TUI, duplex audio,
-WebRTC peer, and the coordination runtime, attached to the resident. Audio
-flows console↔voice agent peer-to-peer; only coordination crosses the
-attachment. _Avoid_: "client" (the pre-collapse two-app term), "browser",
-"surface".
+**Server** — The launchd-resident coordination daemon
+(`com.agentvoice.server`): it owns the Attachment to the resident, the
+persisted orchestrator agent, workers, and rotation, and serves both control
+listeners. It routes commands to the Voice peer and fans state out to ui
+peers; it holds no mute truth and originates no inference of its own.
+_Avoid_: "av server", "backend", and confusion with the App-server it
+attaches to.
 
-**Attachment** — The console's connection to the resident: one WebSocket-
+**Console** — The voice-peer process (`agentvoice console`): the shared TUI
+plus the media engine — duplex audio, WebRTC peer, both mute gates — attached
+to the Server over the Control attachment in the `voice` role. Audio flows
+console↔voice agent peer-to-peer; only control and session signaling cross
+the attachment. _Avoid_: "client", "browser", "surface", and the pre-split
+sense of "the one agentvoice process".
+
+**Attachment** — The Server's connection to the resident: one WebSocket-
 framed unix-socket connection with its own `initialize`. Reattach replaces
 it after a drop; the resident and its threads persist across attachments.
 _Avoid_: "connection" alone (ambiguous with the voice session), "reconnect"
@@ -55,34 +64,45 @@ the files that task produces. _Avoid_: "cwd" (reserved for the resident's own
 working directory), "scratch directory".
 
 **Remote console** — The phone-sized terminal control surface started with
-`agentvoice remote`, on the console's machine or on another one. It attaches
-to the console over the control attachment and carries mute state, persistent
-assignments, source-owned unmute holds, dB signal readings, voice-session
-status, Redial, and Fresh—never audio. It and the Console host the same TUI
-implementation. Both ship together, so the protocol advances in lockstep
-without compatibility shims. _Avoid_: "remote client" (the console remains the
-sole media peer), "phone app".
+`agentvoice remote`, on the Server's machine or on another one. It attaches
+to the Server over the Control attachment in the `ui` role — reachable even
+while no Console is open — and carries mute state, persistent assignments,
+source-owned unmute holds, dB signal readings, voice-session status, Redial,
+and Fresh—never audio. It and the Console are the same host implementation.
+Both ship together, so the protocol advances in lockstep without
+compatibility shims. _Avoid_: "remote client" (the Console remains the sole
+media peer), "phone app".
 
-**Control attachment** — A Remote console's link to the Console, one JSON
-protocol over either of two listeners: the owner-only unix socket
-(`console.sock`) for the console's own machine, and a tailnet WebSocket
-(`remote.listen`) for any other. Both are first-class; the unix socket is not
-a legacy path. _Avoid_: "control socket" (names only one of the two), "remote
-IPC" (it is no longer only local).
+**Control attachment** — A peer's link to the Server, one JSON protocol over
+either of two listeners: the owner-only unix socket (`control.sock`) for the
+Server's own machine, and a tailnet WebSocket (`remote.listen`) for any
+other. Every attachment opens with a hello declaring its peer role — `ui`
+(mirror and command) or `voice` (the media owner) — and both listeners are
+first-class; the unix socket is not a legacy path. _Avoid_: "control socket"
+(names only one of the two), "remote IPC" (it is no longer only local).
 
-**Attachment token** — The pre-shared secret (`remote.token`) a Remote console
+**Voice peer** — The one control-attachment peer holding the `voice` role:
+it owns the Duplex audio device, the WebRTC media session, and both mute
+gates, applies routed commands locally, and publishes instrument state up.
+The Console today; a mobile app someday. A newer voice hello supersedes the
+incumbent, which is demoted to a ui peer; the Server stops the voice session
+the moment its voice peer detaches. _Avoid_: "media client", "audio peer".
+
+**Attachment token** — The pre-shared secret (`remote.token`) a network peer
 presents to attach over the network listener. It replaces file permissions as
 the admission check the moment the link leaves the machine, and it grants
 microphone control. _Avoid_: "password", "api key", and confusion with
 `surface.token`, which is a herdr pane metadata key.
 
-**Heartbeat deadline** — How long the Console will keep honoring a network
-Remote console's unmute holds without hearing from it. Past it the holds are
-released without waiting for a close, because a dead peer's TCP close can lag
-by minutes and a stranded hold means a live microphone nobody is holding.
-_Avoid_: "timeout" (the attachment itself may still recover), "keepalive".
+**Heartbeat deadline** — How long the Server will keep honoring a network
+peer's unmute holds without hearing from it. Past it the holds are released
+without waiting for a close, because a dead peer's TCP close can lag by
+minutes and a stranded hold means a live microphone nobody is holding. The
+Voice peer carries the same doctrine one level down: a dropped control
+attachment releases every remote-sourced hold locally. _Avoid_: "timeout"
+(the attachment itself may still recover), "keepalive".
 
-**Duplex audio device** — The console's client-owned miniaudio device and its
+**Duplex audio device** — The Console's own miniaudio device and its
 only audio path: one `ma_device_type_duplex` whose native callback moves raw
 PCM through a capture ring and a playback ring. It is independent of OpenTUI's
 audio engine and stays open across redials. _Avoid_: "OpenTUI audio".
@@ -137,9 +157,8 @@ The voice session is never told. _Avoid_: "summarization", "truncation".
 **Worker** — a sibling codex thread the orchestrator agent dispatches
 asynchronous work to, with its own context and the orchestrator's execution
 posture but none of its prompts. Addressed by a speakable handle (`w1`), never
-a thread id. Workers live in the resident: they keep running while the console
-is detached and are re-adopted on attach; only a resident restart makes one
-`lost`. Its task outcome remains readable after its thread is retired;
+a thread id. Workers live in the resident: they keep running across Server restarts and
+are re-adopted on attach; only a resident restart makes one `lost`. Its task outcome remains readable after its thread is retired;
 completed turns are archived, while a thread whose first turn was definitively
 rejected is deleted. _Avoid_: subagent (codex's in-thread feature,
 deliberately disabled), background task.
@@ -157,16 +176,16 @@ unload).
 
 **Dispatch** — the `orchestrator.dispatch` surface: three dynamic tools
 (`dispatch_worker`, `check_workers`, `cancel_worker`) declared on the
-orchestrator's thread, answered by the console. _Avoid_: delegation (reserved
+orchestrator's thread, answered by the Server. _Avoid_: delegation (reserved
 for voice→orchestrator), spawn.
 
-**Worker report** — the `<worker_report>` turn the console starts on the
+**Worker report** — the `<worker_report>` turn the Server starts on the
 orchestrator's thread when a worker's turn completes, under
 `orchestrator.dispatch-reports` (off by default — pull-only reading through
 `check_workers`): status plus the worker's final message, trimmed. Arrives
-mid-turn as steered input or opens a fresh turn, and still publishes on
-attach for turns that finished while the console was detached. _Avoid_:
-callback, notification (reserved for JSON-RPC).
+mid-turn as steered input or opens a fresh turn, at any hour — the Server
+needs no console attached to publish it. _Avoid_: callback, notification
+(reserved for JSON-RPC).
 
 **Account profile** — a per-account `CODEX_HOME` under
 `~/.local/state/agentvoice/accounts/<slug>/`: its own `auth.json` (a separate
@@ -181,9 +200,9 @@ spawn when `accounts.balance` is on: `agentusage balance codex`, falling back
 to `codex-swap select`. Its pick is mapped to an account profile by email and
 recorded in `resident.json`. Transient refusals degrade to the canonical
 home; balancing configured with codex-swap installed but nothing onboarded
-refuses console boot, with instructions. _Avoid_: "load balancer", "router".
+refuses Server boot, with instructions in its log. _Avoid_: "load balancer", "router".
 
-**Rotation** — the resident restart (`launchctl kickstart -k`) the console
+**Rotation** — the resident restart (`launchctl kickstart -k`) the Server
 triggers after the active account crosses `accounts.switch-threshold`, taken
 only when idle: no voice session, no running orchestrator turn, no live
 workers. The wrapper's next pick is authoritative; the orchestrator thread
