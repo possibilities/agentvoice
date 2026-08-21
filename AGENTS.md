@@ -245,19 +245,15 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
 This checkout is one of the agent* fleet under `~/code`. Shared machinery
 lives in two siblings, and some changes here must cascade:
 
-- Skills under `skills/<name>/` ship globally through AgentStart's scan
+- Skills under `skills/<name>/` ship through AgentStart's private core plugin
   (`~/code/agentstart/scripts/sync-skills`, run six-hourly by the scheduled
-  updater): a SKILL.md edit is live within six hours, or on demand by
-  running that script. Whether a new skill earns a TOOLS.md advertisement
-  line is a deliberate decision — `agentwiki get tool-advertisement-policy`.
+  updater): Claude Code and Codex expose them under the `agentstart-core`
+  plugin namespace, while Pi uses the plain skill name. A SKILL.md edit is
+  live within six hours, or on demand by running that script. Whether a new
+  skill earns a TOOLS.md advertisement line is a deliberate decision —
+  `agentwiki get tool-advertisement-policy`.
 - Adding or removing a call to another fleet tool changes the fleet map:
   update `~/code/agentstart/skills/fleet/MAP.md` (served by the `fleet`
   skill, every edge with evidence) in the same change.
 - General agent doctrine — collab, build, story, the resource skills — is
   `~/code/agentguidance`; tool-specific runbooks stay here.
-- **LaunchAgent exception:** fleet apps normally keep their plists in
-  AgentStart, but `com.agentvoice.resident` (`src/resident/install.ts`) and
-  `com.agentvoice.server` (`src/server/install.ts`) are rendered and owned
-  *here* — the spawn contracts (account pick, socket paths, realtime flag,
-  baked config flags) are this repo's load-bearing surface, and both
-  installers bake absolute paths that must move with this checkout.
