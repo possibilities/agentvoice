@@ -6,8 +6,10 @@ workers live in it, so they survive console restarts; its wrapper consults
 the balancer at every spawn. _Avoid_: "daemon", "service", "backend server".
 
 **App-server** — The `codex app-server` program the resident runs; spoken to
-as JSON-RPC over WebSocket framing on its unix socket. _Avoid_: "codex
-process".
+as JSON-RPC over WebSocket framing on its unix socket. It disables
+AgentStart's desktop compatibility plugin at spawn, and the Attachment
+registers the canonical `common` skill root before opening a thread.
+_Avoid_: "codex process".
 
 **Server** — The launchd-resident coordination daemon
 (`com.agentvoice.server`): it owns the Attachment to the resident, the
@@ -26,7 +28,9 @@ sense of "the one agentvoice process".
 
 **Attachment** — The Server's connection to the resident: one WebSocket-
 framed unix-socket connection with its own `initialize`. Reattach replaces
-it after a drop; the resident and its threads persist across attachments.
+it after a drop; every attach registers AgentStart's `common` skill root
+before starting or resuming the orchestrator, while the resident and its
+threads persist across attachments.
 _Avoid_: "connection" alone (ambiguous with the voice session), "reconnect"
 for anything but this.
 

@@ -499,7 +499,7 @@ screen-detected (their integrations report session identity only; pi is a
 lifecycle authority), so `blocked`/`done` for those workers is a
 classification, not a report.
 
-### The ambient surface: MCP, skills, hooks, memory
+### The composed and ambient surface: capabilities, MCP, hooks, memory
 
 The orchestrator inherits the machine's codex environment, which is easy to
 forget when "configuring the agent":
@@ -510,7 +510,11 @@ forget when "configuring the agent":
   rather than its own exec tool *(probe)*. Disable per thread with
   `orchestrator.config: {orchestrator: {mcp: {enabled: false}}}` or prune the
   global list.
-- **Skills**: same story via `orchestrator.skills.enabled` and
+- **Skills**: AgentVoice explicitly registers AgentStart's canonical default
+  `common` pack with `skills/extraRoots/set` before every thread start or
+  resume. The resident disables AgentStart's desktop compatibility plugin,
+  so that projection cannot duplicate or namespace those skills. Codex's
+  own enablement still follows `orchestrator.skills.enabled` and
   `skills.include_instructions`.
 - **Hooks** (`~/.codex/hooks.json`): fire on orchestrator turns under
   app-server — probes observed `sessionStart` and `userPromptSubmit` running
@@ -686,8 +690,9 @@ one whisper of cross-thread continuity the voice agent gets for free.
     *(source)*.
 13. **Session-start text does not re-announce on renewals** — and *does*
     repeat after compaction *(probe/source)*.
-14. **Global MCP servers, skills, and hooks ride along invisibly** — and get
-    used *(probe)*.
+14. **Global MCP servers and hooks ride along invisibly; default skills are
+    composed explicitly from AgentStart's `common` pack** — and get used
+    *(probe)*.
 15. **One malformed control frame kills the codex side of a voice session**
     while the media keeps playing — a zombie that hears and speaks but can't
     delegate. The console-side symptom: the agent stops doing work but keeps

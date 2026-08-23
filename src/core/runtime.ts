@@ -15,6 +15,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { withCommonSkills } from "../capabilities.ts";
 import {
   residentSocketPath,
   residentStateFilePath,
@@ -386,7 +387,7 @@ export class VoiceRuntime {
     this.orchestratorTurnActive = false;
 
     try {
-      this.threadId = await this.openThread(attachment);
+      this.threadId = await withCommonSkills(attachment, () => this.openThread(attachment));
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
       if (bootAttach) await this.interruptStrandedTurns(attachment, this.threadId);
       await this.reconcileWorkers(attachment);
