@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { SkillPolicyEntry } from "../src/capabilities.ts";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
 
@@ -8,12 +9,15 @@ function configure(values: ConfigValues = {}) {
   return resolveConfig({}, values, {}, HOME);
 }
 
+// The existing cases assert the wire shape without a compatibility
+// projection installed, which is what an empty policy means.
 function thread(
   values: ConfigValues = {},
   prompts: Prompts = {},
   kind: "start" | "resume" = "start",
+  aliasPolicy: SkillPolicyEntry[] = [],
 ) {
-  return threadParams(configure(values), prompts, kind);
+  return threadParams(configure(values), prompts, kind, aliasPolicy);
 }
 
 function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
@@ -230,6 +234,68 @@ describe("realtimeParams", () => {
   });
 });
 
+describe("compatibility-alias suppression", () => {
+  const policy: SkillPolicyEntry[] = [
+    { name: "agent:collab", enabled: false },
+    { name: "agent:wiki", enabled: false },
+  ];
+
+  test("rides every orchestrator thread, start and resume alike", () => {
+    for (const kind of ["start", "resume"] as const) {
+      expect(thread({}, {}, kind, policy)["config"]).toEqual({ "skills.config": policy });
+    }
+  });
+
+  test("rides worker threads too", () => {
+    expect(workerThreadParams(configure(), policy)["config"]).toEqual({
+      "skills.config": policy,
+    });
+  });
+
+  test("keeps the operator's own config entries beside it", () => {
+    const params = thread(
+      { orchestrator: { effort: "high", config: { agents: { enabled: false } } } },
+      {},
+      "start",
+      policy,
+    );
+    expect(params["config"]).toEqual({
+      model_reasoning_effort: "high",
+      agents: { enabled: false },
+      "skills.config": policy,
+    });
+  });
+
+  test("lets an operator rule win by ordering it last, as codex resolves them", () => {
+    const mine = { name: "agent:collab", enabled: true };
+    const params = thread(
+      { orchestrator: { config: { "skills.config": [mine] } } },
+      {},
+      "start",
+      policy,
+    );
+    expect(params["config"]).toEqual({ "skills.config": [...policy, mine] });
+  });
+
+  test("survives the generic extra escape hatch", () => {
+    const params = thread(
+      { orchestrator: { extra: { config: { model_reasoning_effort: "low" } } } },
+      {},
+      "start",
+      policy,
+    );
+    expect(params["config"]).toEqual({
+      model_reasoning_effort: "low",
+      "skills.config": policy,
+    });
+  });
+
+  test("is not added at all when no compatibility projection is installed", () => {
+    expect(thread()).not.toHaveProperty("config");
+    expect(workerThreadParams(configure(), [])).not.toHaveProperty("config");
+  });
+});
+
 describe("workerThreadParams", () => {
   test("inherits the execution posture but not the identity", () => {
     const params = workerThreadParams(
@@ -244,6 +310,7 @@ describe("workerThreadParams", () => {
           config: { agents: { enabled: false } },
         },
       }),
+      [],
     );
     expect(params["cwd"]).toBe("/home/tester");
     expect(params["sandbox"]).toBe("workspace-write");
@@ -262,7 +329,10 @@ describe("workerThreadParams", () => {
   });
 
   test("prefers a named permission profile over the sandbox, like the orchestrator", () => {
-    const params = workerThreadParams(configure({ orchestrator: { permissions: "profile-1" } }));
+    const params = workerThreadParams(
+      configure({ orchestrator: { permissions: "profile-1" } }),
+      [],
+    );
     expect(params["permissions"]).toBe("profile-1");
     expect(params).not.toHaveProperty("sandbox");
   });

@@ -6,9 +6,9 @@ workers live in it, so they survive console restarts; its wrapper consults
 the balancer at every spawn. _Avoid_: "daemon", "service", "backend server".
 
 **App-server** — The `codex app-server` program the resident runs; spoken to
-as JSON-RPC over WebSocket framing on its unix socket. It disables
-AgentStart's desktop compatibility plugin at spawn, and the Attachment
-registers the canonical `common` skill root before opening a thread.
+as JSON-RPC over WebSocket framing on its unix socket. The Attachment
+registers the canonical `common` skill root before opening a thread, and
+every thread carries the compatibility-alias suppression in its own params.
 _Avoid_: "codex process".
 
 **Server** — The launchd-resident coordination daemon

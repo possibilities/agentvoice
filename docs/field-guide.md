@@ -512,8 +512,10 @@ forget when "configuring the agent":
   global list.
 - **Skills**: AgentVoice explicitly registers AgentStart's canonical default
   `common` pack with `skills/extraRoots/set` before every thread start or
-  resume. The resident disables AgentStart's desktop compatibility plugin,
-  so that projection cannot duplicate or namespace those skills. Codex's
+  resume. Each thread's params also disable the desktop compatibility
+  plugin's `agent:<skill>` aliases by name, so that projection cannot
+  duplicate those skills — a session flag cannot disable the plugin itself,
+  because codex takes plugin enablement only from persistent layers. Codex's
   own enablement still follows `orchestrator.skills.enabled` and
   `skills.include_instructions`.
 - **Hooks** (`~/.codex/hooks.json`): fire on orchestrator turns under

@@ -15,22 +15,13 @@ export const REALTIME_FEATURE = "realtime_conversation";
 
 export const RESIDENT_LABEL = "com.agentvoice.resident";
 
-/** AgentStart's desktop-only compatibility projection must never leak into
- * managed standalone app-servers; AgentVoice registers the canonical pack. */
-export const DISABLE_AGENTSTART_COMPATIBILITY_PLUGIN =
-  'plugins."agent@agentstart-managed".enabled=false';
-
+/** The resident carries no skill policy: codex resolves plugin enablement only
+ * from persistent user and profile layers, so the session flag this once
+ * passed never disabled AgentStart's desktop compatibility projection. Every
+ * thread carries its own suppression instead — see `compatibilityAliasPolicy`
+ * in `src/capabilities.ts`, which the thread params fold in. */
 export function residentArgv(codexBin: string, socketPath: string): string[] {
-  return [
-    codexBin,
-    "-c",
-    DISABLE_AGENTSTART_COMPATIBILITY_PLUGIN,
-    "app-server",
-    "--enable",
-    REALTIME_FEATURE,
-    "--listen",
-    `unix://${socketPath}`,
-  ];
+  return [codexBin, "app-server", "--enable", REALTIME_FEATURE, "--listen", `unix://${socketPath}`];
 }
 
 /** Written by `agentvoice resident pick-home` at every resident spawn. */

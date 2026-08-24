@@ -15,7 +15,11 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { withCommonSkills } from "../capabilities.ts";
+import {
+  compatibilityAliasPolicy,
+  type SkillPolicyEntry,
+  withCommonSkills,
+} from "../capabilities.ts";
 import {
   residentSocketPath,
   residentStateFilePath,
@@ -123,6 +127,9 @@ export class VoiceRuntime {
   private readonly accountsDir: string;
   private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
   private foundPrompts: string[] = [];
+  /** Re-read on every attachment, beside the skill root it belongs to: a
+   * skills re-render between attachments may add or retire an alias. */
+  private aliasPolicy: SkillPolicyEntry[] = [];
 
   private attachment: ResidentAttachment | null = null;
   private threadId: string | null = null;
@@ -249,7 +256,7 @@ export class VoiceRuntime {
       if (this.sessions.hasSession) this.sessions.handleClientGone();
       const started = await attachment.request(
         "thread/start",
-        threadParams(this.config, this.prompts, "start"),
+        threadParams(this.config, this.prompts, "start", this.aliasPolicy),
       );
       this.threadId = extractThreadId(started);
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
@@ -387,6 +394,7 @@ export class VoiceRuntime {
     this.orchestratorTurnActive = false;
 
     try {
+      this.aliasPolicy = compatibilityAliasPolicy();
       this.threadId = await withCommonSkills(attachment, () => this.openThread(attachment));
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
       if (bootAttach) await this.interruptStrandedTurns(attachment, this.threadId);
@@ -412,7 +420,7 @@ export class VoiceRuntime {
           await attachment.request("thread/resume", {
             threadId: previous,
             excludeTurns: true,
-            ...threadParams(this.config, this.prompts, "resume"),
+            ...threadParams(this.config, this.prompts, "resume", this.aliasPolicy),
           }),
         );
       } catch (error) {
@@ -428,7 +436,10 @@ export class VoiceRuntime {
     }
     this.events.onStatus("starting a fresh orchestrator agent…");
     return extractThreadId(
-      await attachment.request("thread/start", threadParams(this.config, this.prompts, "start")),
+      await attachment.request(
+        "thread/start",
+        threadParams(this.config, this.prompts, "start", this.aliasPolicy),
+      ),
     );
   }
 
@@ -544,7 +555,9 @@ export class VoiceRuntime {
     manager = new WorkerManager(
       {
         startWorkerThread: async () => ({
-          threadId: extractThreadId(await request("thread/start", workerThreadParams(this.config))),
+          threadId: extractThreadId(
+            await request("thread/start", workerThreadParams(this.config, this.aliasPolicy)),
+          ),
         }),
         startWorkerTurn: async (workerThreadId, brief) => {
           let turn: { turn?: { id?: string } };

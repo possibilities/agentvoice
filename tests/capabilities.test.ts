@@ -2,8 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { capabilitiesRoot, commonSkillsRoot, withCommonSkills } from "../src/capabilities.ts";
-import { DISABLE_AGENTSTART_COMPATIBILITY_PLUGIN, residentArgv } from "../src/resident/contract.ts";
+import {
+  capabilitiesRoot,
+  commonSkillsRoot,
+  compatibilityAliasPolicy,
+  withCommonSkills,
+} from "../src/capabilities.ts";
+import { residentArgv } from "../src/resident/contract.ts";
 
 const scratch: string[] = [];
 
@@ -56,16 +61,31 @@ describe("AgentStart common capability pack", () => {
     ]);
   });
 
-  test("resident disables the desktop compatibility projection", () => {
+  test("resident carries no skill policy of its own", () => {
+    // Plugin enablement is persistent user/profile policy in codex, so the
+    // session flag this once passed never disabled anything. Suppression is
+    // per thread now, where it demonstrably works.
     expect(residentArgv("/bin/codex", "/tmp/resident.sock")).toEqual([
       "/bin/codex",
-      "-c",
-      DISABLE_AGENTSTART_COMPATIBILITY_PLUGIN,
       "app-server",
       "--enable",
       "realtime_conversation",
       "--listen",
       "unix:///tmp/resident.sock",
+    ]);
+  });
+
+  test("names every compatibility alias to disable, and nothing when absent", () => {
+    const root = mkdtempSync(join(tmpdir(), "agentvoice-aliases-"));
+    scratch.push(root);
+    const env = { AGENTSTART_CAPABILITIES_ROOT: root };
+    expect(compatibilityAliasPolicy(env, "/unused")).toEqual([]);
+
+    const skills = join(root, "compatibility", "codex-marketplace", "plugins", "agent", "skills");
+    for (const name of ["wiki", "collab"]) mkdirSync(join(skills, name), { recursive: true });
+    expect(compatibilityAliasPolicy(env, "/unused")).toEqual([
+      { name: "agent:collab", enabled: false },
+      { name: "agent:wiki", enabled: false },
     ]);
   });
 });

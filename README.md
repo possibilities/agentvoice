@@ -121,10 +121,11 @@ at install) adds `server-debug.log` with protocol frames.
 The resident is deliberately vendor-only: launchd runs a rendered wrapper
 script that consults the account balancer (see
 [balancing](#multi-account-balancing)), then `exec`s
-`codex -c 'plugins."agent@agentstart-managed".enabled=false' app-server
---enable realtime_conversation --listen unix://…`. The Server registers
-AgentStart's canonical `common` skill root on every attachment before it
-starts or resumes a thread. No
+`codex app-server --enable realtime_conversation --listen unix://…`. The
+Server registers AgentStart's canonical `common` skill root on every
+attachment before it starts or resumes a thread, and every thread it opens
+disables the desktop compatibility plugin's duplicate `agent:<skill>`
+aliases by name. No
 agentvoice code runs inside it, so agentvoice edits never require touching
 it — only codex upgrades or moved paths do (`agentvoice resident install` is
 idempotent; rerun it).
