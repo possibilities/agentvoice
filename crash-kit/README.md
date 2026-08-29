@@ -76,7 +76,9 @@ private runtime state were retained.
 The editable Bun installation was also retired: its global `agentvoice`
 command and package links were removed. Two banner-proven rendered prompt
 artifacts were taken out of `~/.agents/prompts/agentvoice/`; their source
-templates are preserved under `removed-from-code/agentguidance/`.
+templates are preserved under `removed-from-code/agentguidance/`. The sole
+Agentchats auxiliary-originator config entry named the retired producer, so
+that live behavior-bearing config was reduced to an empty object.
 
 The older native `AgentVoice.app` and `AgentVoice Dev.app` installation was a
 build of commit `8456729e87af7d4f659470c968baabbe2a6ad0ef`, which remains in the
