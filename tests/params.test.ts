@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillPolicyEntry } from "../src/capabilities.ts";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
+import type { SkillPolicyEntry } from "../src/resources.ts";
 
 const HOME = "/home/tester";
 
@@ -9,15 +9,15 @@ function configure(values: ConfigValues = {}) {
   return resolveConfig({}, values, {}, HOME);
 }
 
-// The existing cases assert the wire shape without a compatibility
-// projection installed, which is what an empty policy means.
+// The existing cases assert the wire shape without managed fleet skills,
+// which is what an empty policy means.
 function thread(
   values: ConfigValues = {},
   prompts: Prompts = {},
   kind: "start" | "resume" = "start",
-  aliasPolicy: SkillPolicyEntry[] = [],
+  skillPolicy: SkillPolicyEntry[] = [],
 ) {
-  return threadParams(configure(values), prompts, kind, aliasPolicy);
+  return threadParams(configure(values), prompts, kind, skillPolicy);
 }
 
 function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
@@ -234,10 +234,10 @@ describe("realtimeParams", () => {
   });
 });
 
-describe("compatibility-alias suppression", () => {
+describe("fixed fleet-skill enablement", () => {
   const policy: SkillPolicyEntry[] = [
-    { name: "agent:collab", enabled: false },
-    { name: "agent:wiki", enabled: false },
+    { name: "agent:collab", enabled: true },
+    { name: "agent:wiki", enabled: true },
   ];
 
   test("rides every orchestrator thread, start and resume alike", () => {
@@ -250,6 +250,17 @@ describe("compatibility-alias suppression", () => {
     expect(workerThreadParams(configure(), policy)["config"]).toEqual({
       "skills.config": policy,
     });
+  });
+
+  test("rides persisted worker resume with operator precedence and no start-only identity", () => {
+    const mine = { name: "agent:collab", enabled: false };
+    const params = workerThreadParams(
+      configure({ orchestrator: { config: { "skills.config": [mine] } } }),
+      policy,
+      "resume",
+    );
+    expect(params["config"]).toEqual({ "skills.config": [...policy, mine] });
+    expect(params).not.toHaveProperty("threadSource");
   });
 
   test("keeps the operator's own config entries beside it", () => {
@@ -290,7 +301,7 @@ describe("compatibility-alias suppression", () => {
     });
   });
 
-  test("is not added at all when no compatibility projection is installed", () => {
+  test("is not added at all when no managed skills are present", () => {
     expect(thread()).not.toHaveProperty("config");
     expect(workerThreadParams(configure(), [])).not.toHaveProperty("config");
   });

@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connectPinnedWebSocket } from "../src/console/pinned-websocket.ts";
 import {
   CONTROL_PROTOCOL_VERSION,
   type ControlCommand,
@@ -80,44 +81,83 @@ function hello(role: "ui" | "voice"): ControlCommand {
 const TOKEN = "0123456789abcdef0123";
 
 interface TestWsPeer {
-  socket: WebSocket;
+  socket: { send(text: string): void; close(): void; isOpen(): boolean };
   next(): Promise<ServerFrame>;
 }
 
 function dialWs(address: string, tls?: { ca: string; serverName: string }): Promise<TestWsPeer> {
-  const socket = new WebSocket(`${tls ? "wss" : "ws"}://${address}`, tls ? { tls } : undefined);
   const frames: ServerFrame[] = [];
   const waiters: Array<(frame: ServerFrame) => void> = [];
-  socket.addEventListener("message", (event) => {
-    const frame = parseServerFrame(String(event.data));
+  const accept = (text: string): void => {
+    const frame = parseServerFrame(text);
     if (!frame) return;
     const waiter = waiters.shift();
     if (waiter) waiter(frame);
     else frames.push(frame);
+  };
+  const peer = (socket: TestWsPeer["socket"]): TestWsPeer => ({
+    socket,
+    next: () =>
+      new Promise((resolve, reject) => {
+        const queued = frames.shift();
+        if (queued) return resolve(queued);
+        const timer = setTimeout(() => reject(new Error("no WebSocket frame within 2s")), 2_000);
+        waiters.push((frame) => {
+          clearTimeout(timer);
+          resolve(frame);
+        });
+      }),
   });
+
+  if (tls) {
+    // Bun's native WebSocket does not honor this custom CA on Bun 1.4.0;
+    // exercise the Remote console's certificate-pinned transport instead.
+    const separator = address.lastIndexOf(":");
+    const host = address.slice(0, separator);
+    const port = Number(address.slice(separator + 1));
+    return new Promise((resolve, reject) => {
+      let opened = false;
+      let closed = false;
+      const socket = connectPinnedWebSocket(
+        { host, port, ca: tls.ca, serverName: tls.serverName },
+        {
+          onOpen() {
+            opened = true;
+            resolve(
+              peer({
+                send: (text) => socket.send(text),
+                close: () => socket.close(),
+                isOpen: () => opened && !closed,
+              }),
+            );
+          },
+          onText: accept,
+          onClose(error) {
+            closed = true;
+            if (!opened) reject(error ?? new Error("could not dial pinned WebSocket"));
+          },
+        },
+      );
+    });
+  }
+
+  const socket = new WebSocket(`ws://${address}`);
+  socket.addEventListener("message", (event) => accept(String(event.data)));
+  const testSocket: TestWsPeer["socket"] = {
+    send: (text) => socket.send(text),
+    close: () => socket.close(),
+    isOpen: () => socket.readyState === WebSocket.OPEN,
+  };
   return new Promise((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(peer(testSocket)), { once: true });
     socket.addEventListener(
-      "open",
-      () =>
-        resolve({
-          socket,
-          next: () =>
-            new Promise((nextResolve, nextReject) => {
-              const queued = frames.shift();
-              if (queued) return nextResolve(queued);
-              const timer = setTimeout(
-                () => nextReject(new Error("no WebSocket frame within 2s")),
-                2_000,
-              );
-              waiters.push((frame) => {
-                clearTimeout(timer);
-                nextResolve(frame);
-              });
-            }),
-        }),
+      "error",
+      (event) => {
+        const message = "message" in event ? String(event.message) : "WebSocket error";
+        reject(new Error(`could not dial: ${message}`));
+      },
       { once: true },
     );
-    socket.addEventListener("error", () => reject(new Error("could not dial")), { once: true });
   });
 }
 
@@ -462,7 +502,7 @@ describe("control server roles", () => {
       clock += 200;
       await Bun.sleep(120);
       expect(closed).toHaveLength(1);
-      expect(peer.socket.readyState).not.toBe(WebSocket.OPEN);
+      expect(peer.socket.isOpen()).toBe(false);
     } finally {
       await server.close();
     }

@@ -122,10 +122,9 @@ The resident is deliberately vendor-only: launchd runs a rendered wrapper
 script that consults the account balancer (see
 [balancing](#multi-account-balancing)), then `exec`s
 `codex app-server --enable realtime_conversation --listen unix://…`. The
-Server registers AgentStart's canonical `common` skill root on every
-attachment before it starts or resumes a thread, and every thread it opens
-disables the desktop compatibility plugin's duplicate `agent:<skill>`
-aliases by name. No
+Server reads AgentStart's fixed managed-skill list on every attachment, and
+every orchestrator and worker thread name-enables the globally installed
+skills-only plugin's qualified `agent:<skill>` names. No
 agentvoice code runs inside it, so agentvoice edits never require touching
 it — only codex upgrades or moved paths do (`agentvoice resident install` is
 idempotent; rerun it).
@@ -557,10 +556,10 @@ Quit. No component requests the Android keyboard.
   `agentvoice resident install` and `agentvoice server install`.
 - `~/.config/agentvoice/` — `server.json` (with `server.schema.json` beside
   it for editor validation) and the prompt files beside it.
-- `~/.local/share/agentstart/capabilities/packs/common/skills` — AgentStart's
-  canonical default skill root, registered with the resident on every
-  attachment. Override the capability root with the absolute
-  `$AGENTSTART_CAPABILITIES_ROOT` for an isolated installation.
+- `~/.local/share/agentstart/resources/managed-skills.txt` — AgentStart's fixed
+  private fleet-skill inventory, read on every attachment. Override the resource
+  root with the absolute `$AGENTSTART_RESOURCES_ROOT` for tests or a relocated
+  installation.
 
 The orchestrator agent persists across Server and console runs
 (`thread.json`); prompt files are read at Server start, so editing one takes

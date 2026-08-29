@@ -33,8 +33,8 @@ everything else belongs to exactly one layer.
 
 - `src/main.ts` — CLI entry: `console`, `server`, `resident`, `accounts`,
   and `remote` are subcommands; the bare command prints usage
-- `src/capabilities.ts` — resolves AgentStart's default `common` capability
-  pack and registers its standalone skill root before every thread open
+- `src/resources.ts` — reads AgentStart's fixed managed-skill inventory and
+  produces qualified `agent:<skill>` enables for every thread attachment
 - `src/paths.ts` — XDG path resolution: state files, the resident socket,
   the config location
 - `src/core/` — the coordination layer (attached to the resident, no UI),
@@ -73,8 +73,8 @@ everything else belongs to exactly one layer.
   - `runtime.ts` — wiring: the attachment lifecycle (reattach with backoff;
     the resident process itself is launchd's job), the persisted orchestrator
     thread (resume on attach, `fresh` to abandon), stranded-turn interruption
-    and worker reconciliation on attach, rotation via `launchctl kickstart`
-    at idle
+    and worker reconciliation on attach, fixed fleet-skill enablement on every
+    thread start/resume, rotation via `launchctl kickstart` at idle
 - `src/server/` — the Server (`com.agentvoice.server`, launchd-resident,
   headless): `control.ts` (both control listeners — the owner-only unix
   socket, which is also the single-Server lock, and the authenticated WSS
@@ -247,12 +247,12 @@ These invariants are load-bearing for `attach.ts` and `runtime.ts`
 This checkout is one of the agent* fleet under `~/code`. Shared machinery
 lives in two siblings, and some changes here must cascade:
 
-- Skills under `skills/<name>/` ship into AgentStart's default `common`
-  capability pack (`~/code/agentstart/scripts/sync-skills`, run six-hourly
-  by the scheduled updater). AgentLaunch composes the pack into managed
-  sessions: Claude Code exposes `/agent:<name>`, while Codex uses `$<name>`
-  and Pi uses `/<name>`. A SKILL.md edit is live within six hours, or on
-  demand by running that script. Whether a new skill earns a TOOLS.md
+- Skills under `skills/<name>/` ship into AgentStart's fixed private
+  fleet resources (`~/code/agentstart/scripts/sync-skills`, run six-hourly
+  by the scheduled updater). AgentLaunch loads them into every managed
+  session: Claude Code exposes `/agent:<name>`, Codex uses
+  `$agent:<name>`, and Pi uses `/<name>`. A SKILL.md edit is live within
+  six hours, or on demand by running that script. Whether a new skill earns a TOOLS.md
   advertisement line is a deliberate decision —
   `agentwiki get tool-advertisement-policy`.
 - Adding or removing a call to another fleet tool changes the fleet map:

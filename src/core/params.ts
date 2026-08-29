@@ -7,7 +7,7 @@
  * that resolved to the empty string IS sent — empty strips a built-in prompt,
  * where absent leaves codex's default in place.
  */
-import type { SkillPolicyEntry } from "../capabilities.ts";
+import type { SkillPolicyEntry } from "../resources.ts";
 import type { Prompts, ServerConfig } from "./config.ts";
 import { VOICE_SEEDS } from "./config.ts";
 import { dispatchTools } from "./workers.ts";
@@ -20,20 +20,20 @@ function setIfDefined(target: Record<string, unknown>, key: string, value: unkno
 }
 
 /**
- * Fold the compatibility-alias suppression into a thread's codex `config`.
+ * Fold the managed qualified-skill enablement into a thread's codex `config`.
  * Ours come first so an operator's own `skills.config` still decides: codex
  * applies skill rules in order and a later rule overrides an earlier one for
  * the same selector.
  */
-function withAliasPolicy(
+function withFleetSkillPolicy(
   config: Record<string, unknown>,
-  aliasPolicy: SkillPolicyEntry[],
+  skillPolicy: SkillPolicyEntry[],
 ): Record<string, unknown> {
-  if (aliasPolicy.length === 0) return config;
+  if (skillPolicy.length === 0) return config;
   const supplied = config["skills.config"];
   return {
     ...config,
-    "skills.config": [...aliasPolicy, ...(Array.isArray(supplied) ? supplied : [])],
+    "skills.config": [...skillPolicy, ...(Array.isArray(supplied) ? supplied : [])],
   };
 }
 
@@ -46,7 +46,7 @@ export function threadParams(
   config: ServerConfig,
   prompts: Prompts,
   kind: "start" | "resume",
-  aliasPolicy: SkillPolicyEntry[],
+  skillPolicy: SkillPolicyEntry[],
 ): Record<string, unknown> {
   const orchestrator = config.orchestrator;
   const params: Record<string, unknown> = {
@@ -90,9 +90,9 @@ export function threadParams(
   // Folded last for the same reason, and over `extra` too: a thread that lost
   // the policy lists every fleet skill twice and has its whole catalogue
   // shortened to fit the budget.
-  const withPolicy = withAliasPolicy(
+  const withPolicy = withFleetSkillPolicy(
     (merged["config"] as Record<string, unknown> | undefined) ?? {},
-    aliasPolicy,
+    skillPolicy,
   );
   if (Object.keys(withPolicy).length > 0) merged["config"] = withPolicy;
   return merged;
@@ -102,18 +102,20 @@ export function threadParams(
  * A worker thread's priming: the orchestrator's execution posture — sandbox,
  * approvals, model, effort, config layer — without its identity. No doctrine
  * prompts (a worker is vanilla codex plus the workspace's AGENTS.md chain)
- * and no dispatch tools (workers do not dispatch workers).
+ * and no dispatch tools (workers do not dispatch workers). `threadSource` is
+ * start-only; resume quietly ignores it rather than validating it.
  */
 export function workerThreadParams(
   config: ServerConfig,
-  aliasPolicy: SkillPolicyEntry[],
+  skillPolicy: SkillPolicyEntry[],
+  kind: "start" | "resume" = "start",
 ): Record<string, unknown> {
   const orchestrator = config.orchestrator;
   const params: Record<string, unknown> = {
     cwd: orchestrator.workspace,
     approvalPolicy: orchestrator.approvalPolicy,
-    threadSource: WORKER_THREAD_SOURCE,
   };
+  if (kind === "start") params["threadSource"] = WORKER_THREAD_SOURCE;
   if (orchestrator.permissions !== undefined) params["permissions"] = orchestrator.permissions;
   else params["sandbox"] = orchestrator.sandbox;
 
@@ -123,12 +125,12 @@ export function workerThreadParams(
   setIfDefined(params, "approvalsReviewer", orchestrator.approvalsReviewer);
   setIfDefined(params, "runtimeWorkspaceRoots", orchestrator.runtimeWorkspaceRoots);
 
-  const codexConfig = withAliasPolicy(
+  const codexConfig = withFleetSkillPolicy(
     {
       ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
       ...orchestrator.config,
     },
-    aliasPolicy,
+    skillPolicy,
   );
   if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
   return params;

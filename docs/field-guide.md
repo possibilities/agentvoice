@@ -499,7 +499,7 @@ screen-detected (their integrations report session identity only; pi is a
 lifecycle authority), so `blocked`/`done` for those workers is a
 classification, not a report.
 
-### The composed and ambient surface: capabilities, MCP, hooks, memory
+### The managed and ambient surface: skills, MCP, hooks, memory
 
 The orchestrator inherits the machine's codex environment, which is easy to
 forget when "configuring the agent":
@@ -510,14 +510,12 @@ forget when "configuring the agent":
   rather than its own exec tool *(probe)*. Disable per thread with
   `orchestrator.config: {orchestrator: {mcp: {enabled: false}}}` or prune the
   global list.
-- **Skills**: AgentVoice explicitly registers AgentStart's canonical default
-  `common` pack with `skills/extraRoots/set` before every thread start or
-  resume. Each thread's params also disable the desktop compatibility
-  plugin's `agent:<skill>` aliases by name, so that projection cannot
-  duplicate those skills — a session flag cannot disable the plugin itself,
-  because codex takes plugin enablement only from persistent layers. Codex's
-  own enablement still follows `orchestrator.skills.enabled` and
-  `skills.include_instructions`.
+- **Skills**: AgentVoice reads AgentStart's fixed private inventory and
+  name-enables the globally installed skills-only plugin's qualified
+  `agent:<skill>` entries on every orchestrator and worker start or resume.
+  AgentStart persistently disables those names outside managed sessions, so no
+  extra root or bare duplicate is registered here. Codex's own enablement still
+  follows `orchestrator.skills.enabled` and `skills.include_instructions`.
 - **Hooks** (`~/.codex/hooks.json`): fire on orchestrator turns under
   app-server — probes observed `sessionStart` and `userPromptSubmit` running
   synchronously on a delegation turn *(probe)*. A `UserPromptSubmit` hook's
