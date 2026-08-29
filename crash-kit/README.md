@@ -57,10 +57,13 @@ file exactly as it stood before retirement:
 - `agentusage/`: `test/render.test.ts`.
 - `droidedtui/`: `CONTEXT.md`,
   `android/app/src/test/java/com/possibilities/droidedtui/host/AndroidHostBridgeTest.java`,
-  the generated `.droidedtui/` copy of that Java test,
+  the generated `.droidedtui/` copy of that Java test (an ignored workspace
+  snapshot rather than a file from the named Git revision),
   `packages/packager/test/manifest.test.ts`, and
   `packages/protocol/test/protocol.test.ts`.
-- `funk/`: `AGENTS.md`, `tests/fixtures/bun`, and `tests/validate.sh`.
+- `funk/`: `AGENTS.md`, `tests/fixtures/bun`, and `tests/validate.sh`. Its
+  repository-local Git metadata was not a tracked source file; the exact
+  AgentVoice section removed from it is recorded below.
 - `clispeak/`: `AGENTS.md`.
 
 ## Runtime retirement record
@@ -79,6 +82,14 @@ artifacts were taken out of `~/.agents/prompts/agentvoice/`; their source
 templates are preserved under `removed-from-code/agentguidance/`. The sole
 Agentchats auxiliary-originator config entry named the retired producer, so
 that live behavior-bearing config was reduced to an empty object.
+
+Funk's repository-local `.git/config` carried this non-secret verification
+hint. It was removed from the live checkout and is preserved here verbatim:
+
+```ini
+[agentvoice]
+	verify = tests/validate.sh
+```
 
 The older native `AgentVoice.app` and `AgentVoice Dev.app` installation was a
 build of commit `8456729e87af7d4f659470c968baabbe2a6ad0ef`, which remains in the
