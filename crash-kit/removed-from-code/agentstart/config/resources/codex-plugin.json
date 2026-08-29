@@ -1,0 +1,17 @@
+{
+  "name": "agent",
+  "version": "1.0.0",
+  "description": "Private fleet skills managed by AgentStart.",
+  "author": { "name": "AgentStart" },
+  "license": "UNLICENSED",
+  "keywords": ["agentstart", "skills"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AgentStart Fleet Skills",
+    "shortDescription": "Fleet skills, inert outside managed sessions.",
+    "longDescription": "Skills-only plugin for AgentLaunch and AgentVoice sessions.",
+    "developerName": "AgentStart",
+    "category": "Developer Tools",
+    "capabilities": ["Skills"]
+  }
+}

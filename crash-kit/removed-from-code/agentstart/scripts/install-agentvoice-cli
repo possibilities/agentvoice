@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -euo pipefail
+
+die() {
+    printf 'AgentStart AgentVoice CLI installer: %s\n' "$*" >&2
+    exit 1
+}
+
+find_bun() {
+    if [ -n "${AGENTSTART_BUN_BIN:-}" ] && [ -x "$AGENTSTART_BUN_BIN" ]; then
+        printf '%s\n' "$AGENTSTART_BUN_BIN"
+        return
+    fi
+    if command -v bun >/dev/null 2>&1; then
+        command -v bun
+        return
+    fi
+    for candidate in /opt/homebrew/bin/bun /usr/local/bin/bun; do
+        if [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+    return 1
+}
+
+[ "$#" -eq 0 ] || {
+    printf 'Usage: install-agentvoice-cli\n' >&2
+    exit 64
+}
+
+[ "$(uname -s)" = Darwin ] || die "macOS is required"
+[ "$(id -u)" -ne 0 ] || die "run as the target user, not root"
+
+# AgentVoice remains its own repository and owns its editable install:
+# dependencies, environment checks (codex, sox), and linking a global
+# `agentvoice` back into the checkout with bun link. AgentStart only invokes
+# that contract. A machine that has not cloned the checkout is a skip, not a
+# failure; a present checkout that fails to install is a real error and
+# propagates. Rerunning is safe: every step is fix-forward and relinking
+# repoints the same global command.
+# The fleet root. AGENTSTART_CODE_ROOT relocates it as a unit — the tests point
+# it at a fixture tree — but it deliberately does not resolve relative to this
+# script: the installer converges the machine, not the checkout it was invoked
+# from, and a worktree run must still find the real fleet rather than silently
+# skipping every tool.
+code_root="${AGENTSTART_CODE_ROOT:-$HOME/code}"
+agentvoice_root="$code_root/agentvoice"
+agentvoice2_root="$code_root/agentvoice2"
+
+# The archive-bound checkout is currently parked at agentvoice2 while keeping
+# its public project and command name AgentVoice. Recognize that one explicit
+# transitional spelling, but refuse an ambiguous machine instead of guessing
+# which of two live checkouts should own the editable global link.
+if [ -f "$agentvoice_root/package.json" ] && [ -f "$agentvoice2_root/package.json" ]; then
+    die "both $agentvoice_root and $agentvoice2_root are present; refusing an ambiguous AgentVoice checkout"
+fi
+if [ ! -f "$agentvoice_root/package.json" ]; then
+    if [ -f "$agentvoice2_root/package.json" ]; then
+        agentvoice_root="$agentvoice2_root"
+    else
+        printf 'AgentStart AgentVoice CLI installer: no checkout at %s or %s; skipping.\n' \
+            "$agentvoice_root" "$agentvoice2_root"
+        exit 0
+    fi
+fi
+
+bun_bin=$(find_bun) || die "bun is not installed"
+
+printf 'Installing the AgentVoice voice CLI from %s.\n' "$agentvoice_root"
+"$bun_bin" run --cwd "$agentvoice_root" cli:install

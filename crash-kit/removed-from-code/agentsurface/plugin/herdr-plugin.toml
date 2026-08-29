@@ -1,0 +1,108 @@
+# AgentSurface's herdr plugin: fleet TUI panes and event-driven behavior on the
+# surface. Linked by agentstart's installer (`herdr plugin link`); commands run
+# the source-linked fleet installs on PATH.
+id = "agentsurface"
+name = "AgentSurface"
+version = "0.12.0"
+min_herdr_version = "0.8.0"
+description = "Launch agents, show usage, control voice, confirm topology closes, label projects, and name conversation tabs"
+platforms = ["macos", "linux"]
+
+# Popup titles follow one convention: the title-cased name of the CLI the TUI
+# is a frontend for — the launch form fronts agentlaunch, the usage dialog
+# fronts agentusage, the voice console fronts agentvoice. A new pane entrypoint
+# takes its CLI's name the same way.
+#
+# The launch surface is a session-modal popup over the active pane. The host
+# resolves the active pane's cwd and runs agentlaunch's form there, so the form
+# preselects the project it opened over; directives the form emits become herdr
+# sessions through the host's stdout pipe (the surface-handoff-protocol wiki
+# page is the contract).
+[[panes]]
+id = "launch"
+title = "Agent Launch"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["agentsurface", "host", "--", "agentlaunch", "--x-surface"]
+
+# The resume picker is the same host contract as the launch form: the host
+# resolves the active pane's cwd so the picker opens scoped to the project it
+# opened over, and each picked session becomes a herdr resume through the
+# stdout directive pipe.
+[[panes]]
+id = "chats"
+title = "Agentchats"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["agentsurface", "host", "--", "agentchats", "search"]
+
+# Popup-bound fleet TUIs live together in this plugin. The wrapper preserves
+# the usage dialog's established escape-to-close behavior.
+[[panes]]
+id = "usage"
+title = "Agent Usage"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["escape-to-quit", "agentusage"]
+
+# The voice console's remote control: `agentvoice remote` attaches to the
+# console already running on this machine (waiting and reconnecting when it is
+# not), so the popup is a control surface, never a second audio session. It
+# takes no wrapper — the TUI owns esc for its ctrl+k palette, and `q` quits —
+# and it stays on 80% geometry because the remote adapts to any terminal shape.
+[[panes]]
+id = "voice"
+title = "Agent Voice"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["agentvoice", "remote"]
+
+# Destructive topology keybindings open these minimal confirmation popups. All
+# three reuse AgentSurface's generic exact-argv confirmation; the internal
+# close-active bridge reads the pane entrypoint's captured plugin context and
+# phrases only the public Herdr close command. Herdr keeps the topology rules.
+[[panes]]
+id = "confirm-close-pane"
+title = "Confirm"
+placement = "popup"
+width = 25
+height = 4
+command = ["agentsurface", "confirm", "--title", "Close pane?", "--", "agentsurface", "close-active", "pane"]
+
+[[panes]]
+id = "confirm-close-tab"
+title = "Confirm"
+placement = "popup"
+width = 24
+height = 4
+command = ["agentsurface", "confirm", "--title", "Close tab?", "--", "agentsurface", "close-active", "tab"]
+
+[[panes]]
+id = "confirm-close-workspace"
+title = "Confirm"
+placement = "popup"
+width = 30
+height = 4
+command = ["agentsurface", "confirm", "--title", "Close workspace?", "--", "agentsurface", "close-active", "workspace"]
+
+# When herdr detects an agent in a pane, publish its sidebar project and
+# conversation tokens and name the pane's tab after the agent's conversation —
+# once. The conversation token opens as an untitled placeholder and follows the
+# slug when naming lands. Each invocation is one bounded attempt: it polls
+# herdr briefly for the agent's session identity and the transcript for its
+# first prompt, then renames the tab with `conversation slug`.
+[[events]]
+on = "pane.agent_detected"
+command = ["agentsurface", "name-tab"]
+
+# A status transition is the surface's own signal that a stalled start moved —
+# a trust dialog accepted, a first prompt typed, however long that took — so it
+# re-arms a naming attempt on the tabs the detection-time attempt could not
+# finish. A named tab's claim makes the frequent firings no-ops.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["agentsurface", "name-tab"]

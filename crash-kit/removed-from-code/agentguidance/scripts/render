@@ -1,0 +1,244 @@
+#!/usr/bin/env bun
+// Render the skill templates under skills/ into AgentStart's default common
+// capability pack, and the
+// prompt templates under prompts/<consumer>/ into ~/.agents/prompts/<consumer>/,
+// splicing two kinds of render point:
+//   <!-- fragment: NAME.md -->          repo-owned shared doctrine, from
+//                                       fragments/ — absence is an error
+//   <!-- extension-prompt: NAME.md -->  operator-owned machine voice, from
+//                                       ~/.config/agentguidance/ — absence
+//                                       renders to nothing
+// A rendered file whose banner names this checkout but whose template is
+// gone gets pruned, so retiring a template here retires it everywhere.
+// Prompt templates carry doctrine for one consuming app (agentvoice's
+// orchestrator files, for now); the consumer's own installer links the
+// rendered file from wherever that app discovers it — this script owns
+// only the rendering.
+
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+
+const repoRoot = dirname(import.meta.dir);
+const configDir = join(
+  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+  "agentguidance",
+);
+const installRoot =
+  process.env.AGENTGUIDANCE_SKILLS_ROOT ??
+  join(
+    homedir(),
+    ".local",
+    "share",
+    "agentstart",
+    "capabilities",
+    "packs",
+    "common",
+    "skills",
+  );
+const promptsInstallRoot = join(homedir(), ".agents", "prompts");
+const skillsRoot = join(repoRoot, "skills");
+const promptsRoot = join(repoRoot, "prompts");
+const fragmentsDir = join(repoRoot, "fragments");
+const MARKER = /^<!-- extension-prompt: ([A-Za-z0-9][A-Za-z0-9._-]*\.md) -->$/;
+const FRAGMENT = /^<!-- fragment: ([A-Za-z0-9][A-Za-z0-9._-]*\.md) -->$/;
+
+const skills = readdirSync(skillsRoot)
+  .filter(
+    (name) =>
+      !name.startsWith(".") &&
+      statSync(join(skillsRoot, name)).isDirectory() &&
+      existsSync(join(skillsRoot, name, "SKILL.md")),
+  )
+  .sort();
+
+if (skills.length === 0) {
+  console.error(`no skill directories found in ${skillsRoot}`);
+  process.exit(1);
+}
+
+function chmodFilesReadOnly(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) chmodFilesReadOnly(path);
+    else chmodSync(path, 0o444);
+  }
+}
+
+const referenced = new Set();
+const referencedFragments = new Set();
+
+function renderTemplate(templatePath) {
+  const lines = readFileSync(templatePath, "utf8").split("\n");
+
+  const out = [];
+  const spliced = [];
+  const absent = [];
+  for (let i = 0; i < lines.length; i++) {
+    const fragment = lines[i].match(FRAGMENT);
+    if (fragment) {
+      const name = fragment[1];
+      referencedFragments.add(name);
+      const fragmentPath = join(fragmentsDir, name);
+      if (!existsSync(fragmentPath)) {
+        // Fragments are this repo's own doctrine: a missing one is a broken
+        // checkout, not an operator choice.
+        console.error(`${templatePath}: missing fragment ${fragmentPath}`);
+        process.exit(1);
+      }
+      out.push(readFileSync(fragmentPath, "utf8").trim());
+      spliced.push(name);
+      continue;
+    }
+    const match = lines[i].match(MARKER);
+    if (!match) {
+      out.push(lines[i]);
+      continue;
+    }
+    const name = match[1];
+    referenced.add(name);
+    const promptPath = join(configDir, name);
+    if (!existsSync(promptPath)) {
+      absent.push(name);
+      // an absent prompt leaves no gap: swallow one adjacent blank line
+      if (out.at(-1) === "" && lines[i + 1] === "") i++;
+      continue;
+    }
+    out.push(readFileSync(promptPath, "utf8").trim());
+    spliced.push(name);
+  }
+
+  const banner =
+    `<!-- Rendered from ${templatePath} — do not edit; ` +
+    `change the template or extension prompts and re-run scripts/render. -->`;
+  let rendered = out.join("\n").trimEnd() + "\n";
+  if (rendered.startsWith("---\n")) {
+    const end = rendered.indexOf("\n---\n", 4);
+    if (end === -1) {
+      console.error(`${templatePath}: unterminated frontmatter`);
+      process.exit(1);
+    }
+    const cut = end + "\n---\n".length;
+    rendered = rendered.slice(0, cut) + banner + "\n" + rendered.slice(cut);
+  } else {
+    rendered = banner + "\n" + rendered;
+  }
+
+  return { rendered, spliced, absent };
+}
+
+function spliceDetail(spliced, absent) {
+  return [
+    spliced.length ? `spliced ${spliced.join(", ")}` : null,
+    absent.length ? `absent ${absent.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+for (const skill of skills) {
+  const templatePath = join(skillsRoot, skill, "SKILL.md");
+  const { rendered, spliced, absent } = renderTemplate(templatePath);
+
+  const target = join(installRoot, skill);
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(target, { recursive: true });
+  for (const entry of readdirSync(join(skillsRoot, skill))) {
+    if (entry === "SKILL.md") continue;
+    cpSync(join(skillsRoot, skill, entry), join(target, entry), {
+      recursive: true,
+    });
+  }
+  writeFileSync(join(target, "SKILL.md"), rendered);
+  chmodFilesReadOnly(target);
+
+  const detail = spliceDetail(spliced, absent);
+  console.log(`${skill} -> ${target}${detail ? ` (${detail})` : ""}`);
+}
+
+const promptConsumers = existsSync(promptsRoot)
+  ? readdirSync(promptsRoot)
+      .filter(
+        (name) =>
+          !name.startsWith(".") &&
+          statSync(join(promptsRoot, name)).isDirectory(),
+      )
+      .sort()
+  : [];
+
+for (const consumer of promptConsumers) {
+  const consumerDir = join(promptsRoot, consumer);
+  const target = join(promptsInstallRoot, consumer);
+  mkdirSync(target, { recursive: true });
+  for (const entry of readdirSync(consumerDir).sort()) {
+    if (!entry.endsWith(".md")) continue;
+    const { rendered, spliced, absent } = renderTemplate(
+      join(consumerDir, entry),
+    );
+    const renderedPath = join(target, entry);
+    rmSync(renderedPath, { force: true });
+    writeFileSync(renderedPath, rendered);
+    chmodSync(renderedPath, 0o444);
+    const detail = spliceDetail(spliced, absent);
+    console.log(
+      `${consumer}/${entry} -> ${renderedPath}${detail ? ` (${detail})` : ""}`,
+    );
+  }
+}
+
+if (existsSync(configDir)) {
+  for (const entry of readdirSync(configDir).sort()) {
+    if (entry.endsWith(".md") && !referenced.has(entry)) {
+      console.log(`note: ${join(configDir, entry)} matches no render point`);
+    }
+  }
+}
+
+if (existsSync(fragmentsDir)) {
+  for (const entry of readdirSync(fragmentsDir).sort()) {
+    if (entry.endsWith(".md") && !referencedFragments.has(entry)) {
+      console.log(`note: ${join(fragmentsDir, entry)} is spliced by no template`);
+    }
+  }
+}
+
+// Prune installed skills this checkout rendered whose template is gone.
+// Only banner-matched directories: everything else in the install root
+// belongs to other tools.
+if (existsSync(installRoot)) {
+  for (const entry of readdirSync(installRoot).sort()) {
+    if (skills.includes(entry)) continue;
+    const installedSkill = join(installRoot, entry, "SKILL.md");
+    if (!existsSync(installedSkill)) continue;
+    const head = readFileSync(installedSkill, "utf8").slice(0, 2000);
+    if (!head.includes(`Rendered from ${repoRoot}/`)) continue;
+    rmSync(join(installRoot, entry), { recursive: true, force: true });
+    console.log(`pruned ${entry} (template removed from ${repoRoot})`);
+  }
+}
+
+// Prune rendered prompts the same way, per file: banner-matched, template gone.
+if (existsSync(promptsInstallRoot)) {
+  for (const consumer of readdirSync(promptsInstallRoot).sort()) {
+    const dir = join(promptsInstallRoot, consumer);
+    if (!statSync(dir).isDirectory()) continue;
+    for (const entry of readdirSync(dir).sort()) {
+      if (!entry.endsWith(".md")) continue;
+      if (existsSync(join(promptsRoot, consumer, entry))) continue;
+      const head = readFileSync(join(dir, entry), "utf8").slice(0, 2000);
+      if (!head.includes(`Rendered from ${repoRoot}/`)) continue;
+      rmSync(join(dir, entry), { force: true });
+      console.log(`pruned ${consumer}/${entry} (template removed from ${repoRoot})`);
+    }
+  }
+}

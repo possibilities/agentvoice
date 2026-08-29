@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -u
+
+if [ -n "${FUNK_TEST_BUN_LOG:-}" ]; then
+    {
+        printf 'bun-stub'
+        printf ' <%s>' "$@"
+        printf '\n'
+    } >>"$FUNK_TEST_BUN_LOG"
+fi
+
+case "$*" in
+    "run --cwd "*" skills:install")
+        printf 'AgentVoice skill already installed in 2 native directories.\n'
+        ;;
+    "run --cwd "*" app:install")
+        # AgentVoice refuses to replace a copy of the installed app that is
+        # currently running and tells the user to quit it and rerun.
+        if [ -n "${FUNK_TEST_AGENTVOICE_APP_RUNNING:-}" ]; then
+            printf 'AgentVoice.app is running; quit it and rerun this installer.\n' >&2
+            exit "${FUNK_TEST_AGENTVOICE_APP_RUNNING_EXIT:-3}"
+        fi
+        printf 'Replaced ~/Applications/AgentVoice.app and launched it in production mode.\n'
+        ;;
+esac
+
+exit "${FUNK_TEST_BUN_EXIT:-0}"

@@ -1,0 +1,24 @@
+{
+  "accounts": {
+    "balance": true
+  },
+  "orchestrator": {
+    "dispatch": true,
+    "dispatch-reports": true,
+    "effort": "high",
+    "sandbox": "danger-full-access",
+    "approval-policy": "on-request",
+    "approvals-reviewer": "auto_review",
+    "config": {
+      "model_auto_compact_token_limit": 60000,
+      "agents": { "enabled": false }
+    }
+  },
+  "voice": {
+    "name": "vale",
+    "codex-response-handoff-mode": "bemTags"
+  },
+  "surface": {
+    "events": true
+  }
+}

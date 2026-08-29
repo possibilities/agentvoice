@@ -1,0 +1,213 @@
+[keys]
+prefix = "ctrl+space"
+previous_tab = ["prefix+p", "alt+1"]
+next_tab = ["prefix+n", "alt+2"]
+next_workspace = "alt+5"
+previous_workspace = "alt+6"
+
+# Destructive topology actions stay on Herdr's familiar keys, but the built-in
+# actions are disabled so they cannot bypass the confirmed popup commands
+# declared below.
+close_pane = ""
+close_tab = ""
+close_workspace = ""
+
+# These actions postdate the v0.8.0 tag the binary still reports, so they work
+# only because it is built from master. alt+3/alt+4 keep tmux's mirrored
+# positions.
+move_tab_previous = "alt+3"
+move_tab_next = "alt+4"
+
+# The session navigator, on tmux's key for the same picker (M-7 choose-session)
+# and completing the alt+5/6/7 set already mirrored. Not prefix+7: that is
+# switch_tab's seventh slot, and herdr drops a default that collides with a
+# user binding without saying so. prefix+g stays as the in-prefix route.
+goto = ["prefix+g", "alt+7"]
+
+# The divider you get, not the axis you cut along: | puts panes side by side
+# and _ stacks them. Both shifted, because a pair the hand learns as one thing
+# should not change grip between halves — and they are tmux's own | and _.
+# Herdr's names invert tmux's: split_vertical is tmux's `split-window -h`.
+# Pinned rather than left to herdr's defaults (prefix+v, prefix+minus) because
+# a default can move between stable releases.
+# Taking split_vertical off prefix+v is what frees it for the voice console.
+split_vertical = "prefix+|"
+split_horizontal = "prefix+_"
+
+# Direct, not prefix+hjkl: pane focus is a repeated motion, and a prefix in
+# front of every step breaks the grip. Mirrors tmux's alt+hjkl, the sibling
+# layer, so one set of fingers works in either multiplexer. Karabiner remaps
+# *right* option + hjkl to arrows, so these are left-option chords — the same
+# constraint tmux already lives under here. Keeping focus off prefix+l is what
+# lets the agent launcher hold it.
+focus_pane_left = "alt+h"
+focus_pane_down = "alt+j"
+focus_pane_up = "alt+k"
+focus_pane_right = "alt+l"
+
+# Same fingers as focus, one shift up, and direct rather than through
+# resize_mode: resizing is a hold-and-repeat motion, and prefix+r then keys
+# then escape costs more than the resize. Mirrors tmux's M-S-hjkl. Left option
+# again, for the same Karabiner reason.
+resize_pane_left = "alt+shift+h"
+resize_pane_down = "alt+shift+j"
+resize_pane_up = "alt+shift+k"
+resize_pane_right = "alt+shift+l"
+
+# Opening a popup entrypoint makes Herdr capture the active pane in the plugin
+# context. AgentSurface's plugin owns each popup's title and geometry, while
+# the session-modal popup keeps that captured context stable during the
+# decision. Popup placement deliberately takes no --target-pane; Herdr rejects
+# layout targeting for session-modal popups.
+[[keys.command]]
+key = "prefix+x"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint confirm-close-pane'
+description = "close pane (confirm)"
+
+[[keys.command]]
+key = "prefix+shift+x"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint confirm-close-tab'
+description = "close tab (confirm)"
+
+[[keys.command]]
+key = "prefix+shift+d"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint confirm-close-workspace'
+description = "close workspace (confirm)"
+
+# Herdr 0.8.0 has no keybind action that creates a tab and starts a harness in
+# it; the helper chains tab create + agent start. Tabs keep the default numeric
+# name; agents are named <kind>-<n>.
+[[keys.command]]
+key = "prefix+shift+c"
+type = "shell"
+command = "herdr-agent-tab claude"
+description = "new tab running claude"
+
+[[keys.command]]
+key = "prefix+shift+o"
+type = "shell"
+command = "herdr-agent-tab codex"
+description = "new tab running codex"
+
+[[keys.command]]
+key = "prefix+shift+i"
+type = "shell"
+command = "herdr-agent-tab pi"
+description = "new tab running pi"
+
+# Popup-bound fleet TUIs are pane entrypoints in AgentSurface's linked plugin,
+# which owns their titles and geometry. The usage pane keeps escape-to-quit in
+# its manifest because the TUI itself uses q rather than esc to quit.
+[[keys.command]]
+key = "prefix+u"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint usage'
+description = "usage"
+
+# The voice pane runs `agentvoice remote` bare — the remote control for the
+# console already running on this machine. Its manifest carries no
+# escape-to-quit because that TUI spends esc on its own ctrl+k palette. `v` for
+# voice: split_vertical moved to prefix+| deliberately, so this displaces
+# nothing.
+[[keys.command]]
+key = "prefix+v"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint voice'
+description = "voice console"
+
+# AgentSurface's linked herdr plugin owns the popup title and geometry. Open
+# its launch entrypoint from the active pane's cwd so the form preselects that
+# project; the launcher quits on esc itself and needs no escape-to-quit wrapper.
+[[keys.command]]
+key = "prefix+l"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint launch --cwd "${HERDR_ACTIVE_PANE_CWD:-$PWD}"'
+description = "launch an agent"
+
+# The session history picker: agentchats search in AgentSurface's popup, from
+# the active pane's cwd so the picker opens scoped to that project. Each pick
+# resumes that session on the surface; the picker quits on esc itself and
+# needs no escape-to-quit wrapper. `h` for history — s, r, and c are herdr's
+# own settings, resize_mode, and new_tab.
+[[keys.command]]
+key = "prefix+h"
+type = "shell"
+command = '"$HERDR_BIN_PATH" plugin pane open --plugin agentsurface --entrypoint chats --cwd "${HERDR_ACTIVE_PANE_CWD:-$PWD}"'
+description = "resume a past session"
+
+# Raw, with no escape-to-quit wrapper: esc means cancel inside lazygit.
+[[keys.command]]
+key = "prefix+a"
+type = "popup"
+command = "lazygit"
+description = "lazygit"
+width = "90%"
+height = "90%"
+
+[theme]
+# The terminal's own palette is the whole theme: Herdr adds no colors of its
+# own, and no [theme.custom] overrides it. Ghostty runs its built-in default
+# colors, so this follows whatever the terminal is showing.
+name = "terminal"
+auto_switch = false
+
+[ui]
+# Use shared single-line pane dividers without an outer frame.
+pane_borders = true
+pane_gaps = false
+pane_outer_borders = false
+# The attention queue, not the grouped-by-space list. This is not merely a
+# preferred default: herdr re-reads it on every config reload and overwrites
+# the runtime sort with it, so leaving the key out silently reverts the
+# in-app toggle to "spaces" each time anything here changes.
+agent_panel_sort = "priority"
+# Herdr accepts a fixed column cap rather than a percentage. The full-screen
+# surface is 213 columns here, so 106 columns is the widest whole-cell value
+# that does not exceed 50%.
+sidebar_max_width = 106
+# Collapse completely rather than leaving the compact status rail visible.
+sidebar_collapsed_mode = "hidden"
+# Agent memory per kind ("cc 3.4 / co 2.1"), summed over each agent pane's
+# process tree by Funk's machine-config script. The status area ends flush
+# against the terminal edge, and command output is trimmed before it is drawn,
+# so the clearance has to come from a literal text entry — those keep their
+# spaces. It reads as two columns: this pad plus the separator before it.
+tab_bar_right = [
+  { type = "command", command = "~/.config/herdr/agent-mem.sh", interval_seconds = 10 },
+  { type = "text", text = " " },
+]
+
+# AgentSurface publishes $project as the workspace label, or the root repository
+# name plus worktree branch for a linked worktree. One token keeps that first
+# line contiguous and gives it the standard inactive workspace-name treatment:
+# under the terminal theme a custom token's own grey is the same grey the
+# builtin name uses, so bold without the extra dim lands on it exactly. Row two
+# is AgentSurface's $conversation token, not herdr's builtin tab name: the
+# builtin elides a single unnamed tab, while the plugin holds "untitled agent"
+# until naming lands, so the row never goes blank. Herdr's own defaults are
+# useless here — the workspace label alone hides which project a worktree
+# belongs to, and row two carries the harness kind or an opaque id.
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "$project", bold = true, dim = false }],
+  ["$conversation"],
+]
+
+[ui.toast]
+# Agent state remains visible in the surface; do not deliver native alerts.
+delivery = "off"
+
+[ui.sound]
+# Paths are relative to ~/.config/herdr.
+enabled = true
+done_path = "../../code/agentstart/assets/herdr-sounds/done.mp3"
+request_path = "../../code/agentstart/assets/herdr-sounds/request.mp3"
+
+[update]
+version_check = true
+
+[experimental]
+kitty_graphics = true

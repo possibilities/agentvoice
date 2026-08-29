@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    # Every installer here refuses a non-Darwin machine, so a Linux runner
+    # tests a platform this repository declines to run on: the AgentVoice
+    # skip case died on the macOS guard before it could reach the skip.
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      # validate.sh runs shellcheck only when it is present and says nothing
+      # when it is not, so an absent binary would silently drop the lint
+      # rather than fail. Install it before validating.
+      - name: Install shellcheck
+        run: command -v shellcheck >/dev/null 2>&1 || brew install shellcheck
+
+      - name: Validate
+        run: tests/validate.sh
