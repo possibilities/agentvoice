@@ -164,6 +164,11 @@ stereo listening fixture with the evaluator on the left and the agent on the
 right. That stereo WAV is the human authority for timing, interruption,
 prosody, pronunciation, and artifacts.
 
+LiveKit event evidence also records `voice.metrics.collected` for every
+Realtime response and cumulative `voice.usage.updated` snapshots. These carry
+the provider-reported text/audio and cached/uncached token splits needed to
+price the voice-model portion of a run without estimating it from WAV duration.
+
 The judge writes a separate, write-once report beneath
 `artifacts/judgments/`. It receives a blind allowlist of the manifest, canonical
 events, oracle checks, and workspace patch, validates every citation, and

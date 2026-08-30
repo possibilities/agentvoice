@@ -388,6 +388,12 @@ function wireSessionTelemetry(
       })),
     });
   });
+  session.on(voice.AgentSessionEventTypes.MetricsCollected, (event) => {
+    emit("livekit", "voice.metrics.collected", { metrics: event.metrics });
+  });
+  session.on(voice.AgentSessionEventTypes.SessionUsageUpdated, (event) => {
+    emit("livekit", "voice.usage.updated", { usage: event.usage });
+  });
   session.on(voice.AgentSessionEventTypes.Error, (event) => {
     emit("livekit", "voice.error", { message: errorMessage(event.error) });
   });
