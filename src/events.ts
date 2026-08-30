@@ -1,4 +1,11 @@
-export type EventSource = "harness" | "app-server" | "realtime" | "media" | "oracle";
+export type EventSource =
+  | "harness"
+  | "app-server"
+  | "realtime"
+  | "livekit"
+  | "fx"
+  | "media"
+  | "oracle";
 
 export interface EventRecord {
   seq: number;

@@ -1,8 +1,12 @@
 node_modules/
 artifacts/
+/.env.local
 fixtures/**/audio/*.wav
 fixtures/**/audio/*.mp3
 fixtures/**/audio/*.m4a
 fixtures/**/audio/*.aiff
+fixtures/**/audio/rendered.json
+!fixtures/compact-full-duplex/audio/*.wav
+!fixtures/compact-full-duplex/audio/rendered.json
 *.log
 .DS_Store

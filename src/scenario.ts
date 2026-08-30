@@ -15,6 +15,7 @@ const playStepSchema = z.object({
   id: z.string().min(1),
   audio: z.string().min(1),
   transcript: z.string().min(1),
+  requireOutputActive: z.boolean().optional(),
 });
 
 const waitStepSchema = z
@@ -39,6 +40,16 @@ const sleepStepSchema = z.object({
   ms: z.number().int().nonnegative(),
 });
 
+const drainStepSchema = z.object({
+  type: z.literal("drain"),
+  timeoutMs: z.number().int().positive().default(15_000),
+});
+
+const waitOutputActiveStepSchema = z.object({
+  type: z.literal("wait-output-active"),
+  timeoutMs: z.number().int().positive().default(60_000),
+});
+
 export const scenarioSchema = z.object({
   schemaVersion: z.literal(1),
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -54,7 +65,15 @@ export const scenarioSchema = z.object({
     })
     .default(DEFAULT_AGENT),
   steps: z
-    .array(z.discriminatedUnion("type", [playStepSchema, waitStepSchema, sleepStepSchema]))
+    .array(
+      z.discriminatedUnion("type", [
+        playStepSchema,
+        waitStepSchema,
+        sleepStepSchema,
+        drainStepSchema,
+        waitOutputActiveStepSchema,
+      ]),
+    )
     .min(1),
   oracle: z
     .object({

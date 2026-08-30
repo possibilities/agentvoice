@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun";
+import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
@@ -58,6 +59,7 @@ export class AppServerClient {
       [options.codexPath ?? "codex", "app-server", "--enable", "realtime_conversation", "--stdio"],
       {
         cwd: options.cwd,
+        env: appServerEnvironment(),
         // Give this ephemeral App-server (and every MCP child it starts) an
         // owned process group so teardown can reap the whole tree.
         detached: true,
@@ -326,6 +328,14 @@ function denialResponse(method: string): Record<string, unknown> {
     default:
       return {};
   }
+}
+
+function appServerEnvironment(): NodeJS.ProcessEnv {
+  const env = environmentWithoutOpenAiApiKey();
+  env["PYTHONDONTWRITEBYTECODE"] = "1";
+  // The reference contender must use Codex subscription authentication, and
+  // the coding workspace never needs access to the paid fixture-render key.
+  return env;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

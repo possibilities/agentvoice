@@ -1,5 +1,7 @@
+import { mkdirSync } from "node:fs";
 import OpusScript from "opusscript";
 import type { EventJournal } from "./events.ts";
+import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 
 export const AUDIO_SAMPLE_RATE = 48_000;
 export const AUDIO_FRAME_MS = 20;
@@ -29,7 +31,12 @@ export async function normalizeAudioToMonoPcm(path: string): Promise<Buffer> {
       "1",
       "pipe:1",
     ],
-    { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    {
+      env: environmentWithoutOpenAiApiKey(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).arrayBuffer(),
@@ -161,6 +168,8 @@ export class DuplexRecorder {
   private inputSamples = 0;
   private outputBaseTimestamp: number | null = null;
   private outputBaseSample = 0;
+  private wallOutputCursor: number | null = null;
+  private wallOutputReceivedAt: number | null = null;
 
   beginTimeline(): void {
     if (this.inputFrames.length > 0 || this.outputSegments.length > 0) {
@@ -193,6 +202,30 @@ export class DuplexRecorder {
     });
   }
 
+  /** Records a 48 kHz mono frame received from a transport without RTP timestamps. */
+  recordOutputMonoFrame(monoPcm: Buffer): void {
+    if (monoPcm.length === 0 || monoPcm.length % 2 !== 0) {
+      throw new Error("output mono frame must contain complete 16-bit samples");
+    }
+    const receivedAt = performance.now();
+    const samples = monoPcm.length / 2;
+    const wallEnd = Math.max(
+      0,
+      Math.round(((receivedAt - this.startedAt) / 1_000) * AUDIO_SAMPLE_RATE),
+    );
+    const frameDurationMs = (samples / AUDIO_SAMPLE_RATE) * 1_000;
+    const contiguous =
+      this.wallOutputCursor !== null &&
+      this.wallOutputReceivedAt !== null &&
+      receivedAt - this.wallOutputReceivedAt <= Math.max(100, frameDurationMs * 3);
+    const sampleOffset = contiguous
+      ? this.wallOutputCursor!
+      : Math.max(this.wallOutputCursor ?? 0, wallEnd - samples);
+    this.outputSegments.push({ sampleOffset, pcm: Buffer.from(monoPcm) });
+    this.wallOutputCursor = sampleOffset + samples;
+    this.wallOutputReceivedAt = receivedAt;
+  }
+
   async write(directory: string): Promise<{ durationMs: number }> {
     const elapsedSamples = Math.ceil(
       ((performance.now() - this.startedAt) / 1_000) * AUDIO_SAMPLE_RATE,
@@ -210,7 +243,7 @@ export class DuplexRecorder {
     }
     const stereo = interleaveStereo(input, output);
 
-    await Bun.$`mkdir -p ${directory}`.quiet();
+    mkdirSync(directory, { recursive: true });
     await Promise.all([
       Bun.write(`${directory}/input.wav`, wavBuffer(input, 1)),
       Bun.write(`${directory}/output.wav`, wavBuffer(output, 1)),

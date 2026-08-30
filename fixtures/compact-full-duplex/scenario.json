@@ -36,7 +36,11 @@
         "event": "orchestrator.turn.completed",
         "occurrence": 1
       },
-      "timeoutMs": 60000
+      "timeoutMs": 75000
+    },
+    {
+      "type": "drain",
+      "timeoutMs": 15000
     },
     {
       "type": "play",
@@ -51,14 +55,21 @@
       "timeoutMs": 60000
     },
     {
-      "type": "sleep",
-      "ms": 1500
+      "type": "wait",
+      "event": "orchestrator.turn.started",
+      "occurrence": 2,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait-output-active",
+      "timeoutMs": 60000
     },
     {
       "type": "play",
       "id": "steer",
       "audio": "audio/03-steer.wav",
-      "transcript": "One constraint I want to make explicit: an exact replay must return the original reservation, not turn every duplicate into an error. Keep working."
+      "transcript": "One constraint I want to make explicit: an exact replay must return the original reservation, not turn every duplicate into an error. Keep working.",
+      "requireOutputActive": true
     },
     {
       "type": "wait",
@@ -79,7 +90,11 @@
         "event": "orchestrator.turn.completed",
         "occurrence": 2
       },
-      "timeoutMs": 60000
+      "timeoutMs": 75000
+    },
+    {
+      "type": "drain",
+      "timeoutMs": 15000
     },
     {
       "type": "play",
@@ -106,11 +121,11 @@
         "event": "orchestrator.turn.completed",
         "occurrence": 3
       },
-      "timeoutMs": 60000
+      "timeoutMs": 75000
     },
     {
-      "type": "sleep",
-      "ms": 1000
+      "type": "drain",
+      "timeoutMs": 15000
     }
   ],
   "oracle": {

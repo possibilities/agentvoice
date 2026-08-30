@@ -2,15 +2,18 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { AppServerClient } from "./app-server.ts";
-import { ContinuousUplink, DuplexRecorder, normalizeAudioToMonoPcm } from "./audio.ts";
+import { ContinuousUplink, DuplexRecorder } from "./audio.ts";
 import { EventJournal } from "./events.ts";
+import { loadVerifiedFixtureAudio } from "./fixture-audio.ts";
+import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 import { RealtimePeer } from "./realtime-peer.ts";
 import {
   assertCodexReferenceVersion,
   assertCodexReferenceVoiceModel,
   CODEX_REFERENCE,
 } from "./reference.ts";
-import { type LoadedScenario, loadScenario, type ScenarioStep, stepAudioPath } from "./scenario.ts";
+import { type CodexRunValidationResult, validateCodexRunEvents } from "./run-validation.ts";
+import { type LoadedScenario, loadScenario, type ScenarioStep } from "./scenario.ts";
 
 const VERSION = "0.1.0";
 const START_TIMEOUT_MS = 60_000;
@@ -28,6 +31,9 @@ interface OracleResult {
   stdout: string;
   stderr: string;
   parsed: unknown;
+  valid: boolean;
+  validationError: string | null;
+  score: number | null;
 }
 
 interface OpenSessionOptions {
@@ -51,15 +57,20 @@ interface OpenSession {
   realtimeSessionId: string;
   voices: unknown;
   appServerCwd: string;
+  fatal: Promise<never>;
 }
 
 export async function runCodexScenario(options: RunOptions): Promise<string> {
   const loaded = await loadScenario(options.scenarioPath);
   assertCodexReferenceVoiceModel(loaded.scenario.agent.voiceModel);
-  const audio = await preloadScenarioAudio(loaded);
+  const fixtureAudio = await loadVerifiedFixtureAudio(loaded);
+  const audio = fixtureAudio.pcmByStepId;
+  const codexVersion = await commandVersion(options.codexPath ?? "codex");
+  assertCodexReferenceVersion(codexVersion);
   const artifactsRoot = resolve(options.artifactsRoot ?? "artifacts");
   const artifactDirectory = uniqueArtifactDirectory(artifactsRoot, loaded.scenario.id, "codex");
   mkdirSync(artifactDirectory, { recursive: true });
+  writeFileSync(join(artifactDirectory, "fixture-audio-receipt.json"), fixtureAudio.receiptBytes);
 
   const scratch = mkdtempSync(join(tmpdir(), "agentvoice-eval-"));
   const workspace = join(scratch, "workspace");
@@ -69,10 +80,9 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
   const journal = new EventJournal();
   const stderr: string[] = [];
   const startedAt = new Date();
-  const codexVersion = await commandVersion(options.codexPath ?? "codex");
-  assertCodexReferenceVersion(codexVersion);
   let session: OpenSession | null = null;
   let oracle: OracleResult | null = null;
+  let validation: CodexRunValidationResult | null = null;
   let status: "completed" | "failed" = "completed";
   let failure: string | null = null;
   let audioDurationMs = 0;
@@ -92,8 +102,13 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
 
     for (let index = 0; index < loaded.scenario.steps.length; index++) {
       const step = loaded.scenario.steps[index]!;
-      await executeStep(step, index, audio, session.uplink, journal);
+      await Promise.race([
+        executeStep(step, index, audio, session.uplink, session.peer, journal),
+        session.fatal,
+      ]);
     }
+    validation = validateCodexRunEvents(journal.snapshot(), { rootThreadId: session.threadId });
+    journal.record("harness", "run.validation.passed", { ...validation });
     journal.record("harness", "scenario.completed");
   } catch (error) {
     status = "failed";
@@ -104,6 +119,12 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
       await stopSession(session, journal);
       audioDurationMs = (await session.recorder.write(artifactDirectory)).durationMs;
     }
+    cpSync(workspace, join(artifactDirectory, "workspace-after"), { recursive: true });
+    await writeWorkspaceDiff(
+      join(artifactDirectory, "workspace-before"),
+      join(artifactDirectory, "workspace-after"),
+      join(artifactDirectory, "workspace.patch"),
+    );
     if (loaded.scenario.oracle) {
       oracle = await runOracle(loaded, workspace, journal).catch((error) => ({
         command: loaded.scenario.oracle!.command,
@@ -112,14 +133,17 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
         stdout: "",
         stderr: message(error),
         parsed: null,
+        valid: false,
+        validationError: message(error),
+        score: null,
       }));
+      if (!oracle.valid) {
+        status = "failed";
+        const oracleFailure = `oracle evidence invalid: ${oracle.validationError}`;
+        failure = failure ? `${failure}; ${oracleFailure}` : oracleFailure;
+        journal.record("harness", "run.failed", { message: failure });
+      }
     }
-    cpSync(workspace, join(artifactDirectory, "workspace-after"), { recursive: true });
-    await writeWorkspaceDiff(
-      join(artifactDirectory, "workspace-before"),
-      join(artifactDirectory, "workspace-after"),
-      join(artifactDirectory, "workspace.patch"),
-    );
     journal.record("harness", "run.finished", { status });
     journal.close();
 
@@ -150,6 +174,10 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
         requestedVoiceModel: null,
         ...loaded.scenario.agent,
       },
+      fixtureAudio: {
+        provenance: fixtureAudio.provenance,
+        utterances: fixtureAudio.evidence,
+      },
       runtime: {
         harnessVersion: VERSION,
         codexVersion,
@@ -160,11 +188,17 @@ export async function runCodexScenario(options: RunOptions): Promise<string> {
         realtimeSessionId: session?.realtimeSessionId ?? null,
         advertisedVoices: session?.voices ?? null,
       },
+      validation,
+      quality: {
+        workspaceScore: oracle?.score ?? null,
+        workspacePassed: oracle ? oracle.valid && oracle.score === 1 : null,
+      },
       evidence: {
         events: "events.ndjson",
         inputAudio: session ? "input.wav" : null,
         outputAudio: session ? "output.wav" : null,
         comparisonAudio: session ? "comparison.wav" : null,
+        fixtureAudioReceipt: "fixture-audio-receipt.json",
         workspacePatch: "workspace.patch",
         oracle: oracle ? "oracle.json" : null,
       },
@@ -232,6 +266,14 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
   let appServer: AppServerClient | null = null;
   let uplink: ContinuousUplink | null = null;
   let realtimeStartFailure: ((params: Record<string, unknown>) => void) | null = null;
+  let rootThreadId: string | null = null;
+  let rejectFatalSession: ((error: Error) => void) | null = null;
+  const fatal = new Promise<never>((_resolve, reject) => {
+    rejectFatalSession = reject;
+  });
+  // Startup races the same error independently. Keep this long-lived signal
+  // observed if a failure arrives before openSession can return it.
+  void fatal.catch(() => {});
 
   try {
     appServer = await AppServerClient.start({
@@ -240,13 +282,14 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
       clientVersion: VERSION,
       onNotification(method, params) {
         options.journal.record("app-server", `appserver.${method}`, sanitize(params));
-        if (method === "turn/started") {
-          options.journal.record("app-server", "orchestrator.turn.started", turnSummary(params));
-        } else if (method === "turn/completed") {
-          options.journal.record("app-server", "orchestrator.turn.completed", turnSummary(params));
-        } else if (method === "thread/realtime/error") {
+        if (rootThreadId !== null) {
+          recordRootTurnNotification(options.journal, method, params, rootThreadId);
+        }
+        if (method === "thread/realtime/error") {
           options.journal.record("app-server", "voice.error", sanitize(params));
           realtimeStartFailure?.(params);
+          rejectFatalSession?.(new Error(`thread/realtime/error: ${notificationMessage(params)}`));
+          rejectFatalSession = null;
         }
       },
       onProtocolMessage(direction, message) {
@@ -269,6 +312,7 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
       config: { model_reasoning_effort: options.reasoningEffort },
     });
     const threadId = extractThreadId(thread);
+    rootThreadId = threadId;
     options.journal.record("app-server", "orchestrator.thread.started", { threadId });
 
     const offer = await peer.createOffer();
@@ -288,10 +332,7 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
         reject(new Error(`thread/realtime/error: ${notificationMessage(params)}`));
       };
     });
-    const ready = Promise.race([Promise.all([started, answer]), failed]).finally(() => {
-      realtimeStartFailure = null;
-    });
-    await appServer.request(
+    const startRequest = appServer.request(
       "thread/realtime/start",
       {
         threadId,
@@ -304,7 +345,12 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
       },
       START_TIMEOUT_MS,
     );
-    const [, answerParams] = await ready;
+    const [, , answerParams] = await Promise.race([
+      Promise.all([startRequest, started, answer]),
+      failed,
+    ]).finally(() => {
+      realtimeStartFailure = null;
+    });
     const sdp = answerParams["sdp"];
     if (typeof sdp !== "string") throw new Error("App-server SDP notification had no SDP");
     uplink = new ContinuousUplink({
@@ -333,6 +379,7 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
       realtimeSessionId,
       voices,
       appServerCwd,
+      fatal,
     };
   } catch (error) {
     uplink?.stop();
@@ -371,6 +418,7 @@ async function executeStep(
   index: number,
   audio: Map<string, Buffer>,
   uplink: ContinuousUplink,
+  peer: RealtimePeer,
   journal: EventJournal,
 ): Promise<void> {
   journal.record("harness", "scenario.step.started", { index, step });
@@ -378,6 +426,9 @@ async function executeStep(
     case "play": {
       const pcm = audio.get(step.id);
       if (!pcm) throw new Error(`no preloaded audio for step ${step.id}`);
+      if (step.requireOutputActive && !peer.isOutputActive()) {
+        throw new Error(`fixture utterance ${step.id} requires active output audio`);
+      }
       journal.record("harness", "fixture.utterance", {
         id: step.id,
         transcript: step.transcript,
@@ -400,18 +451,14 @@ async function executeStep(
     case "sleep":
       await Bun.sleep(step.ms);
       break;
+    case "drain":
+      await peer.waitForOutputIdle(step.timeoutMs);
+      break;
+    case "wait-output-active":
+      await peer.waitForOutputActive(step.timeoutMs);
+      break;
   }
   journal.record("harness", "scenario.step.completed", { index, type: step.type });
-}
-
-async function preloadScenarioAudio(loaded: LoadedScenario): Promise<Map<string, Buffer>> {
-  const audio = new Map<string, Buffer>();
-  for (const step of loaded.scenario.steps) {
-    if (step.type !== "play") continue;
-    if (audio.has(step.id)) throw new Error(`duplicate play step id: ${step.id}`);
-    audio.set(step.id, await normalizeAudioToMonoPcm(stepAudioPath(loaded, step)));
-  }
-  return audio;
 }
 
 async function runOracle(
@@ -422,9 +469,13 @@ async function runOracle(
   const oracle = loaded.scenario.oracle;
   if (!oracle) throw new Error("scenario has no oracle");
   const started = performance.now();
+  const environment: NodeJS.ProcessEnv = {
+    ...environmentWithoutOpenAiApiKey(),
+    AGENTVOICE_EVAL_WORKSPACE: workspace,
+  };
   const child = Bun.spawn(oracle.command, {
     cwd: loaded.directory,
-    env: { ...process.env, AGENTVOICE_EVAL_WORKSPACE: workspace },
+    env: environment,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -441,13 +492,16 @@ async function runOracle(
     new Response(child.stderr).text(),
   ]);
   const exitCode = outcome === "timeout" ? 124 : outcome.exitCode;
+  const parsed = parseJson(stdout);
+  const evidence = validateOracleEvidence(parsed, exitCode);
   const result: OracleResult = {
     command: oracle.command,
     exitCode,
     durationMs: performance.now() - started,
     stdout,
     stderr,
-    parsed: parseJson(stdout),
+    parsed,
+    ...evidence,
   };
   journal.record("oracle", "oracle.completed", {
     exitCode,
@@ -469,6 +523,7 @@ function uniqueArtifactDirectory(root: string, scenario: string, contender: stri
 
 async function commandVersion(command: string): Promise<string> {
   const child = Bun.spawn([command, "--version"], {
+    env: environmentWithoutOpenAiApiKey(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -488,6 +543,7 @@ async function writeWorkspaceDiff(
   destination: string,
 ): Promise<void> {
   const child = Bun.spawn(["diff", "-ruN", before, after], {
+    env: environmentWithoutOpenAiApiKey(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -518,6 +574,24 @@ function turnSummary(params: Record<string, unknown>): Record<string, unknown> {
     status: typeof turn["status"] === "string" ? turn["status"] : null,
     error: sanitizeUnknown(turn["error"]),
   };
+}
+
+export function recordRootTurnNotification(
+  journal: EventJournal,
+  method: string,
+  params: Record<string, unknown>,
+  rootThreadId: string,
+): boolean {
+  if (params["threadId"] !== rootThreadId) return false;
+  if (method === "turn/started") {
+    journal.record("app-server", "orchestrator.turn.started", turnSummary(params));
+    return true;
+  }
+  if (method === "turn/completed") {
+    journal.record("app-server", "orchestrator.turn.completed", turnSummary(params));
+    return true;
+  }
+  return false;
 }
 
 function sanitize(params: Record<string, unknown>): Record<string, unknown> {
@@ -558,6 +632,60 @@ function parseJson(text: string): unknown {
   } catch {
     return null;
   }
+}
+
+export function validateOracleEvidence(
+  parsed: unknown,
+  exitCode: number,
+): Pick<OracleResult, "valid" | "validationError" | "score"> {
+  const issues: string[] = [];
+  if (exitCode !== 0) issues.push(`oracle exited with code ${exitCode}`);
+  if (!isRecord(parsed)) {
+    issues.push("oracle stdout was not a JSON object");
+    return { valid: false, validationError: issues.join("; "), score: null };
+  }
+  const score = parsed["score"];
+  const passed = parsed["passed"];
+  const total = parsed["total"];
+  const checks = parsed["checks"];
+  if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1) {
+    issues.push("score must be a finite number from 0 through 1");
+  }
+  if (typeof passed !== "number" || !Number.isInteger(passed) || passed < 0) {
+    issues.push("passed must be a non-negative integer");
+  }
+  if (typeof total !== "number" || !Number.isInteger(total) || total < 1) {
+    issues.push("total must be a positive integer");
+  }
+  if (!Array.isArray(checks)) {
+    issues.push("checks must be an array");
+  } else if (typeof total === "number" && checks.length !== total) {
+    issues.push(`checks length ${checks.length} did not match total ${total}`);
+  }
+  if (
+    typeof passed === "number" &&
+    typeof total === "number" &&
+    Number.isInteger(passed) &&
+    Number.isInteger(total) &&
+    total > 0 &&
+    passed > total
+  ) {
+    issues.push(`passed ${passed} exceeded total ${total}`);
+  }
+  if (
+    typeof score === "number" &&
+    typeof passed === "number" &&
+    typeof total === "number" &&
+    total > 0 &&
+    Math.abs(score - passed / total) > 1e-9
+  ) {
+    issues.push("score did not equal passed / total");
+  }
+  return {
+    valid: issues.length === 0,
+    validationError: issues.length > 0 ? issues.join("; ") : null,
+    score: typeof score === "number" && Number.isFinite(score) ? score : null,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

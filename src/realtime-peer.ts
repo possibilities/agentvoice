@@ -8,6 +8,8 @@ const OPUS = new RTCRtpCodecParameters({
   clockRate: AUDIO_SAMPLE_RATE,
   channels: 2,
 });
+const OUTPUT_IDLE_MS = 350;
+const AUDIBLE_RMS_THRESHOLD = 64;
 
 export class RealtimePeer {
   private readonly journal: EventJournal;
@@ -19,7 +21,9 @@ export class RealtimePeer {
   private remoteSubscription: { unSubscribe(): void } | null = null;
   private connected = false;
   private closed = false;
-  private lastOutputAudioEventAt = -Infinity;
+  private outputActive = false;
+  private lastOutputAudioAt = -Infinity;
+  private outputIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(journal: EventJournal, recorder: DuplexRecorder) {
     this.journal = journal;
@@ -36,6 +40,7 @@ export class RealtimePeer {
         try {
           const pcm = Buffer.from(this.decoder.decode(packet.payload));
           this.recorder.recordOutput(pcm, packet.header.timestamp);
+          if (isAudiblePcm(pcm)) this.noteOutputAudio();
         } catch (error) {
           this.journal.record("media", "output.audio.decode-error", {
             message: error instanceof Error ? error.message : String(error),
@@ -75,9 +80,35 @@ export class RealtimePeer {
     this.sendTrack.writeRtp(this.builder.create(payload));
   }
 
+  isOutputActive(): boolean {
+    return this.outputActive;
+  }
+
+  async waitForOutputActive(timeoutMs: number): Promise<void> {
+    const deadline = performance.now() + timeoutMs;
+    while (!this.outputActive && performance.now() < deadline) await Bun.sleep(10);
+    if (!this.outputActive) {
+      throw new Error(`output audio did not become active within ${timeoutMs}ms`);
+    }
+  }
+
+  async waitForOutputIdle(timeoutMs: number): Promise<void> {
+    const deadline = performance.now() + timeoutMs;
+    while (this.outputActive && performance.now() < deadline) await Bun.sleep(25);
+    if (this.outputActive) {
+      throw new Error(`output audio did not become idle within ${timeoutMs}ms`);
+    }
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (this.outputIdleTimer) clearTimeout(this.outputIdleTimer);
+    this.outputIdleTimer = null;
+    if (this.outputActive) {
+      this.outputActive = false;
+      this.journal.record("media", "output.audio.truncated");
+    }
     this.remoteSubscription?.unSubscribe();
     this.remoteSubscription = null;
     this.decoder.delete();
@@ -124,18 +155,32 @@ export class RealtimePeer {
       case "delegation.created":
         this.journal.record("realtime", "delegation.created", delegation(event));
         break;
-      case "output_audio.delta": {
-        const now = performance.now();
-        if (now - this.lastOutputAudioEventAt > 300) {
-          this.journal.record("media", "output.audio.started");
-        }
-        this.lastOutputAudioEventAt = now;
-        break;
-      }
       case "error":
         this.journal.record("realtime", "voice.error", sanitizeRealtimeEvent(event));
         break;
     }
+  }
+
+  private noteOutputAudio(): void {
+    this.lastOutputAudioAt = performance.now();
+    if (!this.outputActive) {
+      this.outputActive = true;
+      this.journal.record("media", "output.audio.started");
+    }
+    if (this.outputIdleTimer) clearTimeout(this.outputIdleTimer);
+    this.outputIdleTimer = setTimeout(() => this.markOutputIdle(), OUTPUT_IDLE_MS);
+  }
+
+  private markOutputIdle(): void {
+    this.outputIdleTimer = null;
+    if (this.closed || !this.outputActive) return;
+    const remaining = OUTPUT_IDLE_MS - (performance.now() - this.lastOutputAudioAt);
+    if (remaining > 0) {
+      this.outputIdleTimer = setTimeout(() => this.markOutputIdle(), remaining);
+      return;
+    }
+    this.outputActive = false;
+    this.journal.record("media", "output.audio.idle");
   }
 
   private recordTurnDone(event: Record<string, unknown>): void {
@@ -150,6 +195,17 @@ export class RealtimePeer {
       this.journal.record("realtime", "turn.done", { role, text });
     }
   }
+}
+
+export function isAudiblePcm(pcm: Buffer): boolean {
+  const samples = Math.floor(pcm.length / 2);
+  if (samples === 0) return false;
+  let sumSquares = 0;
+  for (let offset = 0; offset + 1 < pcm.length; offset += 2) {
+    const sample = pcm.readInt16LE(offset);
+    sumSquares += sample * sample;
+  }
+  return Math.sqrt(sumSquares / samples) >= AUDIBLE_RMS_THRESHOLD;
 }
 
 function dataChannelText(message: unknown): string | null {
