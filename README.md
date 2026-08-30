@@ -192,8 +192,9 @@ They came from a LiveKit `agent_config_update` marker whose logical position did
 not match its wall-clock timestamp; OpenAI's adapter explicitly tolerates the
 condition and all deterministic evidence passed. Current code retains the
 marker in LiveKit's local history but removes it from a copied context before
-OpenAI validation and serialization, eliminating the warning without rewriting
-conversation history.
+OpenAI serialization. This keeps the unsupported marker out of provider-bound
+history without rewriting LiveKit's local history; the adapter can still emit
+its tolerated timestamp-order warning while reconciling that local history.
 
 ## Lifecycle and compatibility invariants
 
