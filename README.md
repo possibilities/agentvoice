@@ -1,9 +1,10 @@
 # AgentVoice Eval
 
 Headless, multi-turn, full-duplex evaluation for coding voice agents. One
-scenario drives the real Codex App-server voice product and a LiveKit-based
-contender with the same input audio, workspace, coding model, reasoning effort,
-oracle, artifact contract, and quality rubric.
+scenario drives three contenders—the real Codex App-server voice product,
+Codex native voice paired with Fx, and a LiveKit voice agent paired with Fx—
+with the same input audio, workspace, coding model, reasoning effort, oracle,
+artifact contract, and quality rubric.
 
 ## Architecture
 
@@ -32,6 +33,28 @@ persistent Fx orchestrator (gpt-5.6-terra, medium)
         ⇅
 isolated fixture workspace
 ```
+
+The Codex–Fx contender keeps Codex's native voice behavior but replaces its
+coding path with Fx:
+
+```text
+scripted lifelike evaluator audio
+        ⇅ WebRTC
+pinned Codex V3 voice sidecar (gpt-live-1-codex, cove)
+        ⇅ client-managed delegation and speech handoffs
+persistent Fx orchestrator (gpt-5.6-terra, medium)
+        ⇅
+isolated fixture workspace
+```
+
+The voice sidecar is a standalone `codex-app-server` built from one pinned
+Codex revision and one small, hash-verified patch. With
+`clientManagedHandoffs: true`, raw native delegation events remain visible to
+the harness while both internal handoff routing and transcript-tail routing are
+disabled. The harness sends each delegation to Fx's authenticated work-control
+socket and returns progress or final results through
+`thread/realtime/appendSpeech`. Validation fails if the sidecar starts even one
+Codex coding turn.
 
 LiveKit is the realtime conversation and media runtime; it does not replace the
 coding orchestrator. The voice agent silently delegates checkout-specific work
@@ -78,6 +101,10 @@ replacement rules.
 - `codex-cli 0.151.0` on `PATH`, already logged in.
 - The local Fx fork on `PATH`, authenticated through the Codex subscription;
   the harness verifies that identity and its `yolo` permission mode before use.
+- For the Codex–Fx contender, Git, Cargo, and a writable `/Volumes/Scratch` to
+  build the pinned standalone voice sidecar. Its build is deliberately limited
+  to two Cargo jobs, disables release LTO, and serializes release codegen for a
+  16 GiB development machine.
 - `livekit-server` on `PATH` (the accepted run used 1.13.6).
 - `ffmpeg` on `PATH` for deterministic 48 kHz mono PCM normalization.
 - A direct `OPENAI_API_KEY` for the LiveKit contender, optional quality judge,
@@ -103,6 +130,8 @@ subprocess environments and redacted from persisted evidence.
 Cost boundaries are intentionally visible:
 
 - the Codex reference uses the Codex subscription for voice and coding;
+- the Codex–Fx contender uses the Codex subscription for native voice and for
+  Fx inference, but the voice sidecar itself starts zero Codex coding turns;
 - the LiveKit contender uses the OpenAI API for realtime voice and the Codex
   subscription through Fx for coding;
 - `render:fixture` and `judge` use the OpenAI API only when explicitly run;
@@ -125,7 +154,13 @@ bun run probe:fx
 # Free local job/teardown probe. Bun is the supported worker runtime.
 bun run probe:livekit -- --runtime bun
 
-# Run both contenders against the same committed scenario.
+# Build and hash-bind the pinned native voice sidecar, then run it with Fx.
+bun run check:codex-patch
+bun run build:codex-app-server
+bun run probe:codex-fx
+bun run eval:codex-fx -- fixtures/compact-full-duplex/scenario.json
+
+# Run the other contenders against the same committed scenario.
 bun run eval:codex -- fixtures/compact-full-duplex/scenario.json
 bun run eval:livekit -- fixtures/compact-full-duplex/scenario.json
 
@@ -137,6 +172,8 @@ bun run render:fixture -- fixtures/compact-full-duplex/audio/tts.json --replace 
 ```
 
 The Codex runner fails closed unless the pinned App-server identity matches.
+The Codex–Fx runner also verifies the sidecar source revision, source-patch
+SHA-256, binary SHA-256, and reported version before starting voice or Fx.
 The LiveKit runner fails closed unless the configured public voice identity and
 Fx subscription identity match. Normal fixture use needs no TTS request.
 
@@ -157,12 +194,16 @@ workspace-after/
 oracle.json
 ```
 
-The Codex artifact also contains App-server stderr. The LiveKit artifact adds
-LiveKit worker/server logs and Fx terminal/stderr evidence. `input.wav` and
-`output.wav` are 48 kHz mono; `comparison.wav` is a duration-aligned 48 kHz
-stereo listening fixture with the evaluator on the left and the agent on the
-right. That stereo WAV is the human authority for timing, interruption,
-prosody, pronunciation, and artifacts.
+The Codex artifact also contains App-server stderr. The Codex–Fx artifact adds
+the verified sidecar build identity, Fx terminal/stderr evidence, and copied
+`scenario.json` plus `oracle.py` with SHA-256s in
+`evaluation-input-receipt.json`; its event trace separately records the native
+delegation, correlated Fx admission, and zero-Codex-turn proof. The LiveKit
+artifact adds LiveKit worker/server logs and Fx terminal/stderr evidence.
+`input.wav` and `output.wav` are 48 kHz mono;
+`comparison.wav` is a duration-aligned 48 kHz stereo listening fixture with the
+evaluator on the left and the agent on the right. That stereo WAV is the human
+authority for timing, interruption, prosody, pronunciation, and artifacts.
 
 LiveKit event evidence also records `voice.metrics.collected` for every
 Realtime response and cumulative `voice.usage.updated` snapshots. These carry
@@ -182,15 +223,30 @@ from the text judge, leaving vocal delivery unscored and rubric coverage at
 |---|---|---:|---:|---:|
 | Codex reference | `2026-08-30T15-02-52-325Z-compact-full-duplex-codex` | 5/5 | 92.6/100 | 3/4 |
 | LiveKit + Fx | `2026-08-30T17-10-27-835Z-compact-full-duplex-livekit` | 5/5 | 92.1/100 | 4/4 |
+| Codex–Fx | `2026-08-30T23-18-51-202Z-compact-full-duplex-codex-fx` | 5/5 | 96.1/100 | 4/4 |
 
-Both received full marks for task outcome, instruction and steering fidelity,
-and spoken grounding. LiveKit handled the overlapped steering turn better than
-the reference. Its 0.5-point overall deficit came from one 6.069-second
-utterance-end-to-delegation delay and unnatural speech of shell flags as
-repeated “dash” tokens. The accepted LiveKit run has three Fx turns (`1`, `2`,
-`4`), four delegations, confirmed in-flight steering, confirmed decoded-audio
-overlap, one matched job start/stop pair, zero run or cleanup errors, and
-214.866-second aligned input/output/comparison recordings.
+The accepted Codex–Fx run contains four native voice delegations and four
+correlated Fx admissions, with exactly three successful Fx turns (`1`, `2`,
+and `4`). Delegation three steered active turn two before it completed, and
+decoded PCM established 521 milliseconds of simultaneous evaluator and agent
+speech. The complete post-teardown trace records seven native speech appends,
+the workspace oracle passed all five checks, and the sidecar started zero Codex
+coding turns. Its aligned recordings are 153.151 seconds long.
+
+The Codex–Fx text judge awarded full marks for task outcome, steering fidelity,
+full-duplex handling, flow, and latency. Its only deduction was that the reduced
+judge evidence catalog did not expose the exact Fx test-command event, although
+that event remains in the complete run trace.
+
+The earlier Codex reference and LiveKit runs both received full marks for task
+outcome, instruction and steering fidelity, and spoken grounding. LiveKit
+handled the overlapped steering turn better than the reference. Its 0.5-point
+overall deficit came from one 6.069-second utterance-end-to-delegation delay and
+unnatural speech of shell flags as repeated “dash” tokens. The accepted LiveKit
+run has three Fx turns (`1`, `2`, `4`), four delegations, confirmed in-flight
+steering, confirmed decoded-audio overlap, one matched job start/stop pair,
+zero run or cleanup errors, and 214.866-second aligned
+input/output/comparison recordings.
 
 That accepted worker log contains three nonblocking timestamp-order warnings.
 They came from a LiveKit `agent_config_update` marker whose logical position did

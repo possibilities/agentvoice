@@ -433,6 +433,7 @@ export class FxHeadlessOrchestrator {
   readonly instanceId = `agentvoice-${randomUUID()}`;
   readonly lifecycle = new FxLifecycle(this.instanceId);
   readonly identity: Promise<FxIdentity>;
+  readonly fatal: Promise<never>;
 
   private readonly tempDirectory = mkdtempSync(join(tmpdir(), "agentvoice-fx-"));
   private readonly adeSocketPath = join(this.tempDirectory, "ade.sock");
@@ -446,16 +447,24 @@ export class FxHeadlessOrchestrator {
   private stderrTail = "";
   private startPromise: Promise<FxIdentity> | null = null;
   private stopPromise: Promise<void> | null = null;
+  private rejectFatal: ((error: Error) => void) | null = null;
   private ready = false;
   private stopped = false;
 
   constructor(private readonly options: FxHeadlessOrchestratorOptions) {
+    this.fatal = new Promise<never>((_resolve, reject) => {
+      this.rejectFatal = reject;
+    });
+    void this.fatal.catch(() => {});
     chmodSync(this.tempDirectory, 0o700);
     this.adeServer = new FxAdeServer({
       socketPath: this.adeSocketPath,
       lifecycle: this.lifecycle,
       ...(options.onAdeEvent ? { onEvent: options.onAdeEvent } : {}),
-      ...(options.onProtocolError ? { onProtocolError: options.onProtocolError } : {}),
+      onProtocolError: (error) => {
+        options.onProtocolError?.(error);
+        this.fail(error);
+      },
     });
     this.client = new FxWorkControlClient({
       socketPath: this.workSocketPath,
@@ -558,6 +567,19 @@ export class FxHeadlessOrchestrator {
         terminalLog?.end();
         stderrLog?.end();
       });
+      void this.childExit.then(
+        ({ code, signal }) => {
+          if (!this.stopped) {
+            const phase = this.ready ? "during the active session" : "during startup";
+            this.fail(
+              new Error(
+                `Fx exited ${phase} (code ${code}, signal ${signal ?? "none"})\n${this.logTail()}`,
+              ),
+            );
+          }
+        },
+        (error) => this.fail(asError(error)),
+      );
 
       const started = this.lifecycle.waitForStarted();
       const exited = this.childExit.then(({ code, signal }) => {
@@ -565,7 +587,7 @@ export class FxHeadlessOrchestrator {
           `Fx exited before startup (code ${code}, signal ${signal ?? "none"})\n${this.logTail()}`,
         );
       });
-      await Promise.race([started, exited]);
+      await Promise.race([started, exited, this.fatal]);
       this.assertStarting();
       await this.client.snapshot();
       this.assertStarting();
@@ -586,6 +608,14 @@ export class FxHeadlessOrchestrator {
 
   private assertStarting(): void {
     if (this.stopped) throw new Error("Fx orchestrator stopped during startup");
+  }
+
+  private fail(error: Error): void {
+    if (this.stopped || !this.rejectFatal) return;
+    this.ready = false;
+    this.lifecycle.close(error.message);
+    this.rejectFatal(error);
+    this.rejectFatal = null;
   }
 
   private async probeIdentity(): Promise<FxIdentity> {

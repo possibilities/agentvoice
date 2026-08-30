@@ -274,20 +274,15 @@ class FakeOrchestrator {
 
 class FakeTelemetry {
   readonly events: Array<{
-    source: "livekit" | "fx";
     type: string;
     data: Record<string, unknown>;
   }> = [];
 
   constructor(private readonly order: string[]) {}
 
-  async emit(
-    source: "livekit" | "fx",
-    type: string,
-    data: Record<string, unknown> = {},
-  ): Promise<void> {
+  async emit(type: string, data: Record<string, unknown> = {}): Promise<void> {
     this.order.push(`telemetry:${type}`);
-    this.events.push({ source, type, data });
+    this.events.push({ type, data });
   }
 }
 

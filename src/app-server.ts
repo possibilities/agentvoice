@@ -31,6 +31,8 @@ interface NotificationWaiter {
 
 export interface AppServerOptions {
   codexPath?: string;
+  /** Complete process argv for a standalone App Server build. */
+  command?: readonly string[];
   cwd: string;
   clientVersion: string;
   onNotification?(method: string, params: Record<string, unknown>): void;
@@ -46,6 +48,8 @@ export interface AppServerOptions {
 export class AppServerClient {
   private readonly options: AppServerOptions;
   private readonly child: Subprocess<"pipe", "pipe", "pipe">;
+  private readonly stdoutDone: Promise<void>;
+  private readonly stderrDone: Promise<void>;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly notificationWaiters = new Set<NotificationWaiter>();
   private nextRequestId = 1;
@@ -55,22 +59,22 @@ export class AppServerClient {
 
   private constructor(options: AppServerOptions) {
     this.options = options;
-    this.child = Bun.spawn(
-      [options.codexPath ?? "codex", "app-server", "--enable", "realtime_conversation", "--stdio"],
-      {
-        cwd: options.cwd,
-        env: appServerEnvironment(),
-        // Give this ephemeral App-server (and every MCP child it starts) an
-        // owned process group so teardown can reap the whole tree.
-        detached: true,
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    void this.readStdout();
-    void this.readStderr();
-    void this.child.exited.then((code) => this.finish(`App-server exited with code ${code}`));
+    this.child = Bun.spawn(appServerCommand(options), {
+      cwd: options.cwd,
+      env: appServerEnvironment(),
+      // Give this ephemeral App-server (and every MCP child it starts) an
+      // owned process group so teardown can reap the whole tree.
+      detached: true,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    this.stdoutDone = this.readStdout();
+    this.stderrDone = this.readStderr();
+    void this.child.exited.then(async (code) => {
+      await Promise.allSettled([this.stdoutDone, this.stderrDone]);
+      this.finish(`App-server exited with code ${code}`);
+    });
   }
 
   static async start(options: AppServerOptions): Promise<AppServerClient> {
@@ -171,9 +175,13 @@ export class AppServerClient {
         this.child.exited.then(() => true),
         Bun.sleep(1_000).then(() => false),
       ]);
-      if (!terminated) this.terminateProcessGroup("SIGKILL");
+      if (!terminated) {
+        this.terminateProcessGroup("SIGKILL");
+        await this.child.exited.catch(() => {});
+      }
     }
     this.terminateProcessGroup("SIGTERM");
+    await Promise.allSettled([this.stdoutDone, this.stderrDone]);
     this.finish("App-server closed");
   }
 
@@ -310,6 +318,22 @@ export class AppServerClient {
       // The owned process group is already gone.
     }
   }
+}
+
+export function appServerCommand(
+  options: Pick<AppServerOptions, "codexPath" | "command">,
+): string[] {
+  if (options.command) {
+    if (options.command.length === 0) throw new Error("App-server command cannot be empty");
+    return [...options.command];
+  }
+  return [
+    options.codexPath ?? "codex",
+    "app-server",
+    "--enable",
+    "realtime_conversation",
+    "--stdio",
+  ];
 }
 
 function denialResponse(method: string): Record<string, unknown> {

@@ -6,7 +6,9 @@ import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 export const AUDIO_SAMPLE_RATE = 48_000;
 export const AUDIO_FRAME_MS = 20;
 export const AUDIO_FRAME_SAMPLES = (AUDIO_SAMPLE_RATE * AUDIO_FRAME_MS) / 1_000;
+export const AUDIBLE_OVERLAP_RESOLUTION_SAMPLES = AUDIO_SAMPLE_RATE / 1_000;
 export const MONO_FRAME_BYTES = AUDIO_FRAME_SAMPLES * 2;
+export const AUDIBLE_RMS_THRESHOLD = 64;
 
 const SILENCE_FRAME = Buffer.alloc(MONO_FRAME_BYTES);
 
@@ -55,6 +57,7 @@ interface ActivePlayback {
   id: string;
   pcm: Buffer;
   offset: number;
+  startSample: number;
   resolve(): void;
   reject(error: Error): void;
 }
@@ -94,10 +97,12 @@ export class ContinuousUplink {
       );
     }
     return new Promise((resolve, reject) => {
-      this.active = { id, pcm, offset: 0, resolve, reject };
+      const startSample = this.options.recorder.currentInputSample();
+      this.active = { id, pcm, offset: 0, startSample, resolve, reject };
       this.options.journal.record("media", "input.audio.started", {
         id,
         durationMs: (pcm.length / 2 / AUDIO_SAMPLE_RATE) * 1_000,
+        startSample,
       });
     });
   }
@@ -149,7 +154,11 @@ export class ContinuousUplink {
 
     if (active && active.offset >= active.pcm.length) {
       this.active = null;
-      this.options.journal.record("media", "input.audio.finished", { id: active.id });
+      this.options.journal.record("media", "input.audio.finished", {
+        id: active.id,
+        startSample: active.startSample,
+        endSample: this.options.recorder.currentInputSample(),
+      });
       active.resolve();
     }
   }
@@ -158,6 +167,17 @@ export class ContinuousUplink {
 interface OutputSegment {
   sampleOffset: number;
   pcm: Buffer;
+}
+
+export interface AudibleOverlapMeasurement {
+  sampleRate: number;
+  windowSamples: number;
+  resolutionSamples: number;
+  inputStartSample: number;
+  inputEndSample: number;
+  overlappingWindowCount: number;
+  overlappingSampleCount: number;
+  overlapDurationMs: number;
 }
 
 /** Captures an aligned duplex timeline and emits mono plus stereo-review WAVs. */
@@ -176,6 +196,10 @@ export class DuplexRecorder {
       throw new Error("cannot restart a duplex recording after media was captured");
     }
     this.startedAt = performance.now();
+  }
+
+  currentInputSample(): number {
+    return this.inputSamples;
   }
 
   recordInput(frame: Buffer): void {
@@ -226,21 +250,16 @@ export class DuplexRecorder {
     this.wallOutputReceivedAt = receivedAt;
   }
 
-  async write(directory: string): Promise<{ durationMs: number }> {
-    const elapsedSamples = Math.ceil(
-      ((performance.now() - this.startedAt) / 1_000) * AUDIO_SAMPLE_RATE,
-    );
-    let totalSamples = Math.max(this.inputSamples, elapsedSamples);
-    for (const segment of this.outputSegments) {
-      totalSamples = Math.max(totalSamples, segment.sampleOffset + segment.pcm.length / 2);
-    }
+  measureAudibleOverlap(
+    inputStartSample: number,
+    inputEndSample: number,
+  ): AudibleOverlapMeasurement {
+    const { input, output } = this.renderTracks(inputEndSample);
+    return measureAudiblePcmOverlap(input, output, inputStartSample, inputEndSample);
+  }
 
-    const input = Buffer.alloc(totalSamples * 2);
-    Buffer.concat(this.inputFrames).copy(input);
-    const output = Buffer.alloc(totalSamples * 2);
-    for (const segment of this.outputSegments) {
-      segment.pcm.copy(output, segment.sampleOffset * 2);
-    }
+  async write(directory: string): Promise<{ durationMs: number }> {
+    const { input, output, totalSamples } = this.renderTracks();
     const stereo = interleaveStereo(input, output);
 
     mkdirSync(directory, { recursive: true });
@@ -251,6 +270,90 @@ export class DuplexRecorder {
     ]);
     return { durationMs: (totalSamples / AUDIO_SAMPLE_RATE) * 1_000 };
   }
+
+  private renderTracks(minimumSamples = 0): {
+    input: Buffer;
+    output: Buffer;
+    totalSamples: number;
+  } {
+    const elapsedSamples = Math.ceil(
+      ((performance.now() - this.startedAt) / 1_000) * AUDIO_SAMPLE_RATE,
+    );
+    let totalSamples = Math.max(this.inputSamples, elapsedSamples, minimumSamples);
+    for (const segment of this.outputSegments) {
+      totalSamples = Math.max(totalSamples, segment.sampleOffset + segment.pcm.length / 2);
+    }
+
+    const input = Buffer.alloc(totalSamples * 2);
+    Buffer.concat(this.inputFrames).copy(input);
+    const output = Buffer.alloc(totalSamples * 2);
+    for (const segment of this.outputSegments) {
+      segment.pcm.copy(output, segment.sampleOffset * 2);
+    }
+    return { input, output, totalSamples };
+  }
+}
+
+export function measureAudiblePcmOverlap(
+  input: Buffer,
+  output: Buffer,
+  inputStartSample: number,
+  inputEndSample: number,
+  windowSamples = AUDIO_FRAME_SAMPLES,
+): AudibleOverlapMeasurement {
+  if (!Number.isInteger(inputStartSample) || inputStartSample < 0) {
+    throw new Error(`inputStartSample must be a nonnegative integer; got ${inputStartSample}`);
+  }
+  if (!Number.isInteger(inputEndSample) || inputEndSample <= inputStartSample) {
+    throw new Error(`inputEndSample must be greater than inputStartSample; got ${inputEndSample}`);
+  }
+  if (!Number.isInteger(windowSamples) || windowSamples < 1) {
+    throw new Error(`windowSamples must be a positive integer; got ${windowSamples}`);
+  }
+
+  let overlappingWindowCount = 0;
+  let overlappingSampleCount = 0;
+  for (let offset = inputStartSample; offset < inputEndSample; offset += windowSamples) {
+    const windowEnd = Math.min(offset + windowSamples, inputEndSample);
+    let windowOverlapSamples = 0;
+    for (
+      let resolutionOffset = offset;
+      resolutionOffset < windowEnd;
+      resolutionOffset += AUDIBLE_OVERLAP_RESOLUTION_SAMPLES
+    ) {
+      const samples = Math.min(AUDIBLE_OVERLAP_RESOLUTION_SAMPLES, windowEnd - resolutionOffset);
+      if (
+        isAudiblePcmRange(input, resolutionOffset, samples) &&
+        isAudiblePcmRange(output, resolutionOffset, samples)
+      ) {
+        windowOverlapSamples += samples;
+      }
+    }
+    if (windowOverlapSamples > 0) {
+      overlappingWindowCount++;
+      overlappingSampleCount += windowOverlapSamples;
+    }
+  }
+  return {
+    sampleRate: AUDIO_SAMPLE_RATE,
+    windowSamples,
+    resolutionSamples: AUDIBLE_OVERLAP_RESOLUTION_SAMPLES,
+    inputStartSample,
+    inputEndSample,
+    overlappingWindowCount,
+    overlappingSampleCount,
+    overlapDurationMs: (overlappingSampleCount / AUDIO_SAMPLE_RATE) * 1_000,
+  };
+}
+
+function isAudiblePcmRange(pcm: Buffer, startSample: number, sampleCount: number): boolean {
+  let sumSquares = 0;
+  for (let sample = 0; sample < sampleCount; sample++) {
+    const byteOffset = (startSample + sample) * 2;
+    const value = byteOffset + 1 < pcm.length ? pcm.readInt16LE(byteOffset) : 0;
+    sumSquares += value * value;
+  }
+  return Math.sqrt(sumSquares / sampleCount) >= AUDIBLE_RMS_THRESHOLD;
 }
 
 export function wavBuffer(pcm: Buffer, channels: 1 | 2): Buffer {

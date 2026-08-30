@@ -80,6 +80,32 @@ describe("Fx headless lifecycle", () => {
       if (spawnedPid && processExists(spawnedPid)) process.kill(spawnedPid, "SIGKILL");
     }
   });
+
+  test("rejects the fatal monitor when Fx exits after becoming ready", async () => {
+    const directory = temporaryDirectory();
+    const fakeFxPath = join(directory, "ready-fx");
+    const pidPath = join(directory, "ready-fx.pid");
+    writeFileSync(fakeFxPath, readyFxProgram(pidPath), { mode: 0o700 });
+    chmodSync(fakeFxPath, 0o700);
+    const orchestrator = new FxHeadlessOrchestrator({
+      workspace: directory,
+      fxPath: fakeFxPath,
+      model: "gpt-5.6-terra",
+      reasoningEffort: "medium",
+    });
+    let spawnedPid: number | null = null;
+
+    try {
+      await orchestrator.start();
+      spawnedPid = Number(readFileSync(pidPath, "utf8"));
+      expect(Number.isInteger(spawnedPid) && spawnedPid > 0).toBe(true);
+      process.kill(spawnedPid, "SIGTERM");
+      await expect(orchestrator.fatal).rejects.toThrow("Fx exited during the active session");
+    } finally {
+      await orchestrator.stop().catch(() => {});
+      if (spawnedPid && processExists(spawnedPid)) process.kill(spawnedPid, "SIGKILL");
+    }
+  });
 });
 
 describe("Fx work control", () => {
@@ -324,6 +350,86 @@ if (argument === "--fxnk-version") {
 }
 
 writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+const event = {
+  schema_version: 1,
+  sequence: 1,
+  event: "FxStarted",
+  instance_id: process.env.FX_ADE_INSTANCE_ID,
+  context: {
+    agent_role: "main",
+    workspace_root: process.cwd(),
+    session_id: "test-session",
+    parent_session_id: null,
+    subagent_id: null,
+    turn_id: null,
+    agent_state: "idle",
+    attention_kind: null,
+  },
+  payload: {},
+};
+await new Promise((resolve, reject) => {
+  const socket = createConnection({ path: process.env.FX_ADE_SOCKET_PATH });
+  socket.once("error", reject);
+  socket.once("close", resolve);
+  socket.once("connect", () => socket.end(JSON.stringify(event) + "\\n"));
+});
+process.exit(12);
+`;
+}
+
+function readyFxProgram(pidPath: string): string {
+  return `#!/usr/bin/env bun
+import { writeFileSync } from "node:fs";
+import { createConnection, createServer } from "node:net";
+
+const argument = process.argv[2];
+if (argument === "status") {
+  console.log(JSON.stringify({
+    kind: "status",
+    model_source: "Codex subscription",
+    build_revision: "test-revision",
+    auth: "Codex subscription",
+    connected_providers: ["codex"],
+    permission_mode: "yolo",
+  }));
+  process.exit(0);
+}
+if (argument === "--version") {
+  console.log("0.0.7");
+  process.exit(0);
+}
+if (argument === "--fxnk-version") {
+  console.log("fxnk 0.5.0 (fx 0.0.7)");
+  process.exit(0);
+}
+
+writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+const server = createServer((socket) => {
+  let bytes = Buffer.alloc(0);
+  socket.on("data", (chunk) => {
+    bytes = Buffer.concat([bytes, chunk]);
+    if (bytes.length < 4) return;
+    const length = bytes.readUInt32BE(0);
+    if (bytes.length < length + 4) return;
+    const request = JSON.parse(bytes.subarray(4, length + 4).toString("utf8"));
+    const response = Buffer.from(JSON.stringify({
+      schema: 1,
+      request_id: request.request_id,
+      instance_id: process.env.FX_WORK_CONTROL_INSTANCE_ID,
+      ok: true,
+      result: {
+        snapshot: { active_turn_id: null, queue_paused: false, queue: [] },
+      },
+    }));
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(response.length);
+    socket.end(Buffer.concat([header, response]));
+  });
+});
+await new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(process.env.FX_WORK_CONTROL_SOCKET_PATH, resolve);
+});
 const event = {
   schema_version: 1,
   sequence: 1,

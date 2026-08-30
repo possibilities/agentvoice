@@ -24,7 +24,7 @@ export interface RunOptions {
   codexPath?: string;
 }
 
-interface OracleResult {
+export interface OracleResult {
   command: string[];
   exitCode: number;
   durationMs: number;
@@ -36,7 +36,7 @@ interface OracleResult {
   score: number | null;
 }
 
-interface OpenSessionOptions {
+export interface OpenSessionOptions {
   workspace: string;
   voiceModel: string;
   voice: string;
@@ -44,11 +44,16 @@ interface OpenSessionOptions {
   reasoningEffort: string;
   includeStartupContext: boolean;
   codexPath?: string;
+  appServerCommand?: readonly string[];
+  clientManagedHandoffs?: boolean;
+  delegationAckFiller?: boolean;
+  recordCanonicalCodexTurns?: boolean;
+  onNotification?(method: string, params: Record<string, unknown>): void;
   journal: EventJournal;
   stderr: string[];
 }
 
-interface OpenSession {
+export interface OpenSession {
   appServer: AppServerClient;
   peer: RealtimePeer;
   recorder: DuplexRecorder;
@@ -259,7 +264,7 @@ export async function probeCodexVoice(codexPath = "codex"): Promise<Record<strin
   }
 }
 
-async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
+export async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
   const appServerCwd = mkdtempSync(join(tmpdir(), "agentvoice-app-server-"));
   const recorder = new DuplexRecorder();
   const peer = new RealtimePeer(options.journal, recorder);
@@ -278,13 +283,15 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
   try {
     appServer = await AppServerClient.start({
       ...(options.codexPath ? { codexPath: options.codexPath } : {}),
+      ...(options.appServerCommand ? { command: options.appServerCommand } : {}),
       cwd: appServerCwd,
       clientVersion: VERSION,
       onNotification(method, params) {
         options.journal.record("app-server", `appserver.${method}`, sanitize(params));
-        if (rootThreadId !== null) {
+        if (rootThreadId !== null && options.recordCanonicalCodexTurns !== false) {
           recordRootTurnNotification(options.journal, method, params, rootThreadId);
         }
+        options.onNotification?.(method, params);
         if (method === "thread/realtime/error") {
           options.journal.record("app-server", "voice.error", sanitize(params));
           realtimeStartFailure?.(params);
@@ -313,7 +320,13 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
     });
     const threadId = extractThreadId(thread);
     rootThreadId = threadId;
-    options.journal.record("app-server", "orchestrator.thread.started", { threadId });
+    options.journal.record(
+      "app-server",
+      options.recordCanonicalCodexTurns === false
+        ? "voice.thread.started"
+        : "orchestrator.thread.started",
+      { threadId },
+    );
 
     const offer = await peer.createOffer();
     const realtimeSessionId = crypto.randomUUID();
@@ -341,6 +354,12 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
         voice: options.voice,
         outputModality: "audio",
         includeStartupContext: options.includeStartupContext,
+        ...(options.clientManagedHandoffs !== undefined
+          ? { clientManagedHandoffs: options.clientManagedHandoffs }
+          : {}),
+        ...(options.delegationAckFiller !== undefined
+          ? { delegationAckFiller: options.delegationAckFiller }
+          : {}),
         transport: { type: "webrtc", sdp: offer },
       },
       START_TIMEOUT_MS,
@@ -391,7 +410,7 @@ async function openSession(options: OpenSessionOptions): Promise<OpenSession> {
   }
 }
 
-async function stopSession(session: OpenSession, journal: EventJournal): Promise<void> {
+export async function stopSession(session: OpenSession, journal: EventJournal): Promise<void> {
   session.uplink.stop();
   try {
     const closed = session.appServer.waitForNotification(
@@ -413,7 +432,7 @@ async function stopSession(session: OpenSession, journal: EventJournal): Promise
   journal.record("harness", "session.closed");
 }
 
-async function executeStep(
+export async function executeStep(
   step: ScenarioStep,
   index: number,
   audio: Map<string, Buffer>,
@@ -461,7 +480,7 @@ async function executeStep(
   journal.record("harness", "scenario.step.completed", { index, type: step.type });
 }
 
-async function runOracle(
+export async function runOracle(
   loaded: LoadedScenario,
   workspace: string,
   journal: EventJournal,
@@ -510,7 +529,7 @@ async function runOracle(
   return result;
 }
 
-function uniqueArtifactDirectory(root: string, scenario: string, contender: string): string {
+export function uniqueArtifactDirectory(root: string, scenario: string, contender: string): string {
   const stamp = new Date().toISOString().replaceAll(":", "-").replace(".", "-");
   const base = join(root, `${stamp}-${scenario}-${contender}`);
   let candidate = base;
@@ -521,7 +540,7 @@ function uniqueArtifactDirectory(root: string, scenario: string, contender: stri
   return candidate;
 }
 
-async function commandVersion(command: string): Promise<string> {
+export async function commandVersion(command: string): Promise<string> {
   const child = Bun.spawn([command, "--version"], {
     env: environmentWithoutOpenAiApiKey(),
     stdin: "ignore",
@@ -537,7 +556,7 @@ async function commandVersion(command: string): Promise<string> {
   return stdout.trim();
 }
 
-async function writeWorkspaceDiff(
+export async function writeWorkspaceDiff(
   before: string,
   after: string,
   destination: string,

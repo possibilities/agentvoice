@@ -1,5 +1,6 @@
 node_modules/
 artifacts/
+.cache/
 /.env.local
 fixtures/**/audio/*.wav
 fixtures/**/audio/*.mp3

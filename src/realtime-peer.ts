@@ -1,6 +1,6 @@
 import OpusScript from "opusscript";
 import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters, RtpBuilder } from "werift";
-import { AUDIO_SAMPLE_RATE, type DuplexRecorder } from "./audio.ts";
+import { AUDIBLE_RMS_THRESHOLD, AUDIO_SAMPLE_RATE, type DuplexRecorder } from "./audio.ts";
 import type { EventJournal } from "./events.ts";
 
 const OPUS = new RTCRtpCodecParameters({
@@ -9,7 +9,6 @@ const OPUS = new RTCRtpCodecParameters({
   channels: 2,
 });
 const OUTPUT_IDLE_MS = 350;
-const AUDIBLE_RMS_THRESHOLD = 64;
 
 export class RealtimePeer {
   private readonly journal: EventJournal;

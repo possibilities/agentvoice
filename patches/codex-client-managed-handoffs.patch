@@ -1,0 +1,233 @@
+diff --git a/codex-rs/app-server/README.md b/codex-rs/app-server/README.md
+index cea5327213085adf248a5c9e90cfdab0a08d8c47..96c4bc6a8d43e5f6ef433faa30fb237299a384df 100644
+--- a/codex-rs/app-server/README.md
++++ b/codex-rs/app-server/README.md
+@@ -214,7 +214,7 @@ Example with notification opt-out:
+ - `turn/settings/update` — experimental; publish a narrow model-settings patch to the exact live task identified by `threadId` and `turnId`, regardless of task kind. Requires `step_model_switching`; returns `status: "applied"` or `status: "targetUnavailable"`, or a request error if rejected. Future-thread settings and already captured steps are unchanged. Parent-owned Multi-Agent V2 subagents reject direct settings updates.
+ - `turn/steer` — add user input to an already in-flight regular turn without starting a new turn; returns the active `turnId` that accepted the input. `clientUserMessageId` is optional; when supplied, the corresponding `userMessage` item echoes it as `clientId`. Review and manual compaction turns reject `turn/steer`. Parent-owned Multi-Agent V2 subagents reject direct steering.
+ - `turn/interrupt` — request cancellation of an in-flight turn by `(thread_id, turn_id)`; success is an empty `{}` response and the turn finishes with `status: "interrupted"`. Also available for parent-owned Multi-Agent V2 subagents.
+-- `thread/realtime/start` — start a thread-scoped realtime session (experimental); pass `outputModality: "text"` or `outputModality: "audio"` to choose model output, optionally pass `model` and `version` to override configured realtime selection for this session only, pass `includeStartupContext: false` to omit Codex's generated startup context, and optionally pass `initialItems` to seed V3 with complete role-bearing text messages at session creation. Pass `realtimeStartInstructions` and `realtimeEndInstructions` to control the developer instructions given to the backing Codex model when this session starts and ends. Version `"v1"` uses legacy Bidi `conversation.handoff.*`, `"v2"` uses the Realtime Voice API, and `"v3"` preserves V1 Codex Voice behavior while using Frameless Bidi `delegation.*`. For V3 automatic Codex text, `codexResponseHandoffMode` accepts `"thinking"` (the default; all output uses channel-less thinking appends), `"commentary"` (all output uses the commentary channel), or `"bemTags"` (the raw BEM envelope selects the API channel: BEM `analysis` and `commentary` use `commentary`, while BEM `final` and unparsable output use `speakable`). The BEM envelope remains in the appended text for the frontend model to interpret. V1 and V2 ignore this setting. For V3, pass `delegationAckFiller: false` to suppress the Realtime API's delegation acknowledgement filler or `true` to restore it; omitting the field preserves the Realtime API's default. V1 and V2 ignore `delegationAckFiller`. V3 handoffs do not prepend the legacy `"Agent Final Message"` label. Pass `clientManagedHandoffs: true` to disable automatic Codex response delivery so only the client's explicit append calls produce handoffs. Pass `codexResponsesAsItems: true` to send automatic Codex responses as realtime conversation items instead, and optionally pass `codexResponseItemPrefix` to prepend experiment instructions to those items. Returns `{}` and streams `thread/realtime/*` notifications. Omit `transport` for the websocket transport, or pass `{ "type": "webrtc", "sdp": "..." }` to create a Bidi WebRTC session from a browser-generated SDP offer; the remote answer SDP is emitted as `thread/realtime/sdp`. Conversation `version: "v2"` requests remain unsupported for WebRTC. Parent-owned Multi-Agent V2 subagents reject this request.
++- `thread/realtime/start` — start a thread-scoped realtime session (experimental); pass `outputModality: "text"` or `outputModality: "audio"` to choose model output, optionally pass `model` and `version` to override configured realtime selection for this session only, pass `includeStartupContext: false` to omit Codex's generated startup context, and optionally pass `initialItems` to seed V3 with complete role-bearing text messages at session creation. Pass `realtimeStartInstructions` and `realtimeEndInstructions` to control the developer instructions given to the backing Codex model when this session starts and ends. Version `"v1"` uses legacy Bidi `conversation.handoff.*`, `"v2"` uses the Realtime Voice API, and `"v3"` preserves V1 Codex Voice behavior while using Frameless Bidi `delegation.*`. For V3 automatic Codex text, `codexResponseHandoffMode` accepts `"thinking"` (the default; all output uses channel-less thinking appends), `"commentary"` (all output uses the commentary channel), or `"bemTags"` (the raw BEM envelope selects the API channel: BEM `analysis` and `commentary` use `commentary`, while BEM `final` and unparsable output use `speakable`). The BEM envelope remains in the appended text for the frontend model to interpret. V1 and V2 ignore this setting. For V3, pass `delegationAckFiller: false` to suppress the Realtime API's delegation acknowledgement filler or `true` to restore it; omitting the field preserves the Realtime API's default. V1 and V2 ignore `delegationAckFiller`. V3 handoffs do not prepend the legacy `"Agent Final Message"` label. Pass `clientManagedHandoffs: true` to disable internal handoff and transcript-tail routing while keeping raw realtime events visible; only the client's explicit append calls produce handoffs. Pass `codexResponsesAsItems: true` to send automatic Codex responses as realtime conversation items instead, and optionally pass `codexResponseItemPrefix` to prepend experiment instructions to those items. Returns `{}` and streams `thread/realtime/*` notifications. Omit `transport` for the websocket transport, or pass `{ "type": "webrtc", "sdp": "..." }` to create a Bidi WebRTC session from a browser-generated SDP offer; the remote answer SDP is emitted as `thread/realtime/sdp`. Conversation `version: "v2"` requests remain unsupported for WebRTC. Parent-owned Multi-Agent V2 subagents reject this request.
+ - `thread/realtime/appendAudio` — append an input audio chunk to the active realtime session (experimental); returns `{}`. Parent-owned Multi-Agent V2 subagents reject this request.
+ - `thread/realtime/appendText` — append text input to the active realtime session with a required `role` of `user`, `developer`, or `assistant` (experimental); returns `{}`. Older clients that omit `role` default to `user`. Parent-owned Multi-Agent V2 subagents reject this request.
+ - `thread/realtime/appendSpeech` — append text that the realtime model should speak to the user (experimental); returns `{}`. Parent-owned Multi-Agent V2 subagents reject this request.
+@@ -1227,8 +1227,11 @@ For V3, pass `delegationAckFiller: false` to suppress the Realtime API's
+ delegation acknowledgement filler during WebRTC session creation, or pass `true`
+ to restore the legacy acknowledgement. Omitting `delegationAckFiller` preserves
+ the Realtime API's default. V1 and V2 ignore this setting.
+-Pass `clientManagedHandoffs: true` to suppress automatic Codex response handoffs
+-and items. The client can then choose which updates to deliver with
++Pass `clientManagedHandoffs: true` to leave realtime delegation to the client:
++handoff requests and the end-of-session transcript tail are not routed into
++Codex, and automatic Codex response handoffs and items are suppressed. Raw
++handoff request events remain visible through `thread/realtime/itemAdded`. The
++client can then choose which work to start and which updates to deliver with
+ `thread/realtime/appendText` or `thread/realtime/appendSpeech`.
+ Pass `codexResponsesAsItems: true` to inject automatic Codex responses with
+ `conversation.item.create` instead of the protocol's default speakable output
+diff --git a/codex-rs/app-server/tests/suite/v2/realtime_conversation.rs b/codex-rs/app-server/tests/suite/v2/realtime_conversation.rs
+index 9cf86981bf087b50432b55c813c34ee3bc357bcb..d50dc01ed943f9148c882ddade448e48b08ac4ff 100644
+--- a/codex-rs/app-server/tests/suite/v2/realtime_conversation.rs
++++ b/codex-rs/app-server/tests/suite/v2/realtime_conversation.rs
+@@ -340,6 +340,7 @@ impl RealtimeE2eHarness {
+         self.start_webrtc_realtime_with_codex_response_routing(
+             offer_sdp,
+             /*client_managed_handoffs*/ None,
++            /*flush_transcript_tail_on_session_end*/ None,
+             /*codex_responses_as_items*/ None,
+             /*codex_response_handoff_mode*/ None,
+             /*delegation_ack_filler*/ None,
+@@ -355,6 +356,7 @@ impl RealtimeE2eHarness {
+         self.start_webrtc_realtime_with_codex_response_routing(
+             offer_sdp,
+             /*client_managed_handoffs*/ None,
++            /*flush_transcript_tail_on_session_end*/ None,
+             /*codex_responses_as_items*/ Some(true),
+             /*codex_response_handoff_mode*/ None,
+             /*delegation_ack_filler*/ None,
+@@ -367,6 +369,7 @@ impl RealtimeE2eHarness {
+         &mut self,
+         offer_sdp: &str,
+         client_managed_handoffs: Option<bool>,
++        flush_transcript_tail_on_session_end: Option<bool>,
+         codex_responses_as_items: Option<bool>,
+         codex_response_handoff_mode: Option<CodexResponseHandoffMode>,
+         delegation_ack_filler: Option<bool>,
+@@ -379,7 +382,7 @@ impl RealtimeE2eHarness {
+             .send_thread_realtime_start_request(ThreadRealtimeStartParams {
+                 client_managed_handoffs,
+                 delegation_ack_filler,
+-                flush_transcript_tail_on_session_end: None,
++                flush_transcript_tail_on_session_end,
+                 thread_id: self.thread_id.clone(),
+                 codex_response_item_prefix: codex_responses_as_items
+                     .unwrap_or(false)
+@@ -2246,6 +2249,7 @@ async fn webrtc_v3_start_posts_live_session_and_joins_without_session_update() -
+         .start_webrtc_realtime_with_codex_response_routing(
+             "v=offer\r\n",
+             /*client_managed_handoffs*/ None,
++            /*flush_transcript_tail_on_session_end*/ None,
+             /*codex_responses_as_items*/ None,
+             /*codex_response_handoff_mode*/ None,
+             /*delegation_ack_filler*/ Some(false),
+@@ -2372,6 +2376,7 @@ async fn webrtc_v1_client_managed_handoffs_disable_automatic_output() -> Result<
+         .start_webrtc_realtime_with_codex_response_routing(
+             "v=offer\r\n",
+             /*client_managed_handoffs*/ Some(true),
++            /*flush_transcript_tail_on_session_end*/ None,
+             /*codex_responses_as_items*/ None,
+             /*codex_response_handoff_mode*/ None,
+             /*delegation_ack_filler*/ None,
+@@ -2426,6 +2431,101 @@ async fn webrtc_v1_client_managed_handoffs_disable_automatic_output() -> Result<
+     Ok(())
+ }
+ 
++#[tokio::test]
++async fn webrtc_v3_client_managed_handoffs_keep_events_without_internal_delegation() -> Result<()> {
++    skip_if_no_network!(Ok(()));
++
++    let mut harness = RealtimeE2eHarness::new(
++        RealtimeTestVersion::V1,
++        no_main_loop_responses(),
++        realtime_sideband(vec![realtime_sideband_connection(vec![vec![
++            session_started("sess_v3_client_managed_delegation"),
++            json!({
++                "type": "delegation.created",
++                "offset_ms": 100,
++                "item": {
++                    "id": "handoff_client_managed",
++                    "type": "delegation",
++                    "target": "client",
++                    "content": [{
++                        "type": "input_text",
++                        "text": "delegate through the client"
++                    }]
++                }
++            }),
++            json!({
++                "type": "input_transcript.added",
++                "item": {
++                    "id": "input_tail",
++                    "type": "input_transcript",
++                    "text": "tail after handoff"
++                }
++            }),
++            json!({
++                "type": "turn.done",
++                "turn": {
++                    "id": "turn_tail",
++                    "role": "user",
++                    "transcript": "tail after handoff"
++                }
++            }),
++        ]])]),
++    )
++    .await?;
++
++    let started = harness
++        .start_webrtc_realtime_with_codex_response_routing(
++            "v=offer\r\n",
++            /*client_managed_handoffs*/ Some(true),
++            /*flush_transcript_tail_on_session_end*/ Some(true),
++            /*codex_responses_as_items*/ None,
++            /*codex_response_handoff_mode*/ None,
++            /*delegation_ack_filler*/ None,
++            RealtimeConversationVersion::V3,
++        )
++        .await?;
++    assert_eq!(started.started.version, RealtimeConversationVersion::V3);
++    // V3 WebRTC sideband startup intentionally sends no session.update. An audio append gives the
++    // request/response test server a client frame to answer with the scripted raw V3 events.
++    harness.append_audio(harness.thread_id.clone()).await?;
++
++    let handoff_item = harness
++        .read_notification::<ThreadRealtimeItemAddedNotification>("thread/realtime/itemAdded")
++        .await?;
++    assert_eq!(handoff_item.thread_id, harness.thread_id);
++    assert_eq!(handoff_item.item["type"], json!("handoff_request"));
++    assert_eq!(
++        handoff_item.item["handoff_id"],
++        json!("handoff_client_managed")
++    );
++    assert_eq!(
++        handoff_item.item["input_transcript"],
++        json!("delegate through the client")
++    );
++
++    assert!(
++        timeout(
++            Duration::from_millis(200),
++            harness.read_notification::<TurnStartedNotification>("turn/started"),
++        )
++        .await
++        .is_err(),
++        "client-managed handoff requests and transcript tails must not start internal turns"
++    );
++
++    let closed = harness
++        .read_notification::<ThreadRealtimeClosedNotification>("thread/realtime/closed")
++        .await?;
++    assert_eq!(closed.thread_id, harness.thread_id);
++    assert!(
++        harness.main_loop_responses_requests().await?.is_empty(),
++        "client-managed realtime delegation must not call the Codex Responses API"
++    );
++
++    harness.shutdown().await;
++    Ok(())
++}
++
+ #[tokio::test]
+ async fn webrtc_v1_ignores_codex_response_handoff_mode() -> Result<()> {
+     skip_if_no_network!(Ok(()));
+@@ -2463,6 +2563,7 @@ async fn webrtc_v1_ignores_codex_response_handoff_mode() -> Result<()> {
+         .start_webrtc_realtime_with_codex_response_routing(
+             "v=offer\r\n",
+             /*client_managed_handoffs*/ None,
++            /*flush_transcript_tail_on_session_end*/ None,
+             /*codex_responses_as_items*/ None,
+             /*codex_response_handoff_mode*/ Some(CodexResponseHandoffMode::BemTags),
+             /*delegation_ack_filler*/ None,
+diff --git a/codex-rs/core/src/realtime_conversation.rs b/codex-rs/core/src/realtime_conversation.rs
+index f60d27dceef893b70347e542d52947c035bd4e27..ddbfabb93c3b727b7d261bf67a5f866cbae70c67 100644
+--- a/codex-rs/core/src/realtime_conversation.rs
++++ b/codex-rs/core/src/realtime_conversation.rs
+@@ -1577,6 +1577,7 @@ async fn handle_start_inner(
+     let sess_clone = Arc::clone(sess);
+     let sub_id = sub_id.to_string();
+     let fanout_realtime_active = Arc::clone(&realtime_active);
++    let route_realtime_delegations = !client_managed_handoffs;
+     let fanout_task = tokio::spawn(async move {
+         let ev = |msg| Event {
+             id: sub_id.clone(),
+@@ -1597,11 +1598,15 @@ async fn handle_start_inner(
+             if let RealtimeEvent::Error(_) = &event {
+                 end = RealtimeConversationEnd::Error;
+             }
+-            let maybe_routed_text = match &event {
+-                RealtimeEvent::HandoffRequested(handoff) => {
+-                    realtime_delegation_from_handoff(handoff)
++            let maybe_routed_text = if route_realtime_delegations {
++                match &event {
++                    RealtimeEvent::HandoffRequested(handoff) => {
++                        realtime_delegation_from_handoff(handoff)
++                    }
++                    _ => None,
+                 }
+-                _ => None,
++            } else {
++                None
+             };
+             if let Some(text) = maybe_routed_text {
+                 debug!(text = %text, "[realtime-text] realtime conversation text output");
+@@ -1616,7 +1621,9 @@ async fn handle_start_inner(
+                 )))
+                 .await;
+         }
+-        if let Ok(text) = transcript_tail_rx.recv().await {
++        if let Ok(text) = transcript_tail_rx.recv().await
++            && route_realtime_delegations
++        {
+             sess_clone.route_realtime_text_input(text).await;
+         }
+         if fanout_realtime_active.swap(false, Ordering::Relaxed) {

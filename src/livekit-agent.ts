@@ -3,14 +3,12 @@ import { defineAgent, type JobContext, llm, voice } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
 import { RoomEvent } from "@livekit/rtc-node";
 import { z } from "zod";
-import {
-  type FxAdeEvent,
-  type FxAdmission,
-  FxHeadlessOrchestrator,
-  type FxTurnResult,
-} from "./fx-orchestrator.ts";
+import { FxDelegationController } from "./fx-delegation.ts";
+import { type FxAdeEvent, FxHeadlessOrchestrator } from "./fx-orchestrator.ts";
 import { LiveKitJobResourceStopper } from "./livekit-job-lifecycle.ts";
 import { LiveKitTelemetryClient } from "./livekit-telemetry.ts";
+
+export { FxDelegationController } from "./fx-delegation.ts";
 
 export const LIVEKIT_AGENT_NAME = "agentvoice-livekit-contender";
 export const LIVEKIT_VOICE_MODEL = "gpt-realtime-2.1";
@@ -19,7 +17,6 @@ export const LIVEKIT_REASONING_EFFORT = "medium";
 export const FX_ORCHESTRATOR_MODEL = "gpt-5.6-terra";
 export const FX_REASONING_EFFORT = "medium";
 
-const ORCHESTRATOR_TURN_TIMEOUT_MS = 180_000;
 const FINAL_HANDOFF_TEMPLATE = "{message}";
 const FINAL_HANDOFF_REPLY_AT_TAIL =
   "A completed background coding result has arrived (call_ids: {callIds}). " +
@@ -59,18 +56,6 @@ export function parseLiveKitAgentJobMetadata(
   return metadata;
 }
 
-interface DelegationOrchestrator {
-  admit(text: string): Promise<FxAdmission>;
-  waitForTurn(turnId: string, timeoutMs: number): Promise<FxTurnResult>;
-}
-
-interface DelegationTelemetry {
-  emit(source: "livekit" | "fx", type: string, data?: Record<string, unknown>): Promise<void>;
-}
-
-type DelegationHandoffPhase = "progress" | "result";
-type DelegationHandoff = (message: string, phase: DelegationHandoffPhase) => Promise<void>;
-
 /**
  * LiveKit records AgentConfigUpdate markers in local history, but the OpenAI Realtime adapter
  * cannot serialize those markers as conversation items. Filter only at the provider boundary so
@@ -93,87 +78,6 @@ export function openAIRealtimeChatContext(chatCtx: llm.ChatContext): llm.ChatCon
 export class AgentVoiceRealtimeModel extends openai.realtime.RealtimeModel {
   override session(): AgentVoiceRealtimeSession {
     return new AgentVoiceRealtimeSession(this);
-  }
-}
-
-export class FxDelegationController {
-  constructor(
-    private readonly orchestrator: DelegationOrchestrator,
-    private readonly telemetry: DelegationTelemetry,
-  ) {}
-
-  async delegate(request: string, handoff: DelegationHandoff): Promise<void> {
-    const admission = await this.orchestrator.admit(request);
-    await this.telemetry.emit("livekit", "delegation.created", {
-      text: request,
-      delegationTurnId: admission.delegationTurnId,
-      disposition: admission.disposition,
-      activeTurnId: admission.activeTurnId,
-    });
-
-    if (admission.disposition === "steering") {
-      if (!admission.activeTurnId) {
-        throw new Error("Fx admitted steering without identifying the active turn");
-      }
-      await handoff(
-        "The new constraint was steered into the coding work already in progress. " +
-          "Acknowledge it once in at most eight spoken words, then remain available; the original " +
-          "delegation will deliver the final result.",
-        "progress",
-      );
-      await this.telemetry.emit("livekit", "delegation.steered", {
-        delegationTurnId: admission.delegationTurnId,
-        activeTurnId: admission.activeTurnId,
-      });
-      return;
-    }
-
-    await handoff(
-      "The coding orchestrator accepted the request and is working in the background. " +
-        "Acknowledge this once in at most eight spoken words, stay available for interruption, " +
-        "and do not claim completion yet.",
-      "progress",
-    );
-    let result: FxTurnResult;
-    try {
-      result = await this.orchestrator.waitForTurn(
-        admission.delegationTurnId,
-        ORCHESTRATOR_TURN_TIMEOUT_MS,
-      );
-      if (result.outcome !== "completed") {
-        throw new Error(
-          `Fx turn ${result.turnId} ended ${result.outcome}: ` +
-            (result.assistantText || "no orchestrator report"),
-        );
-      }
-    } catch (error) {
-      await this.telemetry.emit("livekit", "delegation.failed", {
-        delegationTurnId: admission.delegationTurnId,
-        message: errorMessage(error),
-      });
-      await handoff(
-        "The coding orchestrator stopped without a completed result. Tell the user the work failed " +
-          `and give this reason; do not claim completion:\n${errorMessage(error)}`,
-        "result",
-      );
-      return;
-    }
-
-    await this.telemetry.emit("livekit", "delegation.completed", {
-      delegationTurnId: admission.delegationTurnId,
-      turnId: result.turnId,
-      outcome: result.outcome,
-      providerDisposition: result.providerDisposition,
-      assistantText: result.assistantText,
-    });
-    await handoff(
-      "The coding orchestrator has finished. This result is authoritative and replaces the " +
-        "earlier still-running progress update. Give the user an accurate spoken report now in at " +
-        `most 80 words and four short sentences; do not say the work is still running.\n\n${
-          result.assistantText || "The turn completed without a text report."
-        }`,
-      "result",
-    );
   }
 }
 
@@ -273,7 +177,9 @@ export default defineAgent({
       const identity = await activeOrchestrator.start();
       await telemetry.emit("fx", "fx.identity", { ...identity });
 
-      const controller = new FxDelegationController(activeOrchestrator, telemetry);
+      const controller = new FxDelegationController(activeOrchestrator, {
+        emit: (type, data) => telemetry.emit("livekit", type, data),
+      });
       const realtimeModel = new AgentVoiceRealtimeModel({
         model: LIVEKIT_VOICE_MODEL,
         reasoning: { effort: LIVEKIT_REASONING_EFFORT },

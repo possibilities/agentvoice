@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { writeSync } from "node:fs";
+import { probeCodexFxVoice, runCodexFxScenario } from "./codex-fx-runner.ts";
 import { probeCodexVoice, runCodexScenario } from "./codex-runner.ts";
 import { FxHeadlessOrchestrator } from "./fx-orchestrator.ts";
 import { probeLiveKit, runLiveKitScenario } from "./livekit-runner.ts";
@@ -37,6 +38,9 @@ try {
       ...(option(rest, "--runtime") ? { runtimePath: option(rest, "--runtime") } : {}),
     });
     stdout(`${JSON.stringify(result, null, 2)}\n`);
+  } else if (command === "probe" && contender === "codex-fx") {
+    const result = await probeCodexFxVoice(option(rest, "--app-server"));
+    stdout(`${JSON.stringify(result, null, 2)}\n`);
   } else if (command === "run" && contender === "codex") {
     const scenarioPath = positional(rest);
     if (!scenarioPath) throw new Error("missing scenario path");
@@ -46,6 +50,16 @@ try {
       ...(option(rest, "--codex") ? { codexPath: option(rest, "--codex") } : {}),
     });
     stdout(`Codex reference run complete: ${directory}\n`);
+  } else if (command === "run" && contender === "codex-fx") {
+    const scenarioPath = positional(rest);
+    if (!scenarioPath) throw new Error("missing scenario path");
+    const directory = await runCodexFxScenario({
+      scenarioPath,
+      ...(option(rest, "--artifacts") ? { artifactsRoot: option(rest, "--artifacts") } : {}),
+      ...(option(rest, "--app-server") ? { appServerPath: option(rest, "--app-server") } : {}),
+      ...(option(rest, "--fx") ? { fxPath: option(rest, "--fx") } : {}),
+    });
+    stdout(`Codex-Fx contender run complete: ${directory}\n`);
   } else if (command === "run" && contender === "livekit") {
     const scenarioPath = positional(rest);
     if (!scenarioPath) throw new Error("missing scenario path");
@@ -86,6 +100,7 @@ function option(args: readonly string[], name: string): string | undefined {
 function positional(args: readonly string[]): string | undefined {
   const valueOptions = new Set([
     "--artifacts",
+    "--app-server",
     "--codex",
     "--livekit-server",
     "--fx",
@@ -107,9 +122,11 @@ function positional(args: readonly string[]): string | undefined {
 function usage(): void {
   stderr(`Usage:
   bun run src/cli.ts probe codex [--codex PATH]
+  bun run src/cli.ts probe codex-fx [--app-server PATH]
   bun run src/cli.ts probe fx [--fx PATH]
   bun run src/cli.ts probe livekit [--livekit-server PATH] [--worker PATH] [--runtime PATH]
   bun run src/cli.ts run codex SCENARIO [--artifacts DIR] [--codex PATH]
+  bun run src/cli.ts run codex-fx SCENARIO [--artifacts DIR] [--app-server PATH] [--fx PATH]
   bun run src/cli.ts run livekit SCENARIO [--artifacts DIR] [--livekit-server PATH]
     [--fx PATH] [--agent PATH] [--worker PATH] [--runtime PATH]\n`);
 }

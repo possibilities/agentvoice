@@ -36,6 +36,18 @@ The LiveKit Agents voice agent connected to the Fx orchestrator agent. LiveKit h
 
 _Avoid_: LiveKit orchestrator, Fx voice model.
 
+**Codex–Fx contender**
+
+The pinned native Codex voice agent paired with the Fx orchestrator agent through client-managed delegations and handoffs. Its standalone App-server is a voice sidecar only; it must start zero Codex coding turns.
+
+_Avoid_: patched reference, Codex orchestrator, LiveKit-free contender.
+
+**Voice sidecar**
+
+The minimally patched standalone Codex App-server process that owns the Codex–Fx contender's private realtime voice session while leaving all workspace work to Fx.
+
+_Avoid_: backend agent, coding sidecar, extracted voice model.
+
 **Async delegation**
 
 A delegation that continues in the background after the voice agent acknowledges it, so conversation and interruption remain available while the orchestrator agent works.
