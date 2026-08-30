@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+fixtures/**/audio/*.wav
+fixtures/**/audio/*.mp3
+fixtures/**/audio/*.m4a
+fixtures/**/audio/*.aiff
+*.log
+.DS_Store

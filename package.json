@@ -1,0 +1,28 @@
+{
+  "name": "agentvoice-eval",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless full-duplex evaluation harness for coding voice agents.",
+  "scripts": {
+    "eval:codex": "bun run src/cli.ts run codex",
+    "probe:codex": "bun run src/cli.ts probe codex",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check",
+    "format": "biome check --write"
+  },
+  "dependencies": {
+    "opusscript": "0.1.1",
+    "werift": "0.24.4",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.11",
+    "@types/bun": "1.4.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}

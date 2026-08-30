@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "id": "compact-full-duplex",
+  "description": "Diagnose, repair, steer mid-work, verify, and summarize an idempotency bug in one compact full-duplex coding conversation.",
+  "workspace": "workspace",
+  "agent": {
+    "voiceModel": "gpt-live-1-codex",
+    "voice": "cove",
+    "orchestratorModel": "gpt-5.6-terra",
+    "reasoningEffort": "medium",
+    "includeStartupContext": true
+  },
+  "steps": [
+    {
+      "type": "play",
+      "id": "diagnose",
+      "audio": "audio/01-diagnose.wav",
+      "transcript": "Please inspect this checkout and explain why retrying a successful reservation can reduce inventory twice. Don't change anything yet."
+    },
+    {
+      "type": "wait",
+      "event": "delegation.created",
+      "occurrence": 1,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait",
+      "event": "orchestrator.turn.completed",
+      "occurrence": 1,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait",
+      "event": "output.transcript.done",
+      "after": {
+        "event": "orchestrator.turn.completed",
+        "occurrence": 1
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "play",
+      "id": "implement",
+      "audio": "audio/02-implement.wav",
+      "transcript": "Good. Fix it with regression tests. Preserve the public API, and make conflicting reuse of the same request ID fail with an actionable error."
+    },
+    {
+      "type": "wait",
+      "event": "delegation.created",
+      "occurrence": 2,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "sleep",
+      "ms": 1500
+    },
+    {
+      "type": "play",
+      "id": "steer",
+      "audio": "audio/03-steer.wav",
+      "transcript": "One constraint I want to make explicit: an exact replay must return the original reservation, not turn every duplicate into an error. Keep working."
+    },
+    {
+      "type": "wait",
+      "event": "delegation.created",
+      "occurrence": 3,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait",
+      "event": "orchestrator.turn.completed",
+      "occurrence": 2,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait",
+      "event": "output.transcript.done",
+      "after": {
+        "event": "orchestrator.turn.completed",
+        "occurrence": 2
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "play",
+      "id": "verify",
+      "audio": "audio/04-verify.wav",
+      "transcript": "Run the entire test suite now. Then give me a concise final report: the behavior changed, the tests run, and one remaining edge case."
+    },
+    {
+      "type": "wait",
+      "event": "delegation.created",
+      "occurrence": 4,
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait",
+      "event": "orchestrator.turn.completed",
+      "occurrence": 3,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait",
+      "event": "output.transcript.done",
+      "after": {
+        "event": "orchestrator.turn.completed",
+        "occurrence": 3
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "sleep",
+      "ms": 1000
+    }
+  ],
+  "oracle": {
+    "command": ["python3", "oracle.py"],
+    "timeoutMs": 60000
+  }
+}
