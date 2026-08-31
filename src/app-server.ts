@@ -1,7 +1,31 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { Subprocess } from "bun";
 import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const CHILD_OBSERVATION_INTERVAL_MS = 100;
+export const NATIVE_SIDECAR_SANDBOX_PROFILE = "(version 1)\n(allow default)\n(deny process-fork)\n";
+
+export type AppServerExecutionProfile = "legacy-app-server" | "native-voice-sidecar";
+export type ChildProcessPolicy = "owned-process-group" | "kernel-deny-fork" | "unavailable";
+
+export interface AppServerIsolationEvidence {
+  implementationProfile: AppServerExecutionProfile;
+  platform: NodeJS.Platform;
+  childProcessPolicy: ChildProcessPolicy;
+  sandboxExecutable: string | null;
+  sandboxProfileSha256: string | null;
+  childObservation: "ps-descendant-sampling" | "not-required";
+  childObservationErrorCount: number;
+  observedChildProcessCount: number;
+}
+
+export type AppServerIsolationEvent =
+  | "started"
+  | "child-observed"
+  | "observation-error"
+  | "completed";
 
 export class AppServerError extends Error {
   readonly code?: number;
@@ -33,10 +57,12 @@ export interface AppServerOptions {
   codexPath?: string;
   /** Complete process argv for a standalone App Server build. */
   command?: readonly string[];
+  executionProfile?: AppServerExecutionProfile;
   cwd: string;
   clientVersion: string;
   onNotification?(method: string, params: Record<string, unknown>): void;
   onProtocolMessage?(direction: "in" | "out", message: Record<string, unknown>): void;
+  onIsolationEvent?(event: AppServerIsolationEvent, evidence: AppServerIsolationEvidence): void;
   onStderr?(text: string): void;
 }
 
@@ -48,6 +74,8 @@ export interface AppServerOptions {
 export class AppServerClient {
   private readonly options: AppServerOptions;
   private readonly child: Subprocess<"pipe", "pipe", "pipe">;
+  private readonly isolation: AppServerIsolationEvidence;
+  private readonly observedChildProcessIds = new Set<number>();
   private readonly stdoutDone: Promise<void>;
   private readonly stderrDone: Promise<void>;
   private readonly pending = new Map<number, PendingRequest>();
@@ -56,10 +84,15 @@ export class AppServerClient {
   private closed = false;
   private stdoutRemainder = "";
   private stderrRemainder = "";
+  private childObservationTimer: ReturnType<typeof setInterval> | null = null;
+  private childObservationTail: Promise<void> = Promise.resolve();
+  private isolationCompletion: Promise<void> | null = null;
 
   private constructor(options: AppServerOptions) {
     this.options = options;
-    this.child = Bun.spawn(appServerCommand(options), {
+    const launch = appServerLaunch(options);
+    this.isolation = launch.isolation;
+    this.child = Bun.spawn(launch.command, {
       cwd: options.cwd,
       env: appServerEnvironment(),
       // Give this ephemeral App-server (and every MCP child it starts) an
@@ -69,10 +102,20 @@ export class AppServerClient {
       stdout: "pipe",
       stderr: "pipe",
     });
+    this.options.onIsolationEvent?.("started", this.isolationEvidence());
+    if (this.isolation.implementationProfile === "native-voice-sidecar") {
+      this.queueChildObservation();
+      this.childObservationTimer = setInterval(
+        () => this.queueChildObservation(),
+        CHILD_OBSERVATION_INTERVAL_MS,
+      );
+      this.childObservationTimer.unref?.();
+    }
     this.stdoutDone = this.readStdout();
     this.stderrDone = this.readStderr();
     void this.child.exited.then(async (code) => {
       await Promise.allSettled([this.stdoutDone, this.stderrDone]);
+      await this.completeIsolationEvidence();
       this.finish(`App-server exited with code ${code}`);
     });
   }
@@ -182,7 +225,12 @@ export class AppServerClient {
     }
     this.terminateProcessGroup("SIGTERM");
     await Promise.allSettled([this.stdoutDone, this.stderrDone]);
+    await this.completeIsolationEvidence();
     this.finish("App-server closed");
+  }
+
+  isolationEvidence(): AppServerIsolationEvidence {
+    return { ...this.isolation };
   }
 
   private send(message: Record<string, unknown>): void {
@@ -311,6 +359,45 @@ export class AppServerClient {
     this.notificationWaiters.clear();
   }
 
+  private queueChildObservation(): void {
+    this.childObservationTail = this.childObservationTail.then(() => this.observeChildren());
+  }
+
+  private async observeChildren(): Promise<void> {
+    try {
+      const ps = Bun.spawn(["/bin/ps", "-axo", "pid=,ppid="], {
+        env: appServerEnvironment(),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const [stdout, exitCode] = await Promise.all([new Response(ps.stdout).text(), ps.exited]);
+      if (exitCode !== 0) throw new Error(`/bin/ps exited with code ${exitCode}`);
+      for (const pid of descendantProcessIds(stdout, this.child.pid)) {
+        if (this.observedChildProcessIds.has(pid)) continue;
+        this.observedChildProcessIds.add(pid);
+        this.isolation.observedChildProcessCount = this.observedChildProcessIds.size;
+        this.options.onIsolationEvent?.("child-observed", this.isolationEvidence());
+      }
+    } catch {
+      this.isolation.childObservationErrorCount++;
+      this.options.onIsolationEvent?.("observation-error", this.isolationEvidence());
+    }
+  }
+
+  private completeIsolationEvidence(): Promise<void> {
+    if (this.isolationCompletion) return this.isolationCompletion;
+    this.isolationCompletion = (async () => {
+      if (this.childObservationTimer) {
+        clearInterval(this.childObservationTimer);
+        this.childObservationTimer = null;
+      }
+      await this.childObservationTail;
+      this.options.onIsolationEvent?.("completed", this.isolationEvidence());
+    })();
+    return this.isolationCompletion;
+  }
+
   private terminateProcessGroup(signal: NodeJS.Signals): void {
     try {
       process.kill(-this.child.pid, signal);
@@ -334,6 +421,78 @@ export function appServerCommand(
     "realtime_conversation",
     "--stdio",
   ];
+}
+
+export function appServerLaunchCommand(
+  options: Pick<AppServerOptions, "codexPath" | "command" | "executionProfile">,
+  sandboxExecutable = nativeSandboxExecutable(),
+): string[] {
+  const command = appServerCommand(options);
+  if (options.executionProfile !== "native-voice-sidecar") {
+    return command;
+  }
+  if (sandboxExecutable === null) {
+    throw new Error("native voice sidecar requires /usr/bin/sandbox-exec no-fork isolation");
+  }
+  return [sandboxExecutable, "-p", NATIVE_SIDECAR_SANDBOX_PROFILE, ...command];
+}
+
+function appServerLaunch(
+  options: Pick<AppServerOptions, "codexPath" | "command" | "executionProfile">,
+): { command: string[]; isolation: AppServerIsolationEvidence } {
+  const executionProfile = options.executionProfile ?? "legacy-app-server";
+  const sandboxExecutable =
+    executionProfile === "native-voice-sidecar" ? nativeSandboxExecutable() : null;
+  return {
+    command: appServerLaunchCommand(options, sandboxExecutable),
+    isolation: {
+      implementationProfile: executionProfile,
+      platform: process.platform,
+      childProcessPolicy:
+        executionProfile === "legacy-app-server"
+          ? "owned-process-group"
+          : sandboxExecutable
+            ? "kernel-deny-fork"
+            : "unavailable",
+      sandboxExecutable,
+      sandboxProfileSha256: sandboxExecutable
+        ? createHash("sha256").update(NATIVE_SIDECAR_SANDBOX_PROFILE).digest("hex")
+        : null,
+      childObservation:
+        executionProfile === "native-voice-sidecar" ? "ps-descendant-sampling" : "not-required",
+      childObservationErrorCount: 0,
+      observedChildProcessCount: 0,
+    },
+  };
+}
+
+function nativeSandboxExecutable(): string | null {
+  const path = "/usr/bin/sandbox-exec";
+  return process.platform === "darwin" && existsSync(path) ? path : null;
+}
+
+export function descendantProcessIds(psOutput: string, rootPid: number): number[] {
+  const childrenByParent = new Map<number, number[]>();
+  for (const line of psOutput.split("\n")) {
+    const match = /^\s*(\d+)\s+(\d+)\s*$/.exec(line);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    const parentPid = Number(match[2]);
+    const children = childrenByParent.get(parentPid) ?? [];
+    children.push(pid);
+    childrenByParent.set(parentPid, children);
+  }
+  const descendants: number[] = [];
+  const pending = [...(childrenByParent.get(rootPid) ?? [])];
+  const visited = new Set<number>();
+  while (pending.length > 0) {
+    const pid = pending.shift()!;
+    if (visited.has(pid)) continue;
+    visited.add(pid);
+    descendants.push(pid);
+    pending.push(...(childrenByParent.get(pid) ?? []));
+  }
+  return descendants.sort((left, right) => left - right);
 }
 
 function denialResponse(method: string): Record<string, unknown> {

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { NATIVE_SIDECAR_SANDBOX_PROFILE } from "../src/app-server.ts";
 import type { EventRecord, EventSource } from "../src/events.ts";
 import {
   validateCodexFxRunEvents,
@@ -114,15 +117,70 @@ describe("validateLiveKitRunEvents", () => {
 });
 
 describe("validateCodexFxRunEvents", () => {
-  test("accepts native voice with four Fx admissions, three turns, and no Codex work", () => {
+  test("accepts legacy sidecar compatibility with four Fx admissions and no Codex work", () => {
     expect(validateCodexFxRunEvents(validCodexFxTrace(), "voice-thread")).toMatchObject({
       voiceThreadId: "voice-thread",
+      implementationProfile: "legacy-app-server",
       codexWorkTurnCount: 0,
       orchestratorTurnIds: ["41", "42", "43"],
       delegationCount: 4,
       steeringTargetTurnId: "42",
       outputAudioOverlap: "confirmed",
     });
+  });
+
+  test("accepts native sidecar only with strict isolation and the consumed wire contract", () => {
+    expect(
+      validateCodexFxRunEvents(validNativeCodexFxTrace(), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+      }),
+    ).toMatchObject({
+      voiceThreadId: "voice-thread",
+      implementationProfile: "native-voice-sidecar",
+      codexWorkTurnCount: 0,
+      orchestratorTurnIds: ["41", "42", "43"],
+      delegationCount: 4,
+      steeringTargetTurnId: "42",
+      outputAudioOverlap: "confirmed",
+    });
+  });
+
+  test("rejects native MCP traffic, server requests, and child process evidence", () => {
+    const mcp = validNativeCodexFxTrace();
+    mcp.push(
+      event(
+        "appserver.rpc.in",
+        { jsonrpc: "2.0", method: "mcpServer/startupStatus/updated", params: {} },
+        "app-server",
+      ),
+    );
+    expect(() =>
+      validateCodexFxRunEvents(resequence(mcp), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+      }),
+    ).toThrow("expected zero native sidecar MCP events");
+
+    const serverRequest = validNativeCodexFxTrace();
+    serverRequest.push(
+      event(
+        "appserver.rpc.in",
+        { jsonrpc: "2.0", id: 99, method: "item/commandExecution/requestApproval", params: {} },
+        "app-server",
+      ),
+    );
+    expect(() =>
+      validateCodexFxRunEvents(resequence(serverRequest), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+      }),
+    ).toThrow("expected zero native sidecar server-initiated requests");
+
+    const childProcess = validNativeCodexFxTrace();
+    childProcess.push(event("sidecar.child.observed", nativeIsolationEvidence(), "app-server"));
+    expect(() =>
+      validateCodexFxRunEvents(resequence(childProcess), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+      }),
+    ).toThrow("expected zero native sidecar child process observations");
   });
 
   test("requires every native delegation to have a distinct Fx admission", () => {
@@ -582,6 +640,77 @@ function validCodexFxTrace(): EventRecord[] {
     }),
     event("fx.stopped", {}, "fx"),
   ]);
+}
+
+function validNativeCodexFxTrace(): EventRecord[] {
+  const semanticTrace = validCodexFxTrace().filter(
+    (item) =>
+      !(item.type === "appserver.rpc.out" && item.data["method"] === "thread/realtime/start"),
+  );
+  return resequence([
+    event("sidecar.isolation.started", nativeIsolationEvidence(), "app-server"),
+    ...nativeConsumedWireEvents(),
+    ...semanticTrace,
+    event("sidecar.isolation.completed", nativeIsolationEvidence(), "app-server"),
+  ]);
+}
+
+function nativeConsumedWireEvents(): EventRecord[] {
+  return readFileSync(
+    new URL("../fixtures/codex-voice-sidecar/native-consumed-wire.ndjson", import.meta.url),
+    "utf8",
+  )
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const record = JSON.parse(line) as {
+        direction: "in" | "out";
+        message: Record<string, unknown>;
+      };
+      return event(
+        `appserver.rpc.${record.direction}`,
+        replaceWirePlaceholders(record.message) as Record<string, unknown>,
+        "app-server",
+      );
+    });
+}
+
+function replaceWirePlaceholders(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => replaceWirePlaceholders(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceWirePlaceholders(item)]),
+    );
+  }
+  switch (value) {
+    case "$thread":
+      return "voice-thread";
+    case "$session":
+      return "realtime-session";
+    case "$workspace":
+      return "/tmp/agentvoice-workspace";
+    case "$codex-home":
+      return "/tmp/codex-home";
+    case "$offer-sdp":
+      return "offer-sdp";
+    case "$answer-sdp":
+      return "answer-sdp";
+    default:
+      return value;
+  }
+}
+
+function nativeIsolationEvidence(): Record<string, unknown> {
+  return {
+    implementationProfile: "native-voice-sidecar",
+    platform: "darwin",
+    childProcessPolicy: "kernel-deny-fork",
+    sandboxExecutable: "/usr/bin/sandbox-exec",
+    sandboxProfileSha256: createHash("sha256").update(NATIVE_SIDECAR_SANDBOX_PROFILE).digest("hex"),
+    childObservation: "ps-descendant-sampling",
+    childObservationErrorCount: 0,
+    observedChildProcessCount: 0,
+  };
 }
 
 function event(

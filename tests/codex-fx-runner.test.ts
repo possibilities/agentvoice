@@ -2,14 +2,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   assertCapturedEvaluationInputsUnchanged,
   CODEX_SIDECAR_SOURCE_REVISION,
   captureEvaluationInputs,
   loadSidecarBuildMetadata,
+  resolveCodexFxExecutionProfile,
 } from "../src/codex-fx-runner.ts";
 import { loadScenario } from "../src/scenario.ts";
+import {
+  VOICE_SIDECAR_WIRE_CONTRACT_VERSION,
+  voiceSidecarWireContractSha256,
+} from "../src/voice-sidecar-contract.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -48,6 +53,82 @@ describe("Codex voice-sidecar build metadata", () => {
     expect(() =>
       loadSidecarBuildMetadata(fixture.binaryPath, "codex-app-server 0.0.0", fixture.patchPath),
     ).toThrow("source patch SHA-256 did not match");
+  });
+
+  test("accepts schema 2 native metadata without requiring the legacy patch", () => {
+    const fixture = nativeSidecarFixture();
+
+    expect(
+      loadSidecarBuildMetadata(
+        fixture.binaryPath,
+        "codex-voice-sidecar 0.0.0",
+        "/does/not/exist.patch",
+        2,
+      ),
+    ).toMatchObject({
+      schemaVersion: 2,
+      implementation: "codex-voice-sidecar",
+      sourceRepository: "possibilities/codex",
+      sourceRevision: fixture.sourceRevision,
+      upstreamRevision: fixture.upstreamRevision,
+      wireContractVersion: VOICE_SIDECAR_WIRE_CONTRACT_VERSION,
+      wireContractSha256: voiceSidecarWireContractSha256(),
+      binaryVersion: "codex-voice-sidecar 0.0.0",
+    });
+  });
+
+  test("rejects stale schema 2 wire contracts and schema/profile mismatches", () => {
+    const fixture = nativeSidecarFixture({ wireContractSha256: "0".repeat(64) });
+    expect(() =>
+      loadSidecarBuildMetadata(fixture.binaryPath, "codex-voice-sidecar 0.0.0", undefined, 2),
+    ).toThrow("wire contract SHA-256");
+
+    const legacy = sidecarFixture();
+    expect(() =>
+      loadSidecarBuildMetadata(legacy.binaryPath, "codex-app-server 0.0.0", legacy.patchPath, 2),
+    ).toThrow("schemaVersion 1 did not match required 2");
+  });
+});
+
+describe("Codex-Fx execution profile resolution", () => {
+  test("keeps --app-server on the legacy metadata/profile path", () => {
+    expect(resolveCodexFxExecutionProfile({ appServerPath: "legacy-bin" })).toEqual({
+      implementationProfile: "legacy-app-server",
+      binaryPath: resolve("legacy-bin"),
+      command: [
+        resolve("legacy-bin"),
+        "-c",
+        "features.realtime_conversation=true",
+        "--listen",
+        "stdio://",
+      ],
+      requiredMetadataSchemaVersion: 1,
+    });
+  });
+
+  test("routes --voice-sidecar through the native metadata/profile path", () => {
+    expect(resolveCodexFxExecutionProfile({ voiceSidecarPath: "native-bin" })).toEqual({
+      implementationProfile: "native-voice-sidecar",
+      binaryPath: resolve("native-bin"),
+      command: [
+        resolve("native-bin"),
+        "-c",
+        "features.realtime_conversation=true",
+        "--listen",
+        "stdio://",
+      ],
+      appServerExecutionProfile: "native-voice-sidecar",
+      requiredMetadataSchemaVersion: 2,
+    });
+  });
+
+  test("does not allow both sidecar profile flags at once", () => {
+    expect(() =>
+      resolveCodexFxExecutionProfile({
+        appServerPath: "legacy-bin",
+        voiceSidecarPath: "native-bin",
+      }),
+    ).toThrow("mutually exclusive");
   });
 });
 
@@ -124,4 +205,40 @@ function sidecarFixture(): { binaryPath: string; patchPath: string } {
     )}\n`,
   );
   return { binaryPath, patchPath };
+}
+
+function nativeSidecarFixture(
+  overrides: Partial<{
+    sourceRevision: string;
+    upstreamRevision: string;
+    wireContractSha256: string;
+  }> = {},
+): { binaryPath: string; sourceRevision: string; upstreamRevision: string } {
+  const directory = mkdtempSync(join(tmpdir(), "agentvoice-native-sidecar-metadata-"));
+  temporaryDirectories.push(directory);
+  const binaryPath = join(directory, "codex-voice-sidecar");
+  const binary = Buffer.from("native test binary");
+  const sourceRevision = overrides.sourceRevision ?? "1234567890abcdef1234567890abcdef12345678";
+  const upstreamRevision = overrides.upstreamRevision ?? "abcdef1234567890abcdef1234567890abcdef12";
+  writeFileSync(binaryPath, binary);
+  writeFileSync(
+    join(directory, "metadata.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 2,
+        implementation: "codex-voice-sidecar",
+        sourceRepository: "possibilities/codex",
+        sourceRevision,
+        upstreamRevision,
+        wireContractVersion: VOICE_SIDECAR_WIRE_CONTRACT_VERSION,
+        wireContractSha256: overrides.wireContractSha256 ?? voiceSidecarWireContractSha256(),
+        builtAt: "2026-08-30T00:00:00Z",
+        binarySha256: createHash("sha256").update(binary).digest("hex"),
+        binaryVersion: "codex-voice-sidecar 0.0.0",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return { binaryPath, sourceRevision, upstreamRevision };
 }

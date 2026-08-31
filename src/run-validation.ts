@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { NATIVE_SIDECAR_SANDBOX_PROFILE } from "./app-server.ts";
 import {
   AUDIBLE_OVERLAP_RESOLUTION_SAMPLES,
   AUDIO_FRAME_SAMPLES,
@@ -5,6 +7,7 @@ import {
 } from "./audio.ts";
 import type { EventRecord, EventSource } from "./events.ts";
 import { CODEX_REFERENCE } from "./reference.ts";
+import { assertConsumedWireContract, wireMessagesFromEvents } from "./voice-sidecar-contract.ts";
 
 const OUTPUT_AUDIO_STARTED = "output.audio.started";
 const OUTPUT_AUDIO_ENDED = new Set([
@@ -61,6 +64,7 @@ export class LiveKitRunValidationError extends Error {
 
 export interface CodexFxRunValidationResult extends LiveKitRunValidationResult {
   voiceThreadId: string;
+  implementationProfile: CodexFxImplementationProfile;
   codexWorkTurnCount: 0;
   pcmOverlapDurationMs: number;
 }
@@ -73,6 +77,13 @@ export class CodexFxRunValidationError extends Error {
     this.name = "CodexFxRunValidationError";
     this.issues = issues;
   }
+}
+
+export type CodexFxImplementationProfile = "legacy-app-server" | "native-voice-sidecar";
+
+export interface CodexFxRunValidationOptions {
+  steerInputId?: string;
+  implementationProfile?: CodexFxImplementationProfile;
 }
 
 /**
@@ -202,8 +213,14 @@ export function validateLiveKitRunEvents(
 export function validateCodexFxRunEvents(
   snapshot: readonly EventRecord[],
   voiceThreadId: string,
-  steerInputId = "steer",
+  optionsOrSteerInputId: string | CodexFxRunValidationOptions = {},
 ): CodexFxRunValidationResult {
+  const options =
+    typeof optionsOrSteerInputId === "string"
+      ? { steerInputId: optionsOrSteerInputId }
+      : optionsOrSteerInputId;
+  const steerInputId = options.steerInputId ?? "steer";
+  const implementationProfile = options.implementationProfile ?? "legacy-app-server";
   const base = validateFxRunEvents(snapshot, steerInputId, {
     label: "Codex-Fx",
     delegationType: "delegation.created",
@@ -306,6 +323,9 @@ export function validateCodexFxRunEvents(
     issues.push("Fx was not stopped exactly once after voice teardown");
   }
   validateCodexFxIdentityEvidence(snapshot, voiceThreadId, issues);
+  if (implementationProfile === "native-voice-sidecar") {
+    validateNativeVoiceSidecarEvidence(snapshot, issues);
+  }
   for (const type of ["peer.disconnected", "peer.closed"]) {
     const premature = snapshot.filter(
       (event) => event.type === type && (!scenarioCompleted || event.seq < scenarioCompleted.seq),
@@ -378,9 +398,92 @@ export function validateCodexFxRunEvents(
   return {
     ...base,
     voiceThreadId,
+    implementationProfile,
     codexWorkTurnCount: 0,
     pcmOverlapDurationMs: pcmOverlapDurationMs as number,
   };
+}
+
+function validateNativeVoiceSidecarEvidence(
+  snapshot: readonly EventRecord[],
+  issues: string[],
+): void {
+  try {
+    assertConsumedWireContract(wireMessagesFromEvents(snapshot));
+  } catch (error) {
+    issues.push(error instanceof Error ? error.message : String(error));
+  }
+
+  const rpcEvents = snapshot.filter(
+    (event) => event.type === "appserver.rpc.in" || event.type === "appserver.rpc.out",
+  );
+  const mcpRpcEvents = rpcEvents.filter((event) => {
+    const method = rpcMethod(event);
+    return method !== null && (method.startsWith("mcp/") || method.startsWith("mcpServer/"));
+  });
+  const mcpNotifications = snapshot.filter(
+    (event) =>
+      event.type.startsWith("appserver.mcp/") || event.type.startsWith("appserver.mcpServer/"),
+  );
+  if (mcpRpcEvents.length > 0 || mcpNotifications.length > 0) {
+    issues.push(
+      `expected zero native sidecar MCP events; observed ` +
+        `${mcpRpcEvents.length + mcpNotifications.length}`,
+    );
+  }
+
+  const serverRequests = rpcEvents.filter(
+    (event) =>
+      event.type === "appserver.rpc.in" &&
+      requestId(event.data["id"]) !== null &&
+      typeof event.data["method"] === "string",
+  );
+  if (serverRequests.length > 0) {
+    issues.push(
+      `expected zero native sidecar server-initiated requests; observed ${serverRequests.length}`,
+    );
+  }
+
+  const childObserved = snapshot.filter((event) => event.type === "sidecar.child.observed");
+  const childObservationErrors = snapshot.filter(
+    (event) => event.type === "sidecar.child-observation.error",
+  );
+  if (childObserved.length > 0) {
+    issues.push(
+      `expected zero native sidecar child process observations; observed ${childObserved.length}`,
+    );
+  }
+  if (childObservationErrors.length > 0) {
+    issues.push(
+      `expected zero native sidecar child observation errors; observed ${childObservationErrors.length}`,
+    );
+  }
+
+  const isolationStarts = snapshot.filter((event) => event.type === "sidecar.isolation.started");
+  const isolationCompletions = snapshot.filter(
+    (event) => event.type === "sidecar.isolation.completed",
+  );
+  requireEventSource(isolationStarts, "app-server", "native sidecar isolation start", issues);
+  requireEventSource(
+    isolationCompletions,
+    "app-server",
+    "native sidecar isolation completion",
+    issues,
+  );
+  if (isolationStarts.length !== 1 || isolationCompletions.length !== 1) {
+    issues.push(
+      `expected exactly 1 native sidecar isolation start and completion; observed ` +
+        `${isolationStarts.length} starts and ${isolationCompletions.length} completions`,
+    );
+    return;
+  }
+  const start = isolationStarts[0]!;
+  const completion = isolationCompletions[0]!;
+  if (completion.seq <= start.seq) {
+    issues.push("native sidecar isolation completed before it started");
+  }
+  validateNoForkIsolationEvidence(start.data, "start", issues);
+  validateNoForkIsolationEvidence(completion.data, "completion", issues);
 }
 
 function validateFxRunEvents(
@@ -893,6 +996,36 @@ function validateFxAdeProvenance(
       );
     }
   }
+}
+
+function validateNoForkIsolationEvidence(
+  data: Record<string, unknown>,
+  phase: string,
+  issues: string[],
+): void {
+  const expectedProfileSha256 = createHash("sha256")
+    .update(NATIVE_SIDECAR_SANDBOX_PROFILE)
+    .digest("hex");
+  if (
+    data["implementationProfile"] !== "native-voice-sidecar" ||
+    data["childProcessPolicy"] !== "kernel-deny-fork" ||
+    data["sandboxExecutable"] !== "/usr/bin/sandbox-exec" ||
+    data["sandboxProfileSha256"] !== expectedProfileSha256 ||
+    data["childObservation"] !== "ps-descendant-sampling" ||
+    data["childObservationErrorCount"] !== 0 ||
+    data["observedChildProcessCount"] !== 0
+  ) {
+    issues.push(`native sidecar isolation ${phase} did not prove kernel no-fork execution`);
+  }
+}
+
+function rpcMethod(event: EventRecord): string | null {
+  const method = event.data["method"];
+  return typeof method === "string" ? method : null;
+}
+
+function requestId(value: unknown): string | number | null {
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 function requireEventSource(

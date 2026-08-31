@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { AppServerClient } from "./app-server.ts";
+import { AppServerClient, type AppServerExecutionProfile } from "./app-server.ts";
 import { ContinuousUplink, DuplexRecorder } from "./audio.ts";
 import { EventJournal } from "./events.ts";
 import { loadVerifiedFixtureAudio } from "./fixture-audio.ts";
@@ -45,6 +45,7 @@ export interface OpenSessionOptions {
   includeStartupContext: boolean;
   codexPath?: string;
   appServerCommand?: readonly string[];
+  appServerExecutionProfile?: AppServerExecutionProfile;
   clientManagedHandoffs?: boolean;
   delegationAckFiller?: boolean;
   recordCanonicalCodexTurns?: boolean;
@@ -284,6 +285,20 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
     appServer = await AppServerClient.start({
       ...(options.codexPath ? { codexPath: options.codexPath } : {}),
       ...(options.appServerCommand ? { command: options.appServerCommand } : {}),
+      ...(options.appServerExecutionProfile
+        ? {
+            executionProfile: options.appServerExecutionProfile,
+            onIsolationEvent(event, evidence) {
+              const type =
+                event === "child-observed"
+                  ? "sidecar.child.observed"
+                  : event === "observation-error"
+                    ? "sidecar.child-observation.error"
+                    : `sidecar.isolation.${event}`;
+              options.journal.record("app-server", type, { ...evidence });
+            },
+          }
+        : {}),
       cwd: appServerCwd,
       clientVersion: VERSION,
       onNotification(method, params) {

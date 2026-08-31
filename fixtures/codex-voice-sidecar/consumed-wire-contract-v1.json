@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "id": "agentvoice-codex-fx-v1",
+  "derivedFrom": {
+    "artifact": "artifacts/2026-08-30T23-18-51-202Z-compact-full-duplex-codex-fx/events.ndjson",
+    "eventsSha256": "0d120e76ec8ee980827f978af72d5b365cd6a61eb4730736ccd9bb3eaf9c93d1"
+  },
+  "consumedProjection": {
+    "clientNotifications": [
+      {
+        "method": "initialized",
+        "count": 1
+      }
+    ],
+    "requests": [
+      {
+        "method": "initialize",
+        "count": 1,
+        "responseCount": 1
+      },
+      {
+        "method": "thread/realtime/listVoices",
+        "count": 1,
+        "responseCount": 1
+      },
+      {
+        "method": "thread/start",
+        "count": 1,
+        "responseCount": 1
+      },
+      {
+        "method": "thread/realtime/start",
+        "count": 1,
+        "responseCount": 1
+      },
+      {
+        "method": "thread/realtime/appendSpeech",
+        "count": 7,
+        "responseCount": 7
+      },
+      {
+        "method": "thread/realtime/stop",
+        "count": 1,
+        "responseCount": 1
+      },
+      {
+        "method": "thread/delete",
+        "count": 1,
+        "responseCount": 1
+      }
+    ],
+    "serverNotifications": [
+      {
+        "method": "thread/realtime/started",
+        "count": 1
+      },
+      {
+        "method": "thread/realtime/sdp",
+        "count": 1
+      },
+      {
+        "method": "thread/realtime/itemAdded",
+        "count": 4
+      },
+      {
+        "method": "thread/realtime/closed",
+        "count": 1
+      }
+    ],
+    "threadStart": {
+      "approvalPolicy": "never",
+      "sandbox": "danger-full-access",
+      "model": "gpt-5.6-terra",
+      "ephemeral": true,
+      "reasoningEffort": "medium"
+    },
+    "realtimeStart": {
+      "version": "v3",
+      "voice": "cove",
+      "outputModality": "audio",
+      "includeStartupContext": true,
+      "clientManagedHandoffs": true,
+      "delegationAckFiller": false,
+      "modelOverride": "absent",
+      "transport": "webrtc"
+    },
+    "handoffRequests": {
+      "count": 4,
+      "type": "handoff_request",
+      "requiredFields": ["active_transcript", "handoff_id", "input_transcript", "item_id"]
+    },
+    "requestedClose": {
+      "requestCount": 1,
+      "notificationCount": 1,
+      "reason": "requested"
+    }
+  },
+  "ignoredLegacyServerNotifications": [
+    "mcpServer/startupStatus/updated",
+    "remoteControl/status/changed",
+    "thread/realtime/transcript/delta",
+    "thread/realtime/transcript/done",
+    "thread/started",
+    "warning"
+  ],
+  "nativeForbidden": {
+    "turnLifecycleMethods": ["turn/start", "turn/started", "turn/completed"],
+    "mcpMethodPrefixes": ["mcp/", "mcpServer/"],
+    "serverInitiatedRequests": true,
+    "observedChildProcesses": true
+  }
+}

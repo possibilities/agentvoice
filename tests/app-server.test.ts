@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppServerClient, appServerCommand } from "../src/app-server.ts";
+import {
+  AppServerClient,
+  appServerCommand,
+  appServerLaunchCommand,
+  descendantProcessIds,
+} from "../src/app-server.ts";
 
 describe("App Server launch command", () => {
   test("preserves the installed Codex CLI launch by default", () => {
@@ -22,6 +27,59 @@ describe("App Server launch command", () => {
       }),
     ).toEqual(["/tmp/codex-app-server", "--listen", "stdio://"]);
     expect(() => appServerCommand({ command: [] })).toThrow("cannot be empty");
+  });
+
+  test("wraps only the native sidecar profile in the no-fork sandbox", () => {
+    expect(
+      appServerLaunchCommand(
+        {
+          command: ["/tmp/codex-voice-sidecar", "--listen", "stdio://"],
+          executionProfile: "native-voice-sidecar",
+        },
+        "/usr/bin/sandbox-exec",
+      ),
+    ).toEqual([
+      "/usr/bin/sandbox-exec",
+      "-p",
+      "(version 1)\n(allow default)\n(deny process-fork)\n",
+      "/tmp/codex-voice-sidecar",
+      "--listen",
+      "stdio://",
+    ]);
+
+    expect(
+      appServerLaunchCommand(
+        {
+          command: ["/tmp/codex-app-server", "--listen", "stdio://"],
+          executionProfile: "legacy-app-server",
+        },
+        "/usr/bin/sandbox-exec",
+      ),
+    ).toEqual(["/tmp/codex-app-server", "--listen", "stdio://"]);
+    expect(() =>
+      appServerLaunchCommand(
+        {
+          command: ["/tmp/codex-voice-sidecar", "--listen", "stdio://"],
+          executionProfile: "native-voice-sidecar",
+        },
+        null,
+      ),
+    ).toThrow("requires /usr/bin/sandbox-exec");
+  });
+
+  test("finds descendant PIDs from ps output", () => {
+    expect(
+      descendantProcessIds(
+        `
+          100     1
+          101   100
+          102   101
+          103   100
+          104   999
+        `,
+        100,
+      ),
+    ).toEqual([101, 102, 103]);
   });
 
   test("drains a final notification emitted immediately before process exit", async () => {

@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import type { AppServerExecutionProfile } from "./app-server.ts";
 import { CodexFxBridge } from "./codex-fx-bridge.ts";
 import {
   commandVersion,
@@ -29,6 +30,10 @@ import { type FxAdeEvent, FxHeadlessOrchestrator, type FxIdentity } from "./fx-o
 import { assertCodexReferenceVoiceModel, CODEX_REFERENCE } from "./reference.ts";
 import { type CodexFxRunValidationResult, validateCodexFxRunEvents } from "./run-validation.ts";
 import { type LoadedScenario, loadScenario, scenarioSchema } from "./scenario.ts";
+import {
+  VOICE_SIDECAR_WIRE_CONTRACT_VERSION,
+  voiceSidecarWireContractSha256,
+} from "./voice-sidecar-contract.ts";
 
 const VERSION = "0.1.0";
 export const CODEX_SIDECAR_SOURCE_REVISION = "430d26b543b219049192de559987b8cf506efacf";
@@ -43,16 +48,49 @@ export interface CodexFxRunOptions {
   scenarioPath: string;
   artifactsRoot?: string;
   appServerPath?: string;
+  voiceSidecarPath?: string;
   fxPath?: string;
 }
 
-export interface CodexSidecarBuildMetadata {
+export interface LegacyCodexSidecarBuildMetadata {
   schemaVersion: 1;
   sourceRevision: string;
   patchSha256: string;
   builtAt: string;
   binarySha256: string;
   binaryVersion: string;
+}
+
+export interface NativeCodexSidecarBuildMetadata {
+  schemaVersion: 2;
+  implementation: "codex-voice-sidecar";
+  sourceRepository: "possibilities/codex";
+  sourceRevision: string;
+  upstreamRevision: string;
+  wireContractVersion: typeof VOICE_SIDECAR_WIRE_CONTRACT_VERSION;
+  wireContractSha256: string;
+  builtAt: string;
+  binarySha256: string;
+  binaryVersion: string;
+}
+
+export type CodexSidecarBuildMetadata =
+  | LegacyCodexSidecarBuildMetadata
+  | NativeCodexSidecarBuildMetadata;
+
+export type CodexFxImplementationProfile = "legacy-app-server" | "native-voice-sidecar";
+
+export interface CodexFxProbeOptions {
+  appServerPath?: string;
+  voiceSidecarPath?: string;
+}
+
+export interface ResolvedCodexFxExecutionProfile {
+  implementationProfile: CodexFxImplementationProfile;
+  binaryPath: string;
+  command: [string, "-c", "features.realtime_conversation=true", "--listen", "stdio://"];
+  appServerExecutionProfile?: AppServerExecutionProfile;
+  requiredMetadataSchemaVersion: 1 | 2;
 }
 
 interface EvaluationInputFileReceipt {
@@ -79,12 +117,20 @@ export interface CapturedEvaluationInputs {
 
 /** Starts only the pinned native voice sidecar; no evaluator audio or coding turn is submitted. */
 export async function probeCodexFxVoice(
-  configuredAppServerPath = defaultAppServerPath(),
+  configured: string | CodexFxProbeOptions = {},
 ): Promise<Record<string, unknown>> {
-  const appServerPath = resolve(configuredAppServerPath);
+  const execution = resolveCodexFxExecutionProfile(
+    typeof configured === "string" ? { appServerPath: configured } : configured,
+  );
+  const appServerPath = execution.binaryPath;
   assertSidecarBinaryExists(appServerPath);
   const appServerVersion = await commandVersion(appServerPath);
-  const sidecarBuild = loadSidecarBuildMetadata(appServerPath, appServerVersion);
+  const sidecarBuild = loadSidecarBuildMetadata(
+    appServerPath,
+    appServerVersion,
+    CODEX_SIDECAR_PATCH_PATH,
+    execution.requiredMetadataSchemaVersion,
+  );
   const scratch = mkdtempSync(join(tmpdir(), "agentvoice-codex-fx-probe-"));
   const workspace = join(scratch, "workspace");
   mkdirSync(workspace);
@@ -102,13 +148,10 @@ export async function probeCodexFxVoice(
       orchestratorModel: CODEX_REFERENCE.orchestratorModel,
       reasoningEffort: CODEX_REFERENCE.reasoningEffort,
       includeStartupContext: CODEX_REFERENCE.includeStartupContext,
-      appServerCommand: [
-        appServerPath,
-        "-c",
-        "features.realtime_conversation=true",
-        "--listen",
-        "stdio://",
-      ],
+      appServerCommand: execution.command,
+      ...(execution.appServerExecutionProfile
+        ? { appServerExecutionProfile: execution.appServerExecutionProfile }
+        : {}),
       clientManagedHandoffs: true,
       delegationAckFiller: false,
       recordCanonicalCodexTurns: false,
@@ -132,6 +175,8 @@ export async function probeCodexFxVoice(
       ok: true,
       appServerVersion,
       sidecarBuild,
+      implementationProfile: execution.implementationProfile,
+      isolation: session.appServer.isolationEvidence(),
       voiceModel: CODEX_REFERENCE.voiceModel,
       voiceModelSelection: CODEX_REFERENCE.voiceModelSelection,
       observedVoiceModel: voiceSession?.data["model"] ?? null,
@@ -159,10 +204,16 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
     throw new Error("Codex-Fx evaluation requires a workspace oracle");
   }
   const fixtureAudio = await loadVerifiedFixtureAudio(loaded);
-  const appServerPath = resolve(options.appServerPath ?? defaultAppServerPath());
+  const execution = resolveCodexFxExecutionProfile(options);
+  const appServerPath = execution.binaryPath;
   assertSidecarBinaryExists(appServerPath);
   const appServerVersion = await commandVersion(appServerPath);
-  const sidecarBuild = loadSidecarBuildMetadata(appServerPath, appServerVersion);
+  const sidecarBuild = loadSidecarBuildMetadata(
+    appServerPath,
+    appServerVersion,
+    CODEX_SIDECAR_PATCH_PATH,
+    execution.requiredMetadataSchemaVersion,
+  );
   const artifactsRoot = resolve(options.artifactsRoot ?? "artifacts");
   const artifactDirectory = uniqueArtifactDirectory(artifactsRoot, loaded.scenario.id, "codex-fx");
   mkdirSync(artifactDirectory, { recursive: true });
@@ -217,13 +268,10 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
     session = await openSession({
       workspace,
       ...loaded.scenario.agent,
-      appServerCommand: [
-        appServerPath,
-        "-c",
-        "features.realtime_conversation=true",
-        "--listen",
-        "stdio://",
-      ],
+      appServerCommand: execution.command,
+      ...(execution.appServerExecutionProfile
+        ? { appServerExecutionProfile: execution.appServerExecutionProfile }
+        : {}),
       clientManagedHandoffs: true,
       delegationAckFiller: false,
       recordCanonicalCodexTurns: false,
@@ -327,7 +375,10 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
 
     if (!runFailed() && session) {
       try {
-        validation = validateCodexFxRunEvents(journal.snapshot(), session.threadId);
+        validation = validateCodexFxRunEvents(journal.snapshot(), session.threadId, {
+          steerInputId: "steer",
+          implementationProfile: execution.implementationProfile,
+        });
         journal.record("harness", "run.validation.passed", { ...validation });
       } catch (error) {
         failRun(errorMessage(error));
@@ -366,6 +417,12 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
         ...loaded.scenario.agent,
         orchestratorImplementation: "fx-work-control",
       },
+      ...(execution.implementationProfile === "native-voice-sidecar"
+        ? {
+            implementationProfile: execution.implementationProfile,
+            isolation: session?.appServer.isolationEvidence() ?? null,
+          }
+        : {}),
       sidecarBuild,
       fxIdentity,
       fixtureAudio: {
@@ -484,19 +541,84 @@ export function defaultAppServerPath(): string {
   return join(".cache", "codex-app-server", CODEX_SIDECAR_SOURCE_REVISION, "codex-app-server");
 }
 
+export function resolveCodexFxExecutionProfile(
+  options: CodexFxRunOptions | CodexFxProbeOptions,
+): ResolvedCodexFxExecutionProfile {
+  if (options.appServerPath && options.voiceSidecarPath) {
+    throw new Error("--app-server and --voice-sidecar are mutually exclusive");
+  }
+  if (options.voiceSidecarPath) {
+    const binaryPath = resolve(options.voiceSidecarPath);
+    return {
+      implementationProfile: "native-voice-sidecar",
+      binaryPath,
+      command: sidecarCommand(binaryPath),
+      appServerExecutionProfile: "native-voice-sidecar",
+      requiredMetadataSchemaVersion: 2,
+    };
+  }
+  const binaryPath = resolve(options.appServerPath ?? defaultAppServerPath());
+  return {
+    implementationProfile: "legacy-app-server",
+    binaryPath,
+    command: sidecarCommand(binaryPath),
+    requiredMetadataSchemaVersion: 1,
+  };
+}
+
 export function loadSidecarBuildMetadata(
   appServerPath: string,
   binaryVersion: string,
   patchPath = CODEX_SIDECAR_PATCH_PATH,
+  requiredMetadataSchemaVersion?: 1 | 2,
 ): CodexSidecarBuildMetadata {
   assertSidecarBinaryExists(appServerPath);
-  if (!existsSync(patchPath)) throw new Error(`sidecar source patch not found at ${patchPath}`);
   const metadataPath = join(dirname(appServerPath), "metadata.json");
   if (!existsSync(metadataPath))
     throw new Error(`sidecar build metadata not found at ${metadataPath}`);
   const value = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
-  const metadata: CodexSidecarBuildMetadata = {
-    schemaVersion: value["schemaVersion"] === 1 ? 1 : invalid("metadata schemaVersion"),
+  const schemaVersion =
+    value["schemaVersion"] === 1 || value["schemaVersion"] === 2
+      ? value["schemaVersion"]
+      : invalid("metadata schemaVersion");
+  if (
+    requiredMetadataSchemaVersion !== undefined &&
+    schemaVersion !== requiredMetadataSchemaVersion
+  ) {
+    throw new Error(
+      `sidecar build metadata schemaVersion ${schemaVersion} did not match required ` +
+        `${requiredMetadataSchemaVersion}`,
+    );
+  }
+  const metadata =
+    schemaVersion === 1
+      ? legacySidecarBuildMetadata(value, patchPath)
+      : nativeSidecarBuildMetadata(value);
+  if (metadata.binaryVersion !== binaryVersion) {
+    throw new Error(
+      `sidecar metadata version ${metadata.binaryVersion} did not match binary ${binaryVersion}`,
+    );
+  }
+  const actualHash = createHash("sha256").update(readFileSync(appServerPath)).digest("hex");
+  if (metadata.binarySha256 !== actualHash) {
+    throw new Error("sidecar binary SHA-256 did not match its build metadata");
+  }
+  return metadata;
+}
+
+function sidecarCommand(
+  binaryPath: string,
+): [string, "-c", "features.realtime_conversation=true", "--listen", "stdio://"] {
+  return [binaryPath, "-c", "features.realtime_conversation=true", "--listen", "stdio://"];
+}
+
+function legacySidecarBuildMetadata(
+  value: Record<string, unknown>,
+  patchPath: string,
+): LegacyCodexSidecarBuildMetadata {
+  if (!existsSync(patchPath)) throw new Error(`sidecar source patch not found at ${patchPath}`);
+  const metadata: LegacyCodexSidecarBuildMetadata = {
+    schemaVersion: 1,
     sourceRevision: stringField(value, "sourceRevision"),
     patchSha256: sha256Field(value, "patchSha256"),
     builtAt: stringField(value, "builtAt"),
@@ -508,18 +630,43 @@ export function loadSidecarBuildMetadata(
       `sidecar source revision ${metadata.sourceRevision} did not match ${CODEX_SIDECAR_SOURCE_REVISION}`,
     );
   }
-  if (metadata.binaryVersion !== binaryVersion) {
-    throw new Error(
-      `sidecar metadata version ${metadata.binaryVersion} did not match binary ${binaryVersion}`,
-    );
-  }
   const actualPatchHash = createHash("sha256").update(readFileSync(patchPath)).digest("hex");
   if (metadata.patchSha256 !== actualPatchHash) {
     throw new Error("sidecar source patch SHA-256 did not match its build metadata");
   }
-  const actualHash = createHash("sha256").update(readFileSync(appServerPath)).digest("hex");
-  if (metadata.binarySha256 !== actualHash) {
-    throw new Error("sidecar binary SHA-256 did not match its build metadata");
+  return metadata;
+}
+
+function nativeSidecarBuildMetadata(
+  value: Record<string, unknown>,
+): NativeCodexSidecarBuildMetadata {
+  const metadata: NativeCodexSidecarBuildMetadata = {
+    schemaVersion: 2,
+    implementation:
+      value["implementation"] === "codex-voice-sidecar"
+        ? "codex-voice-sidecar"
+        : invalid("implementation"),
+    sourceRepository:
+      value["sourceRepository"] === "possibilities/codex"
+        ? "possibilities/codex"
+        : invalid("sourceRepository"),
+    sourceRevision: shaLikeField(value, "sourceRevision"),
+    upstreamRevision: shaLikeField(value, "upstreamRevision"),
+    wireContractVersion:
+      value["wireContractVersion"] === VOICE_SIDECAR_WIRE_CONTRACT_VERSION
+        ? VOICE_SIDECAR_WIRE_CONTRACT_VERSION
+        : invalid("wireContractVersion"),
+    wireContractSha256: sha256Field(value, "wireContractSha256"),
+    builtAt: stringField(value, "builtAt"),
+    binarySha256: sha256Field(value, "binarySha256"),
+    binaryVersion: stringField(value, "binaryVersion"),
+  };
+  const expectedWireContractSha256 = voiceSidecarWireContractSha256();
+  if (metadata.wireContractSha256 !== expectedWireContractSha256) {
+    throw new Error(
+      `sidecar wire contract SHA-256 ${metadata.wireContractSha256} did not match ` +
+        expectedWireContractSha256,
+    );
   }
   return metadata;
 }
@@ -527,7 +674,9 @@ export function loadSidecarBuildMetadata(
 function assertSidecarBinaryExists(appServerPath: string): void {
   if (!existsSync(appServerPath)) {
     throw new Error(
-      `patched Codex App Server not found at ${appServerPath}; run bun run build:codex-app-server`,
+      `Codex voice sidecar binary not found at ${appServerPath}; ` +
+        `build the legacy App-server with bun run build:codex-app-server or pass ` +
+        `a Codpiece native binary with --voice-sidecar`,
     );
   }
 }
@@ -632,6 +781,12 @@ function stringField(value: Record<string, unknown>, key: string): string {
 function sha256Field(value: Record<string, unknown>, key: string): string {
   const field = stringField(value, key);
   if (!/^[a-f0-9]{64}$/.test(field)) throw new Error(`invalid ${key}`);
+  return field;
+}
+
+function shaLikeField(value: Record<string, unknown>, key: string): string {
+  const field = stringField(value, key);
+  if (!/^[a-f0-9]{40}$/.test(field)) throw new Error(`invalid ${key}`);
   return field;
 }
 

@@ -1,0 +1,36 @@
+{"direction":"out","message":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"agentvoice-eval","title":"AgentVoice Eval","version":"0.1.0"},"capabilities":{"experimentalApi":true,"requestAttestation":false}}}}
+{"direction":"in","message":{"id":1,"result":{"userAgent":"legacy","codexHome":"$codex-home","platformFamily":"unix","platformOs":"macos"}}}
+{"direction":"out","message":{"jsonrpc":"2.0","method":"initialized","params":{}}}
+{"direction":"out","message":{"jsonrpc":"2.0","id":2,"method":"thread/realtime/listVoices","params":{}}}
+{"direction":"in","message":{"method":"mcpServer/startupStatus/updated","params":{"server":"legacy-only"}}}
+{"direction":"in","message":{"id":2,"result":{"voices":{"v1":["cove"],"v2":["marin"],"defaultV1":"cove","defaultV2":"marin"}}}}
+{"direction":"out","message":{"jsonrpc":"2.0","id":3,"method":"thread/start","params":{"cwd":"$workspace","approvalPolicy":"never","sandbox":"danger-full-access","model":"gpt-5.6-terra","ephemeral":true,"config":{"model_reasoning_effort":"medium"}}}}
+{"direction":"in","message":{"id":3,"result":{"thread":{"id":"$thread"}}}}
+{"direction":"in","message":{"method":"thread/started","params":{"thread":{"id":"$thread"}}}}
+{"direction":"out","message":{"jsonrpc":"2.0","id":4,"method":"thread/realtime/start","params":{"threadId":"$thread","realtimeSessionId":"$session","version":"v3","voice":"cove","outputModality":"audio","includeStartupContext":true,"clientManagedHandoffs":true,"delegationAckFiller":false,"transport":{"type":"webrtc","sdp":"$offer-sdp"}}}}
+{"direction":"in","message":{"id":4,"result":{}}}
+{"direction":"in","message":{"method":"thread/realtime/started","params":{"threadId":"$thread","realtimeSessionId":"$session","version":"v3"}}}
+{"direction":"in","message":{"method":"thread/realtime/sdp","params":{"threadId":"$thread","sdp":"$answer-sdp"}}}
+{"direction":"in","message":{"method":"thread/realtime/itemAdded","params":{"threadId":"$thread","item":{"active_transcript":[],"handoff_id":"handoff-1","input_transcript":"diagnose","item_id":"item-1","type":"handoff_request"}}}}
+{"direction":"out","message":{"id":5,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"progress-1"}}}
+{"direction":"in","message":{"id":5,"result":{}}}
+{"direction":"out","message":{"id":6,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"result-1"}}}
+{"direction":"in","message":{"id":6,"result":{}}}
+{"direction":"in","message":{"method":"thread/realtime/itemAdded","params":{"threadId":"$thread","item":{"active_transcript":[],"handoff_id":"handoff-2","input_transcript":"implement","item_id":"item-2","type":"handoff_request"}}}}
+{"direction":"out","message":{"id":7,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"progress-2"}}}
+{"direction":"in","message":{"id":7,"result":{}}}
+{"direction":"in","message":{"method":"thread/realtime/itemAdded","params":{"threadId":"$thread","item":{"active_transcript":[],"handoff_id":"handoff-3","input_transcript":"steer","item_id":"item-3","type":"handoff_request"}}}}
+{"direction":"out","message":{"id":8,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"progress-3"}}}
+{"direction":"in","message":{"id":8,"result":{}}}
+{"direction":"out","message":{"id":9,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"result-2"}}}
+{"direction":"in","message":{"id":9,"result":{}}}
+{"direction":"in","message":{"method":"thread/realtime/itemAdded","params":{"threadId":"$thread","item":{"active_transcript":[],"handoff_id":"handoff-4","input_transcript":"verify","item_id":"item-4","type":"handoff_request"}}}}
+{"direction":"out","message":{"id":10,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"progress-4"}}}
+{"direction":"in","message":{"id":10,"result":{}}}
+{"direction":"out","message":{"id":11,"method":"thread/realtime/appendSpeech","params":{"threadId":"$thread","text":"result-4"}}}
+{"direction":"in","message":{"id":11,"result":{}}}
+{"direction":"out","message":{"id":12,"method":"thread/realtime/stop","params":{"threadId":"$thread"}}}
+{"direction":"in","message":{"id":12,"result":{}}}
+{"direction":"in","message":{"method":"thread/realtime/closed","params":{"threadId":"$thread","reason":"requested"}}}
+{"direction":"out","message":{"id":13,"method":"thread/delete","params":{"threadId":"$thread"}}}
+{"direction":"in","message":{"id":13,"error":{"code":-32600,"message":"ephemeral thread"}}}

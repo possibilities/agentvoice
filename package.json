@@ -13,6 +13,7 @@
     "eval:livekit": "bun run src/cli.ts run livekit",
     "judge": "bun run src/judge-cli.ts",
     "judge:audio": "bun run src/pairwise-audio-judge-cli.ts",
+    "validate:codpiece-artifact": "bun run src/codpiece-artifact-validator-cli.ts",
     "probe:codex": "bun run src/cli.ts probe codex",
     "probe:codex-fx": "bun run src/cli.ts probe codex-fx",
     "probe:fx": "bun run src/cli.ts probe fx",
