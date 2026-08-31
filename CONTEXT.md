@@ -65,3 +65,15 @@ _Avoid_: cancel-and-follow-up, queued correction.
 An interval in which evaluator speech and audible voice-agent output are both active. Mere ability to interrupt between spoken responses does not establish full-duplex overlap.
 
 _Avoid_: multi-turn conversation, sequential interruption.
+
+**Pairwise audio judge**
+
+The identity-blind, order-counterbalanced evaluator that compares two completed runs using deterministic evidence plus their isolated-output and conversation recordings.
+
+_Avoid_: audio analyzer, voice scorer.
+
+**Listening bundle**
+
+The hash-bound, full-length MP3 copies prepared for the pairwise audio judge while the original PCM recordings remain the signal-analysis authority.
+
+_Avoid_: clips, compressed evidence.

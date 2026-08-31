@@ -1,0 +1,3 @@
+# Version pairwise audio judge request binding
+
+The accepted Codex-reference versus Codex–Fx comparison remains transparent historical protocol v1 because its provider responses required recorded journal-time citation repairs and its checkpoint hash did not commit the full request. New judgments use protocol v2: evidence and citations share the audio-track timeline, the exact serialized request body is SHA-256-bound, and v1 checkpoints are validation-only rather than replayable; each v2 report also hash-binds its sanitized provider responses and replays normalization from them during standalone validation, while local aggregate arithmetic is always recomputed with round-once scoring.
