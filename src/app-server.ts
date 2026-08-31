@@ -1,6 +1,7 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import type { Subprocess } from "bun";
+import type { Duplex } from "node:stream";
 import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -58,6 +59,8 @@ export interface AppServerOptions {
   /** Complete process argv for a standalone App Server build. */
   command?: readonly string[];
   executionProfile?: AppServerExecutionProfile;
+  /** Opaque Fx-owned credential authority; inherited by the sidecar as fd 3. */
+  credentialAuthority?: Duplex;
   cwd: string;
   clientVersion: string;
   onNotification?(method: string, params: Record<string, unknown>): void;
@@ -73,7 +76,10 @@ export interface AppServerOptions {
  */
 export class AppServerClient {
   private readonly options: AppServerOptions;
-  private readonly child: Subprocess<"pipe", "pipe", "pipe">;
+  private readonly child: ChildProcessWithoutNullStreams;
+  private readonly spawned: Promise<void>;
+  private readonly childExit: Promise<number | null>;
+  private credentialAuthority: Duplex | null;
   private readonly isolation: AppServerIsolationEvidence;
   private readonly observedChildProcessIds = new Set<number>();
   private readonly stdoutDone: Promise<void>;
@@ -90,17 +96,41 @@ export class AppServerClient {
 
   private constructor(options: AppServerOptions) {
     this.options = options;
+    this.credentialAuthority = options.credentialAuthority ?? null;
+    if (options.credentialAuthority && options.executionProfile !== "native-voice-sidecar") {
+      throw new Error("Fx credential authority requires the native voice-sidecar profile");
+    }
     const launch = appServerLaunch(options);
     this.isolation = launch.isolation;
-    this.child = Bun.spawn(launch.command, {
+    const [command, ...args] = launch.command;
+    let child: ChildProcessWithoutNullStreams;
+    const spawnOptions = {
       cwd: options.cwd,
-      env: appServerEnvironment(),
+      env: appServerEnvironment(options),
       // Give this ephemeral App-server (and every MCP child it starts) an
       // owned process group so teardown can reap the whole tree.
       detached: true,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+    } as const;
+    if (options.credentialAuthority) {
+      child = spawn(command!, args, {
+        ...spawnOptions,
+        stdio: ["pipe", "pipe", "pipe", options.credentialAuthority],
+      }) as ChildProcessWithoutNullStreams;
+    } else {
+      child = spawn(command!, args, { ...spawnOptions, stdio: ["pipe", "pipe", "pipe"] });
+    }
+    this.child = child;
+    this.spawned = waitForSpawn(child).then(() => {
+      // spawn(2) has duplicated the opaque endpoint into descriptor 3. Do not
+      // keep an AgentVoice-side duplicate after a successful child spawn.
+      this.destroyCredentialAuthorityDuplicate();
+    });
+    this.childExit = new Promise((resolvePromise, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code) => resolvePromise(code));
+    });
+    child.stdin.on("error", (error) => {
+      this.finish(`failed writing App-server stdin: ${message(error)}`);
     });
     this.options.onIsolationEvent?.("started", this.isolationEvidence());
     if (this.isolation.implementationProfile === "native-voice-sidecar") {
@@ -113,16 +143,30 @@ export class AppServerClient {
     }
     this.stdoutDone = this.readStdout();
     this.stderrDone = this.readStderr();
-    void this.child.exited.then(async (code) => {
-      await Promise.allSettled([this.stdoutDone, this.stderrDone]);
-      await this.completeIsolationEvidence();
-      this.finish(`App-server exited with code ${code}`);
-    });
+    void this.childExit.then(
+      async (code) => {
+        await Promise.allSettled([this.stdoutDone, this.stderrDone]);
+        await this.completeIsolationEvidence();
+        this.finish(`App-server exited with code ${code}`);
+      },
+      async (error) => {
+        await Promise.allSettled([this.stdoutDone, this.stderrDone]);
+        await this.completeIsolationEvidence();
+        this.finish(`App-server failed to spawn: ${message(error)}`);
+      },
+    );
   }
 
   static async start(options: AppServerOptions): Promise<AppServerClient> {
-    const client = new AppServerClient(options);
+    let client: AppServerClient;
     try {
+      client = new AppServerClient(options);
+    } catch (error) {
+      options.credentialAuthority?.destroy();
+      throw error;
+    }
+    try {
+      await client.spawned;
       await client.request("initialize", {
         clientInfo: {
           name: "agentvoice-eval",
@@ -201,7 +245,10 @@ export class AppServerClient {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed) {
+      this.destroyCredentialAuthorityDuplicate();
+      return;
+    }
     this.closed = true;
     try {
       this.child.stdin.end();
@@ -209,23 +256,30 @@ export class AppServerClient {
       // The process may already have closed stdin.
     }
     const exited = await Promise.race([
-      this.child.exited.then(() => true),
+      this.childExit.then(
+        () => true,
+        () => true,
+      ),
       Bun.sleep(2_000).then(() => false),
     ]);
     if (!exited) {
       this.terminateProcessGroup("SIGTERM");
       const terminated = await Promise.race([
-        this.child.exited.then(() => true),
+        this.childExit.then(
+          () => true,
+          () => true,
+        ),
         Bun.sleep(1_000).then(() => false),
       ]);
       if (!terminated) {
         this.terminateProcessGroup("SIGKILL");
-        await this.child.exited.catch(() => {});
+        await this.childExit.catch(() => {});
       }
     }
     this.terminateProcessGroup("SIGTERM");
     await Promise.allSettled([this.stdoutDone, this.stderrDone]);
     await this.completeIsolationEvidence();
+    this.destroyCredentialAuthorityDuplicate();
     this.finish("App-server closed");
   }
 
@@ -237,14 +291,13 @@ export class AppServerClient {
     if (this.closed) throw new AppServerError("App-server is closed");
     this.options.onProtocolMessage?.("out", message);
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
-    this.child.stdin.flush();
   }
 
   private async readStdout(): Promise<void> {
     const decoder = new TextDecoder();
     try {
       for await (const chunk of this.child.stdout) {
-        this.stdoutRemainder += decoder.decode(chunk, { stream: true });
+        this.stdoutRemainder += decoder.decode(chunk as Buffer, { stream: true });
         this.drainStdoutLines();
       }
       this.stdoutRemainder += decoder.decode();
@@ -258,7 +311,7 @@ export class AppServerClient {
     const decoder = new TextDecoder();
     try {
       for await (const chunk of this.child.stderr) {
-        this.stderrRemainder += decoder.decode(chunk, { stream: true });
+        this.stderrRemainder += decoder.decode(chunk as Buffer, { stream: true });
         this.drainStderrLines();
       }
       this.stderrRemainder += decoder.decode();
@@ -366,14 +419,16 @@ export class AppServerClient {
   private async observeChildren(): Promise<void> {
     try {
       const ps = Bun.spawn(["/bin/ps", "-axo", "pid=,ppid="], {
-        env: appServerEnvironment(),
+        env: appServerEnvironment(this.options),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "ignore",
       });
       const [stdout, exitCode] = await Promise.all([new Response(ps.stdout).text(), ps.exited]);
       if (exitCode !== 0) throw new Error(`/bin/ps exited with code ${exitCode}`);
-      for (const pid of descendantProcessIds(stdout, this.child.pid)) {
+      const rootPid = this.child.pid;
+      if (rootPid === undefined) throw new Error("App-server had no process id");
+      for (const pid of descendantProcessIds(stdout, rootPid)) {
         if (this.observedChildProcessIds.has(pid)) continue;
         this.observedChildProcessIds.add(pid);
         this.isolation.observedChildProcessCount = this.observedChildProcessIds.size;
@@ -399,11 +454,19 @@ export class AppServerClient {
   }
 
   private terminateProcessGroup(signal: NodeJS.Signals): void {
+    const pid = this.child.pid;
+    if (pid === undefined) return;
     try {
-      process.kill(-this.child.pid, signal);
+      process.kill(-pid, signal);
     } catch {
       // The owned process group is already gone.
     }
+  }
+
+  private destroyCredentialAuthorityDuplicate(): void {
+    const authority = this.credentialAuthority;
+    this.credentialAuthority = null;
+    authority?.destroy();
   }
 }
 
@@ -471,6 +534,28 @@ function nativeSandboxExecutable(): string | null {
   return process.platform === "darwin" && existsSync(path) ? path : null;
 }
 
+function waitForSpawn(child: ChildProcessWithoutNullStreams): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    const fallback = setImmediate(() => {
+      if (child.pid !== undefined) onSpawn();
+    });
+    const onSpawn = () => {
+      clearImmediate(fallback);
+      child.off("error", onError);
+      child.off("spawn", onSpawn);
+      resolvePromise();
+    };
+    const onError = (error: Error) => {
+      clearImmediate(fallback);
+      child.off("spawn", onSpawn);
+      child.off("error", onError);
+      reject(error);
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+}
+
 export function descendantProcessIds(psOutput: string, rootPid: number): number[] {
   const childrenByParent = new Map<number, number[]>();
   for (const line of psOutput.split("\n")) {
@@ -513,12 +598,46 @@ function denialResponse(method: string): Record<string, unknown> {
   }
 }
 
-function appServerEnvironment(): NodeJS.ProcessEnv {
-  const env = environmentWithoutOpenAiApiKey();
+function appServerEnvironment(
+  options: Pick<AppServerOptions, "credentialAuthority"> = {},
+): NodeJS.ProcessEnv {
+  const env = options.credentialAuthority
+    ? fxAuthorizedSidecarEnvironment()
+    : environmentWithoutOpenAiApiKey();
   env["PYTHONDONTWRITEBYTECODE"] = "1";
   // The reference contender must use Codex subscription authentication, and
   // the coding workspace never needs access to the paid fixture-render key.
   return env;
+}
+
+const FX_AUTHORIZED_SIDECAR_ENV_ALLOWLIST = [
+  "PATH",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+] as const;
+
+/**
+ * Returns the deliberately tiny environment for a schema-3 sidecar. Fx owns
+ * all credential authority, so the sidecar must not inherit a home directory,
+ * API key, agent socket, or path to any conventional credential store.
+ */
+export function fxAuthorizedSidecarEnvironment(
+  inherited: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const name of FX_AUTHORIZED_SIDECAR_ENV_ALLOWLIST) {
+    const value = inherited[name];
+    if (value !== undefined) environment[name] = value;
+  }
+  environment["PYTHONDONTWRITEBYTECODE"] = "1";
+  return environment;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

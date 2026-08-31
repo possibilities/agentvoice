@@ -44,6 +44,7 @@ try {
       ...(option(rest, "--voice-sidecar")
         ? { voiceSidecarPath: option(rest, "--voice-sidecar") }
         : {}),
+      ...(option(rest, "--fx") ? { fxPath: option(rest, "--fx") } : {}),
     });
     stdout(`${JSON.stringify(result, null, 2)}\n`);
   } else if (command === "run" && contender === "codex") {
@@ -131,7 +132,7 @@ function positional(args: readonly string[]): string | undefined {
 function usage(): void {
   stderr(`Usage:
   bun run src/cli.ts probe codex [--codex PATH]
-  bun run src/cli.ts probe codex-fx [--app-server PATH | --voice-sidecar PATH]
+  bun run src/cli.ts probe codex-fx [--app-server PATH | --voice-sidecar PATH] [--fx PATH]
   bun run src/cli.ts probe fx [--fx PATH]
   bun run src/cli.ts probe livekit [--livekit-server PATH] [--worker PATH] [--runtime PATH]
   bun run src/cli.ts run codex SCENARIO [--artifacts DIR] [--codex PATH]

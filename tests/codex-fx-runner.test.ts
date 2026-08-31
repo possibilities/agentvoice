@@ -9,6 +9,8 @@ import {
   captureEvaluationInputs,
   loadSidecarBuildMetadata,
   resolveCodexFxExecutionProfile,
+  sidecarRequiresFxCredentialAuthority,
+  teardownCodexFxRuntime,
 } from "../src/codex-fx-runner.ts";
 import { loadScenario } from "../src/scenario.ts";
 import {
@@ -55,17 +57,16 @@ describe("Codex voice-sidecar build metadata", () => {
     ).toThrow("source patch SHA-256 did not match");
   });
 
-  test("accepts schema 2 native metadata without requiring the legacy patch", () => {
+  test("keeps schema 2 native metadata on the parity path without Fx authority", () => {
     const fixture = nativeSidecarFixture();
 
-    expect(
-      loadSidecarBuildMetadata(
-        fixture.binaryPath,
-        "codex-voice-sidecar 0.0.0",
-        "/does/not/exist.patch",
-        2,
-      ),
-    ).toMatchObject({
+    const metadata = loadSidecarBuildMetadata(
+      fixture.binaryPath,
+      "codex-voice-sidecar 0.0.0",
+      "/does/not/exist.patch",
+      2,
+    );
+    expect(metadata).toMatchObject({
       schemaVersion: 2,
       implementation: "codex-voice-sidecar",
       sourceRepository: "possibilities/codex",
@@ -75,6 +76,7 @@ describe("Codex voice-sidecar build metadata", () => {
       wireContractSha256: voiceSidecarWireContractSha256(),
       binaryVersion: "codex-voice-sidecar 0.0.0",
     });
+    expect(sidecarRequiresFxCredentialAuthority(metadata)).toBe(false);
   });
 
   test("rejects stale schema 2 wire contracts and schema/profile mismatches", () => {
@@ -87,6 +89,54 @@ describe("Codex voice-sidecar build metadata", () => {
     expect(() =>
       loadSidecarBuildMetadata(legacy.binaryPath, "codex-app-server 0.0.0", legacy.patchPath, 2),
     ).toThrow("schemaVersion 1 did not match required 2");
+  });
+
+  test("accepts schema 3 only with the exact Fx credential authority contract", () => {
+    const fixture = nativeSidecarFixture({ schemaVersion: 3 });
+
+    const metadata = loadSidecarBuildMetadata(
+      fixture.binaryPath,
+      "codex-voice-sidecar 0.0.0",
+      undefined,
+      3,
+    );
+    expect(metadata).toMatchObject({
+      schemaVersion: 3,
+      credentialAuthority: {
+        owner: "fx",
+        provider: "codex",
+        transport: "inherited-fd",
+        descriptor: 3,
+        protocolVersion: 1,
+        maxFrameBytes: 65_536,
+      },
+    });
+    expect(sidecarRequiresFxCredentialAuthority(metadata)).toBe(true);
+
+    for (const [field, invalidValue] of [
+      ["owner", "sidecar"],
+      ["provider", "openai"],
+      ["transport", "socket-path"],
+      ["descriptor", 4],
+      ["protocolVersion", 2],
+      ["maxFrameBytes", 65_537],
+    ] as const) {
+      const invalid = nativeSidecarFixture({
+        schemaVersion: 3,
+        credentialAuthorityOverrides: { [field]: invalidValue },
+      });
+      expect(() =>
+        loadSidecarBuildMetadata(invalid.binaryPath, "codex-voice-sidecar 0.0.0", undefined, 3),
+      ).toThrow(`credentialAuthority.${field}`);
+    }
+
+    const extraField = nativeSidecarFixture({
+      schemaVersion: 3,
+      credentialAuthorityOverrides: { socketPath: "/tmp/forbidden.sock" },
+    });
+    expect(() =>
+      loadSidecarBuildMetadata(extraField.binaryPath, "codex-voice-sidecar 0.0.0", undefined, 3),
+    ).toThrow("credentialAuthority fields");
   });
 });
 
@@ -102,7 +152,7 @@ describe("Codex-Fx execution profile resolution", () => {
         "--listen",
         "stdio://",
       ],
-      requiredMetadataSchemaVersion: 1,
+      requiredMetadataSchemaVersions: [1],
     });
   });
 
@@ -118,7 +168,7 @@ describe("Codex-Fx execution profile resolution", () => {
         "stdio://",
       ],
       appServerExecutionProfile: "native-voice-sidecar",
-      requiredMetadataSchemaVersion: 2,
+      requiredMetadataSchemaVersions: [2, 3],
     });
   });
 
@@ -129,6 +179,31 @@ describe("Codex-Fx execution profile resolution", () => {
         voiceSidecarPath: "native-bin",
       }),
     ).toThrow("mutually exclusive");
+  });
+});
+
+describe("Codex-Fx runtime teardown", () => {
+  test("preserves bridge, sidecar, authority, Fx order even after a sidecar failure", async () => {
+    const order: string[] = [];
+
+    await expect(
+      teardownCodexFxRuntime({
+        closeBridge() {
+          order.push("bridge");
+        },
+        async stopSidecar() {
+          order.push("sidecar");
+          throw new Error("synthetic sidecar cleanup failure");
+        },
+        destroyCredentialAuthority() {
+          order.push("authority");
+        },
+        async stopFx() {
+          order.push("fx");
+        },
+      }),
+    ).rejects.toThrow("synthetic sidecar cleanup failure");
+    expect(order).toEqual(["bridge", "sidecar", "authority", "fx"]);
   });
 });
 
@@ -209,9 +284,11 @@ function sidecarFixture(): { binaryPath: string; patchPath: string } {
 
 function nativeSidecarFixture(
   overrides: Partial<{
+    schemaVersion: 2 | 3;
     sourceRevision: string;
     upstreamRevision: string;
     wireContractSha256: string;
+    credentialAuthorityOverrides: Record<string, unknown>;
   }> = {},
 ): { binaryPath: string; sourceRevision: string; upstreamRevision: string } {
   const directory = mkdtempSync(join(tmpdir(), "agentvoice-native-sidecar-metadata-"));
@@ -221,11 +298,21 @@ function nativeSidecarFixture(
   const sourceRevision = overrides.sourceRevision ?? "1234567890abcdef1234567890abcdef12345678";
   const upstreamRevision = overrides.upstreamRevision ?? "abcdef1234567890abcdef1234567890abcdef12";
   writeFileSync(binaryPath, binary);
+  const schemaVersion = overrides.schemaVersion ?? 2;
+  const credentialAuthority = {
+    owner: "fx",
+    provider: "codex",
+    transport: "inherited-fd",
+    descriptor: 3,
+    protocolVersion: 1,
+    maxFrameBytes: 65_536,
+    ...overrides.credentialAuthorityOverrides,
+  };
   writeFileSync(
     join(directory, "metadata.json"),
     `${JSON.stringify(
       {
-        schemaVersion: 2,
+        schemaVersion,
         implementation: "codex-voice-sidecar",
         sourceRepository: "possibilities/codex",
         sourceRevision,
@@ -235,6 +322,7 @@ function nativeSidecarFixture(
         builtAt: "2026-08-30T00:00:00Z",
         binarySha256: createHash("sha256").update(binary).digest("hex"),
         binaryVersion: "codex-voice-sidecar 0.0.0",
+        ...(schemaVersion === 3 ? { credentialAuthority } : {}),
       },
       null,
       2,

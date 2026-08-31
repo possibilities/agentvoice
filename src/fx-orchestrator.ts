@@ -4,6 +4,7 @@ import { chmodSync, createWriteStream, existsSync, mkdtempSync, rmSync } from "n
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import { z } from "zod";
 import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
 
@@ -443,6 +444,7 @@ export class FxHeadlessOrchestrator {
   private readonly client: FxWorkControlClient;
   private child: ChildProcessWithoutNullStreams | null = null;
   private childExit: Promise<{ code: number | null; signal: NodeJS.Signals | null }> | null = null;
+  private credentialBrokerChannel: Duplex | null = null;
   private terminalTail = "";
   private stderrTail = "";
   private startPromise: Promise<FxIdentity> | null = null;
@@ -497,6 +499,22 @@ export class FxHeadlessOrchestrator {
     return this.lifecycle.waitForTurn(turnId, timeoutMs);
   }
 
+  /**
+   * Transfers the sole AgentVoice-owned endpoint of Fx's credential broker.
+   * The caller must keep the socket opaque and pass it directly to an
+   * Fx-authorized voice sidecar as inherited descriptor 3.
+   */
+  acquireCredentialBrokerChannel(): Duplex {
+    if (!this.ready || this.stopped) {
+      throw new Error("Fx credential broker is unavailable before Fx startup");
+    }
+    const channel = this.credentialBrokerChannel;
+    if (!channel) throw new Error("Fx credential broker channel was already acquired");
+    this.credentialBrokerChannel = null;
+    channel.pause();
+    return channel;
+  }
+
   stop(): Promise<void> {
     this.stopPromise ??= this.stopOnce();
     return this.stopPromise;
@@ -506,6 +524,9 @@ export class FxHeadlessOrchestrator {
     this.stopped = true;
     this.ready = false;
     this.lifecycle.close();
+    const credentialBrokerChannel = this.credentialBrokerChannel;
+    this.credentialBrokerChannel = null;
+    credentialBrokerChannel?.destroy();
     const child = this.child;
     let stopError: Error | null = null;
     try {
@@ -535,6 +556,7 @@ export class FxHeadlessOrchestrator {
         workSocketPath: this.workSocketPath,
         instanceId: this.instanceId,
         token: this.token,
+        credentialFd: 3,
       });
       const launch = ptyLaunch(fxPath);
       if (process.platform === "darwin") environment["AGENTVOICE_FX_EXECUTABLE"] = fxPath;
@@ -542,7 +564,7 @@ export class FxHeadlessOrchestrator {
         cwd: resolve(this.options.workspace),
         env: environment,
         detached: true,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
       });
       this.child = child;
       this.childExit = new Promise((resolvePromise, reject) => {
@@ -580,6 +602,15 @@ export class FxHeadlessOrchestrator {
         },
         (error) => this.fail(asError(error)),
       );
+
+      await waitForSpawn(child);
+      this.assertStarting();
+      const credentialBrokerChannel = child.stdio[3];
+      if (!isDuplex(credentialBrokerChannel)) {
+        throw new Error("Fx credential broker did not expose a parent Duplex for descriptor 3");
+      }
+      credentialBrokerChannel.pause();
+      this.credentialBrokerChannel = credentialBrokerChannel;
 
       const started = this.lifecycle.waitForStarted();
       const exited = this.childExit.then(({ code, signal }) => {
@@ -706,6 +737,7 @@ export function fxEnvironment(
     workSocketPath?: string;
     instanceId?: string;
     token?: string;
+    credentialFd?: 3;
   } = {},
   inherited: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
@@ -722,6 +754,7 @@ export function fxEnvironment(
       delete environment[name];
     }
   }
+  delete environment["FX_CODEX_CREDENTIAL_FD"];
   if (options.model) environment["FX_MODEL"] = options.model;
   if (options.reasoningEffort) environment["FX_EFFORT"] = options.reasoningEffort;
   if (options.adeSocketPath) environment["FX_ADE_SOCKET_PATH"] = options.adeSocketPath;
@@ -729,6 +762,9 @@ export function fxEnvironment(
   if (options.workSocketPath) environment["FX_WORK_CONTROL_SOCKET_PATH"] = options.workSocketPath;
   if (options.instanceId) environment["FX_WORK_CONTROL_INSTANCE_ID"] = options.instanceId;
   if (options.token) environment["FX_WORK_CONTROL_TOKEN"] = options.token;
+  if (options.credentialFd) {
+    environment["FX_CODEX_CREDENTIAL_FD"] = String(options.credentialFd);
+  }
   return environment;
 }
 
@@ -762,6 +798,41 @@ function ptyLaunch(fxPath: string): { command: string; args: string[] } {
     command: "script",
     args: ["-q", "-c", shellQuote(fxPath), "/dev/null"],
   };
+}
+
+function waitForSpawn(child: ChildProcessWithoutNullStreams): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    const fallback = setImmediate(() => {
+      if (child.pid !== undefined) onSpawn();
+    });
+    const onSpawn = () => {
+      clearImmediate(fallback);
+      child.off("error", onError);
+      child.off("spawn", onSpawn);
+      resolvePromise();
+    };
+    const onError = (error: Error) => {
+      clearImmediate(fallback);
+      child.off("spawn", onSpawn);
+      child.off("error", onError);
+      reject(error);
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+}
+
+function isDuplex(value: unknown): value is Duplex {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "pause" in value &&
+    typeof value.pause === "function" &&
+    "write" in value &&
+    typeof value.write === "function" &&
+    "destroy" in value &&
+    typeof value.destroy === "function"
+  );
 }
 
 async function stopProcessGroup(pid: number): Promise<void> {

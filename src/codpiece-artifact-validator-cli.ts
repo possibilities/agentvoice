@@ -25,8 +25,8 @@ import {
 } from "./audio.ts";
 import { type ParsedPcm16Wav, parsePcm16Wav } from "./audio-analysis.ts";
 import {
+  type FxAuthorizedCodexSidecarBuildMetadata,
   loadSidecarBuildMetadata,
-  type NativeCodexSidecarBuildMetadata,
 } from "./codex-fx-runner.ts";
 import {
   commandVersion,
@@ -138,8 +138,8 @@ export async function validateCodpieceArtifact(
     binaryPath,
     binaryVersion,
     undefined,
-    2,
-  ) as NativeCodexSidecarBuildMetadata;
+    3,
+  ) as FxAuthorizedCodexSidecarBuildMetadata;
 
   if (sidecarBuild.sourceRevision !== options.candidateSha) {
     throw new Error(

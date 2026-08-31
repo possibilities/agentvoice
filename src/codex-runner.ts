@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import { AppServerClient, type AppServerExecutionProfile } from "./app-server.ts";
 import { ContinuousUplink, DuplexRecorder } from "./audio.ts";
 import { EventJournal } from "./events.ts";
@@ -46,6 +47,8 @@ export interface OpenSessionOptions {
   codexPath?: string;
   appServerCommand?: readonly string[];
   appServerExecutionProfile?: AppServerExecutionProfile;
+  /** Opaque Fx broker endpoint passed directly to the sidecar as fd 3. */
+  credentialAuthority?: Duplex;
   clientManagedHandoffs?: boolean;
   delegationAckFiller?: boolean;
   recordCanonicalCodexTurns?: boolean;
@@ -299,6 +302,7 @@ export async function openSession(options: OpenSessionOptions): Promise<OpenSess
             },
           }
         : {}),
+      ...(options.credentialAuthority ? { credentialAuthority: options.credentialAuthority } : {}),
       cwd: appServerCwd,
       clientVersion: VERSION,
       onNotification(method, params) {

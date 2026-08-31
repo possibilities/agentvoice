@@ -93,6 +93,19 @@ describe("Codpiece artifact validator CLI", () => {
     });
   });
 
+  test("rejects schema 2 parity metadata as lacking Fx credential authority", async () => {
+    const fixture = await writeArtifactFixture();
+    const metadataPath = join(fixture.root, "binary", "metadata.json");
+    const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+    metadata.schemaVersion = 2;
+    delete metadata.credentialAuthority;
+    writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "schemaVersion 2 did not match required 3",
+    );
+  });
+
   test("rejects artifacts whose native manifest is not accepted by strict validation", async () => {
     const fixture = await writeArtifactFixture();
     const manifestPath = join(fixture.artifact, "manifest.json");
@@ -271,7 +284,7 @@ async function writeArtifactFixture(): Promise<{
   chmodSync(binary, 0o700);
   const binarySha256 = sha256(readFileSync(binary));
   const sidecarBuild = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     implementation: "codex-voice-sidecar",
     sourceRepository: "possibilities/codex",
     sourceRevision: CANDIDATE_SHA,
@@ -281,6 +294,14 @@ async function writeArtifactFixture(): Promise<{
     builtAt: "2026-08-30T00:00:00Z",
     binarySha256,
     binaryVersion: BINARY_VERSION,
+    credentialAuthority: {
+      owner: "fx",
+      provider: "codex",
+      transport: "inherited-fd",
+      descriptor: 3,
+      protocolVersion: 1,
+      maxFrameBytes: 65_536,
+    },
   };
   writeFileSync(
     join(binaryDirectory, "metadata.json"),

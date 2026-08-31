@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import type { AppServerExecutionProfile } from "./app-server.ts";
 import { CodexFxBridge } from "./codex-fx-bridge.ts";
 import {
@@ -74,15 +75,46 @@ export interface NativeCodexSidecarBuildMetadata {
   binaryVersion: string;
 }
 
+export interface FxAuthorizedCodexSidecarBuildMetadata {
+  schemaVersion: 3;
+  implementation: "codex-voice-sidecar";
+  sourceRepository: "possibilities/codex";
+  sourceRevision: string;
+  upstreamRevision: string;
+  wireContractVersion: typeof VOICE_SIDECAR_WIRE_CONTRACT_VERSION;
+  wireContractSha256: string;
+  builtAt: string;
+  binarySha256: string;
+  binaryVersion: string;
+  credentialAuthority: {
+    owner: "fx";
+    provider: "codex";
+    transport: "inherited-fd";
+    descriptor: 3;
+    protocolVersion: 1;
+    maxFrameBytes: 65_536;
+  };
+}
+
 export type CodexSidecarBuildMetadata =
   | LegacyCodexSidecarBuildMetadata
-  | NativeCodexSidecarBuildMetadata;
+  | NativeCodexSidecarBuildMetadata
+  | FxAuthorizedCodexSidecarBuildMetadata;
+
+export type CodexSidecarMetadataSchemaVersion = 1 | 2 | 3;
+
+export function sidecarRequiresFxCredentialAuthority(
+  metadata: CodexSidecarBuildMetadata,
+): metadata is FxAuthorizedCodexSidecarBuildMetadata {
+  return metadata.schemaVersion === 3;
+}
 
 export type CodexFxImplementationProfile = "legacy-app-server" | "native-voice-sidecar";
 
 export interface CodexFxProbeOptions {
   appServerPath?: string;
   voiceSidecarPath?: string;
+  fxPath?: string;
 }
 
 export interface ResolvedCodexFxExecutionProfile {
@@ -90,7 +122,7 @@ export interface ResolvedCodexFxExecutionProfile {
   binaryPath: string;
   command: [string, "-c", "features.realtime_conversation=true", "--listen", "stdio://"];
   appServerExecutionProfile?: AppServerExecutionProfile;
-  requiredMetadataSchemaVersion: 1 | 2;
+  requiredMetadataSchemaVersions: readonly CodexSidecarMetadataSchemaVersion[];
 }
 
 interface EvaluationInputFileReceipt {
@@ -115,7 +147,38 @@ export interface CapturedEvaluationInputs {
   sources: Array<{ path: string; sha256: string }>;
 }
 
-/** Starts only the pinned native voice sidecar; no evaluator audio or coding turn is submitted. */
+export async function teardownCodexFxRuntime(steps: {
+  closeBridge(): void;
+  stopSidecar(): Promise<void>;
+  destroyCredentialAuthority(): void;
+  stopFx(): Promise<void>;
+}): Promise<void> {
+  const errors: Error[] = [];
+  try {
+    steps.closeBridge();
+  } catch (error) {
+    errors.push(asError(error));
+  }
+  try {
+    await steps.stopSidecar();
+  } catch (error) {
+    errors.push(asError(error));
+  }
+  try {
+    steps.destroyCredentialAuthority();
+  } catch (error) {
+    errors.push(asError(error));
+  }
+  try {
+    await steps.stopFx();
+  } catch (error) {
+    errors.push(asError(error));
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, "Codex-Fx runtime teardown failed");
+}
+
+/** Probes the voice sidecar; schema 3 starts Fx only to supply its credential authority. */
 export async function probeCodexFxVoice(
   configured: string | CodexFxProbeOptions = {},
 ): Promise<Record<string, unknown>> {
@@ -129,7 +192,7 @@ export async function probeCodexFxVoice(
     appServerPath,
     appServerVersion,
     CODEX_SIDECAR_PATCH_PATH,
-    execution.requiredMetadataSchemaVersion,
+    execution.requiredMetadataSchemaVersions,
   );
   const scratch = mkdtempSync(join(tmpdir(), "agentvoice-codex-fx-probe-"));
   const workspace = join(scratch, "workspace");
@@ -137,10 +200,25 @@ export async function probeCodexFxVoice(
   const journal = new EventJournal();
   const stderr: string[] = [];
   let session: OpenSession | null = null;
+  let orchestrator: FxHeadlessOrchestrator | null = null;
+  let fxIdentity: FxIdentity | null = null;
+  let credentialAuthority: Duplex | null = null;
   let voiceSession: { data: Record<string, unknown> } | null = null;
   let sessionStopped = false;
 
   try {
+    if (sidecarRequiresFxCredentialAuthority(sidecarBuild)) {
+      orchestrator = new FxHeadlessOrchestrator({
+        workspace,
+        ...(typeof configured !== "string" && configured.fxPath
+          ? { fxPath: configured.fxPath }
+          : {}),
+        model: CODEX_REFERENCE.orchestratorModel,
+        reasoningEffort: CODEX_REFERENCE.reasoningEffort,
+      });
+      fxIdentity = await orchestrator.start();
+      credentialAuthority = orchestrator.acquireCredentialBrokerChannel();
+    }
     session = await openSession({
       workspace,
       voiceModel: CODEX_REFERENCE.voiceModel,
@@ -152,6 +230,7 @@ export async function probeCodexFxVoice(
       ...(execution.appServerExecutionProfile
         ? { appServerExecutionProfile: execution.appServerExecutionProfile }
         : {}),
+      ...(credentialAuthority ? { credentialAuthority } : {}),
       clientManagedHandoffs: true,
       delegationAckFiller: false,
       recordCanonicalCodexTurns: false,
@@ -175,6 +254,7 @@ export async function probeCodexFxVoice(
       ok: true,
       appServerVersion,
       sidecarBuild,
+      ...(fxIdentity ? { fxIdentity } : {}),
       implementationProfile: execution.implementationProfile,
       isolation: session.appServer.isolationEvidence(),
       voiceModel: CODEX_REFERENCE.voiceModel,
@@ -189,9 +269,24 @@ export async function probeCodexFxVoice(
       events: journal.snapshot().map((event) => event.type),
     };
   } finally {
-    if (session && !sessionStopped) await stopSession(session, journal);
-    journal.close();
-    rmSync(scratch, { recursive: true, force: true });
+    try {
+      await teardownCodexFxRuntime({
+        closeBridge() {},
+        async stopSidecar() {
+          if (session && !sessionStopped) await stopSession(session, journal);
+        },
+        destroyCredentialAuthority() {
+          credentialAuthority?.destroy();
+          credentialAuthority = null;
+        },
+        async stopFx() {
+          await orchestrator?.stop();
+        },
+      });
+    } finally {
+      journal.close();
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }
 }
 
@@ -212,7 +307,7 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
     appServerPath,
     appServerVersion,
     CODEX_SIDECAR_PATCH_PATH,
-    execution.requiredMetadataSchemaVersion,
+    execution.requiredMetadataSchemaVersions,
   );
   const artifactsRoot = resolve(options.artifactsRoot ?? "artifacts");
   const artifactDirectory = uniqueArtifactDirectory(artifactsRoot, loaded.scenario.id, "codex-fx");
@@ -231,6 +326,7 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
   let session: OpenSession | null = null;
   let bridge: CodexFxBridge | null = null;
   let orchestrator: FxHeadlessOrchestrator | null = null;
+  let credentialAuthority: Duplex | null = null;
   let fxIdentity: FxIdentity | null = null;
   let oracle: OracleResult | null = null;
   let validation: CodexFxRunValidationResult | null = null;
@@ -264,6 +360,9 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
     orchestrator = activeOrchestrator;
     fxIdentity = await activeOrchestrator.start();
     journal.record("fx", "fx.identity", { ...fxIdentity });
+    if (sidecarRequiresFxCredentialAuthority(sidecarBuild)) {
+      credentialAuthority = activeOrchestrator.acquireCredentialBrokerChannel();
+    }
 
     session = await openSession({
       workspace,
@@ -272,6 +371,7 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
       ...(execution.appServerExecutionProfile
         ? { appServerExecutionProfile: execution.appServerExecutionProfile }
         : {}),
+      ...(credentialAuthority ? { credentialAuthority } : {}),
       clientManagedHandoffs: true,
       delegationAckFiller: false,
       recordCanonicalCodexTurns: false,
@@ -312,31 +412,43 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
   } catch (error) {
     failRun(errorMessage(error));
   } finally {
-    bridge?.close();
-    if (runFailed()) await orchestrator?.stop().catch(() => {});
-    if (session) {
-      await stopSession(session, journal);
-      await session.recorder
-        .write(artifactDirectory)
-        .then((result) => {
-          audioDurationMs = result.durationMs;
-          recordSteerPcmOverlap(session!.recorder, journal);
-        })
-        .catch((error) => failRun(`audio artifact finalization failed: ${errorMessage(error)}`));
-    }
-    await bridge?.drain().catch((error) => {
-      journal.record("bridge", "bridge.drain-error", { message: errorMessage(error) });
-      failRun(`bridge drain failed: ${errorMessage(error)}`);
-    });
-    if (orchestrator) {
-      await orchestrator.stop().then(
-        () => journal.record("fx", "fx.stopped"),
-        (error) => {
-          journal.record("fx", "fx.stop.error", { message: errorMessage(error) });
-          failRun(`Fx cleanup failed: ${errorMessage(error)}`);
-        },
-      );
-    }
+    await teardownCodexFxRuntime({
+      closeBridge() {
+        bridge?.close();
+      },
+      async stopSidecar() {
+        if (session) {
+          await stopSession(session, journal);
+          await session.recorder
+            .write(artifactDirectory)
+            .then((result) => {
+              audioDurationMs = result.durationMs;
+              recordSteerPcmOverlap(session!.recorder, journal);
+            })
+            .catch((error) =>
+              failRun(`audio artifact finalization failed: ${errorMessage(error)}`),
+            );
+        }
+        await bridge?.drain().catch((error) => {
+          journal.record("bridge", "bridge.drain-error", { message: errorMessage(error) });
+          failRun(`bridge drain failed: ${errorMessage(error)}`);
+        });
+      },
+      destroyCredentialAuthority() {
+        credentialAuthority?.destroy();
+        credentialAuthority = null;
+      },
+      async stopFx() {
+        if (!orchestrator) return;
+        await orchestrator.stop().then(
+          () => journal.record("fx", "fx.stopped"),
+          (error) => {
+            journal.record("fx", "fx.stop.error", { message: errorMessage(error) });
+            failRun(`Fx cleanup failed: ${errorMessage(error)}`);
+          },
+        );
+      },
+    }).catch((error) => failRun(`runtime teardown failed: ${errorMessage(error)}`));
 
     cpSync(workspace, join(artifactDirectory, "workspace-after"), { recursive: true });
     await writeWorkspaceDiff(
@@ -554,7 +666,7 @@ export function resolveCodexFxExecutionProfile(
       binaryPath,
       command: sidecarCommand(binaryPath),
       appServerExecutionProfile: "native-voice-sidecar",
-      requiredMetadataSchemaVersion: 2,
+      requiredMetadataSchemaVersions: [2, 3],
     };
   }
   const binaryPath = resolve(options.appServerPath ?? defaultAppServerPath());
@@ -562,7 +674,7 @@ export function resolveCodexFxExecutionProfile(
     implementationProfile: "legacy-app-server",
     binaryPath,
     command: sidecarCommand(binaryPath),
-    requiredMetadataSchemaVersion: 1,
+    requiredMetadataSchemaVersions: [1],
   };
 }
 
@@ -570,30 +682,30 @@ export function loadSidecarBuildMetadata(
   appServerPath: string,
   binaryVersion: string,
   patchPath = CODEX_SIDECAR_PATCH_PATH,
-  requiredMetadataSchemaVersion?: 1 | 2,
+  requiredMetadataSchemaVersions?:
+    | CodexSidecarMetadataSchemaVersion
+    | readonly CodexSidecarMetadataSchemaVersion[],
 ): CodexSidecarBuildMetadata {
   assertSidecarBinaryExists(appServerPath);
   const metadataPath = join(dirname(appServerPath), "metadata.json");
   if (!existsSync(metadataPath))
     throw new Error(`sidecar build metadata not found at ${metadataPath}`);
   const value = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
-  const schemaVersion =
-    value["schemaVersion"] === 1 || value["schemaVersion"] === 2
-      ? value["schemaVersion"]
-      : invalid("metadata schemaVersion");
-  if (
-    requiredMetadataSchemaVersion !== undefined &&
-    schemaVersion !== requiredMetadataSchemaVersion
-  ) {
+  const schemaVersion = metadataSchemaVersion(value["schemaVersion"]);
+  const requiredVersions =
+    typeof requiredMetadataSchemaVersions === "number"
+      ? [requiredMetadataSchemaVersions]
+      : requiredMetadataSchemaVersions;
+  if (requiredVersions !== undefined && !requiredVersions.includes(schemaVersion)) {
     throw new Error(
       `sidecar build metadata schemaVersion ${schemaVersion} did not match required ` +
-        `${requiredMetadataSchemaVersion}`,
+        `${requiredVersions.join(" or ")}`,
     );
   }
   const metadata =
     schemaVersion === 1
       ? legacySidecarBuildMetadata(value, patchPath)
-      : nativeSidecarBuildMetadata(value);
+      : nativeSidecarBuildMetadata(value, schemaVersion);
   if (metadata.binaryVersion !== binaryVersion) {
     throw new Error(
       `sidecar metadata version ${metadata.binaryVersion} did not match binary ${binaryVersion}`,
@@ -639,9 +751,9 @@ function legacySidecarBuildMetadata(
 
 function nativeSidecarBuildMetadata(
   value: Record<string, unknown>,
-): NativeCodexSidecarBuildMetadata {
-  const metadata: NativeCodexSidecarBuildMetadata = {
-    schemaVersion: 2,
+  schemaVersion: 2 | 3,
+): NativeCodexSidecarBuildMetadata | FxAuthorizedCodexSidecarBuildMetadata {
+  const common = {
     implementation:
       value["implementation"] === "codex-voice-sidecar"
         ? "codex-voice-sidecar"
@@ -660,15 +772,39 @@ function nativeSidecarBuildMetadata(
     builtAt: stringField(value, "builtAt"),
     binarySha256: sha256Field(value, "binarySha256"),
     binaryVersion: stringField(value, "binaryVersion"),
-  };
+  } as const;
   const expectedWireContractSha256 = voiceSidecarWireContractSha256();
-  if (metadata.wireContractSha256 !== expectedWireContractSha256) {
+  if (common.wireContractSha256 !== expectedWireContractSha256) {
     throw new Error(
-      `sidecar wire contract SHA-256 ${metadata.wireContractSha256} did not match ` +
+      `sidecar wire contract SHA-256 ${common.wireContractSha256} did not match ` +
         expectedWireContractSha256,
     );
   }
-  return metadata;
+  if (schemaVersion === 2) return { schemaVersion, ...common };
+
+  const credentialAuthority = recordField(value, "credentialAuthority");
+  assertExactKeys(
+    credentialAuthority,
+    ["owner", "provider", "transport", "descriptor", "protocolVersion", "maxFrameBytes"],
+    "credentialAuthority",
+  );
+  return {
+    schemaVersion,
+    ...common,
+    credentialAuthority: {
+      owner: literalField(credentialAuthority, "owner", "fx"),
+      provider: literalField(credentialAuthority, "provider", "codex"),
+      transport: literalField(credentialAuthority, "transport", "inherited-fd"),
+      descriptor: literalField(credentialAuthority, "descriptor", 3),
+      protocolVersion: literalField(credentialAuthority, "protocolVersion", 1),
+      maxFrameBytes: literalField(credentialAuthority, "maxFrameBytes", 65_536),
+    },
+  };
+}
+
+function metadataSchemaVersion(value: unknown): CodexSidecarMetadataSchemaVersion {
+  if (value === 1 || value === 2 || value === 3) return value;
+  return invalid("metadata schemaVersion");
 }
 
 function assertSidecarBinaryExists(appServerPath: string): void {
@@ -790,6 +926,35 @@ function shaLikeField(value: Record<string, unknown>, key: string): string {
   return field;
 }
 
+function recordField(value: Record<string, unknown>, key: string): Record<string, unknown> {
+  const field = value[key];
+  if (typeof field !== "object" || field === null || Array.isArray(field)) {
+    throw new Error(`invalid ${key}`);
+  }
+  return field as Record<string, unknown>;
+}
+
+function literalField<const T extends string | number>(
+  value: Record<string, unknown>,
+  key: string,
+  expected: T,
+): T {
+  if (value[key] !== expected) throw new Error(`invalid credentialAuthority.${key}`);
+  return expected;
+}
+
+function assertExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const actual = Object.keys(value).sort();
+  const required = [...expected].sort();
+  if (actual.length !== required.length || actual.some((key, index) => key !== required[index])) {
+    throw new Error(`invalid ${label} fields`);
+  }
+}
+
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -800,4 +965,8 @@ function invalid(label: string): never {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }

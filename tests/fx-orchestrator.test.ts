@@ -36,6 +36,7 @@ describe("Fx headless lifecycle", () => {
         AGENTVOICE_WORKER_CONTROL_TOKEN: "synthetic-control-token",
         AGENTVOICE_TELEMETRY_SOCKET_PATH: "/tmp/telemetry.sock",
         HERDR_SESSION: "synthetic-session",
+        FX_CODEX_CREDENTIAL_FD: "9",
       },
     );
 
@@ -52,6 +53,7 @@ describe("Fx headless lifecycle", () => {
     expect(environment).not.toHaveProperty("AGENTVOICE_WORKER_CONTROL_TOKEN");
     expect(environment).not.toHaveProperty("AGENTVOICE_TELEMETRY_SOCKET_PATH");
     expect(environment).not.toHaveProperty("HERDR_SESSION");
+    expect(environment).not.toHaveProperty("FX_CODEX_CREDENTIAL_FD");
   });
 
   test("rolls back the detached process group and temporary sockets after startup failure", async () => {
@@ -104,6 +106,37 @@ describe("Fx headless lifecycle", () => {
     } finally {
       await orchestrator.stop().catch(() => {});
       if (spawnedPid && processExists(spawnedPid)) process.kill(spawnedPid, "SIGKILL");
+    }
+  });
+
+  test("exposes Fx descriptor 3 as one paused, opaque broker channel", async () => {
+    const directory = temporaryDirectory();
+    const fakeFxPath = join(directory, "broker-fx");
+    const pidPath = join(directory, "broker-fx.pid");
+    writeFileSync(fakeFxPath, readyFxProgram(pidPath), { mode: 0o700 });
+    chmodSync(fakeFxPath, 0o700);
+    const orchestrator = new FxHeadlessOrchestrator({
+      workspace: directory,
+      fxPath: fakeFxPath,
+      model: "gpt-5.6-terra",
+      reasoningEffort: "medium",
+    });
+
+    try {
+      expect(() => orchestrator.acquireCredentialBrokerChannel()).toThrow("before Fx startup");
+      await orchestrator.start();
+      const channel = orchestrator.acquireCredentialBrokerChannel();
+      expect(channel.isPaused()).toBe(true);
+      expect(() => orchestrator.acquireCredentialBrokerChannel()).toThrow("already acquired");
+      const bytes = await new Promise<Buffer>((resolvePromise, reject) => {
+        channel.once("data", (chunk: Buffer) => resolvePromise(chunk));
+        channel.once("error", reject);
+        channel.resume();
+      });
+      expect(bytes.toString("utf8")).toBe("opaque-broker-bytes");
+      channel.destroy();
+    } finally {
+      await orchestrator.stop().catch(() => {});
     }
   });
 });
@@ -379,7 +412,7 @@ process.exit(12);
 
 function readyFxProgram(pidPath: string): string {
   return `#!/usr/bin/env bun
-import { writeFileSync } from "node:fs";
+import { writeFileSync, writeSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 
 const argument = process.argv[2];
@@ -404,6 +437,8 @@ if (argument === "--fxnk-version") {
 }
 
 writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+if (process.env.FX_CODEX_CREDENTIAL_FD !== "3") process.exit(13);
+writeSync(3, "opaque-broker-bytes");
 const server = createServer((socket) => {
   let bytes = Buffer.alloc(0);
   socket.on("data", (chunk) => {
