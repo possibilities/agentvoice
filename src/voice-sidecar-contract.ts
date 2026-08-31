@@ -84,6 +84,15 @@ const SERVER_NOTIFICATION_METHODS = [
   "thread/realtime/itemAdded",
   "thread/realtime/closed",
 ] as const;
+const OPTIONAL_SERVER_NOTIFICATION_METHODS = [
+  "thread/realtime/transcript/delta",
+  "thread/realtime/transcript/done",
+] as const;
+const REQUEST_METHOD_SET = new Set<string>(REQUEST_METHODS);
+const SERVER_NOTIFICATION_METHOD_SET = new Set<string>([
+  ...SERVER_NOTIFICATION_METHODS,
+  ...OPTIONAL_SERVER_NOTIFICATION_METHODS,
+]);
 const HANDOFF_REQUIRED_FIELDS = [
   "active_transcript",
   "handoff_id",
@@ -236,7 +245,7 @@ export function projectConsumedWireContract(
 export function assertConsumedWireContract(records: readonly WireMessageRecord[]): void {
   const fixture = loadVoiceSidecarWireContract();
   const projection = projectConsumedWireContract(records);
-  const issues: string[] = [];
+  const issues = exactWireIssues(records);
   if (projection.realtimeStart.modelOverride !== "absent") {
     issues.push("thread/realtime/start must omit the model override");
   }
@@ -246,8 +255,158 @@ export function assertConsumedWireContract(records: readonly WireMessageRecord[]
   if (issues.length > 0) throw new VoiceSidecarWireContractError(issues);
 }
 
+function exactWireIssues(records: readonly WireMessageRecord[]): string[] {
+  const issues: string[] = [];
+  const pendingRequests = new Map<string | number, string>();
+  const completedRequestIds = new Set<string | number>();
+
+  for (const [index, record] of records.entries()) {
+    const label = `wire message ${index + 1}`;
+    if (record.direction !== "in" && record.direction !== "out") {
+      issues.push(`${label} has invalid direction ${String(record.direction)}`);
+      continue;
+    }
+    const message = recordValue(record.message);
+    if (!message) {
+      issues.push(`${label} message is not an object`);
+      continue;
+    }
+
+    const hasMethod = hasOwn(message, "method");
+    const rawMethod = message["method"];
+    if (hasMethod && (typeof rawMethod !== "string" || rawMethod.length === 0)) {
+      issues.push(`${label} has a malformed method`);
+      continue;
+    }
+    const method = hasMethod ? (rawMethod as string) : null;
+    const hasId = hasOwn(message, "id");
+    const id = hasId ? requestId(message["id"]) : null;
+    if (hasId && id === null) {
+      if (record.direction === "in" && method) {
+        issues.push(`${label} is an inbound server request with id:null + method ${method}`);
+      } else {
+        issues.push(`${label} has malformed id ${formatId(message["id"])}`);
+      }
+      continue;
+    }
+
+    if (record.direction === "out") {
+      validateOutboundMessage(
+        label,
+        method,
+        hasId,
+        id,
+        pendingRequests,
+        completedRequestIds,
+        issues,
+      );
+    } else {
+      validateInboundMessage(
+        label,
+        message,
+        method,
+        hasId,
+        id,
+        pendingRequests,
+        completedRequestIds,
+        issues,
+      );
+    }
+  }
+
+  for (const [id, method] of pendingRequests) {
+    issues.push(
+      `wire contract ended with unanswered outbound request id ${formatId(id)} method ${method}`,
+    );
+  }
+
+  return issues;
+}
+
+function validateOutboundMessage(
+  label: string,
+  method: string | null,
+  hasId: boolean,
+  id: string | number | null,
+  pendingRequests: Map<string | number, string>,
+  completedRequestIds: Set<string | number>,
+  issues: string[],
+): void {
+  if (method) {
+    if (hasId) {
+      if (!REQUEST_METHOD_SET.has(method)) {
+        issues.push(`${label} has unexpected outbound request method ${method}`);
+      }
+      if (id !== null) {
+        if (pendingRequests.has(id) || completedRequestIds.has(id)) {
+          issues.push(`${label} reuses outbound request id ${formatId(id)}`);
+        } else {
+          pendingRequests.set(id, method);
+        }
+      }
+    } else if (method !== "initialized") {
+      issues.push(`${label} has unexpected outbound notification method ${method}`);
+    }
+    return;
+  }
+
+  if (hasId) {
+    issues.push(`${label} is an unexpected outbound response with id ${formatId(id)}`);
+  } else {
+    issues.push(`${label} has neither method nor id`);
+  }
+}
+
+function validateInboundMessage(
+  label: string,
+  message: Record<string, unknown>,
+  method: string | null,
+  hasId: boolean,
+  id: string | number | null,
+  pendingRequests: Map<string | number, string>,
+  completedRequestIds: Set<string | number>,
+  issues: string[],
+): void {
+  if (method) {
+    if (hasId) {
+      issues.push(`${label} is an inbound server request with method ${method}`);
+    } else if (!SERVER_NOTIFICATION_METHOD_SET.has(method)) {
+      issues.push(`${label} has unexpected inbound notification method ${method}`);
+    }
+    return;
+  }
+
+  if (!hasId) {
+    issues.push(`${label} has neither method nor id`);
+    return;
+  }
+  if (id === null || !pendingRequests.has(id)) {
+    issues.push(`${label} has unknown inbound response id ${formatId(id)}`);
+    return;
+  }
+  if (hasOwn(message, "result") === hasOwn(message, "error")) {
+    issues.push(
+      `${label} response for id ${formatId(id)} must contain exactly one of result or error`,
+    );
+    return;
+  }
+  if (hasOwn(message, "error")) {
+    issues.push(`${label} response for id ${formatId(id)} unexpectedly returned an error`);
+  }
+  pendingRequests.delete(id);
+  completedRequestIds.add(id);
+}
+
 function requestId(value: unknown): string | number | null {
   return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function formatId(id: unknown): string {
+  return id === null ? "null" : JSON.stringify(id);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.hasOwn(value, key);
 }
 
 function record(value: unknown): Record<string, unknown> | null {
