@@ -44,9 +44,27 @@ _Avoid_: patched reference, Codex orchestrator, LiveKit-free contender.
 
 **Voice sidecar**
 
-The minimally patched standalone Codex App-server process that owns the Codex–Fx contender's private realtime voice session while leaving all workspace work to Fx.
+The standalone Codpiece process that owns the Codex–Fx contender's private realtime voice session and narrow compatibility protocol while leaving all workspace work to Fx. It contains no Codex coding-agent runtime.
 
-_Avoid_: backend agent, coding sidecar, extracted voice model.
+_Avoid_: stripped App-server, backend agent, coding sidecar, extracted voice model.
+
+**Fx authority**
+
+The single configured Codex subscription authority owned by Fx for both orchestrator-agent inference and voice-sidecar access. Fx alone selects the account, refreshes and persists its session, and rotates credentials.
+
+_Avoid_: shared auth file, sidecar login, duplicate Codex authorization.
+
+**Credential broker**
+
+The private persistent framed service on Fx's inherited descriptor 3 that resolves and refreshes bounded runtime authority leases. AgentVoice transfers its paused stream opaquely to one voice sidecar and never reads or relays bearer bytes.
+
+_Avoid_: Unix-socket service, AgentVoice auth proxy, credential JSON-RPC.
+
+**Runtime authority lease**
+
+A bounded in-memory access capability issued by the Credential broker to one voice-sidecar process. It contains an access token, pinned account identity, refresh deadline, and monotonic generation, but never a refresh token or serialized Fx session.
+
+_Avoid_: copied auth.json, API key, refresh-token handoff.
 
 **Async delegation**
 
