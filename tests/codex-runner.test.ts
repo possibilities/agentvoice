@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { recordRootTurnNotification, validateOracleEvidence } from "../src/codex-runner.ts";
+import {
+  oracleEnvironment,
+  recordRootTurnNotification,
+  validateOracleEvidence,
+} from "../src/codex-runner.ts";
 import { EventJournal } from "../src/events.ts";
 
 describe("Codex runner canonical events", () => {
@@ -38,5 +42,26 @@ describe("Codex runner canonical events", () => {
     expect(
       validateOracleEvidence({ passed: 1, total: 1, score: 1, checks: [{}] }, 124).validationError,
     ).toContain("oracle exited with code 124");
+  });
+
+  test("prevents oracle Python bytecode without forwarding the OpenAI API key", () => {
+    const inherited = {
+      OPENAI_API_KEY: "synthetic-secret",
+      KEEP_ME: "present",
+      AGENTVOICE_EVAL_WORKSPACE: "/stale/workspace",
+      PYTHONDONTWRITEBYTECODE: "0",
+    };
+
+    expect(oracleEnvironment("/isolated/workspace", inherited)).toEqual({
+      KEEP_ME: "present",
+      AGENTVOICE_EVAL_WORKSPACE: "/isolated/workspace",
+      PYTHONDONTWRITEBYTECODE: "1",
+    });
+    expect(inherited).toEqual({
+      OPENAI_API_KEY: "synthetic-secret",
+      KEEP_ME: "present",
+      AGENTVOICE_EVAL_WORKSPACE: "/stale/workspace",
+      PYTHONDONTWRITEBYTECODE: "0",
+    });
   });
 });

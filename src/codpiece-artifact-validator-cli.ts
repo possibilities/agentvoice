@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -12,19 +11,23 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, normalize, relative, resolve, sep } from "node:path";
+import { TextDecoder } from "node:util";
 import { NATIVE_SIDECAR_SANDBOX_PROFILE } from "./app-server.ts";
 import {
   AUDIBLE_OVERLAP_RESOLUTION_SAMPLES,
   AUDIO_FRAME_SAMPLES,
   AUDIO_SAMPLE_RATE,
   measureAudiblePcmOverlap,
+  wavBuffer,
 } from "./audio.ts";
 import { type ParsedPcm16Wav, parsePcm16Wav } from "./audio-analysis.ts";
 import {
+  codexFxCredentialAuthorityProof,
   type FxAuthorizedCodexSidecarBuildMetadata,
   loadSidecarBuildMetadata,
 } from "./codex-fx-runner.ts";
@@ -36,6 +39,7 @@ import {
 } from "./codex-runner.ts";
 import { EventJournal, type EventRecord } from "./events.ts";
 import { loadVerifiedFixtureAudio, type VerifiedFixtureAudio } from "./fixture-audio.ts";
+import { redactSecrets } from "./judge-evidence.ts";
 import { type CodexFxRunValidationResult, validateCodexFxRunEvents } from "./run-validation.ts";
 import { type LoadedScenario, type Scenario, scenarioSchema } from "./scenario.ts";
 import {
@@ -50,7 +54,26 @@ const MAX_RECEIPT_BYTES = 1_000_000;
 const MAX_SCENARIO_BYTES = 1_000_000;
 const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024;
+const MAX_CREDENTIAL_SCAN_FILE_BYTES = MAX_AUDIO_BYTES;
+const MAX_CREDENTIAL_SCAN_BASE64_CANDIDATES = 64;
+const MAX_CREDENTIAL_SCAN_BASE64_DECODED_BYTES = 1_000_000;
+const MAX_CREDENTIAL_SCAN_BASE64_DEPTH = 2;
+const MAX_CREDENTIAL_SCAN_NESTED_JSON_DEPTH = 4;
+const MAX_CREDENTIAL_SCAN_JSON_STRUCTURE_DEPTH = 64;
 const FULL_SHA_PATTERN = /^[a-f0-9]{40}$/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: The artifact boundary intentionally rejects C0 and C1 control bytes.
+const NON_TEXT_CONTROL_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u;
+const CREDENTIAL_FIELD_ASSIGNMENT_PATTERN =
+  /["']?(?:api[_-]?keys?|authorization|passwords?|secrets?|credentials?|bearer[_-]?tokens?|access[_-]?tokens?|refresh[_-]?tokens?|id[_-]?tokens?|account[_-]?ids?|chatgpt[_-]?account[_-]?ids?)["']?\s*[:=]/iu;
+const CREDENTIAL_BEARING_JSON_KEY_PATTERN =
+  /(?:^|[^a-z0-9])(?:api[_-]?keys?|authorization|passwords?|secrets?|credentials|bearer[_-]?tokens?|access[_-]?tokens?|refresh[_-]?tokens?|id[_-]?tokens?|account[_-]?ids?|chatgpt[_-]?account[_-]?ids?)(?:[^a-z0-9]|$)/iu;
+const CREDENTIAL_BEARING_PATH_NAME_PATTERN =
+  /(?:^|[^a-z0-9])(?:api[_-]?keys?|auth(?:entication)?|authorization|passwords?|secrets?|credentials?|bearer[_-]?tokens?|access[_-]?tokens?|refresh[_-]?tokens?|id[_-]?tokens?|account[_-]?ids?|chatgpt[_-]?account[_-]?ids?)(?:[^a-z0-9]|$)/iu;
+const CREDENTIAL_STORE_DOTFILE_PATTERN =
+  /(?:^|[\\/])(?:\.env(?:\.[^\\/]*)?|\.netrc|\.npmrc|\.pypirc)(?:[\\/]|$)/iu;
+const BASE64_CANDIDATE_PATTERN =
+  /(?:^|[^A-Za-z0-9+/_-])([A-Za-z0-9+/_-]{20,}={0,2})(?=$|[^A-Za-z0-9+/_=-])/gmu;
+const WHOLE_BASE64_PATTERN = /^[A-Za-z0-9+/_-]{20,}={0,2}$/u;
 const CANONICAL_FIXTURE_ROOT = resolve(import.meta.dir, "..", "fixtures", "compact-full-duplex");
 const CANONICAL_SCENARIO_PATH = resolve(CANONICAL_FIXTURE_ROOT, "scenario.json");
 const CANONICAL_WORKSPACE_PATH = resolve(CANONICAL_FIXTURE_ROOT, "workspace");
@@ -129,7 +152,20 @@ export async function validateCodpieceArtifact(
     throw new Error("--candidate-sha must be a full lowercase commit SHA");
   }
 
-  const artifactRoot = realDirectory(options.artifact, "artifact");
+  const submittedArtifactRoot = realDirectory(options.artifact, "artifact");
+  const snapshot = createPrivateArtifactSnapshot(submittedArtifactRoot);
+  try {
+    return await validateCodpieceArtifactSnapshot(options, submittedArtifactRoot, snapshot.root);
+  } finally {
+    rmSync(snapshot.directory, { recursive: true, force: true });
+  }
+}
+
+async function validateCodpieceArtifactSnapshot(
+  options: CodpieceArtifactValidationOptions,
+  submittedArtifactRoot: string,
+  artifactRoot: string,
+): Promise<CodpieceArtifactValidationReceipt> {
   const binaryPath = realExecutable(options.binary, "binary");
   const binaryBytes = readFileSync(binaryPath);
   const binarySha256 = sha256(binaryBytes);
@@ -160,12 +196,25 @@ export async function validateCodpieceArtifact(
   }
 
   const manifest = readArtifactFile(artifactRoot, "manifest.json", MAX_MANIFEST_BYTES, "manifest");
+  assertArtifactTextContainsNoCredentialBearingContent(manifest.bytes);
   const manifestJson = parseJsonRecord(manifest.bytes, "manifest");
+  assertJsonContainsNoCredentialBearingContent(manifestJson);
   const evidence = requiredRecord(manifestJson["evidence"], "manifest evidence");
   const boundEvidence = bindDeclaredEvidenceFiles(artifactRoot, evidence);
   requiredDeclaredEvidenceFile(boundEvidence, "appServerStderr", "App-server stderr log");
   requiredDeclaredEvidenceFile(boundEvidence, "fxTerminal", "Fx terminal log");
   requiredDeclaredEvidenceFile(boundEvidence, "fxStderr", "Fx stderr log");
+  const comparisonWav = requiredDeclaredEvidenceFile(
+    boundEvidence,
+    "comparisonAudio",
+    "comparison audio",
+  );
+  const inputWav = requiredDeclaredEvidenceFile(boundEvidence, "inputAudio", "input audio");
+  const outputWav = requiredDeclaredEvidenceFile(boundEvidence, "outputAudio", "output audio");
+  assertArtifactContainsNoCredentialBearingContent(
+    artifactRoot,
+    new Set([comparisonWav.path, inputWav.path, outputWav.path]),
+  );
   const runtime = requiredRecord(manifestJson["runtime"], "manifest runtime");
   const manifestSidecarBuild = requiredRecord(
     manifestJson["sidecarBuild"],
@@ -183,6 +232,11 @@ export async function validateCodpieceArtifact(
   );
   assertEqual("manifest runtime appServerVersion", runtime["appServerVersion"], binaryVersion);
   assertEqualJson("manifest sidecarBuild", manifestSidecarBuild, sidecarBuild);
+  assertEqualJson(
+    "manifest credentialAuthorityProof",
+    manifestJson["credentialAuthorityProof"],
+    codexFxCredentialAuthorityProof("first-call-401-renewal"),
+  );
 
   const quality = requiredRecord(manifestJson["quality"], "manifest quality");
   assertEqual("manifest workspacePassed", quality["workspacePassed"], true);
@@ -201,6 +255,7 @@ export async function validateCodpieceArtifact(
   const validation = validateCodexFxRunEvents(eventRecords, voiceThreadId, {
     steerInputId: "steer",
     implementationProfile: "native-voice-sidecar",
+    credentialAuthorityProofMode: "first-call-401-renewal",
   });
   assertEqualJson("manifest validation", manifestJson["validation"], validation);
   assertConsumedWireContract(wireMessagesFromEvents(eventRecords));
@@ -246,13 +301,6 @@ export async function validateCodpieceArtifact(
     declaredOracleInputs,
   );
 
-  const comparisonWav = requiredDeclaredEvidenceFile(
-    boundEvidence,
-    "comparisonAudio",
-    "comparison audio",
-  );
-  const inputWav = requiredDeclaredEvidenceFile(boundEvidence, "inputAudio", "input audio");
-  const outputWav = requiredDeclaredEvidenceFile(boundEvidence, "outputAudio", "output audio");
   validateAudioProof(
     eventRecords,
     validation,
@@ -272,7 +320,7 @@ export async function validateCodpieceArtifact(
     binaryVersion,
     wireContractSha256,
     artifact: {
-      path: artifactRoot,
+      path: submittedArtifactRoot,
       manifestSha256: manifest.sha256,
       eventsSha256: events.sha256,
       scenarioSha256: scenario.sha256,
@@ -352,6 +400,29 @@ function realDirectory(path: string, label: string): string {
   return resolved;
 }
 
+function createPrivateArtifactSnapshot(sourceRoot: string): {
+  directory: string;
+  root: string;
+} {
+  const directory = mkdtempSync(resolve(tmpdir(), "agentvoice-artifact-snapshot-"));
+  const root = resolve(directory, "artifact");
+  try {
+    cpSync(sourceRoot, root, {
+      recursive: true,
+      dereference: false,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+    });
+    if (!lstatSync(root).isDirectory()) {
+      throw new Error("artifact snapshot root was not a directory");
+    }
+  } catch {
+    rmSync(directory, { recursive: true, force: true });
+    throw new Error("artifact could not be copied into a private snapshot");
+  }
+  return { directory, root };
+}
+
 function realExecutable(path: string, label: string): string {
   const resolved = resolve(path);
   if (!existsSync(resolved)) throw new Error(`${label} does not exist: ${path}`);
@@ -387,10 +458,9 @@ function readDeclaredArtifactFile(
   const resolved = realpathSync(declaredAbsolutePath);
   assertWithin(artifactRoot, resolved, label);
   const fileStat = statSync(resolved);
-  if (!fileStat.isFile())
-    throw new Error(`${label} is not a regular file: ${artifactRelativePath}`);
+  if (!fileStat.isFile()) throw new Error(`${label} is not a regular file`);
   if (!options.allowEmpty && fileStat.size <= 0) {
-    throw new Error(`${label} is empty: ${artifactRelativePath}`);
+    throw new Error(`${label} is empty`);
   }
   if (fileStat.size > maxBytes) {
     throw new Error(`${label} is ${fileStat.size} bytes, over the ${maxBytes}-byte limit`);
@@ -416,6 +486,7 @@ function bindDeclaredEvidenceFiles(
           requiredString(item, `manifest evidence ${key} path ${index + 1}`),
         )
       : [requiredString(value, `manifest evidence ${key} path`)];
+    for (const path of paths) assertArtifactPathContainsNoCredentialBearingContent(path);
     const files = paths.map((path, index) =>
       readDeclaredArtifactFile(
         artifactRoot,
@@ -502,7 +573,11 @@ async function validateWorkspacePatch(
   if (initialDrift.length > 0) {
     throw new Error("workspace-before did not match the canonical compact-full-duplex workspace");
   }
-  const expectedPatch = await canonicalWorkspacePatch(workspaceBefore, workspaceAfter);
+  const expectedPatch = await canonicalWorkspacePatch(
+    relative(artifactRoot, workspaceBefore),
+    relative(artifactRoot, workspaceAfter),
+    artifactRoot,
+  );
   if (!workspacePatch.bytes.equals(expectedPatch)) {
     throw new Error(
       "workspace patch did not match canonical diff between workspace-before and workspace-after",
@@ -522,8 +597,13 @@ function realArtifactDirectory(artifactRoot: string, relativePath: string, label
   return resolved;
 }
 
-async function canonicalWorkspacePatch(before: string, after: string): Promise<Buffer> {
+async function canonicalWorkspacePatch(
+  before: string,
+  after: string,
+  cwd?: string,
+): Promise<Buffer> {
   const child = Bun.spawn(["diff", "-ruN", before, after], {
+    ...(cwd ? { cwd } : {}),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -557,8 +637,8 @@ function validateScenarioEvidence(manifestScenario: unknown, scenarioFile: Loade
 function parseScenario(bytes: Buffer): Scenario {
   try {
     return scenarioSchema.parse(parseJsonRecord(bytes, "scenario"));
-  } catch (error) {
-    throw new Error(`scenario failed schema validation: ${errorMessage(error)}`);
+  } catch {
+    throw new Error("scenario failed schema validation");
   }
 }
 
@@ -670,7 +750,7 @@ function validateEvaluationInputReceipt(
     );
     const captured = declaredOracleInputs.find((input) => input.declaredPath === artifact);
     if (!captured) {
-      throw new Error(`manifest evidence oracleInputs did not declare ${artifact}`);
+      throw new Error("manifest evidence oracleInputs did not declare the required artifact");
     }
     assertBufferEqual(
       `evaluation input oracle file ${index + 1}`,
@@ -700,9 +780,7 @@ function assertOracleCommandSourcePath(
   const normalizedCommand = normalizeArtifactPath(commandValue, `${label} commandValue`);
   const normalizedArtifact = normalizeArtifactPath(artifact, `${label} artifact`);
   if (normalizedCommand !== normalizedArtifact) {
-    throw new Error(
-      `${label} artifact ${artifact} did not preserve oracle command path ${commandValue}`,
-    );
+    throw new Error(`${label} artifact did not preserve the oracle command path`);
   }
 }
 
@@ -725,13 +803,13 @@ function assertNoSymlinkPathComponents(
   const components = artifactRelativePath.split(sep).filter((component) => component.length > 0);
   for (const [index, component] of components.entries()) {
     current = resolve(current, component);
-    if (!existsSync(current)) throw new Error(`${label} does not exist: ${artifactRelativePath}`);
+    if (!existsSync(current)) throw new Error(`${label} does not exist`);
     const linkStat = lstatSync(current);
     if (linkStat.isSymbolicLink()) {
-      throw new Error(`${label} path component ${component} must not be a symbolic link`);
+      throw new Error(`${label} path must not contain a symbolic link`);
     }
     if (index < components.length - 1 && !linkStat.isDirectory()) {
-      throw new Error(`${label} path component ${component} is not a directory`);
+      throw new Error(`${label} path parent is not a directory`);
     }
   }
 }
@@ -799,21 +877,12 @@ async function rerunCanonicalOracle(
   oracleInputs: readonly LoadedFile[],
 ): Promise<OracleResult> {
   assertPlainDirectoryTree(workspaceAfter, "workspace-after");
-  for (const input of oracleInputs) {
-    const linkStat = lstatSync(input.path);
-    if (linkStat.isSymbolicLink()) {
-      throw new Error(`oracle input must not be a symbolic link: ${input.declaredPath}`);
-    }
-    if (!linkStat.isFile()) {
-      throw new Error(`oracle input must be a regular file: ${input.declaredPath}`);
-    }
-  }
   const scratch = mkdtempSync(resolve(tmpdir(), "agentvoice-oracle-rerun-"));
   try {
     const tempWorkspace = resolve(scratch, "workspace-after");
     cpSync(workspaceAfter, tempWorkspace, { recursive: true });
-    copyArtifactFileForRerun(scratch, scenarioFile, "scenario");
-    for (const input of oracleInputs) copyArtifactFileForRerun(scratch, input, "oracle input");
+    writeArtifactFileForRerun(scratch, scenarioFile, "scenario");
+    for (const input of oracleInputs) writeArtifactFileForRerun(scratch, input, "oracle input");
 
     const loaded: LoadedScenario = {
       path: resolve(scratch, scenarioFile.declaredPath),
@@ -832,11 +901,11 @@ async function rerunCanonicalOracle(
   }
 }
 
-function copyArtifactFileForRerun(scratchRoot: string, file: LoadedFile, label: string): void {
+function writeArtifactFileForRerun(scratchRoot: string, file: LoadedFile, label: string): void {
   const destination = resolve(scratchRoot, file.declaredPath);
   assertWithin(scratchRoot, destination, label);
   mkdirSync(dirname(destination), { recursive: true });
-  copyFileSync(file.path, destination);
+  writeFileSync(destination, file.bytes, { flag: "wx" });
 }
 
 function assertPlainDirectoryTree(directory: string, label: string): void {
@@ -856,6 +925,285 @@ function assertPlainDirectoryTree(directory: string, label: string): void {
   }
 }
 
+function assertArtifactContainsNoCredentialBearingContent(
+  artifactRoot: string,
+  audioEvidencePaths: ReadonlySet<string>,
+): void {
+  for (const path of artifactFiles(artifactRoot, artifactRoot)) {
+    if (audioEvidencePaths.has(path)) continue;
+    const fileStat = statSync(path);
+    if (fileStat.size > MAX_CREDENTIAL_SCAN_FILE_BYTES) {
+      throw new Error("artifact credential scan encountered an oversized file");
+    }
+    const budget = credentialScanBudget();
+    const text = assertArtifactTextContainsNoCredentialBearingContent(readFileSync(path), budget);
+    assertStructuredArtifactContainsNoCredentialBearingContent(path, text, budget);
+  }
+}
+
+interface CredentialScanBudget {
+  base64Candidates: number;
+  base64DecodedBytes: number;
+}
+
+function credentialScanBudget(): CredentialScanBudget {
+  return { base64Candidates: 0, base64DecodedBytes: 0 };
+}
+
+function assertArtifactTextContainsNoCredentialBearingContent(
+  bytes: Buffer,
+  budget: CredentialScanBudget = credentialScanBudget(),
+): string {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(
+      "artifact credential scan accepts only strict UTF-8 text outside declared audio evidence",
+    );
+  }
+  assertCredentialSafeText(text, budget, 0);
+  return text;
+}
+
+function assertCredentialSafeText(
+  text: string,
+  budget: CredentialScanBudget,
+  base64Depth: number,
+): void {
+  const terminalViews = credentialTerminalViews(text);
+  if (terminalViews.some((view) => NON_TEXT_CONTROL_PATTERN.test(view))) {
+    throw new Error(
+      "artifact credential scan accepts only strict UTF-8 text outside declared audio evidence",
+    );
+  }
+  if (
+    containsCredentialBearingText(text) ||
+    terminalViews.some((view) => view !== text && containsCredentialBearingText(view))
+  ) {
+    throw new Error("artifact credential scan found credential-bearing content");
+  }
+  for (const view of new Set(terminalViews)) {
+    assertNoBase64EncodedCredentialContainers(view, budget, base64Depth);
+  }
+}
+
+function credentialTerminalViews(text: string): readonly string[] {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: CSI recognition requires the literal escape control byte.
+  const withoutCsi = text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: OSC recognition requires literal escape and bell control bytes.
+  const oscPattern = /\u001b\]([^\u0007]*?)(?:\u0007|\u001b\\)/gu;
+  return [withoutCsi.replace(oscPattern, "$1"), withoutCsi.replace(oscPattern, "")];
+}
+
+function assertStructuredArtifactContainsNoCredentialBearingContent(
+  path: string,
+  text: string,
+  budget: CredentialScanBudget,
+): void {
+  const lowerPath = path.toLowerCase();
+  if (lowerPath.endsWith(".json")) {
+    assertJsonContainsNoCredentialBearingContent(parseCredentialScanJson(text), budget);
+    return;
+  }
+  if (!lowerPath.endsWith(".ndjson") && !lowerPath.endsWith(".jsonl")) return;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    assertJsonContainsNoCredentialBearingContent(parseCredentialScanJson(line), budget);
+  }
+}
+
+function parseCredentialScanJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("artifact credential scan requires valid JSON in JSON artifacts");
+  }
+}
+
+function assertJsonContainsNoCredentialBearingContent(
+  value: unknown,
+  budget: CredentialScanBudget = credentialScanBudget(),
+  nestedJsonDepth = 0,
+  base64Depth = 0,
+  structureDepth = 0,
+): void {
+  if (structureDepth > MAX_CREDENTIAL_SCAN_JSON_STRUCTURE_DEPTH) {
+    throw new Error("artifact credential scan found excessively nested JSON content");
+  }
+  if (typeof value === "string") {
+    assertCredentialSafeText(value, budget, base64Depth);
+    assertNestedJsonStringContainsNoCredentialBearingContent(
+      value,
+      budget,
+      nestedJsonDepth,
+      base64Depth,
+    );
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertJsonContainsNoCredentialBearingContent(
+        item,
+        budget,
+        nestedJsonDepth,
+        base64Depth,
+        structureDepth + 1,
+      );
+    }
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, child] of Object.entries(value)) {
+    assertCredentialSafeText(key, budget, base64Depth);
+    const normalizedKey = credentialNameView(key);
+    if (CREDENTIAL_BEARING_JSON_KEY_PATTERN.test(normalizedKey) || /^credential$/iu.test(key)) {
+      throw new Error("artifact credential scan found credential-bearing content");
+    }
+    assertJsonContainsNoCredentialBearingContent(
+      child,
+      budget,
+      nestedJsonDepth,
+      base64Depth,
+      structureDepth + 1,
+    );
+  }
+}
+
+function assertNestedJsonStringContainsNoCredentialBearingContent(
+  text: string,
+  budget: CredentialScanBudget,
+  nestedJsonDepth: number,
+  base64Depth: number,
+): void {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[") && !trimmed.startsWith('"')) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return;
+  }
+  if (nestedJsonDepth >= MAX_CREDENTIAL_SCAN_NESTED_JSON_DEPTH) {
+    throw new Error("artifact credential scan found excessively nested JSON content");
+  }
+  assertJsonContainsNoCredentialBearingContent(parsed, budget, nestedJsonDepth + 1, base64Depth, 0);
+}
+
+function assertNoBase64EncodedCredentialContainers(
+  text: string,
+  budget: CredentialScanBudget,
+  base64Depth: number,
+): void {
+  for (const match of text.matchAll(BASE64_CANDIDATE_PATTERN)) {
+    const encoded = match[1]!;
+    if (encoded.length > (MAX_CREDENTIAL_SCAN_BASE64_DECODED_BYTES * 4) / 3 + 4) {
+      throw new Error("artifact credential scan encountered oversized base64-encoded content");
+    }
+    const decoded = decodeBase64Candidate(encoded);
+    if (!decoded) continue;
+    let decodedText: string;
+    try {
+      decodedText = new TextDecoder("utf-8", { fatal: true }).decode(decoded);
+    } catch {
+      continue;
+    }
+
+    const trimmed = decodedText.trim();
+    const structuredJson =
+      trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.startsWith('"');
+    const nestedBase64 = WHOLE_BASE64_PATTERN.test(trimmed);
+    const terminalViews = credentialTerminalViews(decodedText);
+    if (
+      !structuredJson &&
+      !nestedBase64 &&
+      !containsCredentialBearingText(decodedText) &&
+      !terminalViews.some((view) => containsCredentialBearingText(view)) &&
+      !terminalViews.some((view) => NON_TEXT_CONTROL_PATTERN.test(view)) &&
+      !CREDENTIAL_FIELD_ASSIGNMENT_PATTERN.test(decodedText)
+    ) {
+      continue;
+    }
+
+    budget.base64Candidates++;
+    budget.base64DecodedBytes += decoded.length;
+    if (
+      budget.base64Candidates > MAX_CREDENTIAL_SCAN_BASE64_CANDIDATES ||
+      budget.base64DecodedBytes > MAX_CREDENTIAL_SCAN_BASE64_DECODED_BYTES
+    ) {
+      throw new Error("artifact credential scan exceeded its base64 inspection budget");
+    }
+    if (base64Depth >= MAX_CREDENTIAL_SCAN_BASE64_DEPTH) {
+      throw new Error("artifact credential scan found excessively nested base64-encoded content");
+    }
+
+    assertCredentialSafeText(decodedText, budget, base64Depth + 1);
+    if (structuredJson) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        throw new Error("artifact credential scan could not inspect base64-encoded JSON content");
+      }
+      assertJsonContainsNoCredentialBearingContent(parsed, budget, 0, base64Depth + 1, 0);
+    }
+  }
+}
+
+function decodeBase64Candidate(encoded: string): Buffer | null {
+  if (encoded.length % 4 === 1) return null;
+  const normalized = encoded.replaceAll("-", "+").replaceAll("_", "/");
+  const unpadded = normalized.replace(/=+$/u, "");
+  const padded = `${unpadded}${"=".repeat((4 - (unpadded.length % 4)) % 4)}`;
+  const decoded = Buffer.from(padded, "base64");
+  if (decoded.toString("base64").replace(/=+$/u, "") !== unpadded) return null;
+  return decoded;
+}
+
+function containsCredentialBearingText(text: string): boolean {
+  return (
+    redactSecrets(text) !== text ||
+    /(?:^|[\\/])\.codex(?:[\\/]|$)/imu.test(text) ||
+    /(?:^|[\\/])auth\.json\b/imu.test(text) ||
+    /\b(?:CODEX_HOME|OPENAI_API_KEY)\b/u.test(text) ||
+    CREDENTIAL_FIELD_ASSIGNMENT_PATTERN.test(text)
+  );
+}
+
+function assertArtifactPathContainsNoCredentialBearingContent(path: string): void {
+  if (
+    containsCredentialBearingText(path) ||
+    CREDENTIAL_STORE_DOTFILE_PATTERN.test(path) ||
+    CREDENTIAL_BEARING_PATH_NAME_PATTERN.test(credentialNameView(path))
+  ) {
+    throw new Error("artifact credential scan found a credential-bearing path");
+  }
+}
+
+function credentialNameView(value: string): string {
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1-$2");
+}
+
+function artifactFiles(directory: string, artifactRoot: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
+    const path = resolve(directory, entry.name);
+    assertArtifactPathContainsNoCredentialBearingContent(relative(artifactRoot, path));
+    const linkStat = lstatSync(path);
+    if (linkStat.isSymbolicLink()) {
+      throw new Error("artifact credential scan does not accept symbolic links");
+    }
+    if (linkStat.isDirectory()) files.push(...artifactFiles(path, artifactRoot));
+    else if (linkStat.isFile()) files.push(path);
+    else throw new Error("artifact credential scan accepts only regular files and directories");
+  }
+  return files;
+}
+
 function validateAudioProof(
   events: readonly EventRecord[],
   validation: CodexFxRunValidationResult,
@@ -873,6 +1221,9 @@ function validateAudioProof(
   assertWavFormat("input audio", input, 1);
   assertWavFormat("output audio", output, 1);
   assertWavFormat("comparison audio", comparison, 2);
+  assertCanonicalPcmWavContainer("input audio", inputWav, input, 1);
+  assertCanonicalPcmWavContainer("output audio", outputWav, output, 1);
+  assertCanonicalPcmWavContainer("comparison audio", comparisonWav, comparison, 2);
   assertEqual(
     "input/output WAV sample count",
     output.sampleCountPerChannel,
@@ -1054,8 +1405,8 @@ function validateRecordedInputFixtureAudio(
 function parsePcm16WavFile(file: LoadedFile, label: string): ParsedPcm16Wav {
   try {
     return parsePcm16Wav(file.bytes);
-  } catch (error) {
-    throw new Error(`${label} is not canonical PCM WAV: ${errorMessage(error)}`);
+  } catch {
+    throw new Error(`${label} is not canonical PCM WAV`);
   }
 }
 
@@ -1063,6 +1414,17 @@ function assertWavFormat(label: string, wav: ParsedPcm16Wav, channels: 1 | 2): v
   assertEqual(`${label} sampleRate`, wav.sampleRate, AUDIO_SAMPLE_RATE);
   assertEqual(`${label} channels`, wav.channels, channels);
   assertEqual(`${label} bitsPerSample`, wav.bitsPerSample, 16);
+}
+
+function assertCanonicalPcmWavContainer(
+  label: string,
+  file: LoadedFile,
+  wav: ParsedPcm16Wav,
+  channels: 1 | 2,
+): void {
+  if (!file.bytes.equals(wavBuffer(wav.interleavedPcm, channels))) {
+    throw new Error(`${label} was not serialized as a canonical PCM WAV`);
+  }
 }
 
 function assertPcmEqual(
@@ -1169,8 +1531,8 @@ function parseJsonRecord(bytes: Buffer, label: string): Record<string, unknown> 
   let value: unknown;
   try {
     value = JSON.parse(bytes.toString("utf8"));
-  } catch (error) {
-    throw new Error(`${label} is not valid JSON: ${errorMessage(error)}`);
+  } catch {
+    throw new Error(`${label} is not valid JSON`);
   }
   return requiredRecord(value, label);
 }
@@ -1210,7 +1572,7 @@ function requiredNonnegativeInteger(value: unknown, label: string): number {
 
 function assertEqual(label: string, actual: unknown, expected: unknown): void {
   if (actual !== expected) {
-    throw new Error(`${label} ${String(actual)} did not match ${String(expected)}`);
+    throw new Error(`${label} did not match`);
   }
 }
 
@@ -1227,15 +1589,15 @@ function stableJson(value: unknown): string {
 function parseJsonValue(text: string, label: string): unknown {
   try {
     return JSON.parse(text);
-  } catch (error) {
-    throw new Error(`${label} is not valid JSON: ${errorMessage(error)}`);
+  } catch {
+    throw new Error(`${label} is not valid JSON`);
   }
 }
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((item) => stableValue(item));
   if (!isRecord(value)) return value;
-  const sorted: Record<string, unknown> = {};
+  const sorted = Object.create(null) as Record<string, unknown>;
   for (const key of Object.keys(value).sort()) {
     sorted[key] = stableValue(value[key]);
   }
@@ -1248,10 +1610,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function stdout(text: string): void {

@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import { NATIVE_SIDECAR_SANDBOX_PROFILE } from "../src/app-server.ts";
 import type { EventRecord, EventSource } from "../src/events.ts";
 import {
+  FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT,
   validateCodexFxRunEvents,
   validateCodexRunEvents,
+  validateFxCredentialAuthorityLifecycle,
   validateLiveKitRunEvents,
 } from "../src/run-validation.ts";
 
@@ -143,6 +145,116 @@ describe("validateCodexFxRunEvents", () => {
       steeringTargetTurnId: "42",
       outputAudioOverlap: "confirmed",
     });
+  });
+
+  test("proves one initial lease and one first-call-401 renewal before voice startup", () => {
+    expect(
+      validateCodexFxRunEvents(validFxAuthorizedNativeCodexFxTrace(), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+        credentialAuthorityProofMode: "first-call-401-renewal",
+      }),
+    ).toMatchObject({
+      credentialAuthorityLifecycle: {
+        proofMode: "first-call-401-renewal",
+        lifecycleEvent: FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT,
+        accountDigest: "0123456789abcdef0123456789abcdef",
+        resolveGeneration: "9007199254740993",
+        refreshGeneration: "9007199254740994",
+        completedFxTurnAfterRenewalId: "41",
+      },
+    });
+  });
+
+  test("accepts schema-3 probe evidence without requiring renewal or Fx work", () => {
+    const events = resequence([
+      credentialLeaseAccepted("resolve", "initial", 1, "41"),
+      event("voice.session.started", {}, "realtime"),
+    ]);
+
+    expect(validateFxCredentialAuthorityLifecycle(events, "none")).toMatchObject({
+      proofMode: "none",
+      refreshAcceptedSeq: null,
+      refreshGeneration: null,
+      completedFxTurnAfterRenewalSeq: null,
+    });
+  });
+
+  test("rejects renewal identity, generation, count, deadline, and secret-field drift", () => {
+    const mutations: Array<[string, (events: EventRecord[]) => void]> = [
+      ["count 2", (events) => (authorityEvents(events)[1]!.data["count"] = 3)],
+      [
+        "pinned accountDigest",
+        (events) =>
+          (authorityEvents(events)[1]!.data["accountDigest"] = "ffffffffffffffffffffffffffffffff"),
+      ],
+      [
+        "strictly increase",
+        (events) => (authorityEvents(events)[1]!.data["generation"] = "9007199254740993"),
+      ],
+      [
+        "usable refresh deadline",
+        (events) => (authorityEvents(events)[1]!.data["remainingValidityMs"] = 299_999),
+      ],
+      [
+        "exact secret-free lifecycle fields",
+        (events) => (authorityEvents(events)[0]!.data["accessToken"] = "forbidden"),
+      ],
+    ];
+
+    for (const [message, mutate] of mutations) {
+      const events = validFxAuthorizedNativeCodexFxTrace();
+      mutate(events);
+      expect(() =>
+        validateCodexFxRunEvents(resequence(events), "voice-thread", {
+          implementationProfile: "native-voice-sidecar",
+          credentialAuthorityProofMode: "first-call-401-renewal",
+        }),
+      ).toThrow(message);
+    }
+  });
+
+  test("requires renewal before voice startup and completed Fx work after it", () => {
+    const lateRefresh = validFxAuthorizedNativeCodexFxTrace();
+    const refresh = authorityEvents(lateRefresh)[1]!;
+    lateRefresh.splice(lateRefresh.indexOf(refresh), 1);
+    const voiceSessionIndex = lateRefresh.findIndex(
+      (item) => item.type === "voice.session.started",
+    );
+    lateRefresh.splice(voiceSessionIndex + 1, 0, refresh);
+    expect(() =>
+      validateCodexFxRunEvents(resequence(lateRefresh), "voice-thread", {
+        implementationProfile: "native-voice-sidecar",
+        credentialAuthorityProofMode: "first-call-401-renewal",
+      }),
+    ).toThrow("before voice.session.started");
+
+    const noLaterFxCompletion = resequence([
+      credentialLeaseAccepted("resolve", "initial", 1, "41"),
+      credentialLeaseAccepted("refresh", "callUnauthorized", 2, "42"),
+      event("voice.session.started", {}, "realtime"),
+    ]);
+    expect(() =>
+      validateFxCredentialAuthorityLifecycle(noLaterFxCompletion, "first-call-401-renewal"),
+    ).toThrow("no completed Fx turn followed");
+  });
+
+  test("requires the qualifying Fx turn to start after credential renewal", () => {
+    const events = resequence([
+      credentialLeaseAccepted("resolve", "initial", 1, "9007199254740993"),
+      event("orchestrator.turn.started", { turnId: "41" }, "fx"),
+      credentialLeaseAccepted("refresh", "callUnauthorized", 2, "9007199254740994"),
+      event("orchestrator.turn.started", { turnId: "unrelated" }, "fx"),
+      event("voice.session.started", {}, "realtime"),
+      event(
+        "orchestrator.turn.completed",
+        { turnId: "41", status: "completed", outcome: "completed" },
+        "fx",
+      ),
+    ]);
+
+    expect(() => validateFxCredentialAuthorityLifecycle(events, "first-call-401-renewal")).toThrow(
+      "matching post-renewal start",
+    );
   });
 
   test("rejects native MCP traffic, server requests, and child process evidence", () => {
@@ -653,6 +765,45 @@ function validNativeCodexFxTrace(): EventRecord[] {
     ...semanticTrace,
     event("sidecar.isolation.completed", nativeIsolationEvidence(), "app-server"),
   ]);
+}
+
+function validFxAuthorizedNativeCodexFxTrace(): EventRecord[] {
+  const events = validNativeCodexFxTrace();
+  const voiceSessionIndex = events.findIndex((item) => item.type === "voice.session.started");
+  events.splice(
+    voiceSessionIndex,
+    0,
+    credentialLeaseAccepted("resolve", "initial", 1, "9007199254740993"),
+    credentialLeaseAccepted("refresh", "callUnauthorized", 2, "9007199254740994"),
+  );
+  return resequence(events);
+}
+
+function credentialLeaseAccepted(
+  operation: "resolve" | "refresh",
+  reason: "initial" | "callUnauthorized",
+  count: 1 | 2,
+  generation: string,
+): EventRecord {
+  return event(
+    FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT,
+    {
+      schemaVersion: 1,
+      operation,
+      reason,
+      provider: "codex",
+      accountDigest: "0123456789abcdef0123456789abcdef",
+      generation,
+      count,
+      refreshDeadlineMs: 2_000_000_000_000,
+      remainingValidityMs: 600_000,
+    },
+    "app-server",
+  );
+}
+
+function authorityEvents(events: readonly EventRecord[]): EventRecord[] {
+  return events.filter((item) => item.type === FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT);
 }
 
 function nativeConsumedWireEvents(): EventRecord[] {

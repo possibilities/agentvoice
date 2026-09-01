@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Duplex } from "node:stream";
 import { AppServerClient, type AppServerExecutionProfile } from "./app-server.ts";
 import { ContinuousUplink, DuplexRecorder } from "./audio.ts";
@@ -507,13 +507,9 @@ export async function runOracle(
   const oracle = loaded.scenario.oracle;
   if (!oracle) throw new Error("scenario has no oracle");
   const started = performance.now();
-  const environment: NodeJS.ProcessEnv = {
-    ...environmentWithoutOpenAiApiKey(),
-    AGENTVOICE_EVAL_WORKSPACE: workspace,
-  };
   const child = Bun.spawn(oracle.command, {
     cwd: loaded.directory,
-    env: environment,
+    env: oracleEnvironment(workspace),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -548,6 +544,17 @@ export async function runOracle(
   return result;
 }
 
+export function oracleEnvironment(
+  workspace: string,
+  inherited: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...environmentWithoutOpenAiApiKey(inherited),
+    AGENTVOICE_EVAL_WORKSPACE: workspace,
+    PYTHONDONTWRITEBYTECODE: "1",
+  };
+}
+
 export function uniqueArtifactDirectory(root: string, scenario: string, contender: string): string {
   const stamp = new Date().toISOString().replaceAll(":", "-").replace(".", "-");
   const base = join(root, `${stamp}-${scenario}-${contender}`);
@@ -580,7 +587,11 @@ export async function writeWorkspaceDiff(
   after: string,
   destination: string,
 ): Promise<void> {
-  const child = Bun.spawn(["diff", "-ruN", before, after], {
+  const directory = dirname(destination);
+  const beforeLabel = workspaceDiffPath(directory, before, "before");
+  const afterLabel = workspaceDiffPath(directory, after, "after");
+  const child = Bun.spawn(["diff", "-ruN", beforeLabel, afterLabel], {
+    cwd: directory,
     env: environmentWithoutOpenAiApiKey(),
     stdin: "ignore",
     stdout: "pipe",
@@ -593,6 +604,19 @@ export async function writeWorkspaceDiff(
   ]);
   if (code > 1) throw new Error(`workspace diff failed: ${stderr.trim()}`);
   writeFileSync(destination, stdout);
+}
+
+function workspaceDiffPath(root: string, path: string, label: string): string {
+  const normalized = relative(root, isAbsolute(path) ? path : resolve(root, path));
+  if (
+    normalized.length === 0 ||
+    normalized === ".." ||
+    normalized.startsWith(`..${sep}`) ||
+    isAbsolute(normalized)
+  ) {
+    throw new Error(`workspace diff ${label} path must be inside the artifact directory`);
+  }
+  return normalized;
 }
 
 function extractThreadId(result: unknown): string {

@@ -11,6 +11,7 @@ import {
   FxWorkControlClient,
   FxWorkControlError,
   fxEnvironment,
+  fxPtyLaunch,
 } from "../src/fx-orchestrator.ts";
 
 const temporaryDirectories: string[] = [];
@@ -36,13 +37,14 @@ describe("Fx headless lifecycle", () => {
         AGENTVOICE_WORKER_CONTROL_TOKEN: "synthetic-control-token",
         AGENTVOICE_TELEMETRY_SOCKET_PATH: "/tmp/telemetry.sock",
         HERDR_SESSION: "synthetic-session",
-        FX_CODEX_CREDENTIAL_FD: "9",
+        FX_CODEX_CREDENTIAL_LEGACY_FD: "9",
       },
     );
 
     expect(environment).toMatchObject({
       PATH: "/usr/bin",
       FX_AUTO_UPGRADE: "0",
+      PYTHONDONTWRITEBYTECODE: "1",
       FX_MODEL: "gpt-5.6-terra",
       FX_EFFORT: "medium",
       FX_ADE_INSTANCE_ID: "instance-1",
@@ -53,7 +55,34 @@ describe("Fx headless lifecycle", () => {
     expect(environment).not.toHaveProperty("AGENTVOICE_WORKER_CONTROL_TOKEN");
     expect(environment).not.toHaveProperty("AGENTVOICE_TELEMETRY_SOCKET_PATH");
     expect(environment).not.toHaveProperty("HERDR_SESSION");
-    expect(environment).not.toHaveProperty("FX_CODEX_CREDENTIAL_FD");
+    expect(Object.keys(environment).some((name) => name.startsWith("FX_CODEX_CREDENTIAL_"))).toBe(
+      false,
+    );
+  });
+
+  test("appends fixed broker flags through both PTY launch paths only when enabled", () => {
+    const ordinaryExpect = fxPtyLaunch("/tmp/fx path", undefined, "darwin");
+    expect(ordinaryExpect.command).toBe("/usr/bin/expect");
+    expect(ordinaryExpect.args.join(" ")).not.toContain("--codex-credential");
+
+    const brokerExpect = fxPtyLaunch(
+      "/tmp/fx path",
+      { proofMode: "first-call-401-renewal" },
+      "darwin",
+    );
+    expect(brokerExpect.args.join(" ")).toContain(
+      "spawn -noecho $executable --codex-credential-fd 3 --codex-credential-renewal-canary",
+    );
+
+    const ordinaryScript = fxPtyLaunch("/tmp/fx path", undefined, "linux");
+    expect(ordinaryScript).toEqual({
+      command: "script",
+      args: ["-q", "-c", "'/tmp/fx path'", "/dev/null"],
+    });
+    expect(fxPtyLaunch("/tmp/fx path", { proofMode: "none" }, "linux")).toEqual({
+      command: "script",
+      args: ["-q", "-c", "'/tmp/fx path' --codex-credential-fd 3", "/dev/null"],
+    });
   });
 
   test("rolls back the detached process group and temporary sockets after startup failure", async () => {
@@ -101,6 +130,9 @@ describe("Fx headless lifecycle", () => {
       await orchestrator.start();
       spawnedPid = Number(readFileSync(pidPath, "utf8"));
       expect(Number.isInteger(spawnedPid) && spawnedPid > 0).toBe(true);
+      expect(() => orchestrator.acquireCredentialBrokerChannel()).toThrow("was not enabled");
+      const child = (orchestrator as unknown as { child: { stdio: unknown[] } }).child;
+      expect(child.stdio).toHaveLength(3);
       process.kill(spawnedPid, "SIGTERM");
       await expect(orchestrator.fatal).rejects.toThrow("Fx exited during the active session");
     } finally {
@@ -113,13 +145,14 @@ describe("Fx headless lifecycle", () => {
     const directory = temporaryDirectory();
     const fakeFxPath = join(directory, "broker-fx");
     const pidPath = join(directory, "broker-fx.pid");
-    writeFileSync(fakeFxPath, readyFxProgram(pidPath), { mode: 0o700 });
+    writeFileSync(fakeFxPath, readyFxProgram(pidPath, "none"), { mode: 0o700 });
     chmodSync(fakeFxPath, 0o700);
     const orchestrator = new FxHeadlessOrchestrator({
       workspace: directory,
       fxPath: fakeFxPath,
       model: "gpt-5.6-terra",
       reasoningEffort: "medium",
+      credentialBroker: { proofMode: "none" },
     });
 
     try {
@@ -410,7 +443,18 @@ process.exit(12);
 `;
 }
 
-function readyFxProgram(pidPath: string): string {
+function readyFxProgram(
+  pidPath: string,
+  proofMode: "none" | "first-call-401-renewal" | null = null,
+): string {
+  const expectedLaunchArgs =
+    proofMode === null
+      ? []
+      : [
+          "--codex-credential-fd",
+          "3",
+          ...(proofMode === "first-call-401-renewal" ? ["--codex-credential-renewal-canary"] : []),
+        ];
   return `#!/usr/bin/env bun
 import { writeFileSync, writeSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
@@ -437,8 +481,9 @@ if (argument === "--fxnk-version") {
 }
 
 writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
-if (process.env.FX_CODEX_CREDENTIAL_FD !== "3") process.exit(13);
-writeSync(3, "opaque-broker-bytes");
+const expectedLaunchArgs = ${JSON.stringify(expectedLaunchArgs)};
+if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(expectedLaunchArgs)) process.exit(13);
+if (expectedLaunchArgs.length > 0) writeSync(3, "opaque-broker-bytes");
 const server = createServer((socket) => {
   let bytes = Buffer.alloc(0);
   socket.on("data", (chunk) => {

@@ -424,11 +424,16 @@ export interface FxHeadlessOrchestratorOptions {
   fxPath?: string;
   model: string;
   reasoningEffort: string;
+  credentialBroker?: {
+    proofMode: FxCredentialBrokerProofMode;
+  };
   terminalLogPath?: string;
   stderrLogPath?: string;
   onAdeEvent?(event: FxAdeEvent): void;
   onProtocolError?(error: Error): void;
 }
+
+export type FxCredentialBrokerProofMode = "none" | "first-call-401-renewal";
 
 export class FxHeadlessOrchestrator {
   readonly instanceId = `agentvoice-${randomUUID()}`;
@@ -508,6 +513,9 @@ export class FxHeadlessOrchestrator {
     if (!this.ready || this.stopped) {
       throw new Error("Fx credential broker is unavailable before Fx startup");
     }
+    if (!this.options.credentialBroker) {
+      throw new Error("Fx credential broker was not enabled for this launch");
+    }
     const channel = this.credentialBrokerChannel;
     if (!channel) throw new Error("Fx credential broker channel was already acquired");
     this.credentialBrokerChannel = null;
@@ -556,16 +564,23 @@ export class FxHeadlessOrchestrator {
         workSocketPath: this.workSocketPath,
         instanceId: this.instanceId,
         token: this.token,
-        credentialFd: 3,
       });
-      const launch = ptyLaunch(fxPath);
+      const launch = fxPtyLaunch(fxPath, this.options.credentialBroker);
       if (process.platform === "darwin") environment["AGENTVOICE_FX_EXECUTABLE"] = fxPath;
-      const child = spawn(launch.command, launch.args, {
+      const spawnOptions = {
         cwd: resolve(this.options.workspace),
         env: environment,
         detached: true,
-        stdio: ["pipe", "pipe", "pipe", "pipe"],
-      });
+      } as const;
+      const child = this.options.credentialBroker
+        ? spawn(launch.command, launch.args, {
+            ...spawnOptions,
+            stdio: ["pipe", "pipe", "pipe", "pipe"],
+          })
+        : spawn(launch.command, launch.args, {
+            ...spawnOptions,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
       this.child = child;
       this.childExit = new Promise((resolvePromise, reject) => {
         child.once("error", reject);
@@ -605,12 +620,14 @@ export class FxHeadlessOrchestrator {
 
       await waitForSpawn(child);
       this.assertStarting();
-      const credentialBrokerChannel = child.stdio[3];
-      if (!isDuplex(credentialBrokerChannel)) {
-        throw new Error("Fx credential broker did not expose a parent Duplex for descriptor 3");
+      if (this.options.credentialBroker) {
+        const credentialBrokerChannel = child.stdio[3];
+        if (!isDuplex(credentialBrokerChannel)) {
+          throw new Error("Fx credential broker did not expose a parent Duplex for descriptor 3");
+        }
+        credentialBrokerChannel.pause();
+        this.credentialBrokerChannel = credentialBrokerChannel;
       }
-      credentialBrokerChannel.pause();
-      this.credentialBrokerChannel = credentialBrokerChannel;
 
       const started = this.lifecycle.waitForStarted();
       const exited = this.childExit.then(({ code, signal }) => {
@@ -737,24 +754,24 @@ export function fxEnvironment(
     workSocketPath?: string;
     instanceId?: string;
     token?: string;
-    credentialFd?: 3;
   } = {},
   inherited: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const environment = environmentWithoutOpenAiApiKey(inherited);
   environment["FX_AUTO_UPGRADE"] = "0";
+  environment["PYTHONDONTWRITEBYTECODE"] = "1";
   for (const name of Object.keys(environment)) {
     if (
       name.startsWith("LIVEKIT_") ||
       name.startsWith("AGENTVOICE_") ||
       name.startsWith("HERDR_") ||
       name.startsWith("FX_ADE_") ||
-      name.startsWith("FX_WORK_CONTROL_")
+      name.startsWith("FX_WORK_CONTROL_") ||
+      name.startsWith("FX_CODEX_CREDENTIAL_")
     ) {
       delete environment[name];
     }
   }
-  delete environment["FX_CODEX_CREDENTIAL_FD"];
   if (options.model) environment["FX_MODEL"] = options.model;
   if (options.reasoningEffort) environment["FX_EFFORT"] = options.reasoningEffort;
   if (options.adeSocketPath) environment["FX_ADE_SOCKET_PATH"] = options.adeSocketPath;
@@ -762,14 +779,16 @@ export function fxEnvironment(
   if (options.workSocketPath) environment["FX_WORK_CONTROL_SOCKET_PATH"] = options.workSocketPath;
   if (options.instanceId) environment["FX_WORK_CONTROL_INSTANCE_ID"] = options.instanceId;
   if (options.token) environment["FX_WORK_CONTROL_TOKEN"] = options.token;
-  if (options.credentialFd) {
-    environment["FX_CODEX_CREDENTIAL_FD"] = String(options.credentialFd);
-  }
   return environment;
 }
 
-function ptyLaunch(fxPath: string): { command: string; args: string[] } {
-  if (process.platform === "darwin") {
+export function fxPtyLaunch(
+  fxPath: string,
+  credentialBroker?: FxHeadlessOrchestratorOptions["credentialBroker"],
+  platform: NodeJS.Platform = process.platform,
+): { command: string; args: string[] } {
+  const brokerArgs = credentialBrokerLaunchArgs(credentialBroker);
+  if (platform === "darwin") {
     // macOS `script` calls tcgetattr on its own stdin and fails when spawned
     // headlessly with pipes. Expect allocates a real child PTY independently
     // of the parent stdio. The executable travels through the environment so
@@ -786,7 +805,7 @@ function ptyLaunch(fxPath: string): { command: string; args: string[] } {
           "set stty_init {rows 40 columns 120}",
           "set executable $env(AGENTVOICE_FX_EXECUTABLE)",
           "unset env(AGENTVOICE_FX_EXECUTABLE)",
-          "spawn -noecho $executable",
+          `spawn -noecho $executable${brokerArgs.length > 0 ? ` ${brokerArgs.join(" ")}` : ""}`,
           "expect eof",
           "catch wait result",
           "exit [lindex $result 3]",
@@ -796,8 +815,19 @@ function ptyLaunch(fxPath: string): { command: string; args: string[] } {
   }
   return {
     command: "script",
-    args: ["-q", "-c", shellQuote(fxPath), "/dev/null"],
+    args: ["-q", "-c", [shellQuote(fxPath), ...brokerArgs].join(" "), "/dev/null"],
   };
+}
+
+function credentialBrokerLaunchArgs(
+  credentialBroker?: FxHeadlessOrchestratorOptions["credentialBroker"],
+): string[] {
+  if (!credentialBroker) return [];
+  const args = ["--codex-credential-fd", "3"];
+  if (credentialBroker.proofMode === "first-call-401-renewal") {
+    args.push("--codex-credential-renewal-canary");
+  }
+  return args;
 }
 
 function waitForSpawn(child: ChildProcessWithoutNullStreams): Promise<void> {

@@ -63,6 +63,13 @@ describe("Codpiece artifact validator CLI", () => {
 
   test("accepts a completed native Codex-Fx artifact and returns Codpiece's JSON shape", async () => {
     const fixture = await writeArtifactFixture();
+    writeFileSync(
+      join(fixture.artifact, "clean-metadata.json"),
+      `${JSON.stringify({
+        message: "clean semantic JSON",
+        encoded: Buffer.from(JSON.stringify({ message: "clean encoded JSON" })).toString("base64"),
+      })}\n`,
+    );
 
     const receipt = await validateCodpieceArtifact({
       artifact: fixture.artifact,
@@ -103,6 +110,311 @@ describe("Codpiece artifact validator CLI", () => {
 
     await expect(validateFixture(fixture)).rejects.toThrow(
       "schemaVersion 2 did not match required 3",
+    );
+  });
+
+  test("requires the exact one-shot renewal proof mode in the manifest", async () => {
+    const fixture = await writeArtifactFixture();
+    const manifestPath = join(fixture.artifact, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.credentialAuthorityProof.mode = "none";
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "manifest credentialAuthorityProof did not match",
+    );
+  });
+
+  test("rejects an own __proto__ field in an exact manifest object", async () => {
+    const fixture = await writeArtifactFixture();
+    const manifestPath = join(fixture.artifact, "manifest.json");
+    const original = readFileSync(manifestPath, "utf8");
+    const injected = original.replace(
+      '  "credentialAuthorityProof": {\n',
+      '  "credentialAuthorityProof": {\n    "__proto__": {"unexpected": true},\n',
+    );
+    if (injected === original) throw new Error("test manifest __proto__ injection did not apply");
+    writeFileSync(manifestPath, injected);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "manifest credentialAuthorityProof did not match",
+    );
+  });
+
+  test("requires the journaled first-call-401 lease lifecycle", async () => {
+    const fixture = await writeArtifactFixture();
+    const eventsPath = join(fixture.artifact, "events.ndjson");
+    const events = readEvents(eventsPath);
+    const refresh = events.find(
+      (event) =>
+        event.type === "appserver.voiceSidecarAuthority/leaseAccepted" &&
+        event.data["operation"] === "refresh",
+    )!;
+    refresh.data["reason"] = "proactiveNarrow";
+    writeEvents(eventsPath, events);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "refresh/callUnauthorized, provider codex, and count 2",
+    );
+  });
+
+  test("rejects credential-bearing log content without echoing it", async () => {
+    const fixture = await writeArtifactFixture();
+    const sentinel = "Bearer ARTIFACT_CREDENTIAL_SENTINEL";
+    writeFileSync(join(fixture.artifact, "fx-stderr.log"), `${sentinel}\n`);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+    try {
+      await validateFixture(fixture);
+    } catch (error) {
+      expect(String(error)).not.toContain("ARTIFACT_CREDENTIAL_SENTINEL");
+    }
+  });
+
+  test("rejects terminal-control credential obfuscation without discarding OSC payloads", async () => {
+    const backspace = await writeArtifactFixture();
+    writeFileSync(
+      join(backspace.artifact, "fx-stderr.log"),
+      "BearX\ber ARTIFACT_CREDENTIAL_SENTINEL\n",
+    );
+    await expect(validateFixture(backspace)).rejects.toThrow(
+      "artifact credential scan accepts only strict UTF-8 text outside declared audio evidence",
+    );
+
+    const osc = await writeArtifactFixture();
+    writeFileSync(
+      join(osc.artifact, "fx-stderr.log"),
+      "\u001b]0;Bear\u001b[31mer ARTIFACT_CREDENTIAL_SENTINEL\u0007\n",
+    );
+    try {
+      await validateFixture(osc);
+      throw new Error("expected OSC payload scanning to reject the decoded credential");
+    } catch (error) {
+      expect(String(error)).toContain("artifact credential scan found credential-bearing content");
+      expect(String(error)).not.toContain("ARTIFACT_CREDENTIAL_SENTINEL");
+    }
+
+    const acrossOsc = await writeArtifactFixture();
+    writeFileSync(
+      join(acrossOsc.artifact, "fx-stderr.log"),
+      "Bear\u001b]0;ordinary title\u0007er ARTIFACT_CREDENTIAL_SENTINEL\n",
+    );
+    await expect(validateFixture(acrossOsc)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+  });
+
+  test("rejects credential fields and credential-store paths anywhere in artifact files", async () => {
+    const credentialField = await writeArtifactFixture();
+    writeFileSync(
+      join(credentialField.artifact, "fx-terminal.log"),
+      `${JSON.stringify({ accessToken: "credential-value", accountId: "raw-account" })}\n`,
+    );
+    await expect(validateFixture(credentialField)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+
+    const credentialPath = await writeArtifactFixture();
+    writeFileSync(
+      join(credentialPath.artifact, "app-server.stderr.log"),
+      "refused /Users/operator/.codex/auth.json\n",
+    );
+    await expect(validateFixture(credentialPath)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+  });
+
+  test("scans undeclared WAV-suffixed files for credential fields", async () => {
+    const fixture = await writeArtifactFixture();
+    writeFileSync(
+      join(fixture.artifact, "undeclared-audio.wav"),
+      `${JSON.stringify({ bearerToken: "ARTIFACT_CREDENTIAL_SENTINEL" })}\n`,
+    );
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+  });
+
+  test("rejects secret-bearing manifest values before semantic errors can echo them", async () => {
+    const fixture = await writeArtifactFixture();
+    const manifestPath = join(fixture.artifact, "manifest.json");
+    const sentinel = "Bearer ARTIFACT_CREDENTIAL_SENTINEL";
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.status = sentinel;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    try {
+      await validateFixture(fixture);
+      throw new Error("expected credential preflight to reject the manifest");
+    } catch (error) {
+      expect(String(error)).toContain("artifact credential scan found credential-bearing content");
+      expect(String(error)).not.toContain("ARTIFACT_CREDENTIAL_SENTINEL");
+    }
+  });
+
+  test("semantically scans escaped manifest keys before they can enter labels or receipts", async () => {
+    const fixture = await writeArtifactFixture();
+    const manifestPath = join(fixture.artifact, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const serialized = JSON.stringify(manifest, null, 2);
+    const sentinel = "ARTIFACT_CREDENTIAL_SENTINEL";
+    const injected = serialized.replace(
+      '  "evidence": {',
+      `  "evidence": {\n    "\\u0042earer ${sentinel}": "scenario.json",`,
+    );
+    writeFileSync(manifestPath, `${injected}\n`);
+
+    try {
+      await validateFixture(fixture);
+      throw new Error("expected semantic manifest scanning to reject the decoded key");
+    } catch (error) {
+      expect(String(error)).toContain("artifact credential scan found credential-bearing content");
+      expect(String(error)).not.toContain(sentinel);
+    }
+  });
+
+  test("semantically scans escaped NDJSON values and rejects decoded controls", async () => {
+    const escapedCredential = await writeArtifactFixture();
+    const escapedCredentialEvents = join(escapedCredential.artifact, "events.ndjson");
+    replaceVoiceThreadIdEncoding(
+      escapedCredentialEvents,
+      "\\u0042earer ARTIFACT_CREDENTIAL_SENTINEL",
+    );
+    try {
+      await validateFixture(escapedCredential);
+      throw new Error("expected semantic NDJSON scanning to reject the decoded credential");
+    } catch (error) {
+      expect(String(error)).toContain("artifact credential scan found credential-bearing content");
+      expect(String(error)).not.toContain("ARTIFACT_CREDENTIAL_SENTINEL");
+    }
+
+    const escapedControl = await writeArtifactFixture();
+    replaceVoiceThreadIdEncoding(
+      join(escapedControl.artifact, "events.ndjson"),
+      "voice\\u0000thread",
+    );
+    await expect(validateFixture(escapedControl)).rejects.toThrow(
+      "artifact credential scan accepts only strict UTF-8 text outside declared audio evidence",
+    );
+  });
+
+  test("rejects bounded base64-encoded credential containers", async () => {
+    const fixture = await writeArtifactFixture();
+    const encoded = Buffer.from(
+      JSON.stringify({ accessToken: "ARTIFACT_CREDENTIAL_SENTINEL" }),
+    ).toString("base64");
+    writeFileSync(join(fixture.artifact, "encoded-evidence.txt"), `${encoded}\n`);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "artifact credential scan found credential-bearing content",
+    );
+  });
+
+  test("accepts clean source revisions and digests that resemble base64", async () => {
+    const fixture = await writeArtifactFixture();
+    writeFileSync(
+      join(fixture.artifact, "hashes.json"),
+      `${JSON.stringify({
+        sourceRevision: CANDIDATE_SHA,
+        sha256: "0123456789abcdef".repeat(4),
+      })}\n`,
+    );
+
+    await expect(validateFixture(fixture)).resolves.toBeDefined();
+  });
+
+  test("fails closed on excessive decoded-string and structural JSON nesting", async () => {
+    const encoded = await writeArtifactFixture();
+    let nested = '{"\\u0061ccessToken":"ARTIFACT_CREDENTIAL_SENTINEL"}';
+    for (let depth = 0; depth < 4; depth++) nested = JSON.stringify(nested);
+    writeFileSync(join(encoded.artifact, "nested.json"), `${JSON.stringify({ nested })}\n`);
+    await expect(validateFixture(encoded)).rejects.toThrow(
+      "artifact credential scan found excessively nested JSON content",
+    );
+
+    const structural = await writeArtifactFixture();
+    writeFileSync(
+      join(structural.artifact, "deep.json"),
+      `${"[".repeat(80)}"safe"${"]".repeat(80)}\n`,
+    );
+    await expect(validateFixture(structural)).rejects.toThrow(
+      "artifact credential scan found excessively nested JSON content",
+    );
+  });
+
+  test("rejects credential-store names in the actual artifact tree", async () => {
+    const fixture = await writeArtifactFixture();
+    const credentialDirectory = join(fixture.artifact, ".codex");
+    mkdirSync(credentialDirectory);
+    writeFileSync(join(credentialDirectory, "auth.json"), "{}\n");
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "artifact credential scan found a credential-bearing path",
+    );
+  });
+
+  test("rejects common plural, dotfile, and camel-case credential-store names without echo", async () => {
+    for (const sensitiveName of [
+      "secrets.json",
+      "credentials.json",
+      ".env.local",
+      "clientSecret.json",
+    ]) {
+      const fixture = await writeArtifactFixture();
+      writeFileSync(join(fixture.artifact, sensitiveName), "{}\n");
+      try {
+        await validateFixture(fixture);
+        throw new Error(`expected credential path rejection for ${sensitiveName}`);
+      } catch (error) {
+        expect(String(error)).toContain("artifact credential scan found a credential-bearing path");
+        expect(String(error)).not.toContain(sensitiveName);
+      }
+    }
+  });
+
+  test("rejects non-UTF-8 and binary credential containers", async () => {
+    const fixture = await writeArtifactFixture();
+    const utf16 = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('{"accessToken":"ARTIFACT_CREDENTIAL_SENTINEL"}', "utf16le"),
+    ]);
+    writeFileSync(join(fixture.artifact, "opaque.bin"), utf16);
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "artifact credential scan accepts only strict UTF-8 text outside declared audio evidence",
+    );
+  });
+
+  test("rejects credential-bearing ancillary chunks in declared WAV evidence", async () => {
+    const fixture = await writeArtifactFixture();
+    const outputPath = join(fixture.artifact, "output.wav");
+    writeFileSync(
+      outputPath,
+      appendWavChunk(
+        readFileSync(outputPath),
+        "JUNK",
+        Buffer.from("Bearer ARTIFACT_CREDENTIAL_SENTINEL"),
+      ),
+    );
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "output audio was not serialized as a canonical PCM WAV",
+    );
+  });
+
+  test("rejects fmt extensions in declared WAV evidence", async () => {
+    const fixture = await writeArtifactFixture();
+    const inputPath = join(fixture.artifact, "input.wav");
+    writeFileSync(
+      inputPath,
+      extendWavFormat(readFileSync(inputPath), Buffer.from("secret:canary!!!")),
+    );
+
+    await expect(validateFixture(fixture)).rejects.toThrow(
+      "input audio was not serialized as a canonical PCM WAV",
     );
   });
 
@@ -152,7 +464,7 @@ describe("Codpiece artifact validator CLI", () => {
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
     await expect(validateFixture(fixture)).rejects.toThrow(
-      "manifest evidence fxTerminal path component linked must not be a symbolic link",
+      "manifest evidence fxTerminal path must not contain a symbolic link",
     );
   });
 
@@ -242,6 +554,34 @@ describe("Codpiece artifact validator CLI", () => {
     await expect(validateFixture(fixture)).rejects.toThrow("decoded PCM overlap measurement");
   });
 
+  test("validates one private snapshot when the submitted tree changes mid-validation", async () => {
+    const fixture = await writeArtifactFixture();
+    const initialOracleSha256 = sha256(readFileSync(join(fixture.artifact, "oracle.py")));
+    const initialFxStderrSha256 = sha256(readFileSync(join(fixture.artifact, "fx-stderr.log")));
+    const workspacePatch = readFileSync(join(fixture.artifact, "workspace.patch"), "utf8");
+    expect(workspacePatch).toContain("workspace-before/inventory.py");
+    expect(workspacePatch).toContain("workspace-after/inventory.py");
+    expect(workspacePatch).not.toContain(fixture.artifact);
+    const replacements = installArtifactMutationOnVersion(fixture);
+
+    const receipt = await validateCodpieceArtifact({
+      artifact: fixture.artifact,
+      binary: fixture.binary,
+      candidateSha: CANDIDATE_SHA,
+    });
+
+    expect(receipt.artifact.path).toBe(realpathSync(fixture.artifact));
+    expect(receipt.artifact.declaredEvidenceSha256.oracleInputs).toEqual([initialOracleSha256]);
+    expect(receipt.artifact.declaredEvidenceSha256.fxStderr).toBe(initialFxStderrSha256);
+    expect(readFileSync(join(fixture.artifact, "oracle.py"), "utf8")).toBe(replacements.oracle);
+    expect(readFileSync(join(fixture.artifact, "workspace-after", "inventory.py"), "utf8")).toBe(
+      replacements.workspace,
+    );
+    expect(readFileSync(join(fixture.artifact, "fx-stderr.log"), "utf8")).toBe(
+      replacements.fxStderr,
+    );
+  });
+
   test("rejects symlinks in workspace evidence before rerunning the oracle", async () => {
     const fixture = await writeArtifactFixture();
     const workspaceAfter = join(fixture.artifact, "workspace-after");
@@ -250,7 +590,7 @@ describe("Codpiece artifact validator CLI", () => {
     writeWorkspacePatch(fixture.artifact);
 
     await expect(validateFixture(fixture)).rejects.toThrow(
-      "workspace-after contains a symbolic link",
+      "artifact credential scan does not accept symbolic links",
     );
   });
 
@@ -315,6 +655,7 @@ async function writeArtifactFixture(): Promise<{
   const events = validNativeCodexFxTrace(audio.spans, audio.steerOverlap);
   const validation = validateCodexFxRunEvents(events, "voice-thread", {
     implementationProfile: "native-voice-sidecar",
+    credentialAuthorityProofMode: "first-call-401-renewal",
   });
   writeFileSync(
     join(artifact, "events.ndjson"),
@@ -380,6 +721,10 @@ async function writeArtifactFixture(): Promise<{
     implementationProfile: "native-voice-sidecar",
     isolation: nativeIsolationEvidence(),
     sidecarBuild,
+    credentialAuthorityProof: {
+      mode: "first-call-401-renewal",
+      lifecycleEvent: "appserver.voiceSidecarAuthority/leaseAccepted",
+    },
     fxIdentity: {
       auth: "Codex subscription",
       modelSource: "Codex subscription",
@@ -446,6 +791,17 @@ function writeEvents(path: string, events: readonly EventRecord[]): void {
   writeFileSync(path, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
 }
 
+function replaceVoiceThreadIdEncoding(path: string, encodedThreadId: string): void {
+  const lines = readFileSync(path, "utf8").split("\n");
+  const index = lines.findIndex((line) => line.includes('"type":"voice.thread.started"'));
+  if (index < 0) throw new Error("test event trace has no voice.thread.started event");
+  const original = lines[index]!;
+  const replaced = original.replace('"threadId":"voice-thread"', `"threadId":"${encodedThreadId}"`);
+  if (replaced === original) throw new Error("test voice thread ID replacement did not apply");
+  lines[index] = replaced;
+  writeFileSync(path, lines.join("\n"));
+}
+
 function expectedDeclaredEvidenceSha256(artifact: string): Record<string, string | string[]> {
   return {
     events: sha256(readFileSync(join(artifact, "events.ndjson"))),
@@ -475,9 +831,8 @@ function writeWorkspaceEvidence(artifact: string): void {
 }
 
 function writeWorkspacePatch(artifact: string): void {
-  const before = realpathSync(join(artifact, "workspace-before"));
-  const after = realpathSync(join(artifact, "workspace-after"));
-  const result = Bun.spawnSync(["diff", "-ruN", before, after], {
+  const result = Bun.spawnSync(["diff", "-ruN", "workspace-before", "workspace-after"], {
+    cwd: artifact,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -647,6 +1002,27 @@ function validAudioProof(
   };
 }
 
+function appendWavChunk(wav: Buffer, id: string, payload: Buffer): Buffer {
+  if (id.length !== 4) throw new Error("test WAV chunk ID must be four ASCII characters");
+  const header = Buffer.alloc(8);
+  header.write(id, 0, "ascii");
+  header.writeUInt32LE(payload.length, 4);
+  const padding = payload.length % 2 === 0 ? Buffer.alloc(0) : Buffer.alloc(1);
+  const result = Buffer.concat([wav, header, payload, padding]);
+  result.writeUInt32LE(result.length - 8, 4);
+  return result;
+}
+
+function extendWavFormat(wav: Buffer, extension: Buffer): Buffer {
+  if (extension.length === 0 || extension.length % 2 !== 0) {
+    throw new Error("test WAV fmt extension must contain a positive even number of bytes");
+  }
+  const result = Buffer.concat([wav.subarray(0, 36), extension, wav.subarray(36)]);
+  result.writeUInt32LE(16 + extension.length, 16);
+  result.writeUInt32LE(result.length - 8, 4);
+  return result;
+}
+
 function spanFor(spans: Map<string, AudioSpan>, id: string): AudioSpan {
   const span = spans.get(id);
   if (!span) throw new Error(`test fixture is missing audio span for ${id}`);
@@ -663,9 +1039,55 @@ function interleaveStereo(left: Buffer, right: Buffer): Buffer {
   return stereo;
 }
 
-function fakeBinaryProgram(): string {
+function installArtifactMutationOnVersion(fixture: {
+  root: string;
+  artifact: string;
+  binary: string;
+  binarySha256: string;
+}): { oracle: string; workspace: string; fxStderr: string } {
+  const replacements = {
+    oracle: "raise SystemExit(9)\n",
+    workspace: "raise RuntimeError('mutated after snapshot')\n",
+    fxStderr: "Bearer ARTIFACT_CREDENTIAL_SENTINEL\n",
+  };
+  writeFileSync(
+    fixture.binary,
+    fakeBinaryProgram([
+      { path: join(fixture.artifact, "oracle.py"), contents: replacements.oracle },
+      {
+        path: join(fixture.artifact, "workspace-after", "inventory.py"),
+        contents: replacements.workspace,
+      },
+      { path: join(fixture.artifact, "fx-stderr.log"), contents: replacements.fxStderr },
+    ]),
+    { mode: 0o700 },
+  );
+  chmodSync(fixture.binary, 0o700);
+  fixture.binarySha256 = sha256(readFileSync(fixture.binary));
+
+  const metadataPath = join(fixture.root, "binary", "metadata.json");
+  const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+  metadata.binarySha256 = fixture.binarySha256;
+  writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+
+  const manifestPath = join(fixture.artifact, "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.sidecarBuild.binarySha256 = fixture.binarySha256;
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return replacements;
+}
+
+function fakeBinaryProgram(mutations: readonly { path: string; contents: string }[] = []): string {
+  const mutationSource = mutations
+    .map(
+      (mutation) =>
+        `  writeFileSync(${JSON.stringify(mutation.path)}, ${JSON.stringify(mutation.contents)});`,
+    )
+    .join("\n");
   return `#!/usr/bin/env bun
+import { writeFileSync } from "node:fs";
 if (Bun.argv.includes("--version")) {
+${mutationSource}
   console.log(${JSON.stringify(BINARY_VERSION)});
   process.exit(0);
 }
@@ -692,6 +1114,8 @@ function validNativeCodexFxTrace(
       "fx",
     ),
     event("voice.thread.started", { threadId: "voice-thread" }, "app-server"),
+    credentialLeaseAccepted("resolve", "initial", 1, "9007199254740993"),
+    credentialLeaseAccepted("refresh", "callUnauthorized", 2, "9007199254740994"),
     event(
       "voice.session.started",
       { rawType: "session.started", model: null, voice: null },
@@ -752,6 +1176,29 @@ function validNativeCodexFxTrace(
     event("fx.stopped", {}, "fx"),
     event("sidecar.isolation.completed", nativeIsolationEvidence(), "app-server"),
   ]);
+}
+
+function credentialLeaseAccepted(
+  operation: "resolve" | "refresh",
+  reason: "initial" | "callUnauthorized",
+  count: 1 | 2,
+  generation: string,
+): EventRecord {
+  return event(
+    "appserver.voiceSidecarAuthority/leaseAccepted",
+    {
+      schemaVersion: 1,
+      operation,
+      reason,
+      provider: "codex",
+      accountDigest: "0123456789abcdef0123456789abcdef",
+      generation,
+      count,
+      refreshDeadlineMs: 2_000_000_000_000,
+      remainingValidityMs: 600_000,
+    },
+    "app-server",
+  );
 }
 
 function inputAudioEvents(span: AudioSpan): EventRecord[] {

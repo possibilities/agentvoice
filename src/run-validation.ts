@@ -6,6 +6,7 @@ import {
   AUDIO_SAMPLE_RATE,
 } from "./audio.ts";
 import type { EventRecord, EventSource } from "./events.ts";
+import type { FxCredentialBrokerProofMode } from "./fx-orchestrator.ts";
 import { CODEX_REFERENCE } from "./reference.ts";
 import { assertConsumedWireContract, wireMessagesFromEvents } from "./voice-sidecar-contract.ts";
 
@@ -15,6 +16,22 @@ const OUTPUT_AUDIO_ENDED = new Set([
   "output.audio.stopped",
   "output.audio.idle",
 ]);
+export const FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT =
+  "appserver.voiceSidecarAuthority/leaseAccepted";
+const CREDENTIAL_LEASE_MINIMUM_VALIDITY_MS = 300_000;
+const ACCOUNT_DIGEST_PATTERN = /^[a-f0-9]{32}$/;
+const DECIMAL_GENERATION_PATTERN = /^[1-9][0-9]*$/;
+const CREDENTIAL_AUTHORITY_LIFECYCLE_FIELDS = [
+  "schemaVersion",
+  "operation",
+  "reason",
+  "provider",
+  "accountDigest",
+  "generation",
+  "count",
+  "refreshDeadlineMs",
+  "remainingValidityMs",
+] as const;
 
 export interface CodexRunValidationOptions {
   /** Defaults to the sole orchestrator.thread.started event in the trace. */
@@ -67,6 +84,19 @@ export interface CodexFxRunValidationResult extends LiveKitRunValidationResult {
   implementationProfile: CodexFxImplementationProfile;
   codexWorkTurnCount: 0;
   pcmOverlapDurationMs: number;
+  credentialAuthorityLifecycle?: FxCredentialAuthorityLifecycleValidation;
+}
+
+export interface FxCredentialAuthorityLifecycleValidation {
+  proofMode: FxCredentialBrokerProofMode;
+  lifecycleEvent: typeof FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT;
+  resolveAcceptedSeq: number;
+  refreshAcceptedSeq: number | null;
+  accountDigest: string;
+  resolveGeneration: string;
+  refreshGeneration: string | null;
+  completedFxTurnAfterRenewalSeq: number | null;
+  completedFxTurnAfterRenewalId: string | null;
 }
 
 export class CodexFxRunValidationError extends Error {
@@ -84,6 +114,7 @@ export type CodexFxImplementationProfile = "legacy-app-server" | "native-voice-s
 export interface CodexFxRunValidationOptions {
   steerInputId?: string;
   implementationProfile?: CodexFxImplementationProfile;
+  credentialAuthorityProofMode?: FxCredentialBrokerProofMode;
 }
 
 /**
@@ -232,6 +263,13 @@ export function validateCodexFxRunEvents(
     fail: (issues) => new CodexFxRunValidationError(issues),
   });
   const issues: string[] = [];
+  const credentialAuthorityLifecycle = options.credentialAuthorityProofMode
+    ? validateFxCredentialAuthorityLifecycleInto(
+        snapshot,
+        options.credentialAuthorityProofMode,
+        issues,
+      )
+    : null;
   const voiceThreadStarts = snapshot.filter((event) => event.type === "voice.thread.started");
   requireEventSource(voiceThreadStarts, "app-server", "native voice thread start", issues);
   if (voiceThreadStarts.length !== 1 || voiceThreadStarts[0]?.data["threadId"] !== voiceThreadId) {
@@ -401,7 +439,196 @@ export function validateCodexFxRunEvents(
     implementationProfile,
     codexWorkTurnCount: 0,
     pcmOverlapDurationMs: pcmOverlapDurationMs as number,
+    ...(credentialAuthorityLifecycle ? { credentialAuthorityLifecycle } : {}),
   };
+}
+
+export function validateFxCredentialAuthorityLifecycle(
+  snapshot: readonly EventRecord[],
+  proofMode: FxCredentialBrokerProofMode,
+): FxCredentialAuthorityLifecycleValidation {
+  const issues: string[] = [];
+  const validation = validateFxCredentialAuthorityLifecycleInto(snapshot, proofMode, issues);
+  if (issues.length > 0 || !validation) throw new CodexFxRunValidationError(issues);
+  return validation;
+}
+
+function validateFxCredentialAuthorityLifecycleInto(
+  snapshot: readonly EventRecord[],
+  proofMode: FxCredentialBrokerProofMode,
+  issues: string[],
+): FxCredentialAuthorityLifecycleValidation | null {
+  const events = [...snapshot].sort((left, right) => left.seq - right.seq);
+  const accepted = events.filter((event) => event.type === FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT);
+  requireEventSource(accepted, "app-server", "Fx credential lease acceptance", issues);
+  const expectedCount = proofMode === "none" ? 1 : 2;
+  if (accepted.length !== expectedCount) {
+    issues.push(
+      `expected exactly ${expectedCount} Fx credential lease acceptance event(s) for ${proofMode}; observed ${accepted.length}`,
+    );
+  }
+
+  for (const event of accepted) {
+    const actualFields = Object.keys(event.data).sort();
+    const expectedFields = [...CREDENTIAL_AUTHORITY_LIFECYCLE_FIELDS].sort();
+    if (
+      actualFields.length !== expectedFields.length ||
+      actualFields.some((field, index) => field !== expectedFields[index])
+    ) {
+      issues.push(
+        `Fx credential lease acceptance at event ${event.seq} did not contain the exact secret-free lifecycle fields`,
+      );
+    }
+  }
+
+  const resolve = accepted[0];
+  validateCredentialLeaseAcceptance(
+    resolve,
+    { operation: "resolve", reason: "initial", count: 1 },
+    "initial Fx credential resolve",
+    issues,
+  );
+  const refresh = proofMode === "first-call-401-renewal" ? accepted[1] : undefined;
+  if (refresh) {
+    validateCredentialLeaseAcceptance(
+      refresh,
+      { operation: "refresh", reason: "callUnauthorized", count: 2 },
+      "401-triggered Fx credential refresh",
+      issues,
+    );
+  }
+
+  const sessions = events.filter((event) => event.type === "voice.session.started");
+  requireEventSource(sessions, "realtime", "native voice model session", issues);
+  if (sessions.length !== 1) {
+    issues.push(
+      `expected exactly 1 native voice session for Fx credential proof; observed ${sessions.length}`,
+    );
+  }
+  const acceptedBeforeSession = refresh ?? resolve;
+  if (acceptedBeforeSession && sessions[0] && acceptedBeforeSession.seq >= sessions[0].seq) {
+    issues.push(
+      `${refresh ? "refreshed" : "resolved"} Fx credential lease was not accepted before voice.session.started`,
+    );
+  }
+
+  const resolveDigest = credentialString(resolve, "accountDigest");
+  const refreshDigest = credentialString(refresh, "accountDigest");
+  if (!resolveDigest || !ACCOUNT_DIGEST_PATTERN.test(resolveDigest)) {
+    issues.push("initial Fx credential resolve accountDigest was not a lowercase 128-bit digest");
+  }
+  if (refresh && (!refreshDigest || !ACCOUNT_DIGEST_PATTERN.test(refreshDigest))) {
+    issues.push(
+      "401-triggered Fx credential refresh accountDigest was not a lowercase 128-bit digest",
+    );
+  }
+  if (resolveDigest && refreshDigest && resolveDigest !== refreshDigest) {
+    issues.push("Fx credential renewal changed the pinned accountDigest");
+  }
+
+  const resolveGeneration = credentialString(resolve, "generation");
+  const refreshGeneration = credentialString(refresh, "generation");
+  if (!resolveGeneration || !DECIMAL_GENERATION_PATTERN.test(resolveGeneration)) {
+    issues.push("initial Fx credential resolve generation was not a positive decimal string");
+  }
+  if (refresh && (!refreshGeneration || !DECIMAL_GENERATION_PATTERN.test(refreshGeneration))) {
+    issues.push("401-triggered Fx credential refresh generation was not a positive decimal string");
+  }
+  if (
+    resolveGeneration &&
+    refreshGeneration &&
+    DECIMAL_GENERATION_PATTERN.test(resolveGeneration) &&
+    DECIMAL_GENERATION_PATTERN.test(refreshGeneration) &&
+    BigInt(refreshGeneration) <= BigInt(resolveGeneration)
+  ) {
+    issues.push("Fx credential renewal generation did not strictly increase");
+  }
+
+  let completedAfterRenewal: EventRecord | undefined;
+  if (refresh) {
+    completedAfterRenewal = events.find((event) => {
+      if (
+        event.seq <= refresh.seq ||
+        event.source !== "fx" ||
+        event.type !== "orchestrator.turn.completed" ||
+        event.data["status"] !== "completed" ||
+        event.data["outcome"] !== "completed"
+      ) {
+        return false;
+      }
+      const turnId = event.data["turnId"];
+      return (
+        typeof turnId === "string" &&
+        events.some(
+          (candidate) =>
+            candidate.seq > refresh.seq &&
+            candidate.seq < event.seq &&
+            candidate.source === "fx" &&
+            candidate.type === "orchestrator.turn.started" &&
+            candidate.data["turnId"] === turnId,
+        )
+      );
+    });
+    if (!completedAfterRenewal) {
+      issues.push(
+        "no completed Fx turn followed the accepted credential renewal with a matching post-renewal start",
+      );
+    }
+  }
+
+  if (!resolve || !resolveDigest || !resolveGeneration) return null;
+  return {
+    proofMode,
+    lifecycleEvent: FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT,
+    resolveAcceptedSeq: resolve.seq,
+    refreshAcceptedSeq: refresh?.seq ?? null,
+    accountDigest: resolveDigest,
+    resolveGeneration,
+    refreshGeneration: refreshGeneration ?? null,
+    completedFxTurnAfterRenewalSeq: completedAfterRenewal?.seq ?? null,
+    completedFxTurnAfterRenewalId:
+      typeof completedAfterRenewal?.data["turnId"] === "string"
+        ? completedAfterRenewal.data["turnId"]
+        : null,
+  };
+}
+
+function validateCredentialLeaseAcceptance(
+  event: EventRecord | undefined,
+  expected: { operation: "resolve" | "refresh"; reason: string; count: number },
+  label: string,
+  issues: string[],
+): void {
+  if (!event) return;
+  if (
+    event.data["schemaVersion"] !== 1 ||
+    event.data["operation"] !== expected.operation ||
+    event.data["reason"] !== expected.reason ||
+    event.data["provider"] !== "codex" ||
+    event.data["count"] !== expected.count
+  ) {
+    issues.push(
+      `${label} did not carry schemaVersion 1, ${expected.operation}/${expected.reason}, provider codex, and count ${expected.count}`,
+    );
+  }
+  const deadline = event.data["refreshDeadlineMs"];
+  const remaining = event.data["remainingValidityMs"];
+  if (
+    !Number.isSafeInteger(deadline) ||
+    (deadline as number) <= 0 ||
+    !Number.isSafeInteger(remaining) ||
+    (remaining as number) < CREDENTIAL_LEASE_MINIMUM_VALIDITY_MS ||
+    (deadline as number) <= (remaining as number)
+  ) {
+    issues.push(
+      `${label} did not carry a usable refresh deadline with at least ${CREDENTIAL_LEASE_MINIMUM_VALIDITY_MS}ms remaining`,
+    );
+  }
+}
+
+function credentialString(event: EventRecord | undefined, key: string): string | null {
+  const value = event?.data[key];
+  return typeof value === "string" ? value : null;
 }
 
 function validateNativeVoiceSidecarEvidence(

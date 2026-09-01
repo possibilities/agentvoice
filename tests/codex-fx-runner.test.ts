@@ -7,6 +7,7 @@ import {
   assertCapturedEvaluationInputsUnchanged,
   CODEX_SIDECAR_SOURCE_REVISION,
   captureEvaluationInputs,
+  codexFxCredentialAuthorityProof,
   loadSidecarBuildMetadata,
   resolveCodexFxExecutionProfile,
   sidecarRequiresFxCredentialAuthority,
@@ -141,6 +142,17 @@ describe("Codex voice-sidecar build metadata", () => {
 });
 
 describe("Codex-Fx execution profile resolution", () => {
+  test("records only the fixed lifecycle method and approved proof mode", () => {
+    expect(codexFxCredentialAuthorityProof("none")).toEqual({
+      mode: "none",
+      lifecycleEvent: "appserver.voiceSidecarAuthority/leaseAccepted",
+    });
+    expect(codexFxCredentialAuthorityProof("first-call-401-renewal")).toEqual({
+      mode: "first-call-401-renewal",
+      lifecycleEvent: "appserver.voiceSidecarAuthority/leaseAccepted",
+    });
+  });
+
   test("keeps --app-server on the legacy metadata/profile path", () => {
     expect(resolveCodexFxExecutionProfile({ appServerPath: "legacy-bin" })).toEqual({
       implementationProfile: "legacy-app-server",

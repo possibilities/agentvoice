@@ -27,9 +27,19 @@ import {
 } from "./codex-runner.ts";
 import { EventJournal } from "./events.ts";
 import { loadVerifiedFixtureAudio } from "./fixture-audio.ts";
-import { type FxAdeEvent, FxHeadlessOrchestrator, type FxIdentity } from "./fx-orchestrator.ts";
+import {
+  type FxAdeEvent,
+  type FxCredentialBrokerProofMode,
+  FxHeadlessOrchestrator,
+  type FxIdentity,
+} from "./fx-orchestrator.ts";
 import { assertCodexReferenceVoiceModel, CODEX_REFERENCE } from "./reference.ts";
-import { type CodexFxRunValidationResult, validateCodexFxRunEvents } from "./run-validation.ts";
+import {
+  type CodexFxRunValidationResult,
+  FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT,
+  validateCodexFxRunEvents,
+  validateFxCredentialAuthorityLifecycle,
+} from "./run-validation.ts";
 import { type LoadedScenario, loadScenario, scenarioSchema } from "./scenario.ts";
 import {
   VOICE_SIDECAR_WIRE_CONTRACT_VERSION,
@@ -102,6 +112,17 @@ export type CodexSidecarBuildMetadata =
   | FxAuthorizedCodexSidecarBuildMetadata;
 
 export type CodexSidecarMetadataSchemaVersion = 1 | 2 | 3;
+
+export interface CodexFxCredentialAuthorityProof {
+  mode: FxCredentialBrokerProofMode;
+  lifecycleEvent: typeof FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT;
+}
+
+export function codexFxCredentialAuthorityProof(
+  mode: FxCredentialBrokerProofMode,
+): CodexFxCredentialAuthorityProof {
+  return { mode, lifecycleEvent: FX_CREDENTIAL_AUTHORITY_LIFECYCLE_EVENT };
+}
 
 export function sidecarRequiresFxCredentialAuthority(
   metadata: CodexSidecarBuildMetadata,
@@ -204,6 +225,9 @@ export async function probeCodexFxVoice(
   let fxIdentity: FxIdentity | null = null;
   let credentialAuthority: Duplex | null = null;
   let voiceSession: { data: Record<string, unknown> } | null = null;
+  let credentialAuthorityLifecycle: ReturnType<
+    typeof validateFxCredentialAuthorityLifecycle
+  > | null = null;
   let sessionStopped = false;
 
   try {
@@ -215,6 +239,7 @@ export async function probeCodexFxVoice(
           : {}),
         model: CODEX_REFERENCE.orchestratorModel,
         reasoningEffort: CODEX_REFERENCE.reasoningEffort,
+        credentialBroker: { proofMode: "none" },
       });
       fxIdentity = await orchestrator.start();
       credentialAuthority = orchestrator.acquireCredentialBrokerChannel();
@@ -244,6 +269,12 @@ export async function probeCodexFxVoice(
     if (stopErrors > 0) {
       throw new Error(`voice-sidecar probe had ${stopErrors} session stop error(s)`);
     }
+    if (sidecarRequiresFxCredentialAuthority(sidecarBuild)) {
+      credentialAuthorityLifecycle = validateFxCredentialAuthorityLifecycle(
+        journal.snapshot(),
+        "none",
+      );
+    }
     const codexWorkTurnCount = journal.count("appserver.turn/started");
     if (codexWorkTurnCount !== 0) {
       throw new Error(
@@ -255,6 +286,12 @@ export async function probeCodexFxVoice(
       appServerVersion,
       sidecarBuild,
       ...(fxIdentity ? { fxIdentity } : {}),
+      ...(credentialAuthorityLifecycle
+        ? {
+            credentialAuthorityProof: codexFxCredentialAuthorityProof("none"),
+            credentialAuthorityLifecycle,
+          }
+        : {}),
       implementationProfile: execution.implementationProfile,
       isolation: session.appServer.isolationEvidence(),
       voiceModel: CODEX_REFERENCE.voiceModel,
@@ -351,6 +388,13 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
       ...(options.fxPath ? { fxPath: options.fxPath } : {}),
       model: loaded.scenario.agent.orchestratorModel,
       reasoningEffort: loaded.scenario.agent.reasoningEffort,
+      ...(sidecarRequiresFxCredentialAuthority(sidecarBuild)
+        ? {
+            credentialBroker: {
+              proofMode: "first-call-401-renewal" as const,
+            },
+          }
+        : {}),
       terminalLogPath: join(artifactDirectory, "fx-terminal.log"),
       stderrLogPath: join(artifactDirectory, "fx-stderr.log"),
       onAdeEvent: (event) => recordFxEvent(event, journal),
@@ -490,6 +534,9 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
         validation = validateCodexFxRunEvents(journal.snapshot(), session.threadId, {
           steerInputId: "steer",
           implementationProfile: execution.implementationProfile,
+          ...(sidecarRequiresFxCredentialAuthority(sidecarBuild)
+            ? { credentialAuthorityProofMode: "first-call-401-renewal" as const }
+            : {}),
         });
         journal.record("harness", "run.validation.passed", { ...validation });
       } catch (error) {
@@ -536,6 +583,11 @@ export async function runCodexFxScenario(options: CodexFxRunOptions): Promise<st
           }
         : {}),
       sidecarBuild,
+      ...(sidecarRequiresFxCredentialAuthority(sidecarBuild)
+        ? {
+            credentialAuthorityProof: codexFxCredentialAuthorityProof("first-call-401-renewal"),
+          }
+        : {}),
       fxIdentity,
       fixtureAudio: {
         provenance: fixtureAudio.provenance,
