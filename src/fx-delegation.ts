@@ -1,10 +1,11 @@
-import type { FxAdmission, FxTurnResult } from "./fx-orchestrator.ts";
+import type { OrchestratorAdmission, OrchestratorTurnResult } from "./orchestrator-adapter.ts";
 
 const ORCHESTRATOR_TURN_TIMEOUT_MS = 180_000;
 
+/** The slice of an orchestrator adapter the delegation bridge needs. */
 export interface DelegationOrchestrator {
-  admit(text: string): Promise<FxAdmission>;
-  waitForTurn(turnId: string, timeoutMs: number): Promise<FxTurnResult>;
+  admit(text: string): Promise<OrchestratorAdmission>;
+  waitForTurn(turnId: string, timeoutMs: number): Promise<OrchestratorTurnResult>;
 }
 
 export interface DelegationTelemetry {
@@ -57,7 +58,7 @@ export class FxDelegationController {
         "and do not claim completion yet.",
       "progress",
     );
-    let result: FxTurnResult;
+    let result: OrchestratorTurnResult;
     try {
       result = await this.orchestrator.waitForTurn(
         admission.delegationTurnId,

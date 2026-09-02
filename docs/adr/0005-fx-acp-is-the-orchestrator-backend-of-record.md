@@ -1,0 +1,3 @@
+# Fx over ACP is the orchestrator backend of record
+
+The voice layer reaches orchestrator agents only through the orchestrator adapter contract, and `fx acp` is the backend it ships with: it is the closest analogue to the Codex App-server it replaces and one protocol per backend keeps frontends ignorant of transport. Standard ACP cannot admit text into a running turn, so until Fx serves `_fx/session/steer` the adapter queues a second admission behind the active turn and reports it as `queued`; it never reports steering it did not perform. The PTY-launched work-control path stays as the reference adapter and a test oracle, not a product path.

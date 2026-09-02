@@ -7,6 +7,15 @@ import { join, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { z } from "zod";
 import { environmentWithoutOpenAiApiKey } from "./local-env.ts";
+import {
+  LifecycleEmitter,
+  type OrchestratorAdapter,
+  type OrchestratorAgentState,
+  type OrchestratorCapabilities,
+  type OrchestratorIdentity,
+  type OrchestratorLifecycleEvent,
+  type OrchestratorLifecycleListener,
+} from "./orchestrator-adapter.ts";
 
 const MAX_CONTROL_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_ADE_RECORD_BYTES = 2 * 1024 * 1024;
@@ -96,7 +105,8 @@ export interface FxTurnResult {
   completedEvent: FxAdeEvent;
 }
 
-export interface FxIdentity {
+export interface FxIdentity extends OrchestratorIdentity {
+  backend: "fx-work-control";
   fxVersion: string;
   fxnkVersion: string;
   buildRevision: string;
@@ -435,9 +445,17 @@ export interface FxHeadlessOrchestratorOptions {
 
 export type FxCredentialBrokerProofMode = "none" | "first-call-401-renewal";
 
-export class FxHeadlessOrchestrator {
+export class FxHeadlessOrchestrator implements OrchestratorAdapter {
+  readonly backend = "fx-work-control";
+  readonly capabilities: OrchestratorCapabilities = {
+    steering: true,
+    interrupt: true,
+    attention: true,
+  };
   readonly instanceId = `agentvoice-${randomUUID()}`;
   readonly lifecycle = new FxLifecycle(this.instanceId);
+  private readonly adapterLifecycle = new LifecycleEmitter();
+  private lastAgentState: OrchestratorAgentState = "idle";
   readonly identity: Promise<FxIdentity>;
   readonly fatal: Promise<never>;
 
@@ -467,7 +485,10 @@ export class FxHeadlessOrchestrator {
     this.adeServer = new FxAdeServer({
       socketPath: this.adeSocketPath,
       lifecycle: this.lifecycle,
-      ...(options.onAdeEvent ? { onEvent: options.onAdeEvent } : {}),
+      onEvent: (event) => {
+        this.publishLifecycle(event);
+        options.onAdeEvent?.(event);
+      },
       onProtocolError: (error) => {
         options.onProtocolError?.(error);
         this.fail(error);
@@ -502,6 +523,22 @@ export class FxHeadlessOrchestrator {
       return Promise.reject(new Error("Fx orchestrator is not running"));
     }
     return this.lifecycle.waitForTurn(turnId, timeoutMs);
+  }
+
+  async interrupt(): Promise<void> {
+    if (!this.ready || this.stopped) throw new Error("Fx orchestrator is not running");
+    await this.client.interrupt();
+  }
+
+  onLifecycle(listener: OrchestratorLifecycleListener): () => void {
+    return this.adapterLifecycle.subscribe(listener);
+  }
+
+  private publishLifecycle(event: FxAdeEvent): void {
+    for (const record of adeLifecycleEvents(event, this.lastAgentState)) {
+      this.adapterLifecycle.emit(record);
+    }
+    this.lastAgentState = event.context.agent_state;
   }
 
   /**
@@ -686,6 +723,8 @@ export class FxHeadlessOrchestrator {
       throw new Error(`Fx permission mode must be yolo; observed ${status.permission_mode}`);
     }
     return {
+      backend: "fx-work-control",
+      version: versionText.trim(),
       fxVersion: versionText.trim(),
       fxnkVersion: fxnkText.trim(),
       buildRevision: status.build_revision,
@@ -744,6 +783,48 @@ function exchangeFrame(socketPath: string, payload: Buffer, timeoutMs: number): 
       if (!settled) finish(new Error("Fx work-control response ended before one complete frame"));
     });
   });
+}
+
+/**
+ * Projects one ADE event onto the adapter lifecycle. Attention is derived from
+ * the blocked-state transition, so every backend reports it the same way.
+ */
+export function adeLifecycleEvents(
+  event: FxAdeEvent,
+  previousState: OrchestratorAgentState,
+): Omit<OrchestratorLifecycleEvent, "sequence">[] {
+  if (event.context.agent_role !== "main") return [];
+  const turnId = event.context.turn_id === null ? null : String(event.context.turn_id);
+  const base = {
+    turnId,
+    agentState: event.context.agent_state,
+    attentionKind: event.context.attention_kind,
+  };
+  const records: Omit<OrchestratorLifecycleEvent, "sequence">[] = [];
+  switch (event.event) {
+    case "FxStarted":
+      records.push({ type: "orchestrator.started", ...base, data: { ...event.payload } });
+      break;
+    case "TurnStarted":
+      records.push({ type: "turn.started", ...base, data: { ...event.payload } });
+      break;
+    case "PostTurnEnd":
+      records.push({ type: "turn.ended", ...base, data: { ...event.payload } });
+      break;
+    case "Stop":
+      records.push({ type: "orchestrator.stopped", ...base, data: { ...event.payload } });
+      break;
+    default:
+      break;
+  }
+  const nowBlocked = event.context.agent_state === "blocked";
+  const wasBlocked = previousState === "blocked";
+  if (nowBlocked && !wasBlocked) {
+    records.push({ type: "attention.raised", ...base, data: { event: event.event } });
+  } else if (!nowBlocked && wasBlocked) {
+    records.push({ type: "attention.cleared", ...base, data: { event: event.event } });
+  }
+  return records;
 }
 
 export function fxEnvironment(

@@ -42,11 +42,35 @@ The pinned native Codex voice agent paired with the Fx orchestrator agent throug
 
 _Avoid_: patched reference, Codex orchestrator, LiveKit-free contender.
 
+**Codpiece**
+
+The voice layer as a product: the voice sidecar, the orchestrator adapter contract with its backends, and the frontends that dial it. Any number of parts; the requirement is that a frontend can use the whole as one backend to control agents by voice.
+
+_Avoid_: the sidecar alone (that is the voice sidecar), voice app, Codex fork (that is the Codpiece workshop's product, not the layer).
+
 **Voice sidecar**
 
-The standalone Codpiece process that owns the Codex–Fx contender's private realtime voice session and narrow compatibility protocol while leaving all workspace work to Fx. It contains no Codex coding-agent runtime.
+The standalone Codex-derived process that owns the Codex–Fx contender's private realtime voice session and narrow compatibility protocol while leaving all workspace work to the orchestrator agent. It proxies SDP and sideband only; audio flows peer to peer between the frontend and the voice agent. It contains no Codex coding-agent runtime.
 
-_Avoid_: stripped App-server, backend agent, coding sidecar, extracted voice model.
+_Avoid_: stripped App-server, backend agent, coding sidecar, extracted voice model, audio path.
+
+**Orchestrator adapter**
+
+The contract every orchestrator backend implements for the voice layer: start and identity, admit (queued or steering, with a turn id), wait for a turn's outcome and final text, interrupt, lifecycle events (turn started and ended, attention raised and cleared, agent state), stop. `fx acp` is the backend of record; the PTY-launched work-control path is the reference adapter.
+
+_Avoid_: driver, plugin, orchestrator client, transport.
+
+**Backend**
+
+An orchestrator agent reached through an orchestrator adapter. Named by its adapter (`fx-acp`, `fx-work-control`).
+
+_Avoid_: agent (ambiguous with the voice agent), server, model.
+
+**Frontend**
+
+A program that dials the voice sidecar's realtime protocol and owns the audio path: microphone capture, playback, mute gates, and the WebRTC peer. The bare-bones TUI is the first one.
+
+_Avoid_: console (the archive's word for a larger system), client, surface.
 
 **Fx authority**
 
