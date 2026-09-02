@@ -770,7 +770,7 @@ export function loadSidecarBuildMetadata(
   return metadata;
 }
 
-function sidecarCommand(
+export function sidecarCommand(
   binaryPath: string,
 ): [string, "-c", "features.realtime_conversation=true", "--listen", "stdio://"] {
   return [binaryPath, "-c", "features.realtime_conversation=true", "--listen", "stdio://"];

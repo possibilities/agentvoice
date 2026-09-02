@@ -11,3 +11,4 @@ fixtures/**/audio/rendered.json
 !fixtures/compact-full-duplex/audio/rendered.json
 *.log
 .DS_Store
+build/native/

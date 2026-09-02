@@ -6,6 +6,8 @@
   "description": "Headless full-duplex evaluation harness for coding voice agents.",
   "scripts": {
     "render:fixture": "bun run src/tts-cli.ts",
+    "tui": "bun run src/tui/main.ts",
+    "native:build": "bun run scripts/build-native.ts",
     "build:codex-app-server": "scripts/build-codex-app-server.sh",
     "check:codex-patch": "scripts/build-codex-app-server.sh --check",
     "eval:codex": "bun run src/cli.ts run codex",
@@ -28,6 +30,7 @@
     "@livekit/agents-plugin-openai": "1.7.1",
     "@livekit/protocol": "1.50.4",
     "@livekit/rtc-node": "0.13.34",
+    "@opentui/core": "0.5.3",
     "livekit-server-sdk": "2.18.0",
     "opusscript": "0.1.1",
     "werift": "0.24.4",

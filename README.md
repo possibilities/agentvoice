@@ -72,6 +72,31 @@ Realtime API. The LiveKit contender therefore uses the strongest explicit
 public configuration tested here, `gpt-realtime-2.1` with `marin`. The coding
 layer is aligned on `gpt-5.6-terra` at medium reasoning effort.
 
+## Voice TUI
+
+The bare-bones frontend: a terminal screen that dials the Codpiece voice
+sidecar directly, owns the audio path, and routes the voice agent's
+delegations to an orchestrator backend through the orchestrator adapter.
+The microphone opens muted; hold Space to talk, or press `m` to toggle it.
+
+```bash
+bun run native:build                       # once per machine: the miniaudio duplex device
+bun run tui -- --voice-sidecar PATH        # PATH is the sidecar binary; metadata.json sits beside it
+bun run tui -- --voice-sidecar PATH --backend fx-work-control   # the PTY reference adapter
+```
+
+`--workspace` chooses where the orchestrator agent works (default: the
+current directory); `--model`, `--effort`, and `--voice` override the Codex
+reference defaults; `--mic`/`--speaker` pick device indexes; `--debug-log`
+writes the event journal on exit. Keys: `m` mic, `s` speaker, `Space` hold
+to talk, `r` redial, `q` quit. Holding `m` or `s` opens a muted channel for
+the hold only; a quick press toggles it.
+
+There is no acoustic echo cancellation yet — headphones are the honest
+default when the speaker is live (ADR 0005 and the board record the
+deferral). The sidecar proxies SDP and sideband only; audio flows peer to
+peer between this process and the voice agent.
+
 ## Compact full-duplex scenario
 
 The committed scenario packs four evaluator utterances into one conversation:
