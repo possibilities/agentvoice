@@ -107,13 +107,14 @@ export class VoiceSession {
     });
     try {
       const voices = await appServer.request("thread/realtime/listVoices", {});
+      // A synthetic voice thread: an identity for the realtime session, with
+      // no coding runtime behind it. The sidecar reads only these fields, so
+      // sending an approval policy or sandbox would imply an isolation it does
+      // not apply — its isolation comes from the launch profile instead.
       const thread = await appServer.request<Record<string, unknown>>("thread/start", {
         cwd: resolve(options.workspace),
-        approvalPolicy: "never",
-        sandbox: "danger-full-access",
         model: options.orchestratorModel,
         ephemeral: true,
-        config: { model_reasoning_effort: options.reasoningEffort },
       });
       const threadId = extractThreadId(thread);
       options.journal.record("app-server", "voice.thread.started", { threadId });
