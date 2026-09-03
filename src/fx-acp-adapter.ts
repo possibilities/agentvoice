@@ -10,6 +10,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import { z } from "zod";
 import { fxEnvironment } from "./fx-orchestrator.ts";
 import {
@@ -32,6 +33,9 @@ const MAX_LINE_BYTES = 8 * 1024 * 1024;
 const JSON_RPC_INVALID_REQUEST = -32600;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const STEER_METHOD = "_fx/session/steer";
+const SNAPSHOT_METHOD = "_fx/session/snapshot";
+const QUESTION_METHOD = "_fx/session/question";
+const LIFECYCLE_UPDATE = "_fx/lifecycle";
 
 const initializeResultSchema = z.object({
   protocolVersion: z.number(),
@@ -46,9 +50,47 @@ const sessionNewResultSchema = z.object({
   modes: z.object({ currentModeId: z.string() }).optional(),
 });
 const promptResultSchema = z.object({ stopReason: z.string() });
+const queueEntrySchema = z.looseObject({
+  turn_id: z.string(),
+  kind: z.enum(["queued", "steering"]),
+  text: z.string(),
+});
+const childSchema = z.looseObject({
+  name: z.string(),
+  kind: z.string(),
+  phase: z.string(),
+});
+const snapshotSchema = z.looseObject({
+  active_turn_id: z.string().nullable(),
+  queue_paused: z.boolean(),
+  queue: z.array(queueEntrySchema),
+  children: z.array(childSchema).optional(),
+});
 const steerResultSchema = z.object({
   turnId: z.string(),
   disposition: z.enum(["queued", "steering"]),
+  snapshot: snapshotSchema.optional(),
+});
+const lifecycleUpdateSchema = z.looseObject({
+  sessionUpdate: z.literal(LIFECYCLE_UPDATE),
+  event: z.string(),
+  sequence: z.number().int().positive(),
+  turn_id: z.string().nullable(),
+  agent_role: z.enum(["main", "subagent"]),
+  agent_name: z.string().nullable(),
+  agent_state: z.enum(["idle", "working", "blocked"]),
+  attention_kind: z.enum(["permission", "question", "route_recovery"]).nullable(),
+  outcome: z.enum(["completed", "interrupted", "failed", "paused"]).optional(),
+  provider_disposition: z.string().nullable().optional(),
+});
+const chunkUpdateSchema = z.looseObject({
+  turn_id: z.string().optional(),
+  content: z.looseObject({ type: z.string(), text: z.string() }),
+});
+const questionUpdateSchema = z.looseObject({
+  questionId: z.string(),
+  text: z.string(),
+  options: z.array(z.unknown()).optional(),
 });
 const permissionOptionSchema = z.object({
   optionId: z.string(),
@@ -73,6 +115,8 @@ const rpcErrorSchema = z.object({
 export type AcpPermissionOption = z.infer<typeof permissionOptionSchema>;
 export type AcpPermissionRequest = z.infer<typeof permissionRequestSchema>;
 export type AcpSessionUpdate = z.infer<typeof sessionUpdateSchema>;
+export type AcpSnapshot = z.infer<typeof snapshotSchema>;
+export type AcpQuestion = z.infer<typeof questionUpdateSchema>;
 export type AcpPermissionDecision =
   | { outcome: "selected"; optionId: string }
   | { outcome: "cancelled" };
@@ -97,8 +141,12 @@ export interface FxAcpAdapterOptions {
   /** Replaces the `fx acp …` command line; tests point this at a fake server. */
   launch?: { command: string; args: string[]; env?: Record<string, string> };
   requestTimeoutMs?: number;
+  /** Ask Fx to serve its credential broker on inherited descriptor 3. */
+  credentialBroker?: boolean;
   stderrLogPath?: string;
   onPermissionRequest?(request: AcpPermissionRequest): Promise<AcpPermissionDecision>;
+  /** Answers a question Fx raised; returning null leaves it unanswered. */
+  onQuestion?(question: AcpQuestion): Promise<string | null>;
   onUpdate?(update: AcpSessionUpdate): void;
 }
 
@@ -117,6 +165,14 @@ interface TurnWaiter {
 
 interface AcpTurn {
   turnId: string;
+  /** Fx's own turn id, bound when its `turn_started` arrives. */
+  fxTurnId: string | null;
+  /**
+   * A handle for text steered into somebody else's turn. It exists so the
+   * caller has something to await and is never a turn of its own, so it
+   * publishes no lifecycle.
+   */
+  steeringEntry: boolean;
   text: string;
   assistantText: string;
   result: OrchestratorTurnResult | null;
@@ -158,6 +214,7 @@ export class FxAcpAdapter implements OrchestratorAdapter {
   private readonly queue: AcpTurn[] = [];
   private child: ChildProcessWithoutNullStreams | null = null;
   private childExit: Promise<{ code: number | null; signal: NodeJS.Signals | null }> | null = null;
+  private credentialBrokerChannel: Duplex | null = null;
   private stderrLog: WriteStream | null = null;
   private stderrTail = "";
   private lineBuffer = "";
@@ -167,6 +224,15 @@ export class FxAcpAdapter implements OrchestratorAdapter {
   private activeTurn: AcpTurn | null = null;
   private pendingAttention = 0;
   private steering: "unknown" | "supported" | "unsupported" = "unknown";
+  /** True once Fx advertises `_fx.lifecycle`; its feed then owns turn boundaries. */
+  private lifecycleFeed = false;
+  private awaitingTurnStart: AcpTurn | null = null;
+  /**
+   * Fx publishes `turn_ended` before it answers the prompt, so the outcome is
+   * known before the session will accept another one. This stays true until
+   * the prompt itself settles, which is what actually frees the slot.
+   */
+  private promptOutstanding = false;
   private startPromise: Promise<OrchestratorIdentity> | null = null;
   private stopPromise: Promise<void> | null = null;
   private ready = false;
@@ -192,9 +258,15 @@ export class FxAcpAdapter implements OrchestratorAdapter {
           activeTurnId: steered.activeTurnId,
         };
       }
+    }
+    if (active || this.promptOutstanding) {
       const turn = this.createTurn(text);
       this.queue.push(turn);
-      return { delegationTurnId: turn.turnId, disposition: "queued", activeTurnId: active.turnId };
+      return {
+        delegationTurnId: turn.turnId,
+        disposition: "queued",
+        activeTurnId: active?.turnId ?? null,
+      };
     }
     const turn = this.createTurn(text);
     this.startTurn(turn);
@@ -234,6 +306,33 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     return this.lifecycle.subscribe(listener);
   }
 
+  /** Fx's own view of the active turn, its queue, and its children. */
+  async snapshot(): Promise<AcpSnapshot | null> {
+    this.assertRunning();
+    if (!this.lifecycleFeed && this.steering !== "supported") return null;
+    const result = await this.request(SNAPSHOT_METHOD, { sessionId: this.sessionId });
+    const parsed = snapshotSchema.safeParse(result);
+    return parsed.success ? parsed.data : null;
+  }
+
+  /**
+   * Transfers the sole endpoint of Fx's credential broker. The caller must
+   * keep it opaque and pass it to a schema-3 voice sidecar as descriptor 3.
+   */
+  acquireCredentialBrokerChannel(): Duplex {
+    if (!this.ready || this.stopped) {
+      throw new Error("Fx credential broker is unavailable before Fx startup");
+    }
+    if (!this.options.credentialBroker) {
+      throw new Error("Fx credential broker was not enabled for this launch");
+    }
+    const channel = this.credentialBrokerChannel;
+    if (!channel) throw new Error("Fx credential broker channel was already acquired");
+    this.credentialBrokerChannel = null;
+    channel.pause();
+    return channel;
+  }
+
   /** Every lifecycle event so far, for evidence and tests. */
   lifecycleSnapshot() {
     return this.lifecycle.snapshot();
@@ -245,9 +344,19 @@ export class FxAcpAdapter implements OrchestratorAdapter {
   }
 
   private async startOnce(): Promise<OrchestratorIdentity> {
+    // The credential descriptor is a global flag, so it precedes the
+    // subcommand; `fx acp --codex-credential-fd` is not valid grammar.
+    const brokerArgs = this.options.credentialBroker ? ["--codex-credential-fd", "3"] : [];
     const launch = this.options.launch ?? {
       command: this.options.fxPath ?? "fx",
-      args: ["acp", "--model", this.options.model, "--effort", this.options.reasoningEffort],
+      args: [
+        ...brokerArgs,
+        "acp",
+        "--model",
+        this.options.model,
+        "--effort",
+        this.options.reasoningEffort,
+      ],
     };
     const environment = fxEnvironment({
       model: this.options.model,
@@ -257,7 +366,9 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     const child = spawn(launch.command, launch.args, {
       cwd: resolve(this.options.workspace),
       env: environment,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: this.options.credentialBroker
+        ? ["pipe", "pipe", "pipe", "pipe"]
+        : ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
     this.child = child;
@@ -267,6 +378,14 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     });
     if (this.options.stderrLogPath) {
       this.stderrLog = createWriteStream(this.options.stderrLogPath, { flags: "wx", mode: 0o600 });
+    }
+    if (this.options.credentialBroker) {
+      const channel = child.stdio[3];
+      if (!isDuplex(channel)) {
+        throw new Error("Fx did not expose a parent Duplex for credential descriptor 3");
+      }
+      channel.pause();
+      this.credentialBrokerChannel = channel;
     }
     child.stdout.on("data", (chunk: Buffer) => this.consume(chunk));
     child.stderr.on("data", (chunk: Buffer) => {
@@ -294,7 +413,12 @@ export class FxAcpAdapter implements OrchestratorAdapter {
         );
       }
       const extension = initialized.agentCapabilities?.["_fx"];
-      if (isRecord(extension) && extension["steer"] === true) this.markSteering("supported");
+      if (isRecord(extension)) {
+        if (extension["steer"] === true) this.markSteering("supported");
+        if (typeof extension["lifecycle"] === "number" && extension["lifecycle"] >= 1) {
+          this.lifecycleFeed = true;
+        }
+      }
 
       const session = sessionNewResultSchema.parse(
         await this.request("session/new", {
@@ -374,6 +498,9 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     // Fx may leave the real server running past its launcher's exit; the
     // group is ours, so sweep it regardless of how the direct child ended.
     if (child) await terminateProcessGroup(child);
+    this.credentialBrokerChannel?.destroy();
+    this.credentialBrokerChannel = null;
+    this.promptOutstanding = false;
     this.failEverything(new Error("Fx ACP adapter stopped"));
     this.stderrLog?.end();
   }
@@ -408,9 +535,11 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     if (!this.ready || this.stopped) throw new Error("Fx ACP adapter is not running");
   }
 
-  private createTurn(text: string): AcpTurn {
+  private createTurn(text: string, steeringEntry = false): AcpTurn {
     const turn: AcpTurn = {
       turnId: `acp-turn-${++this.turnSequence}`,
+      fxTurnId: null,
+      steeringEntry,
       text,
       assistantText: "",
       result: null,
@@ -422,31 +551,43 @@ export class FxAcpAdapter implements OrchestratorAdapter {
 
   private startTurn(turn: AcpTurn): void {
     this.activeTurn = turn;
-    this.lifecycle.emit({
-      type: "turn.started",
-      turnId: turn.turnId,
-      agentState: "working",
-      attentionKind: null,
-      data: { text: turn.text },
-    });
+    this.promptOutstanding = true;
+    if (this.lifecycleFeed) this.awaitingTurnStart = turn;
+    else {
+      this.lifecycle.emit({
+        type: "turn.started",
+        turnId: turn.turnId,
+        agentState: "working",
+        attentionKind: null,
+        data: { text: turn.text },
+      });
+    }
     this.request(
       "session/prompt",
       { sessionId: this.sessionId, prompt: [{ type: "text", text: turn.text }] },
       null,
     ).then(
       (result) => {
-        const parsed = promptResultSchema.safeParse(result);
-        if (!parsed.success) {
-          this.settleTurn(turn, "failed", null, "Fx ACP prompt response had no stopReason");
-          return;
+        // With the lifecycle feed present, `turn_ended` is authoritative and
+        // has already settled this turn with Fx's own outcome.
+        if (!turn.result) {
+          const parsed = promptResultSchema.safeParse(result);
+          if (parsed.success) {
+            this.settleTurn(
+              turn,
+              outcomeFromStopReason(parsed.data.stopReason),
+              parsed.data.stopReason,
+            );
+          } else {
+            this.settleTurn(turn, "failed", null, "Fx ACP prompt response had no stopReason");
+          }
         }
-        this.settleTurn(
-          turn,
-          outcomeFromStopReason(parsed.data.stopReason),
-          parsed.data.stopReason,
-        );
+        this.promptSettled();
       },
-      (error: unknown) => this.settleTurn(turn, "failed", null, errorMessage(error)),
+      (error: unknown) => {
+        if (!turn.result) this.settleTurn(turn, "failed", null, errorMessage(error));
+        this.promptSettled();
+      },
     );
   }
 
@@ -455,27 +596,35 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     outcome: OrchestratorTurnOutcome,
     providerDisposition: string | null,
     failure?: string,
+    fromLifecycle = false,
   ): void {
     if (turn.result) return;
     const assistantText =
       outcome === "failed" && failure && !turn.assistantText ? failure : turn.assistantText;
     turn.result = { turnId: turn.turnId, outcome, providerDisposition, assistantText };
     if (this.activeTurn === turn) this.activeTurn = null;
-    this.lifecycle.emit({
-      type: "turn.ended",
-      turnId: turn.turnId,
-      agentState: this.agentState(),
-      attentionKind: null,
-      data: { outcome, providerDisposition, ...(failure ? { failure } : {}) },
-    });
+    if (this.awaitingTurnStart === turn) this.awaitingTurnStart = null;
+    if (!fromLifecycle && !turn.steeringEntry) {
+      this.lifecycle.emit({
+        type: "turn.ended",
+        turnId: turn.turnId,
+        agentState: this.agentState(),
+        attentionKind: null,
+        data: { outcome, providerDisposition, ...(failure ? { failure } : {}) },
+      });
+    }
     for (const waiter of turn.waiters.splice(0)) {
       clearTimeout(waiter.timer);
       waiter.resolve(turn.result);
     }
-    if (!this.activeTurn && !this.stopped) {
-      const next = this.queue.shift();
-      if (next) this.startTurn(next);
-    }
+  }
+
+  /** The prompt has been answered, so Fx will accept the next one. */
+  private promptSettled(): void {
+    this.promptOutstanding = false;
+    if (this.activeTurn || this.stopped) return;
+    const next = this.queue.shift();
+    if (next) this.startTurn(next);
   }
 
   private async trySteer(
@@ -488,7 +637,7 @@ export class FxAcpAdapter implements OrchestratorAdapter {
       );
       this.markSteering("supported");
       if (result.disposition !== "steering") return null;
-      const entry = this.createTurn(text);
+      const entry = this.createTurn(text, true);
       const active = this.activeTurn;
       if (active) {
         active.waiters.push({
@@ -610,13 +759,128 @@ export class FxAcpAdapter implements OrchestratorAdapter {
     if (!parsed.success || parsed.data.sessionId !== this.sessionId) return;
     this.options.onUpdate?.(parsed.data);
     const update = parsed.data.update;
-    if (update["sessionUpdate"] !== "agent_message_chunk") return;
-    const content = update["content"];
-    if (!isRecord(content) || content["type"] !== "text" || typeof content["text"] !== "string") {
+    switch (update["sessionUpdate"]) {
+      case LIFECYCLE_UPDATE:
+        this.handleLifecycleUpdate(update);
+        return;
+      case "agent_message_chunk":
+        this.appendAssistantText(update);
+        return;
+      case "_fx/question": {
+        const question = questionUpdateSchema.safeParse(update);
+        if (question.success) void this.answerQuestion(question.data);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /** Routes text by Fx's turn id when it is present, so a steered turn keeps its own. */
+  private appendAssistantText(update: Record<string, unknown>): void {
+    const parsed = chunkUpdateSchema.safeParse(update);
+    if (!parsed.success || parsed.data.content.type !== "text") return;
+    const fxTurnId = parsed.data.turn_id;
+    // Fall back to the active turn: an id we have not bound yet must never
+    // cost the caller the text.
+    const turn = (fxTurnId ? this.turnByFxId(fxTurnId) : null) ?? this.activeTurn;
+    if (turn) turn.assistantText += parsed.data.content.text;
+  }
+
+  private handleLifecycleUpdate(update: Record<string, unknown>): void {
+    const parsed = lifecycleUpdateSchema.safeParse(update);
+    if (!parsed.success) return;
+    const event = parsed.data;
+    const base = {
+      turnId: event.turn_id,
+      agentState: event.agent_state,
+      attentionKind: event.attention_kind,
+    };
+    if (event.agent_role !== "main") {
+      this.lifecycle.emit({
+        type: "attention.raised",
+        ...base,
+        data: { event: event.event, agentName: event.agent_name, child: true },
+      });
       return;
     }
-    const active = this.activeTurn;
-    if (active) active.assistantText += content["text"];
+    switch (event.event) {
+      case "fx_started":
+        return;
+      case "turn_started": {
+        const turn = this.awaitingTurnStart;
+        this.awaitingTurnStart = null;
+        if (turn && event.turn_id) turn.fxTurnId = event.turn_id;
+        this.lifecycle.emit({
+          type: "turn.started",
+          ...base,
+          data: { ...(turn ? { text: turn.text } : {}) },
+        });
+        return;
+      }
+      case "turn_ended": {
+        this.lifecycle.emit({
+          type: "turn.ended",
+          ...base,
+          data: {
+            outcome: event.outcome ?? "completed",
+            providerDisposition: event.provider_disposition ?? null,
+          },
+        });
+        const turn = event.turn_id ? this.turnByFxId(event.turn_id) : this.activeTurn;
+        if (turn) {
+          this.settleTurn(
+            turn,
+            event.outcome ?? "completed",
+            event.provider_disposition ?? null,
+            undefined,
+            true,
+          );
+        }
+        return;
+      }
+      case "attention_raised":
+        this.pendingAttention += 1;
+        this.lifecycle.emit({
+          type: "attention.raised",
+          ...base,
+          data: { agentName: event.agent_name },
+        });
+        return;
+      case "attention_cleared":
+        if (this.pendingAttention > 0) this.pendingAttention -= 1;
+        this.lifecycle.emit({
+          type: "attention.cleared",
+          ...base,
+          data: { agentName: event.agent_name },
+        });
+        return;
+      case "stop":
+        this.lifecycle.emit({ type: "orchestrator.stopped", ...base, data: {} });
+        return;
+      default:
+        return;
+    }
+  }
+
+  private async answerQuestion(question: AcpQuestion): Promise<void> {
+    const answer = await (this.options.onQuestion?.(question) ?? Promise.resolve(null));
+    if (answer === null) return;
+    await this.request(QUESTION_METHOD, {
+      sessionId: this.sessionId,
+      questionId: question.questionId,
+      answer,
+    }).catch((error: unknown) => {
+      this.stderrTail = `${this.stderrTail}
+question answer failed: ${errorMessage(error)}`.slice(-4096);
+    });
+  }
+
+  private turnByFxId(fxTurnId: string): AcpTurn | null {
+    for (const turn of this.turns.values()) {
+      if (turn.fxTurnId === fxTurnId && !turn.result) return turn;
+    }
+    return null;
   }
 
   private async handleServerRequest(
@@ -707,6 +971,15 @@ function signalProcessGroup(child: ChildProcessWithoutNullStreams, signal: NodeJ
       // Already gone.
     }
   }
+}
+
+function isDuplex(value: unknown): value is Duplex {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Duplex).write === "function" &&
+    typeof (value as Duplex).pause === "function"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

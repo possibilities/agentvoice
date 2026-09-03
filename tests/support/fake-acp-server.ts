@@ -7,14 +7,22 @@
  *   fail                answer the prompt with a JSON-RPC error
  *   exit                terminate the process mid-turn
  * FAKE_ACP_STEER=1 advertises and serves `_fx/session/steer`.
+ * FAKE_ACP_LIFECYCLE=1 advertises `_fx.lifecycle` and publishes the feed,
+ * ending each turn on the feed BEFORE answering the prompt — the order the
+ * real Fx uses, and the one that races a client into "Session is busy".
  */
 
 const steerSupported = process.env["FAKE_ACP_STEER"] === "1";
+const lifecycleSupported = process.env["FAKE_ACP_LIFECYCLE"] === "1";
+const PROMPT_ANSWER_DELAY_MS = 60;
+let lifecycleSequence = 0;
+let fxTurnSequence = 0;
 const SESSION_ID = "fake-session";
 
 interface ActiveTurn {
   requestId: number;
   timer: ReturnType<typeof setTimeout> | null;
+  fxTurnId: string;
 }
 
 let mode = "ask";
@@ -42,7 +50,31 @@ function chunk(text: string): void {
     method: "session/update",
     params: {
       sessionId: SESSION_ID,
-      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        ...(lifecycleSupported && activeTurn ? { turn_id: activeTurn.fxTurnId } : {}),
+        content: { type: "text", text },
+      },
+    },
+  });
+}
+
+function lifecycle(event: string, fields: Record<string, unknown>): void {
+  if (!lifecycleSupported) return;
+  write({
+    jsonrpc: "2.0",
+    method: "session/update",
+    params: {
+      sessionId: SESSION_ID,
+      update: {
+        sessionUpdate: "_fx/lifecycle",
+        event,
+        sequence: ++lifecycleSequence,
+        agent_role: "main",
+        agent_name: null,
+        attention_kind: null,
+        ...fields,
+      },
     },
   });
 }
@@ -51,7 +83,20 @@ function endTurn(stopReason: string): void {
   const turn = activeTurn;
   if (!turn) return;
   activeTurn = null;
-  respond(turn.requestId, { stopReason });
+  const outcome = stopReason === "cancelled" ? "interrupted" : "completed";
+  lifecycle("turn_ended", {
+    turn_id: turn.fxTurnId,
+    agent_state: "idle",
+    outcome,
+    provider_disposition: null,
+  });
+  // Answer late, so a client that treats `turn_ended` as the free slot
+  // sends its next prompt while this one is still open.
+  if (lifecycleSupported) {
+    setTimeout(() => respond(turn.requestId, { stopReason }), PROMPT_ANSWER_DELAY_MS);
+  } else {
+    respond(turn.requestId, { stopReason });
+  }
 }
 
 function handlePrompt(id: number, text: string): void {
@@ -59,7 +104,8 @@ function handlePrompt(id: number, text: string): void {
     fail(id, -32603, "Session is busy");
     return;
   }
-  activeTurn = { requestId: id, timer: null };
+  activeTurn = { requestId: id, timer: null, fxTurnId: String(++fxTurnSequence) };
+  lifecycle("turn_started", { turn_id: activeTurn.fxTurnId, agent_state: "working" });
   if (text.startsWith("say:")) {
     activeTurn.timer = setTimeout(() => {
       chunk(text.slice(4));
@@ -129,10 +175,19 @@ function handle(message: Record<string, unknown>): void {
 
   switch (method) {
     case "initialize":
+      lifecycleSequence = 0;
       respond(id, {
         protocolVersion: 1,
         agentInfo: { name: "fake-fx", version: "0.0.0-fake" },
-        agentCapabilities: steerSupported ? { _fx: { steer: true } } : {},
+        agentCapabilities:
+          steerSupported || lifecycleSupported
+            ? {
+                _fx: {
+                  ...(steerSupported ? { steer: true, snapshot: true } : {}),
+                  ...(lifecycleSupported ? { lifecycle: 1 } : {}),
+                },
+              }
+            : {},
       });
       return;
     case "session/new":

@@ -164,6 +164,24 @@ describe("Fx ACP adapter", () => {
     expect([one.assistantText, two.assistantText]).toEqual(["one", "two"]);
   });
 
+  test("publishes no lifecycle for a steering entry, which is not a turn", async () => {
+    const instance = adapter({}, { FAKE_ACP_STEER: "1", FAKE_ACP_LIFECYCLE: "1" });
+    await instance.start();
+    expect(instance.capabilities.steering).toBe(true);
+    const first = await instance.admit("slow:250:base");
+    const steered = await instance.admit("tighten");
+    expect(steered.disposition).toBe("steering");
+    await instance.waitForTurn(first.delegationTurnId, TURN_TIMEOUT_MS);
+    const entry = await instance.waitForTurn(steered.delegationTurnId, TURN_TIMEOUT_MS);
+    expect(entry.outcome).toBe("completed");
+    // One real turn: started and ended once, with no orphan end for the entry.
+    expect(types(instance.lifecycleSnapshot())).toEqual([
+      "orchestrator.started",
+      "turn.started",
+      "turn.ended",
+    ]);
+  });
+
   test("steers into the active turn when the server serves _fx/session/steer", async () => {
     const instance = adapter({}, { FAKE_ACP_STEER: "1" });
     await instance.start();
@@ -179,6 +197,50 @@ describe("Fx ACP adapter", () => {
     expect(result.assistantText).toBe(" +steer:tightenbase");
     const entry = await instance.waitForTurn(steered.delegationTurnId, TURN_TIMEOUT_MS);
     expect(entry.outcome).toBe("completed");
+  });
+
+  test("takes turn boundaries and outcomes from the lifecycle feed", async () => {
+    const instance = adapter({}, { FAKE_ACP_LIFECYCLE: "1" });
+    await instance.start();
+    const admission = await instance.admit("say:pong");
+    const result = await instance.waitForTurn(admission.delegationTurnId, TURN_TIMEOUT_MS);
+    expect(result).toEqual({
+      turnId: "acp-turn-1",
+      outcome: "completed",
+      providerDisposition: null,
+      assistantText: "pong",
+    });
+    const events = instance.lifecycleSnapshot();
+    expect(types(events)).toEqual(["orchestrator.started", "turn.started", "turn.ended"]);
+    // Fx's own turn ids reach the caller once the feed is publishing them.
+    expect(events[1]?.turnId).toBe("1");
+    expect(events[2]).toMatchObject({ turnId: "1", agentState: "idle" });
+    expect(events[2]?.data["outcome"]).toBe("completed");
+  });
+
+  test("waits for the prompt answer before starting queued work", async () => {
+    // The feed ends a turn before the prompt is answered, so a client that
+    // frees its slot on `turn_ended` races Fx into "Session is busy".
+    const instance = adapter({}, { FAKE_ACP_LIFECYCLE: "1" });
+    await instance.start();
+    const first = await instance.admit("slow:150:one");
+    await instance.waitForTurn(first.delegationTurnId, TURN_TIMEOUT_MS);
+    const second = await instance.admit("say:two");
+    const result = await instance.waitForTurn(second.delegationTurnId, TURN_TIMEOUT_MS);
+    expect(result.outcome).toBe("completed");
+    expect(result.assistantText).toBe("two");
+  });
+
+  test("reports a cancelled turn as interrupted from the feed", async () => {
+    const instance = adapter({}, { FAKE_ACP_LIFECYCLE: "1" });
+    await instance.start();
+    const admission = await instance.admit("slow:10000:never");
+    await instance.interrupt();
+    const result = await instance.waitForTurn(admission.delegationTurnId, TURN_TIMEOUT_MS);
+    expect(result.outcome).toBe("interrupted");
+    const ended = instance.lifecycleSnapshot().filter((event) => event.type === "turn.ended");
+    expect(ended).toHaveLength(1);
+    expect(ended[0]?.data["outcome"]).toBe("interrupted");
   });
 
   test("interrupts the active turn", async () => {

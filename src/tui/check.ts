@@ -72,6 +72,7 @@ async function main(): Promise<void> {
           model: CODEX_REFERENCE.orchestratorModel,
           reasoningEffort: CODEX_REFERENCE.reasoningEffort,
           ...(typeof values.fx === "string" ? { fxPath: values.fx } : {}),
+          ...(sidecar.requiresFxCredentialAuthority ? { credentialBroker: true } : {}),
         })
       : new FxHeadlessOrchestrator({
           workspace,
@@ -105,7 +106,8 @@ async function main(): Promise<void> {
       reasoningEffort: CODEX_REFERENCE.reasoningEffort,
       includeStartupContext: CODEX_REFERENCE.includeStartupContext,
       journal,
-      ...(sidecar.requiresFxCredentialAuthority && adapter instanceof FxHeadlessOrchestrator
+      ...(sidecar.requiresFxCredentialAuthority &&
+      (adapter instanceof FxAcpAdapter || adapter instanceof FxHeadlessOrchestrator)
         ? { credentialAuthority: adapter.acquireCredentialBrokerChannel() }
         : {}),
       onError: (message) => record("sidecar error", false, message),
@@ -174,6 +176,12 @@ async function main(): Promise<void> {
 
     await transport.connect();
     record("webrtc peer", true, "connected");
+    const steering = adapter.capabilities.steering;
+    record(
+      "in-flight steering",
+      steering,
+      steering ? "advertised by the backend" : "not advertised; a second request queues",
+    );
 
     // The private voice model is deliberately absent from the wire, so this
     // reports what the session announced and never fails on it.

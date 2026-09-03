@@ -10,6 +10,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import type { Duplex } from "node:stream";
 import { parseArgs } from "node:util";
 import { CodexFxBridge } from "../codex-fx-bridge.ts";
 import { EventJournal } from "../events.ts";
@@ -130,12 +131,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const sidecar = describeSidecar(options.sidecarPath);
-  if (sidecar.requiresFxCredentialAuthority && options.backend !== "fx-work-control") {
-    console.error(
-      "this sidecar takes its authority from Fx over inherited descriptor 3, which only the fx-work-control backend provides today; pass --backend fx-work-control",
-    );
-    process.exit(1);
-  }
 
   const fxPath = resolveFx(options.fxPath);
 
@@ -157,6 +152,7 @@ async function main(): Promise<void> {
           model: options.model,
           reasoningEffort: options.reasoningEffort,
           fxPath,
+          ...(sidecar.requiresFxCredentialAuthority ? { credentialBroker: true } : {}),
         })
       : new FxHeadlessOrchestrator({
           workspace: options.workspace,
@@ -214,8 +210,8 @@ async function main(): Promise<void> {
       reasoningEffort: options.reasoningEffort,
       includeStartupContext: options.startupContext,
       journal,
-      ...(sidecar.requiresFxCredentialAuthority && adapter instanceof FxHeadlessOrchestrator
-        ? { credentialAuthority: adapter.acquireCredentialBrokerChannel() }
+      ...(sidecar.requiresFxCredentialAuthority
+        ? { credentialAuthority: acquireCredentialChannel(adapter) }
         : {}),
       onNotification(method, params) {
         if (bridge) bridge.handleNotification(method, params);
@@ -345,6 +341,14 @@ async function main(): Promise<void> {
   say("dialing the voice agent…");
   void transport.connect().catch((error) => say(`voice · ${message(error)}`));
   await app.done;
+}
+
+/** Both backends serve Fx's credential broker; the sidecar only sees descriptor 3. */
+function acquireCredentialChannel(adapter: OrchestratorAdapter): Duplex {
+  if (adapter instanceof FxAcpAdapter || adapter instanceof FxHeadlessOrchestrator) {
+    return adapter.acquireCredentialBrokerChannel();
+  }
+  throw new Error(`backend ${adapter.backend} cannot serve Fx credential authority`);
 }
 
 /** Runs one startup step; on failure, unwinds every earlier step before rethrowing. */
