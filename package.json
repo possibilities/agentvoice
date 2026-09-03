@@ -6,6 +6,7 @@
   "description": "Headless full-duplex evaluation harness for coding voice agents.",
   "scripts": {
     "tui": "bun run src/tui/main.ts",
+    "check": "bun run src/tui/check.ts",
     "native:build": "bun run scripts/build-native.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

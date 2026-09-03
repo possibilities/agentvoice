@@ -48,6 +48,24 @@ PTY-launched reference adapter instead of ACP; `--model`, `--effort`, and
 `--voice` override the defaults; `--mic`/`--speaker` choose device indexes;
 `--debug-log PATH` writes the event journal on exit.
 
+## Check
+
+Before a first run, or after anything in the stack changes, prove everything
+except your own microphone and speaker:
+
+```bash
+bun run check -- --voice-sidecar PATH --workspace DIR
+```
+
+It starts the real backend and sidecar, connects the WebRTC peer, and makes
+the voice agent speak one sentence through the same handoff path the
+orchestrator uses, reporting the audio it measured. It never opens an audio
+device, so it cannot raise a permission dialog — the device is the one link
+only a person can verify. Two things it deliberately does not assert: the
+private voice model is absent from the wire, so it is reported rather than
+checked; and downlink RTP flows while the agent is silent, so audibility is
+measured separately from packet flow.
+
 ## Layout
 
 - `src/tui/` — the frontend: `main.ts` assembles everything; `app.ts` draws;

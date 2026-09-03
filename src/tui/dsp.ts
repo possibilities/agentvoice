@@ -17,6 +17,9 @@ export function rmsDbS16(buffer: Buffer): number {
   return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
 }
 
+/** Above this peak, decoded audio is speech rather than a silent carrier. */
+export const AUDIBLE_PEAK_DBFS = -50;
+
 /** Map dBFS to a 0..1 meter level over a floor (default -60 dB). */
 export function levelFromDb(db: number, floorDb = -60): number {
   if (!Number.isFinite(db)) return 0;
