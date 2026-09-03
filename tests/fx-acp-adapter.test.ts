@@ -150,6 +150,20 @@ describe("Fx ACP adapter", () => {
     ]);
   });
 
+  test("treats an invalid-request answer to the steer probe as unsupported", async () => {
+    const instance = adapter({}, { FAKE_ACP_UNKNOWN_CODE: "-32600" });
+    await instance.start();
+    const first = await instance.admit("slow:300:one");
+    const second = await instance.admit("say:two");
+    expect(second.disposition).toBe("queued");
+    expect(instance.capabilities.steering).toBe(false);
+    const [one, two] = await Promise.all([
+      instance.waitForTurn(first.delegationTurnId, TURN_TIMEOUT_MS),
+      instance.waitForTurn(second.delegationTurnId, TURN_TIMEOUT_MS),
+    ]);
+    expect([one.assistantText, two.assistantText]).toEqual(["one", "two"]);
+  });
+
   test("steers into the active turn when the server serves _fx/session/steer", async () => {
     const instance = adapter({}, { FAKE_ACP_STEER: "1" });
     await instance.start();

@@ -164,7 +164,12 @@ function handle(message: Record<string, unknown>): void {
     }
     case "_fx/session/steer": {
       if (!steerSupported) {
-        fail(id, -32601, "Method not found");
+        // Newer fx answers unknown methods with -32600 rather than -32601.
+        fail(
+          id,
+          process.env["FAKE_ACP_UNKNOWN_CODE"] === "-32600" ? -32600 : -32601,
+          "Invalid request",
+        );
         return;
       }
       if (activeTurn) {

@@ -29,6 +29,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const TERMINATE_GRACE_MS = 5_000;
 const GROUP_TERMINATE_GRACE_MS = 2_000;
 const MAX_LINE_BYTES = 8 * 1024 * 1024;
+const JSON_RPC_INVALID_REQUEST = -32600;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const STEER_METHOD = "_fx/session/steer";
 
@@ -499,7 +500,12 @@ export class FxAcpAdapter implements OrchestratorAdapter {
       }
       return { delegationTurnId: entry.turnId, activeTurnId: result.turnId };
     } catch (error) {
-      if (error instanceof FxAcpError && error.code === JSON_RPC_METHOD_NOT_FOUND) {
+      // Fx answers an unknown method with either code depending on version;
+      // both mean "no steering here", never a failed admission.
+      if (
+        error instanceof FxAcpError &&
+        (error.code === JSON_RPC_METHOD_NOT_FOUND || error.code === JSON_RPC_INVALID_REQUEST)
+      ) {
         this.markSteering("unsupported");
         return null;
       }
