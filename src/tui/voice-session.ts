@@ -11,10 +11,14 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import { AppServerClient, type AppServerExecutionProfile } from "../app-server.ts";
-import { sidecarCommand } from "../codex-fx-runner.ts";
 import type { EventJournal } from "../events.ts";
 
 const CLIENT_VERSION = "0.1.0";
+
+/** The sidecar's stdio launch: the realtime feature on, JSON-RPC over stdin/stdout. */
+export function sidecarCommand(binaryPath: string): string[] {
+  return [binaryPath, "-c", "features.realtime_conversation=true", "--listen", "stdio://"];
+}
 const START_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 15_000;
 

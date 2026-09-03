@@ -24,24 +24,6 @@ The path that returns orchestrator-agent progress or results to the voice agent 
 
 _Avoid_: callback, relay.
 
-**Reference contender**
-
-The pinned Codex App-server voice stack used as the product-quality baseline for every comparison run.
-
-_Avoid_: control agent, old agent.
-
-**LiveKit contender**
-
-The LiveKit Agents voice agent connected to the Fx orchestrator agent. LiveKit hosts the realtime conversation and media path; Fx performs workspace work.
-
-_Avoid_: LiveKit orchestrator, Fx voice model.
-
-**Codex–Fx contender**
-
-The pinned native Codex voice agent paired with the Fx orchestrator agent through client-managed delegations and handoffs. Its standalone App-server is a voice sidecar only; it must start zero Codex coding turns.
-
-_Avoid_: patched reference, Codex orchestrator, LiveKit-free contender.
-
 **Codpiece**
 
 The voice layer as a product: the voice sidecar, the orchestrator adapter contract with its backends, and the frontends that dial it. Any number of parts; the requirement is that a frontend can use the whole as one backend to control agents by voice.
@@ -50,7 +32,7 @@ _Avoid_: the sidecar alone (that is the voice sidecar), voice app, Codex fork (t
 
 **Voice sidecar**
 
-The standalone Codex-derived process that owns the Codex–Fx contender's private realtime voice session and narrow compatibility protocol while leaving all workspace work to the orchestrator agent. It proxies SDP and sideband only; audio flows peer to peer between the frontend and the voice agent. It contains no Codex coding-agent runtime.
+The standalone Codex-derived process that owns the private realtime voice session and its narrow compatibility protocol while leaving all workspace work to the orchestrator agent. It proxies SDP and sideband only; audio flows peer to peer between the frontend and the voice agent. It contains no Codex coding-agent runtime.
 
 _Avoid_: stripped App-server, backend agent, coding sidecar, extracted voice model, audio path.
 
@@ -101,21 +83,3 @@ _Avoid_: blocking tool call, fire-and-forget task.
 A delegation admitted into the orchestrator agent's currently active turn. Cancelling work and starting a later prompt is not in-flight steering.
 
 _Avoid_: cancel-and-follow-up, queued correction.
-
-**Full-duplex overlap**
-
-An interval in which evaluator speech and audible voice-agent output are both active. Mere ability to interrupt between spoken responses does not establish full-duplex overlap.
-
-_Avoid_: multi-turn conversation, sequential interruption.
-
-**Pairwise audio judge**
-
-The identity-blind, order-counterbalanced evaluator that compares two completed runs using deterministic evidence plus their isolated-output and conversation recordings.
-
-_Avoid_: audio analyzer, voice scorer.
-
-**Listening bundle**
-
-The hash-bound, full-length MP3 copies prepared for the pairwise audio judge while the original PCM recordings remain the signal-analysis authority.
-
-_Avoid_: clips, compressed evidence.
