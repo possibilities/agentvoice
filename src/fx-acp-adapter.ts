@@ -27,6 +27,7 @@ import {
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const TERMINATE_GRACE_MS = 5_000;
+const GROUP_TERMINATE_GRACE_MS = 2_000;
 const MAX_LINE_BYTES = 8 * 1024 * 1024;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const STEER_METHOD = "_fx/session/steer";
@@ -369,6 +370,9 @@ export class FxAcpAdapter implements OrchestratorAdapter {
         }
       }
     }
+    // Fx may leave the real server running past its launcher's exit; the
+    // group is ours, so sweep it regardless of how the direct child ended.
+    if (child) await terminateProcessGroup(child);
     this.failEverything(new Error("Fx ACP adapter stopped"));
     this.stderrLog?.end();
   }
@@ -666,6 +670,23 @@ export class FxAcpAdapter implements OrchestratorAdapter {
       : { jsonrpc: "2.0", id, result: result ?? null };
     this.child?.stdin.write(`${JSON.stringify(payload)}\n`, () => {});
   }
+}
+
+async function terminateProcessGroup(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (!child.pid || process.platform === "win32") return;
+  const alive = () => {
+    try {
+      process.kill(-child.pid!, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!alive()) return;
+  signalProcessGroup(child, "SIGTERM");
+  const deadline = Date.now() + GROUP_TERMINATE_GRACE_MS;
+  while (alive() && Date.now() < deadline) await Bun.sleep(50);
+  if (alive()) signalProcessGroup(child, "SIGKILL");
 }
 
 function signalProcessGroup(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {

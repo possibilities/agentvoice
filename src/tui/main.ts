@@ -7,7 +7,8 @@
  *   bun run tui -- --voice-sidecar PATH [--workspace DIR] [--backend fx-acp]
  */
 
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CodexFxBridge } from "../codex-fx-bridge.ts";
@@ -136,6 +137,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const fxPath = resolveFx(options.fxPath);
+
   const journal = new EventJournal();
   const feed: string[] = [];
   const say = (line: string): void => {
@@ -153,13 +156,13 @@ async function main(): Promise<void> {
           workspace: options.workspace,
           model: options.model,
           reasoningEffort: options.reasoningEffort,
-          ...(options.fxPath ? { fxPath: options.fxPath } : {}),
+          fxPath,
         })
       : new FxHeadlessOrchestrator({
           workspace: options.workspace,
           model: options.model,
           reasoningEffort: options.reasoningEffort,
-          ...(options.fxPath ? { fxPath: options.fxPath } : {}),
+          fxPath,
           ...(sidecar.requiresFxCredentialAuthority
             ? { credentialBroker: { proofMode: "none" as const } }
             : {}),
@@ -194,6 +197,7 @@ async function main(): Promise<void> {
         break;
     }
   });
+  const startupCleanups: Array<() => Promise<unknown>> = [() => adapter.stop()];
   const identity = await adapter.start();
   const backendName = `${identity.backend} · ${identity.model}/${identity.reasoningEffort}`;
 
@@ -201,24 +205,27 @@ async function main(): Promise<void> {
   let bridge: CodexFxBridge | null = null;
   const earlyNotifications: [string, Record<string, unknown>][] = [];
   let transport: VoiceTransport | null = null;
-  const session = await VoiceSession.start({
-    sidecarPath: sidecar.binaryPath,
-    workspace: options.workspace,
-    voice: options.voice,
-    orchestratorModel: options.model,
-    reasoningEffort: options.reasoningEffort,
-    includeStartupContext: options.startupContext,
-    journal,
-    ...(sidecar.requiresFxCredentialAuthority && adapter instanceof FxHeadlessOrchestrator
-      ? { credentialAuthority: adapter.acquireCredentialBrokerChannel() }
-      : {}),
-    onNotification(method, params) {
-      if (bridge) bridge.handleNotification(method, params);
-      else earlyNotifications.push([method, params]);
-    },
-    onClosed: (reason) => transport?.handleClosed(reason),
-    onError: (message) => say(`sidecar · ${message}`),
-  });
+  const session = await startupStep(startupCleanups, () =>
+    VoiceSession.start({
+      sidecarPath: sidecar.binaryPath,
+      workspace: options.workspace,
+      voice: options.voice,
+      orchestratorModel: options.model,
+      reasoningEffort: options.reasoningEffort,
+      includeStartupContext: options.startupContext,
+      journal,
+      ...(sidecar.requiresFxCredentialAuthority && adapter instanceof FxHeadlessOrchestrator
+        ? { credentialAuthority: adapter.acquireCredentialBrokerChannel() }
+        : {}),
+      onNotification(method, params) {
+        if (bridge) bridge.handleNotification(method, params);
+        else earlyNotifications.push([method, params]);
+      },
+      onClosed: (reason) => transport?.handleClosed(reason),
+      onError: (message) => say(`sidecar · ${message}`),
+    }),
+  );
+  startupCleanups.unshift(() => session.close());
   bridge = new CodexFxBridge({
     appServer: session.appServer,
     threadId: session.threadId,
@@ -308,33 +315,62 @@ async function main(): Promise<void> {
   say(`backend ${backendName} · ${identity.auth ?? "auth unknown"}`);
   say(microphone.muted ? "microphone opens muted · hold space to talk" : "microphone is live");
 
-  await audio.start();
-  const app = await createVoiceApp({
-    state: (): VoiceAppState => ({
-      title: "codpiece",
-      phase,
-      liveForMs: transport?.liveForMs ?? null,
-      backend: { name: backendName, state: backendState, detail: backendDetail },
-      mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted, db: meters.mic },
-      speaker: {
-        muted: speaker.muted,
-        effectiveMuted: speaker.effectiveMuted,
-        db: meters.agent,
-      },
-      feed,
+  await startupStep(startupCleanups, () => audio.start());
+  startupCleanups.unshift(() => audio.stop());
+  const app = await startupStep(startupCleanups, () =>
+    createVoiceApp({
+      state: (): VoiceAppState => ({
+        title: "codpiece",
+        phase,
+        liveForMs: transport?.liveForMs ?? null,
+        backend: { name: backendName, state: backendState, detail: backendDetail },
+        mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted, db: meters.mic },
+        speaker: {
+          muted: speaker.muted,
+          effectiveMuted: speaker.effectiveMuted,
+          db: meters.agent,
+        },
+        feed,
+      }),
+      setMuted: (target, muted) => applyMute(target, gate(target).setMuted(muted)),
+      beginUnmute: (target, input) =>
+        applyMute(target, gate(target).beginUnmute(holdSources[input][target])),
+      releaseUnmute: (target, input, commit) =>
+        applyMute(target, gate(target).releaseUnmute(holdSources[input][target], commit)),
+      redial: () => void transport?.redial("manual"),
+      shutdown,
     }),
-    setMuted: (target, muted) => applyMute(target, gate(target).setMuted(muted)),
-    beginUnmute: (target, input) =>
-      applyMute(target, gate(target).beginUnmute(holdSources[input][target])),
-    releaseUnmute: (target, input, commit) =>
-      applyMute(target, gate(target).releaseUnmute(holdSources[input][target], commit)),
-    redial: () => void transport?.redial("manual"),
-    shutdown,
-  });
+  );
 
   say("dialing the voice agent…");
   void transport.connect().catch((error) => say(`voice · ${message(error)}`));
   await app.done;
+}
+
+/** Runs one startup step; on failure, unwinds every earlier step before rethrowing. */
+async function startupStep<T>(
+  cleanups: Array<() => Promise<unknown>>,
+  step: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    for (const cleanup of cleanups) await cleanup().catch(() => {});
+    throw error;
+  }
+}
+
+/** `fx` on PATH, else the user-local install, else a message that says where to put it. */
+function resolveFx(explicit: string | undefined): string {
+  if (explicit) {
+    if (!existsSync(explicit)) throw new Error(`fx not found at ${explicit}`);
+    return explicit;
+  }
+  const onPath = Bun.which("fx");
+  if (onPath) return onPath;
+  const userLocal = resolve(homedir(), ".local", "bin", "fx");
+  if (existsSync(userLocal)) return userLocal;
+  throw new Error("fx not found on PATH or at ~/.local/bin/fx; install Fx or pass --fx PATH");
 }
 
 /** Turns the voice agent's data-channel events into feed lines. */
