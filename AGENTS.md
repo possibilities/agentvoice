@@ -9,7 +9,7 @@ terms in code, comments, and commit messages.
 
 ## Commands
 
-- `bun test` — unit tests (pure logic only; no codex or audio needed)
+- `bun run test` — unit tests in `tests/` (pure logic only; no codex or audio needed)
 - `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
 - `bun run lint` / `bun run format` — Biome check / autofix
 - `bun run console` — the real thing (needs the daemon pair installed:
@@ -33,8 +33,6 @@ everything else belongs to exactly one layer.
 
 - `src/main.ts` — CLI entry: `console`, `server`, `resident`, `accounts`,
   and `remote` are subcommands; the bare command prints usage
-- `src/resources.ts` — reads AgentStart's fixed managed-skill inventory and
-  produces qualified `agent:<skill>` enables for every thread attachment
 - `src/paths.ts` — XDG path resolution: state files, the resident socket,
   the config location
 - `src/core/` — the coordination layer (attached to the resident, no UI),
@@ -73,8 +71,7 @@ everything else belongs to exactly one layer.
   - `runtime.ts` — wiring: the attachment lifecycle (reattach with backoff;
     the resident process itself is launchd's job), the persisted orchestrator
     thread (resume on attach, `fresh` to abandon), stranded-turn interruption
-    and worker reconciliation on attach, fixed fleet-skill enablement on every
-    thread start/resume, rotation via `launchctl kickstart` at idle
+    and worker reconciliation on attach, rotation via `launchctl kickstart` at idle
 - `src/server/` — the Server (`com.agentvoice.server`, launchd-resident,
   headless): `control.ts` (both control listeners — the owner-only unix
   socket, which is also the single-Server lock, and the authenticated WSS

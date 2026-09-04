@@ -1,5 +1,8 @@
 # 0006: Enable fixed AgentStart skills per thread
 
+Superseded on 2026-09-04 by [0007: Defer skill policy to Codex](0007-defer-skill-policy-to-codex.md).
+The decision below is historical, not current behavior.
+
 AgentVoice keeps its independent resident Codex App Server for realtime voice,
 but it no longer registers standalone roots or loads bare duplicates. On every
 attachment it reads AgentStart's fixed `managed-skills.txt`; every

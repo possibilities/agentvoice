@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
-import type { SkillPolicyEntry } from "../src/resources.ts";
 
 const HOME = "/home/tester";
 
@@ -9,15 +8,12 @@ function configure(values: ConfigValues = {}) {
   return resolveConfig({}, values, {}, HOME);
 }
 
-// The existing cases assert the wire shape without managed fleet skills,
-// which is what an empty policy means.
 function thread(
   values: ConfigValues = {},
   prompts: Prompts = {},
   kind: "start" | "resume" = "start",
-  skillPolicy: SkillPolicyEntry[] = [],
 ) {
-  return threadParams(configure(values), prompts, kind, skillPolicy);
+  return threadParams(configure(values), prompts, kind);
 }
 
 function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
@@ -234,77 +230,73 @@ describe("realtimeParams", () => {
   });
 });
 
-describe("fixed fleet-skill enablement", () => {
-  const policy: SkillPolicyEntry[] = [
-    { name: "agent:collab", enabled: true },
-    { name: "agent:wiki", enabled: true },
-  ];
-
-  test("rides every orchestrator thread, start and resume alike", () => {
-    for (const kind of ["start", "resume"] as const) {
-      expect(thread({}, {}, kind, policy)["config"]).toEqual({ "skills.config": policy });
-    }
-  });
-
-  test("rides worker threads too", () => {
-    expect(workerThreadParams(configure(), policy)["config"]).toEqual({
-      "skills.config": policy,
+describe("native skill config passthrough", () => {
+  for (const kind of ["start", "resume"] as const) {
+    test(`${kind}: no config is manufactured when unset`, () => {
+      expect(thread({}, {}, kind)).not.toHaveProperty("config");
+      expect(workerThreadParams(configure(), kind)).not.toHaveProperty("config");
     });
-  });
 
-  test("rides persisted worker resume with operator precedence and no start-only identity", () => {
-    const mine = { name: "agent:collab", enabled: false };
-    const params = workerThreadParams(
-      configure({ orchestrator: { config: { "skills.config": [mine] } } }),
-      policy,
-      "resume",
-    );
-    expect(params["config"]).toEqual({ "skills.config": [...policy, mine] });
-    expect(params).not.toHaveProperty("threadSource");
-  });
-
-  test("keeps the operator's own config entries beside it", () => {
-    const params = thread(
-      { orchestrator: { effort: "high", config: { agents: { enabled: false } } } },
-      {},
-      "start",
-      policy,
-    );
-    expect(params["config"]).toEqual({
-      model_reasoning_effort: "high",
-      agents: { enabled: false },
-      "skills.config": policy,
+    test(`${kind}: other config entries do not cause skill overrides`, () => {
+      const values: ConfigValues = {
+        orchestrator: { effort: "high", config: { agents: { enabled: false } } },
+      };
+      const expected = { model_reasoning_effort: "high", agents: { enabled: false } };
+      expect(thread(values, {}, kind)["config"]).toEqual(expected);
+      expect(workerThreadParams(configure(values), kind)["config"]).toEqual(expected);
     });
-  });
 
-  test("lets an operator rule win by ordering it last, as codex resolves them", () => {
-    const mine = { name: "agent:collab", enabled: true };
-    const params = thread(
-      { orchestrator: { config: { "skills.config": [mine] } } },
-      {},
-      "start",
-      policy,
-    );
-    expect(params["config"]).toEqual({ "skills.config": [...policy, mine] });
-  });
-
-  test("survives the generic extra escape hatch", () => {
-    const params = thread(
-      { orchestrator: { extra: { config: { model_reasoning_effort: "low" } } } },
-      {},
-      "start",
-      policy,
-    );
-    expect(params["config"]).toEqual({
-      model_reasoning_effort: "low",
-      "skills.config": policy,
+    test(`${kind}: explicit skill rules pass through unchanged and in order`, () => {
+      const supplied = [
+        { name: "agent:wiki", enabled: true },
+        { name: "agent:wiki", enabled: false },
+        { path: "/skills/custom/SKILL.md", enabled: true },
+      ];
+      const values: ConfigValues = {
+        orchestrator: { effort: "high", config: { "skills.config": supplied } },
+      };
+      const expected = { model_reasoning_effort: "high", "skills.config": supplied };
+      expect(thread(values, {}, kind)["config"]).toEqual(expected);
+      expect(workerThreadParams(configure(values), kind)["config"]).toEqual(expected);
     });
-  });
 
-  test("is not added at all when no managed skills are present", () => {
-    expect(thread()).not.toHaveProperty("config");
-    expect(workerThreadParams(configure(), [])).not.toHaveProperty("config");
-  });
+    test(`${kind}: an explicit empty skill list stays empty`, () => {
+      const values: ConfigValues = { orchestrator: { config: { "skills.config": [] } } };
+      expect(thread(values, {}, kind)["config"]).toEqual({ "skills.config": [] });
+      expect(workerThreadParams(configure(values), kind)["config"]).toEqual({
+        "skills.config": [],
+      });
+    });
+
+    test(`${kind}: extra.config replaces the orchestrator config without augmentation`, () => {
+      const extraConfig = { "skills.config": [{ name: "custom", enabled: false }] };
+      const values: ConfigValues = {
+        orchestrator: {
+          effort: "high",
+          config: { "skills.config": [{ name: "agent:wiki", enabled: true }] },
+          extra: { config: extraConfig },
+        },
+      };
+      expect(thread(values, {}, kind)["config"]).toEqual(extraConfig);
+      // Workers inherit orchestrator.config, not its identity/extra escape hatch.
+      expect(workerThreadParams(configure(values), kind)["config"]).toEqual({
+        model_reasoning_effort: "high",
+        "skills.config": [{ name: "agent:wiki", enabled: true }],
+      });
+    });
+
+    test(`${kind}: extra.config may remove skill overrides entirely`, () => {
+      for (const extraConfig of [{ model_reasoning_effort: "low" }, {}, null]) {
+        const values: ConfigValues = {
+          orchestrator: {
+            config: { "skills.config": [{ name: "agent:wiki", enabled: true }] },
+            extra: { config: extraConfig },
+          },
+        };
+        expect(thread(values, {}, kind)["config"]).toEqual(extraConfig);
+      }
+    });
+  }
 });
 
 describe("workerThreadParams", () => {
@@ -321,7 +313,6 @@ describe("workerThreadParams", () => {
           config: { agents: { enabled: false } },
         },
       }),
-      [],
     );
     expect(params["cwd"]).toBe("/home/tester");
     expect(params["sandbox"]).toBe("workspace-write");
@@ -340,11 +331,12 @@ describe("workerThreadParams", () => {
   });
 
   test("prefers a named permission profile over the sandbox, like the orchestrator", () => {
-    const params = workerThreadParams(
-      configure({ orchestrator: { permissions: "profile-1" } }),
-      [],
-    );
+    const params = workerThreadParams(configure({ orchestrator: { permissions: "profile-1" } }));
     expect(params["permissions"]).toBe("profile-1");
     expect(params).not.toHaveProperty("sandbox");
+  });
+
+  test("resume omits the start-only identity", () => {
+    expect(workerThreadParams(configure(), "resume")).not.toHaveProperty("threadSource");
   });
 });

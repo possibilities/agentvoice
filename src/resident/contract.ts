@@ -15,9 +15,7 @@ export const REALTIME_FEATURE = "realtime_conversation";
 
 export const RESIDENT_LABEL = "com.agentvoice.resident";
 
-/** The resident carries no skill policy. Every thread name-enables
- * AgentStart's globally inert qualified plugin skills through the params built
- * from `fleetSkillPolicy` in `src/resources.ts`. */
+/** No skill policy is added to the resident's launch arguments. */
 export function residentArgv(codexBin: string, socketPath: string): string[] {
   return [codexBin, "app-server", "--enable", REALTIME_FEATURE, "--listen", `unix://${socketPath}`];
 }

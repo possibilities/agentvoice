@@ -23,7 +23,6 @@ import {
   workersStateFilePath,
 } from "../paths.ts";
 import { RESIDENT_LABEL, readResidentState } from "../resident/contract.ts";
-import { fleetSkillPolicy, type SkillPolicyEntry } from "../resources.ts";
 import {
   accountsDirectory,
   balancerCliPresent,
@@ -122,8 +121,6 @@ export class VoiceRuntime {
   private readonly accountsDir: string;
   private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
   private foundPrompts: string[] = [];
-  /** Re-read on every attachment: a resource render may add or retire a skill. */
-  private skillPolicy: SkillPolicyEntry[] = [];
 
   private attachment: ResidentAttachment | null = null;
   private threadId: string | null = null;
@@ -249,7 +246,7 @@ export class VoiceRuntime {
       if (this.sessions.hasSession) this.sessions.handleClientGone();
       const started = await attachment.request(
         "thread/start",
-        threadParams(this.config, this.prompts, "start", this.skillPolicy),
+        threadParams(this.config, this.prompts, "start"),
       );
       this.threadId = extractThreadId(started);
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
@@ -368,7 +365,6 @@ export class VoiceRuntime {
     this.orchestratorTurnActive = false;
 
     try {
-      this.skillPolicy = fleetSkillPolicy();
       this.threadId = await this.openThread(attachment);
       writeStateFile(this.threadStatePath, { threadId: this.threadId });
       if (bootAttach) await this.interruptStrandedTurns(attachment, this.threadId);
@@ -394,7 +390,7 @@ export class VoiceRuntime {
           await attachment.request("thread/resume", {
             threadId: previous,
             excludeTurns: true,
-            ...threadParams(this.config, this.prompts, "resume", this.skillPolicy),
+            ...threadParams(this.config, this.prompts, "resume"),
           }),
         );
       } catch (error) {
@@ -410,10 +406,7 @@ export class VoiceRuntime {
     }
     this.events.onStatus("starting a fresh orchestrator agent…");
     return extractThreadId(
-      await attachment.request(
-        "thread/start",
-        threadParams(this.config, this.prompts, "start", this.skillPolicy),
-      ),
+      await attachment.request("thread/start", threadParams(this.config, this.prompts, "start")),
     );
   }
 
@@ -490,7 +483,7 @@ export class VoiceRuntime {
       await attachment.request("thread/resume", {
         threadId,
         excludeTurns: true,
-        ...workerThreadParams(this.config, this.skillPolicy, "resume"),
+        ...workerThreadParams(this.config, "resume"),
       });
       const read = (await attachment.request("thread/read", {
         threadId,
@@ -533,9 +526,7 @@ export class VoiceRuntime {
     manager = new WorkerManager(
       {
         startWorkerThread: async () => ({
-          threadId: extractThreadId(
-            await request("thread/start", workerThreadParams(this.config, this.skillPolicy)),
-          ),
+          threadId: extractThreadId(await request("thread/start", workerThreadParams(this.config))),
         }),
         startWorkerTurn: async (workerThreadId, brief) => {
           let turn: { turn?: { id?: string } };

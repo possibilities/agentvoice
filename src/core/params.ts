@@ -7,7 +7,6 @@
  * that resolved to the empty string IS sent — empty strips a built-in prompt,
  * where absent leaves codex's default in place.
  */
-import type { SkillPolicyEntry } from "../resources.ts";
 import type { Prompts, ServerConfig } from "./config.ts";
 import { VOICE_SEEDS } from "./config.ts";
 import { dispatchTools } from "./workers.ts";
@@ -20,24 +19,6 @@ function setIfDefined(target: Record<string, unknown>, key: string, value: unkno
 }
 
 /**
- * Fold the managed qualified-skill enablement into a thread's codex `config`.
- * Ours come first so an operator's own `skills.config` still decides: codex
- * applies skill rules in order and a later rule overrides an earlier one for
- * the same selector.
- */
-function withFleetSkillPolicy(
-  config: Record<string, unknown>,
-  skillPolicy: SkillPolicyEntry[],
-): Record<string, unknown> {
-  if (skillPolicy.length === 0) return config;
-  const supplied = config["skills.config"];
-  return {
-    ...config,
-    "skills.config": [...skillPolicy, ...(Array.isArray(supplied) ? supplied : [])],
-  };
-}
-
-/**
  * Orchestrator-agent priming. `thread/resume` accepts a subset — it ignores
  * unknown fields rather than failing, but sending start-only ones would be a
  * lie about what resuming applies.
@@ -46,7 +27,6 @@ export function threadParams(
   config: ServerConfig,
   prompts: Prompts,
   kind: "start" | "resume",
-  skillPolicy: SkillPolicyEntry[],
 ): Record<string, unknown> {
   const orchestrator = config.orchestrator;
   const params: Record<string, unknown> = {
@@ -87,14 +67,6 @@ export function threadParams(
   // Thread identity is owned by AgentVoice, not the generic extra escape
   // hatch: inventory must remain reliable under every configuration.
   if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;
-  // Folded last for the same reason, and over `extra` too: a thread that lost
-  // the policy lists every fleet skill twice and has its whole catalogue
-  // shortened to fit the budget.
-  const withPolicy = withFleetSkillPolicy(
-    (merged["config"] as Record<string, unknown> | undefined) ?? {},
-    skillPolicy,
-  );
-  if (Object.keys(withPolicy).length > 0) merged["config"] = withPolicy;
   return merged;
 }
 
@@ -107,7 +79,6 @@ export function threadParams(
  */
 export function workerThreadParams(
   config: ServerConfig,
-  skillPolicy: SkillPolicyEntry[],
   kind: "start" | "resume" = "start",
 ): Record<string, unknown> {
   const orchestrator = config.orchestrator;
@@ -125,13 +96,10 @@ export function workerThreadParams(
   setIfDefined(params, "approvalsReviewer", orchestrator.approvalsReviewer);
   setIfDefined(params, "runtimeWorkspaceRoots", orchestrator.runtimeWorkspaceRoots);
 
-  const codexConfig = withFleetSkillPolicy(
-    {
-      ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
-      ...orchestrator.config,
-    },
-    skillPolicy,
-  );
+  const codexConfig = {
+    ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
+    ...orchestrator.config,
+  };
   if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
   return params;
 }

@@ -476,12 +476,14 @@ forget when "configuring the agent":
   rather than its own exec tool *(probe)*. Disable per thread with
   `orchestrator.config: {orchestrator: {mcp: {enabled: false}}}` or prune the
   global list.
-- **Skills**: AgentVoice reads AgentStart's fixed private inventory and
-  name-enables the globally installed skills-only plugin's qualified
-  `agent:<skill>` entries on every orchestrator and worker start or resume.
-  AgentStart persistently disables those names outside managed sessions, so no
-  extra root or bare duplicate is registered here. Codex's own enablement still
-  follows `orchestrator.skills.enabled` and `skills.include_instructions`.
+- **Skills**: Codex owns discovery and enablement in its ordinary environment.
+  AgentVoice adds no inventory, roots, or skill rules. Explicit `skills.config`
+  in `orchestrator.config` passes through unchanged to orchestrator and worker
+  start/resume requests; `orchestrator.extra.config` can replace that config
+  for the orchestrator only. Ambient skills remain subject to Codex's own
+  policy, including `orchestrator.skills.enabled` and `skills.include_instructions`.
+  This does not isolate skills or clear an already-loaded thread's in-memory
+  configuration; see [ADR 0007](adr/0007-defer-skill-policy-to-codex.md).
 - **Hooks** (`~/.codex/hooks.json`): fire on orchestrator turns under
   app-server — probes observed `sessionStart` and `userPromptSubmit` running
   synchronously on a delegation turn *(probe)*. A `UserPromptSubmit` hook's
@@ -656,9 +658,9 @@ one whisper of cross-thread continuity the voice agent gets for free.
     *(source)*.
 13. **Session-start text does not re-announce on renewals** — and *does*
     repeat after compaction *(probe/source)*.
-14. **Global MCP servers and hooks ride along invisibly; default skills are
-    composed explicitly from AgentStart's `common` pack** — and get used
-    *(probe)*.
+14. **Global MCP servers and hooks ride along invisibly** *(probe)*.
+    **Skills follow Codex's ordinary discovery and enablement** — AgentVoice
+    adds no policy and provides no isolation *(source)*.
 15. **One malformed control frame kills the codex side of a voice session**
     while the media keeps playing — a zombie that hears and speaks but can't
     delegate. The console-side symptom: the agent stops doing work but keeps
