@@ -25,7 +25,7 @@
     "resident:probe": "bun run scripts/resident-probe.ts",
     "cli:install": "bun run scripts/install.ts",
     "generate:schema": "bun run scripts/generate-schema.ts && biome check --write server.schema.json",
-    "test": "bun test",
+    "test": "bun test tests",
     "typecheck": "tsc --noEmit",
     "lint": "biome check",
     "format": "biome check --write"

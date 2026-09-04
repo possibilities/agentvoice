@@ -39,7 +39,6 @@ import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from ".
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
 import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
-import { HerdrSurface } from "./surface.ts";
 import {
   archiveWorkerThread,
   deleteWorkerThread,
@@ -139,7 +138,6 @@ export class VoiceRuntime {
   private shuttingDown = false;
   private freshInFlight = false;
   private workers: WorkerManager | null = null;
-  private surface: HerdrSurface | null = null;
   private readonly sessions: VoiceSessionManager;
   private configWatcher: ConfigWatcher | null = null;
 
@@ -275,8 +273,6 @@ export class VoiceRuntime {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
     this.configWatcher?.stop();
-    this.surface?.stop();
-    this.surface = null;
     await Promise.race([
       this.sessions.shutdown(),
       new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
@@ -317,23 +313,6 @@ export class VoiceRuntime {
 
     // Boot fails fast: the operator is present. Later drops are supervised.
     await this.attachOnce(true);
-
-    // The surface outlives any one attachment: its wakes go through the
-    // current attachment when one exists and are dropped (with a status
-    // line) when none does — the doctrine's answer is status on demand
-    // through the surface's own CLI, not a replay.
-    if (this.config.surface.events) {
-      this.surface = new HerdrSurface({
-        socketPath: this.config.surface.socket,
-        tokenKey: this.config.surface.token,
-        effects: {
-          reportToOrchestrator: (text) => this.reportToOrchestrator(text, "surface report"),
-          onStatus: (line) => this.events.onStatus(line),
-          debug: (line) => this.events.debug?.(line),
-        },
-      });
-      this.surface.start();
-    }
 
     if (options.configSource) {
       this.configWatcher = new ConfigWatcher(options.configSource, this.config, {
@@ -610,7 +589,7 @@ export class VoiceRuntime {
   /**
    * Fire and forget a report turn at the orchestrator: upstream admission
    * steers it into a running turn or opens a fresh one; a failure only loses
-   * one report. Worker reports and surface reports share this one channel.
+   * one report.
    */
   private reportToOrchestrator(text: string, kind: string): void {
     const attachment = this.attachment;

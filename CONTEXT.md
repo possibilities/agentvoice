@@ -101,7 +101,7 @@ the moment its voice peer detaches. _Avoid_: "media client", "audio peer".
 presents to attach over the network listener as a manual diagnostic and
 migration path. Normal Remote consoles use Paired-device proof instead; TLS
 protects either path. _Avoid_: "password", "api key", and confusion with
-`surface.token`, which is a herdr pane metadata key.
+the per-device identity used by normal Remote consoles.
 
 **Heartbeat deadline** — How long the Server will keep honoring a network
 peer's unmute holds without hearing from it. Past it the holds are released

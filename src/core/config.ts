@@ -18,7 +18,7 @@
  */
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
-import { defaultConfigPath, type Environ, expandTilde, surfaceSocketPath } from "../paths.ts";
+import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
 import {
   ACCOUNTS_KEYS,
   type AccountsValues,
@@ -41,8 +41,6 @@ import {
   SANDBOX_MODES,
   type SandboxMode,
   SERVER_KEYS,
-  SURFACE_KEYS,
-  type SurfaceValues,
   VOICE_KEYS,
   type VoiceValues,
 } from "./config-schema.ts";
@@ -59,7 +57,6 @@ export type {
   RealtimeVersion,
   RemoteValues,
   SandboxMode,
-  SurfaceValues,
   VoiceValues,
 } from "./config-schema.ts";
 export {
@@ -77,7 +74,6 @@ export {
   REMOTE_KEYS,
   SANDBOX_MODES,
   SERVER_KEYS,
-  SURFACE_KEYS,
   VOICE_KEYS,
 } from "./config-schema.ts";
 
@@ -136,20 +132,6 @@ export interface AccountsConfig {
 }
 
 /**
- * The surface — the shared runtime where placed workers run in the open;
- * herdr is the reference implementation. Wake wiring only: the orchestrator
- * drives the surface itself through its CLI.
- */
-export interface SurfaceConfig {
-  /** Push `<surface_report>` turns at the orchestrator on worker lifecycle events. */
-  events: boolean;
-  /** The surface server's unix socket. */
-  socket: string;
-  /** The pane metadata token key that marks a pane as a placed worker. */
-  token: string;
-}
-
-/**
  * Network policy for Remote consoles. The owner-only unix socket always serves
  * same-machine peers; the authenticated WSS listener always serves paired
  * devices, with `listen` only overriding its default all-interface bind.
@@ -171,7 +153,6 @@ export interface ServerConfig {
   accounts: AccountsConfig;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
-  surface: SurfaceConfig;
   remote: RemoteConfig;
 }
 
@@ -287,7 +268,6 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   accounts: ACCOUNTS_KEYS,
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
-  surface: SURFACE_KEYS,
   remote: REMOTE_KEYS,
 };
 
@@ -487,8 +467,6 @@ export function resolveConfig(
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
     cli.voice?.[key] ?? file.voice?.[key];
-  const pickSurface = <K extends keyof SurfaceValues>(key: K): SurfaceValues[K] =>
-    cli.surface?.[key] ?? file.surface?.[key];
   const pickRemote = <K extends keyof RemoteValues>(key: K): RemoteValues[K] =>
     cli.remote?.[key] ?? file.remote?.[key];
 
@@ -569,11 +547,6 @@ export function resolveConfig(
     },
     orchestrator,
     voice,
-    surface: {
-      events: pickSurface("events") ?? false,
-      socket: expandTilde(pickSurface("socket") ?? surfaceSocketPath(env, home), home),
-      token: pickSurface("token") ?? "worker",
-    },
     remote,
   };
 }
