@@ -116,6 +116,17 @@ describe("generated schema invariants", () => {
     expect(spec(voice, "codex-response-handoff-mode")["enum"]).toEqual([...HANDOFF_MODES]);
   });
 
+  test("voice context controls remain optional booleans, not forced policy", () => {
+    const voice = sectionProperties("voice");
+    for (const key of ["include-startup-context", "flush-transcript-tail-on-session-end"]) {
+      expect(spec(voice, key)["type"]).toBe("boolean");
+      expect(spec(voice, key)["description"]).toContain("Omitted defers to Codex");
+    }
+    expect(topProperties()["voice"]).not.toHaveProperty("required");
+    expect(spec(voice, "include-startup-context")).not.toHaveProperty("default");
+    expect(spec(voice, "flush-transcript-tail-on-session-end")["default"]).toBe(false);
+  });
+
   test("every key carries documentation", () => {
     const sections = [
       topProperties(),

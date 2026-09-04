@@ -33,10 +33,11 @@ _Avoid_: "connection" alone (ambiguous with the voice session), "reconnect"
 for anything but this.
 
 **Orchestrator agent** — The agent that does the actual work: one Codex thread
-living in the workspace, persisted by id across console runs and resumed on
-attach. The thread is its identity and its persistent state; the voice session
-is layered onto it inside app-server. _Avoid_: "orchestrator thread" for the
-actor, "conversation".
+living in the workspace. Codex owns its history; currently AgentVoice selects
+it through one saved id per state directory, resumed on attach, not by launch
+cwd. That selection policy is app-specific, not a Codex default. The thread
+is its identity and its persistent state; the voice session is layered onto
+it inside app-server. _Avoid_: "orchestrator thread" for the actor, "conversation".
 
 **Voice agent** — The realtime speech model the user actually talks to. It
 holds the conversation and delegates execution to the orchestrator agent; the
@@ -148,7 +149,9 @@ delegation context, shaped by `voice.codex-response-*` options and capped at
 
 **Startup context** — The `<startup_context>` block codex synthesizes into the
 voice agent's instructions at session start (current-thread tail, recent work
-across the machine, workspace map); the only cross-session voice memory.
+across the machine, workspace map). Optional and replaceable through native
+Codex settings. Disabling this snapshot does not erase the orchestrator's
+history, suppress ordinary delegation, or guarantee isolation from earlier work.
 _Avoid_: "session memory", "context window".
 
 **Session-boundary instructions** — `ORCHESTRATOR_SESSION_START.md` /

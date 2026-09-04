@@ -2,11 +2,11 @@
 
 How to shape what the **voice agent** and the **orchestrator agent** know, how
 they behave, and how they sound — every lever, its precedence, and its sharp
-edges. Everything here is verified against **codex-cli 0.147.0** (the version
-this repo pins): claims marked *(source)* were read out of the 0.147 source
-tree; claims marked *(probe)* were exercised live against a real app-server on
-ChatGPT-account auth. The realtime surface is experimental upstream, so
-re-verify the load-bearing rows before trusting a newer codex.
+edges. The original baseline is **codex-cli 0.147.0**: claims marked *(source)*
+were read from upstream; claims marked *(probe)* were exercised live against
+a real app-server on ChatGPT-account auth. Later source-only rechecks are
+noted in the evidence appendix. The realtime surface is experimental upstream,
+so re-verify the load-bearing rows before trusting a newer codex.
 
 Vocabulary is [`CONTEXT.md`](../CONTEXT.md)'s. Setup basics live in the
 [README](../README.md); this guide is the depth behind its Configuration
@@ -26,18 +26,21 @@ Three actors run every conversation:
   owns both, performs the handoff between them, and applies almost every knob
   in this guide.
 
-Four lifetimes decide how long anything you inject lasts — and they nest
-differently than they used to, because the thread now *outlives* console runs:
+The native thread outlives console runs. In the current application:
 
 ```
-thread                the orchestrator agent's identity and memory; persisted
-                      (thread.json) and resumed by every console run until --fresh
- ├─ resident          launchd-kept app-server; a crash or rotation restarts it
- │                    and the console resumes the same thread
- ├─ console run       one `agentvoice console` process; prompts read at its start and
- │                    re-applied to the thread on attach
- └─ voice session     one WebRTC call; superseded by every redial
+thread                Codex-owned history; AgentVoice saves its id in thread.json
+resident              launchd-kept app-server; holds loaded threads and turns
+Server                selects/resumes the saved thread; reads prompts at startup
+console run           a control attachment; quitting ends voice, not the thread
+voice session         one WebRTC call; superseded by every redial
 ```
+
+The single saved id is **AgentVoice policy**, not Codex automatically choosing
+a session for the caller's cwd. Today it is per state directory and the
+workspace defaults to the user's home. Cwd-local default continuation with
+`--no-continue` and `--resume <id>` is a planned replacement, not shipped
+behavior. Session selection is separate from the voice-context controls below.
 
 Behavior flows in through more channels than the config file suggests. In
 rough precedence order (later rows are overridden by earlier ones where they
@@ -91,10 +94,10 @@ fields ride on **every** voice session (renewal, recovery, manual `r`).
 | `voice.model` | voice | `model` | per voice session |
 | `voice.name` / `--voice` | voice | `voice` | per voice session (validated per version) |
 | `voice.version` | both sides' protocol | `version` | per voice session (pinned `v3` by default) |
-| `voice.include-startup-context` | voice | `includeStartupContext` | per voice session (default **on**) |
+| `voice.include-startup-context` | voice | `includeStartupContext` | per voice session (omitted defers to Codex; currently **on** for our transport) |
 | `voice.delegation-ack-filler` | voice | `delegationAckFiller` | per voice session (upstream-defined filler) |
 | `voice.codex-response-*` family | the handoff | same-named fields | per voice session |
-| `voice.flush-transcript-tail-on-session-end` | the handoff | same-named field | per voice session |
+| `voice.flush-transcript-tail-on-session-end` | the handoff | `flushTranscriptTailOnSessionEnd` | per voice session (omitted defers to Codex; currently **off**) |
 | `voice.client-managed-handoffs` | the handoff | same-named field | per voice session (**sharp edge**) |
 | `voice.extra:` | voice | merged into `thread/realtime/start` | per voice session (can override `outputModality`/`transport`) |
 
@@ -158,14 +161,17 @@ user to speak first (upstream also has `thread/realtime/appendSpeech` — make
 the agent say arbitrary text — which agentvoice does not currently
 expose).
 
-A fresh voice session is seeded with exactly three things *(source, probe)*:
-the prompt (built-in or yours), the `<startup_context>` block, and your
-`initialItems`. Nothing else crosses sessions — see
+The bootstrap inputs here are the prompt (built-in or yours), optional
+startup context, and your `initialItems` *(source, probe)*. AgentVoice does not
+collect the previous voice session's transcript and replay it into the next.
+That does not isolate the session from earlier work: the selected orchestrator
+thread retains its native history and can recall it during delegation. See
 [memory](#voice-memory-across-sessions-the-startup-context).
 
 ### Voice memory across sessions: the startup context
 
-`include-startup-context` (default **on**) appends a synthesized
+AgentVoice omits `include-startup-context` unless configured. Codex currently
+defaults it **on** for this application's WebRTC transport and appends a synthesized
 `<startup_context>` block to the voice agent's instructions, opening with
 "Startup context from Codex… may be incomplete or stale… do not repeat it
 back unless relevant" *(source: `realtime_context.rs`)*. Sections and budgets:
@@ -177,23 +183,53 @@ back unless relevant" *(source: `realtime_context.rs`)*. Sections and budgets:
 | `## Machine / Workspace Map` | 1,600 tokens | cwd, git root, home; directory trees depth 2, 20 entries/dir, node_modules-class dirs skipped |
 | `## Notes` | 300 tokens | fixed disclaimer |
 
-This block is the **only** cross-session voice memory, and it works — with a
-catch *(probe)*: a codeword told to the voice agent in session 1 was recalled
+This snapshot can convey prior speech indirectly *(probe)*: a codeword told
+to the voice agent in session 1 was recalled
 verbatim in session 2, **because** session 1 also delegated once and the
 delegation's `<transcript_delta>` carried the utterance into thread history,
-where the next session's Current Thread section picked it up. Voice-only chat
-that never delegates **never reaches the thread** and is forgotten at session
-end (default config; `flush-transcript-tail-on-session-end: true` is the
-upstream rollout knob that routes the leftover tail through the orchestrator
-at session end instead of dropping it). With `include-startup-context: false`
-the next session answered "I do not know." — the switch cleanly zeroes voice
-memory while the orchestrator keeps everything.
+where the next session's Current Thread section picked it up. In the probe,
+speech that never reached a delegation was not recalled after session end
+with the default tail flush off. With `include-startup-context: false`, the
+next session answered "I do not know." This demonstrates removal of that
+bootstrap snapshot, **not erasure or a guarantee against later recall**: the
+orchestrator can still answer from its selected thread, files, or other enabled
+Codex context sources.
 
-Two more properties worth knowing: the block is a **boot-time snapshot** —
+`flush-transcript-tail-on-session-end` is a separate native control. AgentVoice
+omits it unless configured; Codex currently defaults it **off**. When enabled,
+Codex routes a nonempty leftover transcript tail through the orchestrator after
+the realtime input task ends, with an instruction to acknowledge it unless
+the transcript asks for something. This can start work after hangup; it is not
+just a silent history save. It does not enable the next startup snapshot, and
+setting it false does not suppress transcripts from ordinary delegations.
+
+The block is a **boot-time snapshot** —
 compaction or new work mid-session never refreshes it — and `Recent Work`
-leaks your machine-wide thread titles into every voice session; set
-`include-startup-context: false` for demo/privacy contexts or an empty
-workspace, or override the whole blob with the config.toml key below.
+can expose machine-wide recent-work information. Native precedence is:
+
+1. `includeStartupContext: false` skips both generated and replacement text.
+2. Otherwise, `experimental_realtime_ws_startup_context`, if configured,
+   replaces the entire snapshot. `""` yields no snapshot; nonempty text is
+   used verbatim.
+3. Otherwise, Codex synthesizes the snapshot described above.
+
+Pass the replacement through `orchestrator.config`, for example:
+
+```json
+{
+  "orchestrator": {
+    "config": { "experimental_realtime_ws_startup_context": "" }
+  }
+}
+```
+
+The booleans ride `thread/realtime/start`; the replacement rides the thread's
+Codex config on start/resume. `voice.extra` can override the boolean RPC fields;
+`orchestrator.extra.config` replaces the thread config object as a whole.
+An already-loaded thread may retain its earlier config. These controls do not
+select a different thread, strip opt-in prompt/seed files, or provide a native
+"current thread only" snapshot mode. Keep them omitted for vanilla defaults;
+set explicit values for a chosen policy.
 
 ### Timbre, model, and version
 
@@ -521,13 +557,14 @@ sent) > `~/.codex/config.toml` > codex built-in**. Two layered subtleties:
 
 ### The three trump cards
 
-Three `~/.codex/config.toml` keys **beat this repo's own settings** and are
-invisible to it *(source)*:
+Three native config keys affect prompt composition *(source)*. They can come
+from `~/.codex/config.toml` or explicit `orchestrator.config` overrides;
+AgentVoice does not inspect the effective upstream values:
 
-| config.toml key | Silently overrides |
+| config.toml key | Effect and condition |
 |---|---|
 | `experimental_realtime_ws_backend_prompt` | `VOICE.md` / the request `prompt` — highest precedence, non-empty wins |
-| `experimental_realtime_ws_startup_context` | the synthesized `<startup_context>` (empty string disables injection entirely) |
+| `experimental_realtime_ws_startup_context` | replaces the synthesized startup snapshot only when `includeStartupContext` is enabled; empty string suppresses that snapshot, not other instructions or history |
 | `experimental_realtime_start_instructions` | the built-in realtime-start text when no `ORCHESTRATOR_SESSION_START.md` is present |
 
 If your `VOICE.md` seems inert, check the first row before anything else.
@@ -611,20 +648,24 @@ before doing anything else.
 
 ## Lifetimes, restarts, and what re-applies
 
+This table describes current AgentVoice wiring, not a native cwd-local
+continue/resume policy.
+
 | Event | Orchestrator thread | Voice session | Prompts/config |
 |---|---|---|---|
 | Voice redial (renewal, `r`, recovery) | unaffected — same thread | superseded silently; new session gets full voice priming again | voice-side files re-sent; session-start text **not** re-delivered (no transition) |
-| Resident crash / rotation / upgrade | **resumed** — same thread id, history (compacted state included) restored from rollout; launchd restarts the resident, the console reattaches with backoff | died with the resident; the console sees `closed("app-server-detached")` and re-offers | `thread/resume` re-sends config + instructions; changed developer instructions only take effect if the resume point lacks a context anchor — in practice, unchanged (files are read at console start) |
-| Console restart | **resumed** — the persisted threadId (`thread.json`) is the identity; running workers are re-adopted | gone (session lifetime is console lifetime); re-offered on start | prompt files re-read — this is when edits apply |
-| `--fresh` / the `f` key | **fresh thread** — conversation memory gone; workspace files and rollouts remain on disk | torn down silently, re-offered against the new thread | full start priming applies to the new thread |
+| Resident crash / rotation / upgrade | **resumed** — same thread id, history (compacted state included) restored from rollout; launchd restarts the resident, the Server reattaches with backoff | died with the resident; the console is told to re-offer when ready | `thread/resume` re-sends config + instructions; files remain those read at Server start |
+| Server restart | saved thread id resumed; workers reconciled | re-offered after reattachment | config and prompt files re-read; an already-loaded Codex thread may retain earlier settings |
+| Console restart | unchanged in the resident, still serviced by the Server | old voice session ends; a new session starts on attachment | prompt files are not re-read by this action |
+| `--fresh` / the `f` key | **fresh thread** — old history is not resumed; workspace files and rollouts remain | torn down silently, re-offered against the new thread | full start priming applies to the new thread |
 | Compaction | same thread, compressed model view; client-visible history unchanged | survives, unaware | base immune; developer/AGENTS re-injected |
 
 The durable substrate across all of it: the **workspace** (files the
 orchestrator wrote), `AGENTS.md` files, prompt files, and codex's rollout
 files under `~/.codex/sessions/` (unless `ephemeral: true`). A `--fresh`
-start begins a fresh agent brain in the same world — and its startup
-context's "Recent Work" section will show the previous threads, which is the
-one whisper of cross-thread continuity the voice agent gets for free.
+start creates a new thread in the same world, not an isolated environment.
+With the generated startup snapshot enabled, "Recent Work" can include older
+threads; other enabled Codex context sources and workspace files also remain.
 
 ## Gotchas
 
@@ -634,8 +675,9 @@ one whisper of cross-thread continuity the voice agent gets for free.
 2. **`gpt-5.3-codex` (and codex-branded models generally) can be rejected on
    ChatGPT-account auth** — every turn 400s while the voice agent keeps
    acking. Watch for `systemError` thread status *(probe)*.
-3. **The three config.toml trump cards** override `VOICE.md`, startup
-   context, and the session-start default invisibly *(source)*.
+3. **Native config can replace prompt inputs**: the backend prompt, startup
+   snapshot (when enabled), and session-start default each have a config
+   override with different precedence *(source)*.
 4. **`ORCHESTRATOR_BASE.md` disables `personality:`** and replaces codex's
    tool discipline; the console's boot warning is earned *(source)*.
 5. **`personality:` is a no-op on models without catalog support** —
@@ -650,12 +692,12 @@ one whisper of cross-thread continuity the voice agent gets for free.
 9. **Typos in `extra:` vanish silently** — serde-lenient upstream *(source)*.
 10. **`initialItems` over budget is a hard session-start error**, not a trim
     (128 items / 8,192 tokens, ~4 bytes/token) *(source)*.
-11. **Voice-only chat is amnesiac by default** — nothing reaches the thread
-    without a delegation (or the tail-flush knob), so the next session can't
-    remember it *(probe)*.
-12. **The startup context leaks machine-wide thread history** into every
-    voice session ("Recent Work", 40 threads) — mind demos on work machines
-    *(source)*.
+11. **The remaining speech tail is not flushed by default** — ordinary
+    delegation still sends transcript text. Turning on tail flush can trigger
+    an orchestrator turn after hangup *(source; recall probe described above)*.
+12. **Generated startup context can include other threads' recent work**
+    ("Recent Work", up to 40 threads). Disabling that snapshot is not history
+    erasure or a guarantee of session isolation *(source)*.
 13. **Session-start text does not re-announce on renewals** — and *does*
     repeat after compaction *(probe/source)*.
 14. **Global MCP servers and hooks ride along invisibly** *(probe)*.
@@ -665,8 +707,8 @@ one whisper of cross-thread continuity the voice agent gets for free.
     while the media keeps playing — a zombie that hears and speaks but can't
     delegate. The console-side symptom: the agent stops doing work but keeps
     talking; redial *(probe)*.
-16. **Editing prompt files does nothing until the next console start** —
-    they're read once per run.
+16. **Editing prompt files requires a Server restart to re-read them** —
+    merely reopening the console does not reload them.
 
 ## Recipes
 
@@ -705,10 +747,11 @@ adjudication instead of blanket denial, live-validated: benign escalations
 proceed after a ~3 s review; without the guardian they are denied outright
 *(probe)*. Each escalation costs one guardian model call.
 
-**A hermetic, quiet orchestrator.** `orchestrator.config: {orchestrator:
+**Reduced ambient context.** `orchestrator.config: {orchestrator:
 {mcp: {enabled: false}}, web_search: "disabled",
 include_apps_instructions: false}` + `include-startup-context: false` on the
-voice side: no ambient MCP tools, no web, no machine-history leak.
+voice side: requests disabling those tools and the startup snapshot. This
+does not erase native history, remove workspace files, or guarantee isolation.
 
 **Faster compaction for marathon sessions.**
 `orchestrator.config: {model_auto_compact_token_limit: 60000}` — compact
@@ -787,8 +830,16 @@ raw frame dumps: session scratchpad, `probes/`.
 | P2 | `appendText` conversational? | No — silent context append, both prompts |
 | P2c/d | Does replacing `VOICE.md` sever delegation? | No — persona applied, delegation + file creation intact; direct questions still answered without delegating |
 | P3 | Session-start text on renewal? | Not re-delivered on supersede; end text only for the latest session after stop |
-| P4 | Cross-session voice memory? | Via delegation transcripts + startup context only; `include-startup-context: false` zeroes it |
+| P4 | Cross-session voice recall in the codeword probe? | Recalled after a delegation plus generated startup snapshot; not recalled with the snapshot disabled. This probe does not establish absence of all other recall paths |
 | P5 | Compaction mid-voice-session | Five auto-compactions; session survived; developer + realtime-start text re-injected each time; `thread/compacted` notification never fired |
 | P6 | Personality live on real models | `friendly` real on gpt-5.6-sol and gpt-5.5 (live catalog beats bundled); `none` strips; mid-thread `thread/settings/update` injects `<personality_spec>` |
 | P7 | Guardian adjudication | user-reviewer: escalation denied; auto_review: reviewed ~2.7 s and allowed; `/tmp` is inside workspace-write's writable roots |
 | P8 | Assistant seed spoken on connect? | No — history only; quoted back on request |
+
+Voice-context defaults and precedence were rechecked read-only on 2026-09-04
+against Codex source `b3f5e45cc1`: `app-server/src/request_processors/turn_processor.rs`
+(`thread_realtime_start`), `core/src/realtime_conversation.rs` (startup snapshot
+selection and transcript-tail routing), and `core/src/realtime_context.rs`
+(snapshot contents), under `codex-rs/`. No new live inference or audio probe
+was run for that documentation pass. Unit tests in `tests/params.test.ts`
+verify AgentVoice's omission and passthrough, not Codex's internal behavior.

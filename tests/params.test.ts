@@ -230,6 +230,96 @@ describe("realtimeParams", () => {
   });
 });
 
+describe("native voice context controls", () => {
+  test("omitted controls stay off the wire so Codex owns their defaults", () => {
+    const config = configure();
+    expect(config.voice.includeStartupContext).toBeUndefined();
+    expect(config.voice.flushTranscriptTailOnSessionEnd).toBeUndefined();
+    const params = realtime();
+    expect(params).not.toHaveProperty("includeStartupContext");
+    expect(params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
+    expect(params).not.toHaveProperty("initialItems");
+    for (const kind of ["start", "resume"] as const) {
+      expect(thread({}, {}, kind)).not.toHaveProperty("config");
+    }
+  });
+
+  for (const include of [false, true]) {
+    for (const flush of [false, true]) {
+      test(`startup context ${include} and tail flush ${flush} remain independent`, () => {
+        const values: ConfigValues = {
+          voice: {
+            "include-startup-context": include,
+            "flush-transcript-tail-on-session-end": flush,
+          },
+        };
+        expect(realtime(values)).toEqual({
+          ...realtime(),
+          includeStartupContext: include,
+          flushTranscriptTailOnSessionEnd: flush,
+        });
+        const overridden = realtime({
+          voice: {
+            ...values.voice,
+            extra: {
+              includeStartupContext: !include,
+              flushTranscriptTailOnSessionEnd: !flush,
+            },
+          },
+        });
+        expect(overridden["includeStartupContext"]).toBe(!include);
+        expect(overridden["flushTranscriptTailOnSessionEnd"]).toBe(!flush);
+      });
+    }
+  }
+
+  for (const kind of ["start", "resume"] as const) {
+    for (const snapshot of ["", "Explicit startup text"]) {
+      test(`${kind}: ${snapshot === "" ? "empty" : "nonempty"} startup override uses thread config unchanged`, () => {
+        const codexConfig = { experimental_realtime_ws_startup_context: snapshot };
+        const values: ConfigValues = { orchestrator: { config: codexConfig } };
+        expect(thread(values, {}, kind)["config"]).toEqual(codexConfig);
+        expect(realtime(values)).toEqual(realtime());
+        // The upstream include gate, not AgentVoice, controls use of the override.
+        expect(
+          thread({ ...values, voice: { "include-startup-context": false } }, {}, kind)["config"],
+        ).toEqual(codexConfig);
+      });
+    }
+
+    test(`${kind}: extra.config still replaces the startup override as a whole`, () => {
+      const values: ConfigValues = {
+        orchestrator: {
+          config: { experimental_realtime_ws_startup_context: "Original" },
+          extra: { config: { experimental_realtime_ws_startup_context: "" } },
+        },
+      };
+      expect(thread(values, {}, kind)["config"]).toEqual({
+        experimental_realtime_ws_startup_context: "",
+      });
+      expect(
+        thread({ orchestrator: { ...values.orchestrator, extra: { config: {} } } }, {}, kind)[
+          "config"
+        ],
+      ).toEqual({});
+    });
+  }
+
+  test("startup and tail opt-outs do not strip explicit prompt and seed files", () => {
+    const params = realtime(
+      {
+        voice: {
+          "include-startup-context": false,
+          "flush-transcript-tail-on-session-end": false,
+        },
+      },
+      { voicePrompt: "Voice instructions", voiceSeedUser: "Explicit seed" },
+    );
+    expect(params["prompt"]).toBe("Voice instructions");
+    expect(params["initialItems"]).toEqual([{ role: "user", text: "Explicit seed" }]);
+  });
+});
+
 describe("native skill config passthrough", () => {
   for (const kind of ["start", "resume"] as const) {
     test(`${kind}: no config is manufactured when unset`, () => {

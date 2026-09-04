@@ -155,7 +155,7 @@ export const orchestratorValuesSchema = z
       .describe("Replaces the thread's workspace roots. Entries are tilde-expanded.")
       .optional(),
     config: passthrough(
-      "Raw ~/.codex/config.toml overrides, applied to this thread only. An entry here beats the effort shorthand above.",
+      "Raw ~/.codex/config.toml overrides, applied to this thread only. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history.",
     ).optional(),
     extra: passthrough(
       "Raw thread/start passthrough, merged last — anything the protocol accepts but this file does not name yet. Typos surface as RPC errors at boot, not as config errors.",
@@ -206,7 +206,7 @@ export const voiceValuesSchema = z
     "include-startup-context": z
       .boolean()
       .describe(
-        "Append a synthesized <startup_context> to the voice agent's instructions: the current thread, recent work across your other codex threads, and a depth-2 workspace tree. Worth false for an empty workspace. Default: upstream behavior.",
+        "Include Codex's startup snapshot in the voice instructions: current-thread history, recent work from other threads, and a bounded machine/workspace map. Omitted defers to Codex (currently on for our WebRTC transport). False skips both generated and overridden startup context; it does not erase the orchestrator's history or prevent later recall through delegation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot, including an empty string to suppress it.",
       )
       .optional(),
     "delegation-ack-filler": z
@@ -237,7 +237,7 @@ export const voiceValuesSchema = z
       .boolean()
       .meta({
         description:
-          "Route any leftover transcript tail through the orchestrator when the session ends.",
+          "Ask Codex to send leftover speech transcripts to the orchestrator when the voice session ends, potentially causing work after hangup. Independent of include-startup-context: this delivers transcript text, while that setting controls the next session's startup snapshot. Omitted defers to Codex (currently off). False does not suppress transcripts sent during ordinary delegations.",
         default: false,
       })
       .optional(),

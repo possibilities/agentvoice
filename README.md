@@ -150,6 +150,12 @@ agent and any running workers stay serviced around the clock, and the next
 `agentvoice console` walks back into the same conversation. `--fresh` (or
 the `f` key) is the deliberate way to start over.
 
+That session selection is AgentVoice policy: one saved id in `thread.json`
+per state directory, not native automatic continuation and not scoped to the
+directory where you launch the console. Cwd-local default continuation,
+`--no-continue`, and `--resume <id>` are planned replacements, not available
+flags yet.
+
 Logs live in `~/.local/state/agentvoice/resident/`: `resident.log` (the
 app-server's stderr) and `pick.log` (each spawn's account pick and why).
 
@@ -216,6 +222,42 @@ free-form objects, so editor validation ends at their boundary.)
 realtime voice session; the Server's attachment and the orchestrator thread
 stay in place. Invalid, unchanged, and unrelated edits are ignored for live
 reaction. Every other config key remains boot-time configuration.
+
+### Native voice context controls
+
+AgentVoice adds no automatic transcript replay between voice sessions.
+It passes these controls to Codex without choosing defaults for them:
+
+- `voice.include-startup-context`: omitted uses Codex's default (currently
+  **on** for our WebRTC transport). The snapshot can include current-thread
+  history, recent work from other threads, and a bounded machine/workspace map.
+  `false` skips that snapshot, including any replacement text.
+- `voice.flush-transcript-tail-on-session-end`: omitted uses Codex's default
+  (currently **off**). `true` sends leftover speech transcripts to the
+  orchestrator at session end and can cause work after hangup. It is independent
+  of startup context and does not replace ordinary delegation transcripts.
+- `orchestrator.config.experimental_realtime_ws_startup_context`: when
+  startup context is enabled, this string replaces the entire generated
+  snapshot. `""` suppresses it. Omit the key to leave Codex's config/defaults
+  in charge. It is a thread-config key, not a `voice.extra` RPC field.
+
+For an explicit opt-out of the snapshot and end-of-session transcript flush:
+
+```json
+{
+  "voice": {
+    "include-startup-context": false,
+    "flush-transcript-tail-on-session-end": false
+  }
+}
+```
+
+These settings do not erase the selected thread's history, prevent the
+orchestrator from recalling earlier work through delegation, or strip your
+explicit prompt/seed files. None is a session picker or a privacy boundary.
+The shipped example stays a no-op; the opt-out above is a choice, not the
+application default. See the [field guide](docs/field-guide.md#voice-memory-across-sessions-the-startup-context)
+for precedence and source evidence.
 
 ### Prompts
 
