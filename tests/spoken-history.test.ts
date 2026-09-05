@@ -25,7 +25,7 @@ const spoken = [
 const page = { data: spoken, nextCursor: null };
 const items: SpokenItem[] = spoken.map((e) => ({ role: e.item.role, text: e.item.text }));
 const replayed = [{ role: "developer", text: SPOKEN_HISTORY_INSTRUCTION }, ...items];
-const replayOn = { voice: { "replay-spoken-history": true } } satisfies ConfigValues;
+const replayOff = { voice: { "replay-spoken-history": false } } satisfies ConfigValues;
 
 describe("native spoken history", () => {
   test("pages backwards but restores speech chronologically, excluding working-agent text", async () => {
@@ -138,13 +138,13 @@ describe("reconnect request defaults", () => {
       history,
     );
 
-  test("reconnects send nothing of AgentVoice's own unless replay is enabled and speech exists", () => {
+  test("reconnects add only replayed speech, and nothing when replay is off or speech is absent", () => {
     const first = params({}, false);
     expect(first).not.toHaveProperty("initialItems");
-    expect(params({}, true, items)).toEqual(first);
-    expect(params(replayOn)).toEqual(first);
-    expect(params(replayOn, false, items)).toEqual(first);
-    expect(params(replayOn, true, items)).toEqual({ ...first, initialItems: replayed });
+    expect(params({}, false, items)).toEqual(first);
+    expect(params({})).toEqual(first);
+    expect(params(replayOff, true, items)).toEqual(first);
+    expect(params({}, true, items)).toEqual({ ...first, initialItems: replayed });
     for (const key of ["prompt", "quietResume", "replaySpokenHistory"])
       expect(first).not.toHaveProperty(key);
     expect(first["includeStartupContext"]).toBe(false);
@@ -152,22 +152,21 @@ describe("reconnect request defaults", () => {
   });
 
   test("explicit initial items and protocol/transport choices keep their meaning under replay", () => {
-    const replay = replayOn.voice;
     for (const initialItems of [[], null, [{ role: "user", text: "Operator startup" }]])
-      expect(
-        params({ voice: { ...replay, extra: { initialItems } } }, true, items)["initialItems"],
-      ).toEqual(initialItems);
+      expect(params({ voice: { extra: { initialItems } } }, true, items)["initialItems"]).toEqual(
+        initialItems,
+      );
     for (const version of [null, "v1"])
-      expect(params({ voice: { ...replay, extra: { version } } }, true, items)).not.toHaveProperty(
+      expect(params({ voice: { extra: { version } } }, true, items)).not.toHaveProperty(
         "initialItems",
       );
     for (const transport of [{ type: "websocket" }, { type: "existingCall", callId: "call" }])
       expect(
-        params({ voice: { ...replay, version: "v3", extra: { transport } } }, true, items),
+        params({ voice: { version: "v3", extra: { transport } } }, true, items),
       ).not.toHaveProperty("initialItems");
     expect(
       realtimeParams(
-        resolveConfig({}, replayOn, {}, "/test"),
+        resolveConfig({}, {}, {}, "/test"),
         { voiceSeedDeveloper: "" },
         "thread",
         "call",
@@ -183,7 +182,7 @@ describe("spoken replay configuration and lifecycle", () => {
   for (const mode of ["continue", "resume", "fresh"] as const) {
     test(`${mode}: replays only the selected conversation; redial refreshes speech and Fresh clears it`, async () => {
       const h = runtimeHarness(
-        replayOn,
+        {},
         mode === "resume" ? { resume: "existing" } : { fresh: mode === "fresh" },
       );
       h.native.main("existing", h.directory);
@@ -230,7 +229,6 @@ describe("spoken replay configuration and lifecycle", () => {
   }
 
   for (const voice of [
-    {},
     { "replay-spoken-history": false },
     { "replay-spoken-history": false, "include-startup-context": true },
     { extra: { initialItems: [] } },
@@ -255,8 +253,8 @@ describe("spoken replay configuration and lifecycle", () => {
   }
 
   for (const resume of [undefined, "existing"]) {
-    test(`${resume ? "explicit resume" : "continue"} with replay on but no saved speech sends no items and no work turn`, async () => {
-      const h = runtimeHarness(replayOn, { resume });
+    test(`${resume ? "explicit resume" : "continue"} with no saved speech sends no items and no work turn`, async () => {
+      const h = runtimeHarness({}, { resume });
       h.native.main("existing", h.directory);
       try {
         await h.runtime.start();
@@ -277,7 +275,7 @@ describe("spoken replay configuration and lifecycle", () => {
   }
 
   test("first connection stays native, closed/error calls redial with replay, Fresh resets the boundary", async () => {
-    const h = runtimeHarness(replayOn, { fresh: true });
+    const h = runtimeHarness({}, { fresh: true });
     h.native.override = (method) =>
       method === "thread/timeline/list" ? Promise.resolve(page) : undefined;
     const offer = async (replay: boolean) => {
@@ -316,7 +314,7 @@ describe("spoken replay configuration and lifecycle", () => {
   });
 
   test("failed Fresh keeps the old conversation's reconnect policy", async () => {
-    const h = runtimeHarness(replayOn, { fresh: true });
+    const h = runtimeHarness({}, { fresh: true });
     h.native.override = (method) =>
       method === "thread/timeline/list" ? Promise.resolve(page) : undefined;
     try {
@@ -341,7 +339,7 @@ describe("spoken replay configuration and lifecycle", () => {
 
   for (const boundary of ["fresh", "quit", "newer-offer"] as const) {
     test(`pending history cannot launch an obsolete call after ${boundary}`, async () => {
-      const h = runtimeHarness(replayOn);
+      const h = runtimeHarness();
       h.native.main("existing", h.directory);
       const pending = deferred<unknown>();
       h.native.override = (method) =>

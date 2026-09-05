@@ -93,8 +93,8 @@ describe("native voice context across call and conversation boundaries", () => {
             await h.runtime.offer(sdp);
             const call = h.native.calls.at(-1)!;
             expect(call.method).toBe("thread/realtime/start");
-            // Default reconnects add no AgentVoice initial items, transcript or
-            // context/tail-flush override: the call matches a first connection.
+            // With no saved speech in this harness, a reconnect adds no initial
+            // items or context/tail-flush override: it matches a first connection.
             expect(call.params).toEqual({
               version: "v3",
               includeStartupContext: false,

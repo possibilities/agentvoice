@@ -127,30 +127,30 @@ If none exists, a new conversation starts. Lookup/resume failures are errors,
 not an excuse to silently create a replacement. Explicit `--resume` must match
 an eligible conversation in the selected workspace.
 
-Default launch and explicit `--continue` resume the selected working thread. By
-default the new voice call carries no AgentVoice-authored items: a reconnect is
-built like a stock app-server realtime start. Setting `replay-spoken-history` to
-`true` restores the thread's recent saved speech into each new WebRTC v3 call,
-using the actual spoken user/assistant segments, which can differ from the working
-agent's text; redial then reads the latest saved speech again, and a first call
-after `--no-continue` or Fresh receives no old speech. The native cross-conversation
-startup snapshot (including Recent Work) is off by default, with an explicit opt-in below.
+Default launch and explicit `--continue` resume the selected working thread and
+restore its recent saved speech into a new WebRTC v3 call. This uses the actual
+spoken user/assistant segments, which can differ from the working agent's text.
+Redial reads the latest saved speech again. A first call after `--no-continue`
+or Fresh receives no old speech. AgentVoice adds no instruction of its own to a
+reconnect; with replay off, the call is built like a stock app-server realtime
+start. The native cross-conversation startup snapshot (including Recent Work) is
+off by default, with an explicit opt-in below.
 
 These independent settings live under `voice` in your selected `server.json`:
 
 | Setting | Default | Ownership and effect |
 | --- | --- | --- |
-| `replay-spoken-history` | `false` | AgentVoice behavior, opt-in: `true` restores saved speech from this conversation on continue/resume/redial. The default sends no AgentVoice items. |
+| `replay-spoken-history` | `true` | AgentVoice behavior: restore saved speech from this conversation on continue/resume/redial. `false` skips history reads/replay while keeping working-thread continuation. |
 | `include-startup-context` | `false` | Native passthrough with an AgentVoice default: `true` opts into the whole Codex snapshot, including Recent Work from other conversations. |
 
-For example, continue the working thread and restore its recent saved speech:
+For example, continue the working thread without restoring old speech:
 
 ```json
-{ "voice": { "replay-spoken-history": true } }
+{ "voice": { "replay-spoken-history": false } }
 ```
 
-The replay setting is not forwarded as a similarly named RPC field. When enabled
-it builds native `initialItems`: one developer item marking the segments as past
+The replay setting is not forwarded as a similarly named RPC field. It builds
+native `initialItems`: one developer item marking the segments as past
 conversation, then the segments; the built-in voice base prompt stays intact.
 Explicit initial items (seed files or raw `voice.extra.initialItems`, including
 `[]` or `null`) replace replay. Other versions/transports receive no automatic
@@ -413,8 +413,9 @@ file sends an empty string. An empty path is an error, not an empty prompt.
 Contents load once at launch and are reused on redial and Fresh. Seed roles are sent developer, user, assistant; raw `initialItems`
 can express any supported ordering/repetition. Session-boundary instructions and
 voice prompts/items ride every realtime start, including redial. Explicit seeds
-replace opt-in spoken-history replay, so their author owns startup behavior.
-Without explicit seeds, a reconnect carries no items unless replay is enabled.
+replace automatic spoken-history replay, so their author owns startup behavior.
+Without explicit seeds, replay reads the selected conversation's saved native
+speech at reconnect and adds nothing else.
 
 Migration: leave old files untouched or back them up, then explicitly reference
 only the ones you want. For a native baseline, leave the section unset. The app

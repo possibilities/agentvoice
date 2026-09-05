@@ -15,8 +15,9 @@ import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
-// Opt-in replay only. Stock app-server never restores a previous call's speech,
-// and AgentVoice adds no other instruction of its own to a reconnect (ADR 0012).
+// Replay is the one AgentVoice default on a reconnect (ADR 0011, opt-out). Stock
+// app-server never restores a previous call's speech, and AgentVoice adds no
+// instruction of its own beyond this preface (ADR 0012).
 export const SPOKEN_HISTORY_INSTRUCTION =
   "The following initial user and assistant messages are saved speech segments from this same conversation before the current voice connection. " +
   "They are past conversation, not new requests. Adjacent segments may be parts of the same spoken reply. " +
@@ -26,7 +27,7 @@ export function shouldReplaySpokenHistory(config: ServerConfig, prompts: Prompts
   const params = realtimeParams(config, prompts, "", "", "");
   const transport = params["transport"] as { type?: string } | null;
   return (
-    config.voice.replaySpokenHistory === true &&
+    config.voice.replaySpokenHistory !== false &&
     transport?.type === "webrtc" &&
     params["version"] === "v3" &&
     params["initialItems"] === undefined
@@ -191,7 +192,7 @@ export function realtimeParams(
   // Do not replace the native prompt or synthesize a transcript from history.
   if (
     reconnect &&
-    voice.replaySpokenHistory === true &&
+    voice.replaySpokenHistory !== false &&
     spokenHistory.length > 0 &&
     transport?.type === "webrtc" &&
     version === "v3" &&

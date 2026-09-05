@@ -43,15 +43,15 @@ Old history remains; native work in the old conversation stays there.
 
 **Continue / resume** — Resume native eligible working-thread history; default
 and --continue select the latest eligible thread, --resume chooses an exact ID.
-No global thread.json pointer. New voice calls carry no AgentVoice items unless
-voice.replay-spoken-history=true restores recent saved speech from that same
-thread; explicit seeds win over replay.
+No global thread.json pointer. New voice calls restore recent saved speech from
+that same thread unless voice.replay-spoken-history=false or explicit seeds win;
+AgentVoice adds no instruction of its own.
 
-**Spoken history replay** — Opt-in: AgentVoice reads native saved speech and sends
-it as past conversation in v3 initialItems, without a separate persistent store.
-The frontend setting voice.replay-spoken-history defaults false, so reconnects
-match a stock app-server realtime start; true reads and replays on continue,
-resume and redial. It cannot restore unsaved audio.
+**Spoken history replay** — AgentVoice reads native saved speech and sends it as
+past conversation in v3 initialItems, without a separate persistent store. The
+frontend setting voice.replay-spoken-history defaults true; false leaves the
+working thread resumed but skips this read/replay, so the reconnect matches a
+stock app-server realtime start. It cannot restore unsaved audio.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice

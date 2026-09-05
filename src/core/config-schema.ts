@@ -198,8 +198,8 @@ export const voiceValuesSchema = z
       .meta({
         title: "AgentVoice: replay spoken history",
         description:
-          "AgentVoice behavior, not a native passthrough. Default false: reconnects send no AgentVoice initial items, matching stock app-server. Explicit true restores recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. Explicit initial items (including seed files, [] or null) replace replay. Independent of native startup context. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
-        default: false,
+          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. False skips history reads and replay without changing working-thread continuation or native startup context; the reconnect then carries no AgentVoice items, matching stock app-server. Explicit initial items (including seed files, [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
+        default: true,
       })
       .optional(),
     "include-startup-context": z
