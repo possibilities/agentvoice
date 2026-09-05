@@ -88,9 +88,11 @@ conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
 
 Default continue uses native unarchived history, newest updated first, with
-sourceKinds appServer (the upstream default excludes it), all providers, exact cwd,
-agentvoice-orchestrator source, no parent and non-ephemeral. Explicit resume
-must be found in that inventory. Do not hide lookup/resume failures as Fresh.
+sourceKinds appServer plus vscode, all providers and exact cwd. Stock 0.153.3
+classifies this third-party app-server client as vscode and can omit threadSource
+from list rows, so verify candidate ownership with thread/read before selecting
+agentvoice-orchestrator, no-parent, non-ephemeral history. Explicit resume must
+be found in that inventory. Do not hide lookup/resume failures as Fresh.
 
 Fresh cuts media before switching identity. Native work in an old main thread
 stays there, even once a new conversation is active. Quitting ends voice and app-owned

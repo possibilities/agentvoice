@@ -28,6 +28,19 @@ function eligible(value: unknown, workspace: string): value is NativeThread {
   );
 }
 
+function listCandidate(value: unknown, workspace: string): value is NativeThread {
+  if (!value || typeof value !== "object") return false;
+  const t = value as NativeThread;
+  return (
+    typeof t.id === "string" &&
+    t.id.length > 0 &&
+    t.cwd === workspace &&
+    !t.parentThreadId &&
+    t.ephemeral !== true &&
+    (t.threadSource == null || t.threadSource === ORCHESTRATOR_THREAD_SOURCE)
+  );
+}
+
 /** Selection is native history lookup, never a second session index. */
 export async function selectThread(
   request: NativeRequest,
@@ -42,7 +55,9 @@ export async function selectThread(
   do {
     const page = (await request("thread/list", {
       cwd: workspace,
-      sourceKinds: ["appServer"],
+      // Stock 0.153.3 classifies third-party app-server threads as `vscode`.
+      // Keep `appServer` for native rows that use the protocol's dedicated kind.
+      sourceKinds: ["appServer", "vscode"],
       modelProviders: [],
       archived: false,
       sortKey: "updated_at",
@@ -52,9 +67,18 @@ export async function selectThread(
     })) as { data?: unknown[]; nextCursor?: string | null };
     if (!page || !Array.isArray(page.data)) throw new Error("thread/list returned no thread list");
     for (const thread of page.data) {
-      if (eligible(thread, workspace) && (!selection.resume || thread.id === selection.resume)) {
-        return thread.id;
-      }
+      if (!listCandidate(thread, workspace) || (selection.resume && thread.id !== selection.resume))
+        continue;
+      // 0.153.3 can omit the persisted threadSource from thread/list rows even
+      // though thread/read restores it. Verify ownership before selecting a
+      // conversation so ordinary Codex/VS Code history remains excluded.
+      const read = (await request("thread/read", {
+        threadId: thread.id,
+        includeTurns: false,
+      })) as { thread?: unknown };
+      if (eligible(read?.thread, workspace)) return thread.id;
+      if (thread.threadSource === ORCHESTRATOR_THREAD_SOURCE)
+        throw new Error(`Conversation ${thread.id} no longer matches this AgentVoice workspace`);
     }
     if (page.nextCursor != null && (typeof page.nextCursor !== "string" || !page.nextCursor)) {
       throw new Error("thread/list returned an invalid cursor");

@@ -133,12 +133,15 @@ reachable paths, not evidence of the operator's active rollout values.
 | Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | Preserve the operator's explicit decision to leave these controls unset. Desktop values cannot be treated as independent, universally native defaults. |
 | Work model, effort, Fast and history | Resume can restore saved settings; history mode also depends on native thread-store capabilities. Desktop can supply product/rollout settings. An omitted field does not necessarily mean config.toml is consulted. | Keep native resolution and existing Fast checks. Correct schema claims that history simply inherits config and that ultra guarantees proactive subagents. |
 | Microphone processing | Desktop requests browser microphone noise suppression. AgentVoice's native duplex PCM path has no echo cancellation/noise suppression stage. App-server cannot supply capture processing to a client-owned microphone. | Existing audio-quality limitation, not fixed by omission or by v3. Keep the headphones recommendation; assess audio processing with real use before adding DSP. |
-| Selection, permissions and transport | AgentVoice already supplies required realtime gates, WebRTC/audio fields, exact-workspace app-server history filters, and full-access policy. | Keep these explicit choices: omitting them would change the product or break the client. |
+| Selection, permissions and transport | AgentVoice supplies required realtime gates, WebRTC/audio fields, exact-workspace history filters, and full-access policy. Stock 0.153.3 lists this third-party app-server client's threads as `vscode` and may omit `threadSource` from list rows, so selection queries `appServer` plus `vscode` and verifies candidates with `thread/read`. | Keep these explicit choices: omitting them would change the product or break the client. Re-probe list/read metadata on native upgrades. |
 
 Source anchors: [native version/model/voice resolution](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core/src/realtime_conversation.rs#L1215),
 [startup context, tail flush and handoff defaults](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/app-server/src/request_processors/turn_processor.rs#L1204),
 [voice prompt's frontend assumptions](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/prompts/templates/realtime/backend_prompt.md#L13),
 and [native thread creation/history selection](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/app-server/src/request_processors/thread_processor.rs#L1419).
+The source-kind and missing-list-marker behavior above was confirmed with
+initialize/list/read probes against the installed stock Codex 0.153.3; it is a
+version-specific compatibility fact, not a general app-server contract.
 
 The v3 regression and its configured-voice side effect were confirmed. This audit
 does not establish another startup failure. It does establish frontend gaps and

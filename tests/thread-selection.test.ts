@@ -11,26 +11,43 @@ const main = (id: string, extra = {}) => ({
 describe("native workspace conversation selection", () => {
   test("lists newest-first, explicitly includes app-server sources and all providers", async () => {
     const request: NativeRequest = async (method, params) => {
-      expect(method).toBe("thread/list");
-      expect(params).toEqual({
-        cwd: "/workspace",
-        sourceKinds: ["appServer"],
-        modelProviders: [],
-        archived: false,
-        sortKey: "updated_at",
-        sortDirection: "desc",
-        limit: 100,
-      });
-      return { data: [main("newest"), main("older")], nextCursor: null };
+      if (method === "thread/list") {
+        expect(params).toEqual({
+          cwd: "/workspace",
+          sourceKinds: ["appServer", "vscode"],
+          modelProviders: [],
+          archived: false,
+          sortKey: "updated_at",
+          sortDirection: "desc",
+          limit: 100,
+        });
+        return {
+          data: [main("newest", { threadSource: null }), main("older")],
+          nextCursor: null,
+        };
+      }
+      expect(method).toBe("thread/read");
+      expect(params).toEqual({ threadId: "newest", includeTurns: false });
+      return { thread: main("newest") };
     };
     expect(await selectThread(request, "/workspace", {})).toBe("newest");
   });
-  test("ignores workers, other workspaces/clients, child threads, and ephemeral history; paginates", async () => {
-    const calls: unknown[] = [];
-    const request: NativeRequest = async (_, params) => {
-      calls.push(params["cursor"]);
+  test("reads list candidates to ignore other clients, workers, workspaces, children, and ephemeral history", async () => {
+    const cursors: unknown[] = [];
+    const reads: unknown[] = [];
+    const request: NativeRequest = async (method, params) => {
+      if (method === "thread/read") {
+        reads.push(params["threadId"]);
+        return {
+          thread:
+            params["threadId"] === "ordinary-vscode"
+              ? main("ordinary-vscode", { threadSource: "another-app" })
+              : main("correct"),
+        };
+      }
+      cursors.push(params["cursor"]);
       return params["cursor"]
-        ? { data: [main("correct")], nextCursor: null }
+        ? { data: [main("correct", { threadSource: null })], nextCursor: null }
         : {
             data: [
               null,
@@ -40,18 +57,22 @@ describe("native workspace conversation selection", () => {
               main("temporary", { ephemeral: true }),
               main("worker", { threadSource: "agentvoice-worker" }),
               main("client", { threadSource: "another-app" }),
+              main("ordinary-vscode", { threadSource: null }),
             ],
             nextCursor: "page2",
           };
     };
     expect(await selectThread(request, "/workspace", {})).toBe("correct");
-    expect(calls).toEqual([undefined, "page2"]);
+    expect(cursors).toEqual([undefined, "page2"]);
+    expect(reads).toEqual(["ordinary-vscode", "correct"]);
   });
   test("explicit resume finds the id across pages and never falls back to fresh", async () => {
-    const request: NativeRequest = async (_, p) =>
-      p["cursor"]
-        ? { data: [main("requested")], nextCursor: null }
+    const request: NativeRequest = async (method, p) => {
+      if (method === "thread/read") return { thread: main("requested") };
+      return p["cursor"]
+        ? { data: [main("requested", { threadSource: null })], nextCursor: null }
         : { data: [main("newer")], nextCursor: "page2" };
+    };
     expect(await selectThread(request, "/workspace", { resume: "requested" })).toBe("requested");
     await expect(selectThread(request, "/workspace", { resume: "missing" })).rejects.toThrow(
       "no unarchived AgentVoice",
@@ -76,5 +97,16 @@ describe("native workspace conversation selection", () => {
     ]) {
       await expect(selectThread(async () => page, "/workspace", {})).rejects.toThrow();
     }
+    await expect(
+      selectThread(
+        async (method) => {
+          if (method === "thread/list")
+            return { data: [main("candidate", { threadSource: null })], nextCursor: null };
+          throw new Error("read failed");
+        },
+        "/workspace",
+        {},
+      ),
+    ).rejects.toThrow("read failed");
   });
 });

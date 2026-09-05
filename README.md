@@ -120,6 +120,9 @@ workspace. Symlink paths canonicalize to the same directory.
 Default launch lists native unarchived app-server history, newest-updated first,
 and continues the latest non-ephemeral AgentVoice main conversation whose cwd
 matches exactly. Legacy worker threads, child threads and other clients' threads are excluded.
+On Codex 0.153.3, app-server-created AgentVoice threads are listed under the
+`vscode` source kind and list rows can omit their saved `threadSource`; AgentVoice
+queries both native categories and confirms ownership with `thread/read`.
 If none exists, a new conversation starts. Lookup/resume failures are errors,
 not an excuse to silently create a replacement. Explicit `--resume` must match
 an eligible conversation in the selected workspace.
