@@ -1,12 +1,9 @@
 #!/usr/bin/env bun
 /** Foreground voice application; console is a compatibility alias. */
-import { realpathSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
-import { runConsoleHost } from "./console/host.ts";
-import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./core/config.ts";
-import { defaultConfigPath, expandTilde } from "./paths.ts";
+import { loadLaunchConfig } from "./core/launch-config.ts";
+
+export { loadLaunchConfig } from "./core/launch-config.ts";
 
 export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a foreground Codex voice TUI
@@ -39,7 +36,7 @@ Options:
   --debug                 Per-launch protocol/media log under the state directory
   --help                  Show help
 
-One AgentVoice process owns an unmodified Codex app-server child.
+The foreground controller retains a disposable voice runtime and its stock Codex child.
 Quitting stops running work; native conversation history remains resumable.
 Full access is mandatory and verified with Codex; no config/environment opt-in.
 No permission dialogs. Connector consent/tool questions are refused visibly.
@@ -52,7 +49,7 @@ VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md. An overr
 and an append for the same agent cannot both be present. Raw native fields remain
 available in orchestrator.extra / voice.extra.
 
-Settings and prompt files load once per launch; restart to apply edits.
+Settings and prompt files load per runtime generation; runtime restart rereads them.
 Raw extra fields can override named CLI settings; see README for precedence.
 
 Keys: [m] toggle microphone · [s] toggle speaker · [r] redial · [f] fresh · [q] quit
@@ -221,55 +218,18 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   };
 }
 
-export async function loadLaunchConfig(parsed: ParsedArgs, launchCwd = process.cwd()) {
-  const home = homedir();
-  const configPath = parsed.configPath
-    ? resolve(launchCwd, expandTilde(parsed.configPath, home))
-    : defaultConfigPath(process.env, home);
-  const {
-    device: _device,
-    "output-device": _outputDevice,
-    resume: _resume,
-    ...values
-  } = parsed.values;
-  const cliValues = cliToConfigValues(values);
-  if (parsed.codexConfig) cliValues["codex-config"] = parsed.codexConfig;
-  const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
-  const config = resolveConfig(cliValues, fileValues, process.env, home, {
-    debug: parsed.debug,
-    configDir: dirname(configPath),
-    launchCwd,
-  });
-  try {
-    if (!statSync(config.orchestrator.workspace).isDirectory()) throw new Error("not a directory");
-    config.orchestrator.workspace = realpathSync(config.orchestrator.workspace);
-  } catch (error) {
-    throw new ConfigError(
-      `Cannot use workspace ${config.orchestrator.workspace}: ${String(error)}`,
-    );
-  }
-  return config;
-}
-
 async function runConsoleCommand(argv: string[]): Promise<number> {
   const command = parseConsoleCommand(argv);
   if (command.help) {
     console.log(USAGE);
     return 0;
   }
-  const config = await loadLaunchConfig(command.parsed);
-  await runConsoleHost(config, VERSION, {
-    media: {
-      deviceIndex: command.options.deviceIndex,
-      outputDeviceIndex: command.options.outputDeviceIndex,
-    },
-    debug: command.options.debug,
-    runtime: {
-      fresh: command.options.fresh,
-      resume: command.options.resume,
-      fast: command.parsed.fast,
-    },
-  });
+  await loadLaunchConfig(command.parsed);
+  const { runController } = await import("./runtime-control/controller.ts");
+  await runController(
+    { parsed: command.parsed, options: command.options, launchCwd: process.cwd() },
+    VERSION,
+  );
   return 0;
 }
 

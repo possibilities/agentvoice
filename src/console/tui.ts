@@ -62,8 +62,8 @@ export interface VoiceTuiHost {
   setMuted(target: AudioTarget, muted: boolean): void;
   beginUnmute(target: AudioTarget, input: VoiceTuiInput): void;
   releaseUnmute(target: AudioTarget, input: VoiceTuiInput): void;
-  redial(): void;
-  fresh(): void;
+  redial(): void | Promise<void>;
+  fresh(): void | Promise<void>;
   shutdown(): void | Promise<void>;
 }
 
@@ -270,7 +270,9 @@ export async function createVoiceTui(
           id: "redial",
           key: "R",
           label: "redial the voice link",
-          onRun: () => host.redial(),
+          onRun: () => {
+            void Promise.resolve(host.redial()).catch(() => {});
+          },
         },
         {
           id: "fresh",
@@ -407,7 +409,7 @@ export async function createVoiceTui(
   }
 
   const onSignal = (): void => {
-    void shutdown();
+    void shutdown().catch(() => {});
   };
 
   renderer.keyInput.on("keypress", (key: ParsedKey) => {
@@ -431,10 +433,10 @@ export async function createVoiceTui(
     }
     if (key.name === "space" || key.eventType !== "press" || key.repeated) return;
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
-      void shutdown();
+      void shutdown().catch(() => {});
       return;
     }
-    if (key.name === "r") host.redial();
+    if (key.name === "r") void Promise.resolve(host.redial()).catch(() => {});
     else if (key.name === "f") host.fresh();
   });
   renderer.keyInput.on("keyrelease", (key: ParsedKey) => {

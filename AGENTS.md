@@ -1,11 +1,11 @@
 # agentvoice — repository guidance
 
-A foreground Codex voice TUI: one AgentVoice process owns UI, audio, WebRTC
-and coordination; an owned stock Codex app-server child provides agents/tools
-over native stdio. No background Server, resident, control attachment or remote
-mode. Read README.md for usage, CONTEXT.md for vocabulary and ADR 0009 for
-workspace/ownership rules. Historical ADRs describe former designs, not active
-implementation.
+A foreground Codex voice TUI: a retained controller owns UI, exact thread
+identity, leases, control transports, and operation records; its disposable
+runtime child owns audio, WebRTC, runtime code, config/prompt/role loading, and
+an owned stock Codex app-server child over native stdio. No background Server,
+resident, remote mode, or arbitrary control attachment. Read README.md for
+usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 
 ## Commands
 
@@ -78,13 +78,22 @@ implementation.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
-- src/core/runtime.ts: launch/resume/Fresh, voice session, child lifecycle,
-  launch-cached settings. No account selection/rotation, reattachment/restart adoption,
-  custom worker manager, tool callback or submitted report/follow-up turns.
-  Keep old main-thread locks until quit; native work may still be active there.
+- src/runtime-control/controller.ts: retained foreground controller, exact
+  thread leases, operation journal, controller/runtime generations and TUI.
+- src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
+  controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
+- src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
+  Never adopt an old journal across a full quit/relaunch.
+- src/control/: shared Zod contract/dispatch, private UDS NDJSON server and
+  loopback Streamable HTTP MCP projection. Keep them semantically identical.
+- src/core/runtime.ts: a voice runtime's launch/resume/Fresh, voice session,
+  child lifecycle, and runtime-cached settings. No account selection/rotation,
+  reattachment/restart adoption, custom worker manager, tool callback or
+  submitted report/follow-up turns. Keep old main-thread locks until quit;
+  native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
 - src/console/host.ts: native readiness before audio opens, negotiation after audio
-  readiness, visible media notices, direct in-process wiring and quit cleanup.
+  readiness, visible media notices, worker-local media wiring and quit cleanup.
 - src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
@@ -117,8 +126,10 @@ be found in that inventory. Do not hide lookup/resume failures as Fresh.
 Fresh cuts media before switching identity. Native work in an old main thread
 stays there, even once a new conversation is active. Quitting ends voice and app-owned
 work and closes the child. Old thread.json/workers.json and native history are
-never rewritten, imported or removed. Per-thread locks allow independent launches;
-an old background version or another client does not participate in that guard.
+never rewritten, imported or removed. The controller retains every acquired
+thread lease until quit, including old Fresh threads. Per-thread locks allow
+independent launches; an old background version or another client does not
+participate in that guard.
 
 App state: thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
@@ -212,7 +223,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   hold-only. OpenTUI 0.5.3 reports repeats as press + repeated; ignore them for
   toggles and renew only live Space holds. Palette opening cancels holds.
   No unrelated visual redesign during lifecycle cuts.
-- All AgentVoice settings and prompt contents load once per launch. No voice-name
+- All AgentVoice settings and prompt contents load once per runtime generation. No voice-name
   watcher or local voice catalog; Codex validates voice selection. TUI model,
   effort and voice version are reported native values, never inferred from requests.
 - server.schema.json is generated and drift-tested. server.json.example remains
@@ -235,7 +246,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   AgentVoice-shaped prompt overlays (the seed files were removed for that reason).
   Preserve empty contents and final raw extra precedence; a present name that
   cannot load fails before native startup even when extra would replace its value.
-  Contents load once per launch and are reused, never hot-reloaded or copied
+  Contents load once per runtime generation and are reused until explicit runtime
+  replacement, never watched or copied
   between sessions. Legacy names and the retired prompt-files key are metadata-only
   warnings/errors, visible without debug; never silently delete/migrate user files.
   Removing overrides does not rewrite saved history or suppress native

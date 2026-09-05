@@ -1,0 +1,202 @@
+# AgentVoice control API
+
+This is the authoritative reference for AgentVoice control protocol version 1.
+The persistent foreground controller owns this API, the exact conversation
+identity, operation journal, Unix socket, and loopback MCP host. Its disposable
+voice runtime may be replaced without replacing this API.
+
+The controller exposes only three initial operations: inspect status, redial
+voice/WebRTC, and replace the full runtime. It does not accept a thread ID,
+workspace, PID, socket path, or component selector from callers.
+
+## Discovery and authorization
+
+The controller starts the private Unix socket and loopback MCP endpoint before
+it starts a voice runtime. The socket path is under the controller's private
+state directory, in a `control/` directory with mode `0700`; its socket mode
+is `0600`. A live controller owns an exclusive lock while it probes stale
+residue and binds, so a second launch cannot take over a live instance. The
+owned Codex child receives the exact path in `AGENTVOICE_CONTROL_SOCKET`; this
+is the supported Unix-socket discovery mechanism. It is per-controller, so an
+agent must use its inherited value rather than derive a path from a workspace or
+guess another instance's endpoint.
+
+Every controller instance has a different loopback URL and a random bearer
+capability. MCP requests must send `Authorization: Bearer <capability>`. The
+capability is supplied to the owned Codex child only in the per-instance
+environment variable named by `bearer_token_env_var`; it is never written to
+the native MCP configuration or printed in diagnostics.
+
+AgentVoice registers this MCP server for each orchestration thread as
+`agentvoice_control`. Its native configuration has `required: true`,
+`enabled_tools` set to the three tool names below, `startup_timeout_sec: 5`,
+`tool_timeout_sec: 5`, and a
+`bearer_token_env_var`. Registration is not readiness: the controller/runtime
+also checks the native MCP catalog for a connected server and the exact tool
+set before it reports the bridge ready.
+
+## Unix socket transport
+
+The socket is newline-delimited JSON (NDJSON). A request is one UTF-8 line;
+responses may finish out of order and retain the caller-selected `id`.
+
+```json
+{"v":1,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
+```
+
+```json
+{"v":1,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":1,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
+```
+
+`v` must be `1`; `type` must be `request`; `id` is a nonempty string of at
+most 128 characters. Unknown envelope fields are rejected. Input frames are
+capped at 1 MiB, a connection may have at most 128 requests in flight, and
+unwritten response data is capped at 4 MiB. A slow peer is disconnected.
+
+Failure responses retain the request `id` where it can be recovered:
+
+```json
+{"v":1,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
+```
+
+Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
+`instance_mismatch`, `stale_generation`, `operation_conflict`, `unavailable`,
+and `internal_error`. A timeout or disconnected socket says nothing about
+whether a mutation was accepted; query status before retrying.
+
+There are no unsolicited event frames in version 1. Poll `agentvoice.status`
+for an operation's state. This keeps a replacement runtime from inheriting a
+caller connection, event subscription, or pending request.
+
+### Socket methods
+
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `agentvoice.status` | `{}` | `ControlStatus` |
+| `agentvoice.redial` | `MutationRequest` | accepted/current `ControlOperation` |
+| `agentvoice.restart` | `MutationRequest` plus `scope: "runtime"` | accepted/current `ControlOperation` |
+
+`MutationRequest` is:
+
+```json
+{"operationId":"restart-17","expectedGeneration":7,"expectedInstanceId":"controller-instance-id"}
+```
+
+`operationId` is an opaque caller-created value matching
+`[A-Za-z0-9][A-Za-z0-9._:-]*`, at most 128 characters. It is durable idempotency
+identity, not a JSON-RPC/socket request ID. `expectedInstanceId` binds a call to
+one controller, and `expectedGeneration` prevents a caller attached to a prior
+runtime incarnation from bouncing a replacement runtime.
+
+### Result shapes
+
+`ControlStatus` contains:
+
+```ts
+{
+  protocolVersion: 1;
+  instanceId: string;
+  workspace: string; // empty while initial candidate startup has not identified it
+  threadId: string;  // empty while initial candidate startup has not identified it
+  generation: number;
+  runtime: { pid?: number; buildId?: string; phase: string; voicePhase?: string };
+  currentOperation?: ControlOperation;
+  recentOperations: ControlOperation[];
+}
+```
+
+`ControlOperation` contains immutable request identity and lifecycle state:
+
+```ts
+{
+  operationId: string;
+  kind: "redial" | "restart";
+  scope: "voice" | "runtime";
+  expectedGeneration: number;
+  expectedInstanceId: string;
+  phase: "accepted" | "quiescing" | "interrupted" | "forced" | "starting" | "ready" | "failed";
+  acceptedAt: string; // ISO 8601
+  updatedAt: string;  // ISO 8601
+  forced?: boolean;
+  result?: { generation: number; threadId: string; workspace: string; pid?: number; buildId?: string };
+  error?: { code: string; message: string };
+}
+```
+
+The controller journal accepts the first valid mutation record before any
+teardown. It retains at most 256 mutation IDs for one controller lifetime and
+returns the latest 16 through `recentOperations`, alongside `currentOperation`.
+Reusing an ID with identical immutable arguments returns the same latest
+operation, even when its recorded generation is now old. Reuse with different
+kind, scope, instance, or generation fails with `operation_conflict`. Concurrent
+mutations are serialized by the controller. A full quit/relaunch does not adopt
+the old journal. A completed operation retains its `result` identity snapshot,
+including the activated build and PID, even after later replacements.
+
+`accepted` means durable acceptance only. `quiescing` stops the current voice
+runtime; `interrupted` records graceful shutdown; `forced` records deadline
+termination; `starting` starts a replacement; `ready` for a restart confirms it
+resumed the controller-bound conversation and reached live media. For redial,
+`ready` confirms that its exact successor voice connection reached live media.
+Failed, superseded, stopped, or timed-out negotiation fails that operation. Read
+`runtime.voicePhase` when present for voice state, while `runtime.phase` is
+process readiness. `failed` includes a stable error. `forced` can remain true
+on later states. No state promises exactly-once execution. Cleanup verifies captured descendant
+identities, including detached sessions; descendants orphaned entirely between
+ownership samples cannot safely be discovered after abrupt parent death.
+
+`agentvoice.redial` has scope `voice`: it reconnects voice/WebRTC on the same
+runtime and does not reload configuration, prompts, native code, or Codex.
+`agentvoice.restart` accepts only scope `runtime`: it replaces audio/WebRTC,
+native AgentVoice code, configuration/prompt snapshot, and owned Codex child
+under the retained controller/TUI. Audio-only, Codex-only, PID-targeted, and
+arbitrary-thread restart scopes do not exist in version 1.
+
+## Streamable HTTP MCP projection
+
+The loopback endpoint is `http://127.0.0.1:<ephemeral-port>/mcp`. It uses the
+standard stateful Streamable HTTP MCP handshake: `initialize`,
+`notifications/initialized`, `tools/list`, then `tools/call`; clients send the
+returned `mcp-session-id` on later requests. Requests without valid bearer
+authentication receive `401`. Unknown sessions receive `404`. The host accepts
+only its exact loopback Host header and same loopback Origin when an Origin is
+present. It caps request bodies at 64 KiB, limits live MCP sessions to 32, and
+closes sessions idle for five minutes.
+
+The tools are a one-to-one projection of the socket methods and call the same
+Zod validation and dispatch implementation:
+
+| MCP tool | Socket method | Input |
+| --- | --- | --- |
+| `agentvoice_status` | `agentvoice.status` | `{}` |
+| `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
+| `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` |
+
+MCP tool results carry the same result object as structured content. Validation
+or controller failures are MCP tool errors. `agentvoice_status` is read-only;
+mutation tools are deliberately not marked idempotent at MCP level because the
+caller must supply the durable operation ID.
+
+## Retry and self-restart rules
+
+Use a fresh, stable operation ID for one intended action. If the MCP call
+returns, retain its operation ID and accepted result. If it times out or the
+initiating Codex client dies, reconnect after exact-thread resume and call
+`agentvoice_status`; retry the *same* immutable request only when status cannot
+already resolve it. Do not generate another ID just because a response was not
+observed.
+
+A restart can terminate the native client before its tool output is persisted
+in conversation history. An `accepted` return is therefore not completion, and
+the original live turn, delegated work, tool processes, approvals, and realtime
+state can be interrupted. The controller keeps the selected exact thread ID;
+the replacement resumes that exact thread rather than using normal “continue”
+selection. Persisted thread/conversation state may resume, but active execution
+does not. A preflight failure leaves the old runtime and generation intact, so a
+new request may use that generation. Once replacement has committed, its
+generation advances even if the replacement later fails; read status and use the
+new generation for a retry.
+
+Future versions may add fields and methods only through a protocol-version
+change or optional result fields. Clients must reject a different `v` and
+ignore optional result fields they do not understand.

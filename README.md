@@ -1,8 +1,10 @@
 # AgentVoice
 
-A foreground Codex voice app with a terminal UI. One AgentVoice process owns
-the TUI, audio, WebRTC and coordination runtime; an unmodified `codex app-server`
-child owns the agents, tools and native conversation history.
+A foreground Codex voice app with a retained terminal controller. The controller
+owns the TUI, exact conversation identity, thread leases, and local control
+plane. Its disposable runtime child owns audio, WebRTC, AgentVoice runtime code,
+and an unmodified `codex app-server` child that owns agents, tools, and native
+conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
 Full access and workspace-local conversation selection are intentional product
@@ -74,8 +76,9 @@ v3 sends that required header; native WebRTC omission falls back to v1 and sends
 
 Explicit version overrides remain available; see [voice protocol](#native-voice-protocol).
 Automatic retries pause after three consecutive short-lived failures and keep
-the last cause visible. `r` retries the same launch settings; configuration edits
-require quitting and relaunching.
+the last cause visible. `r` retries the same launch settings. An orchestrator
+can request a full runtime restart to apply a changed runtime/configuration
+snapshot while the controller stays open; see [control API](docs/api.md).
 
 ### Installation
 
@@ -173,7 +176,9 @@ fresh conversations can run independently.
 
 Quitting stops voice and app-owned work, shuts down the child and restores the
 terminal. **Work does not continue in the background.** The next launch can
-resume saved native history, but there is no worker restart/adoption registry.
+resume saved native history. A full runtime restart is separate from Fresh: the
+controller retains the exact current thread and starts a new runtime without
+using normal continue/history selection to choose a replacement thread.
 Ephemeral conversations and native threads with no saved rollout cannot be
 continued after exit. Workspace selection is not a memory or security sandbox.
 
@@ -192,7 +197,8 @@ continued after exit. Workspace selection is not a memory or security sandbox.
 - Redial renews voice on the same conversation using overlapping WebRTC peers;
   automatic renewal uses the same path. Fresh closes old media first.
 - Device selection, model/effort/voice overrides and config/prompt passthrough.
-  All settings and prompt contents load once per launch; restart to apply edits.
+  Redial and Fresh use the active runtime snapshot; a full runtime restart
+  rereads the pinned launch inputs.
 - Per-launch opt-in debug logs; no phone remote, pairing, listener/discovery,
   Android packaging, separate Server, resident service or Herdr integration.
 
@@ -294,9 +300,11 @@ Known start-only fields, including raw `dynamicTools`, `ephemeral` and
 metadata already saved in native history. `--fast`/`--no-fast` retain their explicit
 launch-tier precedence.
 
-All AgentVoice settings, including `voice.name`, and prompt-file contents load
-once at launch. Editing them requires quitting and relaunching; Fresh and redial
-reuse the launch settings and do not restart Codex. Incompatible permission selectors and
+All AgentVoice settings, including `voice.name`, and prompt-file contents are
+read by a preflighted runtime candidate and cached for that runtime. Fresh and
+redial reuse the active runtime snapshot; a full runtime restart rereads the
+pinned launch inputs and replaces Codex. It cannot adopt later shell-environment
+changes. Incompatible permission selectors and
 disabled realtime support fail clearly; `cwd` must be selected with `--workspace`.
 The full-access opt-in, native permission verification and owned stdio transport
 remain mandatory. Other native keys remain passthrough, not a promise that your
@@ -405,8 +413,8 @@ prompt is per model and partly remote; Codex's own append channel is used as is.
 
 A present name must load: an unreadable file, a directory or a broken link fails
 before Codex starts, even if a raw field would override the contents. Symlinks to
-regular files work. Contents load once at launch and are reused on redial and
-Fresh. Session-boundary instructions and voice prompts ride every realtime start,
+regular files work. Contents are cached by the active runtime for redial and
+Fresh, then reread by a full runtime restart. Session-boundary instructions and voice prompts ride every realtime start,
 including redial. Voice history items are not files: raw `voice.extra.initialItems`
 replaces automatic spoken-history replay.
 
@@ -476,7 +484,7 @@ must end up with either a replacement or an append, never both. Role MCP server
 names must not collide with `orchestrator.config.mcp_servers`, and a raw
 `orchestrator.extra.config` that drops them is an error. A missing role
 directory, an unreadable file, or a Codex child that rejects the skill-root
-request fails before audio opens. Roles load once per launch like every other
+request fails before audio opens. Roles load once per runtime generation like every other
 setting; Codex itself watches the skills root, so skill edits apply to later
 turns. Verified on stock Codex 0.153.4 on September 5, 2026 with
 `bun run app-server:probe`, which registers a disposable root and reads it back.

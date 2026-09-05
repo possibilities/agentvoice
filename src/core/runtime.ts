@@ -10,6 +10,11 @@ import {
   appServerArgv,
 } from "./attach.ts";
 import { type Prompts, readPrompts, type ServerConfig } from "./config.ts";
+import {
+  type ControlMcpRegistration,
+  injectControlMcp,
+  requireControlMcpReady,
+} from "./control-mcp.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
@@ -40,13 +45,65 @@ export interface RuntimeEvents {
   debug?(line: string): void;
 }
 
-export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive">;
+export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive"> & {
+  readonly shutdownForced?: boolean;
+};
 export interface RuntimeOptions extends SessionSelection {
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
+  /** Controller-held lease; retained after this generation exits. */
+  acquireLease?: (threadId: string) => Promise<void>;
+  /** Restart uses exact thread/read+resume, never history inventory selection. */
+  exactResume?: string;
+  snapshot?: RuntimeSnapshot;
+  controlMcp?: ControlMcpRegistration;
+  controlReadinessTimeoutMs?: number;
+  onVerifiedThread?: (identity: { threadId: string; workspace: string }) => void;
+  onChildPid?: (pid: number) => void;
+  onChildReaped?: () => void;
+  onShutdownOutcome?: (forced: boolean) => void;
+}
+
+export interface RuntimeSnapshot {
+  prompts: Prompts;
+  foundPrompts: string[];
+  role: RoleAssets | null;
+  warnings: string[];
+}
+
+/** Pure local preflight is retained in the candidate process through activation. */
+export async function prepareRuntime(
+  config: ServerConfig,
+  control?: ControlMcpRegistration,
+): Promise<RuntimeSnapshot> {
+  const workspace = config.orchestrator.workspace;
+  if (!statSync(workspace).isDirectory() || realpathSync(workspace) !== workspace)
+    throw new Error("Workspace must be an existing canonical absolute directory");
+  const warnings: string[] = [];
+  const loaded = await readPrompts(config, (message) => warnings.push(message));
+  const role = config.role === undefined ? null : await readRoleAssets(config.role);
+  if (role) warnings.push(`role: ${role.dir}`);
+  realtimeParams(config, loaded.prompts, "", "", "");
+  warnings.push(...passthroughWarnings(config, loaded.prompts));
+  for (const kind of ["start", "resume"] as const) {
+    const params = threadParams(config, loaded.prompts, kind, role ?? {});
+    if (control) {
+      // Reject hidden reserved entries even when raw config would discard them.
+      for (const servers of [config.orchestrator.config?.["mcp_servers"], role?.mcpServers]) {
+        if (servers && typeof servers === "object" && Object.hasOwn(servers, control.name))
+          throw new Error(`MCP server name "${control.name}" is reserved for AgentVoice control`);
+      }
+      injectControlMcp(params, control);
+    }
+    if (kind === "start" && params["baseInstructions"] != null)
+      warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
+  }
+  // Validate startup -c invariants before replacing a live generation.
+  appServerArgv(config.codex, config.codexConfig);
+  return { prompts: loaded.prompts, foundPrompts: loaded.paths, role, warnings };
 }
 
 export class VoiceRuntime {
@@ -138,24 +195,14 @@ export class VoiceRuntime {
   async start(): Promise<void> {
     try {
       const workspace = this.config.orchestrator.workspace;
-      if (!statSync(workspace).isDirectory())
-        throw new Error(`Workspace is not a directory: ${workspace}`);
-      // The launch resolver canonicalizes once; do not silently retarget here.
-      if (realpathSync(workspace) !== workspace)
-        throw new Error("Workspace must be a canonical absolute directory");
-      const warnings: string[] = [];
-      const loaded = await readPrompts(this.config, (message) => warnings.push(message));
-      this.prompts = loaded.prompts;
-      this.foundPrompts = loaded.paths;
-      this.role = this.config.role === undefined ? null : await readRoleAssets(this.config.role);
-      if (this.role) warnings.push(`role: ${this.role.dir}`);
-      // Pure preflight: these placeholder IDs/SDP never leave this process.
-      // Reject known option conflicts before spawning Codex or resuming history.
-      realtimeParams(this.config, this.prompts, "", "", "");
-      warnings.push(...passthroughWarnings(this.config, this.prompts));
-      if (this.threadParams("start")["baseInstructions"] != null) {
-        warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
-      }
+      if (!statSync(workspace).isDirectory() || realpathSync(workspace) !== workspace)
+        throw new Error("Workspace changed after runtime preflight");
+      const snapshot =
+        this.options.snapshot ?? (await prepareRuntime(this.config, this.options.controlMcp));
+      this.prompts = snapshot.prompts;
+      this.foundPrompts = snapshot.foundPrompts;
+      this.role = snapshot.role;
+      const warnings = snapshot.warnings;
       if (warnings.length > 0) {
         for (const message of warnings) this.events.onStatus(message);
         this.events.onWarning?.(warnings.join("\n"));
@@ -175,13 +222,20 @@ export class VoiceRuntime {
         }
         this.assertRunning();
       }
-      const id = await selectThread(
-        (method, params) => connection.request(method, params),
-        workspace,
-        this.options,
-      );
+      const id =
+        this.options.exactResume ??
+        (await selectThread(
+          (method, params) => connection.request(method, params),
+          workspace,
+          this.options,
+        ));
       this.assertRunning();
       this.threadId = id ? await this.resumeThread(id) : await this.startThread();
+      this.options.onVerifiedThread?.({
+        threadId: this.threadId,
+        workspace: this.config.orchestrator.workspace,
+      });
+      await this.confirmControlReady();
       this.threadReady = true;
       this.emitReady();
     } catch (error) {
@@ -205,12 +259,17 @@ export class VoiceRuntime {
       await this.sessions.shutdown();
       this.assertRunning();
       const threadId = await this.startThread();
-      this.sessions.reset();
       this.threadId = threadId;
+      this.options.onVerifiedThread?.({
+        threadId: this.threadId,
+        workspace: this.config.orchestrator.workspace,
+      });
+      await this.confirmControlReady();
+      this.sessions.reset();
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
-      if (error instanceof FullAccessError) {
-        this.events.onFatal(error.message);
+      if (error instanceof FullAccessError || this.options.controlMcp) {
+        this.events.onFatal(error instanceof Error ? error.message : String(error));
         await this.shutdown();
       } else if (!this.shuttingDown)
         this.events.onError(`fresh conversation failed: ${String(error)}`, false);
@@ -240,6 +299,7 @@ export class VoiceRuntime {
       } finally {
         this.abort.abort();
         await this.attachment?.close();
+        this.options.onShutdownOutcome?.(this.attachment?.shutdownForced === true);
         this.attachment = null;
         this.sessions.reset();
         for (const release of this.locks.values()) release();
@@ -250,7 +310,8 @@ export class VoiceRuntime {
   }
 
   private threadParams(kind: "start" | "resume"): Record<string, unknown> {
-    return threadParams(this.config, this.prompts, kind, this.role ?? {});
+    const params = threadParams(this.config, this.prompts, kind, this.role ?? {});
+    return this.options.controlMcp ? injectControlMcp(params, this.options.controlMcp) : params;
   }
 
   private assertRunning(): void {
@@ -263,8 +324,27 @@ export class VoiceRuntime {
     return this.attachment;
   }
 
-  private acquire(id: string): void {
+  private async confirmControlReady(): Promise<void> {
+    if (this.options.controlMcp && this.threadId) {
+      const connection = this.requireConnection();
+      await requireControlMcpReady(
+        connection.request.bind(connection),
+        this.threadId,
+        this.options.controlMcp,
+        this.options.controlReadinessTimeoutMs,
+      );
+      this.assertRunning();
+    }
+  }
+
+  private async acquire(id: string): Promise<void> {
     if (this.locks.has(id)) return;
+    if (this.options.acquireLease) {
+      await this.options.acquireLease(id);
+      this.assertRunning();
+      this.locks.set(id, () => {});
+      return;
+    }
     const directory =
       this.options.locksDir ?? join(stateDirectory(process.env, homedir()), "thread-locks");
     this.locks.set(id, lockThread(directory, id));
@@ -276,7 +356,7 @@ export class VoiceRuntime {
     const result = await this.requireConnection().request("thread/start", params);
     this.assertRunning();
     const id = extractThreadId(result);
-    this.acquire(id);
+    await this.acquire(id);
     confirmFullAccess(result);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
@@ -287,7 +367,7 @@ export class VoiceRuntime {
   }
 
   private async resumeThread(id: string): Promise<string> {
-    this.acquire(id);
+    await this.acquire(id);
     const connection = this.requireConnection();
     const read = await connection.request<{
       thread?: {
@@ -375,7 +455,9 @@ export class VoiceRuntime {
     connection = await (this.options.connect ?? AppServerConnection.connect)({
       argv: appServerArgv(this.config.codex, this.config.codexConfig),
       cwd: this.config.orchestrator.workspace,
-      env: { ...process.env },
+      env: { ...process.env, ...this.options.controlMcp?.env },
+      onSpawn: this.options.onChildPid,
+      onReaped: this.options.onChildReaped,
       signal: this.abort.signal,
       clientVersion: this.version,
       onNotification: (method, params) => this.handleNotification(method, params),

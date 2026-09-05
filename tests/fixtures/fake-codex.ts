@@ -10,6 +10,15 @@ if (mode === "stubborn") {
   setInterval(() => {}, 1_000);
 }
 if (mode === "no-initialize") setInterval(() => {}, 1_000);
+if (mode === "delayed-eof") {
+  const hold = setInterval(() => {}, 1_000);
+  process.stdin.on("end", () =>
+    setTimeout(() => {
+      clearInterval(hold);
+      process.exit(0);
+    }, 1_200),
+  );
+}
 createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.method === "initialize") {
@@ -47,6 +56,23 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       stdio: "ignore",
     });
     send({ id: message.id, result: { pid: child.pid } });
+  } else if (message.method === "detached-descendants") {
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const {spawn}=require("node:child_process");
+const nested=spawn(process.execPath,["-e","process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:"ignore"});
+console.log(nested.pid);
+process.on("SIGTERM",()=>{});
+setInterval(()=>{},1000);`,
+      ],
+      { detached: true, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    child.stdout.setEncoding("utf8");
+    child.stdout.once("data", (text: string) => {
+      send({ id: message.id, result: { pid: child.pid, grandchildPid: Number(text.trim()) } });
+    });
   } else if (message.method === "invalid") {
     process.stdout.write("not-json\n");
   } else if (message.method === "hang") {

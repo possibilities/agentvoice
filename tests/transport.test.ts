@@ -167,3 +167,34 @@ describe("voice transport retries", () => {
     }
   });
 });
+
+test("control redial completes only for its exact connected successor, fails on negotiation or stop", async () => {
+  const h = harness();
+  try {
+    h.transport.handleReady(ready);
+    await tick();
+    h.peers[0]!.onState("connected");
+    let result = "pending";
+    const connected = h.transport.redialAndWait("control").then(() => {
+      result = "ready";
+    });
+    await tick();
+    expect(result).toBe("pending");
+    h.peers[0]!.onState("connected");
+    await tick();
+    expect(result).toBe("pending");
+    h.peers[1]!.onState("connected");
+    await connected;
+    expect(result).toBe("ready");
+    const failed = h.transport.redialAndWait("control").catch((error) => error.message);
+    await tick();
+    h.peers[2]!.onState("failed");
+    expect(await failed).toContain("media path failed");
+    const stopped = h.transport.redialAndWait("control").catch((error) => error.message);
+    await tick();
+    await h.transport.stop();
+    expect(await stopped).toContain("stopped");
+  } finally {
+    await h.stop();
+  }
+});

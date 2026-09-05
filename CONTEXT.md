@@ -1,11 +1,20 @@
 # AgentVoice vocabulary
 
-**AgentVoice app / Console** — The foreground process: TUI, audio, WebRTC and
-coordination runtime in one program. There is no separately running AgentVoice Server.
+**AgentVoice controller / Console** — The retained foreground process: terminal
+UI, exact workspace/thread identity, thread leases, durable control operations,
+and private control transports. It is not a resident service and ends when the
+foreground application quits.
+
+**Voice runtime** — The disposable foreground child of the controller:
+AgentVoice configuration/prompt/role loading, native audio/FFI, WebRTC,
+`VoiceRuntime`, and its owned Codex child. A full runtime restart replaces it
+while the controller and terminal stay open. RTP and PCM never cross controller
+IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
-owned by this app. Native JSONL over stdin/stdout; no resident socket or service.
-Codex can create its own tool processes. Quit closes the owned child/process group.
+owned by the voice runtime. Native JSONL over stdin/stdout; no resident socket
+or service. Codex can create its own tool processes. Runtime replacement or
+quit closes the owned child/process group.
 
 **Connection** — The native stdio RPC channel to that child.
 
@@ -30,7 +39,19 @@ it does not imply an external orchestration daemon or custom continuation messag
 app-server handles delegation to the working agent.
 
 **Voice session** — One realtime connection layered on a conversation. Redial
-changes the voice session but not the conversation or workspace.
+changes it without replacing the voice runtime, Codex child, or workspace.
+
+**Runtime restart** — A controller-owned, durable operation that validates a
+candidate runtime before it changes a live call, then replaces the current
+runtime and resumes the exact retained thread. It reloads the pinned launch
+inputs and loaded native artifact; it does not preserve live turns, delegated
+work, realtime state, or native tool connections.
+
+**Control plane** — A versioned private Unix socket and an authenticated,
+loopback Streamable HTTP MCP projection owned by the controller. The injected
+MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
+child only by environment variable. `status`, `redial`, and full `restart`
+share one validated handler. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -78,9 +99,11 @@ the file displaces).
 inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
-**Launch settings** — AgentVoice configuration and prompt file contents read
-once at launch, reused for redial and Fresh. Restart to apply edits, including
-voice name; native Codex settings/history retain their own rules.
+**Runtime settings** — AgentVoice configuration and prompt file contents are
+read by a preflighted runtime candidate and cached for that runtime's redial and
+Fresh actions. A full runtime restart rereads the controller-pinned launch
+provenance; it cannot adopt later shell-environment changes. Native Codex
+settings/history retain their own rules.
 
 **Startup config** — Explicit codex-config string array or repeatable -c /
 --codex-config key=value, forwarded as native Codex -c arguments. File entries
@@ -102,4 +125,7 @@ each source releases only its own hold, and release never commits a toggle.
 **Historical terms** — Resident, Server, Remote console, control attachment,
 paired device, discovery, custom Worker, Worker report, account profile, idle
 account rotation and Quiet resume (ADR 0010, retired by ADR 0012) refer to retired
-implementations in old ADRs, not current runtime components. Native Codex subagents are separate from the removed AgentVoice worker system.
+implementations in old ADRs, not current runtime components. The current
+controller/runtime split is a foreground parent/child topology, not a resident
+server or remote attachment feature. Native Codex subagents are separate from
+the removed AgentVoice worker system.

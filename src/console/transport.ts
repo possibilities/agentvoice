@@ -90,6 +90,10 @@ export class VoiceTransport {
   private rapidFailures = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopping = false;
+  private readonly redialWaiters = new Map<
+    number,
+    { resolve(): void; reject(error: Error): void }
+  >();
 
   constructor(options: VoiceTransportOptions) {
     this.options = options;
@@ -117,6 +121,27 @@ export class VoiceTransport {
     this.clearRetryTimer();
     if (this.ready) this.negotiate();
     // Not ready means the runtime is changing threads; handleReady re-offers.
+  }
+
+  /** Completes only when this exact successor connects; later retries are separate calls. */
+  async redialAndWait(reason: string): Promise<void> {
+    if (this.stopping || !this.ready) throw new Error("Voice transport is not ready for redial");
+    this.redial(reason);
+    const generation = this.generation;
+    if (this.live?.generation === generation && this.live.connected) return;
+    if (this.pending?.generation !== generation)
+      throw new Error("Voice redial could not negotiate a successor");
+    await new Promise<void>((resolve, reject) => {
+      this.redialWaiters.set(generation, { resolve, reject });
+    });
+  }
+
+  private settleRedial(session: PeerSession, reason?: string): void {
+    const waiter = this.redialWaiters.get(session.generation);
+    if (!waiter) return;
+    this.redialWaiters.delete(session.generation);
+    if (reason) waiter.reject(new Error(reason));
+    else waiter.resolve();
   }
 
   sendOpusFrame(frame: Buffer): void {
@@ -313,6 +338,7 @@ export class VoiceTransport {
     if (previous) this.closePeer(previous);
     if (session.remoteTrack) this.options.onRemoteTrack(session.remoteTrack);
     this.setPhase("live");
+    this.settleRedial(session);
     this.options.onInfo(previous ? "voice session renewed" : "voice connected");
     this.startMediaTrace(session);
     session.timers.push(
@@ -329,6 +355,7 @@ export class VoiceTransport {
 
   private failPending(session: PeerSession, reason: string): void {
     if (this.pending !== session) return;
+    this.settleRedial(session, reason);
     this.pending = null;
     this.closePeer(session);
     this.rapidFailures++;
@@ -383,6 +410,7 @@ export class VoiceTransport {
   }
 
   private closePeer(session: PeerSession): void {
+    this.settleRedial(session, "Voice redial was superseded or stopped");
     for (const timer of session.timers) clearTimeout(timer);
     session.timers = [];
     if (session.mediaTraceTimer) clearInterval(session.mediaTraceTimer);

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { AppServerConnection, type AttachOptions, appServerArgv } from "../src/core/attach.ts";
+import { OwnedProcessTree } from "../src/core/owned-processes.ts";
 
 const fixture = join(import.meta.dir, "fixtures/fake-codex.ts");
 async function connect(mode = "", extra: Partial<AttachOptions> = {}) {
@@ -8,15 +9,24 @@ async function connect(mode = "", extra: Partial<AttachOptions> = {}) {
     argv: [process.execPath, fixture, mode],
     cwd: process.cwd(),
     clientVersion: "test",
+    shutdownGraceMs: 50,
     onNotification() {},
     onClose() {},
     ...extra,
   });
 }
-async function until(predicate: () => boolean) {
-  const end = Date.now() + 2_000;
+async function until(predicate: () => boolean, timeoutMs = 2_000) {
+  const end = Date.now() + timeoutMs;
   while (!predicate() && Date.now() < end) await Bun.sleep(5);
   expect(predicate()).toBe(true);
+}
+function isRunning(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe("owned native stdio", () => {
@@ -74,6 +84,18 @@ describe("owned native stdio", () => {
       "--listen",
       "stdio://",
     ]);
+  });
+  test("coalesces process snapshots instead of building an unbounded polling queue", async () => {
+    const c = await connect();
+    const owned = new OwnedProcessTree(c.pid!, { pollIntervalMs: 1 });
+    try {
+      const snapshots = Array.from({ length: 1_000 }, () => owned.snapshotNow());
+      expect(new Set(snapshots).size).toBeLessThanOrEqual(2);
+      await Promise.all(snapshots);
+    } finally {
+      owned.stopTracking();
+      await c.close();
+    }
   });
   test("round trips large frames and fragmented multibyte UTF-8", async () => {
     const c = await connect();
@@ -176,8 +198,17 @@ describe("owned native stdio", () => {
     const start = Date.now();
     await Promise.all([c.close(), c.close()]);
     expect(Date.now() - start).toBeLessThan(3_500);
+    expect(c.shutdownForced).toBe(true);
     expect(await pending).toBeInstanceOf(Error);
     expect(() => process.kill(pid, 0)).toThrow();
+  });
+  test("native EOF drain may exceed the former one-second cutoff without forced termination", async () => {
+    const c = await connect("delayed-eof", { shutdownGraceMs: undefined });
+    const began = Date.now();
+    await c.close();
+    expect(Date.now() - began).toBeGreaterThanOrEqual(1_100);
+    expect(c.shutdownForced).toBe(false);
+    expect(() => process.kill(c.pid!, 0)).toThrow();
   });
   test("abort during initialize closes the owned child", async () => {
     const controller = new AbortController();
@@ -197,6 +228,50 @@ describe("owned native stdio", () => {
         return true;
       }
     });
+  });
+  test("forced quit stops an observed detached tool session and its grandchild", async () => {
+    const c = await connect("stubborn");
+    let owned: { pid: number; grandchildPid: number } | undefined;
+    try {
+      const result = await c.request<{ pid: number; grandchildPid: number }>(
+        "detached-descendants",
+        {},
+      );
+      owned = result;
+      expect(isRunning(result.pid)).toBe(true);
+      expect(isRunning(result.grandchildPid)).toBe(true);
+      await c.close();
+      expect(c.shutdownForced).toBe(true);
+      expect(c.shutdownCleanup).toMatchObject({ complete: true });
+      await until(() => !isRunning(owned!.pid) && !isRunning(owned!.grandchildPid));
+    } finally {
+      if (owned) {
+        try {
+          process.kill(-owned.pid, "SIGKILL");
+        } catch {}
+      }
+      await c.close().catch(() => {});
+    }
+  });
+  test("natural native exit cleans an observed detached tool session", async () => {
+    const c = await connect();
+    let owned: { pid: number; grandchildPid: number } | undefined;
+    try {
+      owned = await c.request("detached-descendants", {});
+      // Let the bounded observer capture the new session before simulating abrupt native loss.
+      await Bun.sleep(100);
+      await expect(c.request("crash", {})).rejects.toThrow();
+      await until(() => !isRunning(owned!.pid) && !isRunning(owned!.grandchildPid), 3_500);
+      await c.close();
+      expect(c.shutdownCleanup).toMatchObject({ complete: true });
+    } finally {
+      if (owned) {
+        try {
+          process.kill(-owned.pid, "SIGKILL");
+        } catch {}
+      }
+      await c.close().catch(() => {});
+    }
   });
   test("missing executable fails promptly", async () => {
     await expect(

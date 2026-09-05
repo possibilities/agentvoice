@@ -1,9 +1,11 @@
 /** Native JSONL transport to the Codex child owned by this launch. */
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { validateCodexConfig } from "./codex-config.ts";
+import { type OwnedProcessOutcome, OwnedProcessTree } from "./owned-processes.ts";
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const CLOSE_GRACE_MS = 1_000;
+const CLOSE_GRACE_MS = 15_000;
+const TERMINATE_GRACE_MS = 2_000;
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 export class AppServerError extends Error {
@@ -56,6 +58,9 @@ export interface AttachOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   clientVersion: string;
+  onSpawn?(pid: number): void;
+  onReaped?(): void;
+  shutdownGraceMs?: number;
   onNotification(method: string, params: Record<string, unknown>): void;
   onClose(info: { expected: boolean; error?: string }): void;
   onRefusal?(message: string): void;
@@ -85,6 +90,9 @@ export class AppServerConnection {
   private buffered = "";
   private exited: Promise<void> = Promise.resolve();
   private reaped = false;
+  private ownedProcesses: OwnedProcessTree | null = null;
+  shutdownForced = false;
+  shutdownCleanup: OwnedProcessOutcome | null = null;
 
   private constructor(private readonly options: AttachOptions) {}
 
@@ -128,15 +136,23 @@ export class AppServerConnection {
       detached: true,
     });
     this.child = child;
+    if (child.pid) {
+      this.ownedProcesses = new OwnedProcessTree(child.pid, { debug: this.options.debug });
+      void this.ownedProcesses.snapshotNow().catch((error) => this.options.debug?.(String(error)));
+      this.options.onSpawn?.(child.pid);
+    }
     this.exited = new Promise<void>((resolve) => {
       child.once("exit", (code, signal) => {
-        this.signalGroup("SIGKILL");
+        const expected = this.closing;
         this.reaped = true;
-        this.finish(this.closing, this.closing ? undefined : `Codex exited (${signal ?? code})`);
+        this.options.onReaped?.();
+        this.finish(expected, expected ? undefined : `Codex exited (${signal ?? code})`);
         resolve();
+        if (!expected) void this.close().catch((error) => this.options.debug?.(String(error)));
       });
       child.once("error", (error) => {
         this.reaped = true;
+        this.options.onReaped?.();
         this.finish(false, `could not start Codex: ${error.message}`);
         resolve();
       });
@@ -189,14 +205,58 @@ export class AppServerConnection {
     // Publish the promise before onClose can re-enter close().
     this.closePromise = Promise.resolve().then(async () => {
       this.finish(true);
-      this.child?.stdin.end();
-      await this.waitForExit(CLOSE_GRACE_MS);
-      this.signalGroup("SIGTERM");
-      await this.waitForExit(CLOSE_GRACE_MS);
-      this.signalGroup("SIGKILL");
-      await this.waitForExit(CLOSE_GRACE_MS);
-      this.child?.stdout.destroy();
-      this.child?.stderr.destroy();
+      let failure: unknown;
+      let cleanup: OwnedProcessOutcome | undefined;
+      try {
+        await this.ownedProcesses?.snapshotNow();
+        this.child?.stdin.end();
+        await this.waitForExit(this.options.shutdownGraceMs ?? CLOSE_GRACE_MS);
+        cleanup = await this.ownedProcesses?.waitForCapturedExit(0);
+        this.shutdownForced = !this.reaped || cleanup?.complete === false;
+        if (!this.reaped || cleanup?.complete === false) {
+          await this.ownedProcesses?.signalCaptured("SIGTERM");
+          if (!this.reaped) this.child?.kill("SIGTERM");
+          const [, outcome] = await Promise.all([
+            this.waitForExit(TERMINATE_GRACE_MS),
+            this.ownedProcesses?.waitForCapturedExit(TERMINATE_GRACE_MS),
+          ]);
+          cleanup = outcome;
+        }
+        if (!this.reaped || cleanup?.complete === false) {
+          await this.ownedProcesses?.signalCaptured("SIGKILL");
+          if (!this.reaped) this.child?.kill("SIGKILL");
+          const [, outcome] = await Promise.all([
+            this.waitForExit(TERMINATE_GRACE_MS),
+            this.ownedProcesses?.waitForCapturedExit(TERMINATE_GRACE_MS),
+          ]);
+          cleanup = outcome;
+        }
+      } catch (error) {
+        failure = error;
+        this.shutdownForced = true;
+        this.child?.stdin.destroy();
+        if (!this.reaped) {
+          this.child?.kill("SIGTERM");
+          await this.waitForExit(TERMINATE_GRACE_MS);
+        }
+        if (!this.reaped) {
+          this.child?.kill("SIGKILL");
+          await this.waitForExit(TERMINATE_GRACE_MS);
+        }
+      } finally {
+        this.shutdownCleanup = cleanup ?? null;
+        this.ownedProcesses?.stopTracking();
+        this.child?.stdout.destroy();
+        this.child?.stderr.destroy();
+      }
+      if (failure) throw failure;
+      if (!this.reaped || cleanup?.complete === false) {
+        const survivors = cleanup?.survivors.join(", ") || "none";
+        const uncertain = cleanup?.uncertain.join(", ") || "none";
+        throw new AppServerError(
+          `Owned Codex process cleanup could not be verified (survivors: ${survivors}; uncertain: ${uncertain})`,
+        );
+      }
     });
     return this.closePromise;
   }
@@ -210,16 +270,6 @@ export class AppServerConnection {
       }),
     ]);
     clearTimeout(timer);
-  }
-
-  private signalGroup(signal: NodeJS.Signals): void {
-    const pid = this.child?.pid;
-    if (!pid || this.reaped) return;
-    try {
-      process.kill(-pid, signal);
-    } catch {
-      /* already reaped */
-    }
   }
 
   private send(message: Record<string, unknown>): void {

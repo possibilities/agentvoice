@@ -34,6 +34,9 @@ export function hostHarness(values: ConfigValues = {}) {
     async stop() {
       calls.push("transport:stop");
     },
+    async redialAndWait() {
+      calls.push("redial");
+    },
     redial() {
       calls.push("redial");
     },
