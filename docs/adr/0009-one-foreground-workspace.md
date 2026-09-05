@@ -25,6 +25,12 @@ metadata-only, visible migration warnings; no automatic file/config migration
 runs. Prompt contents remain launch-cached; native global instructions, history
 and voice-context controls are unchanged. See README's "Explicit prompt overrides".
 
+Amendment 2026-09-04: optional codex-config / -c startup overrides are forwarded
+as ordered, separate native argv values, file entries before CLI entries. No
+default entries or global writes; existing full-access, workspace and realtime
+requirements remain. The child retains them for the launch, including Fresh.
+Native per-thread overrides and persisted resume settings remain separate.
+
 Bare AgentVoice now runs its TUI, audio, WebRTC and coordination in one process.
 It owns a stock Codex app-server child over native stdio. No Codex fork, embed,
 background Server, resident service, remote client or replacement supervisor.

@@ -8,6 +8,13 @@
       "type": "string",
       "description": "Reserved for editor tooling; agentvoice ignores it."
     },
+    "codex-config": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; full-access/workspace/realtime invariants still apply."
+    },
     "codex": {
       "type": "string",
       "description": "The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else \"codex\" on PATH."

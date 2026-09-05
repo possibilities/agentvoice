@@ -21,6 +21,7 @@ Options:
   --no-continue            Start a new conversation (--fresh is an alias)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
+  -c, --codex-config <key=value>  Native Codex startup override (repeatable, TOML value)
   --model <id>             Codex work model (default: native configuration)
   --effort <level>         Codex reasoning effort (default: native configuration)
   --fast                  Native Fast tier when supported (higher usage/cost)
@@ -56,6 +57,8 @@ export interface FlagSpec {
 const LAUNCH_FLAGS: FlagSpec = {
   value: new Set([
     "--config",
+    "--codex-config",
+    "-c",
     "--model",
     "--effort",
     "--voice-model",
@@ -83,6 +86,7 @@ export class UsageError extends Error {}
 
 export interface ParsedArgs {
   values: Record<string, string>;
+  codexConfig?: string[];
   configPath?: string;
   debug: boolean;
   fresh: boolean;
@@ -94,6 +98,7 @@ export interface ParsedArgs {
 export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): ParsedArgs {
   const seen = new Set<string>();
   const values: Record<string, string> = {};
+  const codexConfig: string[] = [];
   let configPath: string | undefined;
   let debug = false;
   let fresh = false;
@@ -104,7 +109,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     const argument = argv[i]!;
     let flag = argument;
     let inline: string | undefined;
-    if (argument.startsWith("--")) {
+    if (argument.startsWith("--") || argument.startsWith("-c=")) {
       const equals = argument.indexOf("=");
       if (equals !== -1) {
         flag = argument.slice(0, equals);
@@ -114,7 +119,8 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     if (!spec.value.has(flag) && !spec.bool.has(flag)) {
       throw new UsageError(`unknown option "${flag}"`);
     }
-    if (seen.has(flag)) {
+    const nativeConfig = flag === "--codex-config" || flag === "-c";
+    if (seen.has(flag) && !nativeConfig) {
       throw new UsageError(`option "${flag}" given more than once`);
     }
     seen.add(flag);
@@ -129,13 +135,14 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     let value = inline;
     if (value === undefined) {
       const nextArgument = argv[i + 1];
-      if (nextArgument === undefined || nextArgument.startsWith("--")) {
+      if (nextArgument === undefined || nextArgument.startsWith("--") || nextArgument === "-c") {
         throw new UsageError(`option "${flag}" requires a value`);
       }
       value = nextArgument;
       i++;
     }
-    if (flag === "--config") configPath = value;
+    if (nativeConfig) codexConfig.push(value);
+    else if (flag === "--config") configPath = value;
     else values[flag.slice(2)] = value;
   }
 
@@ -147,6 +154,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     throw new UsageError("--fast cannot be combined with --no-fast");
   return {
     values,
+    ...(codexConfig.length > 0 ? { codexConfig } : {}),
     configPath,
     debug,
     fresh,
@@ -212,6 +220,7 @@ export function configLoader(parsed: ParsedArgs, launchCwd = process.cwd()) {
     ...values
   } = parsed.values;
   const cliValues = cliToConfigValues(values);
+  if (parsed.codexConfig) cliValues["codex-config"] = parsed.codexConfig;
   const loadResolvedConfig = async () => {
     const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
     const config = resolveConfig(cliValues, fileValues, process.env, home, {

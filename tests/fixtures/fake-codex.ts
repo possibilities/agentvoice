@@ -18,6 +18,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     send({ method: "test/initialized", params: {} });
   } else if (message.method === "echo") {
     send({ id: message.id, result: message.params });
+  } else if (message.method === "test/argv") {
+    send({ id: message.id, result: process.argv.slice(2) });
   } else if (message.method === "fragmented") {
     const bytes = Buffer.from(`${JSON.stringify({ id: message.id, result: "voice 🎤 café" })}\n`);
     const split = bytes.indexOf(Buffer.from("🎤")) + 1;

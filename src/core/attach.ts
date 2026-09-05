@@ -1,5 +1,6 @@
 /** Native JSONL transport to the Codex child owned by this launch. */
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { validateCodexConfig } from "./codex-config.ts";
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const CLOSE_GRACE_MS = 1_000;
@@ -61,8 +62,17 @@ export interface AttachOptions {
   debug?(line: string): void;
 }
 
-export function appServerArgv(codex: string): string[] {
-  return [codex, "app-server", "--enable", "realtime_conversation", "--listen", "stdio://"];
+export function appServerArgv(codex: string, overrides: readonly string[] = []): string[] {
+  validateCodexConfig(overrides);
+  return [
+    codex,
+    "app-server",
+    ...overrides.flatMap((entry) => ["-c", entry]),
+    "--enable",
+    "realtime_conversation",
+    "--listen",
+    "stdio://",
+  ];
 }
 
 export class AppServerConnection {

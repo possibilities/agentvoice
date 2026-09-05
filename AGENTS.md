@@ -29,6 +29,8 @@ implementation.
   strict outer objects, open config/extra passthroughs, optional means unset.
 - src/core/config.ts: CLI > file > default resolution and explicit prompt-files
   loading. Legacy filename checks only warn; never read unreferenced contents.
+- src/core/codex-config.ts: ordered native startup overrides; validate only argv
+  shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Omit unset voice.version; never replace it with an inferred native default.
@@ -170,6 +172,16 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
+- codex-config is an optional string array; append repeatable -c/--codex-config
+  CLI entries after file entries and pass each as a separate native -c argument
+  after app-server. Never shell-evaluate, expand paths or log their values here.
+  Native parses TOML, applies ordered dotted keys, and owns unknown-key behavior.
+  Local interpretation is only for full-access and required realtime guards;
+  effective thread permissions still must be confirmed. Startup values do not
+  hot-reload or get copied into RPC config. Native request config can override
+  startup entries; resumed model settings can outrank native startup defaults.
+  The opt-in scripts/startup-config-probe.ts uses disposable state, network denial
+  and ephemeral threads without turns/media to verify stock precedence on macOS.
 - Prompt files require explicit prompt-files references; absent means no override.
   Paths resolve from the selected config directory, not the workspace. Preserve
   empty contents and final raw extra precedence; bad explicit references fail

@@ -37,6 +37,13 @@ The generated server.schema.json is authoritative for spelling and types.
 | Voice | model, name, version, include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
 | Explicit prompt-files | voice, orchestrator, orchestrator-base, orchestrator-session-start/end, voice-seed-developer/user/assistant file references |
+| Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
+
+Startup config belongs to the owned child, not its conversation requests. Later
+orchestrator.config can override it; continue/resume may retain saved model/effort.
+Use --model/--effort for explicit conversation changes. Startup edits require a
+relaunch, not Fresh. --config still selects AgentVoice JSON. Native paths inside
+startup values are not rewritten; global native config is never edited by this feature.
 
 Not every setting is a CLI flag: --help lists the common flags; server.json and
 the passthrough objects expose the larger surface. Passthrough is not validation:
@@ -158,9 +165,10 @@ choice, not automatic discovery; see README migration notes.
 
 ## Deferred requests and decisions
 
-- Remaining native prompt/settings passthrough completeness audit. Full-access-only,
-  native protocol omission and explicit-only file/seed/session-boundary overrides
-  are decided and implemented. Native voice-context controls remain unset.
+- Native passthrough now covers startup, conversation and realtime settings;
+  full-access-only, native protocol omission and explicit-only file/seed/session-boundary
+  overrides are implemented. Native voice-context controls remain unset. This is
+  not a claim that every native capability has a matching TUI or is independently verified.
 - AgentVoice-specific skill isolation and selective seeding.
 - AgentStart installation wiring and actual installation/first live voice use.
   Its current source installer has no AgentVoice entry; no install was run.

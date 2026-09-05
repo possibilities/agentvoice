@@ -18,6 +18,7 @@
  *   and strips it before validation, whatever its value.
  */
 import { z } from "zod";
+import { codexConfigEntryIssue } from "./codex-config.ts";
 
 export const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"] as const;
 export const APPROVAL_POLICIES = ["never", "on-request", "untrusted"] as const;
@@ -238,6 +239,17 @@ export const voiceValuesSchema = z
   });
 
 const serverShape = {
+  "codex-config": z
+    .array(
+      z.string().superRefine((entry, ctx) => {
+        const message = codexConfigEntryIssue(entry);
+        if (message) ctx.addIssue({ code: "custom", message });
+      }),
+    )
+    .describe(
+      "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; full-access/workspace/realtime invariants still apply.",
+    )
+    .optional(),
   codex: z
     .string()
     .describe(

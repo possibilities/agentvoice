@@ -20,6 +20,7 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
+import { validateCodexConfig } from "./codex-config.ts";
 import {
   APPROVAL_POLICIES,
   type ApprovalPolicy,
@@ -113,6 +114,8 @@ export interface VoiceConfig {
 
 export interface ServerConfig {
   codex: string;
+  /** Ordered native startup -c arguments; never shell-evaluated or hot-reloaded. */
+  codexConfig?: string[];
   debug: boolean;
   /** Base for explicit relative prompt-file paths; legacy warnings only otherwise. */
   configDir: string;
@@ -466,6 +469,13 @@ export function resolveConfig(
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
     cli.voice?.[key] ?? file.voice?.[key];
 
+  const codexConfig = [...(file["codex-config"] ?? []), ...(cli["codex-config"] ?? [])];
+  try {
+    validateCodexConfig(codexConfig);
+  } catch (error) {
+    throw new ConfigError(error instanceof Error ? error.message : String(error));
+  }
+
   const configDir = resolve(
     options.launchCwd ?? process.cwd(),
     options.configDir ?? dirname(defaultConfigPath(env, home)),
@@ -563,6 +573,7 @@ export function resolveConfig(
 
   return {
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
+    ...(codexConfig.length > 0 ? { codexConfig } : {}),
     debug: options.debug ?? false,
     configDir,
     ...(Object.keys(promptFiles).length > 0 ? { promptFiles } : {}),

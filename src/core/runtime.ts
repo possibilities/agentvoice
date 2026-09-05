@@ -340,7 +340,7 @@ export class VoiceRuntime {
     this.assertRunning();
     let connection: RuntimeConnection | null = null;
     connection = await (this.options.connect ?? AppServerConnection.connect)({
-      argv: appServerArgv(this.config.codex),
+      argv: appServerArgv(this.config.codex, this.config.codexConfig),
       cwd: this.config.orchestrator.workspace,
       env: { ...process.env },
       signal: this.abort.signal,

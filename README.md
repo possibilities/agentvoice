@@ -134,6 +134,64 @@ can use its own defaults/configuration. The intentional permissions exception is
 the mandatory full-access/never policy above. Restricted sandbox modes are not
 supported by this app.
 
+### Native startup settings
+
+`--config` selects AgentVoice's JSON file. Repeatable `-c` / `--codex-config`
+instead supplies **native Codex startup configuration**, just like Codex's own
+`-c key=value`. No entries are supplied by default.
+
+```sh
+agentvoice --allow-full-access -c model_reasoning_effort=high
+agentvoice --allow-full-access --codex-config 'shell_environment_policy.include_only=["PATH","HOME"]'
+```
+
+The equivalent opt-in JSON setting is an ordered array of native strings:
+
+```json
+{
+  "codex-config": [
+    "model_reasoning_effort=high",
+    "shell_environment_policy.include_only=[\"PATH\",\"HOME\"]"
+  ]
+}
+```
+
+File entries come first, followed by CLI entries in the order you typed them.
+Codex processes them in order; later assignments win (including replacement of
+whole tables). An empty array adds nothing; it does not clear inherited native
+configuration. Values use **TOML, not JSON**; Codex falls back to a string when
+TOML parsing fails. Empty strings, arrays, booleans, equals signs and whitespace
+are passed intact. Each entry is one native argument, never evaluated by a shell.
+Paths inside native values follow Codex's rules; AgentVoice does not expand them
+or make them relative to its JSON file. Prefer explicit absolute paths when unsure.
+Avoid credentials in CLI values: shell history/process listings may expose them.
+
+There are three distinct configuration points:
+
+| Setting | Applied when | Lifetime |
+| --- | --- | --- |
+| `codex-config` / `-c` | Owned Codex child starts | Entire launch, including Fresh/redial |
+| `orchestrator.config` / `orchestrator.extra` | Conversation starts or resumes | Native thread configuration/history rules |
+| `voice.extra` | Realtime voice session starts | Each voice start/redial |
+
+Startup entries override native config files, but they are not forced over later
+conversation settings. A stock 0.153.3 offline probe confirmed the new-thread
+model order: native file < ordered startup entries < request `config.model` <
+explicit thread `model` (AgentVoice `--model` / `orchestrator.model`, then raw
+`extra.model`). This is not a universal precedence promise for every native field;
+managed requirements still apply and some native config keys override voice RPC
+fields. Continue/resume can retain saved model settings; use `--model` to explicitly
+change a resumed conversation's model. `--fast`/`--no-fast` retain their explicit
+launch-tier precedence.
+
+Only `voice.name` hot reloads. Changing startup entries requires quitting and
+relaunching; Fresh does not restart Codex. Incompatible permission selectors and
+disabled realtime support fail clearly; `cwd` must be selected with `--workspace`.
+The full-access opt-in, native permission verification and owned stdio transport
+remain mandatory. Other native keys remain passthrough, not a promise that your
+Codex version supports them or detects typos. No global config, prompt or skill
+policy is written. See [native override syntax](https://developers.openai.com/codex/config-advanced/#one-off-overrides-from-the-cli).
+
 ### Native voice protocol
 
 Unconfigured `voice.version` is now omitted from `thread/realtime/start`.
