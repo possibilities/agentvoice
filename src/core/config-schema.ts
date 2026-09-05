@@ -235,11 +235,9 @@ export const voiceValuesSchema = z
       .optional(),
     "flush-transcript-tail-on-session-end": z
       .boolean()
-      .meta({
-        description:
-          "Ask Codex to send leftover speech transcripts to the orchestrator when the voice session ends, potentially causing work after hangup. Independent of include-startup-context: this delivers transcript text, while that setting controls the next session's startup snapshot. Omitted defers to Codex (currently off). False does not suppress transcripts sent during ordinary delegations.",
-        default: false,
-      })
+      .describe(
+        "Ask Codex to send leftover speech transcripts to the orchestrator when the voice session ends, potentially causing work after hangup. Independent of include-startup-context: this delivers transcript text, while that setting controls the next session's startup snapshot. Omitted defers to Codex (currently off). False does not suppress transcripts sent during ordinary delegations.",
+      )
       .optional(),
     "client-managed-handoffs": z
       .boolean()

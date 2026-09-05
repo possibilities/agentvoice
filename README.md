@@ -6,7 +6,7 @@ child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
 Full access is an intentional product exception (see below). The defaults audit
-is not finished: optional workers, account balancing and prompt/context controls remain.
+is not finished: optional workers, account balancing and remaining prompt/settings passthrough need review.
 
 ## Start here
 
@@ -219,11 +219,61 @@ explicit launch Fast/standard selection; conflicting permission selectors error.
 Unknown upstream fields may be silently ignored. Transport/output overrides
 can break the media path; not every upstream feature has a matching TUI.
 
-Native voice startup-context and transcript-tail controls are retained unchanged,
-not supplemented by an AgentVoice transcript replay layer. A native startup
-snapshot may include other threads; turning it off does not erase Codex history.
-Enabling tail flush can start work at hangup, but quitting this foreground app
-still stops its child—it does not wait for such work to finish.
+### Native voice context: baseline first
+
+All three controls below are configurable but **unset by default**. No setup is
+needed: AgentVoice omits them and leaves native Codex behavior/configuration in
+charge. The shipped `server.json.example` does not configure them. Continue,
+explicit resume, redial and Fresh do not manufacture overrides.
+
+A saved conversation is not the same as a voice call: redial starts another
+call on the same conversation; Fresh starts a new conversation. Codex can give
+each call a startup snapshot and can deliver leftover speech to the working
+agent when a call ends. These are native mechanisms, not an AgentVoice replay
+layer.
+
+The following are **optional examples for later**, not recommended baseline
+settings. Merge only the setting you want into your chosen config and relaunch;
+these controls do not hot reload.
+
+Skip the native startup snapshot for the voice model:
+
+```json
+{ "voice": { "include-startup-context": false } }
+```
+
+Allow Codex to send leftover speech to the working agent at call end:
+
+```json
+{ "voice": { "flush-transcript-tail-on-session-end": true } }
+```
+
+Replace the generated startup snapshot with your own text:
+
+```json
+{
+  "voice": { "include-startup-context": true },
+  "orchestrator": {
+    "config": { "experimental_realtime_ws_startup_context": "Your startup context." }
+  }
+}
+```
+
+An explicit empty string for that override suppresses its text; it is not the
+same as leaving the key out. `include-startup-context: false` skips both the
+generated snapshot and any override. Neither control erases the working agent's
+history or prevents later recall through delegation. A native snapshot may
+include other threads, so workspace-local conversation selection is not memory
+isolation.
+
+Tail flush is independent of startup context: enabling it can start work at
+hangup. Quitting AgentVoice still stops its child and does not wait for that work
+to finish. Disabling tail flush does not suppress normal in-call delegations.
+
+To return to native resolution, remove the relevant keys; do not substitute
+`false` or `""`. Existing native settings can still apply. `voice.extra` wins over
+the named voice controls, and `orchestrator.extra.config` replaces
+`orchestrator.config` as a whole, so remove conflicting raw overrides too.
 
 ## Optional workers and accounts
 

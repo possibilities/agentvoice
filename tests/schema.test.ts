@@ -120,10 +120,9 @@ describe("generated schema invariants", () => {
     for (const key of ["include-startup-context", "flush-transcript-tail-on-session-end"]) {
       expect(spec(voice, key)["type"]).toBe("boolean");
       expect(spec(voice, key)["description"]).toContain("Omitted defers to Codex");
+      expect(spec(voice, key)).not.toHaveProperty("default");
     }
     expect(topProperties()["voice"]).not.toHaveProperty("required");
-    expect(spec(voice, "include-startup-context")).not.toHaveProperty("default");
-    expect(spec(voice, "flush-transcript-tail-on-session-end")["default"]).toBe(false);
   });
 
   test("every key carries documentation", () => {

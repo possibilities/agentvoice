@@ -175,8 +175,12 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
 - Do not manufacture skill policy, transcript replay or session carryover.
-  Native voice-context controls and skill isolation remain
-  separate decisions. Optional dispatch/account behavior stays opt-in.
+  Native voice-context controls remain configurable but unset by default:
+  includeStartupContext, flushTranscriptTailOnSessionEnd and the native
+  experimental_realtime_ws_startup_context override. Preserve omission and
+  explicit false/empty values through continue, resume, redial and Fresh.
+  Do not seed these into user config or server.json.example. Skill isolation
+  remains a separate decision. Optional dispatch/account behavior stays opt-in.
 
 ## The fleet
 

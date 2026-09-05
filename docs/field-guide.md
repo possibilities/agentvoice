@@ -101,11 +101,15 @@ fully vanilla in defaults, nor a complete passthrough for every future Codex opt
 | orchestrator.config.experimental_realtime_ws_startup_context | Replaces that snapshot when startup context is enabled; an explicit empty string suppresses its text | Replace the voice system prompt or bypass include-startup-context=false |
 | voice.flush-transcript-tail-on-session-end | Delivers leftover speech transcript text to the working agent at voice-session end; can trigger a turn | Replay it through an AgentVoice-managed next-session buffer |
 
-Omitted flags are omitted on the wire. The upstream WebRTC behavior previously
+Decision: keep all three configurable but unset; experience the native baseline
+before tuning them. Omitted flags are omitted on the wire, including across
+continue, explicit resume, redial and Fresh. AgentVoice does not populate a
+startup override or rewrite native/user config. The upstream WebRTC behavior previously
 verified here enables startup context and disables tail flush. Native startup
-context can include recent work from other threads. These remain candidates for
-a separate decision. Quit may interrupt tail-flush work; the app does not wait
-for background completion.
+context can include recent work from other threads: workspace-local selection
+is not memory isolation. Quit may interrupt tail-flush work; the app does not
+wait for background completion. The README's optional examples are not shipped
+configuration; remove a key to restore native resolution, not an empty/false value.
 
 Static VOICE_SEED files are explicit operator-provided initial items, not a
 transcript captured from the previous call. No AgentVoice transcript replay
@@ -140,7 +144,6 @@ skill enabling. Native history and private legacy state are untouched.
 - Remaining vanilla-defaults and prompt/settings passthrough audit, particularly
   seed/session-boundary controls. Full-access-only and native protocol omission
   are decided and implemented.
-- Reconsider the three native voice-context levers above.
 - AgentVoice-specific skill isolation and selective seeding.
 - Review optional worker/report and account features through subsequent sketches.
 - AgentStart installation wiring and actual installation/first live voice use.
