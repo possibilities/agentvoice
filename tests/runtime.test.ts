@@ -294,8 +294,8 @@ describe("launch configuration and reported identity", () => {
     writeFileSync(promptPath, "launch prompt");
     const config = await loadLaunchConfig(parseArgs(["--config", configPath]), h.directory);
     const runtime = new VoiceRuntime(config, "test", h.events, h.runtimeOptions);
-    const offer = () => {
-      runtime.offer("sdp");
+    const offer = async () => {
+      await runtime.offer("sdp");
       const call = h.native.calls.at(-1)!;
       expect(call.params).toMatchObject({
         voice: "cove",
@@ -309,7 +309,7 @@ describe("launch configuration and reported identity", () => {
     };
     try {
       await runtime.start();
-      offer();
+      await offer();
       writeFileSync(
         configPath,
         JSON.stringify({
@@ -319,9 +319,9 @@ describe("launch configuration and reported identity", () => {
       );
       writeFileSync(promptPath, "later prompt");
       await Bun.sleep(350);
-      offer();
+      await offer();
       await runtime.fresh();
-      offer();
+      await offer();
       expect(h.native.options.argv).toContain("model=launch-model");
       expect(h.native.closes).toBe(0);
     } finally {
@@ -353,9 +353,9 @@ describe("launch configuration and reported identity", () => {
         conversationMode: "continued",
         voiceVersion: null,
       });
-      h.runtime.offer("first");
+      await h.runtime.offer("first");
       const first = h.native.calls.at(-1)!.params["realtimeSessionId"];
-      h.runtime.offer("second");
+      await h.runtime.offer("second");
       const second = h.native.calls.at(-1)!.params["realtimeSessionId"];
       const started = (realtimeSessionId: unknown, version: string) =>
         h.native.options.onNotification("thread/realtime/started", {

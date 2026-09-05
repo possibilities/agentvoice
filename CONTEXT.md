@@ -41,14 +41,26 @@ the work model and --fast. Initial seed items require effective v3.
 Old history remains; native work in the old conversation stays there.
 --no-continue/--fresh selects this policy at launch.
 
-**Continue / resume** — Read/resume native eligible history, with no transcript
-copying or global thread.json pointer. --resume additionally chooses an exact ID.
+**Continue / resume** — Resume native eligible working-thread history; default
+and --continue select the latest eligible thread, --resume chooses an exact ID.
+No global thread.json pointer. New voice calls restore recent saved speech from
+that same thread unless voice.replay-spoken-history=false or explicit seeds win.
 
 **Quiet resume** — AgentVoice's default WebRTC v3 reconnect instruction: wait
 for new input instead of repeating old context. A developer initial item leaves
 the native voice prompt intact. Explicit initial items or voice.quiet-resume=false
-disable this default. It is model guidance, not a silence guarantee; native
-working-thread history does not restore every voice-only exchange.
+disable this default. It is model guidance, not a silence guarantee, independent
+of spoken replay and the native startup snapshot.
+
+**Spoken history replay** — AgentVoice reads native saved speech and sends it as
+past conversation in v3 initialItems, without a separate persistent store. The
+frontend setting voice.replay-spoken-history defaults true; false leaves the
+working thread resumed but skips this read/replay. It cannot restore unsaved audio.
+
+**Startup context / Recent Work** — Codex's bundled snapshot of working-thread
+history, other recent conversations and machine/workspace layout. AgentVoice
+defaults voice.include-startup-context to false; explicit true opts in. Separate
+from selected-thread speech replay and native global/workspace instructions.
 
 **Prompt files** — Optional files explicitly named in server.json's prompt-files
 section. Relative paths use that config's directory. No reference sends no file

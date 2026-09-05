@@ -1,7 +1,9 @@
 # 0010: Quiet voice reconnects
 
 2026-09-05. Implementation verified with fake protocol tests; live acceptance pending.
-This qualifies ADR 0008's baseline without changing its native context settings.
+This qualifies ADR 0008's baseline. ADR 0011 subsequently adds spoken-history
+restoration and changes the startup-context default; this document records the
+earlier quiet-only change.
 
 ## Problem and evidence
 

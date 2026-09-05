@@ -77,6 +77,11 @@ describe("workspace launch", () => {
     expect(realtimeParams(config, {}, "t", "rt", "sdp")["threadId"]).toBe("t");
   });
   test("preserves the console/fresh alias, explicit resume, and clear retirement errors", () => {
+    expect(parseConsoleCommand(["--allow-full-access", "--continue"])).toMatchObject({
+      options: { fresh: false },
+    });
+    for (const args of [["--no-continue"], ["--fresh"], ["--resume", "id"]])
+      expect(() => parseArgs(["--continue", ...args])).toThrow("cannot be combined");
     for (const flag of ["--fresh", "--no-continue"]) {
       expect(parseConsoleCommand(["--allow-full-access", flag])).toMatchObject({
         help: false,

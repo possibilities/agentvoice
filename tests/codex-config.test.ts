@@ -149,10 +149,10 @@ describe("native startup configuration", () => {
       h.native.main("existing", h.directory);
       try {
         await h.runtime.start();
-        h.runtime.offer("first");
-        h.runtime.offer("redial");
+        await h.runtime.offer("first");
+        await h.runtime.offer("redial");
         await h.runtime.fresh();
-        h.runtime.offer("fresh");
+        await h.runtime.offer("fresh");
         expect(h.native.options.argv).toEqual(appServerArgv("codex", entries));
         expect(h.native.options.cwd).toBe(h.directory);
         expect(h.native.options.env?.["CODEX_HOME"]).toBe(process.env["CODEX_HOME"]);

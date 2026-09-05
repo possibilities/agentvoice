@@ -196,16 +196,28 @@ export const voiceValuesSchema = z
     "quiet-resume": z
       .boolean()
       .meta({
+        title: "AgentVoice: quiet resume",
         description:
-          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Keeps the native prompt and startup context. False disables it; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call is unchanged. This is a model instruction, not a transport-enforced silence guarantee.",
+          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
+        default: true,
+      })
+      .optional(),
+    "replay-spoken-history": z
+      .boolean()
+      .meta({
+        title: "AgentVoice: replay spoken history",
+        description:
+          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit initial items (including seed files, [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
         default: true,
       })
       .optional(),
     "include-startup-context": z
       .boolean()
-      .describe(
-        "Include Codex's startup snapshot in the voice instructions: current-thread history, recent work from other threads, and a bounded machine/workspace map. Omitted defers to Codex (currently on for our WebRTC transport). False skips both generated and overridden startup context; it does not erase the orchestrator's history or prevent later recall through delegation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot, including an empty string to suppress it.",
-      )
+      .meta({
+        description:
+          "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of replay-spoken-history and working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
+        default: false,
+      })
       .optional(),
     "delegation-ack-filler": z
       .boolean()

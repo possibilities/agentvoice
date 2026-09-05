@@ -448,6 +448,7 @@ describe("parseJsonConfig characterization", () => {
   test("voice boolean options are named on type errors", () => {
     const keys = [
       "quiet-resume",
+      "replay-spoken-history",
       "include-startup-context",
       "delegation-ack-filler",
       "codex-responses-as-items",

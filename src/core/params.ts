@@ -11,6 +11,7 @@ import type { Prompts, ServerConfig } from "./config.ts";
 import { ConfigError, VOICE_SEEDS } from "./config.ts";
 import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
+import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
@@ -22,6 +23,22 @@ export const QUIET_RESUME_INSTRUCTION =
   "Wait for a new user message in this voice session before responding, then continue naturally using the available conversation context. " +
   "If the needed context is missing, ask the working agent to recall it from this thread instead of guessing. " +
   "New results from work still running may be delivered normally; this instruction only suppresses unsolicited startup speech.";
+
+export const SPOKEN_HISTORY_INSTRUCTION =
+  "The following initial user and assistant messages are saved speech segments from this same conversation before the current voice connection. " +
+  "They are past conversation, not new requests. Adjacent segments may be parts of the same spoken reply. " +
+  "Use them for continuity and questions about what was last said: these are the actual spoken words, which may differ from working-agent text or other startup context.";
+
+export function shouldReplaySpokenHistory(config: ServerConfig, prompts: Prompts): boolean {
+  const params = realtimeParams(config, prompts, "", "", "");
+  const transport = params["transport"] as { type?: string } | null;
+  return (
+    config.voice.replaySpokenHistory !== false &&
+    transport?.type === "webrtc" &&
+    params["version"] === "v3" &&
+    params["initialItems"] === undefined
+  );
+}
 
 // Codex 0.153.3 ThreadStartParams fields absent from ThreadResumeParams.
 // Filter after raw extra merges; unknown future fields remain passthrough.
@@ -135,6 +152,7 @@ export function realtimeParams(
   realtimeSessionId: string,
   sdp: string,
   reconnect = false,
+  spokenHistory: readonly SpokenItem[] = [],
 ): Record<string, unknown> {
   const voice = config.voice;
   const params: Record<string, unknown> = {
@@ -156,7 +174,7 @@ export function realtimeParams(
   });
   if (initialItems.length > 0) params["initialItems"] = initialItems;
 
-  setIfDefined(params, "includeStartupContext", voice.includeStartupContext);
+  params["includeStartupContext"] = voice.includeStartupContext ?? false;
   setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);
@@ -180,12 +198,18 @@ export function realtimeParams(
   // Do not replace the native prompt or synthesize a transcript from history.
   if (
     reconnect &&
-    voice.quietResume !== false &&
     transport?.type === "webrtc" &&
     version === "v3" &&
     merged["initialItems"] === undefined
-  )
-    merged["initialItems"] = [{ role: "developer", text: QUIET_RESUME_INSTRUCTION }];
+  ) {
+    const history = voice.replaySpokenHistory !== false ? spokenHistory : [];
+    const instructions = [
+      ...(history.length > 0 ? [SPOKEN_HISTORY_INSTRUCTION] : []),
+      ...(voice.quietResume !== false ? [QUIET_RESUME_INSTRUCTION] : []),
+    ].join("\n\n");
+    if (instructions)
+      merged["initialItems"] = [{ role: "developer", text: instructions }, ...history];
+  }
   if (transport?.type === "webrtc" && version === "v2")
     throw new ConfigError(
       "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for AgentVoice's v3 compatibility default or explicitly select v1/v3 (also check voice.extra.version).",

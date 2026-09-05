@@ -44,8 +44,14 @@ implementation.
   Explicit versions/null and alternate transports win; never call this Codex's native default.
   Quiet resume adds one developer initial item on WebRTC v3 reconnects only;
   quiet-resume=false or explicit initial items (including seed files, []/null) win.
-  This is a frontend turn-taking instruction, not transcript replay or guaranteed silence.
+  Native startup context defaults false; explicit true/null passthrough still wins.
+  Spoken history replay is a separate frontend behavior (default true); explicit
+  initial items or replay-spoken-history=false skip automatic history reads/replay.
   Validate final merged seeds/version and WebRTC v2 conflicts before child startup.
+- src/core/spoken-history.ts: selected-thread native speech reads only. Prefer
+  timeline API; legacy -32601 falls back to the exact verified native JSONL path
+  from thread/read. No file scan, separate ledger, history migration or rewriting.
+  Bound recent speech and report limits/errors; obsolete reads cannot start calls.
 - src/core/full-access.ts: reject incompatible permission selectors and require
   effective dangerFullAccess/never on start/resume/settings reports. Never infer
   effective permissions from the request or bypass managed native requirements.
@@ -218,20 +224,21 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Legacy names are metadata-only warnings, visible without debug; never silently
   delete/migrate user files. Removing overrides does not rewrite saved history or
   suppress native global/project instructions. Skill isolation is still separate.
-- Do not manufacture skill policy, transcript replay or session carryover.
-  Native voice-context controls remain configurable but unset by default:
-  includeStartupContext, flushTranscriptTailOnSessionEnd and the native
-  experimental_realtime_ws_startup_context override. Preserve omission and
-  explicit false/empty values through continue, resume, redial and Fresh.
-  Do not seed these into user config or server.json.example. Skill isolation
-  remains a separate decision. No AgentVoice account-management policy remains.
+- Do not manufacture skill policy or conversation summaries. The operator now
+  authorizes replay of actual saved speech from the selected native thread (ADR
+  0011), independently configurable with voice.replay-spoken-history=false.
+  includeStartupContext defaults false on every call, including Fresh; explicit
+  true enables the entire native snapshot, and raw null restores native resolution.
+  Tail flush and experimental_realtime_ws_startup_context remain unset by default.
+  Preserve explicit overrides; no user-config writes, forced tail-flush work,
+  transcript database, or migration. Skill isolation remains a separate decision.
 - Quiet resume is the documented exception to unmodified voice startup behavior:
   one developer initial item asks resumed/redialed v3 calls to wait for new input.
-  Keep the native prompt and context controls intact; no fabricated transcript,
-  default tail-flush work or history rewriting. First call of Fresh is unchanged.
+  Keep the native base prompt intact; no fabricated transcript, default tail-flush
+  work or history rewriting. First call of Fresh has no replay or quiet instruction.
   A valid started notification marks later calls as reconnects; stale starts do not.
-  See ADR 0010 for stock 0.153.3 and desktop 26.831.20005 evidence. Fake protocol
-  tests do not establish live silence or complete voice-only recall.
+  See ADRs 0010/0011 for stock 0.153.3/0.153.4 and desktop 26.831.20005 evidence.
+  Fake protocol tests do not establish live silence or audio-heard fidelity.
 - No AgentVoice worker tools, registry, archival, reports, or custom turn
   submission. Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.

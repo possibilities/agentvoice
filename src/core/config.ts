@@ -102,6 +102,7 @@ export interface VoiceConfig {
   model?: string;
   name?: string;
   quietResume?: boolean;
+  replaySpokenHistory?: boolean;
   includeStartupContext?: boolean;
   delegationAckFiller?: boolean;
   codexResponseHandoffMode?: HandoffMode;
@@ -548,6 +549,7 @@ export function resolveConfig(
     model: pickVoice("model"),
     name: pickVoice("name"),
     quietResume: pickVoice("quiet-resume"),
+    replaySpokenHistory: pickVoice("replay-spoken-history"),
     includeStartupContext: pickVoice("include-startup-context"),
     delegationAckFiller: pickVoice("delegation-ack-filler"),
     codexResponseHandoffMode: pickVoice("codex-response-handoff-mode"),
