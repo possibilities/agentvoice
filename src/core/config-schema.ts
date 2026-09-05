@@ -158,21 +158,12 @@ export const voiceValuesSchema = z
         default: DEFAULT_WEBRTC_VERSION,
       })
       .optional(),
-    "quiet-resume": z
-      .boolean()
-      .meta({
-        title: "AgentVoice: quiet resume",
-        description:
-          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit raw initial items (including [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
-        default: true,
-      })
-      .optional(),
     "replay-spoken-history": z
       .boolean()
       .meta({
         title: "AgentVoice: replay spoken history",
         description:
-          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
+          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. False skips history reads and replay without changing working-thread continuation or native startup context; the reconnect then carries no AgentVoice items, matching stock app-server. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
         default: true,
       })
       .optional(),

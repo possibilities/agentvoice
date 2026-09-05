@@ -4,7 +4,7 @@ import { dlopen, FFIType, type Pointer, ptr } from "bun:ffi";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-const ABI_VERSION = 1;
+const ABI_VERSION = 2;
 export const DUPLEX_SAMPLE_RATE = 48_000;
 export const DUPLEX_PLAYBACK_CHANNELS = 2;
 const DEFAULT_CAPTURE_CAPACITY_FRAMES = DUPLEX_SAMPLE_RATE;
@@ -12,6 +12,8 @@ const DEFAULT_CAPTURE_CAPACITY_FRAMES = DUPLEX_SAMPLE_RATE;
 const DEFAULT_PLAYBACK_CAPACITY_FRAMES = DUPLEX_SAMPLE_RATE;
 /** The live trace reached a 451.6 ms delivery pause with clean decoded PCM. */
 export const DUPLEX_PLAYBACK_START_FRAMES = DUPLEX_SAMPLE_RATE / 2;
+/** Two 20 ms RTP packets leave one packet interval of recovery headroom. */
+export const DUPLEX_PLAYBACK_RECOVERY_FRAMES = (DUPLEX_SAMPLE_RATE / 1_000) * 40;
 
 const handleU32 = { args: [FFIType.ptr], returns: FFIType.u32 } as const;
 const handleU64 = { args: [FFIType.ptr], returns: FFIType.u64 } as const;
@@ -31,7 +33,7 @@ const nativeSymbols = {
   avn_duplex_miniaudio_version: { args: [], returns: FFIType.cstring },
   avn_duplex_result_description: { args: [FFIType.i32], returns: FFIType.cstring },
   avn_duplex_create: {
-    args: [FFIType.u32, FFIType.u32, FFIType.u32],
+    args: [FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32],
     returns: FFIType.ptr,
   },
   avn_duplex_destroy: { args: [FFIType.ptr], returns: FFIType.void },
@@ -205,6 +207,7 @@ export interface NativeDuplexOptions {
   captureCapacityFrames?: number;
   playbackCapacityFrames?: number;
   playbackStartFrames?: number;
+  playbackRecoveryFrames?: number;
 }
 
 export class NativeDuplexDevice {
@@ -226,13 +229,21 @@ export class NativeDuplexDevice {
       options.playbackStartFrames ?? DUPLEX_PLAYBACK_START_FRAMES,
       "playbackStartFrames",
     );
+    const playbackRecovery = positiveFrames(
+      options.playbackRecoveryFrames ?? DUPLEX_PLAYBACK_RECOVERY_FRAMES,
+      "playbackRecoveryFrames",
+    );
     if (playbackStart > playbackCapacity) {
       throw new RangeError("playbackStartFrames must not exceed playbackCapacityFrames");
+    }
+    if (playbackRecovery > playbackStart) {
+      throw new RangeError("playbackRecoveryFrames must not exceed playbackStartFrames");
     }
     this.handle = this.native.symbols.avn_duplex_create(
       captureCapacity,
       playbackCapacity,
       playbackStart,
+      playbackRecovery,
     );
     if (this.handle === null) {
       throw new Error("native duplex audio initialization failed");

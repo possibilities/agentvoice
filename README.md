@@ -131,15 +131,16 @@ Default launch and explicit `--continue` resume the selected working thread and
 restore its recent saved speech into a new WebRTC v3 call. This uses the actual
 spoken user/assistant segments, which can differ from the working agent's text.
 Redial reads the latest saved speech again. A first call after `--no-continue`
-or Fresh receives no old speech. The native cross-conversation startup snapshot
-(including Recent Work) is off by default, with an explicit opt-in below.
+or Fresh receives no old speech. AgentVoice adds no instruction of its own to a
+reconnect; with replay off, the call is built like a stock app-server realtime
+start. The native cross-conversation startup snapshot (including Recent Work) is
+off by default, with an explicit opt-in below.
 
 These independent settings live under `voice` in your selected `server.json`:
 
 | Setting | Default | Ownership and effect |
 | --- | --- | --- |
-| `replay-spoken-history` | `true` | AgentVoice behavior: restore saved speech from this conversation. `false` skips history reads/replay while keeping working-thread continuation. |
-| `quiet-resume` | `true` | AgentVoice behavior: ask resumed/redialed voice calls to wait for new input. Model guidance, not guaranteed silence. |
+| `replay-spoken-history` | `true` | AgentVoice behavior: restore saved speech from this conversation on continue/resume/redial. `false` skips history reads/replay while keeping working-thread continuation. |
 | `include-startup-context` | `false` | Native passthrough with an AgentVoice default: `true` opts into the whole Codex snapshot, including Recent Work from other conversations. |
 
 For example, continue the working thread without restoring old speech:
@@ -148,11 +149,12 @@ For example, continue the working thread without restoring old speech:
 { "voice": { "replay-spoken-history": false } }
 ```
 
-The two AgentVoice settings are not forwarded as similarly named RPC fields.
-They build native `initialItems`; the built-in voice base prompt stays intact.
+The replay setting is not forwarded as a similarly named RPC field. It builds
+native `initialItems`: one developer item marking the segments as past
+conversation, then the segments; the built-in voice base prompt stays intact.
 Explicit raw `voice.extra.initialItems` (including `[]` or `null`) replace
-automatic replay and quiet-resume guidance. Other versions/transports receive no
-automatic initial items.
+replay. Other versions/transports receive no automatic
+initial items. The former `quiet-resume` key is retired and errors at load.
 
 Speech stays in Codex's native history; AgentVoice adds no persistent transcript
 database. It prefers the native timeline API, with a verified read-only JSONL
@@ -321,8 +323,7 @@ AgentVoice supplies no model name. Sending an explicit protocol also restores
 Codex's configured realtime voice selection, which omitted-version WebRTC
 ignores. `--voice` / `voice.name` still overrides the voice name. Current v1/v3
 share a voice-name family. Protocol selection does not select the working model,
-reasoning or Fast tier, or change startup-context/tail-flush settings. The separate
-quiet-resume policy above uses a developer initial item on reconnect.
+reasoning or Fast tier, or change startup-context/tail-flush settings.
 
 Nonempty `voice.extra.initialItems` require effective v3, which the normal WebRTC
 default satisfies. Conflicting explicit protocols and WebRTC v2 fail before Codex
@@ -407,7 +408,7 @@ before Codex starts, even if a raw field would override the contents. Symlinks t
 regular files work. Contents load once at launch and are reused on redial and
 Fresh. Session-boundary instructions and voice prompts ride every realtime start,
 including redial. Voice history items are not files: raw `voice.extra.initialItems`
-replaces automatic spoken-history replay and quiet-resume's initial item.
+replaces automatic spoken-history replay.
 
 The former names (`VOICE.md`, `ORCHESTRATOR.md`, `ORCHESTRATOR_BASE.md`,
 `ORCHESTRATOR_SESSION_START.md`, `ORCHESTRATOR_SESSION_END.md`,

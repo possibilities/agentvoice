@@ -3,6 +3,8 @@
 2026-09-05. Supersedes ADR 0008's no-replay/startup-context policy and extends
 ADR 0010's quiet-only reconnect behavior. The operator approved saved-speech
 restoration, native Recent Work as an opt-in, and an independent replay opt-out.
+ADR 0012 the same day removed quiet resume; replay, its default and the native
+history contract below are unchanged.
 
 ## Evidence
 

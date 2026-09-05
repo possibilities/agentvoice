@@ -26,7 +26,7 @@ describe("resolveConfig", () => {
     expect(config.voice.version).toBeUndefined();
     expect(config.voice.model).toBeUndefined();
     expect(config.voice.includeStartupContext).toBeUndefined();
-    expect(config.voice.quietResume).toBeUndefined();
+    expect(config.voice.replaySpokenHistory).toBeUndefined();
   });
 
   test("CLI beats file beats default, per leaf", () => {
@@ -113,6 +113,16 @@ describe("parseJsonConfig", () => {
         expect(() => parseJsonConfig(document, "legacy.json")).toThrow("remove this key");
       });
     }
+  }
+
+  for (const value of [true, false]) {
+    test(`retired voice.quiet-resume=${value} errors with a removal instruction`, () => {
+      const document = JSON.stringify({ voice: { "quiet-resume": value } });
+      expect(() => parseJsonConfig(document, "legacy.json")).toThrow(
+        "legacy.json: voice.quiet-resume has been retired",
+      );
+      expect(() => parseJsonConfig(document, "legacy.json")).toThrow("remove this key");
+    });
   }
 
   test("parses nested sections", () => {
@@ -447,7 +457,6 @@ describe("parseJsonConfig characterization", () => {
 
   test("voice boolean options are named on type errors", () => {
     const keys = [
-      "quiet-resume",
       "replay-spoken-history",
       "include-startup-context",
       "delegation-ack-filler",

@@ -1,6 +1,6 @@
-# 0013: Roles are directories delivered to the owned child
+# 0014: Roles are directories delivered to the owned child
 
-Accepted 2026-09-05. Extends [ADR 0012](0012-convention-prompt-files.md) and
+Accepted 2026-09-05. Extends [ADR 0013](0013-convention-prompt-files.md) and
 settles the skill-isolation question left open by [ADR 0007](0007-defer-skill-policy-to-codex.md).
 
 A role is a directory of skills, an mcp.json, and prompt replacement or append
@@ -18,5 +18,5 @@ skills.config or plugin changes were rejected as isolation mechanisms.
 Inside a role, SYSTEM_PROMPT.md and APPEND_SYSTEM_PROMPT.md are the general
 orchestrator prompt every harness receives; the VOICE_ORCHESTRATOR pair stands
 in for the same kind for AgentVoice only, and the replace-or-append rule from
-ADR 0012 applies to the result. A role replaces the config directory as the
+ADR 0013 applies to the result. A role replaces the config directory as the
 prompt source rather than merging with it.

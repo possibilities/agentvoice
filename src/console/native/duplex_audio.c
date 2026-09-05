@@ -64,7 +64,9 @@ struct avn_duplex {
     avn_device_entry* playback_devices;
     uint32_t playback_device_count;
     uint32_t playback_start_frames;
+    uint32_t playback_recovery_frames;
     atomic_bool playback_running;
+    atomic_bool playback_recovering;
     atomic_bool clear_playback_requested;
     _Atomic(uint64_t) callback_count;
     _Atomic(uint32_t) max_callback_frames;
@@ -93,6 +95,7 @@ static int32_t avn_refresh_devices(avn_duplex* duplex);
 static void avn_init_atomics(avn_duplex* duplex)
 {
     atomic_init(&duplex->playback_running, false);
+    atomic_init(&duplex->playback_recovering, false);
     atomic_init(&duplex->clear_playback_requested, false);
     atomic_init(&duplex->callback_count, 0);
     atomic_init(&duplex->max_callback_frames, 0);
@@ -180,6 +183,7 @@ static void avn_discard_playback(avn_duplex* duplex)
         (void)ma_pcm_rb_seek_read(&duplex->playback_ring, available);
     }
     atomic_store_explicit(&duplex->playback_running, false, memory_order_relaxed);
+    atomic_store_explicit(&duplex->playback_recovering, false, memory_order_relaxed);
 }
 
 static void avn_update_max_callback_frames(avn_duplex* duplex, uint32_t frame_count)
@@ -289,10 +293,21 @@ static void avn_data_callback(
 
     uint32_t available = ma_pcm_rb_available_read(&duplex->playback_ring);
     if (!atomic_load_explicit(&duplex->playback_running, memory_order_relaxed)) {
-        if (available < duplex->playback_start_frames) {
+        /* A clear/reset must retain the startup cushion. Only a real underrun recovers sooner. */
+        bool recovering = atomic_load_explicit(
+            &duplex->playback_recovering,
+            memory_order_relaxed
+        );
+        uint32_t required = recovering ? duplex->playback_recovery_frames
+                                      : duplex->playback_start_frames;
+        if (recovering && required < frame_count) {
+            required = frame_count;
+        }
+        if (available < required) {
             return;
         }
         atomic_store_explicit(&duplex->playback_running, true, memory_order_relaxed);
+        atomic_store_explicit(&duplex->playback_recovering, false, memory_order_relaxed);
     }
 
     uint32_t read = avn_ring_read(
@@ -310,6 +325,7 @@ static void avn_data_callback(
     }
     if (read < frame_count) {
         atomic_store_explicit(&duplex->playback_running, false, memory_order_relaxed);
+        atomic_store_explicit(&duplex->playback_recovering, true, memory_order_relaxed);
         atomic_fetch_add_explicit(
             &duplex->playback_starved_frames,
             frame_count - read,
@@ -421,11 +437,13 @@ const char* avn_duplex_result_description(int32_t result)
 avn_duplex* avn_duplex_create(
     uint32_t capture_capacity_frames,
     uint32_t playback_capacity_frames,
-    uint32_t playback_start_frames
+    uint32_t playback_start_frames,
+    uint32_t playback_recovery_frames
 )
 {
     if (capture_capacity_frames == 0 || playback_capacity_frames == 0 ||
-        playback_start_frames == 0 || playback_start_frames > playback_capacity_frames) {
+        playback_start_frames == 0 || playback_start_frames > playback_capacity_frames ||
+        playback_recovery_frames == 0 || playback_recovery_frames > playback_start_frames) {
         return NULL;
     }
     avn_duplex* duplex = (avn_duplex*)calloc(1, sizeof(*duplex));
@@ -434,6 +452,7 @@ avn_duplex* avn_duplex_create(
     }
     avn_init_atomics(duplex);
     duplex->playback_start_frames = playback_start_frames;
+    duplex->playback_recovery_frames = playback_recovery_frames;
 
     ma_result result = ma_context_init(NULL, 0, NULL, &duplex->context);
     if (result != MA_SUCCESS) {
@@ -596,6 +615,7 @@ int32_t avn_duplex_start(
     ma_pcm_rb_reset(&duplex->capture_ring);
     ma_pcm_rb_reset(&duplex->playback_ring);
     atomic_store_explicit(&duplex->playback_running, false, memory_order_relaxed);
+    atomic_store_explicit(&duplex->playback_recovering, false, memory_order_relaxed);
     atomic_store_explicit(&duplex->clear_playback_requested, false, memory_order_relaxed);
 
     ma_device_config config = ma_device_config_init(ma_device_type_duplex);
@@ -642,6 +662,7 @@ int32_t avn_duplex_stop(avn_duplex* duplex)
     ma_pcm_rb_reset(&duplex->capture_ring);
     ma_pcm_rb_reset(&duplex->playback_ring);
     atomic_store_explicit(&duplex->playback_running, false, memory_order_relaxed);
+    atomic_store_explicit(&duplex->playback_recovering, false, memory_order_relaxed);
     atomic_store_explicit(&duplex->clear_playback_requested, false, memory_order_relaxed);
     if (result == MA_DEVICE_NOT_STARTED) {
         return MA_SUCCESS;
@@ -728,6 +749,7 @@ void avn_duplex_clear_playback(avn_duplex* duplex)
     } else {
         ma_pcm_rb_reset(&duplex->playback_ring);
         atomic_store_explicit(&duplex->playback_running, false, memory_order_relaxed);
+        atomic_store_explicit(&duplex->playback_recovering, false, memory_order_relaxed);
     }
 }
 

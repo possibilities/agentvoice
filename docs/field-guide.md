@@ -34,7 +34,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Main agent | model, effort, personality, fixed full-access/never posture, native approvals-reviewer (no execution approvals under never), model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
-| Voice | model, name, version, quiet-resume and replay-spoken-history (frontend policies), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
+| Voice | model, name, version, replay-spoken-history (frontend policy), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
 | Prompt files | Convention names beside the selected config: VOICE_AGENT_SYSTEM_PROMPT / VOICE_AGENT_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SYSTEM_PROMPT / VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SESSION_START / _END (.md); one native control each, override and append exclusive per agent |
 | Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
@@ -116,7 +116,7 @@ requests are refused through native denials or protocol errors with a persistent
 TUI explanation, not an approval UI or invented answers.
 
 Still application-owned: full-access-only posture, visible refusal handling,
-WebRTC/audio transport, workspace-local selection, spoken-history replay, quiet-resume guidance and renewal policy. The project
+WebRTC/audio transport, workspace-local selection, spoken-history replay and renewal policy. The project
 is not yet fully vanilla in defaults, nor a complete passthrough for every future
 Codex option.
 
@@ -152,8 +152,11 @@ continuity report also confirmed unsolicited repetition after a correct resume:
 the new call received the old answer in native startup context but no new user
 message. Desktop contains its own silence instruction and optional transcript
 continuity machinery; stock app-server does not supply those semantics.
-[ADR 0010](adr/0010-quiet-voice-resume.md) records the evidence and the narrow
-AgentVoice quiet-resume policy. That model instruction alone could not restore the last spoken reply. ADR 0011 adds actual saved-speech restoration; live acceptance still remains.
+[ADR 0010](adr/0010-quiet-voice-resume.md) records the evidence and the
+quiet-resume instruction that briefly addressed it; ADR 0011 added saved-speech
+restoration. [ADR 0012](adr/0012-vanilla-voice-reconnects.md) then retired the
+instruction: a reconnect carries replayed speech and nothing else AgentVoice
+authored, so that stock repetition can recur when startup context is enabled.
 
 ## Native voice context levers retained
 
@@ -173,12 +176,12 @@ Frontend settings are independent of those native controls:
 | AgentVoice setting | Default | Effect |
 | --- | --- | --- |
 | voice.replay-spoken-history | true | Restore recent saved speech from the selected native thread on continue/resume/redial; false skips read/replay without changing working-thread continuation. |
-| voice.quiet-resume | true | Ask the reconnected voice model to wait for new input; does not enforce silence in the transport. |
 
-Neither key is forwarded as a similarly named RPC field. They build native v3
-initialItems, keeping the native voice base prompt intact. Explicit raw initialItems
-(including []/null) replace both automatic behaviors.
-Fresh starts with neither; it never reads another conversation for speech replay.
+The key is not forwarded as a similarly named RPC field. It builds native v3
+initialItems, keeping the native voice base prompt intact. Explicit raw
+initialItems (including []/null) replace it.
+Fresh's first call never replays, and no other conversation is read for speech.
+The former voice.quiet-resume key is retired and errors at load (ADR 0012).
 
 Native timeline reads are preferred. Stock 0.153.4 rejects timeline reads for
 legacy history; the fallback reads the verified local JSONL rollout returned by
@@ -230,11 +233,11 @@ choice, not automatic discovery; see README migration notes.
 ## Deferred requests and decisions
 
 - Native passthrough now covers startup, conversation and realtime settings;
-  full-access-only, WebRTC v3 compatibility, quiet-resume guidance and explicit-only
+  full-access-only, WebRTC v3 compatibility, spoken replay and explicit-only
   file/session-boundary overrides are implemented. Startup context defaults off; other native context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - Selective seeding of global skills. Role skills are isolated to the owned child
-  through `skills/extraRoots/set` (ADR 0013); enabling or hiding globally
+  through `skills/extraRoots/set` (ADR 0014); enabling or hiding globally
   installed skills per launch remains a native `skills.config` passthrough.
 - Spoken conversation and audio latency/buffering validation. The editable command
   has been installed; stock 0.153.3 WebRTC startup has been checked without audio

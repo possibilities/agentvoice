@@ -3,9 +3,13 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerError } from "../src/core/attach.ts";
-import type { ConfigValues } from "../src/core/config.ts";
-import { SPOKEN_HISTORY_INSTRUCTION } from "../src/core/params.ts";
-import { boundSpokenHistory, SpokenHistoryReader } from "../src/core/spoken-history.ts";
+import { type ConfigValues, resolveConfig } from "../src/core/config.ts";
+import { realtimeParams, SPOKEN_HISTORY_INSTRUCTION } from "../src/core/params.ts";
+import {
+  boundSpokenHistory,
+  SpokenHistoryReader,
+  type SpokenItem,
+} from "../src/core/spoken-history.ts";
 import { deferred, runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 const speech = (position: number, role: "user" | "assistant", text: string) => ({
@@ -19,6 +23,9 @@ const spoken = [
   speech(5, "assistant", "STARTUP.md."),
 ];
 const page = { data: spoken, nextCursor: null };
+const items: SpokenItem[] = spoken.map((e) => ({ role: e.item.role, text: e.item.text }));
+const replayed = [{ role: "developer", text: SPOKEN_HISTORY_INSTRUCTION }, ...items];
+const replayOff = { voice: { "replay-spoken-history": false } } satisfies ConfigValues;
 
 describe("native spoken history", () => {
   test("pages backwards but restores speech chronologically, excluding working-agent text", async () => {
@@ -119,6 +126,54 @@ describe("native spoken history", () => {
   });
 });
 
+describe("reconnect request defaults", () => {
+  const params = (values: ConfigValues = {}, reconnect = true, history: SpokenItem[] = []) =>
+    realtimeParams(
+      resolveConfig({}, values, {}, "/test"),
+      {},
+      "thread",
+      "call",
+      "sdp",
+      reconnect,
+      history,
+    );
+
+  test("reconnects add only replayed speech, and nothing when replay is off or speech is absent", () => {
+    const first = params({}, false);
+    expect(first).not.toHaveProperty("initialItems");
+    expect(params({}, false, items)).toEqual(first);
+    expect(params({})).toEqual(first);
+    expect(params(replayOff, true, items)).toEqual(first);
+    expect(params({}, true, items)).toEqual({ ...first, initialItems: replayed });
+    for (const key of ["prompt", "quietResume", "replaySpokenHistory"])
+      expect(first).not.toHaveProperty(key);
+    expect(first["includeStartupContext"]).toBe(false);
+    expect(first).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
+  });
+
+  test("explicit initial items and protocol/transport choices keep their meaning under replay", () => {
+    for (const initialItems of [[], null, [{ role: "user", text: "Operator startup" }]])
+      expect(params({ voice: { extra: { initialItems } } }, true, items)["initialItems"]).toEqual(
+        initialItems,
+      );
+    for (const version of [null, "v1"])
+      expect(params({ voice: { extra: { version } } }, true, items)).not.toHaveProperty(
+        "initialItems",
+      );
+    for (const transport of [{ type: "websocket" }, { type: "existingCall", callId: "call" }])
+      expect(
+        params({ voice: { version: "v3", extra: { transport } } }, true, items),
+      ).not.toHaveProperty("initialItems");
+    expect(
+      params(
+        { voice: { extra: { initialItems: [{ role: "developer", text: "" }] } } },
+        true,
+        items,
+      )["initialItems"],
+    ).toEqual([{ role: "developer", text: "" }]);
+  });
+});
+
 describe("spoken replay configuration and lifecycle", () => {
   for (const mode of ["continue", "resume", "fresh"] as const) {
     test(`${mode}: replays only the selected conversation; redial refreshes speech and Fresh clears it`, async () => {
@@ -192,6 +247,91 @@ describe("spoken replay configuration and lifecycle", () => {
       }
     });
   }
+
+  for (const resume of [undefined, "existing"]) {
+    test(`${resume ? "explicit resume" : "continue"} with no saved speech sends no items and no work turn`, async () => {
+      const h = runtimeHarness({}, { resume });
+      h.native.main("existing", h.directory);
+      try {
+        await h.runtime.start();
+        await h.runtime.offer("reconnect");
+        const call = h.native.calls.at(-1)!;
+        expect(call.method).toBe("thread/realtime/start");
+        expect(call.params["threadId"]).toBe("existing");
+        expect(call.params).not.toHaveProperty("initialItems");
+        expect(h.native.calls.some((c) => c.method === "thread/timeline/list")).toBe(true);
+        expect(h.native.calls.some((c) => c.method === "thread/resume")).toBe(true);
+        expect(h.native.calls.some((c) => c.method === "thread/start")).toBe(false);
+        expect(h.native.calls.some((c) => c.method === "turn/start")).toBe(false);
+        expect(h.native.calls.some((c) => c.method === "thread/realtime/appendText")).toBe(false);
+      } finally {
+        await h.cleanup();
+      }
+    });
+  }
+
+  test("first connection stays native, closed/error calls redial with replay, Fresh resets the boundary", async () => {
+    const h = runtimeHarness({}, { fresh: true });
+    h.native.override = (method) =>
+      method === "thread/timeline/list" ? Promise.resolve(page) : undefined;
+    const offer = async (replay: boolean) => {
+      await h.runtime.offer("sdp");
+      const call = h.native.calls.at(-1)!;
+      expect(call.params["initialItems"]).toEqual(replay ? replayed : undefined);
+      return call.params;
+    };
+    try {
+      await h.runtime.start();
+      const first = await offer(false);
+      // An obsolete notification must not turn a failed first attempt into a reconnect.
+      h.native.options.onNotification("thread/realtime/started", {
+        threadId: first["threadId"],
+        realtimeSessionId: "obsolete",
+      });
+      const retry = await offer(false);
+      h.native.options.onNotification("thread/realtime/started", retry);
+      await offer(true);
+      h.native.options.onNotification("thread/realtime/closed", {
+        threadId: first["threadId"],
+        reason: "transport_closed",
+      });
+      await offer(true);
+      h.native.options.onNotification("thread/realtime/error", {
+        threadId: first["threadId"],
+        message: "transport failed",
+      });
+      await offer(true);
+      await h.runtime.fresh();
+      const fresh = await offer(false);
+      expect(fresh["threadId"]).not.toBe(first["threadId"]);
+    } finally {
+      await h.cleanup();
+    }
+  });
+
+  test("failed Fresh keeps the old conversation's reconnect policy", async () => {
+    const h = runtimeHarness({}, { fresh: true });
+    h.native.override = (method) =>
+      method === "thread/timeline/list" ? Promise.resolve(page) : undefined;
+    try {
+      await h.runtime.start();
+      await h.runtime.offer("first");
+      const first = h.native.calls.at(-1)!.params;
+      h.native.options.onNotification("thread/realtime/started", first);
+      h.native.override = (method) =>
+        method === "thread/start"
+          ? Promise.reject(new Error("new thread failed"))
+          : method === "thread/timeline/list"
+            ? Promise.resolve(page)
+            : undefined;
+      await h.runtime.fresh();
+      expect(first["threadId"]).toBe(h.runtime.currentReady!.threadId);
+      await h.runtime.offer("reconnect after failed Fresh");
+      expect(h.native.calls.at(-1)!.params["initialItems"]).toEqual(replayed);
+    } finally {
+      await h.cleanup();
+    }
+  });
 
   for (const boundary of ["fresh", "quit", "newer-offer"] as const) {
     test(`pending history cannot launch an obsolete call after ${boundary}`, async () => {

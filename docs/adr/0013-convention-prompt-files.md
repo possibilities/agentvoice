@@ -1,4 +1,4 @@
-# 0012: Convention prompt files, one native control each
+# 0013: Convention prompt files, one native control each
 
 Accepted 2026-09-05. Supersedes the explicit-only prompt references of commit
 3dc3b95 and the matching provision in [ADR 0009](0009-one-foreground-workspace.md).
