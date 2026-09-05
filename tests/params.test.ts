@@ -168,12 +168,13 @@ describe("threadParams", () => {
 });
 
 describe("realtimeParams", () => {
-  test("carries the transport but leaves protocol selection to Codex when unset", () => {
+  test("carries the WebRTC transport with AgentVoice's v3 compatibility default", () => {
     expect(realtime()).toEqual({
       threadId: "th_1",
       realtimeSessionId: "rt_1",
       outputModality: "audio",
       transport: { type: "webrtc", sdp: "v=0" },
+      version: "v3",
     });
   });
 

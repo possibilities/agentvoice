@@ -32,10 +32,10 @@ app-server handles delegation to the working agent.
 **Voice session** — One realtime connection layered on a conversation. Redial
 changes the voice session but not the conversation or workspace.
 
-**Voice protocol** — Optional voice.version override on the native realtime
-request. Unset defers to Codex's transport-specific default (WebRTC v1 in 0.153.3),
-not necessarily the general realtime config or another Codex UI. Explicit v3 is
-required for initial seed items; this is separate from the work model and --fast.
+**Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
+compatibility; explicit voice.version or voice.extra.version overrides win.
+This frontend default is separate from native fallback (v1 in Codex 0.153.3),
+the work model and --fast. Initial seed items require effective v3.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
 Old history remains; native work in the old conversation stays there.

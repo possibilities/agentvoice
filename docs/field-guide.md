@@ -73,22 +73,19 @@ instructions and voice prompts/items ride each realtime start. Start-only native
 metadata such as dynamic tools is persisted by Codex and cannot be removed merely
 by omitting it on resume.
 
-Voice protocol: unset voice.version stays off the wire. Stock Codex 0.153.3
-uses v1 for WebRTC omission, independently of the general native realtime config;
-it also ignores the native configured voice in that case, while an explicit
-request voice still applies. This is the API's default, not necessarily every
-Codex UI's choice. Explicit v3 preserves AgentVoice's former protocol and is
-required for initial seed items. WebRTC v2 and non-v3 seed combinations fail
-before child startup. Final extra overrides are checked; no seeds are silently
-discarded and no protocol is auto-selected. Protocol changes may change the
-default speech model/behavior. Current v1/v3 share a voice-name family.
+Voice protocol: AgentVoice selects v3 on final WebRTC requests with no version.
+This is a documented frontend compatibility default, not stock app-server's
+fallback. Explicit version overrides (including raw null) remain authoritative;
+alternate raw transports receive no default. Initial items require effective v3,
+including empty seed-file contents. A conflicting explicit protocol fails early.
 
-The September 5, 2026 live startup check found the service rejecting omitted
-WebRTC version on stock 0.153.3 with `invalid_quicksilver_alpha_header`; explicit
-v3 connected with audio hardware disabled. See the [startup workaround](../README.md#codex-01533-voice-startup-compatibility).
-This is observed compatibility for one account/runtime, not a new application
-default. Retry exhaustion retains the service error and requires manual redial
-after three failures; readiness notifications do not bypass the retry delay.
+On September 5, 2026, native WebRTC omission on stock 0.153.3 was rejected with
+`invalid_quicksilver_alpha_header`; explicit v3 connected and the operator
+confirmed it works. v3 also honors Codex's configured voice name; native WebRTC
+omission ignores it. Speech-model resolution stays native to the chosen protocol.
+See the [compatibility explanation](../README.md#webrtc-compatibility-default).
+Retry exhaustion preserves the cause and stops after three failures; readiness
+notifications do not bypass the retry delay.
 
 ## What ships versus what is native
 
@@ -119,6 +116,34 @@ WebRTC/audio transport, workspace-local selection and renewal policy. The projec
 is not yet fully vanilla in defaults, nor a complete passthrough for every future
 Codex option.
 
+## Default comparison audit
+
+Rechecked September 5, 2026 against stock app-server 0.153.3 source and the
+installed desktop client 26.831.20005 build 7524 (bundled Codex 0.152.0).
+Desktop evidence is its shipped `webview/assets/app-initial-592a0643ed17.js`:
+`bps` selects client-owned calls, `yfs` builds native requests, `Lhs` reads model
+rollout configuration, and `Upr` builds its prompt/context settings. These are
+reachable paths, not evidence of the operator's active rollout values.
+
+| Area | Finding and consequence | Decision |
+| --- | --- | --- |
+| Protocol, speech model and voice name | Desktop can explicitly force v3; stock WebRTC omission instead selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Restore v3 compatibility in AgentVoice; leave model/name resolution and explicit overrides native. |
+| Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows status and meters, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
+| Session prompts and handoffs | Native Codex has voice start/end instructions and automatic handoff forwarding. Desktop adds its own session instructions/tools and can create calls itself. AgentVoice keeps Codex in charge of both the call and handoffs. | Keep native instructions and forwarding. Copying desktop instructions/tool metadata requires corresponding frontend handlers; it is not a compatibility prerequisite. |
+| Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | Preserve the operator's explicit decision to leave these controls unset. Desktop values cannot be treated as independent, universally native defaults. |
+| Work model, effort, Fast and history | Resume can restore saved settings; history mode also depends on native thread-store capabilities. Desktop can supply product/rollout settings. An omitted field does not necessarily mean config.toml is consulted. | Keep native resolution and existing Fast checks. Correct schema claims that history simply inherits config and that ultra guarantees proactive subagents. |
+| Microphone processing | Desktop requests browser microphone noise suppression. AgentVoice's native duplex PCM path has no echo cancellation/noise suppression stage. App-server cannot supply capture processing to a client-owned microphone. | Existing audio-quality limitation, not fixed by omission or by v3. Keep the headphones recommendation; assess audio processing with real use before adding DSP. |
+| Selection, permissions and transport | AgentVoice already supplies required realtime gates, WebRTC/audio fields, exact-workspace app-server history filters, and full-access policy. | Keep these explicit choices: omitting them would change the product or break the client. |
+
+Source anchors: [native version/model/voice resolution](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core/src/realtime_conversation.rs#L1215),
+[startup context, tail flush and handoff defaults](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/app-server/src/request_processors/turn_processor.rs#L1204),
+[voice prompt's frontend assumptions](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/prompts/templates/realtime/backend_prompt.md#L13),
+and [native thread creation/history selection](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/app-server/src/request_processors/thread_processor.rs#L1419).
+
+The v3 regression and its configured-voice side effect were confirmed. This audit
+does not establish another startup failure. It does establish frontend gaps and
+several reasons to say "stock app-server behavior" instead of "desktop parity."
+
 ## Native voice context levers retained
 
 | Lever | Effect | Does not do |
@@ -127,7 +152,7 @@ Codex option.
 | orchestrator.config.experimental_realtime_ws_startup_context | Replaces that snapshot when startup context is enabled; an explicit empty string suppresses its text | Replace the voice system prompt or bypass include-startup-context=false |
 | voice.flush-transcript-tail-on-session-end | Delivers leftover speech transcript text to the working agent at voice-session end; can trigger a turn | Replay it through an AgentVoice-managed next-session buffer |
 
-Decision: keep all three configurable but unset; experience the native baseline
+Decision: keep all three configurable but unset; experience the app-server baseline
 before tuning them. Omitted flags are omitted on the wire, including across
 continue, explicit resume, redial and Fresh. AgentVoice does not populate a
 startup override or rewrite native/user config. The upstream WebRTC behavior previously
@@ -183,13 +208,14 @@ choice, not automatic discovery; see README migration notes.
 ## Deferred requests and decisions
 
 - Native passthrough now covers startup, conversation and realtime settings;
-  full-access-only, native protocol omission and explicit-only file/seed/session-boundary
+  full-access-only, WebRTC v3 compatibility and explicit-only file/seed/session-boundary
   overrides are implemented. Native voice-context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - AgentVoice-specific skill isolation and selective seeding.
 - Spoken conversation and audio latency/buffering validation. The editable command
   has been installed; stock 0.153.3 WebRTC startup has been checked without audio
-  hardware, including the explicit-v3 workaround above.
+  hardware, and the operator confirmed the v3 launch works. Broader audio quality
+  and native tool/result presentation still need use-case validation.
 
 Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
 and native --fast/--no-fast are implemented. They do not settle the items above.

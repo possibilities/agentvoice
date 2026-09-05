@@ -60,35 +60,22 @@ terminal with microphone permission. Headphones are recommended: there is no
 echo cancellation. The original voice semantics were verified on Codex 0.147;
 run the native protocol probe before changing the supported runtime.
 
-### Codex 0.153.3 voice startup compatibility
+### WebRTC compatibility default
 
-On September 5, 2026, a live startup check with stock Codex 0.153.3 and the
-local authenticated account rejected the omitted-version WebRTC request with
-`AVAS requires OpenAI-Alpha: quicksilver=v2.` Explicit `voice.version: "v3"`
-connected and stayed live until shutdown; microphone/speaker audio was disabled
-for that check. This verifies startup, not spoken conversation or all accounts.
+AgentVoice sends realtime **v3 by default** for WebRTC. Ordinary launches need
+no personal configuration workaround. This is a documented frontend transport
+choice; the owned Codex app-server remains unmodified.
 
-If you see this rejection, merge the following into your AgentVoice JSON config
-and relaunch, or save it as `voice-settings.json` and select it explicitly:
+On September 5, 2026, stock Codex 0.153.3's omitted-version WebRTC request was
+rejected with `AVAS requires OpenAI-Alpha: quicksilver=v2.` Explicit v3 connected,
+and the operator confirmed the launch works. In [Codex 0.153.3 source](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core/src/realtime_conversation.rs),
+v3 sends that required header; native WebRTC omission falls back to v1 and sends
+`quicksilver=v1`. The header's `v2` is not protocol v2, which WebRTC rejects.
 
-```json
-{ "voice": { "version": "v3" } }
-```
-
-```sh
-agentvoice --allow-full-access --config ./voice-settings.json
-```
-
-The header's `v2` is **not** `voice.version: "v2"`, which WebRTC rejects.
-In [Codex 0.153.3 source](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core/src/realtime_conversation.rs),
-v3 selects the parser that sends `quicksilver=v2`; omitted WebRTC version selects
-v1 and sends `quicksilver=v1`. AgentVoice preserves omission and never switches
-protocols automatically. A protocol change can also change Codex's default voice
-model and behavior. `--voice` selects a voice name, not the protocol version.
-
-Automatic retries pause after three consecutive short-lived failures. The TUI
-keeps the last cause alongside redial guidance; `r` retries the same launch
-settings. Configuration edits require quitting and relaunching.
+Explicit version overrides remain available; see [voice protocol](#native-voice-protocol).
+Automatic retries pause after three consecutive short-lived failures and keep
+the last cause visible. `r` retries the same launch settings; configuration edits
+require quitting and relaunching.
 
 ### Installation
 
@@ -205,9 +192,9 @@ later: `orchestrator.extra.model` beats `--model`, an explicit
 `orchestrator.config.model_reasoning_effort` beats `--effort`, and
 `voice.extra.voice` beats `--voice`. `orchestrator.extra.config` replaces the
 assembled request config as a whole. Fast flags are the explicit exception and
-win over raw tier settings. Optional unset settings stay off the wire so Codex
-can use its own defaults/configuration. The intentional permissions exception is
-the mandatory full-access/never policy above. Restricted sandbox modes are not
+win over raw tier settings. Unset settings stay off the wire except the documented
+full-access/never policy and WebRTC v3 compatibility default. Native app-server
+defaults do not imply desktop-client parity. Restricted sandbox modes are not
 supported by this app.
 
 ### Native startup settings
@@ -276,31 +263,34 @@ policy is written. See [native override syntax](https://developers.openai.com/co
 
 ### Native voice protocol
 
-Unconfigured `voice.version` is now omitted from `thread/realtime/start`.
-This follows stock Codex's **WebRTC interface default**, not a promise to match
-every Codex product UI. An offline validation probe against Codex 0.153.3 confirmed
-that omission follows v1; upstream source selects it independently of the general
-native realtime version config. AgentVoice does not hardcode that default.
+AgentVoice defaults the final WebRTC request to `version: "v3"` when the version
+is unset. This restores service compatibility, rather than inferring a default
+from another Codex UI. The choice applies on start, continue, explicit resume,
+redial and Fresh. No configuration file is created or edited.
 
-To preserve the former explicit v3 choice, put this in your chosen server.json:
+Named `voice.version` overrides it, and raw `voice.extra.version` wins last.
+Explicit v1 still passes through, although the service tested here rejects it.
+Raw `voice.extra.version: null` requests Codex's native fallback (WebRTC v1 in
+0.153.3), including its compatibility risk. Explicit invalid values are not
+silently repaired. Alternate raw transports receive no v3 default; this TUI
+still implements only WebRTC media.
 
-```json
-{ "voice": { "version": "v3" } }
-```
-
-Changing protocols can change the native default speech model and behavior.
-In Codex 0.153.3, omitted version on WebRTC also ignores the native configured
-realtime voice; explicit AgentVoice `voice.name` / `--voice` still passes through.
-Current v1 and v3 share the same voice-name family. No new prompt, seed or
-startup-context/tail-flush policy is added by this change.
+Codex chooses the speech model: with v3, its 0.153.3 fallback is
+`gpt-live-1-codex`, after explicit voice-model and native configuration overrides.
+AgentVoice supplies no model name. Sending an explicit protocol also restores
+Codex's configured realtime voice selection, which omitted-version WebRTC
+ignores. `--voice` / `voice.name` still overrides the voice name. Current v1/v3
+share a voice-name family. This does not select the working model, reasoning
+or Fast tier, or add prompt/startup-context/tail-flush overrides.
 
 Explicit `prompt-files` voice-seed references and nonempty `voice.extra.initialItems`
-require explicit v3. Even an explicitly referenced empty seed file creates an initial item. Incompatible seed
-settings and WebRTC v2 fail locally before Codex starts; seeds are never silently
-dropped and protocols are never automatically switched. Checks use the final
-merged request: `voice.extra.version` wins, and an explicit `initialItems: []`
-can still intentionally replace file seeds. Explicit v1/v3 remain configurable;
-the raw transport escape hatch remains unchanged.
+require effective v3, which the normal WebRTC default satisfies. Even an empty
+referenced seed file creates an item. Conflicting explicit protocols and WebRTC
+v2 fail before Codex starts. Checks use the final merged request; an explicit
+`initialItems: []` can still replace file seeds. Seeds are never silently dropped.
+
+For the related audit of prompts, context, handoffs and frontend responsibilities,
+see the [default comparison audit](docs/field-guide.md#default-comparison-audit).
 
 ### Supported behavior and raw experiments
 
@@ -375,9 +365,9 @@ file sends an empty string. An empty path is an error, not an empty prompt.
 | `orchestrator-base` | Thread `baseInstructions`: replaces the entire base prompt (visible warning) | `ORCHESTRATOR_BASE.md` |
 | `orchestrator-session-start` | Realtime `realtimeStartInstructions` to the working agent | `ORCHESTRATOR_SESSION_START.md` |
 | `orchestrator-session-end` | Realtime `realtimeEndInstructions` to the working agent | `ORCHESTRATOR_SESSION_END.md` |
-| `voice-seed-developer` | Developer-role `initialItems` entry; explicit v3 required | `VOICE_SEED_DEVELOPER.md` |
-| `voice-seed-user` | User-role `initialItems` entry; explicit v3 required | `VOICE_SEED_USER.md` |
-| `voice-seed-assistant` | Assistant-role `initialItems` entry; explicit v3 required | `VOICE_SEED_ASSISTANT.md` |
+| `voice-seed-developer` | Developer-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_DEVELOPER.md` |
+| `voice-seed-user` | User-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_USER.md` |
+| `voice-seed-assistant` | Assistant-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_ASSISTANT.md` |
 
 Contents load once at launch and are reused on redial and Fresh. Seed roles are sent developer, user, assistant; raw `initialItems`
 can express any supported ordering/repetition. Session-boundary instructions and

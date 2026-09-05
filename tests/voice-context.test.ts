@@ -93,8 +93,9 @@ describe("native voice context across call and conversation boundaries", () => {
             h.runtime.offer(sdp);
             const call = h.native.calls.at(-1)!;
             expect(call.method).toBe("thread/realtime/start");
-            // Exact payload: no inferred flags, snapshot copies, prompts or seed items.
+            // Compatibility version only; no inferred context flags, prompts or seeds.
             expect(call.params).toEqual({
+              version: "v3",
               threadId,
               realtimeSessionId: expect.any(String),
               outputModality: "audio",

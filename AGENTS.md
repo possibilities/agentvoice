@@ -40,7 +40,8 @@ implementation.
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
-  Omit unset voice.version; never replace it with an inferred native default.
+  Default effective WebRTC requests to v3 for compatibility after raw merging.
+  Explicit versions/null and alternate transports win; never call this Codex's native default.
   Validate final merged seeds/version and WebRTC v2 conflicts before child startup.
 - src/core/full-access.ts: reject incompatible permission selectors and require
   effective dangerFullAccess/never on start/resume/settings reports. Never infer
@@ -117,7 +118,8 @@ an isolated disposable CODEX_HOME, and deliberately invalid requests; no live au
 On September 5, 2026, a live startup check with stock 0.153.3 and the local native
 login rejected omitted WebRTC version with invalid_quicksilver_alpha_header;
 explicit v3 connected (no microphone/speaker). See README's compatibility note.
-Keep omission intact; this account/runtime observation is not a new native default.
+The operator confirmed the v3 launch works and approved restoring it as AgentVoice's
+documented WebRTC compatibility default. This is not a new native app-server default.
 
 These invariants are load-bearing for `session.ts`; re-verify them before
 bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs`,
@@ -157,10 +159,11 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
    `thread/resume` quietly drops start-only fields rather than erroring
    — hence `params.ts` filters known fields after the raw extra merge (0.153.3).
 9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
-   text tokens. Require explicit v3 for nonempty initial items (including empty
-   seed-file text). Unset voice.version is omitted. In Codex 0.153.3, WebRTC
-   omission selects v1 independently of general realtime config and ignores
-   the native configured voice, but still honors an explicit request voice.
+   text tokens. Require effective v3 for nonempty initial items (including empty
+   seed-file text). AgentVoice supplies v3 for WebRTC when version is unset;
+   explicit voice.extra.version:null still reaches native fallback. In Codex
+   0.153.3, that fallback selects v1 independently of general realtime config and
+   ignores the native configured voice. Explicit v3 honors that voice config.
    WebRTC rejects v2; v1 and v3 use the same voice-name family. Do not infer
    that this transport default matches every Codex product UI.
 10. The webrtc transport is load-bearing for auth, not just media: the
@@ -190,6 +193,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
+  Keep protocol selection separate from prompt/model/context policy. An API fallback
+  is not evidence of desktop parity. See the field guide's default comparison audit.
 - codex-config is an optional string array; append repeatable -c/--codex-config
   CLI entries after file entries and pass each as a separate native -c argument
   after app-server. Never shell-evaluate, expand paths or log their values here.
