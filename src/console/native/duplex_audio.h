@@ -18,7 +18,7 @@ extern "C" {
 typedef struct avn_duplex avn_duplex;
 
 enum {
-    AVN_DUPLEX_ABI_VERSION = 1,
+    AVN_DUPLEX_ABI_VERSION = 2,
     AVN_DUPLEX_SAMPLE_RATE = 48000,
     AVN_DUPLEX_CAPTURE_CHANNELS = 1,
     AVN_DUPLEX_PLAYBACK_CHANNELS = 2,
@@ -40,7 +40,8 @@ AVN_AUDIO_API const char* avn_duplex_result_description(int32_t result);
 AVN_AUDIO_API avn_duplex* avn_duplex_create(
     uint32_t capture_capacity_frames,
     uint32_t playback_capacity_frames,
-    uint32_t playback_start_frames
+    uint32_t playback_start_frames,
+    uint32_t playback_recovery_frames
 );
 AVN_AUDIO_API void avn_duplex_destroy(avn_duplex* duplex);
 

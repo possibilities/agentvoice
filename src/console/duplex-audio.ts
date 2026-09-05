@@ -8,6 +8,7 @@ import type { MediaStreamTrack } from "werift";
 import { FRAME_SAMPLES, rmsDbS16 } from "./dsp.ts";
 import {
   DUPLEX_PLAYBACK_CHANNELS,
+  DUPLEX_PLAYBACK_RECOVERY_FRAMES,
   DUPLEX_PLAYBACK_START_FRAMES,
   DUPLEX_SAMPLE_RATE,
   type DuplexDeviceInfo,
@@ -144,7 +145,7 @@ export class DuplexVoiceAudio {
 
       const negotiated = device.negotiatedFormat();
       this.options.debug?.(
-        `duplex opened miniaudio=${device.miniaudioVersion} client_rate=${DUPLEX_SAMPLE_RATE} playback_start_frames=${DUPLEX_PLAYBACK_START_FRAMES} ` +
+        `duplex opened miniaudio=${device.miniaudioVersion} client_rate=${DUPLEX_SAMPLE_RATE} playback_start_frames=${DUPLEX_PLAYBACK_START_FRAMES} playback_recovery_frames=${DUPLEX_PLAYBACK_RECOVERY_FRAMES} ` +
           `backend=${negotiated.backend} capture=${JSON.stringify({ device: negotiated.captureDevice, ...negotiated.capture })} ` +
           `playback=${JSON.stringify({ device: negotiated.playbackDevice, ...negotiated.playback })}`,
       );
