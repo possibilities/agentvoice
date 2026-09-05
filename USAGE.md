@@ -40,7 +40,7 @@ Use the MCP tools when you are operating the conversation that supplied them:
 ```text
 agentvoice_status({})
 agentvoice_redial({ operationId, expectedGeneration, expectedInstanceId })
-agentvoice_restart_runtime({ operationId, expectedGeneration, expectedInstanceId, scope: "runtime" })
+agentvoice_restart_runtime({ operationId, expectedGeneration, expectedInstanceId, scope: "runtime", handoffPrompt? })
 ```
 
 Start with `agentvoice_status`. It gives the controller-bound `instanceId`, the
@@ -90,12 +90,48 @@ successor fails the operation. Check `runtime.voicePhase` when present
 for the voice state, and `runtime.phase` for process readiness. If an operation
 fails, read its error and status before deciding whether a new action is appropriate.
 
+## Give the restarted agent a task
+
+Pass optional `handoffPrompt` on the runtime restart request to resume work
+without another user utterance:
+
+```ts
+await agentvoice_restart_runtime({
+  operationId: `restart-${crypto.randomUUID()}`,
+  expectedInstanceId: status.instanceId,
+  expectedGeneration: status.generation,
+  scope: "runtime",
+  handoffPrompt: "Read AgentVoice status and report the new runtime generation.",
+});
+```
+
+The prompt is limited to 8,192 UTF-8 bytes and must contain non-whitespace text.
+The controller saves it before teardown and submits it once to the backing
+Codex agent after the same thread and live media are ready. This is ordinary
+native task input; existing system/developer instructions stay in place.
+It may start a new turn or steer a regular turn that has already begun.
+
+Read `currentOperation.handoff` or the matching recent operation. `pending` and
+`submitting` are transitional; `accepted` includes the native `turnId`, `failed`
+reports a prevented/refused delivery, and `unknown` means acceptance is uncertain.
+A restart may be `ready` while its handoff failed. Acceptance proves neither
+completed work nor speech, and the handoff text is not echoed through status.
+
+An uncertain handoff is never automatically resent. Reusing the same restart
+operation ID returns its recorded outcome; changing the prompt under that ID
+is a conflict. Inspect native history before considering another action. Redial,
+later restarts, and full quit/relaunch do not replay this handoff.
+
+This field requires control protocol 2. Update Unix clients to `v: 2` and fully
+relaunch AgentVoice once to activate the new controller; runtime restart alone
+retains the previous controller/API. The native voice protocol is unchanged.
+
 ## Idempotency, timeouts, and stale callers
 
 Give one intended action one stable `operationId` matching
 `[A-Za-z0-9][A-Za-z0-9._:-]*`. The controller durable journal returns the same
 operation for a duplicate ID with the same immutable arguments. Reusing an ID
-with different scope, instance, or generation is refused. The controller keeps
+with different scope, instance, generation, or handoff prompt is refused. The controller keeps
 at most 256 IDs for its own lifetime and exposes its latest 16 operations plus
 the current one. Mutations are serialized; this protects against parallel
 orchestrator branches issuing two restarts. A full quit/relaunch begins a new
@@ -148,7 +184,7 @@ fake-controller example for both UDS and HTTP MCP.
 
 ```ts
 const request = {
-  v: 1,
+  v: 2,
   type: "request",
   id: "status-1",
   method: "agentvoice.status",

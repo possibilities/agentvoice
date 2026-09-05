@@ -47,6 +47,14 @@ runtime and resumes the exact retained thread. It reloads the pinned launch
 inputs and loaded native artifact; it does not preserve live turns, delegated
 work, realtime state, or native tool connections.
 
+**Restart handoff** — Optional `handoffPrompt` attached to one runtime restart.
+The retained controller privately saves it with the operation and submits it
+once as labeled native task input after exact resume and media readiness.
+Its submission status is separate from restart success, execution, and speech.
+It does not edit prompts, replay automatically, or survive full controller quit.
+Native `turn/start` starts or steers the backing agent; it is not a new worker
+system. See `docs/adr/0016-restart-handoff.md`.
+
 **Control plane** — A versioned private Unix socket and an authenticated,
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
@@ -66,7 +74,8 @@ Old history remains; native work in the old conversation stays there.
 and --continue select the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. New voice calls restore recent saved speech from
 that same thread unless voice.replay-spoken-history=false or raw initial items win;
-AgentVoice adds no instruction of its own.
+Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
+is a separate native task submission after connection readiness.
 
 **Spoken history replay** — AgentVoice reads native saved speech and sends it as
 past conversation in v3 initialItems, without a separate persistent store. The

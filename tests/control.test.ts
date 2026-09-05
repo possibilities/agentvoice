@@ -30,7 +30,7 @@ function operation(
   };
 }
 
-function fakeBackend(): ControlBackend {
+function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
   const recentOperations: ControlOperation[] = [];
   const byId = new Map<string, ControlOperation>();
   const accept = (
@@ -38,6 +38,7 @@ function fakeBackend(): ControlBackend {
     scope: ControlOperation["scope"],
     request: ControlMutationRequest,
   ) => {
+    observe?.(request);
     if (request.expectedGeneration !== 7)
       throw new ControlError(
         "stale_generation",
@@ -83,12 +84,16 @@ async function socketRequest(path: string, request: unknown): Promise<Record<str
 async function socketLine(path: string, line: string): Promise<Record<string, unknown>> {
   return await new Promise((resolve, reject) => {
     let received = "";
+    let outgoing = Buffer.from(line);
+    const flush = (socket: { write(data: Uint8Array): number }) => {
+      const written = socket.write(outgoing);
+      if (written > 0) outgoing = outgoing.subarray(written);
+    };
     void Bun.connect({
       unix: path,
       socket: {
-        open: (socket) => {
-          socket.write(line);
-        },
+        open: flush,
+        drain: flush,
         data: (socket, data) => {
           received += new TextDecoder().decode(data);
           const newline = received.indexOf("\n");
@@ -123,8 +128,9 @@ async function mcpRequest(
 describe("controller control transports", () => {
   test("socket and MCP use the same durable mutation dispatch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
+    const requests: unknown[] = [];
     const server = await startControlServer({
-      backend: fakeBackend(),
+      backend: fakeBackend((request) => requests.push(request)),
       stateDir,
       instanceId: "instance-a",
     });
@@ -140,7 +146,7 @@ describe("controller control transports", () => {
         enabled_tools: ["agentvoice_status", "agentvoice_redial", "agentvoice_restart_runtime"],
       });
       const status = await socketRequest(server.socketPath, {
-        v: 1,
+        v: CONTROL_PROTOCOL_VERSION,
         type: "request",
         id: "status-1",
         method: "agentvoice.status",
@@ -173,7 +179,9 @@ describe("controller control transports", () => {
         { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
         sessionId ?? undefined,
       );
-      expect(await tools.text()).toContain("agentvoice_restart_runtime");
+      const toolText = await tools.text();
+      expect(toolText).toContain("agentvoice_restart_runtime");
+      expect(toolText).toContain("handoffPrompt");
 
       const call = await mcpRequest(
         server.httpUrl,
@@ -189,6 +197,7 @@ describe("controller control transports", () => {
               expectedGeneration: 7,
               expectedInstanceId: "instance-a",
               scope: "runtime",
+              handoffPrompt: "After restart, check status.\n雪",
             },
           },
         },
@@ -196,7 +205,7 @@ describe("controller control transports", () => {
       );
       expect(await call.text()).toContain('"operationId":"restart-1"');
       const duplicate = await socketRequest(server.socketPath, {
-        v: 1,
+        v: CONTROL_PROTOCOL_VERSION,
         type: "request",
         id: "duplicate-1",
         method: "agentvoice.restart",
@@ -205,12 +214,67 @@ describe("controller control transports", () => {
           expectedGeneration: 7,
           expectedInstanceId: "instance-a",
           scope: "runtime",
+          handoffPrompt: "After restart, check status.\n雪",
         },
       });
       expect(duplicate).toMatchObject({
         ok: true,
         result: { operationId: "restart-1", phase: "accepted" },
       });
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toEqual(requests[1]);
+      expect(requests[0]).toHaveProperty("handoffPrompt", "After restart, check status.\n雪");
+      let badRequestId = 4;
+      for (const handoffPrompt of ["", " \n\t", null, "a".repeat(8193), "雪".repeat(2731)]) {
+        const args = {
+          operationId: "bad-handoff",
+          expectedGeneration: 7,
+          expectedInstanceId: "instance-a",
+          scope: "runtime",
+          handoffPrompt,
+        };
+        const socket = await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "bad-handoff",
+          method: "agentvoice.restart",
+          params: args,
+        });
+        expect(socket).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+        const mcp = await mcpRequest(
+          server.httpUrl,
+          server.bearerToken,
+          {
+            jsonrpc: "2.0",
+            id: badRequestId++,
+            method: "tools/call",
+            params: { name: "agentvoice_restart_runtime", arguments: args },
+          },
+          sessionId ?? undefined,
+        );
+        expect(await mcp.text()).toContain('"isError":true');
+      }
+      expect(requests).toHaveLength(2);
+      const redialPrompt = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "bad-redial",
+        method: "agentvoice.redial",
+        params: {
+          operationId: "bad-redial",
+          expectedGeneration: 7,
+          expectedInstanceId: "instance-a",
+          handoffPrompt: "task",
+        },
+      });
+      expect(redialPrompt).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+      const legacy = await socketRequest(server.socketPath, {
+        v: 1,
+        type: "request",
+        id: "legacy",
+        method: "agentvoice.status",
+      });
+      expect(legacy).toMatchObject({ ok: false, error: { code: "invalid_request" } });
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
@@ -230,7 +294,7 @@ describe("controller control transports", () => {
       const malformed = await socketLine(server.socketPath, "{not json}\n");
       expect(malformed).toMatchObject({ ok: false, error: { code: "invalid_request" } });
       const invalid = await socketRequest(server.socketPath, {
-        v: 1,
+        v: CONTROL_PROTOCOL_VERSION,
         type: "request",
         id: "bad",
         method: "agentvoice.restart",
@@ -238,7 +302,7 @@ describe("controller control transports", () => {
       });
       expect(invalid).toMatchObject({ ok: false, error: { code: "invalid_params" } });
       const stale = await socketRequest(server.socketPath, {
-        v: 1,
+        v: CONTROL_PROTOCOL_VERSION,
         type: "request",
         id: "stale",
         method: "agentvoice.redial",

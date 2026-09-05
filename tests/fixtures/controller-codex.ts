@@ -54,5 +54,18 @@ for await (const line of input) {
     };
   }
   if (request.method === "thread/timeline/list") result = { data: [], nextCursor: null };
+  if (request.method === "turn/start") {
+    const mode = existsSync(join(root, "handoff-mode"))
+      ? readFileSync(join(root, "handoff-mode"), "utf8")
+      : "accepted";
+    if (mode === "refused") {
+      process.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32600, message: JSON.stringify(params) } })}\n`,
+      );
+      continue;
+    }
+    result =
+      mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
+  }
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
 }

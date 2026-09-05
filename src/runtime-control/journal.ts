@@ -3,8 +3,18 @@ import { closeSync, constants, fsyncSync, mkdirSync, openSync, writeSync } from 
 import { dirname } from "node:path";
 import type { ControlOperation } from "../control/types.ts";
 
+/** Private payload stays in the controller-lifetime journal, never public status. */
+export type JournalOperation = ControlOperation & {
+  handoffPayload?: { prompt: string; threadId: string; workspace: string };
+};
+
+export function publicOperation(operation: JournalOperation): ControlOperation {
+  const { handoffPayload: _private, ...publicFields } = operation;
+  return structuredClone(publicFields);
+}
+
 export class OperationJournal {
-  private readonly records = new Map<string, ControlOperation>();
+  private readonly records = new Map<string, JournalOperation>();
   private readonly fd: number;
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -27,7 +37,7 @@ export class OperationJournal {
   all() {
     return [...this.records.values()].map((record) => structuredClone(record));
   }
-  save(operation: ControlOperation): void {
+  save(operation: JournalOperation): void {
     if (!this.records.has(operation.operationId) && this.records.size >= 256)
       throw new Error(
         "Controller operation limit reached; quit and relaunch before further mutations",

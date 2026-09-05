@@ -16,11 +16,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startControlServer } from "../src/control/index.ts";
 import type { ControlBackend, ControlStatus } from "../src/control/types.ts";
+import { CONTROL_PROTOCOL_VERSION } from "../src/control/types.ts";
 import { parseMcpConfigCommand, runMcpConfigCommand } from "../src/main.ts";
 
 function status(instanceId: string, workspace: string, threadId: string): ControlStatus {
   return {
-    protocolVersion: 1,
+    protocolVersion: CONTROL_PROTOCOL_VERSION,
     instanceId,
     workspace,
     threadId,

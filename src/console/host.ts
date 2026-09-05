@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerConfig } from "../core/config.ts";
+import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
 import { tierLabel } from "../core/service-tier.ts";
 import { stateDirectory } from "../paths.ts";
@@ -43,6 +44,8 @@ export interface ConsoleHostOptions {
   media?: MediaOptions;
   createTui?: (host: VoiceTuiHost) => Promise<VoiceTui>;
   onStarted?: () => void;
+  /** Private controller delivery, separate from interactive UI commands. */
+  onHandoffReady?: (submit: (request: HandoffRequest) => Promise<HandoffResult>) => void;
   initialMute?: { mic: boolean; speaker: boolean };
   runtime?: RuntimeOptions;
   debug?: boolean;
@@ -170,6 +173,11 @@ export async function runConsoleHost(
     },
     options.runtime,
   );
+  options.onHandoffReady?.(async (request) => {
+    if (closed || fatal || !audioReady || phase !== "live" || !runtime)
+      return handoffFailure("not_ready");
+    return runtime.submitHandoff(request);
+  });
 
   function gate(target: AudioTarget): MuteGate {
     return target === "mic" ? microphone : speaker;

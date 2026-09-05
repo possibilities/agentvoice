@@ -115,15 +115,23 @@ describe("persistent controller and disposable runtime", () => {
         JSON.stringify({ orchestrator: { model: "after", workspace: "/ignored-by-cli" } }),
       );
       writeFileSync(prompt, "new prompt");
-      const request = mutation("replace-one");
+      const promptText = "Inspect status after restart.\nA private handoff: 雪.";
+      const request = { ...mutation("replace-one"), handoffPrompt: promptText };
       const accepted = await controller.restart(request);
       expect(accepted.phase).toBe("accepted");
+      expect(accepted.handoff?.status).toBe("pending");
+      expect(JSON.stringify(accepted)).not.toContain("private handoff");
       expect(readFileSync(join(root, "operations/integration.jsonl"), "utf8")).toContain(
         '"phase":"accepted"',
       );
       expect(controller.status().runtime.pid).toBe(first.runtime.pid);
-      await until(() => controller.status().currentOperation?.phase === "ready", 10_000);
+      await until(
+        () => controller.status().currentOperation?.handoff?.status === "accepted",
+        10_000,
+      );
       const second = controller.status();
+      expect(second.currentOperation?.handoff?.turnId).toBe("handoff-turn");
+      expect(JSON.stringify(second)).not.toContain("private handoff");
       expect(second.threadId).toBe(first.threadId);
       expect(second.generation).toBe(2);
       expect(second.runtime.pid).not.toBe(first.runtime.pid);
@@ -136,6 +144,11 @@ describe("persistent controller and disposable runtime", () => {
         operationId: "replace-one",
         phase: "ready",
       });
+      for (const handoffPrompt of [undefined, "changed task"]) {
+        await expect(controller.restart({ ...request, handoffPrompt })).rejects.toThrow(
+          "different immutable request",
+        );
+      }
       await expect(controller.restart({ ...request, operationId: "stale-new-id" })).rejects.toThrow(
         "Read status",
       );
@@ -144,6 +157,21 @@ describe("persistent controller and disposable runtime", () => {
         .split("\n")
         .map((line) => JSON.parse(line));
       const newCalls = audit.filter((call) => call.pid !== firstNative);
+      const turns = newCalls.filter((call) => call.method === "turn/start");
+      expect(turns).toHaveLength(1);
+      expect(turns[0].params).toEqual({
+        threadId: first.threadId,
+        clientUserMessageId: accepted.handoff!.clientUserMessageId,
+        input: [
+          {
+            type: "text",
+            text: `AgentVoice restart handoff (agent-provided task):\n\n${promptText}`,
+          },
+        ],
+      });
+      expect(newCalls.findIndex((call) => call.method === "turn/start")).toBeGreaterThan(
+        newCalls.findIndex((call) => call.method === "mcpServerStatus/list"),
+      );
       expect(newCalls.some((call) => call.method === "thread/list")).toBe(false);
       expect(newCalls.find((call) => call.method === "thread/resume").params).toMatchObject({
         threadId: first.threadId,
@@ -161,6 +189,9 @@ describe("persistent controller and disposable runtime", () => {
       await until(() => controller.status().currentOperation?.phase === "ready");
       expect(controller.status().generation).toBe(2);
       expect(controller.status().runtime.pid).toBe(second.runtime.pid);
+      expect(
+        readFileSync(join(root, "native-audit.jsonl"), "utf8").match(/"method":"turn\/start"/gu),
+      ).toHaveLength(1);
       // Invalid local config is rejected in the candidate before touching the live generation.
       writeFileSync(configPath, '{"accounts":{}}');
       await controller.restart(mutation("invalid-config"));
@@ -174,6 +205,22 @@ describe("persistent controller and disposable runtime", () => {
       await until(() => controller.status().threadId === "test-thread-2");
       expect(() => lockThread(join(root, "thread-locks"), first.threadId)).toThrow("already open");
       expect(() => lockThread(join(root, "thread-locks"), "test-thread-2")).toThrow("already open");
+      for (const [mode, outcome] of [
+        ["refused", "failed"],
+        ["malformed", "unknown"],
+      ] as const) {
+        writeFileSync(join(root, "handoff-mode"), mode);
+        await controller.restart({ ...mutation(`handoff-${mode}`), handoffPrompt: promptText });
+        await until(
+          () => controller.status().currentOperation?.handoff?.status === outcome,
+          10_000,
+        );
+        expect(controller.status().runtime.phase).toBe("ready");
+        expect(controller.status().currentOperation?.phase).toBe("ready");
+        expect(controller.status().threadId).toBe("test-thread-2");
+        expect(JSON.stringify(controller.status())).not.toContain("private handoff");
+        expect(() => process.kill(controller.status().runtime.pid!, 0)).not.toThrow();
+      }
     } finally {
       await controller.shutdown();
       rmSync(root, { recursive: true, force: true });

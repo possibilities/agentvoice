@@ -1,13 +1,19 @@
 # AgentVoice control API
 
-This is the authoritative reference for AgentVoice control protocol version 1.
+This is the authoritative reference for AgentVoice control protocol version 2.
 The persistent foreground controller owns this API, the exact conversation
 identity, operation journal, Unix socket, and loopback MCP host. Its disposable
 voice runtime may be replaced without replacing this API.
 
-The controller exposes only three initial operations: inspect status, redial
+The controller exposes three operations: inspect status, redial
 voice/WebRTC, and replace the full runtime. It does not accept a thread ID,
 workspace, PID, socket path, or component selector from callers.
+
+Version 2 adds an optional restart handoff prompt and its submission status.
+Version 1 Unix frames are rejected; update socket clients and fully relaunch
+the foreground application to activate a new controller. Runtime restart keeps
+the existing controller and cannot upgrade its API. The MCP transport version
+and the native Codex/voice protocols are separate from this control version.
 
 ## Discovery and authorization
 
@@ -60,14 +66,14 @@ The socket is newline-delimited JSON (NDJSON). A request is one UTF-8 line;
 responses may finish out of order and retain the caller-selected `id`.
 
 ```json
-{"v":1,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
+{"v":2,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
 ```
 
 ```json
-{"v":1,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":1,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
+{"v":2,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":2,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
 ```
 
-`v` must be `1`; `type` must be `request`; `id` is a nonempty string of at
+`v` must be `2`; `type` must be `request`; `id` is a nonempty string of at
 most 128 characters. Unknown envelope fields are rejected. Input frames are
 capped at 1 MiB, a connection may have at most 128 requests in flight, and
 unwritten response data is capped at 4 MiB. A slow peer is disconnected.
@@ -75,7 +81,7 @@ unwritten response data is capped at 4 MiB. A slow peer is disconnected.
 Failure responses retain the request `id` where it can be recovered:
 
 ```json
-{"v":1,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
+{"v":2,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
 ```
 
 Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
@@ -83,7 +89,7 @@ Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
 and `internal_error`. A timeout or disconnected socket says nothing about
 whether a mutation was accepted; query status before retrying.
 
-There are no unsolicited event frames in version 1. Poll `agentvoice.status`
+There are no unsolicited event frames in version 2. Poll `agentvoice.status`
 for an operation's state. This keeps a replacement runtime from inheriting a
 caller connection, event subscription, or pending request.
 
@@ -93,7 +99,7 @@ caller connection, event subscription, or pending request.
 | --- | --- | --- |
 | `agentvoice.status` | `{}` | `ControlStatus` |
 | `agentvoice.redial` | `MutationRequest` | accepted/current `ControlOperation` |
-| `agentvoice.restart` | `MutationRequest` plus `scope: "runtime"` | accepted/current `ControlOperation` |
+| `agentvoice.restart` | `MutationRequest` plus `scope: "runtime"` and optional `handoffPrompt` | accepted/current `ControlOperation` |
 
 `MutationRequest` is:
 
@@ -113,7 +119,7 @@ runtime incarnation from bouncing a replacement runtime.
 
 ```ts
 {
-  protocolVersion: 1;
+  protocolVersion: 2;
   instanceId: string;
   workspace: string; // empty while initial candidate startup has not identified it
   threadId: string;  // empty while initial candidate startup has not identified it
@@ -137,6 +143,12 @@ runtime incarnation from bouncing a replacement runtime.
   acceptedAt: string; // ISO 8601
   updatedAt: string;  // ISO 8601
   forced?: boolean;
+  handoff?: {
+    status: "pending" | "submitting" | "accepted" | "failed" | "unknown";
+    clientUserMessageId: string;
+    turnId?: string;
+    error?: { code: string; message: string };
+  };
   result?: { generation: number; threadId: string; workspace: string; pid?: number; buildId?: string };
   error?: { code: string; message: string };
 }
@@ -147,7 +159,7 @@ teardown. It retains at most 256 mutation IDs for one controller lifetime and
 returns the latest 16 through `recentOperations`, alongside `currentOperation`.
 Reusing an ID with identical immutable arguments returns the same latest
 operation, even when its recorded generation is now old. Reuse with different
-kind, scope, instance, or generation fails with `operation_conflict`. Concurrent
+kind, scope, instance, generation, or handoff prompt (including omission) fails with `operation_conflict`. Concurrent
 mutations are serialized by the controller. A full quit/relaunch does not adopt
 the old journal. A completed operation retains its `result` identity snapshot,
 including the activated build and PID, even after later replacements.
@@ -169,7 +181,51 @@ runtime and does not reload configuration, prompts, native code, or Codex.
 `agentvoice.restart` accepts only scope `runtime`: it replaces audio/WebRTC,
 native AgentVoice code, configuration/prompt snapshot, and owned Codex child
 under the retained controller/TUI. Audio-only, Codex-only, PID-targeted, and
-arbitrary-thread restart scopes do not exist in version 1.
+arbitrary-thread restart scopes do not exist in version 2.
+
+## Optional restart handoff
+
+Only `agentvoice.restart` / `agentvoice_restart_runtime` accepts `handoffPrompt`:
+
+```json
+{"operationId":"restart-17","expectedGeneration":7,"expectedInstanceId":"controller-instance-id","scope":"runtime","handoffPrompt":"Read AgentVoice status and report the new runtime generation."}
+```
+
+The prompt must contain non-whitespace text and occupy at most 8,192 UTF-8 bytes.
+Its original contents are part of immutable request identity. Omission preserves
+ordinary restart behavior. Redial does not accept a handoff prompt.
+
+The controller privately journals the prompt and the selected workspace/thread
+before accepting the restart. It submits the prompt at most once after the
+replacement resumes that exact conversation, reaches live voice, and enables
+media with the retained mute preferences. Submission uses the owned Codex
+connection's native `turn/start`, with a labeled restart-handoff text input and
+a stable `clientUserMessageId`. Native `turn/start` starts an idle backing agent
+or steers an active regular turn; a handoff is not necessarily a dedicated new
+turn. The correlation ID is not a promise of native deduplication.
+
+Handoff status is separate from the restart's `phase`:
+
+| `handoff.status` | Meaning |
+| --- | --- |
+| `pending` | Saved with the operation; no submission attempt has started. |
+| `submitting` | The one permitted submission attempt is in progress. |
+| `accepted` | Native returned a turn ID, recorded as `handoff.turnId`. |
+| `failed` | Delivery was prevented or explicitly refused; see the stable error. |
+| `unknown` | The attempt may have reached native, but its acceptance could not be established. |
+
+A healthy replacement remains `phase: "ready"` when handoff submission fails.
+Native acceptance does not establish completed work or audible speech. Observe
+native work and the actual voice response separately. The prompt is not returned
+in status or operation results, and errors omit prompt contents. It is stored in
+the private operation journal and submitted to native conversation input; it is
+not a secret-storage mechanism.
+
+Duplicate operation requests return the recorded result and never submit again.
+There is no automatic retry after uncertain acceptance, later readiness events,
+redials, or further restarts. A failed restart does not carry its prompt into an
+unrelated retry. Full quit/relaunch does not adopt old handoffs. This API does not
+provide a separate mailbox, queue, cancellation method, or persistent prompt edit.
 
 ## Streamable HTTP MCP projection
 
@@ -189,7 +245,7 @@ Zod validation and dispatch implementation:
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
 | `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
-| `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` |
+| `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` and optional `handoffPrompt` |
 
 MCP tool results carry the same result object as structured content. Validation
 or controller failures are MCP tool errors. `agentvoice_status` is read-only;

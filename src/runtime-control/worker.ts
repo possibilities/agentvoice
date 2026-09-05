@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceTuiHost, VoiceTuiState } from "../console/tui.ts";
 import type { ServerConfig } from "../core/config.ts";
+import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import {
   IPC_VERSION,
@@ -26,6 +27,7 @@ export function runRuntimeWorker(
   let factory: ConsoleHostOptions["mediaFactory"];
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: VoiceTuiHost | undefined;
+  let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let hostRun: Promise<void> | undefined;
   let endHost: (() => void) | undefined;
   let tick: ReturnType<typeof setInterval> | undefined;
@@ -156,6 +158,9 @@ export function runRuntimeWorker(
       bootReady = () => finish();
       bootFailed = finish;
       hostRun = runHost(config!, currentLaunch.version, {
+        onHandoffReady: (submit) => {
+          submitHandoff = submit;
+        },
         mediaFactory: factory,
         media: currentLaunch.provenance.options,
         debug: currentLaunch.provenance.options.debug,
@@ -248,6 +253,10 @@ export function runRuntimeWorker(
       case "redial":
         await host?.redial();
         return null;
+      case "handoff":
+        if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
+          return handoffFailure("not_ready");
+        return submitHandoff(params as HandoffRequest);
       case "fresh":
         await host?.fresh();
         return null;

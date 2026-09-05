@@ -17,6 +17,13 @@ import {
 } from "./control-mcp.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import {
+  type HandoffRequest,
+  type HandoffResult,
+  handoffFailure,
+  handoffRequestSchema,
+  handoffUnknown,
+} from "./handoff.ts";
+import {
   ORCHESTRATOR_THREAD_SOURCE,
   passthroughWarnings,
   realtimeParams,
@@ -121,6 +128,7 @@ export class VoiceRuntime {
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
   private readonly activeTurns = new Map<string, string>();
+  private privateHandoffPrompt: string | undefined;
   private readonly sessions: VoiceSessionManager;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
@@ -174,7 +182,7 @@ export class VoiceRuntime {
         if (connection && threadId)
           await connection.request("thread/realtime/stop", { threadId }, 1_000);
       },
-      debug: (line) => this.events.debug?.(line),
+      debug: (line) => this.debug(line),
     });
   }
 
@@ -281,6 +289,53 @@ export class VoiceRuntime {
     }
   }
 
+  async submitHandoff(input: HandoffRequest): Promise<HandoffResult> {
+    const checked = handoffRequestSchema.safeParse(input);
+    if (
+      !checked.success ||
+      this.shuttingDown ||
+      this.freshInFlight ||
+      !this.threadReady ||
+      !this.attachment?.alive ||
+      this.threadId !== input.threadId ||
+      this.config.orchestrator.workspace !== input.workspace
+    )
+      return handoffFailure("not_ready");
+    const connection = this.attachment;
+    this.privateHandoffPrompt = input.prompt;
+    try {
+      // This native method starts an idle thread or steers an active regular turn.
+      // clientUserMessageId is correlation, not native deduplication.
+      const result = await connection.request(
+        "turn/start",
+        {
+          threadId: input.threadId,
+          clientUserMessageId: input.clientUserMessageId,
+          input: [
+            {
+              type: "text",
+              text: `AgentVoice restart handoff (agent-provided task):\n\n${input.prompt}`,
+            },
+          ],
+        },
+        10_000,
+      );
+      const turn = (result as { turn?: { id?: unknown; status?: unknown } } | null)?.turn;
+      if (
+        typeof turn?.id !== "string" ||
+        !turn.id ||
+        turn.id.length > 256 ||
+        turn.status !== "inProgress"
+      )
+        return handoffUnknown();
+      return { status: "accepted", turnId: turn.id };
+    } catch (error) {
+      return error instanceof AppServerError && typeof error.code === "number" && !error.timedOut
+        ? handoffFailure("native_refused")
+        : handoffUnknown();
+    }
+  }
+
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
@@ -316,6 +371,13 @@ export class VoiceRuntime {
 
   private assertRunning(): void {
     if (this.shuttingDown) throw new Error("AgentVoice is shutting down");
+  }
+
+  private debug(line: string): void {
+    const prompt = this.privateHandoffPrompt;
+    if (prompt && (line.includes(prompt) || line.includes(JSON.stringify(prompt).slice(1, -1))))
+      this.events.debug?.("[restart handoff content omitted]");
+    else this.events.debug?.(line);
   }
 
   private requireConnection(): RuntimeConnection {
@@ -468,7 +530,7 @@ export class VoiceRuntime {
         this.sessions.reset();
         this.events.onFatal(info.error ?? "Codex connection closed");
       },
-      debug: (line) => this.events.debug?.(line),
+      debug: (line) => this.debug(line),
     });
     if (this.shuttingDown || !connection.alive) {
       await connection.close();

@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { handoffPromptSchema } from "../core/handoff.ts";
 import {
   CONTROL_PROTOCOL_VERSION,
   type ControlBackend,
   ControlError,
   type ControlMutationRequest,
+  type ControlRestartRequest,
 } from "./types.ts";
 
 const operationId = z
@@ -49,6 +51,15 @@ export const controlOperationSchema = z
       .strict()
       .optional(),
     error: z.object({ code: z.string(), message: z.string() }).optional(),
+    handoff: z
+      .object({
+        status: z.enum(["pending", "submitting", "accepted", "failed", "unknown"]),
+        clientUserMessageId: z.string().min(1).max(128),
+        turnId: z.string().min(1).max(256).optional(),
+        error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -74,7 +85,9 @@ export const controlStatusSchema = z
   })
   .strict();
 
-const restart = mutation.extend({ scope: z.literal("runtime") }).strict();
+const restart = mutation
+  .extend({ scope: z.literal("runtime"), handoffPrompt: handoffPromptSchema.optional() })
+  .strict();
 
 export type ControlMethod = "agentvoice.status" | "agentvoice.redial" | "agentvoice.restart";
 
@@ -108,12 +121,11 @@ export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
   "agentvoice.restart": {
     tool: "agentvoice_restart_runtime",
     description:
-      "Accept an idempotent full runtime restart for this controller instance and generation. Completion must be recovered with agentvoice_status.",
+      "Accept an idempotent full runtime restart for this controller instance and generation. Optional handoffPrompt is submitted once as native working-agent input after the same conversation and voice are ready. Recover restart and handoff status with agentvoice_status; acceptance does not confirm execution or speech.",
     params: restart,
     result: controlOperationSchema,
     readOnly: false,
-    invoke: async (backend, params) =>
-      await backend.restart(params as ControlMutationRequest & { scope: "runtime" }),
+    invoke: async (backend, params) => await backend.restart(params as ControlRestartRequest),
   },
 };
 

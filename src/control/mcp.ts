@@ -2,7 +2,12 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CONTROL_METHODS, dispatchControl } from "./contract.ts";
-import { CONTROL_MCP_PATH, type ControlBackend, ControlError } from "./types.ts";
+import {
+  CONTROL_MCP_PATH,
+  CONTROL_PROTOCOL_VERSION,
+  type ControlBackend,
+  ControlError,
+} from "./types.ts";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_SESSIONS = 32;
@@ -144,7 +149,7 @@ export class ControlMcpHttpHost {
 
 function buildMcpServer(backend: ControlBackend): McpServer {
   const server = new McpServer(
-    { name: "agentvoice-control", version: "1" },
+    { name: "agentvoice-control", version: String(CONTROL_PROTOCOL_VERSION) },
     {
       instructions:
         "Control the AgentVoice controller bound to this exact conversation. Restart and redial return durable accepted operations; use agentvoice_status to recover completion after an interrupted tool call.",

@@ -101,6 +101,12 @@ Automatic retries pause after three consecutive short-lived failures and keep
 the last cause visible. `r` retries the same launch settings. An orchestrator
 can request a full runtime restart to apply a changed runtime/configuration
 snapshot while the controller stays open; see [control API](docs/api.md).
+An optional `handoffPrompt` on that restart request gives the resumed working
+agent a task after the exact conversation and live media are ready. Submission
+status is tracked separately from restart success; work and audible speech still
+need to be observed. See [restart handoffs](USAGE.md#give-the-restarted-agent-a-task).
+The new request uses control protocol 2 and requires a full foreground relaunch
+to activate its controller; runtime restart alone does not upgrade the API.
 
 ### Installation
 
@@ -221,6 +227,9 @@ continued after exit. Workspace selection is not a memory or security sandbox.
 - Device selection, model/effort/voice overrides and config/prompt passthrough.
   Redial and Fresh use the active runtime snapshot; a full runtime restart
   rereads the pinned launch inputs.
+- Optional runtime-restart handoff: save a prompt before teardown and submit it
+  once to the resumed working agent after media readiness, with recoverable
+  submission status through the existing control tools.
 - Per-launch opt-in debug logs; no phone remote, pairing, Android packaging,
   separate Server, resident service or Herdr integration.
 
@@ -577,7 +586,9 @@ the named voice controls, and `orchestrator.extra.config` replaces
 
 Codex owns the voice-to-working-agent handoff, tools, subagents and their native
 events. AgentVoice does not add worker tools, start extra worker threads, compose
-completion reports, submit follow-up turns, or archive/delete completed work.
+completion reports, or archive/delete completed work. The optional restart
+handoff submits one caller-provided task through native `turn/start` after resume;
+its submission status is separate from the native work's outcome.
 It generates no worker-specific instructions; optional operator prompt overrides
 still pass through.
 

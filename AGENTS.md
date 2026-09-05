@@ -80,6 +80,9 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/runtime-control/controller.ts: retained foreground controller, exact
   thread leases, operation journal, controller/runtime generations and TUI.
+  Optional restart handoffs are journaled before teardown and submitted once
+  after exact resume and live media. Keep handoff outcome separate from runtime
+  readiness; never stop healthy media on a handoff refusal or ambiguous result.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
 - src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
@@ -90,7 +93,8 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - src/core/runtime.ts: a voice runtime's launch/resume/Fresh, voice session,
   child lifecycle, and runtime-cached settings. No account selection/rotation,
   reattachment/restart adoption, custom worker manager, tool callback or
-  submitted report/follow-up turns. Keep old main-thread locks until quit;
+  submitted report/follow-up turns, except the explicit controller-owned restart
+  handoff through native turn/start (ADR 0016). Keep old main-thread locks until quit;
   native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
 - src/console/host.ts: native readiness before audio opens, negotiation after audio
@@ -272,7 +276,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Preserve explicit overrides; no user-config writes, forced tail-flush work,
   transcript database, or migration. Role skills are the only skill isolation:
   extra roots on the owned child, no global skills.config or plugin changes.
-- Reconnects carry no AgentVoice-authored instruction: only replayed saved speech
+- Ordinary reconnects carry no AgentVoice-authored instruction: only replayed saved speech
   and its one-item preface ride a resumed/redialed call (ADR 0012 retired quiet
   resume; the key errors like other retired configuration). Keep the native base prompt
   intact; no fabricated transcript, default tail-flush work or history rewriting.
@@ -281,7 +285,12 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   See ADRs 0010/0011 for stock 0.153.3/0.153.4 and desktop 26.831.20005 evidence.
   Fake protocol tests do not establish live silence or audio-heard fidelity.
 - No AgentVoice worker tools, registry, archival, reports, or custom turn
-  submission. Native Codex tools, subagents and voice handoffs stay native.
+  submission except a caller-supplied restart handoff (ADR 0016). Submit that
+  handoff once through native turn/start after the controller verifies exact
+  identity and live media. Do not change either agent's prompt defaults, retry
+  ambiguous acceptance, echo the private prompt in status/errors, or assume a
+  clientUserMessageId guarantees native deduplication. Native Codex tools,
+  subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.
   Saved custom tool calls receive an immediate failed tool result and visible
   retirement notice; never resurrect a handler or rewrite native history.

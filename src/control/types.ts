@@ -2,7 +2,7 @@
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 1;
+export const CONTROL_PROTOCOL_VERSION = 2;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -27,6 +27,18 @@ export type ControlMutationRequest = {
   expectedInstanceId: string;
 };
 
+export type ControlRestartRequest = ControlMutationRequest & {
+  scope: "runtime";
+  handoffPrompt?: string;
+};
+
+export type ControlHandoff = {
+  status: "pending" | "submitting" | "accepted" | "failed" | "unknown";
+  clientUserMessageId: string;
+  turnId?: string;
+  error?: { code: string; message: string };
+};
+
 export type ControlOperation = {
   operationId: string;
   kind: "redial" | "restart";
@@ -45,6 +57,7 @@ export type ControlOperation = {
     buildId?: string;
   };
   error?: { code: string; message: string };
+  handoff?: ControlHandoff;
 };
 
 export type ControlStatus = {
@@ -64,7 +77,7 @@ type MaybePromise<T> = T | Promise<T>;
 export interface ControlBackend {
   status(): MaybePromise<ControlStatus>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;
-  restart(request: ControlMutationRequest & { scope: "runtime" }): Promise<ControlOperation>;
+  restart(request: ControlRestartRequest): Promise<ControlOperation>;
 }
 
 /** A stable error suitable for both JSON socket and MCP error results. */
