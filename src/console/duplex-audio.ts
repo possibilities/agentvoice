@@ -199,6 +199,7 @@ export class DuplexVoiceAudio {
   }
 
   detachRemote(): void {
+    this.device?.clearPlayback();
     this.logDownlinkWindow("track detached");
     this.remoteGeneration++;
     this.remoteSubscription?.unSubscribe();

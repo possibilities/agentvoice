@@ -1,79 +1,145 @@
 import { describe, expect, test } from "bun:test";
-import { SocketOutbox } from "../src/core/socket-outbox.ts";
+import { join } from "node:path";
+import { AppServerConnection, type AttachOptions, appServerArgv } from "../src/core/attach.ts";
 
-/** A socket that accepts at most `cap` bytes per write until drained. */
-function throttledSink(cap: number): {
-  outbox: SocketOutbox;
-  drained(): Buffer;
-  drainKernel(): void;
-} {
-  const accepted: Buffer[] = [];
-  let budget = cap;
-  const outbox = new SocketOutbox((data) => {
-    const take = Math.min(budget, data.length);
-    if (take > 0) accepted.push(Buffer.from(data.subarray(0, take)));
-    budget -= take;
-    return take;
+const fixture = join(import.meta.dir, "fixtures/fake-codex.ts");
+async function connect(mode = "", extra: Partial<AttachOptions> = {}) {
+  return AppServerConnection.connect({
+    argv: [process.execPath, fixture, mode],
+    cwd: process.cwd(),
+    clientVersion: "test",
+    onNotification() {},
+    onClose() {},
+    ...extra,
   });
-  return {
-    outbox,
-    drained: () => Buffer.concat(accepted),
-    drainKernel: () => {
-      budget = cap;
-      outbox.flush();
-    },
-  };
+}
+async function until(predicate: () => boolean) {
+  const end = Date.now() + 2_000;
+  while (!predicate() && Date.now() < end) await Bun.sleep(5);
+  expect(predicate()).toBe(true);
 }
 
-describe("SocketOutbox", () => {
-  test("small writes pass straight through", () => {
-    const sink = throttledSink(8192);
-    sink.outbox.write(Buffer.from("hello"));
-    expect(sink.drained().toString()).toBe("hello");
-    expect(sink.outbox.hasPending).toBe(false);
+describe("owned native stdio", () => {
+  test("uses only stock app-server flags", () => {
+    expect(appServerArgv("/bin/codex")).toEqual([
+      "/bin/codex",
+      "app-server",
+      "--enable",
+      "realtime_conversation",
+      "--listen",
+      "stdio://",
+    ]);
   });
-
-  test("a frame larger than the kernel buffer delivers whole across drains", () => {
-    const sink = throttledSink(8192);
-    const frame = Buffer.alloc(20000, 7);
-    sink.outbox.write(frame);
-    expect(sink.outbox.hasPending).toBe(true);
-    sink.drainKernel();
-    sink.drainKernel();
-    expect(sink.outbox.hasPending).toBe(false);
-    expect(Buffer.compare(sink.drained(), frame)).toBe(0);
+  test("round trips large frames and fragmented multibyte UTF-8", async () => {
+    const c = await connect();
+    try {
+      const body = { text: "large 🎤".repeat(20_000) };
+      const [echo, fragment] = await Promise.all([
+        c.request("echo", body),
+        c.request("fragmented", {}),
+      ]);
+      expect(echo).toEqual(body);
+      expect(fragment).toBe("voice 🎤 café");
+    } finally {
+      await c.close();
+    }
   });
-
-  test("writes issued while a remainder is pending keep their order", () => {
-    const sink = throttledSink(4);
-    sink.outbox.write(Buffer.from("AAAAAAAA")); // 8 bytes: 4 sent, 4 pending
-    sink.outbox.write(Buffer.from("BB"));
-    sink.outbox.write(Buffer.from("C"));
-    while (sink.outbox.hasPending) sink.drainKernel();
-    expect(sink.drained().toString()).toBe("AAAAAAAABBC");
+  test("delivers notifications, answers tools, and preserves fail-closed approvals", async () => {
+    const notices: Array<[string, Record<string, unknown>]> = [];
+    const c = await connect("", {
+      onNotification: (m, p) => notices.push([m, p]),
+      onRequest: (m) => (m === "item/tool/call" ? Promise.resolve({ success: true }) : null),
+    });
+    try {
+      await c.request("approval", {});
+      await c.request("dynamic", {});
+      await until(() => notices.filter(([m]) => m === "test/answer").length === 2);
+      expect(notices).toContainEqual(["test/initialized", {}]);
+      expect(notices).toContainEqual(["test/answer", { decision: "decline" }]);
+      expect(notices).toContainEqual(["test/answer", { success: true }]);
+    } finally {
+      await c.close();
+    }
   });
-
-  test("a zero-byte kernel acceptance keeps the whole write pending", () => {
-    const sink = throttledSink(0);
-    sink.outbox.write(Buffer.from("payload"));
-    expect(sink.outbox.hasPending).toBe(true);
-    expect(sink.drained().length).toBe(0);
+  test("preserves JSON-RPC errors and bounds unanswered requests", async () => {
+    const c = await connect();
+    try {
+      await expect(c.request("fail", {})).rejects.toMatchObject({ code: 42 });
+      await expect(c.request("hang", {}, 15)).rejects.toMatchObject({ timedOut: true });
+      expect(await c.request<{ still: string }>("echo", { still: "alive" })).toEqual({
+        still: "alive",
+      });
+    } finally {
+      await c.close();
+    }
   });
-
-  test("a negative write return is treated as nothing accepted", () => {
-    const outbox = new SocketOutbox(() => -1);
-    outbox.write(Buffer.from("data"));
-    expect(outbox.hasPending).toBe(true);
+  test("crash rejects pending requests and reports closure once", async () => {
+    const closed: unknown[] = [];
+    const c = await connect("", { onClose: (event) => closed.push(event) });
+    await expect(c.request("crash", {})).rejects.toThrow();
+    await c.close();
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toMatchObject({ expected: false });
   });
-
-  test("flush stops at the still-full boundary and resumes later", () => {
-    const sink = throttledSink(3);
-    sink.outbox.write(Buffer.from("123456"));
-    sink.outbox.write(Buffer.from("789"));
-    sink.drainKernel(); // sends "456"
-    expect(sink.drained().toString()).toBe("123456");
-    sink.drainKernel(); // sends "789"
-    expect(sink.drained().toString()).toBe("123456789");
-    expect(sink.outbox.hasPending).toBe(false);
+  test("quit reaps an uncooperative child and is idempotent", async () => {
+    const c = await connect("stubborn");
+    const pid = c.pid!;
+    const pending = c.request("hang", {}).catch((e) => e);
+    const start = Date.now();
+    await Promise.all([c.close(), c.close()]);
+    expect(Date.now() - start).toBeLessThan(3_500);
+    expect(await pending).toBeInstanceOf(Error);
+    expect(() => process.kill(pid, 0)).toThrow();
+  });
+  test("abort during initialize closes the owned child", async () => {
+    const controller = new AbortController();
+    const starting = connect("no-initialize", { signal: controller.signal });
+    setTimeout(() => controller.abort(), 30);
+    await expect(starting).rejects.toThrow();
+  });
+  test("quit also stops tool processes in the owned child's process group", async () => {
+    const c = await connect();
+    const { pid } = await c.request<{ pid: number }>("descendant", {});
+    await c.close();
+    await until(() => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  });
+  test("missing executable fails promptly", async () => {
+    await expect(
+      connect("", { argv: ["/definitely-not-an-agentvoice-executable"] }),
+    ).rejects.toThrow(/could not start Codex/);
+  });
+  test("malformed stdout fails pending requests instead of hanging", async () => {
+    const c = await connect();
+    try {
+      await expect(c.request("invalid", {})).rejects.toThrow("invalid JSON");
+    } finally {
+      await c.close();
+    }
+  });
+  test("a throwing tool handler denies the request without killing the connection", async () => {
+    const notices: unknown[] = [];
+    const c = await connect("", {
+      onRequest() {
+        throw new Error("handler failed");
+      },
+      onNotification: (m, p) => {
+        if (m === "test/answer") notices.push(p);
+      },
+    });
+    try {
+      await c.request("approval", {});
+      await until(() => notices.length === 1);
+      expect(notices[0]).toEqual({ decision: "decline" });
+      expect(c.alive).toBe(true);
+    } finally {
+      await c.close();
+    }
   });
 });

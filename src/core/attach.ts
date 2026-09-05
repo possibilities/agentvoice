@@ -1,26 +1,9 @@
-/**
- * The console's attachment to the resident app-server: JSON-RPC 2.0 over
- * WebSocket framing over the resident's `--listen unix://` socket. Mirrors
- * the stdio client's contract — request/notify, notification fan-out, and
- * fail-closed denial of unhandled server→client requests — with connection
- * loss surfaced through `onClose` for the runtime to redial.
- */
-import type { Socket } from "bun";
-import { SocketOutbox } from "./socket-outbox.ts";
-import {
-  buildHandshakeRequest,
-  encodeCloseFrame,
-  encodeFrame,
-  encodeTextFrame,
-  FrameDecoder,
-  OP_PONG,
-  parseHandshakeResponse,
-  randomMaskKey,
-  websocketAcceptValue,
-} from "./ws-frame.ts";
+/** Native JSONL transport to the Codex child owned by this launch. */
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
-const HANDSHAKE_TIMEOUT_MS = 10_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const CLOSE_GRACE_MS = 1_000;
+const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 export class AppServerError extends Error {
   readonly code?: number;
@@ -67,110 +50,102 @@ interface PendingRequest {
 }
 
 export interface AttachOptions {
-  socketPath: string;
+  argv: string[];
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
   clientVersion: string;
   onNotification(method: string, params: Record<string, unknown>): void;
-  /**
-   * Optional answerer for server→client requests. Return a promise resolving
-   * to the response payload, or null (or reject) to fall back to the
-   * fail-closed denial. Absent means every request is denied.
-   */
   onRequest?(
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> | null;
-  /** Called exactly once when the attachment ends, however it ends. */
   onClose(info: { expected: boolean; error?: string }): void;
   debug?(line: string): void;
 }
 
-export class ResidentAttachment {
-  private readonly options: AttachOptions;
-  private socket: Socket | null = null;
-  private outbox: SocketOutbox | null = null;
-  private readonly decoder = new FrameDecoder();
-  private handshakeBuffer: Buffer = Buffer.alloc(0);
-  private handshake: { key: string; resolve(): void; reject(error: Error): void } | null = null;
+export function appServerArgv(codex: string): string[] {
+  return [codex, "app-server", "--enable", "realtime_conversation", "--listen", "stdio://"];
+}
+
+export class AppServerConnection {
+  private child: ChildProcessWithoutNullStreams | null = null;
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
   private closed = false;
   private closing = false;
+  private closePromise: Promise<void> | null = null;
+  private buffered = "";
+  private exited: Promise<void> = Promise.resolve();
+  private reaped = false;
 
-  private constructor(options: AttachOptions) {
-    this.options = options;
-  }
+  private constructor(private readonly options: AttachOptions) {}
 
-  /** Connect, upgrade, and run the `initialize` handshake. */
-  static async connect(options: AttachOptions): Promise<ResidentAttachment> {
-    const attachment = new ResidentAttachment(options);
-    await attachment.open();
+  static async connect(options: AttachOptions): Promise<AppServerConnection> {
+    const connection = new AppServerConnection(options);
+    const abort = () => {
+      void connection.close();
+    };
     try {
-      await attachment.request("initialize", {
+      if (options.signal?.aborted) throw new AppServerError("Codex startup cancelled");
+      connection.open();
+      options.signal?.addEventListener("abort", abort, { once: true });
+      await connection.request("initialize", {
         clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
         capabilities: { experimentalApi: true, requestAttestation: false },
       });
-      attachment.notify("initialized", {});
+      connection.notify("initialized", {});
+      return connection;
     } catch (error) {
-      // A rejected connect() must not strand a live socket behind it.
-      attachment.close();
+      await connection.close();
       throw error;
+    } finally {
+      options.signal?.removeEventListener("abort", abort);
     }
-    return attachment;
   }
 
   get alive(): boolean {
-    return this.socket !== null && !this.closed;
+    return this.child !== null && !this.closed && !this.closing;
+  }
+  get pid(): number | undefined {
+    return this.child?.pid;
   }
 
-  private async open(): Promise<void> {
-    const keyBytes = new Uint8Array(16);
-    crypto.getRandomValues(keyBytes);
-    const key = Buffer.from(keyBytes).toString("base64");
-
-    let socket: Socket;
-    try {
-      socket = await Bun.connect({
-        unix: this.options.socketPath,
-        socket: {
-          data: (_socket, chunk) => this.handleData(chunk),
-          drain: () => this.outbox?.flush(),
-          close: () => this.handleClose(),
-          error: (_socket, error) => this.fail(error.message),
-        },
-      });
-    } catch (error) {
-      throw new AppServerError(
-        `cannot reach the resident app-server at ${this.options.socketPath}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    this.socket = socket;
-    this.outbox = new SocketOutbox((data) => socket.write(data));
-
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.handshake = null;
-        try {
-          socket.end();
-        } catch {
-          // already gone; the close handler owns the rest
-        }
-        reject(new AppServerError("websocket handshake timed out"));
-      }, HANDSHAKE_TIMEOUT_MS);
-      this.handshake = {
-        key,
-        resolve: () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      };
-      this.writeRaw(Buffer.from(buildHandshakeRequest(key)));
+  private open(): void {
+    const [bin, ...args] = this.options.argv;
+    if (!bin) throw new AppServerError("no Codex executable configured");
+    const child = spawn(bin, args, {
+      cwd: this.options.cwd,
+      env: this.options.env ?? process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+      detached: true,
     });
+    this.child = child;
+    this.exited = new Promise<void>((resolve) => {
+      child.once("exit", (code, signal) => {
+        this.signalGroup("SIGKILL");
+        this.reaped = true;
+        this.finish(this.closing, this.closing ? undefined : `Codex exited (${signal ?? code})`);
+        resolve();
+      });
+      child.once("error", (error) => {
+        this.reaped = true;
+        this.finish(false, `could not start Codex: ${error.message}`);
+        resolve();
+      });
+    });
+    child.stdin.on("error", (error) => this.fail(`Codex stdin: ${error.message}`));
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => this.handleData(chunk));
+    child.stdout.on("end", () => {
+      if (!this.closing && !this.closed) this.fail("Codex stdout closed");
+    });
+    child.stdout.on("error", (error) => this.fail(error.message));
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) =>
+      this.options.debug?.(`codex stderr: ${chunk.trimEnd()}`),
+    );
+    child.stderr.on("error", (error) => this.options.debug?.(`Codex stderr: ${error.message}`));
   }
 
   request<T = unknown>(
@@ -178,33 +153,21 @@ export class ResidentAttachment {
     params: unknown,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   ): Promise<T> {
-    if (!this.alive) {
+    if (!this.alive)
       return Promise.reject(new AppServerError(`${method}: not attached to the app-server`));
-    }
     const id = this.nextRequestId++;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new AppServerError(`${method} timed out after ${timeoutMs}ms`, undefined, true));
       }, timeoutMs);
-      this.pending.set(id, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        timer,
-        method,
-      });
+      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer, method });
       try {
         this.send({ jsonrpc: "2.0", id, method, params });
       } catch (error) {
         this.pending.delete(id);
         clearTimeout(timer);
-        reject(
-          new AppServerError(
-            `${method}: failed to write to app-server: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          ),
-        );
+        reject(new AppServerError(String(error)));
       }
     });
   }
@@ -213,84 +176,73 @@ export class ResidentAttachment {
     this.send({ jsonrpc: "2.0", method, params });
   }
 
-  /** Graceful detach: close frame, then socket end. The resident lives on. */
-  close(): void {
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
     this.closing = true;
-    const socket = this.socket;
-    if (!socket || this.closed) return;
-    try {
-      this.writeRaw(encodeCloseFrame(1000, randomMaskKey()));
-      // end() with a still-pending outbox truncates the close frame; the
-      // resident then sees EOF, which it treats as the same disconnect.
-      socket.end();
-    } catch {
-      // the close handler owns the rest
-    }
+    // Publish the promise before onClose can re-enter close().
+    this.closePromise = Promise.resolve().then(async () => {
+      this.finish(true);
+      this.child?.stdin.end();
+      await this.waitForExit(CLOSE_GRACE_MS);
+      this.signalGroup("SIGTERM");
+      await this.waitForExit(CLOSE_GRACE_MS);
+      this.signalGroup("SIGKILL");
+      await this.waitForExit(CLOSE_GRACE_MS);
+      this.child?.stdout.destroy();
+      this.child?.stderr.destroy();
+    });
+    return this.closePromise;
   }
 
-  // -------------------------------------------------------------------------
+  private async waitForExit(ms: number): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      this.exited,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+
+  private signalGroup(signal: NodeJS.Signals): void {
+    const pid = this.child?.pid;
+    if (!pid || this.reaped) return;
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      /* already reaped */
+    }
+  }
 
   private send(message: Record<string, unknown>): void {
+    if (!this.alive || !this.child) throw new AppServerError("Codex connection is closed");
     const text = JSON.stringify(message);
     this.options.debug?.(`-> ${text}`);
-    this.writeRaw(encodeTextFrame(text, randomMaskKey()));
+    // Writable owns buffering/backpressure; a false return is not a partial write.
+    this.child.stdin.write(`${text}\n`);
   }
 
-  private writeRaw(data: Buffer): void {
-    const outbox = this.outbox;
-    if (!outbox || !this.socket || this.closed) {
-      throw new AppServerError("not attached to the app-server");
-    }
-    outbox.write(data);
-  }
-
-  private handleData(chunk: Uint8Array): void {
-    try {
-      let payload: Uint8Array = chunk;
-      if (this.handshake) {
-        this.handshakeBuffer = Buffer.concat([this.handshakeBuffer, Buffer.from(chunk)]);
-        const parsed = parseHandshakeResponse(this.handshakeBuffer);
-        if (!parsed.done) return;
-        const handshake = this.handshake;
-        this.handshake = null;
-        this.handshakeBuffer = Buffer.alloc(0);
-        if (!parsed.ok) {
-          this.socket?.end();
-          handshake.reject(new AppServerError(parsed.error));
-          return;
-        }
-        // Require the accept header outright: a non-WebSocket process
-        // answering 101 on the socket must fail here, not by feeding
-        // JSON-RPC frames into an alien protocol until a timeout.
-        if (parsed.acceptValue !== websocketAcceptValue(handshake.key)) {
-          this.socket?.end();
-          handshake.reject(
-            new AppServerError("websocket handshake accept header missing or mismatched"),
-          );
-          return;
-        }
-        handshake.resolve();
-        if (parsed.rest.length === 0) return;
-        payload = parsed.rest;
+  private handleData(chunk: string): void {
+    if (this.closed) return;
+    this.buffered += chunk;
+    for (;;) {
+      const newline = this.buffered.indexOf("\n");
+      if (newline < 0) break;
+      const line = this.buffered.slice(0, newline);
+      this.buffered = this.buffered.slice(newline + 1);
+      if (Buffer.byteLength(line) > MAX_FRAME_BYTES) {
+        this.fail("Codex frame exceeds 32 MiB");
+        return;
       }
-      for (const event of this.decoder.feed(payload)) {
-        if (event.type === "text") {
-          this.dispatchText(event.text);
-        } else if (event.type === "ping") {
-          this.writeRaw(encodeFrame(OP_PONG, event.payload, randomMaskKey()));
-        } else if (event.type === "close") {
-          this.closing = true;
-          try {
-            this.writeRaw(encodeCloseFrame(1000, randomMaskKey()));
-            this.socket?.end();
-          } catch {
-            // already closing
-          }
-        }
+      try {
+        this.dispatchText(line);
+      } catch (error) {
+        this.fail(String(error));
+        return;
       }
-    } catch (error) {
-      this.fail(error instanceof Error ? error.message : String(error));
     }
+    if (Buffer.byteLength(this.buffered) > MAX_FRAME_BYTES) this.fail("Codex frame exceeds 32 MiB");
   }
 
   private dispatchText(text: string): void {
@@ -298,8 +250,7 @@ export class ResidentAttachment {
     try {
       frame = JSON.parse(text);
     } catch {
-      this.options.debug?.(`dropping non-JSON frame: ${text.slice(0, 120)}`);
-      return;
+      throw new AppServerError("Codex stdout contained invalid JSON");
     }
     if (typeof frame !== "object" || frame === null) return;
     const message = frame as Record<string, unknown>;
@@ -331,7 +282,12 @@ export class ResidentAttachment {
       // with an immediate denial so no request ever parks a turn.
       const requestId = id as number | string;
       const params = (message["params"] ?? {}) as Record<string, unknown>;
-      const handled = this.options.onRequest?.(method, params);
+      let handled: Promise<Record<string, unknown> | null> | null | undefined;
+      try {
+        handled = this.options.onRequest?.(method, params);
+      } catch {
+        handled = null;
+      }
       if (handled) {
         handled
           .then((response) => {
@@ -360,37 +316,19 @@ export class ResidentAttachment {
   }
 
   private fail(error: string): void {
-    this.options.debug?.(`attachment failed: ${error}`);
-    const handshake = this.handshake;
-    if (handshake) {
-      this.handshake = null;
-      handshake.reject(new AppServerError(error));
-    }
-    try {
-      this.socket?.end();
-    } catch {
-      // already gone
-    }
+    if (this.closing || this.closed) return;
     this.finish(false, error);
-  }
-
-  private handleClose(): void {
-    const handshake = this.handshake;
-    if (handshake) {
-      this.handshake = null;
-      handshake.reject(new AppServerError("connection closed during handshake"));
-    }
-    this.finish(this.closing);
+    void this.close();
   }
 
   private finish(expected: boolean, error?: string): void {
     if (this.closed) return;
     this.closed = true;
-    this.socket = null;
-    this.outbox = null;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(new AppServerError(`${pending.method}: attachment to app-server closed`));
+      pending.reject(
+        new AppServerError(`${pending.method}: ${error ?? "Codex connection closed"}`),
+      );
     }
     this.pending.clear();
     this.options.onClose({ expected, ...(error !== undefined ? { error } : {}) });

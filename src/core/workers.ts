@@ -11,13 +11,10 @@
  * started as a turn on the orchestrator's thread — upstream admission steers
  * it into a running turn or opens a fresh one (verified against 0.147).
  *
- * Workers live in the resident app-server, so they survive a console restart:
- * the registry is persisted and re-adopted on attach (`adopt`), with turns
- * that ended while detached finalized from thread history. Only a resident
- * restart makes a worker `lost` — running workers die with that process. A
- * Worker's task outcome and thread cleanup are deliberately separate: a
- * terminal outcome is preserved for check/report while archival retries until
- * app-server confirms the live thread has been retired.
+ * Workers belong to one parent conversation for this launch only. Quitting
+ * stops their owned Codex child; no registry is persisted or adopted. Task
+ * outcome and cleanup remain separate: completed work can be checked while
+ * archival retries in the live process.
  */
 
 /** A dispatched worker's lifecycle, for progress UIs. */
@@ -127,62 +124,6 @@ export interface WorkerRecord {
   terminalStatus?: TerminalWorkerStatus;
   cancellation: CancellationStatus;
   cleanup: WorkerCleanup;
-}
-
-/** What survives a console restart: enough to reconcile against the resident. */
-export interface PersistedWorker {
-  id: string;
-  threadId: string;
-  turnId?: string;
-  title: string;
-  brief: string;
-  status: WorkerStatus;
-  startedAt: number;
-  finishedAt?: number;
-  report?: string;
-  /** Cleanup still owed when the console died. */
-  cleanupPending: boolean;
-}
-
-const WORKER_STATUSES: ReadonlyArray<string> = [
-  "running",
-  "completed",
-  "failed",
-  "interrupted",
-  "cancelled",
-  "lost",
-];
-
-function isPersistedWorker(value: unknown): value is PersistedWorker {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record["id"] === "string" &&
-    /^w\d+$/.test(record["id"]) &&
-    typeof record["threadId"] === "string" &&
-    typeof record["title"] === "string" &&
-    typeof record["brief"] === "string" &&
-    typeof record["status"] === "string" &&
-    WORKER_STATUSES.includes(record["status"]) &&
-    typeof record["startedAt"] === "number" &&
-    typeof record["cleanupPending"] === "boolean"
-  );
-}
-
-/**
- * Validate a persisted registry document. A malformed entry is dropped rather
- * than adopted — a corrupt record must never wedge console attachment — and
- * the dropped count is reported so the loss is loud.
- */
-export function parsePersistedWorkers(raw: unknown): {
-  workers: PersistedWorker[];
-  dropped: number;
-} {
-  if (typeof raw !== "object" || raw === null) return { workers: [], dropped: 0 };
-  const entries = (raw as Record<string, unknown>)["workers"];
-  if (!Array.isArray(entries)) return { workers: [], dropped: 0 };
-  const workers = entries.filter(isPersistedWorker);
-  return { workers, dropped: entries.length - workers.length };
 }
 
 type CleanupDisposition = "archive" | "delete";
@@ -326,10 +267,16 @@ export class WorkerManager {
   private readonly pushReports: boolean;
   private readonly workers = new Map<string, WorkerRecord>();
   private nextWorker = 1;
+  private disposed = false;
 
   constructor(effects: WorkerEffects, pushReports: boolean) {
     this.effects = effects;
     this.pushReports = pushReports;
+  }
+
+  /** Stop scheduling cleanup after the owned child exits. */
+  dispose(): void {
+    this.disposed = true;
   }
 
   /** Thread ids of workers, for routing notifications. */
@@ -528,72 +475,6 @@ export class WorkerManager {
     return [...this.workers.values()].map(snapshot);
   }
 
-  /** What survives a console restart, written on every transition. */
-  persistenceRecords(): PersistedWorker[] {
-    return [...this.workers.values()].map((worker) => ({
-      id: worker.id,
-      threadId: worker.threadId,
-      ...(worker.turnId === undefined ? {} : { turnId: worker.turnId }),
-      title: worker.title,
-      brief: worker.brief,
-      status: worker.status,
-      startedAt: worker.startedAt,
-      ...(worker.finishedAt === undefined ? {} : { finishedAt: worker.finishedAt }),
-      ...(worker.report === undefined ? {} : { report: worker.report }),
-      cleanupPending: worker.cleanup.status !== "complete",
-    }));
-  }
-
-  /**
-   * Re-adopt a worker persisted by a previous console run — registration
-   * only, before any resident RPC: ownership must exist the moment the new
-   * attachment can deliver a `turn/completed`, or a completion racing the
-   * reconcile reads would be dropped forever. A settled record recreates a
-   * settled worker (retrying any owed cleanup); a running record recreates a
-   * live one, refined afterwards by `handleTurnCompleted` (the turn ended
-   * while detached — its report still publishes) or `markLost`.
-   */
-  adopt(persisted: PersistedWorker): void {
-    const numeric = Number.parseInt(persisted.id.replace(/^w/, ""), 10);
-    if (Number.isInteger(numeric) && numeric >= this.nextWorker) this.nextWorker = numeric + 1;
-    const settled = persisted.status !== "running";
-    const worker: WorkerRecord = {
-      id: persisted.id,
-      threadId: persisted.threadId,
-      ...(persisted.turnId === undefined ? {} : { turnId: persisted.turnId }),
-      title: persisted.title,
-      brief: persisted.brief,
-      status: persisted.status,
-      startedAt: persisted.startedAt,
-      ...(persisted.finishedAt === undefined ? {} : { finishedAt: persisted.finishedAt }),
-      ...(persisted.report === undefined ? {} : { report: persisted.report }),
-      terminalObserved: settled,
-      taskSettled: settled,
-      terminalPublished: settled,
-      cancellation: "none",
-      cleanup: { status: persisted.cleanupPending ? "idle" : "complete", attempts: 0 },
-    };
-    this.workers.set(worker.id, worker);
-    if (settled && persisted.cleanupPending) this.requestCleanup(worker, "archive");
-    this.effects.onWorkerUpdate?.(snapshot(worker));
-  }
-
-  /**
-   * The worker's thread is definitively gone (the resident restarted
-   * underneath it). Only called on hard evidence — a transient read failure
-   * leaves the worker running for the next reconcile to retry.
-   */
-  markLost(threadId: string): void {
-    const worker = [...this.workers.values()].find((candidate) => candidate.threadId === threadId);
-    if (!worker || worker.taskSettled) return;
-    worker.status = "lost";
-    worker.finishedAt = this.effects.now();
-    worker.report = "lost with a resident restart";
-    worker.taskSettled = true;
-    this.effects.onWorkerUpdate?.(snapshot(worker));
-    this.requestCleanup(worker, "archive");
-  }
-
   private requestCleanup(worker: WorkerRecord, disposition: CleanupDisposition): void {
     if (worker.cleanup.status === "complete") return;
     worker.cleanup.disposition = disposition;
@@ -622,7 +503,7 @@ export class WorkerManager {
   }
 
   private runCleanup(worker: WorkerRecord): void {
-    if (worker.cleanup.status !== "pending" || !worker.cleanup.disposition) return;
+    if (this.disposed || worker.cleanup.status !== "pending" || !worker.cleanup.disposition) return;
     const disposition = worker.cleanup.disposition;
     worker.cleanup.status = "running";
     const cleanup =
@@ -636,6 +517,7 @@ export class WorkerManager {
         this.effects.onWorkSettled?.();
       },
       (error) => {
+        if (this.disposed) return;
         worker.cleanup.status = "pending";
         worker.cleanup.attempts++;
         const delay = Math.min(

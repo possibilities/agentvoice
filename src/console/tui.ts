@@ -8,7 +8,7 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import type { VoicePhase } from "../core/control-protocol.ts";
+import type { VoicePhase } from "../core/voice-types.ts";
 import { createCommandPalette } from "../tui/palette.ts";
 import {
   AUDIO_CONTROL_KITTY_KEYBOARD,
@@ -45,7 +45,7 @@ export interface VoiceTuiChannelState {
 }
 
 export interface VoiceTuiState {
-  /** False while no voice peer's state is in hand — detached, or none exists. */
+  /** False once the foreground host has closed. */
   available: boolean;
   phase: VoicePhase;
   liveForMs: number | null;
@@ -75,7 +75,7 @@ export interface VoiceTui {
   shutdown(): Promise<void>;
 }
 
-/** One instrument shared by the Console and Remote console hosts. */
+/** The foreground voice instrument. */
 export async function createVoiceTui(
   host: VoiceTuiHost,
   options: VoiceTuiOptions = {},

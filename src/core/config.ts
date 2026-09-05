@@ -1,5 +1,5 @@
 /**
- * Server configuration: CLI flags over `server.json` over built-in defaults.
+ * Application configuration: CLI flags over `server.json` over built-in defaults.
  * Options left unset are not sent to codex at all, so codex's own
  * configuration (`~/.codex/config.toml`) applies.
  *
@@ -28,16 +28,13 @@ import {
   type ConfigValues,
   configValuesSchema,
   DEFAULT_REALTIME_VERSION,
-  DEFAULT_REMOTE_PORT,
   DEFAULT_SWITCH_THRESHOLD,
   type HandoffMode,
   type HistoryMode,
   ORCHESTRATOR_KEYS,
   type OrchestratorValues,
   type Personality,
-  REMOTE_KEYS,
   type RealtimeVersion,
-  type RemoteValues,
   SANDBOX_MODES,
   type SandboxMode,
   SERVER_KEYS,
@@ -55,7 +52,6 @@ export type {
   OrchestratorValues,
   Personality,
   RealtimeVersion,
-  RemoteValues,
   SandboxMode,
   VoiceValues,
 } from "./config-schema.ts";
@@ -64,14 +60,12 @@ export {
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
   DEFAULT_REALTIME_VERSION,
-  DEFAULT_REMOTE_PORT,
   DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
   PERSONALITIES,
   REALTIME_VERSIONS,
-  REMOTE_KEYS,
   SANDBOX_MODES,
   SERVER_KEYS,
   VOICE_KEYS,
@@ -131,20 +125,6 @@ export interface AccountsConfig {
   switchThreshold: number;
 }
 
-/**
- * Network policy for Remote consoles. The owner-only unix socket always serves
- * same-machine peers; the authenticated WSS listener always serves paired
- * devices, with `listen` only overriding its default all-interface bind.
- */
-export interface RemoteConfig {
-  /** WSS bind override; null means all interfaces. */
-  listen: string | null;
-  port: number;
-  /** Optional compatibility credential for manual --host diagnosis. */
-  token: string | null;
-  allowAnyAddress: boolean;
-}
-
 export interface ServerConfig {
   codex: string;
   debug: boolean;
@@ -153,27 +133,6 @@ export interface ServerConfig {
   accounts: AccountsConfig;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
-  remote: RemoteConfig;
-}
-
-/**
- * Compatibility classifier for the old token-only listener policy. The WSS
- * listener now accepts arbitrary bind overrides because every peer still needs
- * a paired-device proof or the optional diagnostic token.
- */
-export function isPrivateRemoteAddress(host: string): boolean {
-  const address = host.trim().toLowerCase();
-  if (address === "localhost" || address === "127.0.0.1" || address === "::1") return true;
-  const ipv4 = address.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
-  if (ipv4) {
-    const first = Number(ipv4[1]);
-    const second = Number(ipv4[2]);
-    if (first === 127) return true;
-    // Tailscale's CGNAT allocation, 100.64.0.0/10.
-    return first === 100 && second >= 64 && second <= 127;
-  }
-  // Tailscale's ULA allocation, fd7a:115c:a1e0::/48.
-  return address.startsWith("fd7a:115c:a1e0:");
 }
 
 export class ConfigError extends Error {}
@@ -268,7 +227,6 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   accounts: ACCOUNTS_KEYS,
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
-  remote: REMOTE_KEYS,
 };
 
 /**
@@ -375,6 +333,10 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
   }
 
   const raw = document as Record<string, unknown>;
+  if (Object.hasOwn(raw, "remote"))
+    throw new ConfigError(
+      `${source}: remote configuration has been retired; remove the remote section to use the foreground TUI`,
+    );
   // Reserved for editor tooling; carries no configuration, whatever its value.
   const { $schema: _schema, ...options } = raw;
   const parsed = configValuesSchema.safeParse(options);
@@ -448,6 +410,7 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
 // ---------------------------------------------------------------------------
 
 export interface ResolveOptions {
+  launchCwd?: string;
   debug?: boolean;
   /** Where prompt files are discovered; defaults to the default config dir. */
   configDir?: string;
@@ -467,8 +430,6 @@ export function resolveConfig(
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
     cli.voice?.[key] ?? file.voice?.[key];
-  const pickRemote = <K extends keyof RemoteValues>(key: K): RemoteValues[K] =>
-    cli.remote?.[key] ?? file.remote?.[key];
 
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
@@ -486,10 +447,31 @@ export function resolveConfig(
     );
   }
 
-  // The orchestrator agent lives in the user's home directory: it is an
-  // assistant on this machine, not a process penned into a scratch dir. It
-  // makes its own working directories for the files a task produces.
-  const workspace = resolve(expandTilde(pickOrchestrator("workspace") ?? home, home));
+  const launchCwd = options.launchCwd ?? process.cwd();
+  const workspaceValue = pickOrchestrator("workspace") ?? launchCwd;
+  if (!workspaceValue.trim()) throw new ConfigError("workspace must be a non-empty directory");
+  const workspace = resolve(launchCwd, expandTilde(workspaceValue, home));
+  const extra = pickOrchestrator("extra");
+  const rawCwd = extra?.["cwd"];
+  if (
+    rawCwd !== undefined &&
+    (typeof rawCwd !== "string" || resolve(launchCwd, expandTilde(rawCwd, home)) !== workspace)
+  ) {
+    throw new ConfigError(
+      "orchestrator.extra.cwd conflicts with the selected workspace; use --workspace",
+    );
+  }
+  for (const key of ["threadId", "path", "history"]) {
+    if (extra && Object.hasOwn(extra, key))
+      throw new ConfigError(
+        `orchestrator.extra.${key} cannot override conversation identity; use --resume`,
+      );
+  }
+  const voiceExtra = pickVoice("extra");
+  for (const key of ["threadId", "realtimeSessionId"]) {
+    if (voiceExtra && Object.hasOwn(voiceExtra, key))
+      throw new ConfigError(`voice.extra.${key} cannot override conversation identity`);
+  }
   const roots = pickOrchestrator("runtime-workspace-roots");
 
   const orchestrator: OrchestratorConfig = {
@@ -507,7 +489,7 @@ export function resolveConfig(
     serviceTier: pickOrchestrator("service-tier"),
     ephemeral: pickOrchestrator("ephemeral"),
     historyMode: pickOrchestrator("history-mode"),
-    runtimeWorkspaceRoots: roots?.map((root) => resolve(expandTilde(root, home))),
+    runtimeWorkspaceRoots: roots?.map((root) => resolve(workspace, expandTilde(root, home))),
     config: pickOrchestrator("config"),
     extra: pickOrchestrator("extra"),
   };
@@ -527,16 +509,6 @@ export function resolveConfig(
     extra: pickVoice("extra"),
   };
 
-  const listen = pickRemote("listen") ?? null;
-  const remoteToken = pickRemote("token") ?? null;
-  const allowAnyAddress = pickRemote("allow-any-address") ?? false;
-  const remote: RemoteConfig = {
-    listen,
-    port: pickRemote("port") ?? DEFAULT_REMOTE_PORT,
-    token: remoteToken,
-    allowAnyAddress,
-  };
-
   return {
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     debug: options.debug ?? false,
@@ -547,6 +519,5 @@ export function resolveConfig(
     },
     orchestrator,
     voice,
-    remote,
   };
 }

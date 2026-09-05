@@ -1,5 +1,5 @@
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
-import type { VoicePhase } from "../core/control-protocol.ts";
+import type { VoicePhase } from "../core/voice-types.ts";
 import { formatClock } from "./dsp.ts";
 import { type SignalFieldFrame, signalFieldWashColor } from "./signal-field.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";

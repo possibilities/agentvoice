@@ -1,12 +1,10 @@
 #!/usr/bin/env bun
-/** CLI entry: `agentvoice console [options]` is the voice console; sibling
- *  subcommands manage the Server, the resident app-server, account profiles,
- *  and the Remote console. */
-import { existsSync } from "node:fs";
+/** Foreground voice application; console is a compatibility alias. */
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import packageJson from "../package.json";
-import { ConsoleError, type ConsoleTarget, runConsoleHost } from "./console/host.ts";
+import { runConsoleHost } from "./console/host.ts";
 import {
   AUTH_FILE,
   accountsDirectory,
@@ -15,45 +13,45 @@ import {
   onboardingCommands,
   reconcileFarm,
 } from "./core/accounts.ts";
-import {
-  ConfigError,
-  cliToConfigValues,
-  DEFAULT_REMOTE_PORT,
-  loadConfigFile,
-  resolveConfig,
-} from "./core/config.ts";
-import { controlSocketPath, defaultConfigPath, expandTilde } from "./paths.ts";
-import {
-  installResident,
-  ResidentError,
-  residentStatus,
-  restartResident,
-  runPickHome,
-  uninstallResident,
-} from "./resident/install.ts";
-import { runServer, ServerError } from "./server/host.ts";
-import {
-  installServer,
-  restartServer,
-  ServerInstallError,
-  serverStatus,
-  uninstallServer,
-} from "./server/install.ts";
-import { pairWithServer } from "./server/pair.ts";
+import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./core/config.ts";
+import { defaultConfigPath, expandTilde } from "./paths.ts";
 
 export const VERSION: string = packageJson.version;
-
-const USAGE = `agentvoice — talk to a Codex orchestrator agent, hands-free
+const USAGE = `agentvoice — a foreground Codex voice TUI
 
 Usage:
-  agentvoice console [options]    Open the voice console
-  agentvoice server <command>     Manage the launchd-resident Server
-  agentvoice resident <command>   Manage the launchd-resident codex app-server
-  agentvoice accounts <command>   Manage account profiles for balancing
-  agentvoice remote               Open the phone-sized remote console
+  agentvoice [options]           Continue this workspace's latest voice conversation
+  agentvoice console [options]   Compatibility alias
+  agentvoice accounts <command>  Manage optional account profiles
 
-Run \`agentvoice <command> --help\` for options. First run: install the
-daemon pair with \`agentvoice server install\`, then run \`agentvoice console\`.
+Options:
+  --workspace <dir>        Conversation root (default: launch directory)
+  --no-continue            Start a new conversation (--fresh is an alias)
+  --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
+  --config <path>          Config file (default: ~/.config/agentvoice/server.json)
+  --model <id>             Codex work model (default: native configuration)
+  --effort <level>         Codex reasoning effort (default: native configuration)
+  --voice-model <id>       Realtime voice model
+  --voice <name>           Voice timbre
+  --device <index>         Microphone device (default: system default)
+  --output-device <index>  Speaker device (default: system default)
+  --sandbox <mode>         read-only | workspace-write | danger-full-access
+  --approval-policy <p>    never | on-request | untrusted
+  --codex <path>           Stock Codex executable (default: $CODEX_PATH or codex)
+  --debug                 Per-launch protocol/media log under the state directory
+  --help                  Show help
+
+One AgentVoice process owns an unmodified Codex app-server child.
+Quitting stops running work; native conversation history remains resumable.
+No background services or remote attachment. Existing permission defaults remain
+danger-full-access / never; this release does not change them.
+
+Prompts are optional files beside the config:
+  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md
+  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_{START,END}.md
+
+Keys: [m] microphone · [s] speaker · [r] redial · [f] fresh · [q] quit
+      [ctrl+k] commands · [space] push-to-talk (key-release capable terminal)
 `;
 
 const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
@@ -72,131 +70,11 @@ The slug is a local label (lowercase letters, digits, hyphens) — pick one
 per ChatGPT account, e.g. "personal" or "work".
 `;
 
-const CONSOLE_USAGE = `agentvoice console — open the voice console
-
-Usage:
-  agentvoice console [options]
-
-Attaches to the Server as its voice peer — the owner of the microphone,
-speaker, and voice-session media — and hosts the shared TUI. Requires the
-daemon pair: agentvoice server install. Configuration lives with the
-Server (server.json, or \`agentvoice server install\` flags); the console
-keeps only its device flags.
-
-Options:
-  --device <index>         Microphone device index (default: system default)
-  --output-device <index>  Speaker device index (default: system default)
-  --fresh                  Abandon the persisted agent; start a fresh thread
-  --debug                  Write a debug log to the state directory
-
-Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
-`;
-
-const SERVER_USAGE = `agentvoice server — the launchd-resident coordination Server
-
-The Server owns the attachment to the resident app-server: the persisted
-orchestrator agent, workers, account rotation, and the control listeners
-that the Console and Remote consoles attach to. It runs headless under
-launchd, so the orchestrator stays serviced with no console open. It
-originates no inference of its own.
-
-Usage:
-  agentvoice server install [options]   Render the LaunchAgent (installing
-                                        the resident first when missing),
-                                        load, and start
-  agentvoice server status              Report launchd and socket state
-  agentvoice server pair                Open a two-minute phone pairing window
-  agentvoice server restart             Restart the Server
-  agentvoice server uninstall           Unload and remove the LaunchAgent
-  agentvoice server run [options]       Run in the foreground (what the
-                                        LaunchAgent invokes)
-
-Options (install bakes them into the LaunchAgent; run takes the same set;
-the full surface lives in server.json — see server.schema.json):
-  --config <path>          Config file (default: ~/.config/agentvoice/server.json)
-  --model <id>             Orchestrator agent model (default: codex config)
-  --effort <level>         Orchestrator agent reasoning effort (default: codex config)
-  --voice-model <id>       Voice agent model (default: codex config)
-  --voice <name>           Voice timbre (default: upstream default)
-  --workspace <dir>        Orchestrator agent working directory
-                           (default: your home directory)
-  --sandbox <mode>         read-only | workspace-write | danger-full-access
-                           (default: danger-full-access)
-  --approval-policy <p>    never | on-request | untrusted (default: never)
-  --codex <path>           Codex binary (default: $CODEX_PATH or "codex")
-  --debug                  Write a debug log to the state directory
-
-Prompts are files in the config file's directory, all optional:
-  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md   prime the voice agent
-  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md,               prime the orchestrator
-  ORCHESTRATOR_SESSION_{START,END}.md                    agent
-`;
-
-const RESIDENT_USAGE = `agentvoice resident — the launchd-resident codex app-server
-
-The resident is a bare \`codex app-server\` kept alive by launchd, serving a
-private unix socket the console attaches to. Threads and workers live in it,
-so they survive console restarts. Its wrapper consults the account balancer
-at every spawn (accounts.balance).
-
-Usage:
-  agentvoice resident install [--config <path>]   Render the wrapper and
-                                                  LaunchAgent, load, and start
-  agentvoice resident status                      Report launchd, socket, and
-                                                  account state
-  agentvoice resident restart                     Restart onto a fresh
-                                                  balancer pick
-  agentvoice resident uninstall                   Unload and remove the
-                                                  LaunchAgent
-  agentvoice resident pick-home                   (wrapper-internal) print the
-                                                  balancer's CODEX_HOME pick
-`;
-
-const REMOTE_USAGE = `agentvoice remote — the phone-sized control surface for the Server
-
-Usage:
-  agentvoice remote                          attach on this machine
-  agentvoice remote --host <addr> [--port N] diagnose a network route
-
-Options:
-  --host <address>  A manually selected Server address. Omitted, the Remote
-                    console attaches through the owner-only unix socket on
-                    this machine.
-  --port <port>     Defaults to ${DEFAULT_REMOTE_PORT}; must match remote.port there.
-  --token <secret>  Must match remote.token in the Server's server.json.
-                    Defaults to $AGENTVOICE_REMOTE_TOKEN. Required with --host.
-
-Manual --host uses encrypted WSS but deliberately skips certificate pinning;
-it is a diagnostic path. The generic Android app uses none of these flags: run
-\`agentvoice server pair\` once, then it discovers routes, pins the Server, and
-proves its Android-Keystore identity automatically.
-
-The Remote console carries mute controls, Redial, Fresh, and signal state;
-audio remains on the Console's own device, and the Server is reachable even
-while no Console is open. Serving manual --host needs remote.token in the
-Server's server.json; remote.listen is only an optional bind override.
-
-Keys: [m] mute mic · [s] mute speaker · [r] redial voice · [f] fresh thread · [q] quit
-`;
-
 export interface FlagSpec {
   value: ReadonlySet<string>;
   bool: ReadonlySet<string>;
 }
-
-/** Device flags only: the config surface belongs to the Server. */
-const CONSOLE_FLAGS: FlagSpec = {
-  value: new Set(["--device", "--output-device"]),
-  bool: new Set(["--debug", "--fresh", "--help"]),
-};
-
-const RESIDENT_FLAGS: FlagSpec = {
-  value: new Set(["--config"]),
-  bool: new Set(["--help"]),
-};
-
-/** The config-layer flags; device flags stay with the console. */
-const SERVER_FLAGS: FlagSpec = {
+const LAUNCH_FLAGS: FlagSpec = {
   value: new Set([
     "--config",
     "--model",
@@ -207,8 +85,11 @@ const SERVER_FLAGS: FlagSpec = {
     "--sandbox",
     "--approval-policy",
     "--codex",
+    "--device",
+    "--output-device",
+    "--resume",
   ]),
-  bool: new Set(["--debug", "--help"]),
+  bool: new Set(["--debug", "--fresh", "--no-continue", "--help"]),
 };
 
 export class UsageError extends Error {}
@@ -221,7 +102,7 @@ export interface ParsedArgs {
   help: boolean;
 }
 
-export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): ParsedArgs {
+export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): ParsedArgs {
   const seen = new Set<string>();
   const values: Record<string, string> = {};
   let configPath: string | undefined;
@@ -250,7 +131,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): Parsed
     if (spec.bool.has(flag)) {
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
-      else if (flag === "--fresh") fresh = true;
+      else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
       else help = true;
       continue;
     }
@@ -267,6 +148,10 @@ export function parseArgs(argv: string[], spec: FlagSpec = SERVER_FLAGS): Parsed
     else values[flag.slice(2)] = value;
   }
 
+  if (!help && fresh && values["resume"] !== undefined)
+    throw new UsageError("--resume cannot be combined with --no-continue/--fresh");
+  if (!help && values["resume"] !== undefined && !values["resume"].trim())
+    throw new UsageError("--resume requires a non-empty id");
   return { values, configPath, debug, fresh, help };
 }
 
@@ -278,194 +163,91 @@ function parseDeviceIndex(flag: string, value: string): number {
   return index;
 }
 
-function configLoader(parsed: ParsedArgs): {
-  configPath: string;
-  loadResolvedConfig: () => ReturnType<typeof loadAndResolve>;
-} {
-  const home = homedir();
-  const configPath = parsed.configPath
-    ? resolve(expandTilde(parsed.configPath, home))
-    : defaultConfigPath(process.env, home);
-  const explicitConfig = parsed.configPath !== undefined;
-  const cliValues = cliToConfigValues(parsed.values);
-  const loadResolvedConfig = () =>
-    loadAndResolve(configPath, explicitConfig, cliValues, parsed.debug);
-  return { configPath, loadResolvedConfig };
-}
-
-async function loadAndResolve(
-  configPath: string,
-  explicitConfig: boolean,
-  cliValues: ReturnType<typeof cliToConfigValues>,
-  debug: boolean,
-) {
-  const fileValues = await loadConfigFile(configPath, explicitConfig);
-  return resolveConfig(cliValues, fileValues, process.env, homedir(), {
-    debug,
-    configDir: dirname(configPath),
-  });
-}
-
 export interface ConsoleOptions {
   deviceIndex?: number;
   outputDeviceIndex?: number;
   debug: boolean;
-  /** Abandon the persisted orchestrator agent and start a fresh thread. */
   fresh: boolean;
+  resume?: string;
 }
-
-export type ParsedConsoleCommand = { help: true } | { help: false; options: ConsoleOptions };
+export type ParsedConsoleCommand =
+  | { help: true }
+  | { help: false; options: ConsoleOptions; parsed: ParsedArgs };
 
 export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
-  const parsed = parseArgs(argv, CONSOLE_FLAGS);
+  const parsed = parseArgs(argv);
   if (parsed.help) return { help: true };
   const device = parsed.values["device"];
   const outputDevice = parsed.values["output-device"];
-  const options: ConsoleOptions = {
-    ...(device === undefined ? {} : { deviceIndex: parseDeviceIndex("--device", device) }),
-    ...(outputDevice === undefined
-      ? {}
-      : { outputDeviceIndex: parseDeviceIndex("--output-device", outputDevice) }),
-    debug: parsed.debug,
-    fresh: parsed.fresh,
+  const resume = parsed.values["resume"];
+  return {
+    help: false,
+    parsed,
+    options: {
+      ...(device === undefined ? {} : { deviceIndex: parseDeviceIndex("--device", device) }),
+      ...(outputDevice === undefined
+        ? {}
+        : { outputDeviceIndex: parseDeviceIndex("--output-device", outputDevice) }),
+      debug: parsed.debug,
+      fresh: parsed.fresh,
+      ...(resume === undefined ? {} : { resume }),
+    },
   };
-  return { help: false, options };
+}
+
+export function configLoader(parsed: ParsedArgs, launchCwd = process.cwd()) {
+  const home = homedir();
+  const configPath = parsed.configPath
+    ? resolve(launchCwd, expandTilde(parsed.configPath, home))
+    : defaultConfigPath(process.env, home);
+  const {
+    device: _device,
+    "output-device": _outputDevice,
+    resume: _resume,
+    ...values
+  } = parsed.values;
+  const cliValues = cliToConfigValues(values);
+  const loadResolvedConfig = async () => {
+    const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
+    const config = resolveConfig(cliValues, fileValues, process.env, home, {
+      debug: parsed.debug,
+      configDir: dirname(configPath),
+      launchCwd,
+    });
+    try {
+      if (!statSync(config.orchestrator.workspace).isDirectory())
+        throw new Error("not a directory");
+      config.orchestrator.workspace = realpathSync(config.orchestrator.workspace);
+    } catch (error) {
+      throw new ConfigError(
+        `Cannot use workspace ${config.orchestrator.workspace}: ${String(error)}`,
+      );
+    }
+    return config;
+  };
+  return { configPath, loadResolvedConfig };
 }
 
 async function runConsoleCommand(argv: string[]): Promise<number> {
   const command = parseConsoleCommand(argv);
   if (command.help) {
-    console.log(CONSOLE_USAGE);
+    console.log(USAGE);
     return 0;
   }
-  const { deviceIndex, outputDeviceIndex, debug, fresh } = command.options;
-  await runConsoleHost(controlSocketPath(process.env, homedir()), {
-    media: {
-      ...(deviceIndex === undefined ? {} : { deviceIndex }),
-      ...(outputDeviceIndex === undefined ? {} : { outputDeviceIndex }),
-    },
-    fresh,
-    debug,
-  });
-  return 0;
-}
-
-async function runResidentCommand(argv: string[]): Promise<number> {
-  const subcommand = argv[0];
-  if (subcommand === undefined || subcommand === "--help" || subcommand === "help") {
-    console.log(RESIDENT_USAGE);
-    return subcommand === undefined ? 2 : 0;
-  }
-  const parsed = parseArgs(argv.slice(1), RESIDENT_FLAGS);
-  if (parsed.help) {
-    console.log(RESIDENT_USAGE);
-    return 0;
-  }
-  const { configPath, loadResolvedConfig } = configLoader(parsed);
-  switch (subcommand) {
-    case "install":
-      // Bake --config into the wrapper only when the operator gave one: the
-      // default path resolves at every spawn, so a config created later is
-      // picked up — and a missing default never errors the pick.
-      return installResident(
-        await loadResolvedConfig(),
-        parsed.configPath !== undefined ? configPath : undefined,
-      );
-    case "status":
-      return residentStatus();
-    case "restart":
-      return restartResident();
-    case "uninstall":
-      return uninstallResident();
-    case "pick-home":
-      return runPickHome(await loadResolvedConfig());
-    default:
-      throw new UsageError(`unknown resident command "${subcommand}"`);
-  }
-}
-
-async function runServerCommand(argv: string[]): Promise<number> {
-  const subcommand = argv[0];
-  if (subcommand === undefined || subcommand === "--help" || subcommand === "help") {
-    console.log(SERVER_USAGE);
-    return subcommand === undefined ? 2 : 0;
-  }
-  if (subcommand === "status") return serverStatus();
-  if (subcommand === "pair") {
-    if (argv.length !== 1) throw new UsageError("server pair takes no options");
-    return pairWithServer(controlSocketPath(process.env, homedir()));
-  }
-  if (subcommand === "restart") return restartServer();
-  if (subcommand === "uninstall") return uninstallServer();
-  if (subcommand !== "install" && subcommand !== "run") {
-    throw new UsageError(`unknown server command "${subcommand}"`);
-  }
-  const parsed = parseArgs(argv.slice(1), SERVER_FLAGS);
-  if (parsed.help) {
-    console.log(SERVER_USAGE);
-    return 0;
-  }
-  const { configPath, loadResolvedConfig } = configLoader(parsed);
+  const { configPath, loadResolvedConfig } = configLoader(command.parsed);
   const config = await loadResolvedConfig();
-  if (subcommand === "install") {
-    const runArgs: string[] = [];
-    if (parsed.configPath !== undefined) runArgs.push("--config", configPath);
-    for (const [key, value] of Object.entries(parsed.values)) {
-      runArgs.push(`--${key}`, value);
-    }
-    if (parsed.debug) runArgs.push("--debug");
-    return installServer(config, runArgs, parsed.configPath !== undefined ? configPath : undefined);
-  }
-  await runServer(config, VERSION, {
-    debug: parsed.debug,
-    configSource: { path: configPath, load: loadResolvedConfig },
+  await runConsoleHost(config, VERSION, {
+    media: {
+      deviceIndex: command.options.deviceIndex,
+      outputDeviceIndex: command.options.outputDeviceIndex,
+    },
+    debug: command.options.debug,
+    runtime: {
+      fresh: command.options.fresh,
+      resume: command.options.resume,
+      configSource: { path: configPath, load: loadResolvedConfig },
+    },
   });
-  return 0;
-}
-
-/**
- * Which Server a Remote console attaches to: the unix socket path on this
- * machine, or a network Server. Returns null for `--help`.
- */
-export function parseRemoteTarget(
-  argv: string[],
-  env: NodeJS.ProcessEnv,
-  home: string,
-): ConsoleTarget | null {
-  const parsed = parseArgs(argv, {
-    value: new Set(["--host", "--port", "--token"]),
-    bool: new Set(["--help"]),
-  });
-  if (parsed.help) return null;
-  // parseArgs keys values by the bare flag name, without the leading dashes.
-  const host = parsed.values["host"];
-  if (host === undefined) {
-    if (parsed.values["port"] !== undefined || parsed.values["token"] !== undefined) {
-      throw new UsageError("--port and --token only apply with --host");
-    }
-    return controlSocketPath(env, home);
-  }
-  const token = parsed.values["token"] ?? env["AGENTVOICE_REMOTE_TOKEN"];
-  if (token === undefined || token === "") {
-    throw new UsageError(
-      "--host needs --token (or $AGENTVOICE_REMOTE_TOKEN); it must match remote.token in the Server's server.json",
-    );
-  }
-  const rawPort = parsed.values["port"];
-  const port = rawPort === undefined ? DEFAULT_REMOTE_PORT : Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new UsageError(`--port must be a port number, got "${rawPort}"`);
-  }
-  return { host, port, token, secure: true };
-}
-
-async function runRemoteCommand(argv: string[]): Promise<number> {
-  const target = parseRemoteTarget(argv, process.env, homedir());
-  if (target === null) {
-    console.log(REMOTE_USAGE);
-    return 0;
-  }
-  await runConsoleHost(target);
   return 0;
 }
 
@@ -550,7 +332,7 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
       for (const command of missing) console.log(`  ${command}`);
     } else if (pool.length > 0) {
       console.log(
-        "\nevery codex-swap account has a profile; restart the resident to balance:\n  agentvoice resident restart",
+        "\nevery codex-swap account has a profile; launch agentvoice with accounts.balance enabled",
       );
     }
     return 0;
@@ -559,57 +341,27 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
   throw new UsageError(`unknown accounts command "${subcommand}"`);
 }
 
-async function main(): Promise<number> {
-  const argv = process.argv.slice(2);
+export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0];
-  if (command === undefined || command === "help" || command === "--help") {
-    console.log(USAGE);
-    return command === undefined ? 2 : 0;
-  }
-
-  const commands: Record<string, { run: (argv: string[]) => Promise<number>; usage: string }> = {
-    console: { run: runConsoleCommand, usage: CONSOLE_USAGE },
-    server: { run: runServerCommand, usage: SERVER_USAGE },
-    resident: { run: runResidentCommand, usage: RESIDENT_USAGE },
-    remote: { run: runRemoteCommand, usage: REMOTE_USAGE },
-    accounts: { run: runAccountsCommand, usage: ACCOUNTS_USAGE },
-  };
-  const entry = command.startsWith("-") ? undefined : commands[command];
-  if (entry === undefined) {
-    if (command.startsWith("-")) {
-      console.error(`the console is a subcommand now: run \`agentvoice console ${command} …\`\n`);
-    } else {
-      console.error(`unknown command "${command}"\n`);
-    }
-    console.error(USAGE);
-    return 2;
-  }
-  const run = () => entry.run(argv.slice(1));
-  const usage = entry.usage;
-
   try {
-    return await run();
+    if (command === "help") {
+      console.log(USAGE);
+      return 0;
+    }
+    if (command === "accounts") return await runAccountsCommand(argv.slice(1));
+    if (command === "server" || command === "resident" || command === "remote") {
+      throw new UsageError(
+        `${command} has been retired. Run agentvoice [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
+      );
+    }
+    return await runConsoleCommand(command === "console" ? argv.slice(1) : argv);
   } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     if (error instanceof UsageError) {
-      console.error(`${error.message}\n`);
-      console.error(usage);
+      console.error(USAGE);
       return 2;
     }
-    if (
-      error instanceof ConfigError ||
-      error instanceof ConsoleError ||
-      error instanceof ResidentError ||
-      error instanceof ServerError ||
-      error instanceof ServerInstallError
-    ) {
-      console.error(error.message);
-      return 1;
-    }
-    console.error(error instanceof Error ? error.message : String(error));
     return 1;
   }
 }
-
-if (import.meta.main) {
-  process.exit(await main());
-}
+if (import.meta.main) process.exit(await main());

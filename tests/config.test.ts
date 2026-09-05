@@ -5,15 +5,13 @@ import { join } from "node:path";
 import {
   ConfigError,
   cliToConfigValues,
-  DEFAULT_REMOTE_PORT,
-  isPrivateRemoteAddress,
   loadConfigFile,
   parseJsonConfig,
   promptFilenames,
   readPrompts,
   resolveConfig,
 } from "../src/core/config.ts";
-import { parseArgs, parseConsoleCommand, parseRemoteTarget, UsageError } from "../src/main.ts";
+import { parseArgs, parseConsoleCommand, UsageError } from "../src/main.ts";
 
 const HOME = "/home/tester";
 
@@ -23,7 +21,7 @@ describe("resolveConfig", () => {
     expect(config.codex).toBe("codex");
     expect(config.orchestrator.sandbox).toBe("danger-full-access");
     expect(config.orchestrator.approvalPolicy).toBe("never");
-    expect(config.orchestrator.workspace).toBe("/home/tester");
+    expect(config.orchestrator.workspace).toBe(process.cwd());
     expect(config.orchestrator.model).toBeUndefined();
     expect(config.orchestrator.effort).toBeUndefined();
     expect(config.orchestrator.personality).toBeUndefined();
@@ -70,9 +68,9 @@ describe("resolveConfig", () => {
       HOME,
     );
     expect(config.codex).toBe("/opt/codex");
-    // The workspace is the home directory, not a state path: XDG_STATE_HOME
+    // The workspace is the launch directory, not a state path: XDG_STATE_HOME
     // moves the state directory without moving the agent.
-    expect(config.orchestrator.workspace).toBe("/home/tester");
+    expect(config.orchestrator.workspace).toBe(process.cwd());
   });
 
   test("expands tilde in workspace, roots, and codex paths", () => {
@@ -115,105 +113,9 @@ describe("resolveConfig", () => {
     ).toHaveProperty("dispatchReports", undefined);
   });
 
-  test("leaves the secure listener bind override unset by default", () => {
-    const config = resolveConfig({}, {}, {}, HOME);
-    expect(config.remote.listen).toBeNull();
-    expect(config.remote.token).toBeNull();
-    expect(config.remote.port).toBe(DEFAULT_REMOTE_PORT);
-    expect(config.remote.allowAnyAddress).toBe(false);
-  });
-
-  test("remote.listen is an optional TLS bind override and token is diagnostic", () => {
-    const token = "0123456789abcdef0123";
-    expect(
-      resolveConfig({}, { remote: { listen: "100.114.244.89" } }, {}, HOME).remote.token,
-    ).toBeNull();
-    expect(
-      resolveConfig({}, { remote: { listen: "192.168.1.20", token } }, {}, HOME).remote.listen,
-    ).toBe("192.168.1.20");
-    expect(
-      resolveConfig({}, { remote: { listen: "0.0.0.0", token } }, {}, HOME).remote.listen,
-    ).toBe("0.0.0.0");
-    const config = resolveConfig(
-      {},
-      { remote: { listen: "100.114.244.89", port: 9100, token } },
-      {},
-      HOME,
-    );
-    expect(config.remote).toEqual({
-      listen: "100.114.244.89",
-      port: 9100,
-      token,
-      allowAnyAddress: false,
-    });
-    expect(
-      resolveConfig(
-        {},
-        { remote: { listen: "192.168.1.20", token, "allow-any-address": true } },
-        {},
-        HOME,
-      ).remote.listen,
-    ).toBe("192.168.1.20");
-  });
-
-  test("classifies tailnet, loopback, and everything else", () => {
-    // Tailscale's CGNAT allocation is 100.64.0.0/10 — 100.0.x and 100.128.x
-    // are outside it and belong to whoever else routes them.
-    expect(isPrivateRemoteAddress("100.64.0.1")).toBe(true);
-    expect(isPrivateRemoteAddress("100.127.255.254")).toBe(true);
-    expect(isPrivateRemoteAddress("100.63.255.255")).toBe(false);
-    expect(isPrivateRemoteAddress("100.128.0.1")).toBe(false);
-    expect(isPrivateRemoteAddress("127.0.0.1")).toBe(true);
-    expect(isPrivateRemoteAddress("::1")).toBe(true);
-    expect(isPrivateRemoteAddress("localhost")).toBe(true);
-    expect(isPrivateRemoteAddress("fd7a:115c:a1e0::1")).toBe(true);
-    expect(isPrivateRemoteAddress("fd00::1")).toBe(false);
-    expect(isPrivateRemoteAddress("0.0.0.0")).toBe(false);
-    expect(isPrivateRemoteAddress("192.168.1.20")).toBe(false);
-    expect(isPrivateRemoteAddress("10.0.0.5")).toBe(false);
-  });
-
   test("configDir defaults to the config directory", () => {
     expect(resolveConfig({}, {}, {}, HOME).configDir).toBe("/home/tester/.config/agentvoice");
     expect(resolveConfig({}, {}, {}, HOME, { configDir: "/etc/avn" }).configDir).toBe("/etc/avn");
-  });
-});
-
-describe("parseRemoteTarget", () => {
-  test("attaches on this machine unless --host names another", () => {
-    expect(parseRemoteTarget([], {}, HOME)).toBe(
-      "/home/tester/.local/state/agentvoice/control.sock",
-    );
-    expect(parseRemoteTarget(["--help"], {}, HOME)).toBeNull();
-    expect(
-      parseRemoteTarget(["--host", "100.64.0.9", "--token", "s3cret-token"], {}, HOME),
-    ).toEqual({
-      host: "100.64.0.9",
-      port: DEFAULT_REMOTE_PORT,
-      token: "s3cret-token",
-      secure: true,
-    });
-    expect(
-      parseRemoteTarget(
-        ["--host", "greybird", "--port", "9100"],
-        { AGENTVOICE_REMOTE_TOKEN: "t" },
-        HOME,
-      ),
-    ).toEqual({ host: "greybird", port: 9100, token: "t", secure: true });
-  });
-
-  test("refuses a network attachment it cannot authenticate", () => {
-    // Silently falling back to the local socket is the failure this guards:
-    // the Remote console would attach to the wrong Console and look fine.
-    expect(() => parseRemoteTarget(["--host", "100.64.0.9"], {}, HOME)).toThrow(/needs --token/);
-    expect(() => parseRemoteTarget(["--token", "t"], {}, HOME)).toThrow(/only apply with --host/);
-    expect(() => parseRemoteTarget(["--port", "9100"], {}, HOME)).toThrow(/only apply with --host/);
-    expect(() =>
-      parseRemoteTarget(["--host", "h", "--token", "t", "--port", "nope"], {}, HOME),
-    ).toThrow(/must be a port number/);
-    expect(() =>
-      parseRemoteTarget(["--host", "h", "--token", "t", "--port", "70000"], {}, HOME),
-    ).toThrow(/must be a port number/);
   });
 });
 
@@ -834,7 +736,7 @@ describe("parseArgs characterization", () => {
 
 describe("parseConsoleCommand", () => {
   test("defaults to system devices, resume, and no debug", () => {
-    expect(parseConsoleCommand([])).toEqual({
+    expect(parseConsoleCommand([])).toMatchObject({
       help: false,
       options: { debug: false, fresh: false },
     });
@@ -857,8 +759,8 @@ describe("parseConsoleCommand", () => {
     });
   });
 
-  test("rejects the config-layer flags, which moved to the Server", () => {
-    for (const flag of ["--model", "--config", "--voice", "--url", "--token", "--port"]) {
+  test("rejects retired network flags", () => {
+    for (const flag of ["--url", "--token", "--port", "--host"]) {
       expect(() => parseConsoleCommand([`${flag}=x`])).toThrow(UsageError);
     }
   });

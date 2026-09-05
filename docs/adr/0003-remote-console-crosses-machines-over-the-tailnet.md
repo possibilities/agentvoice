@@ -1,5 +1,8 @@
 # 0003: The Remote console crosses machines over a tailnet WebSocket
 
+Superseded by [0009: One foreground app, one workspace per launch](0009-one-foreground-workspace.md).
+The design below is historical, not active runtime behavior.
+
 Superseding 0002's "opens no new network listener", a Remote console may now
 run on another machine, reaching the Console through an opt-in WebSocket bound
 to a Tailscale address and admitted by a pre-shared token. QUIC has no Bun

@@ -27,7 +27,7 @@ const codex = process.env["CODEX_PATH"] ?? Bun.which("codex");
 if (codex) {
   ok(`codex at ${codex}`);
 } else {
-  warn("codex not found on PATH — the resident needs it: https://github.com/openai/codex");
+  warn("codex not found on PATH — AgentVoice needs it: https://github.com/openai/codex");
 }
 
 // native duplex audio — the console's only audio path, built from source
@@ -51,6 +51,4 @@ if ((await build.exited) !== 0) {
 }
 ok("duplex audio device built");
 
-console.log(
-  "\nready:  agentvoice resident install   (once)   then:  bun run console   (or `agentvoice console`)",
-);
+console.log("\nready:  bun run console   (or `agentvoice`)");

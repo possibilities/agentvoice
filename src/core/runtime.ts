@@ -1,204 +1,131 @@
-/**
- * The console's coordination runtime: one attachment to the resident
- * app-server, one orchestrator agent, at most one realtime (WebRTC) voice
- * session. Audio flows peer-to-peer between the console and the voice agent;
- * this runtime only coordinates — it relays SDP offers into
- * `thread/realtime/start` and answers back out, owns the persisted thread,
- * reconciles workers after a restart, and rotates the resident across
- * accounts at idle. Session lifecycle lives in session.ts; worker logic in
- * workers.ts; this file is wiring.
- *
- * The resident process itself is launchd's job. This runtime attaches,
- * reattaches with backoff when the attachment drops (resident crash, upgrade,
- * rotation), and resumes the same orchestrator agent each time.
- */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+/** Foreground coordination: one owned Codex child and workspace-local native history. */
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { stateDirectory } from "../paths.ts";
 import {
-  residentSocketPath,
-  residentStateFilePath,
-  stateDirectory,
-  threadStateFilePath,
-  workersStateFilePath,
-} from "../paths.ts";
-import { RESIDENT_LABEL, readResidentState } from "../resident/contract.ts";
-import {
+  type AccountSelection,
   accountsDirectory,
   balancerCliPresent,
   discoverProfiles,
   listPoolAccounts,
   maxUsedPercent,
   onboardingFailureMessage,
+  reconcileFarm,
   runBalancerCommand,
   selectAccount,
 } from "./accounts.ts";
-import { AppServerError, ResidentAttachment } from "./attach.ts";
+import {
+  AppServerConnection,
+  AppServerError,
+  type AttachOptions,
+  appServerArgv,
+} from "./attach.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
-import { realtimeParams, threadParams, workerThreadParams } from "./params.ts";
+import {
+  ORCHESTRATOR_THREAD_SOURCE,
+  realtimeParams,
+  threadParams,
+  workerThreadParams,
+} from "./params.ts";
 import { VoiceSessionManager } from "./session.ts";
+import { lockThread } from "./thread-lock.ts";
+import { type SessionSelection, selectThread } from "./thread-selection.ts";
+import type { ReadyInfo } from "./voice-types.ts";
 import {
   archiveWorkerThread,
   deleteWorkerThread,
-  type PersistedWorker,
-  parsePersistedWorkers,
   WorkerManager,
   type WorkerSnapshot,
   WorkerTurnStartError,
 } from "./workers.ts";
 
-const REATTACH_BACKOFF_INITIAL_MS = 500;
-const REATTACH_BACKOFF_CAP_MS = 30_000;
-const SHUTDOWN_STOP_TIMEOUT_MS = 1_500;
+export type { ReadyInfo } from "./voice-types.ts";
 
-export interface ReadyInfo {
-  threadId: string;
-  workspace: string;
-  /** null means "codex default". */
-  model: string | null;
-  effort: string | null;
-  voiceModel: string | null;
-  voice: string | null;
-  /** Prompt files priming the agents. */
-  prompts: string[];
-}
-
-/** The runtime's outward face — what the WebSocket protocol used to carry. */
 export interface RuntimeEvents {
-  /** Offers are accepted from now on; re-emitted whenever offers reopen. */
   onReady(info: ReadyInfo): void;
   onAnswer(sdp: string): void;
-  /** The voice session ended; wait for the next onReady, then re-offer. */
   onClosed(reason?: string): void;
-  /** Negotiate a replacement voice session against the same agent. */
   onRedial(reason: string): void;
-  /** fatal: the session is dead — close the peer and wait for onReady. */
   onError(message: string, fatal: boolean): void;
+  onFatal(message: string): void;
   onWorker(worker: WorkerSnapshot): void;
-  /** One-line notices for the event feed. */
   onStatus(line: string): void;
   debug?(line: string): void;
 }
 
-export interface RuntimeOptions {
-  /** Abandon the persisted orchestrator agent and start a fresh thread. */
-  fresh?: boolean;
+export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive">;
+export interface RuntimeOptions extends SessionSelection {
   configSource?: WatchedConfigSource;
-}
-
-interface ThreadReadShape {
-  thread?: {
-    status?: { type?: string };
-    turns?: Array<Record<string, unknown>>;
-  };
-}
-
-function loadThreadState(path: string): string | null {
-  try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-    return typeof raw["threadId"] === "string" ? raw["threadId"] : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Atomic write: a torn state file must never eat the orchestrator agent. */
-function writeStateFile(path: string, value: unknown): void {
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(tmp, path);
+  /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
+  connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
+  locksDir?: string;
+  pickAccount?: () => Promise<AccountSelection>;
 }
 
 export class VoiceRuntime {
-  private readonly config: ServerConfig;
-  private readonly version: string;
-  private readonly events: RuntimeEvents;
-  private readonly socketPath: string;
-  private readonly threadStatePath: string;
-  private readonly workersStatePath: string;
-  private readonly residentStatePath: string;
-  private readonly accountsDir: string;
-  private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
-  private foundPrompts: string[] = [];
-
-  private attachment: ResidentAttachment | null = null;
+  private attachment: RuntimeConnection | null = null;
   private threadId: string | null = null;
   private threadReady = false;
+  private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
+  private foundPrompts: string[] = [];
   private activeVoiceName: string | undefined;
   private activeAccount: string | null = null;
-  private orchestratorTurnActive = false;
   private exhaustedPercent: number | null = null;
   private rotating = false;
-  private reattachFailures = 0;
-  private reattaching = false;
-  private shuttingDown = false;
+  private rotationPromise: Promise<void> | null = null;
   private freshInFlight = false;
-  private workers: WorkerManager | null = null;
+  private shuttingDown = false;
+  private shutdownPromise: Promise<void> | null = null;
+  private readonly abort = new AbortController();
+  private readonly locks = new Map<string, () => void>();
+  private readonly managers = new Map<string, WorkerManager>();
+  private readonly activeTurns = new Map<string, string>();
+  private pendingReports = 0;
   private readonly sessions: VoiceSessionManager;
   private configWatcher: ConfigWatcher | null = null;
 
-  private constructor(config: ServerConfig, version: string, events: RuntimeEvents) {
-    this.config = config;
-    this.version = version;
-    this.events = events;
+  constructor(
+    private readonly config: ServerConfig,
+    private readonly version: string,
+    private readonly events: RuntimeEvents,
+    private readonly options: RuntimeOptions = {},
+  ) {
     this.activeVoiceName = config.voice.name;
-    const home = homedir();
-    this.socketPath = residentSocketPath(process.env, home);
-    this.threadStatePath = threadStateFilePath(process.env, home);
-    this.workersStatePath = workersStateFilePath(process.env, home);
-    this.residentStatePath = residentStateFilePath(process.env, home);
-    this.accountsDir = accountsDirectory(process.env, home);
-
     this.sessions = new VoiceSessionManager({
       sendAnswer: (sdp) => this.events.onAnswer(sdp),
       sendClosed: (reason) => this.events.onClosed(reason),
       sendFailed: (message) => this.events.onError(message, true),
       sendReady: () => this.emitReady(),
-      startRealtime: (realtimeSessionId, sdp) => {
-        const attachment = this.attachment;
+      startRealtime: async (sessionId, sdp) => {
+        const connection = this.attachment;
         const threadId = this.threadId;
-        if (!attachment || !threadId) {
-          return Promise.reject(new AppServerError("not attached to the app-server"));
-        }
-        return attachment
-          .request(
-            "thread/realtime/start",
-            realtimeParams(
-              configWithVoiceName(this.config, this.activeVoiceName),
-              this.prompts,
-              threadId,
-              realtimeSessionId,
-              sdp,
-            ),
-          )
-          .then(() => {});
+        if (!connection || !threadId || this.shuttingDown)
+          throw new AppServerError("Codex is not ready");
+        await connection.request(
+          "thread/realtime/start",
+          realtimeParams(
+            configWithVoiceName(this.config, this.activeVoiceName),
+            this.prompts,
+            threadId,
+            sessionId,
+            sdp,
+          ),
+        );
       },
-      stopRealtime: () => {
-        const attachment = this.attachment;
+      stopRealtime: async () => {
+        const connection = this.attachment;
         const threadId = this.threadId;
-        if (!attachment || !threadId) {
-          return Promise.reject(new AppServerError("not attached to the app-server"));
-        }
-        return attachment.request("thread/realtime/stop", { threadId }).then(() => {});
+        if (connection && threadId)
+          await connection.request("thread/realtime/stop", { threadId }, 1_000);
       },
       debug: (line) => this.events.debug?.(line),
     });
   }
 
-  static async start(
-    config: ServerConfig,
-    version: string,
-    events: RuntimeEvents,
-    options: RuntimeOptions = {},
-  ): Promise<VoiceRuntime> {
-    const runtime = new VoiceRuntime(config, version, events);
-    await runtime.boot(options);
-    return runtime;
-  }
-
   get currentReady(): ReadyInfo | null {
-    if (!this.threadReady || !this.threadId) return null;
+    if (!this.threadReady || !this.threadId || this.shuttingDown) return null;
     return {
       threadId: this.threadId,
       workspace: this.config.orchestrator.workspace,
@@ -211,319 +138,200 @@ export class VoiceRuntime {
   }
 
   workerSnapshots(): WorkerSnapshot[] {
-    return this.workers?.snapshots() ?? [];
+    return this.managers.get(this.threadId ?? "")?.snapshots() ?? [];
   }
 
-  /** The voice peer detached: a session nobody can hear or mute must not outlive it. */
-  voiceGone(): void {
-    if (this.sessions.hasSession) this.sessions.handleClientGone();
-  }
-
-  /** A new offer supersedes whatever voice session is running. */
-  offer(sdp: string): void {
-    if (!this.threadReady || !this.attachment) {
-      this.events.onError("no orchestrator agent yet; wait for ready", false);
-      return;
+  async start(): Promise<void> {
+    try {
+      const workspace = this.config.orchestrator.workspace;
+      if (!statSync(workspace).isDirectory())
+        throw new Error(`Workspace is not a directory: ${workspace}`);
+      // The launch resolver canonicalizes once; do not silently retarget here.
+      if (realpathSync(workspace) !== workspace)
+        throw new Error("Workspace must be a canonical absolute directory");
+      this.prompts = await readPrompts(this.config.configDir);
+      this.foundPrompts = promptFilenames(this.prompts);
+      if (this.prompts.orchestratorBaseInstructions !== undefined) {
+        this.events.onStatus(
+          `warning: ${PROMPT_FILES.orchestratorBaseInstructions} replaces Codex's entire system prompt`,
+        );
+      }
+      if (this.config.accounts.balance && !this.options.pickAccount && balancerCliPresent()) {
+        if (!discoverProfiles(accountsDirectory(process.env, homedir())).some((p) => p.identity)) {
+          throw new Error(
+            onboardingFailureMessage(
+              await listPoolAccounts((argv, ms) => runBalancerCommand(argv, ms, this.abort.signal)),
+            ),
+          );
+        }
+      }
+      await this.openConnection(await this.pickAccount());
+      const connection = this.requireConnection();
+      const id = await selectThread(
+        (method, params) => connection.request(method, params),
+        workspace,
+        this.options,
+      );
+      this.assertRunning();
+      this.threadId = id ? await this.resumeThread(id) : await this.startThread();
+      this.ensureManager(this.threadId);
+      this.threadReady = true;
+      this.emitReady();
+      if (this.options.configSource) {
+        this.configWatcher = new ConfigWatcher(this.options.configSource, this.config, {
+          voiceNameChanged: (name) => {
+            if (this.shuttingDown) return;
+            this.activeVoiceName = name;
+            this.events.onStatus(`voice changed to ${name ?? "upstream default"}`);
+            this.emitReady();
+            if (this.sessions.hasSession) this.events.onRedial("voice-name-changed");
+          },
+          rejected: (error) => this.events.onStatus(`config change ignored: ${String(error)}`),
+        });
+        this.configWatcher.start();
+        void this.configWatcher.reload();
+      }
+    } catch (error) {
+      await this.shutdown();
+      throw error;
     }
+  }
+
+  offer(sdp: string): void {
+    if (!this.threadReady || this.shuttingDown || this.rotating) return;
     this.sessions.handleOffer(sdp);
   }
 
-  /**
-   * Abandon the current orchestrator agent and start a fresh thread. The old
-   * voice session's control plane is stopped silently, then the console is
-   * told to redial: the transport negotiates against the new thread while
-   * the old audio keeps its usual best-effort tail — the same
-   * make-before-break every redial gets, so a pending negotiation cannot
-   * strand the new thread behind a stale peer.
-   */
   async fresh(): Promise<void> {
-    const attachment = this.attachment;
-    if (this.freshInFlight || this.rotating || this.shuttingDown) return;
-    if (!attachment || !this.threadReady) return;
+    if (!this.threadReady || this.freshInFlight || this.rotating || this.shuttingDown) return;
     this.freshInFlight = true;
+    this.threadReady = false;
     try {
-      this.threadReady = false;
-      if (this.sessions.hasSession) this.sessions.handleClientGone();
-      const started = await attachment.request(
-        "thread/start",
-        threadParams(this.config, this.prompts, "start"),
-      );
-      this.threadId = extractThreadId(started);
-      writeStateFile(this.threadStatePath, { threadId: this.threadId });
-      this.threadReady = true;
-      this.events.onStatus(`fresh orchestrator agent (${this.threadId.slice(0, 8)}…)`);
-      this.emitReady();
-      this.events.onRedial("fresh-thread");
+      // Cut media before changing identity; no old audio or SDP enters the new conversation.
+      this.events.onClosed("fresh-thread");
+      await this.sessions.shutdown();
+      this.sessions.reset();
+      this.assertRunning();
+      this.threadId = await this.startThread();
+      this.ensureManager(this.threadId);
+      this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
-      this.threadReady = this.threadId !== null;
-      this.events.onError(
-        `fresh thread failed: ${error instanceof Error ? error.message : String(error)}`,
-        false,
-      );
-      if (this.threadReady) this.emitReady();
+      if (!this.shuttingDown)
+        this.events.onError(`fresh conversation failed: ${String(error)}`, false);
     } finally {
       this.freshInFlight = false;
+      this.threadReady = this.threadId !== null && this.attachment?.alive === true;
+      this.emitReady();
     }
   }
 
-  async shutdown(): Promise<void> {
-    if (this.shuttingDown) return;
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
+    this.threadReady = false;
     this.configWatcher?.stop();
-    await Promise.race([
-      this.sessions.shutdown(),
-      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_STOP_TIMEOUT_MS)),
-    ]);
-    this.persistWorkers();
-    this.attachment?.close();
-    this.attachment = null;
-  }
-
-  // -------------------------------------------------------------------------
-
-  private async boot(options: RuntimeOptions): Promise<void> {
-    mkdirSync(join(stateDirectory(process.env, homedir()), "app-server"), {
-      recursive: true,
-      mode: 0o700,
-    });
-    mkdirSync(this.config.orchestrator.workspace, { recursive: true, mode: 0o700 });
-    this.prompts = await readPrompts(this.config.configDir);
-    this.foundPrompts = promptFilenames(this.prompts);
-    if (this.prompts.orchestratorBaseInstructions !== undefined) {
-      this.events.onStatus(
-        `warning: ${PROMPT_FILES.orchestratorBaseInstructions} replaces codex's entire system prompt`,
-      );
-    }
-
-    // Balancing on + a balancing setup installed + nothing onboarded is a
-    // configuration error, not a degraded mode: exit with the exact commands.
-    if (this.config.accounts.balance && balancerCliPresent()) {
-      const profiles = discoverProfiles(this.accountsDir);
-      if (!profiles.some((profile) => profile.identity !== null)) {
-        throw new Error(onboardingFailureMessage(await listPoolAccounts()));
-      }
-    }
-
-    if (options.fresh !== true) {
-      this.threadId = loadThreadState(this.threadStatePath);
-    }
-
-    // Boot fails fast: the operator is present. Later drops are supervised.
-    await this.attachOnce(true);
-
-    if (options.configSource) {
-      this.configWatcher = new ConfigWatcher(options.configSource, this.config, {
-        voiceNameChanged: (name) => {
-          this.activeVoiceName = name;
-          this.events.onStatus(`voice changed to ${name ?? "upstream default"}`);
-          this.emitReady();
-          if (this.sessions.hasSession) this.events.onRedial("voice-name-changed");
-        },
-        rejected: (error) => {
-          this.events.onStatus(
-            `config change ignored: ${error instanceof Error ? error.message : String(error)}`,
+    for (const manager of this.managers.values()) manager.dispose();
+    this.shutdownPromise = (async () => {
+      try {
+        await this.sessions.shutdown();
+        const connection = this.attachment;
+        if (connection) {
+          await Promise.allSettled(
+            [...this.activeTurns].map(([threadId, turnId]) =>
+              connection.request("turn/interrupt", { threadId, turnId }, 500),
+            ),
           );
-        },
-      });
-      this.configWatcher.start();
-      void this.configWatcher.reload();
-    }
-  }
-
-  /**
-   * One attach → thread → reconcile → ready cycle. Throws on failure.
-   * `bootAttach` marks the console's first attachment: only there are
-   * in-flight orchestrator turns stranded (their console is dead). On a
-   * reattach they may be this console's own work surviving an attachment
-   * blip — resuming re-subscribes their notifications instead.
-   */
-  private async attachOnce(bootAttach: boolean): Promise<void> {
-    // `let` + null guard: a close during the handshake or initialize fires
-    // onClose before connect() resolves — with a `const` binding that
-    // callback would hit the temporal dead zone and throw inside the socket
-    // event handler. The failed connect() rejection is the real signal there.
-    let attachment: ResidentAttachment | null = null;
-    attachment = await ResidentAttachment.connect({
-      socketPath: this.socketPath,
-      clientVersion: this.version,
-      onNotification: (method, params) => this.handleNotification(method, params),
-      onRequest: (method, params) => this.handleRequest(method, params),
-      onClose: (info) => {
-        if (attachment) this.handleDetached(attachment, info);
-      },
-      debug: (line) => this.events.debug?.(line),
-    }).catch((error) => {
-      throw new AppServerError(
-        `${error instanceof Error ? error.message : String(error)}\n` +
-          `Is the resident app-server running? Install it with: agentvoice resident install\n` +
-          `Inspect it with: agentvoice resident status`,
-      );
-    });
-    this.attachment = attachment;
-    this.activeAccount = readResidentState(this.residentStatePath)?.account ?? null;
-    this.exhaustedPercent = null;
-    this.orchestratorTurnActive = false;
-
-    try {
-      this.threadId = await this.openThread(attachment);
-      writeStateFile(this.threadStatePath, { threadId: this.threadId });
-      if (bootAttach) await this.interruptStrandedTurns(attachment, this.threadId);
-      await this.reconcileWorkers(attachment);
-    } catch (error) {
-      this.attachment = null;
-      attachment.close();
-      throw error;
-    }
-    this.threadReady = true;
-    this.events.onStatus(
-      `attached (account: ${this.activeAccount ?? "canonical"}, thread ${this.threadId.slice(0, 8)}…)`,
-    );
-    this.emitReady();
-  }
-
-  private async openThread(attachment: ResidentAttachment): Promise<string> {
-    if (this.threadId) {
-      const previous = this.threadId;
-      this.events.onStatus(`resuming the orchestrator agent (${previous.slice(0, 8)}…)`);
-      try {
-        return extractThreadId(
-          await attachment.request("thread/resume", {
-            threadId: previous,
-            excludeTurns: true,
-            ...threadParams(this.config, this.prompts, "resume"),
-          }),
-        );
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        this.events.onStatus(`thread/resume failed (${detail}); starting fresh`);
-        // A no-rollout thread is definitively pre-turn: it holds nothing and
-        // can never be resumed, but it may still be loaded in the resident.
-        // Delete it so silent console restarts don't accumulate empty threads.
-        if (detail.includes(`no rollout found for thread id ${previous}`)) {
-          attachment.request("thread/delete", { threadId: previous }).catch(() => {});
         }
+      } finally {
+        this.abort.abort();
+        await this.attachment?.close();
+        // Rotation may own an old child that is no longer the attachment,
+        // or a new child still initializing. Do not exit before it is reaped.
+        await this.rotationPromise;
+        this.attachment = null;
+        this.sessions.reset();
+        for (const release of this.locks.values()) release();
+        this.locks.clear();
       }
-    }
-    this.events.onStatus("starting a fresh orchestrator agent…");
-    return extractThreadId(
-      await attachment.request("thread/start", threadParams(this.config, this.prompts, "start")),
+    })();
+    return this.shutdownPromise;
+  }
+
+  private assertRunning(): void {
+    if (this.shuttingDown) throw new Error("AgentVoice is shutting down");
+  }
+
+  private requireConnection(): RuntimeConnection {
+    this.assertRunning();
+    if (!this.attachment?.alive) throw new AppServerError("Codex connection is closed");
+    return this.attachment;
+  }
+
+  private acquire(id: string): void {
+    if (this.locks.has(id)) return;
+    const directory =
+      this.options.locksDir ?? join(stateDirectory(process.env, homedir()), "thread-locks");
+    this.locks.set(id, lockThread(directory, id));
+  }
+
+  private async startThread(): Promise<string> {
+    const result = await this.requireConnection().request(
+      "thread/start",
+      threadParams(this.config, this.prompts, "start"),
     );
+    this.assertRunning();
+    const id = extractThreadId(result);
+    this.acquire(id);
+    return id;
   }
 
-  /**
-   * A turn still in flight on the orchestrator's thread was driven by a
-   * console that no longer exists — and if it is parked on a dispatch tool
-   * call, the answerable connection died with it (an unanswered dynamic tool
-   * call parks its turn indefinitely; verified by resident-probe). Interrupt
-   * rather than adopt: the conversation that wanted the answer is gone.
-   */
-  private async interruptStrandedTurns(
-    attachment: ResidentAttachment,
-    threadId: string,
-  ): Promise<void> {
-    let read: ThreadReadShape;
-    try {
-      read = (await attachment.request("thread/read", {
-        threadId,
-        includeTurns: true,
-      })) as ThreadReadShape;
-    } catch {
-      return; // a fresh thread has nothing to read
+  private async resumeThread(id: string): Promise<string> {
+    this.acquire(id);
+    const connection = this.requireConnection();
+    const read = await connection.request<{
+      thread?: {
+        id?: string;
+        cwd?: string;
+        threadSource?: string;
+        parentThreadId?: string | null;
+        ephemeral?: boolean;
+      };
+    }>("thread/read", { threadId: id });
+    this.assertRunning();
+    if (
+      read.thread?.id !== id ||
+      read.thread.cwd !== this.config.orchestrator.workspace ||
+      read.thread.threadSource !== ORCHESTRATOR_THREAD_SOURCE ||
+      read.thread.parentThreadId ||
+      read.thread.ephemeral
+    ) {
+      throw new Error(`Conversation ${id} no longer matches this AgentVoice workspace`);
     }
-    for (const turn of read.thread?.turns ?? []) {
-      if (turn["status"] !== "inProgress" || typeof turn["id"] !== "string") continue;
-      try {
-        await attachment.request("turn/interrupt", { threadId, turnId: turn["id"] });
-        this.events.onStatus("interrupted a turn stranded by the previous console run");
-      } catch (error) {
-        this.events.debug?.(
-          `stranded-turn interrupt failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    const result = await connection.request("thread/resume", {
+      ...threadParams(this.config, this.prompts, "resume"),
+      threadId: id,
+      excludeTurns: true,
+    });
+    this.assertRunning();
+    if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
+    this.events.onStatus(`continued conversation: ${id}`);
+    return id;
   }
 
-  /** Rebuild the worker registry from disk against the resident's state. */
-  private async reconcileWorkers(attachment: ResidentAttachment): Promise<void> {
-    if (this.config.orchestrator.dispatch !== true) {
-      this.workers = null;
-      return;
-    }
-    const persisted = this.workers?.persistenceRecords() ?? this.loadPersistedWorkers();
-    const manager = this.buildWorkerManager();
-    this.workers = manager;
-    if (persisted.length > 0) {
-      this.events.onStatus(`reconciling ${persisted.length} persisted worker(s)…`);
-    }
-    // Register ownership before any RPC: once the thread below is resumed, a
-    // completion can arrive in the same socket batch as the read response and
-    // would be dropped if ownsThread were still false.
-    for (const record of persisted) manager.adopt(record);
-    for (const record of persisted) {
-      if (record.status !== "running") continue;
-      await this.refineAdoptedWorker(attachment, manager, record.threadId);
-    }
-    this.persistWorkers();
-  }
-
-  /**
-   * Resume the worker's thread (re-subscribing this attachment to its
-   * notifications) and read its state: still active means the completion will
-   * arrive normally; idle means the turn ended while detached and is
-   * finalized from history; a definitively missing thread is lost. Any other
-   * failure leaves the worker running — attachment trouble is not worker
-   * death, and the next reconcile retries.
-   */
-  private async refineAdoptedWorker(
-    attachment: ResidentAttachment,
-    manager: WorkerManager,
-    threadId: string,
-  ): Promise<void> {
-    try {
-      await attachment.request("thread/resume", {
-        threadId,
-        excludeTurns: true,
-        ...workerThreadParams(this.config, "resume"),
-      });
-      const read = (await attachment.request("thread/read", {
-        threadId,
-        includeTurns: true,
-      })) as ThreadReadShape;
-      if (read.thread?.status?.type === "active") return;
-      const turns = read.thread?.turns ?? [];
-      manager.handleTurnCompleted(threadId, turns[turns.length - 1] ?? {});
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      if (detail.includes("thread not found") || detail.includes("no rollout found")) {
-        manager.markLost(threadId);
-        return;
-      }
-      this.events.debug?.(`worker reconcile deferred for ${threadId}: ${detail}`);
+  private ensureManager(parentId: string): void {
+    if (this.config.orchestrator.dispatch === true && !this.managers.has(parentId)) {
+      this.managers.set(parentId, this.buildWorkerManager(parentId));
     }
   }
 
-  private loadPersistedWorkers(): PersistedWorker[] {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(readFileSync(this.workersStatePath, "utf8"));
-    } catch {
-      return [];
-    }
-    const { workers, dropped } = parsePersistedWorkers(raw);
-    if (dropped > 0) {
-      this.events.onStatus(`workers.json: dropped ${dropped} malformed record(s)`);
-    }
-    return workers;
-  }
-
-  private buildWorkerManager(): WorkerManager {
-    let manager: WorkerManager;
+  private buildWorkerManager(parentId: string): WorkerManager {
     const request = (method: string, params: unknown) => {
       const attachment = this.attachment;
-      if (!attachment) return Promise.reject(new AppServerError("not attached to the app-server"));
+      if (!attachment || this.shuttingDown)
+        return Promise.reject(new AppServerError("not attached to the app-server"));
       return attachment.request(method, params);
     };
-    manager = new WorkerManager(
+    const manager = new WorkerManager(
       {
         startWorkerThread: async () => ({
           threadId: extractThreadId(await request("thread/start", workerThreadParams(this.config))),
@@ -558,15 +366,14 @@ export class VoiceRuntime {
         scheduleCleanupRetry(run, delayMs) {
           setTimeout(run, delayMs).unref();
         },
-        reportToOrchestrator: (text) => this.reportToOrchestrator(text, "worker report"),
+        reportToOrchestrator: (text) => this.reportToOrchestrator(parentId, text),
         onWorkerUpdate: (worker) => {
-          if (this.workers !== manager) return; // a superseded registry
+          if (this.shuttingDown || this.threadId !== parentId) return;
           this.events.onWorker(worker);
-          this.persistWorkers();
         },
         onWorkSettled: () => {
-          if (this.workers !== manager) return;
-          this.persistWorkers();
+          if (this.shuttingDown) return;
+
           this.maybeRotate();
         },
         now: () => Date.now(),
@@ -577,37 +384,16 @@ export class VoiceRuntime {
     return manager;
   }
 
-  /**
-   * Fire and forget a report turn at the orchestrator: upstream admission
-   * steers it into a running turn or opens a fresh one; a failure only loses
-   * one report.
-   */
-  private reportToOrchestrator(text: string, kind: string): void {
-    const attachment = this.attachment;
-    const threadId = this.threadId;
-    if (!attachment || !threadId) {
-      this.events.onStatus(`${kind} dropped: not attached to the app-server`);
-      return;
-    }
-    attachment
-      .request("turn/start", { threadId, input: [{ type: "text", text }] })
-      .catch((error) => {
-        this.events.onStatus(
-          `${kind} failed to land: ${error instanceof Error ? error.message : String(error)}`,
-        );
+  private reportToOrchestrator(parentId: string, text: string): void {
+    if (this.shuttingDown || !this.attachment?.alive) return;
+    this.pendingReports++;
+    void this.attachment
+      .request("turn/start", { threadId: parentId, input: [{ type: "text", text }] })
+      .catch((error) => this.events.onStatus(`worker report failed: ${String(error)}`))
+      .finally(() => {
+        this.pendingReports--;
+        this.maybeRotate();
       });
-  }
-
-  private persistWorkers(): void {
-    if (this.config.orchestrator.dispatch !== true) return;
-    const workers = this.workers?.persistenceRecords() ?? [];
-    try {
-      writeStateFile(this.workersStatePath, { workers });
-    } catch (error) {
-      this.events.debug?.(
-        `worker persistence failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   private emitReady(): void {
@@ -616,30 +402,25 @@ export class VoiceRuntime {
   }
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
-    if (method === "turn/started" && params["threadId"] === this.threadId) {
-      this.orchestratorTurnActive = true;
-    } else if (method === "turn/completed" && params["threadId"] === this.threadId) {
-      this.orchestratorTurnActive = false;
-    } else if (method === "account/rateLimits/updated" && this.config.accounts.balance) {
+    if (this.shuttingDown) return;
+    const id = params["threadId"];
+    const turn = (params["turn"] ?? {}) as Record<string, unknown>;
+    if (typeof id === "string") {
+      if (method === "turn/started" && typeof turn["id"] === "string")
+        this.activeTurns.set(id, turn["id"]);
+      if (method === "turn/completed") {
+        this.activeTurns.delete(id);
+        for (const manager of this.managers.values()) {
+          if (manager.ownsThread(id)) manager.handleTurnCompleted(id, turn);
+        }
+      }
+      if (id === this.threadId && method.startsWith("thread/realtime/"))
+        this.sessions.handleNotification(method, params);
+    }
+    if (method === "account/rateLimits/updated" && this.config.accounts.balance) {
       const used = maxUsedPercent(params);
       this.exhaustedPercent =
         used !== null && used >= this.config.accounts.switchThreshold ? used : null;
-    }
-    if (method === "turn/completed" && this.workers) {
-      const turnThread = params["threadId"];
-      if (typeof turnThread === "string" && this.workers.ownsThread(turnThread)) {
-        this.workers.handleTurnCompleted(
-          turnThread,
-          (params["turn"] ?? {}) as Record<string, unknown>,
-        );
-      }
-      this.maybeRotate();
-      return;
-    }
-    if (method.startsWith("thread/realtime/")) {
-      if (params["threadId"] === undefined || params["threadId"] === this.threadId) {
-        this.sessions.handleNotification(method, params);
-      }
     }
     this.maybeRotate();
   }
@@ -648,107 +429,103 @@ export class VoiceRuntime {
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> | null {
-    if (method !== "item/tool/call" || !this.workers) return null;
-    // Only the orchestrator's thread carries the dispatch tools; anything
-    // else falls through to the fail-closed denial.
-    if (params["threadId"] !== this.threadId) return null;
-    const tool = typeof params["tool"] === "string" ? params["tool"] : "";
-    const args = (params["arguments"] ?? {}) as Record<string, unknown>;
-    return this.workers.handleToolCall(tool, args);
-  }
-
-  private handleDetached(
-    attachment: ResidentAttachment,
-    info: { expected: boolean; error?: string },
-  ): void {
-    if (this.attachment !== attachment) return; // an attachment we replaced
-    this.attachment = null;
-    this.threadReady = false;
-    this.orchestratorTurnActive = false;
-    const hadSession = this.sessions.hasSession;
-    this.sessions.reset(); // the voice session cannot outlive the attachment
-    this.persistWorkers(); // workers may still be alive; reconcile on reattach
-    if (this.shuttingDown || info.expected) return;
-    if (hadSession) this.events.onClosed("app-server-detached");
-    this.events.onStatus(
-      `resident app-server detached${info.error ? ` (${info.error})` : ""}; reattaching`,
+    if (this.shuttingDown || method !== "item/tool/call") return null;
+    const id = params["threadId"];
+    const manager = typeof id === "string" ? this.managers.get(id) : undefined;
+    if (!manager) return null;
+    return manager.handleToolCall(
+      typeof params["tool"] === "string" ? params["tool"] : "",
+      (params["arguments"] ?? {}) as Record<string, unknown>,
     );
-    this.scheduleReattach();
   }
 
-  private scheduleReattach(): void {
-    if (this.reattaching || this.shuttingDown) return;
-    this.reattaching = true;
-    const delay = Math.min(
-      REATTACH_BACKOFF_INITIAL_MS * 2 ** this.reattachFailures,
-      REATTACH_BACKOFF_CAP_MS,
+  private async pickAccount(): Promise<AccountSelection> {
+    this.assertRunning();
+    if (!this.config.accounts.balance) return { kind: "canonical", reason: "balancing disabled" };
+    if (this.options.pickAccount) return this.options.pickAccount();
+    return selectAccount(discoverProfiles(accountsDirectory(process.env, homedir())), (argv, ms) =>
+      runBalancerCommand(argv, ms, this.abort.signal),
     );
-    setTimeout(() => {
-      void (async () => {
-        try {
-          await this.attachOnce(false);
-          this.reattachFailures = 0;
-        } catch (error) {
-          this.reattachFailures++;
-          this.events.onStatus(
-            `reattach failed (${error instanceof Error ? error.message : String(error)})`,
-          );
-        } finally {
-          this.reattaching = false;
-          if (!this.attachment && !this.shuttingDown) this.scheduleReattach();
-        }
-      })();
-    }, delay);
   }
 
-  /**
-   * An exhausted account rotates only between things: never under a voice
-   * session, a running orchestrator turn, or live workers. The balancer is
-   * consulted first — picking the already-active account disarms instead of
-   * restarting into the same exhaustion. The restart itself is launchd's:
-   * kickstart re-runs the wrapper, whose pick is authoritative.
-   */
+  private async openConnection(selection: AccountSelection): Promise<void> {
+    this.assertRunning();
+    const env = { ...process.env };
+    if (selection.kind === "profile") {
+      reconcileFarm(
+        env["CODEX_HOME"] ?? join(homedir(), ".codex"),
+        selection.profile.directory,
+        (line) => this.events.onStatus(line),
+      );
+      env["CODEX_HOME"] = selection.profile.directory;
+    }
+    let connection: RuntimeConnection | null = null;
+    connection = await (this.options.connect ?? AppServerConnection.connect)({
+      argv: appServerArgv(this.config.codex),
+      cwd: this.config.orchestrator.workspace,
+      env,
+      signal: this.abort.signal,
+      clientVersion: this.version,
+      onNotification: (method, params) => this.handleNotification(method, params),
+      onRequest: (method, params) => this.handleRequest(method, params),
+      onClose: (info) => {
+        if (this.shuttingDown || this.attachment !== connection || info.expected) return;
+        this.threadReady = false;
+        this.sessions.reset();
+        this.events.onFatal(info.error ?? "Codex connection closed");
+      },
+      debug: (line) => this.events.debug?.(line),
+    });
+    if (this.shuttingDown || !connection.alive) {
+      await connection.close();
+      throw new Error("Codex stopped during startup");
+    }
+    this.attachment = connection;
+    this.activeAccount = selection.kind === "profile" ? selection.email : null;
+    this.exhaustedPercent = null;
+  }
+
+  private idle(): boolean {
+    return (
+      !this.shuttingDown &&
+      !this.freshInFlight &&
+      this.threadReady &&
+      !this.sessions.hasSession &&
+      this.activeTurns.size === 0 &&
+      this.pendingReports === 0 &&
+      ![...this.managers.values()].some((manager) => manager.hasUnfinishedWork())
+    );
+  }
+
   private maybeRotate(): void {
-    if (this.exhaustedPercent === null || this.rotating || this.shuttingDown) return;
-    if (!this.config.accounts.balance || !this.attachment || !this.threadReady) return;
-    if (this.freshInFlight || this.reattaching) return;
-    if (this.sessions.hasSession || this.orchestratorTurnActive) return;
-    if (this.workers?.hasUnfinishedWork()) return;
+    if (
+      !this.config.accounts.balance ||
+      this.exhaustedPercent === null ||
+      this.rotating ||
+      !this.idle()
+    )
+      return;
     this.rotating = true;
-    const usedPercent = this.exhaustedPercent;
-    void (async () => {
+    this.rotationPromise = (async () => {
       try {
-        const selection = await selectAccount(
-          discoverProfiles(this.accountsDir),
-          runBalancerCommand,
-        );
+        const selection = await this.pickAccount();
+        if (!this.idle()) return;
         if (selection.kind === "canonical" || selection.email === this.activeAccount) {
-          this.exhaustedPercent = null; // nothing better; re-armed by the next update
+          this.exhaustedPercent = null;
           return;
         }
-        // Re-check every idle gate: the balancer call yielded, and a voice
-        // session, fresh(), or a detachment may have started meanwhile.
-        if (
-          !this.attachment ||
-          !this.threadReady ||
-          this.freshInFlight ||
-          this.reattaching ||
-          this.sessions.hasSession ||
-          this.orchestratorTurnActive ||
-          this.workers?.hasUnfinishedWork()
-        ) {
-          return;
-        }
-        this.events.onStatus(
-          `rotating off ${this.activeAccount ?? "canonical"} (${usedPercent}% used) to ${selection.email}`,
-        );
-        await kickstartResident();
-        // The attachment drops as the resident restarts; the reattach loop
-        // resumes the same orchestrator agent under the wrapper's new pick.
+        this.threadReady = false;
+        const old = this.attachment;
+        this.attachment = null;
+        await old?.close();
+        await this.openConnection(selection);
+        if (this.threadId) await this.resumeThread(this.threadId);
+        this.threadReady = true;
+        this.events.onStatus(`rotated to ${selection.email}`);
+        this.rotating = false;
+        this.emitReady();
       } catch (error) {
-        this.events.onStatus(
-          `rotation failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        if (!this.shuttingDown) this.events.onFatal(`account rotation failed: ${String(error)}`);
       } finally {
         this.rotating = false;
       }
@@ -759,21 +536,6 @@ export class VoiceRuntime {
 function extractThreadId(result: unknown): string {
   const shape = result as { thread?: { id?: string }; threadId?: string };
   const id = shape?.thread?.id ?? shape?.threadId;
-  if (!id) throw new AppServerError("app-server returned no thread id");
+  if (typeof id !== "string" || !id) throw new AppServerError("app-server returned no thread id");
   return id;
-}
-
-/** `launchctl kickstart -k`: restart the resident under launchd supervision. */
-export async function kickstartResident(): Promise<void> {
-  const uid = process.getuid?.();
-  if (uid === undefined) throw new Error("no uid; launchctl needs a gui domain");
-  const child = Bun.spawn(["launchctl", "kickstart", "-k", `gui/${uid}/${RESIDENT_LABEL}`], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const code = await child.exited;
-  if (code !== 0) {
-    const stderr = await new Response(child.stderr).text();
-    throw new Error(`launchctl kickstart failed (${code}): ${stderr.trim()}`);
-  }
 }

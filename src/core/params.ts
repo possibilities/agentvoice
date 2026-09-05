@@ -63,7 +63,11 @@ export function threadParams(
       params["dynamicTools"] = dispatchTools(orchestrator.dispatchReports === true);
     }
   }
-  const merged = { ...params, ...orchestrator.extra };
+  const merged: Record<string, unknown> = {
+    ...params,
+    ...orchestrator.extra,
+    cwd: orchestrator.workspace,
+  };
   // Thread identity is owned by AgentVoice, not the generic extra escape
   // hatch: inventory must remain reliable under every configuration.
   if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;

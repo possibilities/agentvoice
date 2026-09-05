@@ -1,38 +1,13 @@
-/**
- * The one Console host: a control-attachment peer around the shared TUI.
- * With a media engine it is the Console — role `voice`, owning the duplex
- * audio device, the WebRTC peer, and both mute gates, applying every command
- * locally and publishing instrument state up. Without one it is a Remote
- * console — role `ui`, mirroring the Server's fan-out and sending commands.
- *
- * Mute authority lives with the media engine, never the link: local inputs
- * reach the gates with zero network hops, and a dropped link releases every
- * remote-sourced hold — a stranded hold must never outlive the ability of
- * anyone to release it. A `voice-superseded` frame demotes a running Console
- * in place: media stops, and the same host continues as a mirror.
- */
-
-import { randomBytes } from "node:crypto";
+/** One foreground host: TUI, media, and coordination share this process. */
 import { appendFileSync, mkdirSync } from "node:fs";
-import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  CONTROL_PROTOCOL_VERSION,
-  type ControlCommand,
-  type ControlState,
-  encodeControlFrame,
-  parseServerFrame,
-  type VoiceStateBody,
-} from "../core/control-protocol.ts";
-import { controlProofPayload } from "../core/pairing.ts";
+import type { ServerConfig } from "../core/config.ts";
+import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
 import { stateDirectory } from "../paths.ts";
-import { type AudioTarget, MuteGate, type UnmuteHoldSource } from "./audio-control.ts";
-// The media engine is imported lazily: the ui role (including the Android
-// Remote console package) must never load werift or the native duplex device.
-import type { DuplexVoiceAudio } from "./duplex-audio.ts";
-import { connectPinnedWebSocket } from "./pinned-websocket.ts";
-import type { TransportPhase, VoiceTransport } from "./transport.ts";
+import { type AudioTarget, MuteGate } from "./audio-control.ts";
+import type { DuplexVoiceAudio, VoiceAudioOptions } from "./duplex-audio.ts";
+import type { TransportPhase, VoiceTransport, VoiceTransportOptions } from "./transport.ts";
 import {
   createVoiceTui,
   type VoiceTui,
@@ -41,686 +16,222 @@ import {
   type VoiceTuiState,
 } from "./tui.ts";
 
-const RECONNECT_MS = 750;
-/** Comfortably inside the Server's hold-releasing heartbeat deadline. */
-const PING_INTERVAL_MS = 1_500;
-/** Meter cadence for the voice-state stream; discrete changes publish now. */
-const PUBLISH_INTERVAL_MS = 100;
-const PREFLIGHT_TIMEOUT_MS = 500;
-
 export class ConsoleError extends Error {}
-
-/** A unix socket path, a fixed network Server, or a route resolver such as Android discovery. */
-export type ConsoleTarget = string | NetworkTarget | ConsoleTargetResolver;
-
-export interface ConsoleTargetResolver {
-  resolve(): Promise<NetworkTarget>;
-  close?(): void | Promise<void>;
-}
-
-export interface NetworkTarget {
-  host: string;
-  port: number;
-  token?: string;
-  /** WSS with an unverified certificate is reserved for manual token diagnosis. */
-  secure?: boolean;
-  tls?: {
-    ca: string;
-    serverName: string;
-  };
-  device?: {
-    id: string;
-    sign(payload: Uint8Array): Promise<string>;
-    /**
-     * Verifies the Server's `auth-proof` over this connection's
-     * serverChallenge. Present makes the proof mandatory: no frame is
-     * trusted before it lands, and a bad proof drops the link.
-     */
-    verifyServer?(challenge: string, signature: string): boolean;
-  };
-}
-
-/** Present means this host is the Console: role `voice`, audio in-process. */
 export interface MediaOptions {
   deviceIndex?: number;
   outputDeviceIndex?: number;
 }
-
+export type HostAudio = Pick<
+  DuplexVoiceAudio,
+  "start" | "stop" | "attachRemote" | "detachRemote" | "micMuted" | "speakerMuted"
+>;
+export type HostTransport = Pick<
+  VoiceTransport,
+  | "sendOpusFrame"
+  | "stop"
+  | "redial"
+  | "handleReady"
+  | "handleAnswer"
+  | "handleClosed"
+  | "handleRedial"
+  | "handleSignalLost"
+  | "handleError"
+  | "liveForMs"
+>;
 export interface ConsoleHostOptions {
   media?: MediaOptions;
-  /** Abandon the persisted orchestrator agent once attached. */
-  fresh?: boolean;
+  runtime?: RuntimeOptions;
   debug?: boolean;
   tui?: VoiceTuiOptions;
-}
-
-/** One attachment attempt; the caller owns retrying it. */
-interface ControlLink {
-  send(frame: string): void;
-  close(): void;
+  /** Injectable media boundary for tests that must not capture a microphone. */
+  mediaFactory?: {
+    check(): void;
+    audio(options: VoiceAudioOptions): HostAudio;
+    transport(options: VoiceTransportOptions): HostTransport;
+  };
 }
 
 export async function runConsoleHost(
-  target: ConsoleTarget,
+  config: ServerConfig,
+  version: string,
   options: ConsoleHostOptions = {},
 ): Promise<void> {
-  const media = options.media ?? null;
-  if (media) {
-    // Fail before taking over the terminal or touching the Server.
-    const { duplexAudioAvailabilityError } = await import("./duplex-device.ts");
-    const availabilityError = duplexAudioAvailabilityError();
-    if (availabilityError) throw new ConsoleError(availabilityError);
-    if (typeof target === "string" && !(await socketReachable(target))) {
-      throw new ConsoleError(
-        `cannot reach the Server at ${target}\n` +
-          `Install the daemon pair with: agentvoice server install\n` +
-          `Inspect it with: agentvoice server status`,
-      );
-    }
-  }
-
+  const factory = options.mediaFactory ?? (await nativeMediaFactory());
+  factory.check();
   let debugLog: ((line: string) => void) | undefined;
   if (options.debug) {
-    const stateDir = stateDirectory(process.env, homedir());
-    mkdirSync(stateDir, { recursive: true });
-    const path = join(stateDir, "console-debug.log");
-    debugLog = (line: string) => {
+    const directory = join(stateDirectory(process.env, homedir()), "runs");
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const path = join(directory, `${Date.now()}-${process.pid}.log`);
+    debugLog = (line) => {
       try {
-        appendFileSync(path, `${new Date().toISOString()} ${line}\n`);
+        appendFileSync(path, `${new Date().toISOString()} ${line}\n`, { mode: 0o600 });
       } catch {
-        // Debug logging must never break the Console.
+        /* logging is best effort */
       }
     };
-    debugLog(`console start (${media ? "voice" : "ui"} role)`);
   }
-  const feed = (line: string): void => debugLog?.(`feed: ${line}`);
-
-  let latest: ControlState | null = null;
-  let link: ControlLink | null = null;
-  let connected = false;
-  let serverChallenge: string | null = null;
-  let serverVerified = true;
+  const feed = (line: string) => debugLog?.(line);
+  let tui: VoiceTui | null = null;
+  let runtime: VoiceRuntime | null = null;
   let closed = false;
   let fatal: string | null = null;
-  let freshQueued = options.fresh === true;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let pingTimer: ReturnType<typeof setInterval> | null = null;
-  let tui: VoiceTui | null = null;
-  let activeTarget: string | NetworkTarget | null = null;
-  let connectAttempt = 0;
-
-  const send = (command: ControlCommand): void => {
-    if (!connected || !link) return;
-    link.send(encodeControlFrame(command));
-  };
-
-  // ---- the media engine (Console role only) --------------------------------
-
-  let mediaActive = media !== null;
+  let shutdownPromise: Promise<void> | null = null;
   const meters = { mic: -Infinity, agent: -Infinity };
   const microphone = new MuteGate();
   const speaker = new MuteGate();
-  const localUnmuteSources: Record<VoiceTuiInput, Record<AudioTarget, symbol>> = {
-    pointer: {
-      mic: Symbol("console-mic-pointer"),
-      speaker: Symbol("console-speaker-pointer"),
-    },
-    key: { mic: Symbol("console-mic-key"), speaker: Symbol("console-speaker-key") },
-    space: { mic: Symbol("console-mic-space"), speaker: Symbol("console-speaker-space") },
-  };
-  /** Remote-sourced holds now open, released wholesale when the link drops. */
-  const remoteHolds: Record<AudioTarget, Set<string>> = {
-    mic: new Set(),
-    speaker: new Set(),
-  };
   let phase: TransportPhase = "waiting-ready";
-  let publishTimer: ReturnType<typeof setInterval> | null = null;
-
-  let audio: DuplexVoiceAudio | null = null;
-  let transport: VoiceTransport | null = null;
-  if (media) {
-    const [duplexAudio, voiceTransport] = await Promise.all([
-      import("./duplex-audio.ts"),
-      import("./transport.ts"),
-    ]);
-    audio = new duplexAudio.DuplexVoiceAudio({
-      deviceIndex: media.deviceIndex,
-      outputDeviceIndex: media.outputDeviceIndex,
-      sendFrame: (frame) => transport?.sendOpusFrame(frame),
-      onMicLevel: (db) => {
-        meters.mic = db;
-      },
-      onAgentLevel: (db) => {
-        meters.agent = db;
-      },
-      onWarning: (line) => feed(line),
-      debug: debugLog,
-    });
-    transport = new voiceTransport.VoiceTransport({
-      signal: { offer: (sdp) => send({ type: "offer", sdp }) },
-      debug: debugLog,
-      onPhase: (next) => {
-        phase = next;
-        tui?.refresh();
-        // Phase is discrete: ui peers should not wait out the meter tick.
-        publishVoiceState();
-      },
-      onReady: () => tui?.refresh(),
-      onRemoteTrack: (track) => audio?.attachRemote(track),
-      onOaiEvent: (event) => {
-        const type = typeof event["type"] === "string" ? event["type"] : "";
-        debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`);
-        if (type === "session.started" || type === "session.created") {
-          const session = event["session"] as Record<string, unknown> | undefined;
-          const model = typeof session?.["model"] === "string" ? ` · ${session["model"]}` : "";
-          feed(`voice session started${model}`);
-          return;
-        }
-        if (type === "turn.done") {
-          const turn = event["turn"] as Record<string, unknown> | undefined;
-          const transcript =
-            typeof turn?.["transcript"] === "string" ? turn["transcript"].trim() : "";
-          if (!transcript) return;
-          const isUser = turn?.["role"] === "user";
-          const line = `${isUser ? "you" : "agent"} · ${transcript.length > 70 ? `${transcript.slice(0, 69)}…` : transcript}`;
-          feed(line);
-          return;
-        }
-        if (type === "error") feed(`upstream: ${JSON.stringify(event).slice(0, 90)}`);
-      },
-      onInfo: feed,
-      onError: feed,
-    });
-  }
-
-  function voiceBody(): VoiceStateBody {
-    return {
-      phase,
-      liveForMs: transport?.liveForMs ?? null,
-      mic: {
-        muted: microphone.muted,
-        effectiveMuted: microphone.effectiveMuted,
-        db: Number.isFinite(meters.mic) ? meters.mic : null,
-      },
-      speaker: {
-        muted: speaker.muted,
-        effectiveMuted: speaker.effectiveMuted,
-        db: Number.isFinite(meters.agent) ? meters.agent : null,
-      },
-    };
-  }
-
-  function publishVoiceState(): void {
-    if (!mediaActive) return;
-    send({ type: "voice-state", voice: voiceBody() });
-  }
-
-  function muteGate(target: AudioTarget): MuteGate {
-    return target === "mic" ? microphone : speaker;
-  }
-
-  function setMutedLocal(target: AudioTarget, muted: boolean): void {
-    publishMuteChange(target, muteGate(target).setMuted(muted));
-  }
-
-  function beginUnmuteLocal(target: AudioTarget, source: UnmuteHoldSource): void {
-    publishMuteChange(target, muteGate(target).beginUnmute(source));
-  }
-
-  function releaseUnmuteLocal(target: AudioTarget, source: UnmuteHoldSource, commit = false): void {
-    publishMuteChange(target, muteGate(target).releaseUnmute(source, commit));
-  }
-
-  function publishMuteChange(target: AudioTarget, changed: boolean): void {
-    if (!changed || !audio) return;
-    const gate = muteGate(target);
-    if (target === "mic") audio.micMuted = gate.effectiveMuted;
-    else audio.speakerMuted = gate.effectiveMuted;
-    const talking = target === "mic" && gate.muted && !gate.effectiveMuted;
-    feed(
-      `${target === "mic" ? "microphone" : "speaker"} ${talking ? "talking" : gate.effectiveMuted ? "muted" : "live"}`,
-    );
-    tui?.refresh();
-    publishVoiceState();
-  }
-
-  function releaseRemoteHolds(): void {
-    for (const target of ["mic", "speaker"] as const) {
-      for (const source of [...remoteHolds[target]]) {
-        releaseUnmuteLocal(target, source, false);
-      }
-      remoteHolds[target].clear();
-    }
-  }
-
-  /** Another Console took the voice role; carry on as a mirror. */
-  function demote(): void {
-    if (!mediaActive) return;
-    tui?.cancelInputs();
-    mediaActive = false;
-    if (publishTimer) clearInterval(publishTimer);
-    publishTimer = null;
-    releaseRemoteHolds();
-    void transport?.stop();
-    void audio?.stop();
-    feed("superseded: another Console owns the audio; mirroring from here");
-    tui?.refresh();
-  }
-
-  // ---- the shared TUI ------------------------------------------------------
-
-  function state(): VoiceTuiState {
-    if (mediaActive) {
-      return {
-        available: true,
-        phase,
-        liveForMs: transport?.liveForMs ?? null,
-        mic: {
-          muted: microphone.muted,
-          effectiveMuted: microphone.effectiveMuted,
-          db: meters.mic,
-        },
-        speaker: {
-          muted: speaker.muted,
-          effectiveMuted: speaker.effectiveMuted,
-          db: meters.agent,
-        },
-      };
-    }
-    const voice = connected ? (latest?.voice ?? null) : null;
-    return {
-      available: voice !== null,
-      phase: voice?.phase ?? "waiting-ready",
-      liveForMs: voice?.liveForMs ?? null,
-      mic: {
-        muted: voice?.mic.muted ?? false,
-        effectiveMuted: voice?.mic.effectiveMuted ?? false,
-        db: voice?.mic.db ?? -Infinity,
-      },
-      speaker: {
-        muted: voice?.speaker.muted ?? false,
-        effectiveMuted: voice?.speaker.effectiveMuted ?? false,
-        db: voice?.speaker.db ?? -Infinity,
-      },
-    };
-  }
-
-  async function shutdownHost(): Promise<void> {
-    if (closed) return;
-    closed = true;
-    debugLog?.("console shutdown");
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (pingTimer) clearInterval(pingTimer);
-    if (publishTimer) clearInterval(publishTimer);
-    reconnectTimer = null;
-    pingTimer = null;
-    publishTimer = null;
-    if (audio) audio.micMuted = true;
-    await (isTargetResolver(target) ? target.close?.() : undefined);
-    link?.close();
-    link = null;
-    connected = false;
-    await audio?.stop().catch(() => {});
-    await transport?.stop().catch(() => {});
-  }
-
-  tui = await createVoiceTui(
-    {
-      state,
-      setMuted: (target, muted) => {
-        if (mediaActive) setMutedLocal(target, muted);
-        else send({ type: "set-muted", target, muted });
-      },
-      beginUnmute: (target, input) => {
-        if (mediaActive) beginUnmuteLocal(target, localUnmuteSources[input][target]);
-        else send({ type: "hold-unmuted", target, input });
-      },
-      releaseUnmute: (target, input, commit) => {
-        if (mediaActive) releaseUnmuteLocal(target, localUnmuteSources[input][target], commit);
-        else send({ type: "release-unmuted", target, input, commit });
-      },
-      redial: () => {
-        if (mediaActive) transport?.redial("manual");
-        else send({ type: "redial" });
-      },
-      fresh: () => send({ type: "fresh" }),
-      shutdown: shutdownHost,
+  let transport: HostTransport | null = null;
+  const sources: Record<VoiceTuiInput, Record<AudioTarget, symbol>> = {
+    pointer: { mic: Symbol("mic-pointer"), speaker: Symbol("speaker-pointer") },
+    key: { mic: Symbol("mic-key"), speaker: Symbol("speaker-key") },
+    space: { mic: Symbol("mic-space"), speaker: Symbol("speaker-space") },
+  };
+  const audio = factory.audio({
+    ...options.media,
+    sendFrame: (frame) => transport?.sendOpusFrame(frame),
+    onMicLevel: (db) => {
+      meters.mic = db;
     },
-    options.tui ?? {},
+    onAgentLevel: (db) => {
+      meters.agent = db;
+    },
+    onWarning: feed,
+    debug: debugLog,
+  });
+  transport = factory.transport({
+    signal: { offer: (sdp) => runtime?.offer(sdp) },
+    debug: debugLog,
+    onPhase: (next) => {
+      phase = next;
+      tui?.refresh();
+    },
+    onReady: (info) => {
+      feed(`workspace ${info.workspace} · conversation ${info.threadId}`);
+      tui?.refresh();
+    },
+    onRemoteTrack: (track) => audio.attachRemote(track),
+    onOaiEvent: (event) => debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`),
+    onInfo: feed,
+    onError: feed,
+  });
+
+  const fail = (message: string) => {
+    if (closed) return;
+    fatal = message;
+    void tui?.shutdown();
+  };
+  runtime = new VoiceRuntime(
+    config,
+    version,
+    {
+      onReady: (info) => transport?.handleReady(info),
+      onAnswer: (sdp) => {
+        void transport?.handleAnswer(sdp);
+      },
+      onClosed: (reason) => {
+        if (reason === "fresh-thread") {
+          transport?.handleSignalLost();
+          audio.detachRemote();
+        } else transport?.handleClosed(reason);
+      },
+      onRedial: (reason) => transport?.handleRedial(reason),
+      onError: (message, isFatal) => transport?.handleError(message, isFatal),
+      onFatal: fail,
+      onWorker: (worker) => feed(`worker ${worker.id}: ${worker.status}`),
+      onStatus: feed,
+      debug: debugLog,
+    },
+    options.runtime,
   );
 
-  // ---- the control link ----------------------------------------------------
-
-  /** Applies one decoded frame; a refusal ends the session rather than retrying. */
-  const receive = (line: string): void => {
-    const frame = parseServerFrame(line);
-    if (!frame) return;
-    if (!serverVerified) {
-      if (frame.type === "auth-proof") {
-        const networkTarget = typeof activeTarget === "object" ? activeTarget : null;
-        const verifier = networkTarget?.device?.verifyServer;
-        if (verifier && serverChallenge && verifier(serverChallenge, frame.signature)) {
-          serverVerified = true;
-          debugLog?.("server identity proven");
-        } else {
-          debugLog?.("server identity proof failed; dropping the link");
-          link?.close();
-        }
-        return;
-      }
-      debugLog?.(`frame dropped before server proof: ${frame.type}`);
-      return;
-    }
-    if (frame.type === "auth-proof") return;
-    switch (frame.type) {
-      case "state":
-        latest = frame;
-        return;
-      case "reject": {
-        if (closed) return;
-        fatal = `the Server refused this console: ${frame.reason}`;
-        void shutdownHost();
-        void tui?.shutdown();
-        return;
-      }
-      default:
-        break;
-    }
-    if (!mediaActive || !transport) return;
-    switch (frame.type) {
-      case "session-ready":
-        transport.handleReady(frame.info);
-        return;
-      case "session-answer":
-        void transport.handleAnswer(frame.sdp);
-        return;
-      case "session-closed":
-        transport.handleClosed(frame.reason);
-        return;
-      case "session-redial":
-        transport.handleRedial(frame.reason);
-        return;
-      case "session-error":
-        transport.handleError(frame.message, frame.fatal);
-        return;
-      case "voice-superseded":
-        demote();
-        return;
-      case "route-set-muted":
-        setMutedLocal(frame.target, frame.muted);
-        return;
-      case "route-hold":
-        remoteHolds[frame.target].add(frame.source);
-        beginUnmuteLocal(frame.target, frame.source);
-        return;
-      case "route-release":
-        remoteHolds[frame.target].delete(frame.source);
-        releaseUnmuteLocal(frame.target, frame.source, frame.commit);
-        return;
-      case "route-redial":
-        transport.redial("remote");
-        return;
-      default:
-        return;
-    }
-  };
-
-  const onBatch = (): void => {
+  function gate(target: AudioTarget): MuteGate {
+    return target === "mic" ? microphone : speaker;
+  }
+  function syncMute(target: AudioTarget): void {
+    if (target === "mic") audio.micMuted = microphone.effectiveMuted;
+    else audio.speakerMuted = speaker.effectiveMuted;
     tui?.refresh();
-  };
-
-  const onOpen = (device?: { id: string; signature: string }): void => {
-    connected = true;
-    const networkTarget = typeof activeTarget === "object" ? activeTarget : null;
-    const requireProof = device !== undefined && networkTarget?.device?.verifyServer !== undefined;
-    serverChallenge = requireProof ? randomBytes(24).toString("base64url") : null;
-    serverVerified = !requireProof;
-    link?.send(
-      encodeControlFrame({
-        type: "hello",
-        protocol: CONTROL_PROTOCOL_VERSION,
-        role: mediaActive ? "voice" : "ui",
-        ...(networkTarget?.token ? { token: networkTarget.token } : {}),
-        ...(device ? { device } : {}),
-        ...(serverChallenge ? { serverChallenge } : {}),
-      }),
-    );
-    if (networkTarget) {
-      pingTimer = setInterval(() => send({ type: "ping" }), PING_INTERVAL_MS);
-      pingTimer.unref?.();
-    }
-    if (freshQueued) {
-      freshQueued = false;
-      send({ type: "fresh" });
-    }
-    if (mediaActive) {
-      publishVoiceState();
-      publishTimer = setInterval(publishVoiceState, PUBLISH_INTERVAL_MS);
-      publishTimer.unref?.();
-    }
-    tui?.refresh();
-  };
-
-  const onClose = (): void => {
-    if (pingTimer) clearInterval(pingTimer);
-    if (publishTimer) clearInterval(publishTimer);
-    pingTimer = null;
-    publishTimer = null;
-    link = null;
-    connected = false;
-    latest = null;
-    tui?.cancelInputs();
-    if (mediaActive) {
-      // Fail safe: with the Server gone, nobody can release a remote hold.
-      releaseRemoteHolds();
-      transport?.handleSignalLost();
-    }
-    tui?.refresh();
-    if (!closed) reconnectTimer = setTimeout(connect, RECONNECT_MS);
-  };
-
-  function connect(): void {
-    if (closed) return;
-    const attempt = ++connectAttempt;
-    const open = (resolved: string | NetworkTarget): void => {
-      if (closed || attempt !== connectAttempt) return;
-      activeTarget = resolved;
-      link =
-        typeof resolved === "string"
-          ? connectSocket(resolved, { onOpen, onFrame: receive, onBatch, onClose })
-          : connectWebSocket(resolved, mediaActive ? "voice" : "ui", {
-              onOpen,
-              onFrame: receive,
-              onBatch,
-              onClose,
-              ...(debugLog ? { debug: debugLog } : {}),
-            });
+  }
+  function state(): VoiceTuiState {
+    return {
+      available: !closed,
+      phase,
+      liveForMs: transport?.liveForMs ?? null,
+      mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted, db: meters.mic },
+      speaker: { muted: speaker.muted, effectiveMuted: speaker.effectiveMuted, db: meters.agent },
     };
-    if (!isTargetResolver(target)) {
-      open(target);
-      return;
-    }
-    void target
-      .resolve()
-      .then((resolved) => {
-        debugLog?.(`route resolved: ${typeof resolved === "string" ? resolved : resolved.host}`);
-        open(resolved);
-      })
-      .catch((error) => {
-        debugLog?.(
-          `route resolution failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        if (!closed && attempt === connectAttempt)
-          reconnectTimer = setTimeout(connect, RECONNECT_MS);
-      });
+  }
+  function shutdown(): Promise<void> {
+    if (shutdownPromise) return shutdownPromise;
+    closed = true;
+    audio.micMuted = true;
+    shutdownPromise = (async () => {
+      await Promise.allSettled([audio.stop(), transport?.stop(), runtime?.shutdown()]);
+    })();
+    return shutdownPromise;
   }
 
-  if (audio) {
-    try {
-      await audio.start();
-    } catch (error) {
-      await tui.shutdown();
-      throw new ConsoleError(error instanceof Error ? error.message : String(error));
-    }
+  try {
+    tui = await createVoiceTui(
+      {
+        state,
+        setMuted: (target, muted) => {
+          gate(target).setMuted(muted);
+          syncMute(target);
+        },
+        beginUnmute: (target, input) => {
+          gate(target).beginUnmute(sources[input][target]);
+          syncMute(target);
+        },
+        releaseUnmute: (target, input, commit) => {
+          gate(target).releaseUnmute(sources[input][target], commit);
+          syncMute(target);
+        },
+        redial: () => transport?.redial("manual"),
+        fresh: () => {
+          void runtime?.fresh();
+        },
+        shutdown,
+      },
+      options.tui,
+    );
+    // Handlers exist before asynchronous startup, so quitting during initialization works too.
+    const boot = (async () => {
+      try {
+        await audio.start();
+        if (!closed) await runtime!.start();
+      } catch (error) {
+        if (!closed) fail(error instanceof Error ? error.message : String(error));
+      } finally {
+        // A device may finish opening after the initial quit cleanup.
+        if (closed) {
+          await audio.stop();
+          await shutdown();
+        }
+      }
+    })();
+    await tui.done;
+    await boot;
+  } finally {
+    await shutdown();
+    await tui?.shutdown();
   }
-  connect();
-  await tui.done;
   if (fatal) throw new ConsoleError(fatal);
 }
 
-// ---------------------------------------------------------------------------
-
-interface LinkHandlers {
-  onOpen(device?: { id: string; signature: string }): void;
-  onFrame(line: string): void;
-  /** One redraw per arrival, not per frame in it. */
-  onBatch(): void;
-  onClose(): void;
-  debug?(line: string): void;
-}
-
-function connectSocket(socketPath: string, handlers: LinkHandlers): ControlLink {
-  const socket: Socket = createConnection(socketPath);
-  let buffered = "";
-  socket.setEncoding("utf8");
-  socket.on("connect", handlers.onOpen);
-  socket.on("data", (chunk: string) => {
-    buffered += chunk;
-    for (;;) {
-      const newline = buffered.indexOf("\n");
-      if (newline === -1) break;
-      handlers.onFrame(buffered.slice(0, newline));
-      buffered = buffered.slice(newline + 1);
-    }
-    handlers.onBatch();
-  });
-  socket.on("error", () => {});
-  socket.on("close", handlers.onClose);
+async function nativeMediaFactory(): Promise<NonNullable<ConsoleHostOptions["mediaFactory"]>> {
+  const [device, audio, transport] = await Promise.all([
+    import("./duplex-device.ts"),
+    import("./duplex-audio.ts"),
+    import("./transport.ts"),
+  ]);
   return {
-    send: (frame) => {
-      if (!socket.destroyed) socket.write(frame);
+    check() {
+      const error = device.duplexAudioAvailabilityError();
+      if (error) throw new ConsoleError(error);
     },
-    close: () => socket.destroy(),
+    audio: (options) => new audio.DuplexVoiceAudio(options),
+    transport: (options) => new transport.VoiceTransport(options),
   };
-}
-
-/** Cross-machine attachment over plaintext diagnostics or verified WSS. */
-function connectWebSocket(
-  target: NetworkTarget,
-  role: "ui" | "voice",
-  handlers: LinkHandlers,
-): ControlLink {
-  let settled = false;
-  let proofStarted = false;
-  let transport: ControlLink | null = null;
-  const onTransportOpen = (): void => {
-    handlers.debug?.(`link open: ${target.host}:${target.port}`);
-    if (!target.device) handlers.onOpen();
-  };
-  const onText = (text: string): void => {
-    const frame = parseServerFrame(text);
-    if (target.device && frame?.type === "auth-challenge") {
-      if (proofStarted) return;
-      proofStarted = true;
-      const device = target.device;
-      void device
-        .sign(
-          controlProofPayload({
-            challenge: frame.challenge,
-            protocol: CONTROL_PROTOCOL_VERSION,
-            role,
-            deviceId: device.id,
-          }),
-        )
-        .then((signature) => {
-          if (!settled) handlers.onOpen({ id: device.id, signature });
-        })
-        .catch(() => transport?.close());
-      return;
-    }
-    handlers.onFrame(text);
-    handlers.onBatch();
-  };
-  const onTransportClose = (error?: Error): void => {
-    if (settled) return;
-    settled = true;
-    handlers.debug?.(
-      `link closed: ${target.host}:${target.port}${error ? ` ${error.message}` : ""}`,
-    );
-    handlers.onClose();
-  };
-
-  if (target.tls) {
-    transport = connectPinnedWebSocket(
-      {
-        host: target.host,
-        port: target.port,
-        ca: target.tls.ca,
-        serverName: target.tls.serverName,
-      },
-      {
-        onOpen: onTransportOpen,
-        onText,
-        onClose: onTransportClose,
-        debug: handlers.debug,
-      },
-    );
-    return transport;
-  }
-
-  const secure = target.secure === true;
-  const socket = new WebSocket(
-    `${secure ? "wss" : "ws"}://${formatHost(target.host)}:${target.port}`,
-    secure ? { tls: { rejectUnauthorized: false } } : undefined,
-  );
-  transport = {
-    send: (frame) => {
-      if (socket.readyState === WebSocket.OPEN) socket.send(frame);
-    },
-    close: () => socket.close(),
-  };
-  socket.addEventListener("open", onTransportOpen);
-  socket.addEventListener("message", (event: MessageEvent) => {
-    if (typeof event.data === "string") onText(event.data);
-  });
-  socket.addEventListener("error", (event: Event) =>
-    onTransportClose(new Error((event as { message?: string }).message ?? "WebSocket error")),
-  );
-  socket.addEventListener("close", (event: CloseEvent) =>
-    onTransportClose(event.code === 1000 ? undefined : new Error(`WebSocket closed ${event.code}`)),
-  );
-  return transport;
-}
-
-function isTargetResolver(target: ConsoleTarget): target is ConsoleTargetResolver {
-  return (
-    typeof target === "object" &&
-    target !== null &&
-    "resolve" in target &&
-    typeof target.resolve === "function"
-  );
-}
-
-/** Bare IPv6 literals need brackets in a URL authority. */
-function formatHost(host: string): string {
-  return host.includes(":") ? `[${host}]` : host;
-}
-
-function socketReachable(path: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection(path);
-    const timer = setTimeout(() => {
-      socket.destroy();
-      resolve(false);
-    }, PREFLIGHT_TIMEOUT_MS);
-    socket.once("connect", () => {
-      clearTimeout(timer);
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("error", () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
-  });
 }

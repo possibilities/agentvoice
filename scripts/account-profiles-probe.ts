@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { buildDenialResponse } from "../src/core/attach.ts";
-import { REALTIME_FEATURE } from "../src/resident/contract.ts";
+
+const REALTIME_FEATURE = "realtime_conversation";
 
 // The probe still exercises the stdio transport — profile mechanics are
 // transport-independent, and stdio needs no socket scaffolding here.

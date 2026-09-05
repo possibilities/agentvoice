@@ -8,27 +8,24 @@
   },
   "private": true,
   "type": "module",
-  "description": "Minimal voice server over the Codex app-server realtime (WebRTC) surface.",
+  "description": "Foreground Codex voice TUI with workspace-local native conversations.",
   "bin": {
     "agentvoice": "./src/main.ts"
   },
   "scripts": {
     "console": "bun run src/main.ts console",
-    "server": "bun run src/main.ts server run",
     "setup": "bun run scripts/setup.ts",
-    "android:package": "droidedtui package .",
-    "android:run": "droidedtui run .",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",
     "accounts:probe": "bun run scripts/account-profiles-probe.ts",
     "field:demo": "bun run scripts/signal-field-demo.ts",
-    "resident:probe": "bun run scripts/resident-probe.ts",
     "cli:install": "bun run scripts/install.ts",
     "generate:schema": "bun run scripts/generate-schema.ts && biome check --write server.schema.json",
     "test": "bun test tests",
     "typecheck": "tsc --noEmit",
     "lint": "biome check",
-    "format": "biome check --write"
+    "format": "biome check --write",
+    "app-server:probe": "bun run scripts/app-server-probe.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
@@ -43,8 +40,5 @@
     "opusscript": "^0.1.1",
     "werift": "^0.24.3",
     "zod": "^4.4.3"
-  },
-  "optionalDependencies": {
-    "droidedtui": "file:../droidedtui"
   }
 }

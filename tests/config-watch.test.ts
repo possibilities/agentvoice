@@ -16,7 +16,6 @@ function config(voiceName: string | undefined, model = "orchestrator-a"): Server
       model,
     },
     voice: { version: "v3", name: voiceName },
-    remote: { listen: null, port: 8473, token: null, allowAnyAddress: false },
   };
 }
 

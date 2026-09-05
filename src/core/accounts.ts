@@ -300,9 +300,16 @@ export async function selectAccount(
   return { kind: "canonical", reason: lastReason };
 }
 
-/** Default balancer runner: spawn, bounded, stdout captured, stderr passed. */
-export async function runBalancerCommand(argv: string[], timeoutMs: number): Promise<BalancerRun> {
-  const child = Bun.spawn(argv, { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+/** Default balancer runner: bounded/cancellable; never writes into the TUI. */
+export async function runBalancerCommand(
+  argv: string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<BalancerRun> {
+  if (signal?.aborted) throw new Error("account selection cancelled");
+  const child = Bun.spawn(argv, { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const abort = () => child.kill("SIGKILL");
+  signal?.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
   try {
     const stdout = await new Response(child.stdout).text();
@@ -310,6 +317,7 @@ export async function runBalancerCommand(argv: string[], timeoutMs: number): Pro
     return { exitCode, stdout };
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
   }
 }
 
@@ -406,7 +414,7 @@ export function onboardingFailureMessage(pool: PoolAccount[]): string {
     "",
     "Each login binds its profile to whichever account approves the device",
     "code, so use a browser window signed into the account you mean.",
-    "Then restart the server. To run single-account instead, set",
+    "Then launch agentvoice again. To run single-account instead, set",
     "accounts.balance: false.",
   ].join("\n");
 }

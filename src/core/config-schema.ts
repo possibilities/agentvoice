@@ -43,11 +43,6 @@ export const DEFAULT_REALTIME_VERSION: RealtimeVersion = "v3";
 
 export const DEFAULT_SWITCH_THRESHOLD = 95;
 
-export const DEFAULT_REMOTE_PORT = 8473;
-
-/** Short enough to guess is short enough to reject at load. */
-export const MINIMUM_REMOTE_TOKEN_LENGTH = 16;
-
 /** An object whose contents forward verbatim — never recursed or validated. */
 const passthrough = (description: string) => z.looseObject({}).describe(description);
 
@@ -57,7 +52,7 @@ export const accountsValuesSchema = z
       .boolean()
       .meta({
         description:
-          "Ask the balancer (`agentusage balance codex`, falling back to `codex-swap select`) which account to run on at every app-server child spawn. Needs profiles: `agentvoice accounts add <slug>` once per account — with codex-swap installed and none logged in, boot exits with the exact onboarding commands. Without the balancer CLIs, or on transient refusals, the server falls back to the canonical home loudly. Default: false (the canonical ~/.codex and whatever `codex login` put there).",
+          "Ask the balancer (`agentusage balance codex`, falling back to `codex-swap select`) which account to run on at every app-server child spawn. Needs profiles: `agentvoice accounts add <slug>` once per account — with codex-swap installed and none logged in, boot exits with the exact onboarding commands. Without the balancer CLIs, or on transient refusals, the app falls back to the canonical home loudly. Default: false (the canonical ~/.codex and whatever `codex login` put there).",
         default: false,
       })
       .optional(),
@@ -81,7 +76,7 @@ export const orchestratorValuesSchema = z
     workspace: z
       .string()
       .describe(
-        "The agent's working directory (its cwd; an AGENTS.md there applies). Tilde-expanded. Default: the user's home directory.",
+        "The conversation workspace: native session selection, the Codex thread, and workers use this root. Tilde-expanded; relative paths use the launch directory. Default: launch cwd. --workspace overrides this value.",
       )
       .optional(),
     dispatch: z
@@ -115,7 +110,7 @@ export const orchestratorValuesSchema = z
     personality: z
       .enum(PERSONALITIES)
       .describe(
-        "Orchestrator personality. Silently disabled when ORCHESTRATOR_BASE.md replaces the system prompt (the server warns at boot). Default: codex config.",
+        "Orchestrator personality. Silently disabled when ORCHESTRATOR_BASE.md replaces the system prompt (the app warns at boot). Default: codex config.",
       )
       .optional(),
     sandbox: z
@@ -152,13 +147,15 @@ export const orchestratorValuesSchema = z
       .optional(),
     "runtime-workspace-roots": z
       .array(z.string())
-      .describe("Replaces the thread's workspace roots. Entries are tilde-expanded.")
+      .describe(
+        "Replaces the thread's workspace roots. Entries are tilde-expanded; relative entries resolve inside the selected workspace.",
+      )
       .optional(),
     config: passthrough(
       "Raw ~/.codex/config.toml overrides, applied to this thread only. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history.",
     ).optional(),
     extra: passthrough(
-      "Raw thread/start passthrough, merged last — anything the protocol accepts but this file does not name yet. Typos surface as RPC errors at boot, not as config errors.",
+      "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Conflicting cwd and threadId/path/history overrides are rejected. Upstream can silently ignore unknown or start-only fields on resume; consult its protocol.",
     ).optional(),
   })
   .meta({
@@ -250,53 +247,11 @@ export const voiceValuesSchema = z
       })
       .optional(),
     extra: passthrough(
-      "Raw thread/realtime/start passthrough, merged last. outputModality and transport are owned by the server and belong here if you ever need them.",
+      "Raw thread/realtime/start passthrough, merged last. threadId and realtimeSessionId overrides are rejected. Changing transport or outputModality can disable this TUI's audio path.",
     ).optional(),
   })
   .meta({
     description: "Primes the voice agent — the realtime speech model the user talks to.",
-  });
-
-export const remoteValuesSchema = z
-  .strictObject({
-    listen: z
-      .string()
-      .meta({
-        description:
-          "Optional address override for the authenticated TLS listener. Unset binds all interfaces so paired Remote consoles can race Bonjour LAN and remembered Tailscale routes; every route is treated as hostile and admitted by the pinned Server identity plus per-device proof.",
-        default: null,
-      })
-      .optional(),
-    port: z
-      .int()
-      .min(1)
-      .max(65535)
-      .meta({
-        description: "Port for the authenticated TLS listener and Bonjour service.",
-        default: DEFAULT_REMOTE_PORT,
-      })
-      .optional(),
-    token: z
-      .string()
-      .min(MINIMUM_REMOTE_TOKEN_LENGTH)
-      .meta({
-        description:
-          "Optional compatibility secret accepted from the manual `agentvoice remote --host` diagnostic path. Normal Android Remote consoles pair once and prove an individual Keystore identity instead.",
-        default: null,
-      })
-      .optional(),
-    "allow-any-address": z
-      .boolean()
-      .meta({
-        description:
-          "Retained compatibility setting from the pre-TLS listener; it no longer changes address admission because every network route now uses authenticated TLS and per-peer admission.",
-        default: false,
-      })
-      .optional(),
-  })
-  .meta({
-    description:
-      "The authenticated TLS listener used by paired Remote consoles over same-LAN discovery or remembered Tailscale routes, plus the optional manual-token diagnostic path.",
   });
 
 const serverShape = {
@@ -309,7 +264,6 @@ const serverShape = {
   accounts: accountsValuesSchema.optional(),
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
-  remote: remoteValuesSchema.optional(),
 };
 
 /** What the loader validates: `server.json` contents with `$schema` already stripped. */
@@ -327,11 +281,9 @@ export const configFileSchema = z.strictObject({
 export type AccountsValues = z.infer<typeof accountsValuesSchema>;
 export type OrchestratorValues = z.infer<typeof orchestratorValuesSchema>;
 export type VoiceValues = z.infer<typeof voiceValuesSchema>;
-export type RemoteValues = z.infer<typeof remoteValuesSchema>;
 export type ConfigValues = z.infer<typeof configValuesSchema>;
 
 export const SERVER_KEYS: ReadonlyArray<string> = Object.keys(serverShape);
 export const ACCOUNTS_KEYS: ReadonlyArray<string> = Object.keys(accountsValuesSchema.shape);
 export const ORCHESTRATOR_KEYS: ReadonlyArray<string> = Object.keys(orchestratorValuesSchema.shape);
 export const VOICE_KEYS: ReadonlyArray<string> = Object.keys(voiceValuesSchema.shape);
-export const REMOTE_KEYS: ReadonlyArray<string> = Object.keys(remoteValuesSchema.shape);

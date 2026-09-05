@@ -1,5 +1,8 @@
 # 0004: A resident Server owns the coordination runtime
 
+Superseded by [0009: One foreground app, one workspace per launch](0009-one-foreground-workspace.md).
+The design below is historical, not active runtime behavior.
+
 Superseding 0002's "attaches to the Client" and amending 0003: the
 coordination runtime — the attachment to the resident, the persisted
 orchestrator agent, workers, rotation — moves out of the Console into a

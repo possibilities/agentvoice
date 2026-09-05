@@ -1,116 +1,82 @@
 # agentvoice — repository guidance
 
-Minimal voice system for Codex: a launchd-resident Server (the
-coordination runtime) attached to a launchd-resident `codex app-server`
-over a private unix socket, with the voice console and Remote consoles as
-control-attachment peers of the Server. Read
-`README.md` for usage, `CONTEXT.md` for the glossary — use its canonical
-terms in code, comments, and commit messages.
+A foreground Codex voice TUI: one AgentVoice process owns UI, audio, WebRTC
+and coordination; an owned stock Codex app-server child provides agents/tools
+over native stdio. No background Server, resident, control attachment or remote
+mode. Read README.md for usage, CONTEXT.md for vocabulary and ADR 0009 for
+workspace/ownership rules. Historical ADRs describe former designs, not active
+implementation.
 
 ## Commands
 
-- `bun run test` — unit tests in `tests/` (pure logic only; no codex or audio needed)
-- `bun run typecheck` — `tsc --noEmit`, strict with `noUncheckedIndexedAccess`
-- `bun run lint` / `bun run format` — Biome check / autofix
-- `bun run console` — the real thing (needs the daemon pair installed:
-  `agentvoice server install`, codex ≥ 0.147 logged in, a built duplex
-  device, and a microphone)
-- `bun run server` — the Server in the foreground (what the LaunchAgent
-  invokes; `agentvoice server install` is the daemon form)
-- `bun run native:build` / `bun run audio:probe` — build and exercise the
-  duplex audio device (needs Zig or a C11 compiler; the probe needs audio
-  hardware). `bun run setup` builds it; the console will not start without it
-- `bun run resident:probe` — live verification of the resident-transport
-  semantics (spawns its own app-server on a scratch socket; spends a few tiny
-  turns and seconds of realtime session). Re-run before bumping the supported
-  codex version
-- `bun run accounts:probe` — live verification of account-profile mechanics
+- `bun run test` — tests in tests/, fake protocol/media, no credentials or mic.
+  Do not run bare `bun test`: it can discover dependency/vendor tests.
+- `bun run typecheck` — strict TypeScript, no emit.
+- `bun run lint` / `bun run format` — Biome checks / fixes.
+- `bun run console` — foreground TUI; needs Codex login and built native audio.
+- `bun run native:build` / `bun run audio:probe` — build / exercise audio.
+  The latter opens hardware; never substitute it for a no-microphone UI test.
+- `bun run app-server:probe` — initialize and workspace-filtered list against
+  an owned stock child, no turns/audio. Verify before Codex runtime upgrades.
+- `bun run accounts:probe` — separate live account/profile/inference probe.
+- `bun run generate:schema` — regenerate server.schema.json after schema edits.
 
-## Map
+## Source map
 
-One program, four layers. `src/` root holds the entry and shared utilities;
-everything else belongs to exactly one layer.
+- src/main.ts: foreground CLI, console alias, workspace canonicalization;
+  accounts subcommand remains separate. Former service/remote verbs error.
+- src/paths.ts: config/state locations and tilde expansion.
+- src/core/config-schema.ts: single source of truth for config keys and docs;
+  strict outer objects, open config/extra passthroughs, optional means unset.
+- src/core/config.ts: CLI > file > default resolution and prompt-file loading.
+- src/core/params.ts: pure config/prompts → native thread and realtime requests.
+  Codex normally ignores unknown fields; do not promise errors on passthrough typos.
+- src/core/attach.ts: owned child, native UTF-8 JSONL framing, correlated RPC,
+  notifications, default approval denials, bounded shutdown of its process group.
+- src/core/thread-selection.ts: paginated native history lookup in exact workspace,
+  AgentVoice main source only; no global pointer or separate session index.
+- src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
+- src/core/runtime.ts: launch/resume/Fresh, session and per-parent worker managers,
+  child lifecycle, idle account rotation, config watcher. No reattachment/restart
+  adoption. Keep old parent identity/locks while workers can still report there.
+- src/core/session.ts: counted native voice starts/stops and attribution.
+- src/core/workers.ts: optional dynamic dispatch/check/cancel, report composition,
+  archival retries. In-memory per-parent state only, disposed on quit.
+- src/core/accounts.ts: optional balancer selection, account-profile symlink farm,
+  distinct login grants and native shared history; no launchctl.
+- src/console/host.ts: direct in-process runtime/media/TUI wiring and quit cleanup.
+- src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.
+- src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
+  capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
+- src/console/tui.ts + signal-field*.ts + src/tui/palette.ts: one full-height
+  signal field, mute/PTT, palette; no peer mirroring.
 
-- `src/main.ts` — CLI entry: `console`, `server`, `resident`, `accounts`,
-  and `remote` are subcommands; the bare command prints usage
-- `src/paths.ts` — XDG path resolution: state files, the resident socket,
-  the config location
-- `src/core/` — the coordination layer (attached to the resident, no UI),
-  plus the pure codecs both sides of the control attachment share:
-  - `config-schema.ts` — the `server.json` surface as a zod schema, the
-    single source of truth: `config.ts` validates files with it, and
-    `scripts/generate-schema.ts` generates `server.schema.json` from it.
-    Every field is `.optional()` with no zod `.default()` so unset stays unset
-  - `config.ts` — config resolution (CLI > `server.json` > default); unset
-    options are not sent to codex at all. Values nest under `orchestrator` and
-    `voice` by which agent they prime, not by which RPC carries them. Also owns
-    prompt-file discovery (`PROMPT_FILES`)
-  - `params.ts` — pure config+prompts → `thread/start`, `thread/resume`, and
-    `thread/realtime/start` payloads; tested in `tests/params.test.ts`
-  - `ws-frame.ts` — pure RFC 6455 client codec for the resident's socket
-    transport; tested in `tests/ws-frame.test.ts`
-  - `control-protocol.ts` — the control attachment's wire protocol (v9),
-    pure: peer roles (`ui`/`voice`), state fan-out, routed audio commands,
-    and the session-signaling frames that were the in-process
-    runtime↔transport interface; tested in `tests/control-protocol.test.ts`
-  - `attach.ts` — the attachment: JSON-RPC over WebSocket framing over the
-    resident's unix socket; request/notify, notification fan-out, fail-closed
-    denial of approval requests (an optional `onRequest` answerer may claim a
-    request first; everything else denies)
-  - `session.ts` — the voice-session state machine (supersede, attribution);
-    pure effects-injected logic, tested in `tests/session.test.ts`
-  - `workers.ts` — worker dispatch under `orchestrator.dispatch`: the three
-    dynamic tools, the worker registry, worker-report composition, and
-    restart adoption (`adopt`/`persistenceRecords`); pure effects-injected
-    logic, tested in `tests/workers.test.ts`
-  - `accounts.ts` — account profiles and balanced selection under
-    `accounts.balance`: identity/balancer-output parsing (pure), the symlink
-    farm, selection with canonical fallback; tested in
-    `tests/accounts.test.ts`, upstream mechanics re-verified by
-    `scripts/account-profiles-probe.ts`
-  - `runtime.ts` — wiring: the attachment lifecycle (reattach with backoff;
-    the resident process itself is launchd's job), the persisted orchestrator
-    thread (resume on attach, `fresh` to abandon), stranded-turn interruption
-    and worker reconciliation on attach, rotation via `launchctl kickstart` at idle
-- `src/server/` — the Server (`com.agentvoice.server`, launchd-resident,
-  headless): `control.ts` (both control listeners — the owner-only unix
-  socket, which is also the single-Server lock, and the authenticated WSS
-  listener for pinned paired devices plus optional token diagnostics — with
-  peer admission, roles, and voice-peer supersede; see `docs/adr/0003-*`
-  through `0005-*`), `host.ts` (`server run`:
-  hosts the runtime, relays session signaling to the voice peer, routes ui
-  commands, fans state out; originates no inference), `install.ts` (the
-  LaunchAgent: install ensures the resident first, and the config-layer CLI
-  flags are baked into its spawn contract)
-- `src/console/` — the surface, a control-attachment peer: `host.ts` (the one
-  host for both roles — with a media engine it is the Console/voice peer,
-  without one the Remote console/ui peer; media imports stay lazy so the
-  Android package never loads them), `transport.ts` (werift WebRTC peer,
-  two-peer redial, driven by session frames off the link), `duplex-audio.ts`
-  + `duplex-device.ts` + `native/` (the duplex audio device — the only audio
-  path), `dsp.ts` (pure audio math, tested), and `tui.ts` (the one OpenTUI
-  instrument both roles share)
-- `src/resident/` — the resident bundle: `contract.ts` (spawn contract,
-  socket, account state file), `install.ts` (wrapper + LaunchAgent rendering,
-  install/status/restart/uninstall, and the wrapper's per-spawn `pick-home`)
-- `server.schema.json` — the whole config surface, every key typed and
-  documented; generated from the zod schema in `src/core/config-schema.ts`
-  by `bun run generate:schema` (a test fails on drift, and the generator
-  throws on an undocumented key). `server.json.example` must stay a
-  verbatim-copy no-op; a test asserts that. Adding a config key means
-  declaring and describing it in `config-schema.ts` — the loader and the
-  published schema both follow, and the drift gate enforces regeneration.
+## Ownership and state invariants
 
-**One `AGENTS.md`, at the root.** Codex loads only the chain from the project
-root down to the thread's cwd and never descends into subdirectories
-(`codex-rs/core/src/agents_md.rs`; confirmed on 0.147 with a two-level probe).
-pi is the same shape from the other direction: at startup it walks from cwd up
-through every ancestor, taking one guidance file per directory — `AGENTS.md`
-before `CLAUDE.md` — and never descends either
-(`@earendil-works/pi-coding-agent` 0.84.1, `dist/core/resource-loader.js`,
-`loadProjectContextFiles`). Since both run here with cwd at the repo root, a
-`src/core/AGENTS.md` would be read *never* — it would rot unnoticed. Only
-Claude Code loads a subtree `CLAUDE.md` on demand when it reads files there.
+Resolve one existing absolute real workspace before spawning the child:
+CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
+thread start/resume and workers; relative runtime roots use it too. Reject
+conflicting cwd and identity escape hatches. This is selection, not filesystem
+sandboxing or memory isolation.
+
+Default continue uses native unarchived history, newest updated first, with
+sourceKinds appServer (the upstream default excludes it), all providers, exact cwd,
+agentvoice-orchestrator source, no parent and non-ephemeral. Explicit resume
+must be found in that inventory. Do not hide lookup/resume failures as Fresh.
+
+Fresh cuts media before switching identity. Keep workers tied to their original
+parent, even once a new conversation is active. Quitting ends voice and app-owned
+work and closes the child. Old thread.json/workers.json and native history are
+never rewritten, imported or removed. Per-thread locks allow independent launches;
+an old background version or another client does not participate in that guard.
+
+App state: thread-locks/, optional accounts/, and opt-in unique runs/ logs under
+~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
+remain ~/.config/agentvoice/server.json and adjacent markdown files. Account
+profile homes keep independent auth.json and share canonical native state.
+
+Do not silently install, restart/uninstall old services, change global config,
+edit archive checkouts or start inference/audio probes. Those require scope.
 
 ## Upstream realtime semantics (verified against codex 0.147 source + probes)
 
@@ -169,75 +135,21 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
     between stores. Cross-profile resume and grant coexistence are re-verified
     by `bun run accounts:probe`.
 
-## Resident-transport semantics (verified by `bun run resident:probe` on 0.147)
-
-These invariants are load-bearing for `attach.ts` and `runtime.ts`
-(`codex-rs/app-server-transport/src/transport/unix_socket.rs`,
-`codex-rs/app-server/src/lib.rs`, `request_processors/thread_processor.rs`):
-
-12. `--listen unix://PATH` serves a **WebSocket handshake over the unix
-    stream** (tokio-tungstenite `accept_async`) — hence the hand-rolled
-    client codec in `ws-frame.ts`; Bun's native WebSocket cannot dial unix
-    sockets. The socket is created 0600 and upstream requires a private
-    (0700, owned) parent directory; unix socket paths cap at ~104 bytes
-    (`SUN_LEN`). No auth policy applies on the unix path — filesystem
-    permissions are the boundary — while the TCP `ws://` listener carries
-    Origin rejection and auth requirements upstream. **`Bun.connect`
-    `socket.write` is a partial write** — the macOS unix-socket send buffer
-    is 8 KiB, and an ignored remainder truncates the stream mid-frame,
-    hanging the peer forever on the declared length (a ~9 KiB
-    `thread/start` carrying ORCHESTRATOR.md did exactly this). Every write
-    goes through `SocketOutbox` in `attach.ts`, flushed on `drain`.
-13. Socket mode is multi-connection and persists across disconnects
-    (`single_client_mode` is stdio-only). Each connection runs its own
-    `initialize` with `experimentalApi`. Threads and **running turns survive
-    a dropped connection**; `thread/resume` works mid-turn and re-subscribes
-    the new connection to that thread's notifications. Notifications emitted
-    while no connection was attached are **never replayed** — reconcile by
-    reading state (`thread/read`), not by waiting.
-14. A pre-turn thread has no rollout: `thread/resume` fails with "no rollout
-    found", yet the thread may still be loaded in the resident. `runtime.ts`
-    deletes such a thread when falling back to a fresh start, so silent
-    console restarts don't accumulate empty loaded threads.
-15. An **unanswered dynamic tool call parks its turn indefinitely** (thread
-    `active`, turn `inProgress`, ≥60 s observed); `turn/interrupt` clears it.
-    The answerable connection dies with the Server, so on attach the runtime
-    interrupts turns stranded on the orchestrator's thread.
-16. The realtime surface works identically from a socket connection —
-    start/sdp answer/started/stop all verified over `unix://` with the
-    ordinary ChatGPT bearer (invariant 10 is model-side, not client-side).
 
 ## Conventions
 
-- Comments state constraints the code can't show; no narration.
-- `Record<string, unknown>` access uses bracket keys (hence Biome's
-  `useLiteralKeys` is off).
-- Full-screen TUIs are chromeless: no header or footer rows. Critical
-  signals (phase, timer, mode) float over the full-bleed signal field as a
-  translucent overlay — status top-center, each voice's label and readout
-  over its outlined touch zone, push-to-talk over the bottom band — and every
-  action lives in the ctrl+k command palette (`src/tui/palette.ts`: type to
-  filter, enter to run, rows tappable), which is also the key reference.
-  Direct hotkeys stay bound while it is closed; ctrl+c always falls
-  through.
-- The orchestrator agent's cwd is the user's home directory by default
-  (`orchestrator.workspace` overrides it); it is expected to make its own
-  per-task working directories rather than write there directly. Nothing
-  under the state dir is the agent's workspace.
-- State on disk under `~/.local/state/agentvoice/` (`$XDG_STATE_HOME`
-  honored): `app-server` (stable resident cwd — must
-  outlive the process; it re-reads its own cwd on every thread start),
-  `resident/` (0700: the app-server socket, rendered wrapper, pick log, and
-  `resident.json` account state), `server/` (0700: the Server's launchd log),
-  `thread.json` (the persisted orchestrator threadId, resumed on attach),
-  `workers.json` (the persisted worker registry, reconciled on attach),
-  `control.sock` (the Server's owner-only control listener for same-machine
-  Consoles and Remote consoles — also the single-Server lock),
-  `server/identity-{key,cert}.pem` (the stable Server identity),
-  `server/paired-devices.json` (individually admitted device public keys),
-  `accounts/<slug>` (account profiles: a real `auth.json`, a private
-  `app-server-control/`, and a symlink farm over shared canonical `~/.codex`
-  state, reconciled at every pick).
+- One root AGENTS.md; don't hide instructions in subtrees an agent won't load.
+- Comments state constraints the code cannot show, not narration.
+- Record<string, unknown> access uses bracket keys.
+- The TUI is chromeless: full-bleed signal field with translucent status/meter
+  overlays. Commands live in ctrl+k; direct keys work while it is closed and
+  ctrl+c always falls through. No unrelated visual redesign during lifecycle cuts.
+- server.schema.json is generated and drift-tested. server.json.example remains
+  a verbatim-copy no-op. Unset fields are not sent, except explicit documented
+  application defaults; do not imply the vanilla-defaults audit is complete.
+- Do not manufacture skill policy, transcript replay or session carryover.
+  Native voice-context controls, skill isolation, permissions and --fast remain
+  separate decisions. Optional dispatch/account behavior stays opt-in.
 
 ## The fleet
 

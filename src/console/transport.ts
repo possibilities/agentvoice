@@ -1,6 +1,6 @@
 /**
  * Voice transport: the werift WebRTC peer, driven by session signaling that
- * arrives over the control attachment. Owns session lifecycle — offer/answer,
+ * arrives directly from the in-process runtime. Owns session lifecycle — offer/answer,
  * renewal before the upstream ceiling, and manual redial — and hands audio to
  * the pipeline as opaque Opus frames.
  *
@@ -10,7 +10,7 @@
  * is processed, so the old audio is a best-effort tail, not a guarantee.)
  */
 import { MediaStreamTrack, RTCPeerConnection, RTCRtpCodecParameters, RtpBuilder } from "werift";
-import type { SessionReadyInfo, VoicePhase } from "../core/control-protocol.ts";
+import type { ReadyInfo as SessionReadyInfo, VoicePhase } from "../core/voice-types.ts";
 import { SAMPLE_RATE } from "./dsp.ts";
 import {
   formatWebRtcMediaTrace,
@@ -23,7 +23,7 @@ import {
 export type ReadyInfo = SessionReadyInfo;
 export type TransportPhase = VoicePhase;
 
-/** The upstream half of the control attachment's session signaling. */
+/** The runtime-facing half of native session signaling. */
 export interface TransportSignal {
   offer(sdp: string): void;
 }
@@ -120,7 +120,7 @@ export class VoiceTransport {
     this.options.onInfo(`redial (${reason})`);
     this.clearRetryTimer();
     if (this.ready) this.negotiate();
-    // Not ready means the Server is rebuilding; handleReady re-offers.
+    // Not ready means the runtime is changing threads; handleReady re-offers.
   }
 
   sendOpusFrame(frame: Buffer): void {
@@ -140,7 +140,7 @@ export class VoiceTransport {
     this.setPhase("stopped");
   }
 
-  // ---- session signaling from the Server ----------------------------------
+  // ---- session signaling from the runtime ----------------------------------
 
   handleReady(info: ReadyInfo): void {
     if (this.stopping) return;
@@ -179,7 +179,7 @@ export class VoiceTransport {
     this.live = null;
     if (live) this.closePeer(live);
     if (!this.pending) this.setPhase("waiting-ready");
-    // The Server re-emits ready when offers reopen; wantLive re-offers.
+    // The runtime re-emits ready when offers reopen; wantLive re-offers.
   }
 
   handleRedial(reason: string): void {
@@ -187,9 +187,9 @@ export class VoiceTransport {
   }
 
   /**
-   * The control link died: signaling is gone, so both peers are strays and
+   * The conversation changed: both old peers are strays and
    * the failure budget is moot. wantLive survives — the next handleReady
-   * (the Server re-sends ready on reattach) renegotiates.
+   * from the runtime renegotiates.
    */
   handleSignalLost(): void {
     if (this.stopping) return;

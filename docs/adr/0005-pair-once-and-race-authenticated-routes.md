@@ -1,5 +1,8 @@
 # 0005: Pair once and race authenticated routes
 
+Superseded by [0009: One foreground app, one workspace per launch](0009-one-foreground-workspace.md).
+The design below is historical, not active runtime behavior.
+
 Superseding 0003's opt-in token-only WebSocket, the Server always exposes WSS
 and normal Android Remote consoles pair once with two-sided numeric comparison,
 pin the Server certificate, and prove an individual Android-Keystore key on

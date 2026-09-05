@@ -3,8 +3,8 @@
  * Editable install: dependencies, environment setup, native console audio, and
  * a global `agentvoice` command linked back to this checkout via `bun link`
  * — TypeScript edits apply immediately; native audio edits need `native:build`.
- * AgentStart invokes this same contract (`bun run cli:install`) from
- * ~/code/agentvoice.
+ * AgentStart integration is deferred: its current installer does not invoke
+ * this standalone contract (`bun run cli:install`). No service is installed.
  */
 import { dirname, join } from "node:path";
 
