@@ -23,6 +23,7 @@ import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
 import { validateCodexConfig } from "./codex-config.ts";
+import { ConfigError } from "./config-error.ts";
 import {
   APPROVAL_POLICIES,
   type ApprovalPolicy,
@@ -42,6 +43,7 @@ import {
   type VoiceValues,
 } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
+import { ROLE_PROMPT_FILES, resolveRolePath } from "./role.ts";
 
 export type {
   ApprovalPolicy,
@@ -119,19 +121,22 @@ export interface ServerConfig {
   debug: boolean;
   /** Directory scanned for convention-named prompt files and legacy warnings. */
   configDir: string;
+  /** Absolute role directory; replaces configDir as the prompt source and adds skills/MCPs. */
+  role?: string;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
 }
 
-export class ConfigError extends Error {}
+export { ConfigError } from "./config-error.ts";
 
 // ---------------------------------------------------------------------------
 // Convention prompt files — one native control per filename
 // ---------------------------------------------------------------------------
 
 /**
- * Filenames looked up in the selected config directory. Each is one native
- * Codex control; nothing here is an AgentVoice-shaped overlay:
+ * Filenames looked up in the selected config directory, or in the role
+ * directory when a role is active. Each is one native Codex control; nothing
+ * here is an AgentVoice-shaped overlay:
  * - VOICE_AGENT_SYSTEM_PROMPT replaces the realtime `prompt`.
  * - VOICE_AGENT_APPEND_SYSTEM_PROMPT rides Codex's startup-context slot, which
  *   native code renders after the built-in prompt (see params.ts).
@@ -140,6 +145,9 @@ export class ConfigError extends Error {}
  *   Codex's own developer message after the base prompt.
  * - The SESSION files replace the realtime start/end instructions the
  *   orchestrator receives when a voice session opens or closes.
+ * In a role, SYSTEM_PROMPT.md / APPEND_SYSTEM_PROMPT.md (role.ts) are the
+ * general orchestrator files every harness receives; the VOICE_ORCHESTRATOR
+ * pair, when present, stands in for them here, same kind for same kind.
  */
 export const PROMPT_FILES = {
   voicePrompt: "VOICE_AGENT_SYSTEM_PROMPT.md",
@@ -184,42 +192,113 @@ export const LEGACY_PROMPT_FILES = [
   "ORCHESTRATOR_SESSION_END.md",
 ] as const;
 
+export interface LoadedPrompts {
+  prompts: Prompts;
+  /** Files that loaded, in stable role order, for the ready report. */
+  paths: string[];
+}
+
 function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+/** Whether a name exists in the directory at all (a broken link counts). */
+async function present(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw new ConfigError(`cannot read ${path}: ${String(error)}`);
+  }
 }
 
 /**
  * A name that exists must load: a broken link, directory or unreadable file
  * fails before Codex starts rather than silently sending nothing.
  */
-export async function readPrompts(
-  config: Pick<ServerConfig, "configDir" | "codexConfig">,
-  warn: (message: string) => void = () => {},
-): Promise<Prompts> {
+async function readPromptFile(path: string, filename: string): Promise<string | undefined> {
+  if (!(await present(path))) return undefined;
+  try {
+    if (!(await stat(path)).isFile()) throw new Error("expected a regular file");
+    return await readFile(path, "utf8");
+  } catch (error) {
+    throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
+  }
+}
+
+/**
+ * Reads the six convention files from `dir` plus, when `general` is set, the
+ * role's SYSTEM_PROMPT / APPEND_SYSTEM_PROMPT. Returns the effective prompts,
+ * the files they came from, and every prompt file seen (for conflict messages).
+ */
+async function readPromptDirectory(
+  dir: string,
+  general: boolean,
+): Promise<LoadedPrompts & { seen: string[] }> {
   const prompts: Prompts = {};
+  const source: Partial<Record<PromptName, string>> = {};
+  const seen: string[] = [];
+  if (general) {
+    for (const [name, filename] of Object.entries(ROLE_PROMPT_FILES) as [PromptName, string][]) {
+      const text = await readPromptFile(join(dir, filename), filename);
+      if (text === undefined) continue;
+      prompts[name] = text;
+      source[name] = filename;
+      seen.push(filename);
+    }
+  }
   for (const [name, filename] of Object.entries(PROMPT_FILES) as [PromptName, string][]) {
-    const path = join(config.configDir, filename);
-    try {
-      await lstat(path);
-    } catch (error) {
-      if (isMissing(error)) continue;
-      throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
-    }
-    try {
-      if (!(await stat(path)).isFile()) throw new Error("expected a regular file");
-      prompts[name] = await readFile(path, "utf8");
-    } catch (error) {
-      throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
-    }
+    const text = await readPromptFile(join(dir, filename), filename);
+    if (text === undefined) continue;
+    // The voice-specific variant stands in for the general file of the same kind.
+    prompts[name] = text;
+    source[name] = filename;
+    seen.push(filename);
   }
   for (const [override, append] of EXCLUSIVE_PROMPT_PAIRS) {
-    if (prompts[override] !== undefined && prompts[append] !== undefined)
-      throw new ConfigError(
-        `${PROMPT_FILES[override]} and ${PROMPT_FILES[append]} cannot both be present in ${config.configDir}; keep one`,
+    if (prompts[override] !== undefined && prompts[append] !== undefined) {
+      const files = seen.filter((filename) =>
+        [
+          source[override],
+          source[append],
+          general ? ROLE_PROMPT_FILES[override as keyof typeof ROLE_PROMPT_FILES] : undefined,
+          general ? ROLE_PROMPT_FILES[append as keyof typeof ROLE_PROMPT_FILES] : undefined,
+        ].includes(filename),
       );
+      throw new ConfigError(
+        `${files.join(" and ")} cannot both be present in ${dir}: choose a replacement or an append for this agent`,
+      );
+    }
+  }
+  const paths = (Object.keys(PROMPT_FILES) as PromptName[]).flatMap((name) =>
+    source[name] === undefined ? [] : [join(dir, source[name])],
+  );
+  return { prompts, paths, seen };
+}
+
+/**
+ * Loads prompt overrides from the role directory when a role is active,
+ * otherwise from the config directory. Legacy names in the config directory
+ * only warn; so do convention files there that an active role is shadowing.
+ */
+export async function readPrompts(
+  config: Pick<ServerConfig, "configDir" | "codexConfig" | "role">,
+  warn: (message: string) => void = () => {},
+): Promise<LoadedPrompts> {
+  const loaded = await readPromptDirectory(
+    config.role ?? config.configDir,
+    config.role !== undefined,
+  );
+  if (config.role !== undefined) {
+    for (const filename of Object.values(PROMPT_FILES)) {
+      const path = join(config.configDir, filename);
+      if (await present(path))
+        warn(`Ignoring ${path}: role ${config.role} supplies the prompt files for this launch.`);
+    }
   }
   if (
-    prompts.voiceAppend !== undefined &&
+    loaded.prompts.voiceAppend !== undefined &&
     config.codexConfig?.some(
       (entry) => entry.slice(0, entry.indexOf("=")).trim() === STARTUP_CONTEXT_KEY,
     )
@@ -241,14 +320,7 @@ export async function readPrompts(
         );
     }
   }
-  return prompts;
-}
-
-/** Paths of the files that loaded, in stable role order; call only after successful loading. */
-export function promptPaths(config: Pick<ServerConfig, "configDir">, prompts: Prompts): string[] {
-  return (Object.keys(PROMPT_FILES) as PromptName[]).flatMap((name) =>
-    prompts[name] === undefined ? [] : [join(config.configDir, PROMPT_FILES[name])],
-  );
+  return { prompts: loaded.prompts, paths: loaded.paths };
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +542,9 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
       case "voice":
         voice.name = value;
         break;
+      case "role":
+        config.role = value;
+        break;
       default:
         fail(source, `unhandled option "--${key}"`);
     }
@@ -515,6 +590,11 @@ export function resolveConfig(
     options.launchCwd ?? process.cwd(),
     options.configDir ?? dirname(defaultConfigPath(env, home)),
   );
+  const roleSpec = pickTop("role");
+  const role =
+    roleSpec === undefined
+      ? undefined
+      : resolveRolePath(roleSpec, env, home, options.launchCwd ?? process.cwd());
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
   if (permissions !== undefined && explicitSandbox !== undefined) {
@@ -605,6 +685,7 @@ export function resolveConfig(
     ...(codexConfig.length > 0 ? { codexConfig } : {}),
     debug: options.debug ?? false,
     configDir,
+    ...(role === undefined ? {} : { role }),
     orchestrator,
     voice,
   };

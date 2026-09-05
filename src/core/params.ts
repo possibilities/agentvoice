@@ -11,6 +11,7 @@ import type { Prompts, ServerConfig } from "./config.ts";
 import { ConfigError, PROMPT_FILES, STARTUP_CONTEXT_KEY } from "./config.ts";
 import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
+import { ROLE_MCP_FILE, type RoleAssets } from "./role.ts";
 import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
@@ -75,12 +76,14 @@ function setIfDefined(target: Record<string, unknown>, key: string, value: unkno
 /**
  * Orchestrator-agent priming. `thread/resume` accepts a subset — it ignores
  * unknown fields rather than failing, but sending start-only ones would be a
- * lie about what resuming applies.
+ * lie about what resuming applies. Role MCP servers ride the per-thread config
+ * so they exist only in this child's conversation, never in global config.
  */
 export function threadParams(
   config: ServerConfig,
   prompts: Prompts,
   kind: "start" | "resume",
+  role: Pick<RoleAssets, "mcpServers"> = {},
 ): Record<string, unknown> {
   const orchestrator = config.orchestrator;
   const params: Record<string, unknown> = {
@@ -110,6 +113,18 @@ export function threadParams(
       throw appendSlotConflict(`orchestrator.config.${STARTUP_CONTEXT_KEY}`);
     codexConfig[STARTUP_CONTEXT_KEY] = prompts.voiceAppend;
   }
+  if (role.mcpServers !== undefined) {
+    const configured = codexConfig["mcp_servers"];
+    if (configured !== undefined && !record(configured))
+      throw new ConfigError("orchestrator.config.mcp_servers must be an object");
+    for (const name of Object.keys(role.mcpServers)) {
+      if (configured !== undefined && Object.hasOwn(configured, name))
+        throw new ConfigError(
+          `role ${ROLE_MCP_FILE} and orchestrator.config.mcp_servers both define "${name}"; keep one`,
+        );
+    }
+    codexConfig["mcp_servers"] = { ...(configured ?? {}), ...role.mcpServers };
+  }
   if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
 
   if (kind === "start") {
@@ -132,6 +147,16 @@ export function threadParams(
     const config = merged["config"];
     if (!record(config) || config[STARTUP_CONTEXT_KEY] !== prompts.voiceAppend)
       throw appendSlotConflict("orchestrator.extra.config");
+  }
+  if (role.mcpServers !== undefined) {
+    const config = merged["config"];
+    const servers = record(config) ? config["mcp_servers"] : undefined;
+    for (const [name, server] of Object.entries(role.mcpServers)) {
+      if (!record(servers) || JSON.stringify(servers[name]) !== JSON.stringify(server))
+        throw new ConfigError(
+          `orchestrator.extra.config replaced the role's MCP server "${name}"; remove that raw override or the role's ${ROLE_MCP_FILE}`,
+        );
+    }
   }
   return merged;
 }

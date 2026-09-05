@@ -247,6 +247,12 @@ const serverShape = {
       'The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else "codex" on PATH.',
     )
     .optional(),
+  role: z
+    .string()
+    .describe(
+      "Role for this launch: a directory path, or a name under $AGENTROLES_HOME (default ~/.config/agentroles). The role directory replaces this file's directory as the prompt source (SYSTEM_PROMPT.md/APPEND_SYSTEM_PROMPT.md for the orchestrator plus the VOICE_* files), adds its skills/ directory to the owned Codex child, and adds mcp.json servers to the conversation. --role overrides this value. Default: no role.",
+    )
+    .optional(),
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
 };

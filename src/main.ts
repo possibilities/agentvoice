@@ -21,6 +21,8 @@ Options:
   --continue              Continue this workspace's conversation (default)
   --no-continue            Start a new conversation (--fresh is an alias)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
+  --role <name|path>       Role directory (name under ~/.config/agentroles or a path):
+                           its skills, mcp.json and prompt files apply to this launch only
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
   -c, --codex-config <key=value>  Native Codex startup override (repeatable, TOML value)
   --model <id>             Codex work model (default: native configuration)
@@ -77,6 +79,7 @@ const LAUNCH_FLAGS: FlagSpec = {
     "--device",
     "--output-device",
     "--resume",
+    "--role",
   ]),
   bool: new Set([
     "--allow-full-access",

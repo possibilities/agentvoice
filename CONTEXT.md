@@ -92,6 +92,13 @@ precede CLI entries. This sets launch-wide native defaults, distinct from later
 conversation/realtime overrides and persisted resume settings. Nothing is seeded
 or hot-reloaded; --config still selects AgentVoice's JSON file.
 
+**Role** — A directory naming what this launch's agents can do: skills/,
+mcp.json, and prompt replacements or appends, shared with the agentroles CLI
+for Claude Code and the Codex CLI. AgentVoice selects one with --role or the
+role key; its prompt files replace the config directory's, its skills register
+on the owned child only, and its MCP servers ride per-thread config. Not an
+identity, account, or workspace. _Avoid_: capability, overlay, profile.
+
 **Mute / hold** — M/S and channel clicks toggle the persistent mute assignment.
 Space (with key releases) and the pointer PTT band temporarily unmute the mic;
 each source releases only its own hold, and release never commits a toggle.

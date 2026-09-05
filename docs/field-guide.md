@@ -38,6 +38,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
 | Prompt files | Convention names beside the selected config: VOICE_AGENT_SYSTEM_PROMPT / VOICE_AGENT_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SYSTEM_PROMPT / VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SESSION_START / _END (.md); one native control each, override and append exclusive per agent |
 | Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
+| Role | --role or the role key: a directory whose prompt files replace the config directory's, whose skills/ registers on the owned child, and whose mcp.json rides per-thread config |
 
 Startup config belongs to the owned child, not its conversation requests. Later
 orchestrator.config can override it; continue/resume may retain saved model/effort.
@@ -232,7 +233,9 @@ choice, not automatic discovery; see README migration notes.
   full-access-only, WebRTC v3 compatibility, quiet-resume guidance and explicit-only
   file/session-boundary overrides are implemented. Startup context defaults off; other native context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
-- AgentVoice-specific skill isolation and selective seeding.
+- Selective seeding of global skills. Role skills are isolated to the owned child
+  through `skills/extraRoots/set` (ADR 0013); enabling or hiding globally
+  installed skills per launch remains a native `skills.config` passthrough.
 - Spoken conversation and audio latency/buffering validation. The editable command
   has been installed; stock 0.153.3 WebRTC startup has been checked without audio
   hardware, and the operator confirmed the v3 launch works. Broader audio quality

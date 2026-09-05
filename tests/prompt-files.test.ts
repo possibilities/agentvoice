@@ -16,7 +16,6 @@ import {
   PROMPT_FILES,
   type PromptName,
   parseJsonConfig,
-  promptPaths,
   readPrompts,
   resolveConfig,
   STARTUP_CONTEXT_KEY,
@@ -76,12 +75,12 @@ describe("convention prompt files", () => {
         parseArgs(["--config", "settings/settings.json"]),
         root,
       );
-      const prompts = await readPrompts(config);
-      expect(prompts).toEqual({
+      const loaded = await readPrompts(config);
+      expect(loaded.prompts).toEqual({
         voicePrompt: "",
         orchestratorDeveloperInstructions: "Speak precisely 🎤\n",
       });
-      expect(promptPaths(config, prompts)).toEqual([
+      expect(loaded.paths).toEqual([
         join(root, "settings", PROMPT_FILES.voicePrompt),
         join(root, "settings", PROMPT_FILES.orchestratorDeveloperInstructions),
       ]);
@@ -128,7 +127,7 @@ describe("convention prompt files", () => {
     symlinkSync(join(h.directory, "VOICE.md"), join(h.directory, PROMPT_FILES.voicePrompt));
     symlinkSync(join(h.directory, "missing"), join(h.directory, "ORCHESTRATOR.md"));
     try {
-      expect(await readPrompts(h.config, (line) => warnings.push(line))).toEqual({
+      expect((await readPrompts(h.config, (line) => warnings.push(line))).prompts).toEqual({
         voicePrompt: "chosen",
       });
       expect(warnings).toHaveLength(2);

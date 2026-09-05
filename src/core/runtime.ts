@@ -9,7 +9,7 @@ import {
   type AttachOptions,
   appServerArgv,
 } from "./attach.ts";
-import { promptPaths, readPrompts, type ServerConfig } from "./config.ts";
+import { type Prompts, readPrompts, type ServerConfig } from "./config.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
@@ -18,6 +18,7 @@ import {
   shouldReplaySpokenHistory,
   threadParams,
 } from "./params.ts";
+import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { SpokenHistoryReader } from "./spoken-history.ts";
@@ -52,8 +53,9 @@ export class VoiceRuntime {
   private attachment: RuntimeConnection | null = null;
   private threadId: string | null = null;
   private threadReady = false;
-  private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
+  private prompts: Prompts = {};
   private foundPrompts: string[] = [];
+  private role: RoleAssets | null = null;
   private effort: string | null = null;
   private conversationMode: "started" | "continued" = "started";
   private freshInFlight = false;
@@ -142,13 +144,16 @@ export class VoiceRuntime {
       if (realpathSync(workspace) !== workspace)
         throw new Error("Workspace must be a canonical absolute directory");
       const warnings: string[] = [];
-      this.prompts = await readPrompts(this.config, (message) => warnings.push(message));
+      const loaded = await readPrompts(this.config, (message) => warnings.push(message));
+      this.prompts = loaded.prompts;
+      this.foundPrompts = loaded.paths;
+      this.role = this.config.role === undefined ? null : await readRoleAssets(this.config.role);
+      if (this.role) warnings.push(`role: ${this.role.dir}`);
       // Pure preflight: these placeholder IDs/SDP never leave this process.
       // Reject known option conflicts before spawning Codex or resuming history.
       realtimeParams(this.config, this.prompts, "", "", "");
       warnings.push(...passthroughWarnings(this.config, this.prompts));
-      this.foundPrompts = promptPaths(this.config, this.prompts);
-      if (threadParams(this.config, this.prompts, "start")["baseInstructions"] != null) {
+      if (this.threadParams("start")["baseInstructions"] != null) {
         warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
       }
       if (warnings.length > 0) {
@@ -157,6 +162,19 @@ export class VoiceRuntime {
       }
       await this.openConnection();
       const connection = this.requireConnection();
+      // Process-local to this owned child: no other Codex process sees the root.
+      if (this.role?.skillsRoot !== undefined) {
+        try {
+          await connection.request("skills/extraRoots/set", {
+            extraRoots: [this.role.skillsRoot],
+          });
+        } catch (error) {
+          throw new Error(
+            `role skills could not be registered with Codex (skills/extraRoots/set): ${String(error)}`,
+          );
+        }
+        this.assertRunning();
+      }
       const id = await selectThread(
         (method, params) => connection.request(method, params),
         workspace,
@@ -231,6 +249,10 @@ export class VoiceRuntime {
     return this.shutdownPromise;
   }
 
+  private threadParams(kind: "start" | "resume"): Record<string, unknown> {
+    return threadParams(this.config, this.prompts, kind, this.role ?? {});
+  }
+
   private assertRunning(): void {
     if (this.shuttingDown) throw new Error("AgentVoice is shutting down");
   }
@@ -250,7 +272,7 @@ export class VoiceRuntime {
 
   private async startThread(): Promise<string> {
     const selection = this.tierSelection!;
-    const params = await selection.prepare(threadParams(this.config, this.prompts, "start"));
+    const params = await selection.prepare(this.threadParams("start"));
     const result = await this.requireConnection().request("thread/start", params);
     this.assertRunning();
     const id = extractThreadId(result);
@@ -291,7 +313,7 @@ export class VoiceRuntime {
     const selection = this.tierSelection!;
     const params = await selection.prepare(
       {
-        ...threadParams(this.config, this.prompts, "resume"),
+        ...this.threadParams("resume"),
         threadId: id,
         excludeTurns: true,
       },

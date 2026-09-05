@@ -37,6 +37,12 @@ implementation.
 - src/core/config.ts: named CLI > file > default resolution and convention prompt
   files beside the selected config (PROMPT_FILES, one native control each; override
   plus append for one agent errors). Legacy filename checks only warn, never read.
+- src/core/role.ts: role resolution (name under $AGENTROLES_HOME, else path), mcp.json
+  translation to Codex fields, skills root discovery. Prompt mapping lives in config.ts:
+  SYSTEM_PROMPT/APPEND_SYSTEM_PROMPT are the general orchestrator files; the
+  VOICE_ORCHESTRATOR pair stands in for the same kind. Role skills go to the owned
+  child via skills/extraRoots/set after initialize (process-local, verified on stock
+  0.153.4); role MCP servers ride per-thread config. Never write under CODEX_HOME.
 - src/core/codex-config.ts: ordered native startup overrides; validate only argv
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
@@ -232,7 +238,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   between sessions. Legacy names and the retired prompt-files key are metadata-only
   warnings/errors, visible without debug; never silently delete/migrate user files.
   Removing overrides does not rewrite saved history or suppress native
-  global/project instructions. Skill isolation is still separate.
+  global/project instructions. A role directory replaces the config directory as
+  the prompt source for its launch; config-directory files then warn, never merge.
 - Do not manufacture skill policy or conversation summaries. The operator now
   authorizes replay of actual saved speech from the selected native thread (ADR
   0011), independently configurable with voice.replay-spoken-history=false.
@@ -241,7 +248,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Tail flush and experimental_realtime_ws_startup_context remain unset by default
   unless VOICE_AGENT_APPEND_SYSTEM_PROMPT.md claims the latter (ADR 0012).
   Preserve explicit overrides; no user-config writes, forced tail-flush work,
-  transcript database, or migration. Skill isolation remains a separate decision.
+  transcript database, or migration. Role skills are the only skill isolation:
+  extra roots on the owned child, no global skills.config or plugin changes.
 - Quiet resume is the documented exception to unmodified voice startup behavior:
   one developer initial item asks resumed/redialed v3 calls to wait for new input.
   Keep the native base prompt intact; no fabricated transcript, default tail-flush

@@ -224,6 +224,7 @@ agentvoice --allow-full-access --fast
 agentvoice --allow-full-access --resume <thread-id> --no-fast
 agentvoice --allow-full-access --voice <voice-name> --device 1 --output-device 2
 agentvoice --allow-full-access --config ./voice-settings.json --debug
+agentvoice --allow-full-access --role researcher
 ```
 
 Named CLI options beat the same named file settings. Raw native overrides merge
@@ -418,7 +419,8 @@ an override does not erase earlier instructions/messages from a resumed native
 conversation; use `--no-continue` for a new conversation when testing the
 baseline. Native global and workspace instructions, skills, MCPs and hooks still
 apply, even to Fresh. AgentVoice does not automatically enable AgentStart skills
-or isolate native state.
+or isolate native state; a [role](#roles) adds its own skills and MCP servers to
+this launch without changing what other Codex processes see.
 
 The two request escape hatches are `orchestrator.extra` and `voice.extra`;
 `orchestrator.config` carries native Codex config overrides. Extra values
@@ -439,6 +441,44 @@ Inline prompt values work through these same native escape hatches:
 Raw fields win over file contents, including explicit empty/null values; omit a
 field to restore native resolution. Native config can itself override request
 prompts, so removing AgentVoice overrides is not a global Codex prompt reset.
+
+### Roles
+
+A role is a directory that changes what this launch's agents can do without
+touching global Codex or AgentVoice state: skills, MCP servers, and prompt
+replacements or appends. The format is shared with the `agentroles` CLI, which
+delivers the same directory to Claude Code and the Codex CLI by command-line
+arguments. AgentVoice reads it natively because only its own process can
+register skill roots with the Codex child it owns.
+
+```sh
+agentvoice --allow-full-access --role researcher      # ~/.config/agentroles/researcher
+agentvoice --allow-full-access --role ./roles/researcher
+```
+
+`--role` takes a name under `$AGENTROLES_HOME` (default `~/.config/agentroles`)
+or a directory path. The `role` key in `server.json` is the file-level default;
+`--role` overrides it. Names use letters, digits, `_` and `-` only.
+
+| Role file | Effect in AgentVoice |
+| --- | --- |
+| `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
+| `VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md` / `VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md` | Voice-specific stand-ins for the general file of the same kind, used by AgentVoice only |
+| `VOICE_AGENT_SYSTEM_PROMPT.md` / `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` | Voice agent prompt, as in the prompt override files above |
+| `VOICE_ORCHESTRATOR_SESSION_START.md` / `_END.md` | Realtime start/end instructions, as above |
+| `skills/<name>/SKILL.md` | Registered with the owned child through `skills/extraRoots/set` right after `initialize`; no other Codex process sees them, and nothing is written under CODEX_HOME |
+| `mcp.json` | Claude Code's `.mcp.json` shape (`{"mcpServers": {...}}`), translated to Codex fields (`headers` becomes `http_headers`, `type` is dropped, `sse` is rejected) and sent as per-thread `mcp_servers` config on start and resume |
+
+With a role active, the config directory's prompt files are ignored with a
+visible notice, and after voice-specific stand-ins are applied the orchestrator
+must end up with either a replacement or an append, never both. Role MCP server
+names must not collide with `orchestrator.config.mcp_servers`, and a raw
+`orchestrator.extra.config` that drops them is an error. A missing role
+directory, an unreadable file, or a Codex child that rejects the skill-root
+request fails before audio opens. Roles load once per launch like every other
+setting; Codex itself watches the skills root, so skill edits apply to later
+turns. Verified on stock Codex 0.153.4 on September 5, 2026 with
+`bun run app-server:probe`, which registers a disposable root and reads it back.
 
 ### Native voice context: baseline first
 
