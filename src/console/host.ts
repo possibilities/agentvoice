@@ -145,6 +145,10 @@ export async function runConsoleHost(
       },
       onFatal: fail,
       onStatus: feed,
+      onWarning: (message) => {
+        notice = message;
+        tui?.refresh();
+      },
       debug: debugLog,
     },
     options.runtime,

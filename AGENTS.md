@@ -27,7 +27,8 @@ implementation.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
-- src/core/config.ts: CLI > file > default resolution and prompt-file loading.
+- src/core/config.ts: CLI > file > default resolution and explicit prompt-files
+  loading. Legacy filename checks only warn; never read unreferenced contents.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Omit unset voice.version; never replace it with an inferred native default.
@@ -88,7 +89,7 @@ an old background version or another client does not participate in that guard.
 
 App state: thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
-remain ~/.config/agentvoice/server.json and adjacent markdown files. Inherit
+remain ~/.config/agentvoice/server.json and explicitly referenced prompt files. Inherit
 CODEX_HOME unchanged (including omission); native Codex owns authentication,
 credential storage/refresh, configuration and history. Never discover, create or
 reconcile profile homes, read auth.json, invoke account tools/login, or replace
@@ -134,7 +135,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 7. `prompt` is a double-option upstream: omitted keeps codex's built-in
    `backend_prompt.md`, while both `null` and `""` yield an empty prompt
    (`codex-rs/core/src/realtime_prompt.rs`). Prompt files encode that as
-   absent vs. present-but-empty. A non-empty
+   unreferenced vs. explicitly referenced with empty contents. A non-empty
    `experimental_realtime_ws_backend_prompt` in `~/.codex/config.toml` silently
    outranks the request `prompt`, and we cannot see it.
 8. Thread and realtime params are serde-lenient: unknown fields are ignored,
@@ -169,6 +170,14 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
+- Prompt files require explicit prompt-files references; absent means no override.
+  Paths resolve from the selected config directory, not the workspace. Preserve
+  empty contents and final raw extra precedence; bad explicit references fail
+  before native startup even when extra would replace their values. Contents load
+  once per launch and are reused, never hot-reloaded or copied between sessions.
+  Legacy names are metadata-only warnings, visible without debug; never silently
+  delete/migrate user files. Removing overrides does not rewrite saved history or
+  suppress native global/project instructions. Skill isolation is still separate.
 - Do not manufacture skill policy, transcript replay or session carryover.
   Native voice-context controls remain configurable but unset by default:
   includeStartupContext, flushTranscriptTailOnSessionEnd and the native

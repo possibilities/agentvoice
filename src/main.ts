@@ -41,9 +41,9 @@ Full access is mandatory and verified with Codex; no config/environment opt-in.
 No permission dialogs. Connector consent/tool questions are refused visibly.
 No background services or remote attachment.
 
-Prompts are optional files beside the config:
-  VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md
-  ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_{START,END}.md
+Prompts are opt-in: name files in server.json's prompt-files section, or use
+native fields in orchestrator.extra / voice.extra. No filename auto-loading.
+Relative prompt-file paths resolve beside the selected config, not the workspace.
 
 Keys: [m] microphone · [s] speaker · [r] redial · [f] fresh · [q] quit
       [ctrl+k] commands · [space] push-to-talk (key-release capable terminal)

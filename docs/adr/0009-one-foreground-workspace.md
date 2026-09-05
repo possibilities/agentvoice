@@ -17,6 +17,14 @@ directories, credentials, symlinks and native history are preserved; selecting
 an existing home is an explicit operator environment choice. See README's
 "Native authentication" for migration. This does not change child ownership.
 
+Amendment 2026-09-04: conventional prompt filename activation is retired.
+Only explicit prompt-files references load text; relative paths use the selected
+config directory. Raw native fields retain precedence, including null/empty
+values. Bad explicit references fail before Codex starts. Legacy files generate
+metadata-only, visible migration warnings; no automatic file/config migration
+runs. Prompt contents remain launch-cached; native global instructions, history
+and voice-context controls are unchanged. See README's "Explicit prompt overrides".
+
 Bare AgentVoice now runs its TUI, audio, WebRTC and coordination in one process.
 It owns a stock Codex app-server child over native stdio. No Codex fork, embed,
 background Server, resident service, remote client or replacement supervisor.

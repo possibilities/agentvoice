@@ -8,6 +8,7 @@ import {
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
   PERSONALITIES,
+  PROMPT_FILE_KEYS,
   REALTIME_VERSIONS,
   SANDBOX_MODES,
   SERVER_KEYS,
@@ -61,15 +62,15 @@ describe("generated schema invariants", () => {
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema["title"]).toBe("agentvoice configuration");
     expect(schema["description"]).toBe(
-      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
     );
   });
 
-  test("strict at root, orchestrator, voice; open in the passthrough subtrees", () => {
+  test("strict at root, prompt-files, orchestrator, voice; open in the passthrough subtrees", () => {
     const schema = buildSchema();
     expect(schema["additionalProperties"]).toBe(false);
     const properties = topProperties();
-    for (const section of ["orchestrator", "voice"]) {
+    for (const section of ["prompt-files", "orchestrator", "voice"]) {
       expect(spec(properties, section)["additionalProperties"]).toBe(false);
     }
     // config/extra forward to the codex key space: they must never close.
@@ -91,6 +92,9 @@ describe("generated schema invariants", () => {
     expect(Object.keys(topProperties()).sort()).toEqual(["$schema", ...SERVER_KEYS].sort());
     expect(Object.keys(sectionProperties("orchestrator")).sort()).toEqual(
       [...ORCHESTRATOR_KEYS].sort(),
+    );
+    expect(Object.keys(sectionProperties("prompt-files")).sort()).toEqual(
+      [...PROMPT_FILE_KEYS].sort(),
     );
     expect(Object.keys(sectionProperties("voice")).sort()).toEqual([...VOICE_KEYS].sort());
     expect(spec(topProperties(), "$schema")["type"]).toBe("string");
@@ -125,6 +129,7 @@ describe("generated schema invariants", () => {
   test("every key carries documentation", () => {
     const sections = [
       topProperties(),
+      sectionProperties("prompt-files"),
       sectionProperties("orchestrator"),
       sectionProperties("voice"),
     ];

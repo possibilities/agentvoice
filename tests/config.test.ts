@@ -7,8 +7,6 @@ import {
   cliToConfigValues,
   loadConfigFile,
   parseJsonConfig,
-  promptFilenames,
-  readPrompts,
   resolveConfig,
 } from "../src/core/config.ts";
 import { parseArgs, parseConsoleCommand, UsageError } from "../src/main.ts";
@@ -211,7 +209,7 @@ describe("parseJsonConfig", () => {
   // language and would not create the own property this exercises.
   test("a __proto__ key is an unknown option at every strict level", () => {
     expect(() => parseJsonConfig('{"__proto__": {"polluted": true}}', "server.json")).toThrow(
-      /unknown option "__proto__"; known keys: codex, orchestrator, voice/,
+      /unknown option "__proto__"; known keys: codex, prompt-files, orchestrator, voice/,
     );
     expect(() =>
       parseJsonConfig('{"codex": "codex", "__proto__": {"polluted": true}}', "server.json"),
@@ -303,47 +301,6 @@ describe("cliToConfigValues", () => {
     });
     expect(() => cliToConfigValues({ sandbox: "yolo" })).toThrow(ConfigError);
     expect(() => cliToConfigValues({ "approval-policy": "always" })).toThrow(ConfigError);
-  });
-});
-
-describe("prompt files", () => {
-  let directory: string;
-
-  beforeAll(() => {
-    directory = mkdtempSync(join(tmpdir(), "avn-prompts-"));
-    writeFileSync(join(directory, "ORCHESTRATOR.md"), "be terse\n");
-    writeFileSync(join(directory, "VOICE.md"), ""); // empty strips the built-in prompt
-    writeFileSync(join(directory, "VOICE_SEED_DEVELOPER.md"), "seed\n");
-    writeFileSync(join(directory, "NOT_A_PROMPT.md"), "ignored\n");
-  });
-
-  afterAll(() => rmSync(directory, { recursive: true, force: true }));
-
-  test("reads conventional names only, keeping empty apart from absent", async () => {
-    const prompts = await readPrompts(directory);
-    expect(prompts.orchestratorDeveloperInstructions).toBe("be terse\n");
-    expect(prompts.voiceSeedDeveloper).toBe("seed\n");
-    expect(prompts.voicePrompt).toBe("");
-    expect(prompts.orchestratorBaseInstructions).toBeUndefined();
-    expect(prompts.voiceSeedUser).toBeUndefined();
-  });
-
-  test("reports what it found, in a stable order", async () => {
-    expect(promptFilenames(await readPrompts(directory))).toEqual([
-      "VOICE.md",
-      "VOICE_SEED_DEVELOPER.md",
-      "ORCHESTRATOR.md",
-    ]);
-  });
-
-  test("an empty directory yields nothing", async () => {
-    const empty = mkdtempSync(join(tmpdir(), "avn-empty-"));
-    try {
-      expect(await readPrompts(empty)).toEqual({});
-      expect(promptFilenames({})).toEqual([]);
-    } finally {
-      rmSync(empty, { recursive: true, force: true });
-    }
   });
 });
 

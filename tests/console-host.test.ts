@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { BoxRenderable, type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { AUDIO_CONTROL_CLICK_MS } from "../src/console/audio-control.ts";
@@ -17,6 +19,35 @@ function selectableTextIds(root: Renderable): string[] {
 }
 
 describe("foreground console host", () => {
+  test("ignored legacy prompts warn visibly without debug or changing the voice phase", async () => {
+    const h = hostHarness();
+    writeFileSync(join(h.directory, "VOICE.md"), "LEGACY BODY MUST NOT APPEAR");
+    const setup = await createTestRenderer({ width: 100, height: 30, exitOnCtrlC: false });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    try {
+      await setup.waitFor(
+        () =>
+          setup.captureCharFrame().includes("LIVE") &&
+          setup.captureCharFrame().includes("Ignoring legacy"),
+      );
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain("VOICE.md");
+      expect(frame).toContain("prompt-files");
+      expect(frame).not.toContain("LEGACY BODY MUST NOT APPEAR");
+      expect(h.native.alive).toBe(true);
+      expect(
+        h.native.calls.find((call) => call.method === "thread/start")?.params,
+      ).not.toHaveProperty("developerInstructions");
+    } finally {
+      setup.mockInput.pressKey("q");
+      await run;
+      await h.cleanup();
+    }
+  });
   test("unsupported interaction remains visible without debug or an approval dialog", async () => {
     const h = hostHarness();
     const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });

@@ -9,7 +9,7 @@ import {
   type AttachOptions,
   appServerArgv,
 } from "./attach.ts";
-import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
+import { promptPaths, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import { ORCHESTRATOR_THREAD_SOURCE, realtimeParams, threadParams } from "./params.ts";
@@ -29,6 +29,8 @@ export interface RuntimeEvents {
   onError(message: string, fatal: boolean): void;
   onFatal(message: string): void;
   onStatus(line: string): void;
+  /** Non-fatal launch/config warnings; displayed without treating media as failed. */
+  onWarning?(message: string): void;
   debug?(line: string): void;
 }
 
@@ -120,15 +122,18 @@ export class VoiceRuntime {
       // The launch resolver canonicalizes once; do not silently retarget here.
       if (realpathSync(workspace) !== workspace)
         throw new Error("Workspace must be a canonical absolute directory");
-      this.prompts = await readPrompts(this.config.configDir);
+      const warnings: string[] = [];
+      this.prompts = await readPrompts(this.config, (message) => warnings.push(message));
       // Pure preflight: these placeholder IDs/SDP never leave this process.
       // Reject known option conflicts before spawning Codex or resuming history.
       realtimeParams(this.config, this.prompts, "", "", "");
-      this.foundPrompts = promptFilenames(this.prompts);
-      if (this.prompts.orchestratorBaseInstructions !== undefined) {
-        this.events.onStatus(
-          `warning: ${PROMPT_FILES.orchestratorBaseInstructions} replaces Codex's entire system prompt`,
-        );
+      this.foundPrompts = promptPaths(this.config);
+      if (threadParams(this.config, this.prompts, "start")["baseInstructions"] != null) {
+        warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
+      }
+      if (warnings.length > 0) {
+        for (const message of warnings) this.events.onStatus(message);
+        this.events.onWarning?.(warnings.join("\n"));
       }
       await this.openConnection();
       const connection = this.requireConnection();

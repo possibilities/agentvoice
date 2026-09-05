@@ -72,7 +72,10 @@ describe("native realtime defaults", () => {
   });
 
   test("invalid seed setup fails before any native connection, history lookup or resume", async () => {
-    const h = runtimeHarness({}, { resume: "existing" });
+    const h = runtimeHarness(
+      { "prompt-files": { "voice-seed-user": "./VOICE_SEED_USER.md" } },
+      { resume: "existing" },
+    );
     writeFileSync(join(h.directory, "VOICE_SEED_USER.md"), "seed");
     try {
       await expect(h.runtime.start()).rejects.toThrow("require explicit realtime v3");

@@ -36,7 +36,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
 | Voice | model, name, version, include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
-| Prompt files | VOICE, ORCHESTRATOR, ORCHESTRATOR_BASE, ORCHESTRATOR_SESSION_START/END, VOICE_SEED_DEVELOPER/USER/ASSISTANT markdown |
+| Explicit prompt-files | voice, orchestrator, orchestrator-base, orchestrator-session-start/end, voice-seed-developer/user/assistant file references |
 
 Not every setting is a CLI flag: --help lists the common flags; server.json and
 the passthrough objects expose the larger surface. Passthrough is not validation:
@@ -51,8 +51,11 @@ missing tier metadata or a different per-thread provider fail clearly. Start/res
 responses confirm the applied setting when available; TUI labels missing data
 as requested. The indicator is configured tier, not billing telemetry.
 
-Only voice.name hot reloads. Prompts load once at launch and are reused on redial
-and Fresh. Main prompt settings ride thread/start or resume; session-boundary
+Only voice.name hot reloads. Prompts load only from explicit prompt-files references,
+once at launch, and are reused on redial and Fresh. Paths are relative to the selected
+config directory (absolute and ~/ also work); missing/unreadable/non-file references
+fail before native startup. Unreferenced conventional files only produce visible
+migration warnings, with no content reads. Main prompt settings ride thread/start or resume; session-boundary
 instructions and voice prompts/items ride each realtime start. Start-only native
 metadata such as dynamic tools is persisted by Codex and cannot be removed merely
 by omitting it on resume.
@@ -69,8 +72,12 @@ default speech model/behavior. Current v1/v3 share a voice-name family.
 
 ## What ships versus what is native
 
-AgentVoice supplies no default custom prompt files. Optional files intentionally
-override native behavior; ORCHESTRATOR_BASE replaces the full base prompt.
+AgentVoice supplies no default custom prompt files. Explicit prompt-files references
+or raw native prompt fields intentionally override behavior; orchestrator-base
+maps to baseInstructions and replaces the full base prompt. Raw extra fields win
+over files, including explicit null/empty values. Unset sends nothing; a referenced
+empty file sends empty text. Removing references does not erase saved instructions:
+--no-continue tests a new conversation without changing native global/project guidance.
 Global Codex configuration can itself override voice prompts or introduce
 instructions, skills, MCPs and hooks. Removing deliberate AgentStart skill
 injection does not isolate those native inputs.
@@ -110,7 +117,7 @@ is not memory isolation. Quit may interrupt tail-flush work; the app does not
 wait for background completion. The README's optional examples are not shipped
 configuration; remove a key to restore native resolution, not an empty/false value.
 
-Static VOICE_SEED files are explicit operator-provided initial items, not a
+Explicit voice-seed file references are operator-provided initial items, not a
 transcript captured from the previous call. No AgentVoice transcript replay
 layer was introduced.
 
@@ -151,9 +158,9 @@ choice, not automatic discovery; see README migration notes.
 
 ## Deferred requests and decisions
 
-- Remaining vanilla-defaults and prompt/settings passthrough audit, particularly
-  seed/session-boundary controls. Full-access-only and native protocol omission
-  are decided and implemented.
+- Remaining native prompt/settings passthrough completeness audit. Full-access-only,
+  native protocol omission and explicit-only file/seed/session-boundary overrides
+  are decided and implemented. Native voice-context controls remain unset.
 - AgentVoice-specific skill isolation and selective seeding.
 - AgentStart installation wiring and actual installation/first live voice use.
   Its current source installer has no AgentVoice entry; no install was run.

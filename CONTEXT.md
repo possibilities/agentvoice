@@ -44,9 +44,10 @@ Old history remains; native work in the old conversation stays there.
 **Continue / resume** — Read/resume native eligible history, with no transcript
 copying or global thread.json pointer. --resume additionally chooses an exact ID.
 
-**Prompt files** — Optional operator-provided markdown beside server.json.
-Absent is native behavior; present and empty sends an empty string. Not a
-shipped doctrine or automatically copied transcript.
+**Prompt files** — Optional files explicitly named in server.json's prompt-files
+section. Relative paths use that config's directory. No reference sends no file
+override; a referenced empty file sends an empty string. Conventional filenames
+only trigger migration warnings. Not shipped doctrine or a copied transcript.
 
 **CODEX_HOME** — Native Codex configuration/authentication/history location,
 inherited unchanged from the launch environment. Codex resolves its default when

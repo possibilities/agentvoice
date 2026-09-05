@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -11,6 +11,45 @@
     "codex": {
       "type": "string",
       "description": "The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else \"codex\" on PATH."
+    },
+    "prompt-files": {
+      "type": "object",
+      "description": "Explicit prompt-file references only; no files are loaded by conventional filename. Paths are tilde-expanded and relative to the selected config directory, not the workspace. Missing/unreadable/non-file references fail before Codex starts. Contents load once per launch; raw extra fields still win. Omitted means no file overrides.",
+      "properties": {
+        "voice": {
+          "type": "string",
+          "description": "File for the native realtime prompt. Explicit empty text is sent empty; omission leaves native resolution alone."
+        },
+        "orchestrator": {
+          "type": "string",
+          "description": "File for native thread developerInstructions."
+        },
+        "orchestrator-base": {
+          "type": "string",
+          "description": "File for native thread baseInstructions; replaces the entire base prompt (sharp edge)."
+        },
+        "orchestrator-session-start": {
+          "type": "string",
+          "description": "File for native realtimeStartInstructions to the working agent, sent on each realtime start/redial."
+        },
+        "orchestrator-session-end": {
+          "type": "string",
+          "description": "File for native realtimeEndInstructions to the working agent, sent on each realtime start/redial."
+        },
+        "voice-seed-developer": {
+          "type": "string",
+          "description": "File for a developer-role initial voice item. Requires explicit realtime v3, even for empty text."
+        },
+        "voice-seed-user": {
+          "type": "string",
+          "description": "File for a user-role initial voice item. Requires explicit realtime v3, even for empty text."
+        },
+        "voice-seed-assistant": {
+          "type": "string",
+          "description": "File for an assistant-role initial voice item. Requires explicit realtime v3, even for empty text."
+        }
+      },
+      "additionalProperties": false
     },
     "orchestrator": {
       "type": "object",
@@ -31,7 +70,7 @@
         "personality": {
           "type": "string",
           "enum": ["none", "friendly", "pragmatic"],
-          "description": "Orchestrator personality. Silently disabled when ORCHESTRATOR_BASE.md replaces the system prompt (the app warns at boot). Default: codex config."
+          "description": "Orchestrator personality. A custom baseInstructions prompt may supersede native personality behavior. Default: Codex configuration."
         },
         "sandbox": {
           "type": "string",

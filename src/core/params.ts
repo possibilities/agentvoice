@@ -124,7 +124,7 @@ export function realtimeParams(
   const items = merged["initialItems"];
   if (Array.isArray(items) && items.length > 0 && version !== "v3")
     throw new ConfigError(
-      'Initial voice items (VOICE_SEED_*.md or voice.extra.initialItems) require explicit realtime v3. Set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or choose a protocol for you.',
+      'Initial voice items (prompt-files voice-seed references or voice.extra.initialItems) require explicit realtime v3. Set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or choose a protocol for you.',
     );
   return merged;
 }

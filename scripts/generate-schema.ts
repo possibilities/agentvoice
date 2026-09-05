@@ -14,7 +14,7 @@ import { configFileSchema } from "../src/core/config-schema.ts";
 
 const TITLE = "agentvoice configuration";
 const DESCRIPTION =
-  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.";
+  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.";
 
 type Schema = Record<string, unknown>;
 
@@ -97,7 +97,7 @@ export function buildSchema(): Schema {
   const schema: Schema = { $schema, title: TITLE, description: DESCRIPTION, ...rest };
 
   const top = properties(schema, "top level");
-  for (const section of ["orchestrator", "voice"]) hoistDescription(top, section);
+  for (const section of ["prompt-files", "orchestrator", "voice"]) hoistDescription(top, section);
   const orchestrator = properties(top["orchestrator"], "orchestrator");
   const voice = properties(top["voice"], "voice");
   openPassthrough(orchestrator, "orchestrator", "config");
@@ -106,6 +106,7 @@ export function buildSchema(): Schema {
   dropVacuousPropertyNames(voice, "voice", "codex-response-handoff-channel-prefixes");
 
   assertDocumented(top, "");
+  assertDocumented(properties(top["prompt-files"], "prompt-files"), "prompt-files.");
   assertDocumented(orchestrator, "orchestrator.");
   assertDocumented(voice, "voice.");
 
