@@ -92,8 +92,9 @@ describe("resolveConfig", () => {
     expect(() =>
       resolveConfig({}, { orchestrator: { permissions: "p", sandbox: "read-only" } }, {}, HOME),
     ).toThrow(/cannot be combined/);
-    const config = resolveConfig({}, { orchestrator: { permissions: "p" } }, {}, HOME);
-    expect(config.orchestrator.permissions).toBe("p");
+    expect(() => resolveConfig({}, { orchestrator: { permissions: "p" } }, {}, HOME)).toThrow(
+      "full-access-only",
+    );
   });
 
   test("dispatch-reports requires dispatch", () => {
@@ -736,7 +737,7 @@ describe("parseArgs characterization", () => {
 
 describe("parseConsoleCommand", () => {
   test("defaults to system devices, resume, and no debug", () => {
-    expect(parseConsoleCommand([])).toMatchObject({
+    expect(parseConsoleCommand(["--allow-full-access"])).toMatchObject({
       help: false,
       options: { debug: false, fresh: false },
     });
@@ -744,6 +745,7 @@ describe("parseConsoleCommand", () => {
 
   test("parses device indices, fresh, and debug", () => {
     const command = parseConsoleCommand([
+      "--allow-full-access",
       "--device",
       "1",
       "--output-device=2",
@@ -767,7 +769,7 @@ describe("parseConsoleCommand", () => {
 
   test("rejects malformed and out-of-range device indices", () => {
     for (const value of ["1junk", "1.5", "-1", "+1", "", "2147483648"]) {
-      expect(() => parseConsoleCommand([`--device=${value}`])).toThrow(
+      expect(() => parseConsoleCommand(["--allow-full-access", `--device=${value}`])).toThrow(
         /must be a non-negative 32-bit integer/,
       );
     }

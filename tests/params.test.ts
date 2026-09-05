@@ -38,8 +38,8 @@ describe("threadParams", () => {
         "service-tier": "flex",
         personality: "pragmatic",
         "approvals-reviewer": "auto_review",
-        "approval-policy": "on-request",
-        sandbox: "workspace-write",
+        "approval-policy": "never",
+        sandbox: "danger-full-access",
         "runtime-workspace-roots": ["/a"],
         ephemeral: true,
         "history-mode": "paginated",
@@ -51,8 +51,8 @@ describe("threadParams", () => {
       serviceTier: "flex",
       personality: "pragmatic",
       approvalsReviewer: "auto_review",
-      approvalPolicy: "on-request",
-      sandbox: "workspace-write",
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
       runtimeWorkspaceRoots: ["/a"],
       ephemeral: true,
       historyMode: "paginated",
@@ -60,8 +60,8 @@ describe("threadParams", () => {
   });
 
   test("permissions replaces sandbox rather than joining it", () => {
-    const params = thread({ orchestrator: { permissions: "profile-a" } });
-    expect(params["permissions"]).toBe("profile-a");
+    const params = thread({ orchestrator: { permissions: ":danger-full-access" } });
+    expect(params["permissions"]).toBe(":danger-full-access");
     expect(params).not.toHaveProperty("sandbox");
   });
 
@@ -129,9 +129,14 @@ describe("threadParams", () => {
     );
   });
 
-  test("extra merges last and can override", () => {
-    const params = thread({ orchestrator: { extra: { sandbox: "read-only", newField: 7 } } });
-    expect(params["sandbox"]).toBe("read-only");
+  test("extra merges last but cannot change the full-access posture", () => {
+    expect(() => thread({ orchestrator: { extra: { sandbox: "read-only" } } })).toThrow(
+      "full-access-only",
+    );
+    const params = thread({
+      orchestrator: { extra: { sandbox: "danger-full-access", newField: 7 } },
+    });
+    expect(params["sandbox"]).toBe("danger-full-access");
     expect(params["newField"]).toBe(7);
   });
 
@@ -397,16 +402,16 @@ describe("workerThreadParams", () => {
           dispatch: true,
           model: "m",
           effort: "high",
-          sandbox: "workspace-write",
-          "approval-policy": "on-request",
+          sandbox: "danger-full-access",
+          "approval-policy": "never",
           "approvals-reviewer": "auto_review",
           config: { agents: { enabled: false } },
         },
       }),
     );
     expect(params["cwd"]).toBe(process.cwd());
-    expect(params["sandbox"]).toBe("workspace-write");
-    expect(params["approvalPolicy"]).toBe("on-request");
+    expect(params["sandbox"]).toBe("danger-full-access");
+    expect(params["approvalPolicy"]).toBe("never");
     expect(params["threadSource"]).toBe("agentvoice-worker");
     expect(params["approvalsReviewer"]).toBe("auto_review");
     expect(params["model"]).toBe("m");
@@ -420,9 +425,11 @@ describe("workerThreadParams", () => {
     expect(params).not.toHaveProperty("personality");
   });
 
-  test("prefers a named permission profile over the sandbox, like the orchestrator", () => {
-    const params = workerThreadParams(configure({ orchestrator: { permissions: "profile-1" } }));
-    expect(params["permissions"]).toBe("profile-1");
+  test("accepts only the built-in full-access permission profile, like the orchestrator", () => {
+    const params = workerThreadParams(
+      configure({ orchestrator: { permissions: ":danger-full-access" } }),
+    );
+    expect(params["permissions"]).toBe(":danger-full-access");
     expect(params).not.toHaveProperty("sandbox");
   });
 

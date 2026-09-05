@@ -63,6 +63,8 @@ export class NativeStub implements RuntimeConnection {
     }
     if (method === "thread/read" || method === "thread/resume")
       result = { thread: this.threads.find((t) => t.id === params["threadId"]) };
+    if (method === "thread/start" || method === "thread/resume")
+      result = { ...(result as object), ...nativeFullAccess };
     if (this.tiers && (method === "thread/start" || method === "thread/resume")) {
       const config = params["config"] as Record<string, unknown> | undefined;
       result = {
@@ -89,6 +91,12 @@ export class NativeStub implements RuntimeConnection {
     this.threads.push({ id, cwd, threadSource: ORCHESTRATOR_THREAD_SOURCE });
   }
 }
+
+export const nativeFullAccess = {
+  sandbox: { type: "dangerFullAccess" },
+  approvalPolicy: "never",
+  activePermissionProfile: { id: ":danger-full-access", extends: null },
+};
 
 export function runtimeHarness(values: ConfigValues = {}, options: RuntimeOptions = {}) {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "agentvoice-test-")));

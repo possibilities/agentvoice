@@ -30,8 +30,8 @@ The generated server.schema.json is authoritative for spelling and types.
 
 | Area | Keys / controls |
 | --- | --- |
-| Launch | workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
-| Main agent | model, effort, personality, sandbox or named permissions, approval-policy, approvals-reviewer, model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
+| Launch | mandatory --allow-full-access, workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
+| Main agent | model, effort, personality, fixed full-access/never posture, native approvals-reviewer (no execution approvals under never), model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Optional workers | dispatch, dispatch-reports |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
@@ -67,8 +67,19 @@ Global Codex configuration can itself override voice prompts or introduce
 instructions, skills, MCPs and hooks. Removing deliberate AgentStart skill
 injection does not isolate those native inputs.
 
-Still application-owned: full-access/never permission defaults, fail-closed
-approval responses, realtime v3, WebRTC/audio transport, workspace-local selection,
+Full access is a deliberate exception to vanilla settings: every launch needs
+--allow-full-access or errors before config/child/microphone startup. There is no
+confirmation dialog or environment/config bypass; help/accounts are exempt.
+Matching legacy permission values are accepted, incompatible typed/raw selectors
+error, and the only supported profile is :danger-full-access. Native effective
+dangerFullAccess/never must be verified on start/resume, Fresh, account rotation
+and workers. Managed restrictions are never bypassed. A settings downgrade stops
+the child. Full access does not grant connector consent or answer tool questions:
+requests are refused through native denials or protocol errors with a persistent
+TUI explanation, not an approval UI or invented answers.
+
+Still application-owned: full-access-only posture, visible refusal handling,
+realtime v3, WebRTC/audio transport, workspace-local selection,
 renewal policy, and optional dispatch/account policy. The project is not yet
 fully vanilla in defaults, nor a complete passthrough for every future Codex option.
 
@@ -116,8 +127,8 @@ skill enabling. Native history and private legacy state are untouched.
 
 ## Deferred requests and decisions
 
-- Full vanilla-defaults and prompt/settings passthrough audit, particularly
-  permissions/approvals, realtime v3 and seed/session-boundary controls.
+- Remaining vanilla-defaults and prompt/settings passthrough audit, particularly
+  realtime v3 and seed/session-boundary controls. Full-access-only is decided.
 - Reconsider the three native voice-context levers above.
 - AgentVoice-specific skill isolation and selective seeding.
 - Reinventory/review optional worker/report and account features before more cuts.

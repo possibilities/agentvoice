@@ -23,6 +23,7 @@ import {
 } from "./attach.ts";
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
+import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
   realtimeParams,
@@ -222,11 +223,15 @@ export class VoiceRuntime {
       this.ensureManager(this.threadId);
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
-      if (!this.shuttingDown)
+      if (error instanceof FullAccessError) {
+        this.events.onFatal(error.message);
+        await this.shutdown();
+      } else if (!this.shuttingDown)
         this.events.onError(`fresh conversation failed: ${String(error)}`, false);
     } finally {
       this.freshInFlight = false;
-      this.threadReady = this.threadId !== null && this.attachment?.alive === true;
+      this.threadReady =
+        !this.shuttingDown && this.threadId !== null && this.attachment?.alive === true;
       this.emitReady();
     }
   }
@@ -287,6 +292,7 @@ export class VoiceRuntime {
     this.assertRunning();
     const id = extractThreadId(result);
     this.acquire(id);
+    confirmFullAccess(result);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
@@ -330,6 +336,7 @@ export class VoiceRuntime {
     const result = await connection.request("thread/resume", params);
     this.assertRunning();
     if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
+    confirmFullAccess(result);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
@@ -358,9 +365,11 @@ export class VoiceRuntime {
           const result = await request("thread/start", params);
           const threadId = extractThreadId(result);
           try {
+            confirmFullAccess(result);
             await selection.confirm(result, params);
             this.assertRunning();
           } catch (error) {
+            this.events.onError(`Worker refused: ${String(error)}`, false);
             // No turn was submitted. Preserve the original refusal and make any
             // cleanup failure visible rather than silently orphaning the root.
             try {
@@ -454,9 +463,22 @@ export class VoiceRuntime {
       }
       if (id === this.threadId && method.startsWith("thread/realtime/"))
         this.sessions.handleNotification(method, params);
-      if (id === this.threadId && method === "thread/settings/updated") {
+      if (
+        method === "thread/settings/updated" &&
+        (id === this.threadId ||
+          this.managers.has(id) ||
+          [...this.managers.values()].some((manager) => manager.ownsThread(id)))
+      ) {
         const settings = params["threadSettings"] as Record<string, unknown> | undefined;
-        if (settings) {
+        try {
+          confirmFullAccess(settings, true);
+        } catch (error) {
+          this.threadReady = false;
+          this.events.onFatal(String(error));
+          void this.shutdown();
+          return;
+        }
+        if (settings && id === this.threadId) {
           if (typeof settings["model"] === "string") this.tier.model = settings["model"];
           if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
             this.tier.serviceTier = settings["serviceTier"] as string | null;
@@ -515,6 +537,7 @@ export class VoiceRuntime {
       clientVersion: this.version,
       onNotification: (method, params) => this.handleNotification(method, params),
       onRequest: (method, params) => this.handleRequest(method, params),
+      onRefusal: (message) => this.events.onError(message, false),
       onClose: (info) => {
         if (this.shuttingDown || this.attachment !== connection || info.expected) return;
         this.threadReady = false;

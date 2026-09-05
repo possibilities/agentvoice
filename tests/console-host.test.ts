@@ -17,6 +17,35 @@ function selectableTextIds(root: Renderable): string[] {
 }
 
 describe("foreground console host", () => {
+  test("unsupported interaction remains visible without debug or an approval dialog", async () => {
+    const h = hostHarness();
+    const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    const message =
+      "Refused tool/requestUserInput: AgentVoice has no approval/input UI. Full access does not grant connector consent or answer tool questions. Use a supported Codex client for required interaction.";
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
+      h.native.options.onRefusal!(message);
+      await setup.waitFor(() => setup.captureCharFrame().includes("Refused tool/requestUserInput"));
+      for (const width of [40, 80, 120]) {
+        setup.resize(width, 24);
+        await setup.renderOnce();
+        const frame = setup.captureCharFrame();
+        expect(frame).toContain("connector");
+        expect(frame).toContain("interaction.");
+        expect(frame).not.toContain("Accept");
+        expect(h.native.alive).toBe(true);
+      }
+    } finally {
+      setup.mockInput.pressKey("q");
+      await run;
+      await h.cleanup();
+    }
+  });
   test("shows Fast/Standard reported by Codex and labels unconfirmed requests", async () => {
     for (const [fast, reported, label] of [
       [true, "priority", "Work: Fast"],

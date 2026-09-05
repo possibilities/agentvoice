@@ -29,6 +29,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   } else if (message.method === "dynamic") {
     send({ id: message.id, result: {} });
     send({ id: "dynamic", method: "item/tool/call", params: { tool: "test" } });
+  } else if (message.method === "server-request") {
+    send({ id: message.id, result: {} });
+    send({ id: "server-request", method: message.params.method, params: {} });
   } else if (message.method === "fail") {
     send({ id: message.id, error: { code: 42, message: "refused" } });
   } else if (message.method === "crash") {
@@ -42,6 +45,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     process.stdout.write("not-json\n");
   } else if (message.method === "hang") {
     // No reply: exercise cancellation and request timeout.
+  } else if (message.id === "server-request") {
+    send({ method: "test/response", params: message });
   } else if (message.id === "approval" || message.id === "dynamic") {
     send({ method: "test/answer", params: message.result });
   }

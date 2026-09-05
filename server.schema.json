@@ -65,23 +65,23 @@
         "sandbox": {
           "type": "string",
           "enum": ["read-only", "workspace-write", "danger-full-access"],
-          "description": "Execution sandbox for the orchestrator thread. NOT combinable with permissions — set one or the other.",
+          "description": "Full-access-only product policy: only danger-full-access is accepted at launch. Incompatible values error. NOT combinable with permissions.",
           "default": "danger-full-access"
         },
         "approval-policy": {
           "type": "string",
           "enum": ["never", "on-request", "untrusted"],
-          "description": "When codex escalates for approval.",
+          "description": "Full-access-only product policy: only never is accepted at launch. No approval UI is provided.",
           "default": "never"
         },
         "approvals-reviewer": {
           "type": "string",
           "enum": ["user", "auto_review", "guardian_subagent"],
-          "description": "Who reviews approval requests. auto_review gives escalations outside the sandbox an AI review (~3 s) instead of agentvoice's blanket fail-closed denial. Default: user."
+          "description": "Native reviewer passthrough; execution approvals are disabled by the mandatory never policy. This does not grant connector consent or answer questions. Default: native configuration."
         },
         "permissions": {
           "type": "string",
-          "description": "Named permission profile. NOT combinable with sandbox — set one or the other."
+          "description": "Only the built-in :danger-full-access profile is supported; other profiles error at launch. NOT combinable with sandbox."
         },
         "model-provider": {
           "type": "string",
@@ -109,11 +109,11 @@
         },
         "config": {
           "type": "object",
-          "description": "Raw ~/.codex/config.toml overrides, applied to this thread only. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history."
+          "description": "Raw ~/.codex/config.toml overrides, applied to this thread only. Permission selectors must match danger-full-access / never. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history."
         },
         "extra": {
           "type": "object",
-          "description": "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Conflicting cwd and threadId/path/history overrides are rejected. Upstream can silently ignore unknown or start-only fields on resume; consult its protocol."
+          "description": "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Permission selectors must match danger-full-access / never. Conflicting cwd and threadId/path/history overrides are rejected. Upstream can silently ignore unknown or start-only fields on resume; consult its protocol."
         }
       },
       "additionalProperties": false,

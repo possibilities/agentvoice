@@ -82,10 +82,15 @@ describe("workspace launch", () => {
   });
   test("preserves the console/fresh alias, explicit resume, and clear retirement errors", () => {
     for (const flag of ["--fresh", "--no-continue"]) {
-      expect(parseConsoleCommand([flag])).toMatchObject({ help: false, options: { fresh: true } });
+      expect(parseConsoleCommand(["--allow-full-access", flag])).toMatchObject({
+        help: false,
+        options: { fresh: true },
+      });
       expect(() => parseConsoleCommand([flag, "--resume", "id"])).toThrow("cannot be combined");
     }
-    expect(parseConsoleCommand(["--resume=id", "--workspace=/work"])).toMatchObject({
+    expect(
+      parseConsoleCommand(["--allow-full-access", "--resume=id", "--workspace=/work"]),
+    ).toMatchObject({
       options: { resume: "id", fresh: false },
     });
     expect(() => parseArgs(["--resume="])).toThrow("non-empty");

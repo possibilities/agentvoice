@@ -41,6 +41,7 @@ import {
   VOICE_KEYS,
   type VoiceValues,
 } from "./config-schema.ts";
+import { validateFullAccessParams } from "./full-access.ts";
 
 export type {
   AccountsValues,
@@ -508,6 +509,21 @@ export function resolveConfig(
     clientManagedHandoffs: pickVoice("client-managed-handoffs"),
     extra: pickVoice("extra"),
   };
+
+  try {
+    validateFullAccessParams(
+      {
+        sandbox: orchestrator.sandbox,
+        permissions: orchestrator.permissions,
+        approvalPolicy: orchestrator.approvalPolicy,
+        config: orchestrator.config,
+      },
+      "orchestrator",
+    );
+    validateFullAccessParams(orchestrator.extra ?? {}, "orchestrator.extra");
+  } catch (error) {
+    throw new ConfigError(error instanceof Error ? error.message : String(error));
+  }
 
   return {
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),

@@ -18,9 +18,10 @@ export class AppServerError extends Error {
 /**
  * Fail-closed answers for approval-bearing server→client requests. The console
  * runs unattended, so an unanswered request would park the agent turn forever;
- * every request gets an immediate denial (or `{}` when the method is unknown).
+ * Requests without a native refusal shape receive a JSON-RPC error, not an
+ * empty success or fabricated answers to a tool's questions.
  */
-export function buildDenialResponse(method: string): Record<string, unknown> {
+export function buildDenialResponse(method: string): Record<string, unknown> | null {
   switch (method) {
     case "execCommandApproval":
     case "applyPatchApproval":
@@ -34,11 +35,10 @@ export function buildDenialResponse(method: string): Record<string, unknown> {
       return { decision: "decline" };
     case "item/permissions/requestApproval":
       return { permissions: {}, scope: "turn" };
-    case "item/tool/requestUserInput":
-    case "tool/requestUserInput":
-      return { answers: {} };
+    case "mcpServer/elicitation/request":
+      return { action: "decline", content: null };
     default:
-      return {};
+      return null;
   }
 }
 
@@ -61,6 +61,7 @@ export interface AttachOptions {
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> | null;
   onClose(info: { expected: boolean; error?: string }): void;
+  onRefusal?(message: string): void;
   debug?(line: string): void;
 }
 
@@ -291,13 +292,14 @@ export class AppServerConnection {
       if (handled) {
         handled
           .then((response) => {
-            this.respond(requestId, response ?? buildDenialResponse(method));
+            if (response == null) this.refuse(requestId, method);
+            else this.respond(requestId, response);
           })
           .catch(() => {
-            this.respond(requestId, buildDenialResponse(method));
+            this.refuse(requestId, method);
           });
       } else {
-        this.respond(requestId, buildDenialResponse(method));
+        this.refuse(requestId, method);
       }
       return;
     }
@@ -312,6 +314,22 @@ export class AppServerConnection {
       this.send({ jsonrpc: "2.0", id, result });
     } catch {
       // detached mid-answer; the request dies with the connection
+    }
+  }
+
+  private refuse(id: number | string, method: string): void {
+    const message = `Refused ${method}: AgentVoice has no approval/input UI. Full access does not grant connector consent or answer tool questions. Use a supported Codex client for required interaction.`;
+    const result = buildDenialResponse(method);
+    try {
+      if (result !== null) this.respond(id, result);
+      else this.send({ jsonrpc: "2.0", id, error: { code: -32601, message } });
+    } catch {
+      // The pending request dies with its connection.
+    }
+    try {
+      this.options.onRefusal?.(message);
+    } catch {
+      this.options.debug?.("refusal notice callback failed");
     }
   }
 

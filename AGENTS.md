@@ -13,7 +13,7 @@ implementation.
   Do not run bare `bun test`: it can discover dependency/vendor tests.
 - `bun run typecheck` — strict TypeScript, no emit.
 - `bun run lint` / `bun run format` — Biome checks / fixes.
-- `bun run console` — foreground TUI; needs Codex login and built native audio.
+- `bun run console --allow-full-access` — foreground TUI; needs Codex login and built native audio.
 - `bun run native:build` / `bun run audio:probe` — build / exercise audio.
   The latter opens hardware; never substitute it for a no-microphone UI test.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
@@ -31,6 +31,9 @@ implementation.
 - src/core/config.ts: CLI > file > default resolution and prompt-file loading.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
+- src/core/full-access.ts: reject incompatible permission selectors and require
+  effective dangerFullAccess/never on start/resume/settings reports. Never infer
+  effective permissions from the request or bypass managed native requirements.
 - src/core/service-tier.ts: launch-only Fast/standard override, per-child native
   catalog preflight, response checks and requested-versus-reported tier labels.
   No flag means no extra RPCs/overrides. --no-fast sends default, not omission;
@@ -38,7 +41,8 @@ implementation.
   The resume-model preflight mirrors upstream has_model_resume_override; reverify
   when upgrading Codex. Never switch models to satisfy Fast.
 - src/core/attach.ts: owned child, native UTF-8 JSONL framing, correlated RPC,
-  notifications, default approval denials, bounded shutdown of its process group.
+  notifications, visible refusal callback, native denial payloads or JSON-RPC
+  errors for unsupported human input, bounded shutdown of its process group.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
@@ -58,6 +62,13 @@ implementation.
   signal field, mute/PTT, palette; no peer mirroring.
 
 ## Ownership and state invariants
+
+Public voice launches require --allow-full-access before config/child/media
+startup, every time. No prompt or config/env bypass. Help/accounts are exempt.
+Full access / never is an intentional product invariant for main and workers,
+not a default to inherit or weaken. Confirm native start/resume responses on
+launch, Fresh, rotation and workers. Unexpected human interaction is refused
+with a persistent TUI notice; never add automatic consent or invented answers.
 
 Resolve one existing absolute real workspace before spawning the child:
 CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
@@ -154,7 +165,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
 - Do not manufacture skill policy, transcript replay or session carryover.
-  Native voice-context controls, skill isolation and permissions remain
+  Native voice-context controls and skill isolation remain
   separate decisions. Optional dispatch/account behavior stays opt-in.
 
 ## The fleet

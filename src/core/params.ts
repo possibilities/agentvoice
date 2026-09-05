@@ -9,6 +9,7 @@
  */
 import type { Prompts, ServerConfig } from "./config.ts";
 import { VOICE_SEEDS } from "./config.ts";
+import { validateFullAccessParams } from "./full-access.ts";
 import { dispatchTools } from "./workers.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
@@ -71,6 +72,9 @@ export function threadParams(
   // Thread identity is owned by AgentVoice, not the generic extra escape
   // hatch: inventory must remain reliable under every configuration.
   if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;
+  validateFullAccessParams(merged);
+  // A raw matching built-in profile is allowed, but Codex rejects both selectors.
+  if (merged["permissions"] !== undefined) delete merged["sandbox"];
   return merged;
 }
 
@@ -105,6 +109,7 @@ export function workerThreadParams(
     ...orchestrator.config,
   };
   if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
+  validateFullAccessParams(params, "worker");
   return params;
 }
 

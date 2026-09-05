@@ -5,24 +5,54 @@ the TUI, audio, WebRTC and coordination runtime; an unmodified `codex app-server
 child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
-That audit is not finished: permission defaults, pinned realtime v3, automatic
-approval denial, optional worker dispatch and account balancing remain.
+Full access is an intentional product exception (see below). The defaults audit
+is not finished: pinned realtime v3, optional workers and account balancing remain.
 
 ## Start here
 
 From a prepared checkout (Bun dependencies and native audio already built):
 
 ```sh
-bun run /Users/arthack/code/agentvoice/src/main.ts
-bun run /Users/arthack/code/agentvoice/src/main.ts --workspace ~/code/myapp
-bun run /Users/arthack/code/agentvoice/src/main.ts --no-continue
-bun run /Users/arthack/code/agentvoice/src/main.ts --resume <thread-id>
+bun run /Users/arthack/code/agentvoice/src/main.ts --allow-full-access
+bun run /Users/arthack/code/agentvoice/src/main.ts --allow-full-access --workspace ~/code/myapp
+bun run /Users/arthack/code/agentvoice/src/main.ts --allow-full-access --no-continue
+bun run /Users/arthack/code/agentvoice/src/main.ts --allow-full-access --resume <thread-id>
 ```
 
 The absolute source command preserves your shell's working directory. In the
 examples, replace the checkout path if needed. Once installed, `agentvoice`
 is shorthand for the same entrypoint. `agentvoice console` is a compatibility
 alias; `--fresh` is an alias for `--no-continue`.
+
+### Full access is required
+
+Every voice launch requires `--allow-full-access`, including `console`, continue
+and resume. Without it the command errors (exit 2) before reading config, starting
+Codex or opening the microphone. No confirmation dialog, environment variable,
+config key or remembered consent substitutes for the flag. Help and `accounts`
+administration remain available without it.
+
+This permits unrestricted command filesystem/network access with native
+`danger-full-access` and approval policy `never`. Workspace selection does **not**
+confine file access. Main conversations and optional workers use the same policy;
+AgentVoice verifies Codex's effective start/resume responses, including Fresh and
+account rotation. Missing/restricted permission reports fail closed. Managed Codex
+requirements are never bypassed or rewritten to make launch succeed.
+
+Incompatible `sandbox`, `approval-policy`, named permission profiles and native
+config/extra selectors error. Matching legacy values remain accepted; the only
+supported profile is `:danger-full-access`. Permissions are a product invariant,
+not an inherited vanilla default or a setting for the app to relax later.
+
+Full access does not answer tool questions, authenticate connectors or grant
+their consent. Unexpected command/file/permission requests are denied, MCP
+elicitations declined, and unsupported input/auth/unknown requests receive a
+protocol error, never invented answers or empty successes. A persistent TUI
+notice explains the refusal without interrupting the whole conversation. Complete
+required interaction in a supporting Codex client; AgentVoice offers no approval
+UI. A native permission downgrade stops the app-owned child.
+
+Native protocol reference: [Codex approvals and connector interaction](https://learn.chatgpt.com/docs/app-server#approvals).
 
 Requirements: Bun, stock Codex with the experimental realtime app-server
 surface, an authenticated Codex account, built native duplex audio, and a
@@ -94,19 +124,17 @@ imply a background server. Use `--config <path>` for another file.
 Common launch options:
 
 ```sh
-agentvoice --workspace ~/code/myapp --model <model-id> --effort high
-agentvoice --fast
-agentvoice --resume <thread-id> --no-fast
-agentvoice --voice <voice-name> --device 1 --output-device 2
-agentvoice --sandbox workspace-write --approval-policy never
-agentvoice --config ./voice-settings.json --debug
+agentvoice --allow-full-access --workspace ~/code/myapp --model <model-id> --effort high
+agentvoice --allow-full-access --fast
+agentvoice --allow-full-access --resume <thread-id> --no-fast
+agentvoice --allow-full-access --voice <voice-name> --device 1 --output-device 2
+agentvoice --allow-full-access --config ./voice-settings.json --debug
 ```
 
 CLI options beat file values. Optional unset settings stay off the wire so Codex
-can use its own configuration. Exceptions retained here include
-`danger-full-access` / `never` and realtime version `v3`. Approval requests
-that reach this client are denied, not presented interactively. Default
-permissions are unrestricted; choose a sandbox explicitly when you need one.
+can use its own configuration. Exceptions are the mandatory full-access/never
+policy above and the retained realtime version `v3`. Restricted sandbox modes
+are not supported by this app.
 
 ### Native Fast mode
 
@@ -159,7 +187,7 @@ AgentVoice does not automatically enable AgentStart skills.
 The two request escape hatches are `orchestrator.extra` and `voice.extra`;
 `orchestrator.config` carries native Codex config overrides. Extra values
 usually win, but cannot replace conversation IDs, the selected workspace, or an
-explicit launch Fast/standard selection.
+explicit launch Fast/standard selection; conflicting permission selectors error.
 Unknown upstream fields may be silently ignored. Transport/output overrides
 can break the media path; not every upstream feature has a matching TUI.
 

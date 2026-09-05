@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { VoiceRuntime } from "../src/core/runtime.ts";
 import { observeTier, ServiceTierSelection, tierLabel } from "../src/core/service-tier.ts";
 import { parseArgs, parseConsoleCommand } from "../src/main.ts";
-import { deferred, NativeStub, runtimeHarness } from "./fixtures/runtime-harness.ts";
+import {
+  deferred,
+  NativeStub,
+  nativeFullAccess,
+  runtimeHarness,
+} from "./fixtures/runtime-harness.ts";
 
 const tier = (native: NativeStub, fast?: boolean) =>
   new ServiceTierSelection((m, p) => native.request(m, p), "/work", fast);
@@ -13,7 +18,7 @@ describe("native Fast launch policy", () => {
     expect(parseArgs([])).not.toHaveProperty("fast");
     expect(parseArgs(["--fast"]).fast).toBe(true);
     expect(parseArgs(["--no-fast"]).fast).toBe(false);
-    expect(parseConsoleCommand(["--resume=id", "--fast"])).toMatchObject({
+    expect(parseConsoleCommand(["--allow-full-access", "--resume=id", "--fast"])).toMatchObject({
       parsed: { fast: true },
     });
     for (const args of [
@@ -243,6 +248,7 @@ describe("Fast runtime propagation", () => {
         method === "thread/start" && params["threadSource"] === "agentvoice-worker"
           ? Promise.resolve({
               thread: { id: "rejected-worker" },
+              ...nativeFullAccess,
               model: "native-model",
               serviceTier: "default",
             })
@@ -345,7 +351,12 @@ describe("Fast runtime propagation", () => {
       await h.runtime.start();
       h.native.options.onNotification("thread/settings/updated", {
         threadId: h.runtime.currentReady!.threadId,
-        threadSettings: { model: "changed", serviceTier: "priority" },
+        threadSettings: {
+          ...nativeFullAccess,
+          sandboxPolicy: nativeFullAccess.sandbox,
+          model: "changed",
+          serviceTier: "priority",
+        },
       });
       expect(h.runtime.currentReady).toMatchObject({ model: "changed", serviceTier: "priority" });
     } finally {

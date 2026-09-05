@@ -20,6 +20,51 @@ async function until(predicate: () => boolean) {
 }
 
 describe("owned native stdio", () => {
+  test("refuses every human-interaction shape visibly, without answers or empty successes", async () => {
+    const notices: Record<string, unknown>[] = [];
+    const refusals: string[] = [];
+    const c = await connect("", {
+      onNotification: (method, params) => {
+        if (method === "test/response") notices.push(params);
+      },
+      onRefusal: (message) => refusals.push(message),
+    });
+    const cases: Array<[string, unknown]> = [
+      [
+        "execCommandApproval",
+        { decision: { denied: { rejection: "agentvoice runs unattended and never approves" } } },
+      ],
+      [
+        "applyPatchApproval",
+        { decision: { denied: { rejection: "agentvoice runs unattended and never approves" } } },
+      ],
+      ["item/commandExecution/requestApproval", { decision: "decline" }],
+      ["item/fileChange/requestApproval", { decision: "decline" }],
+      ["item/permissions/requestApproval", { permissions: {}, scope: "turn" }],
+      ["mcpServer/elicitation/request", { action: "decline", content: null }],
+      ["item/tool/requestUserInput", null],
+      ["tool/requestUserInput", null],
+      ["item/tool/call", null],
+      ["account/chatgptAuthTokens/refresh", null],
+      ["future/request", null],
+    ];
+    try {
+      for (const [method, result] of cases) {
+        const count = notices.length;
+        await c.request("server-request", { method });
+        await until(() => notices.length === count + 1);
+        const response = notices.at(-1)!;
+        if (result === null) {
+          expect(response).not.toHaveProperty("result");
+          expect(response["error"]).toMatchObject({ code: -32601 });
+        } else expect(response["result"]).toEqual(result);
+        expect(refusals.at(-1)).toContain(`Refused ${method}`);
+      }
+      expect(c.alive).toBe(true);
+    } finally {
+      await c.close();
+    }
+  });
   test("uses only stock app-server flags", () => {
     expect(appServerArgv("/bin/codex")).toEqual([
       "/bin/codex",

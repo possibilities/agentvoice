@@ -13,6 +13,11 @@ Codex can create its own tool processes. Quit closes the owned child/process gro
 to launch cwd unless explicitly configured or overridden by --workspace. Used
 for native conversation lookup and all AgentVoice-created threads. Not a sandbox.
 
+**Full access** — Required execution posture: native danger-full-access / never,
+verified on every thread start/resume. --allow-full-access is mandatory launch
+consent, not a config setting. No approval UI; connector/tool interaction is
+refused visibly and remains distinct from execution permissions.
+
 **Conversation / main thread** — A native Codex thread tagged
 agentvoice-orchestrator. Its saved history can continue across app launches.
 The latest eligible thread in the exact workspace is the default selection.

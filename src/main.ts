@@ -20,11 +20,12 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a foreground Codex voice TUI
 
 Usage:
-  agentvoice [options]           Continue this workspace's latest voice conversation
-  agentvoice console [options]   Compatibility alias
+  agentvoice --allow-full-access [options]          Continue this workspace's conversation
+  agentvoice console --allow-full-access [options]  Compatibility alias
   agentvoice accounts <command>  Manage optional account profiles
 
 Options:
+  --allow-full-access      Required each launch: unrestricted files/network, no approvals
   --workspace <dir>        Conversation root (default: launch directory)
   --no-continue            Start a new conversation (--fresh is an alias)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
@@ -37,16 +38,17 @@ Options:
   --voice <name>           Voice timbre
   --device <index>         Microphone device (default: system default)
   --output-device <index>  Speaker device (default: system default)
-  --sandbox <mode>         read-only | workspace-write | danger-full-access
-  --approval-policy <p>    never | on-request | untrusted
+  --sandbox <mode>         Only danger-full-access is supported
+  --approval-policy <p>    Only never is supported
   --codex <path>           Stock Codex executable (default: $CODEX_PATH or codex)
   --debug                 Per-launch protocol/media log under the state directory
   --help                  Show help
 
 One AgentVoice process owns an unmodified Codex app-server child.
 Quitting stops running work; native conversation history remains resumable.
-No background services or remote attachment. Existing permission defaults remain
-danger-full-access / never; this release does not change them.
+Full access is mandatory and verified with Codex; no config/environment opt-in.
+No permission dialogs. Connector consent/tool questions are refused visibly.
+No background services or remote attachment.
 
 Prompts are optional files beside the config:
   VOICE.md, VOICE_SEED_{DEVELOPER,USER,ASSISTANT}.md
@@ -91,7 +93,15 @@ const LAUNCH_FLAGS: FlagSpec = {
     "--output-device",
     "--resume",
   ]),
-  bool: new Set(["--debug", "--fresh", "--no-continue", "--fast", "--no-fast", "--help"]),
+  bool: new Set([
+    "--allow-full-access",
+    "--debug",
+    "--fresh",
+    "--no-continue",
+    "--fast",
+    "--no-fast",
+    "--help",
+  ]),
 };
 
 export class UsageError extends Error {}
@@ -103,6 +113,7 @@ export interface ParsedArgs {
   fresh: boolean;
   help: boolean;
   fast?: boolean;
+  allowFullAccess?: boolean;
 }
 
 export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): ParsedArgs {
@@ -137,7 +148,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
       if (flag === "--debug") debug = true;
       else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
       else if (flag === "--fast" || flag === "--no-fast") fast = flag === "--fast";
-      else help = true;
+      else if (flag === "--help") help = true;
       continue;
     }
     let value = inline;
@@ -159,7 +170,15 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     throw new UsageError("--resume requires a non-empty id");
   if (!help && seen.has("--fast") && seen.has("--no-fast"))
     throw new UsageError("--fast cannot be combined with --no-fast");
-  return { values, configPath, debug, fresh, help, ...(fast === undefined ? {} : { fast }) };
+  return {
+    values,
+    configPath,
+    debug,
+    fresh,
+    help,
+    ...(fast === undefined ? {} : { fast }),
+    ...(seen.has("--allow-full-access") ? { allowFullAccess: true } : {}),
+  };
 }
 
 function parseDeviceIndex(flag: string, value: string): number {
@@ -184,6 +203,10 @@ export type ParsedConsoleCommand =
 export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   const parsed = parseArgs(argv);
   if (parsed.help) return { help: true };
+  if (!parsed.allowFullAccess)
+    throw new UsageError(
+      "AgentVoice requires --allow-full-access on every launch: unrestricted filesystem/network access and no command/file approval prompts.",
+    );
   const device = parsed.values["device"];
   const outputDevice = parsed.values["output-device"];
   const resume = parsed.values["resume"];
@@ -340,7 +363,7 @@ async function runAccountsCommand(argv: string[]): Promise<number> {
       for (const command of missing) console.log(`  ${command}`);
     } else if (pool.length > 0) {
       console.log(
-        "\nevery codex-swap account has a profile; launch agentvoice with accounts.balance enabled",
+        "\nevery codex-swap account has a profile; launch agentvoice --allow-full-access with accounts.balance enabled",
       );
     }
     return 0;
@@ -359,7 +382,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "accounts") return await runAccountsCommand(argv.slice(1));
     if (command === "server" || command === "resident" || command === "remote") {
       throw new UsageError(
-        `${command} has been retired. Run agentvoice [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
+        `${command} has been retired. Run agentvoice --allow-full-access [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
       );
     }
     return await runConsoleCommand(command === "console" ? argv.slice(1) : argv);

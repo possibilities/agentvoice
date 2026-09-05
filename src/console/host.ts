@@ -77,6 +77,7 @@ export async function runConsoleHost(
   let runtime: VoiceRuntime | null = null;
   let closed = false;
   let fatal: string | null = null;
+  let notice: string | undefined;
   let shutdownPromise: Promise<void> | null = null;
   const meters = { mic: -Infinity, agent: -Infinity };
   const microphone = new MuteGate();
@@ -137,7 +138,11 @@ export async function runConsoleHost(
         } else transport?.handleClosed(reason);
       },
       onRedial: (reason) => transport?.handleRedial(reason),
-      onError: (message, isFatal) => transport?.handleError(message, isFatal),
+      onError: (message, isFatal) => {
+        notice = message;
+        tui?.refresh();
+        transport?.handleError(message, isFatal);
+      },
       onFatal: fail,
       onWorker: (worker) => feed(`worker ${worker.id}: ${worker.status}`),
       onStatus: feed,
@@ -157,6 +162,7 @@ export async function runConsoleHost(
   function state(): VoiceTuiState {
     return {
       available: !closed,
+      notice,
       phase,
       liveForMs: transport?.liveForMs ?? null,
       workTier: tierLabel(

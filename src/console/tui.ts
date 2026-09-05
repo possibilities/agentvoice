@@ -50,6 +50,7 @@ export interface VoiceTuiState {
   phase: VoicePhase;
   liveForMs: number | null;
   workTier?: string;
+  notice?: string;
   mic: VoiceTuiChannelState;
   speaker: VoiceTuiChannelState;
 }
@@ -200,6 +201,28 @@ export async function createVoiceTui(
   );
   renderer.root.add(commandTrigger);
 
+  // Persistent, wrapped explanation; no consent controls or invented answers.
+  const noticePanel = new BoxRenderable(renderer, {
+    id: "voice-notice-panel",
+    position: "absolute",
+    top: 2,
+    left: 0,
+    right: 0,
+    paddingLeft: 1,
+    paddingRight: 1,
+    backgroundColor: PALETTE.panel,
+  });
+  const notice = new TextRenderable(renderer, {
+    id: "voice-notice",
+    width: "100%",
+    content: "",
+    fg: PALETTE.agent,
+    bg: PALETTE.panel,
+    selectable: false,
+  });
+  noticePanel.add(notice);
+  renderer.root.add(noticePanel);
+
   let pttHeld = false;
   const keyControlGestures = new Map<
     AudioTarget,
@@ -232,6 +255,8 @@ export async function createVoiceTui(
     const width = renderer.width || process.stdout.columns || 40;
     const height = renderer.height || process.stdout.rows || 24;
     const state = host.state();
+    notice.content = state.notice ?? "";
+    noticePanel.visible = !!state.notice;
     layoutWidth = width;
     layoutHeight = height;
     rails.minHeight = height < 9 ? 4 : 7;

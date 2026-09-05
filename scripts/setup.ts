@@ -51,4 +51,6 @@ if ((await build.exited) !== 0) {
 }
 ok("duplex audio device built");
 
-console.log("\nready:  bun run console   (or `agentvoice`)");
+console.log(
+  "\nready:  bun run console --allow-full-access   (or `agentvoice --allow-full-access`)",
+);
