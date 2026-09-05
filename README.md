@@ -60,12 +60,44 @@ terminal with microphone permission. Headphones are recommended: there is no
 echo cancellation. The original voice semantics were verified on Codex 0.147;
 run the native protocol probe before changing the supported runtime.
 
+### Codex 0.153.3 voice startup compatibility
+
+On September 5, 2026, a live startup check with stock Codex 0.153.3 and the
+local authenticated account rejected the omitted-version WebRTC request with
+`AVAS requires OpenAI-Alpha: quicksilver=v2.` Explicit `voice.version: "v3"`
+connected and stayed live until shutdown; microphone/speaker audio was disabled
+for that check. This verifies startup, not spoken conversation or all accounts.
+
+If you see this rejection, merge the following into your AgentVoice JSON config
+and relaunch, or save it as `voice-settings.json` and select it explicitly:
+
+```json
+{ "voice": { "version": "v3" } }
+```
+
+```sh
+agentvoice --allow-full-access --config ./voice-settings.json
+```
+
+The header's `v2` is **not** `voice.version: "v2"`, which WebRTC rejects.
+In [Codex 0.153.3 source](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core/src/realtime_conversation.rs),
+v3 selects the parser that sends `quicksilver=v2`; omitted WebRTC version selects
+v1 and sends `quicksilver=v1`. AgentVoice preserves omission and never switches
+protocols automatically. A protocol change can also change Codex's default voice
+model and behavior. `--voice` selects a voice name, not the protocol version.
+
+Automatic retries pause after three consecutive short-lived failures. The TUI
+keeps the last cause alongside redial guidance; `r` retries the same launch
+settings. Configuration edits require quitting and relaunching.
+
+### Installation
+
 Installation is deliberately separate. `bun run setup` checks prerequisites
 and builds audio; `bun run native:build` rebuilds it. Both build without opening
 an audio device. `scripts/install.sh --install` is the single editable installer;
 `bun run cli:install` is an alias, and AgentStart's `install-agent-clis` delegates
-to the same contract. **Source wiring is ready; actual installation and first
-live voice use have not been performed as part of this change.**
+to the same contract. Installation does not verify authentication or connect a
+voice session; live voice compatibility is a separate check.
 
 The installer requires Bun 1.3+, an executable stock Codex (`CODEX_PATH` or PATH),
 a C11 compiler (Zig, clang or cc), and a clean checkout with the AgentVoice GitHub
