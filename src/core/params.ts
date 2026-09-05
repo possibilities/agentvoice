@@ -14,6 +14,15 @@ import { validateFullAccessParams } from "./full-access.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
+// The desktop has its own silence instruction for continuity. Stock app-server
+// startup context alone does not distinguish old answers from speech to deliver.
+export const QUIET_RESUME_INSTRUCTION =
+  "This voice connection is reopening on an existing conversation. Prior conversation and startup context are background, not a new user message. " +
+  "Remain silent at connection startup: do not greet, announce the reconnection, repeat an old answer, or continue an old request. " +
+  "Wait for a new user message in this voice session before responding, then continue naturally using the available conversation context. " +
+  "If the needed context is missing, ask the working agent to recall it from this thread instead of guessing. " +
+  "New results from work still running may be delivered normally; this instruction only suppresses unsolicited startup speech.";
+
 // Codex 0.153.3 ThreadStartParams fields absent from ThreadResumeParams.
 // Filter after raw extra merges; unknown future fields remain passthrough.
 const START_ONLY_FIELDS = [
@@ -125,6 +134,7 @@ export function realtimeParams(
   threadId: string,
   realtimeSessionId: string,
   sdp: string,
+  reconnect = false,
 ): Record<string, unknown> {
   const voice = config.voice;
   const params: Record<string, unknown> = {
@@ -166,6 +176,16 @@ export function realtimeParams(
   if (transport?.type === "webrtc" && merged["version"] === undefined)
     merged["version"] = DEFAULT_WEBRTC_VERSION;
   const version = merged["version"];
+  // Explicit initial items own startup behavior, including an empty array/null.
+  // Do not replace the native prompt or synthesize a transcript from history.
+  if (
+    reconnect &&
+    voice.quietResume !== false &&
+    transport?.type === "webrtc" &&
+    version === "v3" &&
+    merged["initialItems"] === undefined
+  )
+    merged["initialItems"] = [{ role: "developer", text: QUIET_RESUME_INSTRUCTION }];
   if (transport?.type === "webrtc" && version === "v2")
     throw new ConfigError(
       "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for AgentVoice's v3 compatibility default or explicitly select v1/v3 (also check voice.extra.version).",

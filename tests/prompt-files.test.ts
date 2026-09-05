@@ -128,13 +128,13 @@ describe("explicit prompt files", () => {
       for (const call of h.native.calls) {
         for (const key of [
           "prompt",
-          "initialItems",
           "realtimeStartInstructions",
           "realtimeEndInstructions",
           "baseInstructions",
           "developerInstructions",
         ])
           expect(call.params).not.toHaveProperty(key);
+        expect(JSON.stringify(call.params)).not.toContain("DO NOT LOAD THIS LEGACY TEXT");
       }
     } finally {
       for (const name of Object.values(LEGACY_PROMPT_FILES))

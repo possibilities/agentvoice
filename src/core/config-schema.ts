@@ -193,6 +193,14 @@ export const voiceValuesSchema = z
         default: DEFAULT_WEBRTC_VERSION,
       })
       .optional(),
+    "quiet-resume": z
+      .boolean()
+      .meta({
+        description:
+          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Keeps the native prompt and startup context. False disables it; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call is unchanged. This is a model instruction, not a transport-enforced silence guarantee.",
+        default: true,
+      })
+      .optional(),
     "include-startup-context": z
       .boolean()
       .describe(

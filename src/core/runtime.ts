@@ -82,7 +82,14 @@ export class VoiceRuntime {
           throw new AppServerError("Codex is not ready");
         await connection.request(
           "thread/realtime/start",
-          realtimeParams(this.config, this.prompts, threadId, sessionId, sdp),
+          realtimeParams(
+            this.config,
+            this.prompts,
+            threadId,
+            sessionId,
+            sdp,
+            this.conversationMode === "continued" || this.sessions.hasStarted,
+          ),
         );
       },
       stopRealtime: async () => {
@@ -161,9 +168,10 @@ export class VoiceRuntime {
       // Cut media before changing identity; no old audio or SDP enters the new conversation.
       this.events.onClosed("fresh-thread");
       await this.sessions.shutdown();
-      this.sessions.reset();
       this.assertRunning();
-      this.threadId = await this.startThread();
+      const threadId = await this.startThread();
+      this.sessions.reset();
+      this.threadId = threadId;
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
       if (error instanceof FullAccessError) {

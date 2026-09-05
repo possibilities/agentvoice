@@ -127,6 +127,24 @@ If none exists, a new conversation starts. Lookup/resume failures are errors,
 not an excuse to silently create a replacement. Explicit `--resume` must match
 an eligible conversation in the selected workspace.
 
+On continue/resume and redial, AgentVoice's **quiet-resume** policy asks the voice
+to wait for new input instead of greeting or repeating an old answer. It adds one
+developer `initialItems` entry on WebRTC v3; the native voice prompt and startup
+context remain intact. This is a frontend instruction, not a native default or
+a transport-enforced guarantee. Disable it with
+`{ "voice": { "quiet-resume": false } }` in your selected `server.json`.
+Explicit initial items (seed files or `voice.extra.initialItems`, including `[]`
+or `null`) take precedence. Other versions/transports receive no such item.
+A new conversation's first voice call keeps native startup behavior.
+
+Continuing restores the working Codex thread and starts a new voice call. Native
+startup context includes a bounded working-thread history snapshot, not every
+spoken exchange from the previous call. Completed delegated answers can therefore
+support a follow-up; voice-only details never handed to the working agent may be
+missing. No AgentVoice transcript store or replay is added. See the
+[continuity investigation](docs/adr/0010-quiet-voice-resume.md) for evidence and
+the live acceptance test, which is still pending.
+
 Fresh changes the conversation, not the workspace. It cuts the old media path
 before opening the new one. Old native history is not deleted, and any native
 work still active in the old conversation stays there. A per-thread kernel lock prevents two AgentVoice
@@ -283,8 +301,9 @@ Codex chooses the speech model: with v3, its 0.153.3 fallback is
 AgentVoice supplies no model name. Sending an explicit protocol also restores
 Codex's configured realtime voice selection, which omitted-version WebRTC
 ignores. `--voice` / `voice.name` still overrides the voice name. Current v1/v3
-share a voice-name family. This does not select the working model, reasoning
-or Fast tier, or add prompt/startup-context/tail-flush overrides.
+share a voice-name family. Protocol selection does not select the working model,
+reasoning or Fast tier, or change startup-context/tail-flush settings. The separate
+quiet-resume policy above uses a developer initial item on reconnect.
 
 Explicit `prompt-files` voice-seed references and nonempty `voice.extra.initialItems`
 require effective v3, which the normal WebRTC default satisfies. Even an empty
@@ -375,7 +394,8 @@ file sends an empty string. An empty path is an error, not an empty prompt.
 Contents load once at launch and are reused on redial and Fresh. Seed roles are sent developer, user, assistant; raw `initialItems`
 can express any supported ordering/repetition. Session-boundary instructions and
 voice prompts/items ride every realtime start, including redial. No transcripts
-are captured and replayed by AgentVoice.
+are captured and replayed by AgentVoice. Explicit seeds replace quiet-resume's
+default initial item, so their author owns startup behavior.
 
 Migration: leave old files untouched or back them up, then explicitly reference
 only the ones you want. For a native baseline, leave the section unset. The app
