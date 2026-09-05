@@ -44,18 +44,14 @@ Old history remains; native work in the old conversation stays there.
 **Continue / resume** — Resume native eligible working-thread history; default
 and --continue select the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. New voice calls restore recent saved speech from
-that same thread unless voice.replay-spoken-history=false or explicit seeds win.
-
-**Quiet resume** — AgentVoice's default WebRTC v3 reconnect instruction: wait
-for new input instead of repeating old context. A developer initial item leaves
-the native voice prompt intact. Explicit initial items or voice.quiet-resume=false
-disable this default. It is model guidance, not a silence guarantee, independent
-of spoken replay and the native startup snapshot.
+that same thread unless voice.replay-spoken-history=false or explicit seeds win;
+AgentVoice adds no instruction of its own.
 
 **Spoken history replay** — AgentVoice reads native saved speech and sends it as
 past conversation in v3 initialItems, without a separate persistent store. The
 frontend setting voice.replay-spoken-history defaults true; false leaves the
-working thread resumed but skips this read/replay. It cannot restore unsaved audio.
+working thread resumed but skips this read/replay, so the reconnect matches a
+stock app-server realtime start. It cannot restore unsaved audio.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
@@ -86,6 +82,6 @@ Space (with key releases) and the pointer PTT band temporarily unmute the mic;
 each source releases only its own hold, and release never commits a toggle.
 
 **Historical terms** — Resident, Server, Remote console, control attachment,
-paired device, discovery, custom Worker, Worker report, account profile and idle
-account rotation refer to retired implementations in old ADRs, not current runtime
-components. Native Codex subagents are separate from the removed AgentVoice worker system.
+paired device, discovery, custom Worker, Worker report, account profile, idle
+account rotation and Quiet resume (ADR 0010, retired by ADR 0012) refer to retired
+implementations in old ADRs, not current runtime components. Native Codex subagents are separate from the removed AgentVoice worker system.

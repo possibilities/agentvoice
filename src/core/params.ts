@@ -15,15 +15,9 @@ import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
-// The desktop has its own silence instruction for continuity. Stock app-server
-// startup context alone does not distinguish old answers from speech to deliver.
-export const QUIET_RESUME_INSTRUCTION =
-  "This voice connection is reopening on an existing conversation. Prior conversation and startup context are background, not a new user message. " +
-  "Remain silent at connection startup: do not greet, announce the reconnection, repeat an old answer, or continue an old request. " +
-  "Wait for a new user message in this voice session before responding, then continue naturally using the available conversation context. " +
-  "If the needed context is missing, ask the working agent to recall it from this thread instead of guessing. " +
-  "New results from work still running may be delivered normally; this instruction only suppresses unsolicited startup speech.";
-
+// Replay is the one AgentVoice default on a reconnect (ADR 0011, opt-out). Stock
+// app-server never restores a previous call's speech, and AgentVoice adds no
+// instruction of its own beyond this preface (ADR 0012).
 export const SPOKEN_HISTORY_INSTRUCTION =
   "The following initial user and assistant messages are saved speech segments from this same conversation before the current voice connection. " +
   "They are past conversation, not new requests. Adjacent segments may be parts of the same spoken reply. " +
@@ -198,18 +192,16 @@ export function realtimeParams(
   // Do not replace the native prompt or synthesize a transcript from history.
   if (
     reconnect &&
+    voice.replaySpokenHistory !== false &&
+    spokenHistory.length > 0 &&
     transport?.type === "webrtc" &&
     version === "v3" &&
     merged["initialItems"] === undefined
-  ) {
-    const history = voice.replaySpokenHistory !== false ? spokenHistory : [];
-    const instructions = [
-      ...(history.length > 0 ? [SPOKEN_HISTORY_INSTRUCTION] : []),
-      ...(voice.quietResume !== false ? [QUIET_RESUME_INSTRUCTION] : []),
-    ].join("\n\n");
-    if (instructions)
-      merged["initialItems"] = [{ role: "developer", text: instructions }, ...history];
-  }
+  )
+    merged["initialItems"] = [
+      { role: "developer", text: SPOKEN_HISTORY_INSTRUCTION },
+      ...spokenHistory,
+    ];
   if (transport?.type === "webrtc" && version === "v2")
     throw new ConfigError(
       "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for AgentVoice's v3 compatibility default or explicitly select v1/v3 (also check voice.extra.version).",
