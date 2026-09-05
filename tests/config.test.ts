@@ -544,8 +544,8 @@ describe("resolveConfig characterization", () => {
   });
 
   test("every optional leaf stays undefined when unset", () => {
-    // Anything undefined here is omitted from the codex payloads entirely
-    // (params.ts drops undefined); resolution must never default-inject.
+    // WebRTC's compatibility version is applied at request construction, after
+    // raw transport/version overrides. Configuration parsing preserves omission.
     const { orchestrator, voice } = resolveConfig({}, {}, {}, HOME);
     const orchestratorLeaves = [
       "model",

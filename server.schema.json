@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access and WebRTC v3 compatibility. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -45,15 +45,15 @@
         },
         "voice-seed-developer": {
           "type": "string",
-          "description": "File for a developer-role initial voice item. Requires explicit realtime v3, even for empty text."
+          "description": "File for a developer-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
         },
         "voice-seed-user": {
           "type": "string",
-          "description": "File for a user-role initial voice item. Requires explicit realtime v3, even for empty text."
+          "description": "File for a user-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
         },
         "voice-seed-assistant": {
           "type": "string",
-          "description": "File for an assistant-role initial voice item. Requires explicit realtime v3, even for empty text."
+          "description": "File for an assistant-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
         }
       },
       "additionalProperties": false
@@ -72,7 +72,7 @@
         },
         "effort": {
           "type": "string",
-          "description": "Reasoning effort (none…ultra); sugar for model_reasoning_effort. An entry in orchestrator.config beats this shorthand. Note: ultra additionally switches on codex's proactive multi-agent mode. Default: codex config."
+          "description": "Reasoning effort (none…ultra); sugar for model_reasoning_effort. An entry in orchestrator.config beats this shorthand. Model support and subagent behavior belong to Codex; this field does not promise a multi-agent mode. Default: Codex configuration."
         },
         "personality": {
           "type": "string",
@@ -115,7 +115,7 @@
         "history-mode": {
           "type": "string",
           "enum": ["legacy", "paginated"],
-          "description": "Thread history mode. Default: codex config."
+          "description": "Native history representation. Unset lets app-server choose based on thread-store capabilities (Codex 0.153.3); resume retains the saved mode."
         },
         "runtime-workspace-roots": {
           "type": "array",
@@ -152,12 +152,13 @@
         },
         "name": {
           "type": "string",
-          "description": "Voice timbre, validated by Codex when voice starts. Loaded once per launch; restart to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through."
+          "description": "Voice timbre, validated by Codex when voice starts. Loaded once per launch; restart to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through."
         },
         "version": {
           "type": "string",
           "enum": ["v1", "v2", "v3"],
-          "description": "Optional native realtime protocol override. Unset omits version, preserving Codex's transport-specific default (WebRTC uses v1 in Codex 0.153.3, not the general realtime config). Set v3 explicitly to preserve AgentVoice's former protocol or use initial seed items. WebRTC rejects v2."
+          "description": "Realtime protocol override. AgentVoice defaults WebRTC requests to v3 for service compatibility; this is a frontend transport default, not Codex's omitted-version fallback. Explicit values and final voice.extra.version overrides win, including null for native fallback (WebRTC v1 in Codex 0.153.3, currently rejected by the service tested here). Alternate raw transports receive no compatibility default. WebRTC rejects v2; initial seed items require effective v3.",
+          "default": "v3"
         },
         "include-startup-context": {
           "type": "boolean",

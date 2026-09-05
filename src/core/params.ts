@@ -3,12 +3,13 @@
  * the mapping from config and prompt files to wire fields is testable: a wrong
  * field name here is silently ignored upstream rather than rejected.
  *
- * Unset options are never sent, preserving native defaults/configuration. A prompt
+ * Unset options stay omitted except documented application defaults. A prompt
  * that resolved to the empty string IS sent — empty strips a built-in prompt,
  * where absent leaves codex's default in place.
  */
 import type { Prompts, ServerConfig } from "./config.ts";
 import { ConfigError, VOICE_SEEDS } from "./config.ts";
+import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
@@ -159,16 +160,20 @@ export function realtimeParams(
   setIfDefined(params, "clientManagedHandoffs", voice.clientManagedHandoffs);
 
   const merged = { ...params, ...voice.extra };
-  const version = merged["version"];
   const transport = merged["transport"] as { type?: string } | null;
+  // Stock 0.153.3 falls back to WebRTC v1, which the current service rejects.
+  // Keep explicit overrides (including null) and alternate transports intact.
+  if (transport?.type === "webrtc" && merged["version"] === undefined)
+    merged["version"] = DEFAULT_WEBRTC_VERSION;
+  const version = merged["version"];
   if (transport?.type === "webrtc" && version === "v2")
     throw new ConfigError(
-      "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for the native default or explicitly select v1/v3 (also check voice.extra.version).",
+      "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for AgentVoice's v3 compatibility default or explicitly select v1/v3 (also check voice.extra.version).",
     );
   const items = merged["initialItems"];
   if (Array.isArray(items) && items.length > 0 && version !== "v3")
     throw new ConfigError(
-      'Initial voice items (prompt-files voice-seed references or voice.extra.initialItems) require explicit realtime v3. Set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or choose a protocol for you.',
+      'Initial voice items (prompt-files voice-seed references or voice.extra.initialItems) require effective realtime v3. Use AgentVoice\'s WebRTC default or set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or replace an explicit protocol choice.',
     );
   return merged;
 }

@@ -6,9 +6,9 @@
  *
  * Contract:
  * - Every field is `.optional()` and none carries a zod `.default()`: an unset
- *   key must stay unset through parse so resolution can keep it unset and
- *   never send it to codex at all. The `default` entries in `.meta()` are
- *   schema documentation of resolution-time behavior, not parse-time values.
+ *   key must stay unset through parse. Documented application defaults apply
+ *   during resolution or request construction; other unset fields stay omitted.
+ *   The `default` entries in `.meta()` document behavior, not parse-time values.
  * - The root, `prompt-files`, `orchestrator`, and `voice` reject unknown keys.
  *   `strictObject` alone does not finish that job: zod skips a literal own
  *   `__proto__` key, so `config.ts` scans the raw document for it separately.
@@ -36,6 +36,9 @@ export type HistoryMode = (typeof HISTORY_MODES)[number];
 export type RealtimeVersion = (typeof REALTIME_VERSIONS)[number];
 export type HandoffMode = (typeof HANDOFF_MODES)[number];
 
+/** WebRTC service compatibility, not Codex's omitted-version fallback. */
+export const DEFAULT_WEBRTC_VERSION: RealtimeVersion = "v3";
+
 /** An object whose contents forward verbatim — never recursed or validated. */
 const passthrough = (description: string) => z.looseObject({}).describe(description);
 
@@ -62,13 +65,13 @@ export const promptFilesSchema = z
       "File for native realtimeEndInstructions to the working agent, sent on each realtime start/redial.",
     ),
     "voice-seed-developer": promptPath(
-      "File for a developer-role initial voice item. Requires explicit realtime v3, even for empty text.",
+      "File for a developer-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
     ),
     "voice-seed-user": promptPath(
-      "File for a user-role initial voice item. Requires explicit realtime v3, even for empty text.",
+      "File for a user-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
     ),
     "voice-seed-assistant": promptPath(
-      "File for an assistant-role initial voice item. Requires explicit realtime v3, even for empty text.",
+      "File for an assistant-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
     ),
   })
   .describe(
@@ -92,7 +95,7 @@ export const orchestratorValuesSchema = z
     effort: z
       .string()
       .describe(
-        "Reasoning effort (none…ultra); sugar for model_reasoning_effort. An entry in orchestrator.config beats this shorthand. Note: ultra additionally switches on codex's proactive multi-agent mode. Default: codex config.",
+        "Reasoning effort (none…ultra); sugar for model_reasoning_effort. An entry in orchestrator.config beats this shorthand. Model support and subagent behavior belong to Codex; this field does not promise a multi-agent mode. Default: Codex configuration.",
       )
       .optional(),
     personality: z
@@ -142,7 +145,9 @@ export const orchestratorValuesSchema = z
       .optional(),
     "history-mode": z
       .enum(HISTORY_MODES)
-      .describe("Thread history mode. Default: codex config.")
+      .describe(
+        "Native history representation. Unset lets app-server choose based on thread-store capabilities (Codex 0.153.3); resume retains the saved mode.",
+      )
       .optional(),
     "runtime-workspace-roots": z
       .array(z.string())
@@ -177,14 +182,16 @@ export const voiceValuesSchema = z
     name: z
       .string()
       .describe(
-        "Voice timbre, validated by Codex when voice starts. Loaded once per launch; restart to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through.",
+        "Voice timbre, validated by Codex when voice starts. Loaded once per launch; restart to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through.",
       )
       .optional(),
     version: z
       .enum(REALTIME_VERSIONS)
-      .describe(
-        "Optional native realtime protocol override. Unset omits version, preserving Codex's transport-specific default (WebRTC uses v1 in Codex 0.153.3, not the general realtime config). Set v3 explicitly to preserve AgentVoice's former protocol or use initial seed items. WebRTC rejects v2.",
-      )
+      .meta({
+        description:
+          "Realtime protocol override. AgentVoice defaults WebRTC requests to v3 for service compatibility; this is a frontend transport default, not Codex's omitted-version fallback. Explicit values and final voice.extra.version overrides win, including null for native fallback (WebRTC v1 in Codex 0.153.3, currently rejected by the service tested here). Alternate raw transports receive no compatibility default. WebRTC rejects v2; initial seed items require effective v3.",
+        default: DEFAULT_WEBRTC_VERSION,
+      })
       .optional(),
     "include-startup-context": z
       .boolean()
