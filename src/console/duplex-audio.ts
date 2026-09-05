@@ -26,7 +26,6 @@ export interface VoiceAudioOptions {
   debug?(line: string): void;
 }
 
-const SILENCE_WARN_CHUNKS = 50;
 const CAPTURE_POLL_MS = 5;
 const MAX_CAPTURE_CHUNKS_PER_POLL = 32;
 const DEBUG_LOG_INTERVAL_MS = 1_000;
@@ -100,8 +99,6 @@ export class DuplexVoiceAudio {
   private observedPlaybackStarvations = 0n;
   private remoteSubscription: { unSubscribe(): void } | null = null;
   private remoteGeneration = 0;
-  private silentChunks = 0;
-  private warnedSilence = false;
   private warnedDecode = false;
   private warnedPlaybackDrop = false;
   private seenRemoteAudio = false;
@@ -237,19 +234,6 @@ export class DuplexVoiceAudio {
 
   private handleMicFrame(frame: Buffer): void {
     this.options.onMicLevel(rmsDbS16(frame));
-    if (isAllZero(frame)) {
-      this.silentChunks++;
-      if (this.silentChunks >= SILENCE_WARN_CHUNKS && !this.warnedSilence) {
-        this.warnedSilence = true;
-        this.options.onWarning(
-          "microphone is delivering pure silence — check System Settings › Privacy & Security › Microphone for your terminal, then restart it",
-        );
-      }
-    } else {
-      this.silentChunks = 0;
-      this.warnedSilence = false;
-    }
-
     if (!this.encoder) return;
     try {
       sendCapturedFrame(this.encoder, frame, this.micMuted, this.options.sendFrame);
@@ -536,13 +520,6 @@ function validateDeviceIndex(
   const names =
     devices.map((device) => `${device.index}: ${device.name}`).join(", ") || "none found";
   throw new Error(`no ${direction} device with index ${index} (${names})`);
-}
-
-function isAllZero(buffer: Buffer): boolean {
-  for (let offset = 0; offset < buffer.length; offset += 2) {
-    if (buffer.readInt16LE(offset) !== 0) return false;
-  }
-  return true;
 }
 
 function minimum(current: number | null, value: number): number {
