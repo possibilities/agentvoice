@@ -42,6 +42,8 @@ export interface TransportEvents {
 export interface VoiceTransportOptions extends TransportEvents {
   signal: TransportSignal;
   debug?(line: string): void;
+  /** Injectable network boundary for transport lifecycle tests. */
+  createPeer?(): RTCPeerConnection;
 }
 
 /** Renew shortly before the ~60-minute upstream session ceiling. */
@@ -143,9 +145,8 @@ export class VoiceTransport {
     this.debug(`ready: thread ${info.threadId}`);
     if (this.wantLive && !this.live && !this.pending) {
       if (this.rapidFailures >= MAX_RAPID_FAILURES) {
-        this.options.onError("voice failed repeatedly — press r to redial when ready");
         this.setPhase("failed");
-      } else {
+      } else if (!this.retryTimer) {
         this.negotiate();
       }
     }
@@ -221,13 +222,14 @@ export class VoiceTransport {
   }
 
   private negotiate(): void {
-    if (this.stopping || !this.ready) return;
+    if (this.stopping || !this.ready || this.rapidFailures >= MAX_RAPID_FAILURES) return;
+    this.clearRetryTimer();
     const stale = this.pending;
     this.pending = null;
     if (stale) this.closePeer(stale);
 
     const generation = ++this.generation;
-    const pc = new RTCPeerConnection({ codecs: { audio: [OPUS] } });
+    const pc = this.options.createPeer?.() ?? new RTCPeerConnection({ codecs: { audio: [OPUS] } });
     const sendTrack = new MediaStreamTrack({ kind: "audio" });
     const session: PeerSession = {
       generation,
@@ -329,9 +331,8 @@ export class VoiceTransport {
     if (this.pending !== session) return;
     this.pending = null;
     this.closePeer(session);
-    this.options.onError(reason);
     this.rapidFailures++;
-    this.afterFailure();
+    this.afterFailure(reason);
   }
 
   private failLive(session: PeerSession, reason: string): void {
@@ -340,26 +341,30 @@ export class VoiceTransport {
       session.liveSince !== null && Date.now() - session.liveSince > HEALTHY_SESSION_MS;
     this.live = null;
     this.closePeer(session);
-    this.options.onError(reason);
-    if (this.pending) return; // a successor is already negotiating
+    if (this.pending) {
+      this.options.onError(reason);
+      return; // a successor is already negotiating
+    }
     this.rapidFailures = wasHealthy ? 1 : this.rapidFailures + 1;
-    this.afterFailure();
+    this.afterFailure(reason);
   }
 
   /** Shared failure tail: give up at the budget, otherwise re-offer shortly. */
-  private afterFailure(): void {
+  private afterFailure(reason: string): void {
+    this.clearRetryTimer();
     if (this.rapidFailures >= MAX_RAPID_FAILURES) {
-      this.options.onError("voice failed repeatedly — press r to redial");
+      this.options.onError(`${reason} — retries paused; press r to redial`);
       // Repeated supersede attempts have killed the old session's control
       // plane server-side; don't pretend it is still live.
       this.dropPeers();
       this.setPhase("failed");
       return;
     }
+    this.options.onError(reason);
     if (!this.live) this.setPhase("waiting-ready");
     if (this.ready) {
-      this.clearRetryTimer();
       this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
         if (!this.stopping && this.wantLive && !this.pending) this.negotiate();
       }, RETRY_OFFER_MS);
     }

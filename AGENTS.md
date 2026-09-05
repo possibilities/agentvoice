@@ -114,6 +114,10 @@ edit archive checkouts or start inference/audio probes. Those require scope.
 Baseline lifecycle verified against Codex 0.147 source + probes. Version/default
 and invalid-combination checks refreshed against stock 0.153.3 with network denied,
 an isolated disposable CODEX_HOME, and deliberately invalid requests; no live audio.
+On September 5, 2026, a live startup check with stock 0.153.3 and the local native
+login rejected omitted WebRTC version with invalid_quicksilver_alpha_header;
+explicit v3 connected (no microphone/speaker). See README's compatibility note.
+Keep omission intact; this account/runtime observation is not a new native default.
 
 These invariants are load-bearing for `session.ts`; re-verify them before
 bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs`,

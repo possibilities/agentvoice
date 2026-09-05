@@ -83,6 +83,13 @@ before child startup. Final extra overrides are checked; no seeds are silently
 discarded and no protocol is auto-selected. Protocol changes may change the
 default speech model/behavior. Current v1/v3 share a voice-name family.
 
+The September 5, 2026 live startup check found the service rejecting omitted
+WebRTC version on stock 0.153.3 with `invalid_quicksilver_alpha_header`; explicit
+v3 connected with audio hardware disabled. See the [startup workaround](../README.md#codex-01533-voice-startup-compatibility).
+This is observed compatibility for one account/runtime, not a new application
+default. Retry exhaustion retains the service error and requires manual redial
+after three failures; readiness notifications do not bypass the retry delay.
+
 ## What ships versus what is native
 
 AgentVoice supplies no default custom prompt files. Explicit prompt-files references
@@ -180,12 +187,13 @@ choice, not automatic discovery; see README migration notes.
   overrides are implemented. Native voice-context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - AgentVoice-specific skill isolation and selective seeding.
-- Actual installation and first live voice use. AgentStart now delegates to the
-  hardened repository-owned installer; only disposable installation tests were run.
+- Spoken conversation and audio latency/buffering validation. The editable command
+  has been installed; stock 0.153.3 WebRTC startup has been checked without audio
+  hardware, including the explicit-v3 workaround above.
 
 Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
 and native --fast/--no-fast are implemented. They do not settle the items above.
 
 Native readiness checks complete before audio hardware opens; negotiation waits
-for audio readiness. LIVE is a media state, not work completion. Live audio,
-latency/buffering and first-install validation remain separate checks.
+for audio readiness. LIVE is a media state, not work completion. Live audio and
+latency/buffering remain separate checks.
