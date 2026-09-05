@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerConfig } from "../core/config.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
+import { tierLabel } from "../core/service-tier.ts";
 import { stateDirectory } from "../paths.ts";
 import { type AudioTarget, MuteGate } from "./audio-control.ts";
 import type { DuplexVoiceAudio, VoiceAudioOptions } from "./duplex-audio.ts";
@@ -158,6 +159,16 @@ export async function runConsoleHost(
       available: !closed,
       phase,
       liveForMs: transport?.liveForMs ?? null,
+      workTier: tierLabel(
+        runtime?.currentReady ?? {
+          requestedServiceTier:
+            options.runtime?.fast === undefined
+              ? undefined
+              : options.runtime.fast
+                ? "priority"
+                : "default",
+        },
+      ),
       mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted, db: meters.mic },
       speaker: { muted: speaker.muted, effectiveMuted: speaker.effectiveMuted, db: meters.agent },
     };

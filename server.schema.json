@@ -89,7 +89,7 @@
         },
         "service-tier": {
           "type": "string",
-          "description": "Service tier. Default: codex config."
+          "description": "Native service-tier passthrough. Default: codex config. Launch flags --fast/--no-fast take precedence (including over extra.serviceTier); --fast checks the native model catalog and enables the thread-local Fast gate."
         },
         "ephemeral": {
           "type": "boolean",

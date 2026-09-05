@@ -31,6 +31,8 @@ Options:
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
   --model <id>             Codex work model (default: native configuration)
   --effort <level>         Codex reasoning effort (default: native configuration)
+  --fast                  Native Fast tier when supported (higher usage/cost)
+  --no-fast               Explicit standard processing, overriding inherited Fast
   --voice-model <id>       Realtime voice model
   --voice <name>           Voice timbre
   --device <index>         Microphone device (default: system default)
@@ -89,7 +91,7 @@ const LAUNCH_FLAGS: FlagSpec = {
     "--output-device",
     "--resume",
   ]),
-  bool: new Set(["--debug", "--fresh", "--no-continue", "--help"]),
+  bool: new Set(["--debug", "--fresh", "--no-continue", "--fast", "--no-fast", "--help"]),
 };
 
 export class UsageError extends Error {}
@@ -100,6 +102,7 @@ export interface ParsedArgs {
   debug: boolean;
   fresh: boolean;
   help: boolean;
+  fast?: boolean;
 }
 
 export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): ParsedArgs {
@@ -109,6 +112,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
   let debug = false;
   let fresh = false;
   let help = false;
+  let fast: boolean | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const argument = argv[i]!;
@@ -132,6 +136,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
       else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
+      else if (flag === "--fast" || flag === "--no-fast") fast = flag === "--fast";
       else help = true;
       continue;
     }
@@ -152,7 +157,9 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     throw new UsageError("--resume cannot be combined with --no-continue/--fresh");
   if (!help && values["resume"] !== undefined && !values["resume"].trim())
     throw new UsageError("--resume requires a non-empty id");
-  return { values, configPath, debug, fresh, help };
+  if (!help && seen.has("--fast") && seen.has("--no-fast"))
+    throw new UsageError("--fast cannot be combined with --no-fast");
+  return { values, configPath, debug, fresh, help, ...(fast === undefined ? {} : { fast }) };
 }
 
 function parseDeviceIndex(flag: string, value: string): number {
@@ -245,6 +252,7 @@ async function runConsoleCommand(argv: string[]): Promise<number> {
     runtime: {
       fresh: command.options.fresh,
       resume: command.options.resume,
+      fast: command.parsed.fast,
       configSource: { path: configPath, load: loadResolvedConfig },
     },
   });

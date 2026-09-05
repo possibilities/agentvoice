@@ -30,7 +30,7 @@ The generated server.schema.json is authoritative for spelling and types.
 
 | Area | Keys / controls |
 | --- | --- |
-| Launch | workspace, config path, fresh/no-continue, resume ID, debug, microphone/output device indices, Codex executable |
+| Launch | workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
 | Main agent | model, effort, personality, sandbox or named permissions, approval-policy, approvals-reviewer, model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Optional workers | dispatch, dispatch-reports |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
@@ -43,8 +43,15 @@ The generated server.schema.json is authoritative for spelling and types.
 Not every setting is a CLI flag: --help lists the common flags; server.json and
 the passthrough objects expose the larger surface. Passthrough is not validation:
 unknown native fields may be ignored, and unsupported transport/output values
-can disable audio. --fast is not yet a launch flag; service-tier already exists
-as a raw config option, without the requested model-capability-aware shortcut.
+can disable audio. --fast selects the working model's advertised native Fast
+tier (higher usage/cost); --no-fast explicitly selects standard. Neither changes
+the model, reasoning effort or realtime speech. With neither flag, tier/config
+passthrough stays unchanged. The flags win over file/config/extra tier values;
+Fast enables only the thread-local native feature gate, not global settings.
+Support is checked against each child's catalog before work; unknown models,
+missing tier metadata or a different per-thread provider fail clearly. Start/resume
+responses confirm the applied setting when available; TUI labels missing data
+as requested. The indicator is configured tier, not billing telemetry.
 
 Only voice.name hot reloads. Prompts load once at launch and are reused on redial
 and Fresh. Main prompt settings ride thread/start or resume; session-boundary
@@ -94,7 +101,7 @@ Accounts: independently logged-in profile homes, shared native history/config,
 balancer preference/fallback, quota observation, idle-only child replacement.
 Selection remains opt-in. Never copy auth grants between stores.
 
-TUI/media: signal field, status/elapsed timer, dB meters, command palette,
+TUI/media: signal field, status/elapsed timer, working-model tier, dB meters, command palette,
 mouse and keyboard mute/PTT, device selection, Opus/WebRTC, make-before-break
 redial, automatic renewal and debug metrics. There is no echo cancellation,
 text-chat transcript pane or interactive approval UI.
@@ -109,7 +116,6 @@ skill enabling. Native history and private legacy state are untouched.
 
 ## Deferred requests and decisions
 
-- Model-capability-aware --fast.
 - Full vanilla-defaults and prompt/settings passthrough audit, particularly
   permissions/approvals, realtime v3 and seed/session-boundary controls.
 - Reconsider the three native voice-context levers above.
@@ -118,5 +124,5 @@ skill enabling. Native history and private legacy state are untouched.
 - AgentStart installation wiring and actual installation/first live voice use.
   Its current source installer has no AgentVoice entry; no install was run.
 
-Continue/workspace selection and one foreground AgentVoice process are the
-implemented ADR 0009 scope. They deliberately do not settle the items above.
+Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
+and native --fast/--no-fast are implemented. They do not settle the items above.

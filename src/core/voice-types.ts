@@ -5,6 +5,9 @@ export interface ReadyInfo {
   threadId: string;
   workspace: string;
   model: string | null;
+  /** Native configured tier, not per-request billing/execution telemetry. */
+  serviceTier?: string | null;
+  requestedServiceTier?: string;
   effort: string | null;
   voiceModel: string | null;
   voice: string | null;

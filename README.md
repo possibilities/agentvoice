@@ -95,6 +95,8 @@ Common launch options:
 
 ```sh
 agentvoice --workspace ~/code/myapp --model <model-id> --effort high
+agentvoice --fast
+agentvoice --resume <thread-id> --no-fast
 agentvoice --voice <voice-name> --device 1 --output-device 2
 agentvoice --sandbox workspace-write --approval-policy never
 agentvoice --config ./voice-settings.json --debug
@@ -105,6 +107,37 @@ can use its own configuration. Exceptions retained here include
 `danger-full-access` / `never` and realtime version `v3`. Approval requests
 that reach this client are denied, not presented interactively. Default
 permissions are unrestricted; choose a sandbox explicitly when you need one.
+
+### Native Fast mode
+
+`--fast` requests the working Codex model's advertised Fast tier: the same model
+and reasoning settings, faster processing at higher usage/cost. It does not
+change the realtime speech model, speech speed, prompts or voice context.
+`--no-fast` explicitly requests standard processing. The flags conflict with
+each other; omitting both preserves existing AgentVoice/native tier settings.
+
+These are launch overrides, including for continued conversations, Fresh and
+optional workers. They beat `orchestrator.service-tier`, native config overrides
+and `orchestrator.extra.serviceTier`. Raw configuration remains unchanged when
+neither flag is supplied. Fast enables only the thread-local native feature
+gate; AgentVoice never saves this choice to global Codex configuration.
+Native thread history/settings still follow Codex's own persistence rules.
+
+Fast checks the current child's paginated model catalog, including hidden models,
+and rechecks after account rotation. Unknown/unsupported models or unavailable
+capability information produce an error, not a model substitution or silent
+fallback. A per-thread provider override differing from the child's catalog
+provider cannot be verified; configure that provider natively or omit `--fast`.
+If an older Codex lacks service-tier catalog metadata, update it or use the raw
+passthrough without the flag. Codex/account/provider restrictions still apply.
+
+The status line says `Work: Fast` or `Work: Standard` when Codex reports that
+setting, and appends `requested` if the response lacks tier information.
+This is the native configured tier, not per-request billing telemetry or a
+guaranteed speedup. A native null tier means no accelerated tier; a missing
+field means unknown. See the [official Fast documentation](https://learn.chatgpt.com/docs/agent-configuration/speed).
+
+### Prompt files
 
 Prompt files are optional and live beside the config:
 
@@ -125,7 +158,8 @@ AgentVoice does not automatically enable AgentStart skills.
 
 The two request escape hatches are `orchestrator.extra` and `voice.extra`;
 `orchestrator.config` carries native Codex config overrides. Extra values
-usually win, but cannot replace conversation IDs or the selected workspace.
+usually win, but cannot replace conversation IDs, the selected workspace, or an
+explicit launch Fast/standard selection.
 Unknown upstream fields may be silently ignored. Transport/output overrides
 can break the media path; not every upstream feature has a matching TUI.
 

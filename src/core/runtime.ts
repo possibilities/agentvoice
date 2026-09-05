@@ -29,6 +29,7 @@ import {
   threadParams,
   workerThreadParams,
 } from "./params.ts";
+import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { lockThread } from "./thread-lock.ts";
 import { type SessionSelection, selectThread } from "./thread-selection.ts";
@@ -57,6 +58,8 @@ export interface RuntimeEvents {
 
 export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive">;
 export interface RuntimeOptions extends SessionSelection {
+  /** Launch-only tier override; omitted preserves native configuration. */
+  fast?: boolean;
   configSource?: WatchedConfigSource;
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
@@ -85,6 +88,8 @@ export class VoiceRuntime {
   private pendingReports = 0;
   private readonly sessions: VoiceSessionManager;
   private configWatcher: ConfigWatcher | null = null;
+  private tierSelection: ServiceTierSelection | null = null;
+  private tier: TierObservation = {};
 
   constructor(
     private readonly config: ServerConfig,
@@ -129,7 +134,8 @@ export class VoiceRuntime {
     return {
       threadId: this.threadId,
       workspace: this.config.orchestrator.workspace,
-      model: this.config.orchestrator.model ?? null,
+      ...this.tier,
+      model: this.tier.model ?? this.config.orchestrator.model ?? null,
       effort: this.config.orchestrator.effort ?? null,
       voiceModel: this.config.voice.model ?? null,
       voice: this.activeVoiceName ?? null,
@@ -275,13 +281,15 @@ export class VoiceRuntime {
   }
 
   private async startThread(): Promise<string> {
-    const result = await this.requireConnection().request(
-      "thread/start",
-      threadParams(this.config, this.prompts, "start"),
-    );
+    const selection = this.tierSelection!;
+    const params = await selection.prepare(threadParams(this.config, this.prompts, "start"));
+    const result = await this.requireConnection().request("thread/start", params);
     this.assertRunning();
     const id = extractThreadId(result);
     this.acquire(id);
+    const tier = await selection.confirm(result, params);
+    this.assertRunning();
+    this.tier = tier;
     return id;
   }
 
@@ -295,6 +303,8 @@ export class VoiceRuntime {
         threadSource?: string;
         parentThreadId?: string | null;
         ephemeral?: boolean;
+        model?: string | null;
+        modelProvider?: string;
       };
     }>("thread/read", { threadId: id });
     this.assertRunning();
@@ -307,13 +317,22 @@ export class VoiceRuntime {
     ) {
       throw new Error(`Conversation ${id} no longer matches this AgentVoice workspace`);
     }
-    const result = await connection.request("thread/resume", {
-      ...threadParams(this.config, this.prompts, "resume"),
-      threadId: id,
-      excludeTurns: true,
-    });
+    const selection = this.tierSelection!;
+    const params = await selection.prepare(
+      {
+        ...threadParams(this.config, this.prompts, "resume"),
+        threadId: id,
+        excludeTurns: true,
+      },
+      read.thread,
+    );
+    this.assertRunning();
+    const result = await connection.request("thread/resume", params);
     this.assertRunning();
     if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
+    const tier = await selection.confirm(result, params);
+    this.assertRunning();
+    this.tier = tier;
     this.events.onStatus(`continued conversation: ${id}`);
     return id;
   }
@@ -333,9 +352,28 @@ export class VoiceRuntime {
     };
     const manager = new WorkerManager(
       {
-        startWorkerThread: async () => ({
-          threadId: extractThreadId(await request("thread/start", workerThreadParams(this.config))),
-        }),
+        startWorkerThread: async () => {
+          const selection = this.tierSelection!;
+          const params = await selection.prepare(workerThreadParams(this.config));
+          const result = await request("thread/start", params);
+          const threadId = extractThreadId(result);
+          try {
+            await selection.confirm(result, params);
+            this.assertRunning();
+          } catch (error) {
+            // No turn was submitted. Preserve the original refusal and make any
+            // cleanup failure visible rather than silently orphaning the root.
+            try {
+              await archiveWorkerThread(request, threadId);
+            } catch (cleanupError) {
+              throw new Error(
+                `${String(error)}; cleanup of worker ${threadId} failed: ${String(cleanupError)}`,
+              );
+            }
+            throw error;
+          }
+          return { threadId };
+        },
         startWorkerTurn: async (workerThreadId, brief) => {
           let turn: { turn?: { id?: string } };
           try {
@@ -416,6 +454,15 @@ export class VoiceRuntime {
       }
       if (id === this.threadId && method.startsWith("thread/realtime/"))
         this.sessions.handleNotification(method, params);
+      if (id === this.threadId && method === "thread/settings/updated") {
+        const settings = params["threadSettings"] as Record<string, unknown> | undefined;
+        if (settings) {
+          if (typeof settings["model"] === "string") this.tier.model = settings["model"];
+          if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
+            this.tier.serviceTier = settings["serviceTier"] as string | null;
+          this.emitReady();
+        }
+      }
     }
     if (method === "account/rateLimits/updated" && this.config.accounts.balance) {
       const used = maxUsedPercent(params);
@@ -481,6 +528,14 @@ export class VoiceRuntime {
       throw new Error("Codex stopped during startup");
     }
     this.attachment = connection;
+    this.tierSelection = new ServiceTierSelection(
+      (method, params) => {
+        this.assertRunning();
+        return connection!.request(method, params);
+      },
+      this.config.orchestrator.workspace,
+      this.options.fast,
+    );
     this.activeAccount = selection.kind === "profile" ? selection.email : null;
     this.exhaustedPercent = null;
   }

@@ -136,7 +136,12 @@ export const orchestratorValuesSchema = z
       .describe("Named permission profile. NOT combinable with sandbox — set one or the other.")
       .optional(),
     "model-provider": z.string().describe("Model provider id. Default: codex config.").optional(),
-    "service-tier": z.string().describe("Service tier. Default: codex config.").optional(),
+    "service-tier": z
+      .string()
+      .describe(
+        "Native service-tier passthrough. Default: codex config. Launch flags --fast/--no-fast take precedence (including over extra.serviceTier); --fast checks the native model catalog and enables the thread-local Fast gate.",
+      )
+      .optional(),
     ephemeral: z
       .boolean()
       .describe("Leave no persisted thread history. Default: false.")

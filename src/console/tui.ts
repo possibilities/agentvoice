@@ -49,6 +49,7 @@ export interface VoiceTuiState {
   available: boolean;
   phase: VoicePhase;
   liveForMs: number | null;
+  workTier?: string;
   mic: VoiceTuiChannelState;
   speaker: VoiceTuiChannelState;
 }
@@ -411,7 +412,7 @@ export async function createVoiceTui(
     const runs = instrumentRuns(
       fieldSize.width,
       fieldSize.height,
-      signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse),
+      signalFieldStatus(state.phase, state.liveForMs, renderer.width, pulse, state.workTier),
       { muted: state.mic.muted, talking: micTalking, color: youLabelColor, db: state.mic.db },
       { muted: agentMuted, color: agentLabelColor, db: state.speaker.db },
       state.mic.muted,

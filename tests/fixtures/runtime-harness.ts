@@ -26,6 +26,13 @@ export class NativeStub implements RuntimeConnection {
   closes = 0;
   calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   threads: NativeThread[] = [];
+  /** Opt-in native tier protocol; existing lifecycle tests retain minimal responses. */
+  tiers = false;
+  nativeConfig: Record<string, unknown> = { model: "native-model", model_provider: "openai" };
+  models: Record<string, unknown>[] = [
+    { model: "native-model", isDefault: true, serviceTiers: [{ id: "priority", name: "Fast" }] },
+    { model: "slow-model", serviceTiers: [] },
+  ];
   options!: AttachOptions;
   override?: (method: string, params: Record<string, unknown>) => Promise<unknown> | undefined;
   private counter = 0;
@@ -42,6 +49,8 @@ export class NativeStub implements RuntimeConnection {
     const overridden = this.override?.(method, params);
     if (overridden) return (await overridden) as T;
     let result: unknown = {};
+    if (method === "config/read") result = { config: this.nativeConfig };
+    if (method === "model/list") result = { data: this.models, nextCursor: null };
     if (method === "thread/list") result = { data: this.threads, nextCursor: null };
     if (method === "thread/start") {
       const thread = {
@@ -54,6 +63,15 @@ export class NativeStub implements RuntimeConnection {
     }
     if (method === "thread/read" || method === "thread/resume")
       result = { thread: this.threads.find((t) => t.id === params["threadId"]) };
+    if (this.tiers && (method === "thread/start" || method === "thread/resume")) {
+      const config = params["config"] as Record<string, unknown> | undefined;
+      result = {
+        ...(result as object),
+        model: params["model"] ?? config?.["model"] ?? this.nativeConfig["model"],
+        modelProvider: "openai",
+        serviceTier: params["serviceTier"] ?? this.nativeConfig["service_tier"] ?? null,
+      };
+    }
     if (method === "turn/start") {
       const turn = { id: `turn-${++this.turns}`, status: "inProgress" };
       this.options.onNotification("turn/started", { threadId: params["threadId"], turn });

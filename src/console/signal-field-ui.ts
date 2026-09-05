@@ -65,6 +65,7 @@ export function signalFieldStatus(
   liveForMs: number | null,
   width: number,
   pulse: number,
+  workTier?: string,
 ): SignalFieldStatus {
   const busy = phase === "waiting-ready" || phase === "negotiating";
   const dotOn = !busy || Math.sin(pulse * 6) > 0;
@@ -78,7 +79,7 @@ export function signalFieldStatus(
           : VOICE_TONES.dim;
   const label = width < 64 ? COMPACT_PHASE_LABEL[phase] : PHASE_LABEL[phase];
   return {
-    text: `${dotOn ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${label}${liveForMs === null ? "" : ` ${formatClock(liveForMs)}`}`,
+    text: `${dotOn ? SIGNAL_GLYPHS.live : SIGNAL_GLYPHS.idle} ${label}${liveForMs === null ? "" : ` ${formatClock(liveForMs)}`}${workTier ? ` · ${workTier}` : ""}`,
     color,
   };
 }

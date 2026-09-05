@@ -31,6 +31,12 @@ implementation.
 - src/core/config.ts: CLI > file > default resolution and prompt-file loading.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
+- src/core/service-tier.ts: launch-only Fast/standard override, per-child native
+  catalog preflight, response checks and requested-versus-reported tier labels.
+  No flag means no extra RPCs/overrides. --no-fast sends default, not omission;
+  native off can report default or null (disabled Fast gate). Missing is unknown.
+  The resume-model preflight mirrors upstream has_model_resume_override; reverify
+  when upgrading Codex. Never switch models to satisfy Fast.
 - src/core/attach.ts: owned child, native UTF-8 JSONL framing, correlated RPC,
   notifications, default approval denials, bounded shutdown of its process group.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
@@ -148,7 +154,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
 - Do not manufacture skill policy, transcript replay or session carryover.
-  Native voice-context controls, skill isolation, permissions and --fast remain
+  Native voice-context controls, skill isolation and permissions remain
   separate decisions. Optional dispatch/account behavior stays opt-in.
 
 ## The fleet

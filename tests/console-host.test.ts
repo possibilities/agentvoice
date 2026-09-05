@@ -17,6 +17,34 @@ function selectableTextIds(root: Renderable): string[] {
 }
 
 describe("foreground console host", () => {
+  test("shows Fast/Standard reported by Codex and labels unconfirmed requests", async () => {
+    for (const [fast, reported, label] of [
+      [true, "priority", "Work: Fast"],
+      [false, "default", "Work: Standard"],
+      [false, undefined, "Work: Standard requested"],
+    ] as const) {
+      const h = hostHarness();
+      h.native.tiers = reported !== undefined;
+      const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+      const run = runConsoleHost(h.config, "test", {
+        mediaFactory: h.mediaFactory,
+        runtime: { ...h.runtimeOptions, fast },
+        tui: { createRenderer: async () => setup.renderer },
+      });
+      try {
+        await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
+        expect(setup.captureCharFrame()).toContain(label);
+        if (reported !== undefined) expect(setup.captureCharFrame()).not.toContain("requested");
+        setup.resize(40, 19);
+        await setup.waitFor(() => setup.captureCharFrame().includes(label));
+      } finally {
+        setup.mockInput.pressKey("q");
+        await run;
+        await h.cleanup();
+      }
+    }
+  });
+
   test("fills portrait, landscape and shallow viewports; palette and mouse quit still work", async () => {
     const h = hostHarness();
     const setup = await createTestRenderer({ width: 49, height: 46, exitOnCtrlC: false });
