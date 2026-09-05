@@ -19,7 +19,7 @@ import {
   readPrompts,
   resolveConfig,
 } from "../src/core/config.ts";
-import { configLoader, parseArgs } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs } from "../src/main.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("explicit prompt files", () => {
@@ -88,10 +88,10 @@ describe("explicit prompt files", () => {
         join(root, "settings/settings.json"),
         JSON.stringify({ "prompt-files": { voice: "voice.txt", orchestrator: "work.txt" } }),
       );
-      const config = await configLoader(
+      const config = await loadLaunchConfig(
         parseArgs(["--config", "settings/settings.json"]),
         root,
-      ).loadResolvedConfig();
+      );
       expect(await readPrompts(config)).toEqual({
         voicePrompt: "",
         orchestratorDeveloperInstructions: "Speak precisely 🎤\n",

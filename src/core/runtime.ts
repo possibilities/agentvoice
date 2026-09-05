@@ -10,9 +10,13 @@ import {
   appServerArgv,
 } from "./attach.ts";
 import { promptPaths, readPrompts, type ServerConfig } from "./config.ts";
-import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
-import { ORCHESTRATOR_THREAD_SOURCE, realtimeParams, threadParams } from "./params.ts";
+import {
+  ORCHESTRATOR_THREAD_SOURCE,
+  passthroughWarnings,
+  realtimeParams,
+  threadParams,
+} from "./params.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { lockThread } from "./thread-lock.ts";
@@ -25,7 +29,6 @@ export interface RuntimeEvents {
   onReady(info: ReadyInfo): void;
   onAnswer(sdp: string): void;
   onClosed(reason?: string): void;
-  onRedial(reason: string): void;
   onError(message: string, fatal: boolean): void;
   onFatal(message: string): void;
   onStatus(line: string): void;
@@ -38,7 +41,6 @@ export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | 
 export interface RuntimeOptions extends SessionSelection {
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
-  configSource?: WatchedConfigSource;
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
@@ -50,7 +52,8 @@ export class VoiceRuntime {
   private threadReady = false;
   private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
   private foundPrompts: string[] = [];
-  private activeVoiceName: string | undefined;
+  private effort: string | null = null;
+  private conversationMode: "started" | "continued" = "started";
   private freshInFlight = false;
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
@@ -58,7 +61,6 @@ export class VoiceRuntime {
   private readonly locks = new Map<string, () => void>();
   private readonly activeTurns = new Map<string, string>();
   private readonly sessions: VoiceSessionManager;
-  private configWatcher: ConfigWatcher | null = null;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
 
@@ -68,7 +70,6 @@ export class VoiceRuntime {
     private readonly events: RuntimeEvents,
     private readonly options: RuntimeOptions = {},
   ) {
-    this.activeVoiceName = config.voice.name;
     this.sessions = new VoiceSessionManager({
       sendAnswer: (sdp) => this.events.onAnswer(sdp),
       sendClosed: (reason) => this.events.onClosed(reason),
@@ -81,13 +82,7 @@ export class VoiceRuntime {
           throw new AppServerError("Codex is not ready");
         await connection.request(
           "thread/realtime/start",
-          realtimeParams(
-            configWithVoiceName(this.config, this.activeVoiceName),
-            this.prompts,
-            threadId,
-            sessionId,
-            sdp,
-          ),
+          realtimeParams(this.config, this.prompts, threadId, sessionId, sdp),
         );
       },
       stopRealtime: async () => {
@@ -106,10 +101,10 @@ export class VoiceRuntime {
       threadId: this.threadId,
       workspace: this.config.orchestrator.workspace,
       ...this.tier,
-      model: this.tier.model ?? this.config.orchestrator.model ?? null,
-      effort: this.config.orchestrator.effort ?? null,
-      voiceModel: this.config.voice.model ?? null,
-      voice: this.activeVoiceName ?? null,
+      model: this.tier.model ?? null,
+      effort: this.effort,
+      conversationMode: this.conversationMode,
+      voiceVersion: this.sessions.version,
       prompts: this.foundPrompts,
     };
   }
@@ -127,6 +122,7 @@ export class VoiceRuntime {
       // Pure preflight: these placeholder IDs/SDP never leave this process.
       // Reject known option conflicts before spawning Codex or resuming history.
       realtimeParams(this.config, this.prompts, "", "", "");
+      warnings.push(...passthroughWarnings(this.config, this.prompts));
       this.foundPrompts = promptPaths(this.config);
       if (threadParams(this.config, this.prompts, "start")["baseInstructions"] != null) {
         warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
@@ -146,20 +142,6 @@ export class VoiceRuntime {
       this.threadId = id ? await this.resumeThread(id) : await this.startThread();
       this.threadReady = true;
       this.emitReady();
-      if (this.options.configSource) {
-        this.configWatcher = new ConfigWatcher(this.options.configSource, this.config, {
-          voiceNameChanged: (name) => {
-            if (this.shuttingDown) return;
-            this.activeVoiceName = name;
-            this.events.onStatus(`voice changed to ${name ?? "upstream default"}`);
-            this.emitReady();
-            if (this.sessions.hasSession) this.events.onRedial("voice-name-changed");
-          },
-          rejected: (error) => this.events.onStatus(`config change ignored: ${String(error)}`),
-        });
-        this.configWatcher.start();
-        void this.configWatcher.reload();
-      }
     } catch (error) {
       await this.shutdown();
       throw error;
@@ -201,7 +183,6 @@ export class VoiceRuntime {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
     this.threadReady = false;
-    this.configWatcher?.stop();
     this.shutdownPromise = (async () => {
       try {
         await this.sessions.shutdown();
@@ -253,6 +234,8 @@ export class VoiceRuntime {
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
+    this.effort = reportedEffort(result);
+    this.conversationMode = "started";
     return id;
   }
 
@@ -297,6 +280,8 @@ export class VoiceRuntime {
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
+    this.effort = reportedEffort(result);
+    this.conversationMode = "continued";
     this.events.onStatus(`continued conversation: ${id}`);
     return id;
   }
@@ -330,6 +315,7 @@ export class VoiceRuntime {
           if (typeof settings["model"] === "string") this.tier.model = settings["model"];
           if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
             this.tier.serviceTier = settings["serviceTier"] as string | null;
+          if (Object.hasOwn(settings, "reasoningEffort")) this.effort = reportedEffort(settings);
           this.emitReady();
         }
       }
@@ -376,4 +362,9 @@ function extractThreadId(result: unknown): string {
   const id = shape?.thread?.id ?? shape?.threadId;
   if (typeof id !== "string" || !id) throw new AppServerError("app-server returned no thread id");
   return id;
+}
+
+function reportedEffort(result: unknown): string | null {
+  const effort = (result as Record<string, unknown> | null)?.["reasoningEffort"];
+  return typeof effort === "string" ? effort : null;
 }

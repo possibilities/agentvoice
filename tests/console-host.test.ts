@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BoxRenderable, type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
-import { AUDIO_CONTROL_CLICK_MS } from "../src/console/audio-control.ts";
+import { KEY_HOLD_LEASE_MS } from "../src/console/audio-control.ts";
 import { runConsoleHost } from "../src/console/host.ts";
 import { hostHarness } from "./fixtures/host-harness.ts";
 import { deferred } from "./fixtures/runtime-harness.ts";
@@ -151,7 +151,7 @@ describe("foreground console host", () => {
       await setup.mockMouse.pressDown(trigger.x + Math.floor(trigger.width / 2), trigger.y);
       await setup.renderOnce();
       expect(setup.captureCharFrame()).toContain("redial the voice link");
-      expect(setup.captureCharFrame()).toContain("fresh orchestrator thread");
+      expect(setup.captureCharFrame()).toContain("fresh conversation");
       const quit = setup.renderer.root.findDescendantById("voice-palette-command-quit")!;
       await setup.mockMouse.click(quit.x + 2, quit.y);
       await run;
@@ -167,7 +167,6 @@ describe("foreground console host", () => {
 
   test("direct mute, push-to-talk, redial and Fresh controls reach local media/runtime", async () => {
     const h = hostHarness();
-    let clock = 1_000;
     const setup = await createTestRenderer({
       width: 49,
       height: 28,
@@ -177,7 +176,7 @@ describe("foreground console host", () => {
     const run = runConsoleHost(h.config, "test", {
       mediaFactory: h.mediaFactory,
       runtime: h.runtimeOptions,
-      tui: { createRenderer: async () => setup.renderer, now: () => clock },
+      tui: { createRenderer: async () => setup.renderer },
     });
     try {
       await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
@@ -208,18 +207,16 @@ describe("foreground console host", () => {
       expect(h.audio.micMuted).toBe(true);
       expect(setup.renderer.hasSelection).toBe(false);
 
-      // Kitty Space: hold opens only until release; quick tap commits.
+      // Kitty Space: even a quick tap only opens until release.
       const space = (event: number) =>
         setup.renderer.stdin.emit("data", Buffer.from(`\x1b[32;1:${event}u`));
       space(1);
       expect(h.audio.micMuted).toBe(false);
-      clock += AUDIO_CONTROL_CLICK_MS + 1;
       space(3);
       expect(h.audio.micMuted).toBe(true);
       space(1);
-      clock += AUDIO_CONTROL_CLICK_MS;
       space(3);
-      expect(h.audio.micMuted).toBe(false);
+      expect(h.audio.micMuted).toBe(true);
       space(1);
       space(3);
       expect(h.audio.micMuted).toBe(true);
@@ -244,6 +241,7 @@ describe("foreground console host", () => {
         }),
       ).rejects.toThrow("lookup failed");
       expect(h.native.closes).toBe(1);
+      expect(h.calls).not.toContain("audio:start");
       expect(h.calls).toContain("audio:stop");
       expect(h.calls).toContain("transport:stop");
     } finally {
@@ -251,10 +249,14 @@ describe("foreground console host", () => {
     }
   });
 
-  test("quitting while audio opens stops late-opened audio without starting Codex", async () => {
+  test("quitting while audio opens stops late-opened audio and the prepared child", async () => {
     const h = hostHarness();
     const opening = deferred();
-    h.audio.start = () => opening.promise;
+    const entered = deferred();
+    h.audio.start = () => {
+      entered.resolve();
+      return opening.promise;
+    };
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
     const run = runConsoleHost(h.config, "test", {
       mediaFactory: h.mediaFactory,
@@ -262,14 +264,229 @@ describe("foreground console host", () => {
       tui: { createRenderer: async () => setup.renderer },
     });
     try {
-      await setup.waitFor(() => !!setup.renderer.root.findDescendantById("voice-rails"));
+      await entered.promise;
+      expect(h.calls).not.toContain("ready");
       setup.mockInput.pressKey("q");
       opening.resolve();
       await run;
       expect(h.calls.filter((c) => c === "audio:stop").length).toBeGreaterThanOrEqual(2);
-      expect(h.native.calls).toHaveLength(0);
+      expect(h.native.calls.some((c) => c.method === "thread/start")).toBe(true);
+      expect(h.native.closes).toBe(1);
+      expect(h.calls).not.toContain("ready");
     } finally {
       opening.resolve();
+      await run;
+      await h.cleanup();
+    }
+  });
+});
+
+describe("baseline readiness and feedback", () => {
+  test("media warnings persist without debug through phase updates and resizing", async () => {
+    const h = hostHarness();
+    const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
+      h.warnAudio("microphone is delivering pure silence — check microphone permission");
+      await setup.waitFor(() => setup.captureCharFrame().includes("pure silence"));
+      expect(setup.captureCharFrame()).toContain("LIVE");
+      h.failTransport("answer rejected: invalid SDP");
+      for (const width of [40, 80, 120]) {
+        setup.resize(width, 24);
+        await setup.renderOnce();
+        expect(setup.captureCharFrame()).toContain("answer rejected");
+        expect(setup.captureCharFrame()).toContain("invalid SDP");
+        expect(setup.captureCharFrame()).toContain("FAILED");
+      }
+    } finally {
+      setup.mockInput.pressKey("q");
+      await run;
+      await h.cleanup();
+    }
+  });
+
+  test("shows conversation selection, reported model and Fresh identity", async () => {
+    const h = hostHarness();
+    h.native.main("saved-conversation", h.directory);
+    h.native.tiers = true;
+    const setup = await createTestRenderer({ width: 120, height: 24, exitOnCtrlC: false });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("Continued: saved-conversation"));
+      expect(setup.captureCharFrame()).toContain(h.directory);
+      expect(setup.captureCharFrame()).toContain("Model: native-model");
+      expect(h.calls.indexOf("audio:start")).toBeLessThan(h.calls.indexOf("ready"));
+      setup.mockInput.pressKey("f");
+      await setup.waitFor(() => setup.captureCharFrame().includes("Started: thread-1"));
+      expect(setup.captureCharFrame()).not.toContain("saved-conversation");
+      setup.resize(40, 24);
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("Started: thread-1");
+      expect(setup.captureCharFrame()).toContain(h.directory.slice(-6));
+    } finally {
+      setup.mockInput.pressKey("q");
+      await run;
+      await h.cleanup();
+    }
+  });
+
+  test("invalid prompt, protocol, permissions and Fast readiness never open audio", async () => {
+    for (const failure of ["prompt", "protocol", "permissions", "fast"] as const) {
+      const h = hostHarness(
+        failure === "prompt"
+          ? { "prompt-files": { voice: "missing.md" } }
+          : failure === "protocol"
+            ? { voice: { version: "v2" } }
+            : {},
+      );
+      if (failure === "permissions")
+        h.native.override = (method) =>
+          method === "thread/start"
+            ? Promise.resolve({
+                thread: { id: "denied" },
+                sandbox: { type: "readOnly" },
+                approvalPolicy: "never",
+              })
+            : undefined;
+      if (failure === "fast") h.native.models = [];
+      const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+      try {
+        await expect(
+          runConsoleHost(h.config, "test", {
+            mediaFactory: h.mediaFactory,
+            runtime: { ...h.runtimeOptions, ...(failure === "fast" ? { fast: true } : {}) },
+            tui: { createRenderer: async () => setup.renderer },
+          }),
+        ).rejects.toThrow();
+        expect(h.calls).not.toContain("audio:start");
+        expect(h.calls).not.toContain("ready");
+        expect(h.native.closes).toBe(failure === "permissions" || failure === "fast" ? 1 : 0);
+      } finally {
+        await h.cleanup();
+      }
+    }
+  });
+
+  test("quit during native readiness closes the child without opening audio", async () => {
+    const h = hostHarness();
+    const pending = deferred<unknown>();
+    const entered = deferred();
+    h.native.override = (method) => {
+      if (method !== "thread/list") return undefined;
+      entered.resolve();
+      return pending.promise;
+    };
+    const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    try {
+      await entered.promise;
+      setup.mockInput.pressKey("q");
+      pending.resolve({ data: [], nextCursor: null });
+      await run;
+      expect(h.native.closes).toBe(1);
+      expect(h.calls).not.toContain("audio:start");
+      expect(h.calls).not.toContain("ready");
+    } finally {
+      pending.resolve({ data: [], nextCursor: null });
+      await run;
+      await h.cleanup();
+    }
+  });
+
+  test("audio-open failure closes the prepared child without negotiating", async () => {
+    const h = hostHarness();
+    h.audio.start = async () => {
+      throw new Error("device unavailable");
+    };
+    const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
+    try {
+      await expect(
+        runConsoleHost(h.config, "test", {
+          mediaFactory: h.mediaFactory,
+          runtime: h.runtimeOptions,
+          tui: { createRenderer: async () => setup.renderer },
+        }),
+      ).rejects.toThrow("device unavailable");
+      expect(h.native.closes).toBe(1);
+      expect(h.calls).not.toContain("ready");
+    } finally {
+      await h.cleanup();
+    }
+  });
+
+  test("toggles ignore repeats; PTT holds compose, expire safely and respect palette focus", async () => {
+    const h = hostHarness();
+    const setup = await createTestRenderer({
+      width: 80,
+      height: 24,
+      exitOnCtrlC: false,
+      kittyKeyboard: true,
+    });
+    const run = runConsoleHost(h.config, "test", {
+      mediaFactory: h.mediaFactory,
+      runtime: h.runtimeOptions,
+      tui: { createRenderer: async () => setup.renderer },
+    });
+    const key = (code: number, event: number) =>
+      setup.renderer.stdin.emit("data", Buffer.from(`\x1b[${code};1:${event}u`));
+    try {
+      await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
+      for (const [code, muted] of [
+        [109, () => h.audio.micMuted],
+        [115, () => h.audio.speakerMuted],
+      ] as const) {
+        key(code, 1);
+        expect(muted()).toBe(true);
+        key(code, 2);
+        key(code, 3);
+        expect(muted()).toBe(true);
+      }
+      key(32, 1);
+      expect(h.audio.micMuted).toBe(false);
+      key(32, 3);
+      expect(h.audio.micMuted).toBe(true);
+      await setup.renderOnce();
+      const rails = setup.renderer.root.findDescendantById("voice-rails")!;
+      const x = rails.x + 2,
+        y = rails.y + rails.height - 2;
+      await setup.mockMouse.pressDown(x, y);
+      key(32, 1);
+      await setup.mockMouse.release(x, y);
+      expect(h.audio.micMuted).toBe(false);
+      key(32, 3);
+      expect(h.audio.micMuted).toBe(true);
+      key(32, 1);
+      await Bun.sleep(KEY_HOLD_LEASE_MS + 30);
+      expect(h.audio.micMuted).toBe(true);
+      key(32, 2); // late repeats cannot resurrect an expired hold
+      expect(h.audio.micMuted).toBe(true);
+      key(32, 3);
+      key(32, 1);
+      setup.mockInput.pressKey("k", { ctrl: true });
+      setup.renderer.stdin.emit("data", Buffer.from("\x1b[107;5:2u"));
+      expect(h.audio.micMuted).toBe(true);
+      key(32, 3);
+      key(32, 1);
+      key(109, 1);
+      expect(h.audio.micMuted).toBe(true);
+      setup.mockInput.pressKey("c", { ctrl: true });
+      await run;
+      expect(h.native.closes).toBe(1);
+    } finally {
+      setup.mockInput.pressKey("c", { ctrl: true });
       await run;
       await h.cleanup();
     }

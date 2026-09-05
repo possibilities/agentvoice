@@ -5,11 +5,9 @@ export type UnmuteHoldSource = object | symbol | string | number;
 
 export type AudioControlKeyAction = {
   target: AudioTarget;
-  action: "begin" | "renew" | "end" | "toggle";
+  action: "toggle";
 };
 export type SpaceControlKeyAction = "begin" | "renew" | "end";
-
-export const AUDIO_CONTROL_CLICK_MS = 250;
 
 // Printable keys need all-keys encoding for terminals to report both halves
 // of a press/release gesture, including the Space microphone control.
@@ -26,6 +24,10 @@ interface ControlKey {
   name: string;
   source: "raw" | "kitty";
   eventType: "press" | "repeat" | "release";
+  /** OpenTUI 0.5.3 represents Kitty repeats as press + repeated. */
+  repeated?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
 }
 
 export function audioControlKeyAction(
@@ -33,19 +35,9 @@ export function audioControlKeyAction(
   paletteOpen: boolean,
 ): AudioControlKeyAction | null {
   const target = key.name === "m" ? "mic" : key.name === "s" ? "speaker" : null;
-  if (!target) return null;
-
-  // Releases finish a gesture even if the palette opened while the key was down.
-  if (key.source === "kitty" && key.eventType === "release") {
-    return { target, action: "end" };
-  }
-  if (paletteOpen) return null;
-  if (key.source === "raw") {
-    return key.eventType === "press" ? { target, action: "toggle" } : null;
-  }
-  if (key.eventType === "press") return { target, action: "begin" };
-  if (key.eventType === "repeat") return { target, action: "renew" };
-  return null;
+  if (!target || paletteOpen || key.ctrl || key.meta || key.eventType !== "press" || key.repeated)
+    return null;
+  return { target, action: "toggle" };
 }
 
 export function spaceControlKeyAction(
@@ -56,13 +48,9 @@ export function spaceControlKeyAction(
   // A release must close an existing hold even if the palette opened while
   // Space was down; presses belong to the palette while it is modal.
   if (key.eventType === "release") return "end";
-  if (paletteOpen) return null;
-  if (key.eventType === "press") return "begin";
-  return key.eventType === "repeat" ? "renew" : null;
-}
-
-export function releaseCommitsClick(startedAt: number, releasedAt: number): boolean {
-  return releasedAt - startedAt <= AUDIO_CONTROL_CLICK_MS;
+  if (paletteOpen || key.ctrl || key.meta) return null;
+  if (key.eventType === "repeat" || key.repeated) return "renew";
+  return key.eventType === "press" ? "begin" : null;
 }
 
 export interface MuteState {
@@ -119,10 +107,9 @@ export class MuteGate {
     return changed(before, this.state());
   }
 
-  releaseUnmute(source: UnmuteHoldSource, commit = false): boolean {
+  releaseUnmute(source: UnmuteHoldSource): boolean {
     const before = this.state();
     if (!this.holds.has(source)) return false;
-    if (commit) this.mutedValue = false;
     this.holds.delete(source);
     return changed(before, this.state());
   }

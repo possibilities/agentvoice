@@ -103,12 +103,6 @@ export class VoiceTransport {
     return since ? Date.now() - since : null;
   }
 
-  /** Milliseconds until automatic renewal, or null when not live. */
-  get renewInMs(): number | null {
-    const live = this.liveForMs;
-    return live === null ? null : Math.max(0, RENEWAL_MS - live);
-  }
-
   /**
    * Negotiate a replacement session; the current one keeps playing until the
    * replacement connects. Manual (`r`), or automatic for renewal and retry.
@@ -180,10 +174,6 @@ export class VoiceTransport {
     if (live) this.closePeer(live);
     if (!this.pending) this.setPhase("waiting-ready");
     // The runtime re-emits ready when offers reopen; wantLive re-offers.
-  }
-
-  handleRedial(reason: string): void {
-    this.redial(reason);
   }
 
   /**
@@ -339,7 +329,7 @@ export class VoiceTransport {
     if (this.pending !== session) return;
     this.pending = null;
     this.closePeer(session);
-    this.options.onError(`voice: ${reason}`);
+    this.options.onError(reason);
     this.rapidFailures++;
     this.afterFailure();
   }
@@ -350,7 +340,7 @@ export class VoiceTransport {
       session.liveSince !== null && Date.now() - session.liveSince > HEALTHY_SESSION_MS;
     this.live = null;
     this.closePeer(session);
-    this.options.onError(`voice: ${reason}`);
+    this.options.onError(reason);
     if (this.pending) return; // a successor is already negotiating
     this.rapidFailures = wasHealthy ? 1 : this.rapidFailures + 1;
     this.afterFailure();

@@ -1,5 +1,6 @@
 /**
- * Application configuration: CLI flags over `server.json` over built-in defaults.
+ * Named application settings: CLI flags over `server.json` over built-in defaults.
+ * Raw native fields merge later in params.ts and can override named CLI settings.
  * Options left unset are not sent to codex at all, so codex's own
  * configuration (`~/.codex/config.toml`) applies.
  *

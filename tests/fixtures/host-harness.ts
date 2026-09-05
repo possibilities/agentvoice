@@ -1,11 +1,12 @@
 import type { VoiceAudioOptions } from "../../src/console/duplex-audio.ts";
 import type { ConsoleHostOptions, HostAudio, HostTransport } from "../../src/console/host.ts";
 import type { VoiceTransportOptions } from "../../src/console/transport.ts";
+import type { ConfigValues } from "../../src/core/config.ts";
 import { runtimeHarness } from "./runtime-harness.ts";
 
 /** In-process fake media. It never imports the audio device or opens WebRTC. */
-export function hostHarness() {
-  const h = runtimeHarness();
+export function hostHarness(values: ConfigValues = {}) {
+  const h = runtimeHarness(values);
   const calls: string[] = [];
   let audioOptions!: VoiceAudioOptions;
   let transportOptions!: VoiceTransportOptions;
@@ -43,7 +44,6 @@ export function hostHarness() {
     },
     async handleAnswer() {},
     handleClosed() {},
-    handleRedial() {},
     handleError() {},
     handleSignalLost() {
       calls.push("signal:lost");
@@ -60,5 +60,16 @@ export function hostHarness() {
       return transport;
     },
   };
-  return { ...h, audio, transport, calls, mediaFactory };
+  return {
+    ...h,
+    audio,
+    transport,
+    calls,
+    mediaFactory,
+    warnAudio: (message: string) => audioOptions.onWarning(message),
+    failTransport: (message: string) => {
+      transportOptions.onError(message);
+      transportOptions.onPhase("failed");
+    },
+  };
 }

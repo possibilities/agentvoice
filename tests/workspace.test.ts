@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseJsonConfig, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams } from "../src/core/params.ts";
-import { configLoader, parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs, parseConsoleCommand } from "../src/main.ts";
 
 describe("workspace launch", () => {
   test("defaults to launch cwd; CLI wins over file; relative paths and extra roots share that root", () => {
@@ -36,20 +36,17 @@ describe("workspace launch", () => {
       mkdirSync(join(root, "project"));
       symlinkSync(join(root, "project"), join(root, "alias"));
       writeFileSync(join(root, "settings.json"), "{}");
-      const loader = configLoader(
+      const config = await loadLaunchConfig(
         parseArgs(["--workspace", "alias", "--config", "settings.json"]),
         root,
       );
-      expect((await loader.loadResolvedConfig()).orchestrator.workspace).toBe(
-        join(root, "project"),
-      );
-      expect(loader.configPath).toBe(join(root, "settings.json"));
+      expect(config.orchestrator.workspace).toBe(join(root, "project"));
       for (const workspace of ["missing", "settings.json", ""]) {
         await expect(
-          configLoader(
+          loadLaunchConfig(
             parseArgs(["--workspace", workspace, "--config", "settings.json"]),
             root,
-          ).loadResolvedConfig(),
+          ),
         ).rejects.toThrow();
       }
     } finally {

@@ -5,8 +5,9 @@ the TUI, audio, WebRTC and coordination runtime; an unmodified `codex app-server
 child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
-Full access is an intentional product exception (see below). The defaults audit
-is not finished: remaining prompt/settings passthrough still needs review.
+Full access and workspace-local conversation selection are intentional product
+policies. Raw native settings remain available, with visible warnings for modes
+that this frontend cannot implement; passthrough is not a claim of feature parity.
 
 ## Start here
 
@@ -124,15 +125,28 @@ continued after exit. Workspace selection is not a memory or security sandbox.
   `f` fresh conversation, `q` or `ctrl+c` quit.
 - Click the YOU/AGENT zones to toggle microphone/speaker mute. With the mic
   muted, the bottom band is hold-only push-to-talk. In release-capable
-  terminals, `m`, `s` and Space distinguish a quick tap (toggle) from a hold
-  (temporarily unmute); terminals without release reporting use plain m/s
-  toggles and leave Space inert.
+  terminals, hold Space to temporarily unmute the mic; releasing always restores
+  mute, even after a quick tap. M/S toggle on press in all terminals. Terminals
+  without key-release reporting leave Space inert. Opening the palette cancels
+  active holds; a missing Space release times out safely.
 - Redial renews voice on the same conversation using overlapping WebRTC peers;
   automatic renewal uses the same path. Fresh closes old media first.
-- Device selection, model/effort/voice overrides, config/prompt passthrough,
-  voice-name hot reload.
+- Device selection, model/effort/voice overrides and config/prompt passthrough.
+  All settings and prompt contents load once per launch; restart to apply edits.
 - Per-launch opt-in debug logs; no phone remote, pairing, listener/discovery,
   Android packaging, separate Server, resident service or Herdr integration.
+
+The upper field shows workspace, whether the conversation was started or continued,
+and its native ID (truncated to fit). Model, effort and voice protocol reflect
+Codex reports, not requested values; missing model data shows `unknown`. Identity
+rows hide below 12 terminal rows. `LIVE` means the media link is connected, not
+that Codex work completed. The most recent audio/transport or interaction notice
+stays visible without `--debug`; detailed media tracing remains opt-in.
+
+Launch validates prompts/protocol, selects the native conversation and confirms
+permissions/Fast before opening audio. The WebRTC offer follows device readiness.
+If opening audio fails, the owned child is closed; native conversation creation
+or resume may already have happened.
 
 ## Configuration and prompts
 
@@ -154,7 +168,12 @@ agentvoice --allow-full-access --voice <voice-name> --device 1 --output-device 2
 agentvoice --allow-full-access --config ./voice-settings.json --debug
 ```
 
-CLI options beat file values. Optional unset settings stay off the wire so Codex
+Named CLI options beat the same named file settings. Raw native overrides merge
+later: `orchestrator.extra.model` beats `--model`, an explicit
+`orchestrator.config.model_reasoning_effort` beats `--effort`, and
+`voice.extra.voice` beats `--voice`. `orchestrator.extra.config` replaces the
+assembled request config as a whole. Fast flags are the explicit exception and
+win over raw tier settings. Optional unset settings stay off the wire so Codex
 can use its own defaults/configuration. The intentional permissions exception is
 the mandatory full-access/never policy above. Restricted sandbox modes are not
 supported by this app.
@@ -206,11 +225,17 @@ explicit thread `model` (AgentVoice `--model` / `orchestrator.model`, then raw
 `extra.model`). This is not a universal precedence promise for every native field;
 managed requirements still apply and some native config keys override voice RPC
 fields. Continue/resume can retain saved model settings; use `--model` to explicitly
-change a resumed conversation's model. `--fast`/`--no-fast` retain their explicit
+change a resumed conversation's model (unless a raw field overrides it).
+In Codex 0.153.3, an explicit reasoning-effort request also prevents restoring the
+saved model/provider: supply `--model` too when you want to keep a specific model.
+Known start-only fields, including raw `dynamicTools`, `ephemeral` and
+`historyMode`, are stripped from resume requests; omitting them does not remove
+metadata already saved in native history. `--fast`/`--no-fast` retain their explicit
 launch-tier precedence.
 
-Only `voice.name` hot reloads. Changing startup entries requires quitting and
-relaunching; Fresh does not restart Codex. Incompatible permission selectors and
+All AgentVoice settings, including `voice.name`, and prompt-file contents load
+once at launch. Editing them requires quitting and relaunching; Fresh and redial
+reuse the launch settings and do not restart Codex. Incompatible permission selectors and
 disabled realtime support fail clearly; `cwd` must be selected with `--workspace`.
 The full-access opt-in, native permission verification and owned stdio transport
 remain mandatory. Other native keys remain passthrough, not a promise that your
@@ -244,6 +269,18 @@ dropped and protocols are never automatically switched. Checks use the final
 merged request: `voice.extra.version` wins, and an explicit `initialItems: []`
 can still intentionally replace file seeds. Explicit v1/v3 remain configurable;
 the raw transport escape hatch remains unchanged.
+
+### Supported behavior and raw experiments
+
+Native Codex tools, subagents and native voice handoffs work through app-server.
+`client-managed-handoffs: true` instead expects client append calls that AgentVoice
+does not implement. Nonempty `orchestrator.extra.dynamicTools` advertises tools
+on new conversations without adding handlers; those calls fail. Overriding
+`voice.extra.transport` or selecting non-audio `outputModality` can break this
+TUI's generated WebRTC offer/audio path. These modes remain raw passthrough for
+experiments and produce a visible launch warning. Use the omitted settings for
+the supported baseline. Unknown or misspelled native keys can still be ignored
+by Codex; AgentVoice does not validate every upstream option.
 
 ### Native Fast mode
 
@@ -310,8 +347,7 @@ file sends an empty string. An empty path is an error, not an empty prompt.
 | `voice-seed-user` | User-role `initialItems` entry; explicit v3 required | `VOICE_SEED_USER.md` |
 | `voice-seed-assistant` | Assistant-role `initialItems` entry; explicit v3 required | `VOICE_SEED_ASSISTANT.md` |
 
-Contents load once at launch and are reused on redial and Fresh; only `voice.name`
-hot reloads. Seed roles are sent developer, user, assistant; raw `initialItems`
+Contents load once at launch and are reused on redial and Fresh. Seed roles are sent developer, user, assistant; raw `initialItems`
 can express any supported ordering/repetition. Session-boundary instructions and
 voice prompts/items ride every realtime start, including redial. No transcripts
 are captured and replayed by AgentVoice.

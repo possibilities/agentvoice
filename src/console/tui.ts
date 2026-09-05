@@ -8,20 +8,20 @@ import {
   StyledText,
   TextRenderable,
 } from "@opentui/core";
-import type { VoicePhase } from "../core/voice-types.ts";
+import type { ReadyInfo, VoicePhase } from "../core/voice-types.ts";
 import { createCommandPalette } from "../tui/palette.ts";
 import {
   AUDIO_CONTROL_KITTY_KEYBOARD,
   type AudioTarget,
   audioControlKeyAction,
   KEY_HOLD_LEASE_MS,
-  releaseCommitsClick,
   spaceControlKeyAction,
 } from "./audio-control.ts";
 import { levelFromDb } from "./dsp.ts";
 import { mixHex, SignalField } from "./signal-field.ts";
 import {
   boundedViewportSize,
+  conversationLines,
   instrumentRuns,
   pttRowCount,
   signalFieldStatus,
@@ -36,7 +36,7 @@ const OVERLAY_ALPHA = 0.75;
 /** A muted voice keeps animating, its strands sunk most of the way into the panel. */
 const MUTED_STRAND_ALPHA = 0.55;
 
-export type VoiceTuiInput = "pointer" | "key" | "space";
+export type VoiceTuiInput = "pointer" | "space";
 
 export interface VoiceTuiChannelState {
   muted: boolean;
@@ -51,6 +51,8 @@ export interface VoiceTuiState {
   liveForMs: number | null;
   workTier?: string;
   notice?: string;
+  workspace?: string;
+  conversation?: ReadyInfo;
   mic: VoiceTuiChannelState;
   speaker: VoiceTuiChannelState;
 }
@@ -59,7 +61,7 @@ export interface VoiceTuiHost {
   state(): VoiceTuiState;
   setMuted(target: AudioTarget, muted: boolean): void;
   beginUnmute(target: AudioTarget, input: VoiceTuiInput): void;
-  releaseUnmute(target: AudioTarget, input: VoiceTuiInput, commit: boolean): void;
+  releaseUnmute(target: AudioTarget, input: VoiceTuiInput): void;
   redial(): void;
   fresh(): void;
   shutdown(): void | Promise<void>;
@@ -67,7 +69,6 @@ export interface VoiceTuiHost {
 
 export interface VoiceTuiOptions {
   createRenderer?(): Promise<CliRenderer>;
-  now?(): number;
 }
 
 export interface VoiceTui {
@@ -82,7 +83,6 @@ export async function createVoiceTui(
   host: VoiceTuiHost,
   options: VoiceTuiOptions = {},
 ): Promise<VoiceTui> {
-  const now = options.now ?? (() => performance.now());
   const renderer: CliRenderer = options.createRenderer
     ? await options.createRenderer()
     : await createCliRenderer({
@@ -182,7 +182,10 @@ export async function createVoiceTui(
     onMouseDown: (event) => {
       event.stopPropagation();
       event.preventDefault();
-      if (!palette.isOpen()) palette.open();
+      if (!palette.isOpen()) {
+        cancelInputs();
+        palette.open();
+      }
     },
     onMouseUp: (event) => {
       event.stopPropagation();
@@ -205,7 +208,7 @@ export async function createVoiceTui(
   const noticePanel = new BoxRenderable(renderer, {
     id: "voice-notice-panel",
     position: "absolute",
-    top: 2,
+    top: 5,
     left: 0,
     right: 0,
     paddingLeft: 1,
@@ -224,21 +227,7 @@ export async function createVoiceTui(
   renderer.root.add(noticePanel);
 
   let pttHeld = false;
-  const keyControlGestures = new Map<
-    AudioTarget,
-    {
-      startedAt: number;
-      startedMuted: boolean;
-      clickEligible: boolean;
-      lease: ReturnType<typeof setTimeout>;
-    }
-  >();
-  let spaceGesture: {
-    startedAt: number;
-    startedMuted: boolean;
-    clickEligible: boolean;
-    lease: ReturnType<typeof setTimeout>;
-  } | null = null;
+  let spaceLease: ReturnType<typeof setTimeout> | null = null;
   let layoutWidth = 0;
   let layoutHeight = 0;
   let pulse = 0;
@@ -257,6 +246,7 @@ export async function createVoiceTui(
     const state = host.state();
     notice.content = state.notice ?? "";
     noticePanel.visible = !!state.notice;
+    noticePanel.top = height < 12 ? 1 : 5;
     layoutWidth = width;
     layoutHeight = height;
     rails.minHeight = height < 9 ? 4 : 7;
@@ -267,13 +257,13 @@ export async function createVoiceTui(
         {
           id: "mic",
           key: "M",
-          label: `mic — ${state.mic.muted ? "unmute · hold M/Space" : "mute on release"}`,
+          label: `mic — ${state.mic.muted ? "unmute · Space holds to talk" : "mute"}`,
           onRun: () => toggle("mic"),
         },
         {
           id: "speaker",
           key: "S",
-          label: `speaker — ${state.speaker.muted ? "unmute · hold S" : "mute on release"}`,
+          label: `speaker — ${state.speaker.muted ? "unmute" : "mute"}`,
           onRun: () => toggle("speaker"),
         },
         {
@@ -285,7 +275,7 @@ export async function createVoiceTui(
         {
           id: "fresh",
           key: "F",
-          label: "fresh orchestrator thread",
+          label: "fresh conversation",
           onRun: () => host.fresh(),
         },
         { id: "quit", key: "Q", label: "quit", onRun: () => void shutdown() },
@@ -319,87 +309,32 @@ export async function createVoiceTui(
   function endPushToTalk(): void {
     if (!pttHeld) return;
     pttHeld = false;
-    host.releaseUnmute("mic", "pointer", false);
+    host.releaseUnmute("mic", "pointer");
     refresh();
   }
 
-  function renewControlKey(target: AudioTarget, clickEligible: boolean): void {
-    const existing = keyControlGestures.get(target);
-    if (existing) {
-      clearTimeout(existing.lease);
-      existing.lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
-      existing.lease.unref?.();
-      return;
-    }
-    const muted = persistentMuted(target);
-    if (muted === null) return;
-    if (muted) host.beginUnmute(target, "key");
-    const lease = setTimeout(() => endControlKey(target, false), KEY_HOLD_LEASE_MS);
-    lease.unref?.();
-    keyControlGestures.set(target, {
-      startedAt: now(),
-      startedMuted: muted,
-      clickEligible,
-      lease,
-    });
+  function renewSpaceControl(begin: boolean): void {
+    // Repeats only renew a live hold. After a lost-release timeout, require
+    // another press rather than reopening the microphone on a stray repeat.
+    if (!spaceLease && (!begin || persistentMuted("mic") !== true)) return;
+    if (spaceLease) clearTimeout(spaceLease);
+    else host.beginUnmute("mic", "space");
+    spaceLease = setTimeout(endSpaceControl, KEY_HOLD_LEASE_MS);
+    spaceLease.unref?.();
     refresh();
   }
 
-  function endControlKey(target: AudioTarget, classifyClick = true): void {
-    const gesture = keyControlGestures.get(target);
-    if (!gesture) return;
-    keyControlGestures.delete(target);
-    clearTimeout(gesture.lease);
-    if (gesture.startedMuted) {
-      const commit =
-        classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
-      host.releaseUnmute(target, "key", commit);
-    } else if (classifyClick && gesture.clickEligible) {
-      host.setMuted(target, true);
-    }
-    refresh();
-  }
-
-  function renewSpaceControl(clickEligible: boolean): void {
-    if (spaceGesture) {
-      clearTimeout(spaceGesture.lease);
-      spaceGesture.lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
-      spaceGesture.lease.unref?.();
-      return;
-    }
-    const muted = persistentMuted("mic");
-    if (muted === null) return;
-    if (muted) host.beginUnmute("mic", "space");
-    const lease = setTimeout(() => endSpaceControl(false), KEY_HOLD_LEASE_MS);
-    lease.unref?.();
-    spaceGesture = {
-      startedAt: now(),
-      startedMuted: muted,
-      clickEligible,
-      lease,
-    };
-    refresh();
-  }
-
-  function endSpaceControl(classifyClick = true): void {
-    const gesture = spaceGesture;
-    if (!gesture) return;
-    spaceGesture = null;
-    clearTimeout(gesture.lease);
-    if (gesture.startedMuted) {
-      const commit =
-        classifyClick && gesture.clickEligible && releaseCommitsClick(gesture.startedAt, now());
-      host.releaseUnmute("mic", "space", commit);
-    } else if (classifyClick && gesture.clickEligible) {
-      host.setMuted("mic", true);
-    }
+  function endSpaceControl(): void {
+    if (!spaceLease) return;
+    clearTimeout(spaceLease);
+    spaceLease = null;
+    host.releaseUnmute("mic", "space");
     refresh();
   }
 
   function cancelInputs(): void {
-    if (spaceGesture) endSpaceControl(false);
+    endSpaceControl();
     endPushToTalk();
-    for (const target of [...keyControlGestures.keys()]) endControlKey(target, false);
   }
 
   const frameCallback = async (deltaMs: number): Promise<void> => {
@@ -441,12 +376,15 @@ export async function createVoiceTui(
       { muted: state.mic.muted, talking: micTalking, color: youLabelColor, db: state.mic.db },
       { muted: agentMuted, color: agentLabelColor, db: state.speaker.db },
       state.mic.muted,
+      fieldSize.height >= 12
+        ? conversationLines(state.workspace, state.conversation, fieldSize.width)
+        : [],
     ).map((run) => ({ ...run, color: mixHex(PALETTE.panel, run.color, OVERLAY_ALPHA) }));
     fieldCanvas.content = styledInstrumentField(
       frame,
       { faint: PALETTE.faint, dim: PALETTE.dim, you: youFieldColor, agent: agentFieldColor },
       runs,
-      [0],
+      fieldSize.height >= 12 ? [0, 1, 2, 3] : [0],
     );
   };
 
@@ -479,21 +417,19 @@ export async function createVoiceTui(
       endSpaceControl();
       return;
     }
-    if (controlAction?.action === "end") {
-      endControlKey(controlAction.target);
+    if (palette.handleKey(key)) {
+      if (palette.isOpen()) cancelInputs();
       return;
     }
-    if (palette.handleKey(key)) return;
     if (spaceAction) {
       renewSpaceControl(spaceAction === "begin");
       return;
     }
     if (controlAction) {
-      if (controlAction.action === "toggle") toggle(controlAction.target);
-      else renewControlKey(controlAction.target, controlAction.action === "begin");
+      toggle(controlAction.target);
       return;
     }
-    if (key.name === "space" || key.eventType !== "press") return;
+    if (key.name === "space" || key.eventType !== "press" || key.repeated) return;
     if (key.name === "q" || (key.ctrl && key.name === "c")) {
       void shutdown();
       return;
@@ -503,8 +439,6 @@ export async function createVoiceTui(
   });
   renderer.keyInput.on("keyrelease", (key: ParsedKey) => {
     if (spaceControlKeyAction(key, palette.isOpen()) === "end") endSpaceControl();
-    const controlAction = audioControlKeyAction(key, palette.isOpen());
-    if (controlAction?.action === "end") endControlKey(controlAction.target);
   });
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);

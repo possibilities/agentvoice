@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { VoiceRuntime } from "../src/core/runtime.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
-import { deferred, NativeStub, runtimeHarness } from "./fixtures/runtime-harness.ts";
+import { loadLaunchConfig, parseArgs } from "../src/main.ts";
+import {
+  deferred,
+  NativeStub,
+  nativeFullAccess,
+  runtimeHarness,
+} from "./fixtures/runtime-harness.ts";
 
 describe("foreground runtime ownership", () => {
   test("new starts share the canonical workspace; Fresh changes identity and clears media", async () => {
@@ -258,6 +265,128 @@ describe("foreground runtime ownership", () => {
       expect(h.fatal).toEqual([]);
     } finally {
       closing.resolve();
+      await h.cleanup();
+    }
+  });
+});
+
+describe("launch configuration and reported identity", () => {
+  test("file edits do not change settings or prompt contents on redial or Fresh", async () => {
+    const h = runtimeHarness();
+    const configPath = join(h.directory, "server.json");
+    const promptPath = join(h.directory, "chosen.md");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        "codex-config": ["model=launch-model"],
+        voice: { name: "cove", "include-startup-context": false },
+        "prompt-files": { voice: "chosen.md" },
+      }),
+    );
+    writeFileSync(promptPath, "launch prompt");
+    const config = await loadLaunchConfig(parseArgs(["--config", configPath]), h.directory);
+    const runtime = new VoiceRuntime(config, "test", h.events, h.runtimeOptions);
+    const offer = () => {
+      runtime.offer("sdp");
+      const call = h.native.calls.at(-1)!;
+      expect(call.params).toMatchObject({
+        voice: "cove",
+        prompt: "launch prompt",
+        includeStartupContext: false,
+      });
+      h.native.options.onNotification("thread/realtime/started", {
+        threadId: runtime.currentReady!.threadId,
+        realtimeSessionId: call.params["realtimeSessionId"],
+      });
+    };
+    try {
+      await runtime.start();
+      offer();
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          "codex-config": ["model=later-model"],
+          voice: { name: "vale", "include-startup-context": true },
+        }),
+      );
+      writeFileSync(promptPath, "later prompt");
+      await Bun.sleep(350);
+      offer();
+      await runtime.fresh();
+      offer();
+      expect(h.native.options.argv).toContain("model=launch-model");
+      expect(h.native.closes).toBe(0);
+    } finally {
+      await runtime.shutdown();
+      await h.cleanup();
+    }
+  });
+
+  test("status uses native model/effort reports and attributes protocol to the current session", async () => {
+    const h = runtimeHarness({
+      orchestrator: { model: "requested", effort: "high" },
+      voice: { version: "v3" },
+    });
+    h.native.main("saved", h.directory);
+    h.native.override = (method) =>
+      method === "thread/resume"
+        ? Promise.resolve({
+            thread: h.native.threads[0],
+            ...nativeFullAccess,
+            model: "reported",
+            reasoningEffort: "low",
+          })
+        : undefined;
+    try {
+      await h.runtime.start();
+      expect(h.runtime.currentReady).toMatchObject({
+        model: "reported",
+        effort: "low",
+        conversationMode: "continued",
+        voiceVersion: null,
+      });
+      h.runtime.offer("first");
+      const first = h.native.calls.at(-1)!.params["realtimeSessionId"];
+      h.runtime.offer("second");
+      const second = h.native.calls.at(-1)!.params["realtimeSessionId"];
+      const started = (realtimeSessionId: unknown, version: string) =>
+        h.native.options.onNotification("thread/realtime/started", {
+          threadId: "saved",
+          realtimeSessionId,
+          version,
+        });
+      started(first, "v1");
+      expect(h.runtime.currentReady!.voiceVersion).toBeNull();
+      started(second, "v3");
+      started(first, "v1");
+      expect(h.runtime.currentReady!.voiceVersion).toBe("v3");
+      h.native.options.onNotification("thread/settings/updated", {
+        threadId: "saved",
+        threadSettings: {
+          ...nativeFullAccess,
+          sandboxPolicy: nativeFullAccess.sandbox,
+          model: "updated",
+          reasoningEffort: "medium",
+        },
+      });
+      expect(h.runtime.currentReady).toMatchObject({ model: "updated", effort: "medium" });
+      await h.runtime.fresh();
+      expect(h.runtime.currentReady).toMatchObject({
+        model: null,
+        effort: null,
+        conversationMode: "started",
+        voiceVersion: null,
+      });
+      h.native.options.onNotification("thread/settings/updated", {
+        threadId: "saved",
+        threadSettings: {
+          ...nativeFullAccess,
+          sandboxPolicy: nativeFullAccess.sandbox,
+          model: "old work",
+        },
+      });
+      expect(h.runtime.currentReady!.model).toBeNull();
+    } finally {
       await h.cleanup();
     }
   });

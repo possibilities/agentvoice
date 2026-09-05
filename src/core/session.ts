@@ -38,6 +38,7 @@ export const REALTIME_START_TIMEOUT_MS = 60_000;
 interface Session {
   id: string;
   active: boolean;
+  version: string | null;
   startTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -53,14 +54,19 @@ export class VoiceSessionManager {
     this.startTimeoutMs = startTimeoutMs;
   }
 
-  get hasSession(): boolean {
-    return this.session !== null;
+  get version(): string | null {
+    return this.session?.version ?? null;
   }
 
   /** A new offer supersedes whatever is running — renewal and retry alike. */
   handleOffer(sdp: string): void {
     if (this.session?.startTimer) clearTimeout(this.session.startTimer);
-    const next: Session = { id: crypto.randomUUID(), active: false, startTimer: null };
+    const next: Session = {
+      id: crypto.randomUUID(),
+      active: false,
+      version: null,
+      startTimer: null,
+    };
     this.session = next;
     next.startTimer = setTimeout(() => {
       if (this.session !== next) return;
@@ -80,6 +86,7 @@ export class VoiceSessionManager {
         // supersede or our ordered stop already covers it — ignore.
         if (this.session && params["realtimeSessionId"] === this.session.id) {
           this.session.active = true;
+          this.session.version = typeof params["version"] === "string" ? params["version"] : null;
           if (this.session.startTimer) {
             clearTimeout(this.session.startTimer);
             this.session.startTimer = null;
@@ -124,13 +131,6 @@ export class VoiceSessionManager {
       default:
         return; // transcript deltas and other realtime chatter: not our surface
     }
-  }
-
-  /** The client is gone; session lifetime is socket lifetime. */
-  handleClientGone(): void {
-    if (!this.session) return;
-    this.clearSession();
-    this.stop();
   }
 
   /** Everything died with the app-server child; nothing left to stop. */

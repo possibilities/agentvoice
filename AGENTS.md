@@ -34,7 +34,7 @@ implementation.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
-- src/core/config.ts: CLI > file > default resolution and explicit prompt-files
+- src/core/config.ts: named CLI > file > default resolution and explicit prompt-files
   loading. Legacy filename checks only warn; never read unreferenced contents.
 - src/core/codex-config.ts: ordered native startup overrides; validate only argv
   shape and product-invariant choices, never rewrite the forwarded strings.
@@ -58,11 +58,12 @@ implementation.
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/core/runtime.ts: launch/resume/Fresh, voice session, child lifecycle,
-  config watcher. No account selection/rotation, reattachment/restart adoption,
+  launch-cached settings. No account selection/rotation, reattachment/restart adoption,
   custom worker manager, tool callback or submitted report/follow-up turns.
   Keep old main-thread locks until quit; native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
-- src/console/host.ts: direct in-process runtime/media/TUI wiring and quit cleanup.
+- src/console/host.ts: native readiness before audio opens, negotiation after audio
+  readiness, visible media notices, direct in-process wiring and quit cleanup.
 - src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
@@ -149,8 +150,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
    outranks the request `prompt`, and we cannot see it.
 8. Thread and realtime params are serde-lenient: unknown fields are ignored,
    never rejected. A misspelled key in an `extra:` block fails silently, and
-   `thread/resume` quietly drops the 12 start-only fields rather than erroring
-   — hence `params.ts` filters them itself.
+   `thread/resume` quietly drops start-only fields rather than erroring
+   — hence `params.ts` filters known fields after the raw extra merge (0.153.3).
 9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
    text tokens. Require explicit v3 for nonempty initial items (including empty
    seed-file text). Unset voice.version is omitted. In Codex 0.153.3, WebRTC
@@ -175,7 +176,13 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - Record<string, unknown> access uses bracket keys.
 - The TUI is chromeless: full-bleed signal field with translucent status/meter
   overlays. Commands live in ctrl+k; direct keys work while it is closed and
-  ctrl+c always falls through. No unrelated visual redesign during lifecycle cuts.
+  ctrl+c always falls through. M/S toggle on press; Space and pointer PTT are
+  hold-only. OpenTUI 0.5.3 reports repeats as press + repeated; ignore them for
+  toggles and renew only live Space holds. Palette opening cancels holds.
+  No unrelated visual redesign during lifecycle cuts.
+- All AgentVoice settings and prompt contents load once per launch. No voice-name
+  watcher or local voice catalog; Codex validates voice selection. TUI model,
+  effort and voice version are reported native values, never inferred from requests.
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
@@ -209,7 +216,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Retired dispatch/dispatch-reports config keys error, including explicit false.
   Saved custom tool calls receive an immediate failed tool result and visible
   retirement notice; never resurrect a handler or rewrite native history.
-  Raw dynamicTools metadata still passes through but has no client implementation.
+  Raw dynamicTools metadata passes on start only, with a visible warning and no
+  client implementation. Unsupported client handoffs and media overrides also warn.
 
 ## The fleet
 

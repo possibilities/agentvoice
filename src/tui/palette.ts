@@ -33,6 +33,7 @@ export interface CommandPalette {
     meta?: boolean;
     sequence?: string;
     eventType?: string;
+    repeated?: boolean;
   }): boolean;
   update(state: PaletteState): void;
 }
@@ -220,7 +221,7 @@ export function createCommandPalette(
       if (key.eventType === "release") return open;
       // Kitty event reporting makes a held ctrl+k repeat; only a fresh press
       // may toggle the palette.
-      if (key.eventType === "repeat" && key.ctrl && key.name === "k") return open;
+      if ((key.eventType === "repeat" || key.repeated) && key.ctrl && key.name === "k") return open;
       if (!open) {
         if (key.ctrl && key.name === "k") {
           openPalette();

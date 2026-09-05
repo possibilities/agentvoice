@@ -34,7 +34,6 @@ export type HostTransport = Pick<
   | "handleReady"
   | "handleAnswer"
   | "handleClosed"
-  | "handleRedial"
   | "handleSignalLost"
   | "handleError"
   | "liveForMs"
@@ -84,9 +83,15 @@ export async function runConsoleHost(
   const speaker = new MuteGate();
   let phase: TransportPhase = "waiting-ready";
   let transport: HostTransport | null = null;
+  let audioReady = false;
+  const showNotice = (message: string) => {
+    if (closed) return;
+    feed(message);
+    notice = message;
+    tui?.refresh();
+  };
   const sources: Record<VoiceTuiInput, Record<AudioTarget, symbol>> = {
     pointer: { mic: Symbol("mic-pointer"), speaker: Symbol("speaker-pointer") },
-    key: { mic: Symbol("mic-key"), speaker: Symbol("speaker-key") },
     space: { mic: Symbol("mic-space"), speaker: Symbol("speaker-space") },
   };
   const audio = factory.audio({
@@ -98,7 +103,7 @@ export async function runConsoleHost(
     onAgentLevel: (db) => {
       meters.agent = db;
     },
-    onWarning: feed,
+    onWarning: (message) => showNotice(`Audio: ${message}`),
     debug: debugLog,
   });
   transport = factory.transport({
@@ -115,7 +120,7 @@ export async function runConsoleHost(
     onRemoteTrack: (track) => audio.attachRemote(track),
     onOaiEvent: (event) => debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`),
     onInfo: feed,
-    onError: feed,
+    onError: (message) => showNotice(`Voice: ${message}`),
   });
 
   const fail = (message: string) => {
@@ -127,7 +132,10 @@ export async function runConsoleHost(
     config,
     version,
     {
-      onReady: (info) => transport?.handleReady(info),
+      onReady: (info) => {
+        if (audioReady && !closed) transport?.handleReady(info);
+        tui?.refresh();
+      },
       onAnswer: (sdp) => {
         void transport?.handleAnswer(sdp);
       },
@@ -137,18 +145,13 @@ export async function runConsoleHost(
           audio.detachRemote();
         } else transport?.handleClosed(reason);
       },
-      onRedial: (reason) => transport?.handleRedial(reason),
       onError: (message, isFatal) => {
-        notice = message;
-        tui?.refresh();
+        showNotice(message);
         transport?.handleError(message, isFatal);
       },
       onFatal: fail,
       onStatus: feed,
-      onWarning: (message) => {
-        notice = message;
-        tui?.refresh();
-      },
+      onWarning: showNotice,
       debug: debugLog,
     },
     options.runtime,
@@ -166,6 +169,8 @@ export async function runConsoleHost(
     return {
       available: !closed,
       notice,
+      workspace: config.orchestrator.workspace,
+      conversation: runtime?.currentReady ?? undefined,
       phase,
       liveForMs: transport?.liveForMs ?? null,
       workTier: tierLabel(
@@ -204,8 +209,8 @@ export async function runConsoleHost(
           gate(target).beginUnmute(sources[input][target]);
           syncMute(target);
         },
-        releaseUnmute: (target, input, commit) => {
-          gate(target).releaseUnmute(sources[input][target], commit);
+        releaseUnmute: (target, input) => {
+          gate(target).releaseUnmute(sources[input][target]);
           syncMute(target);
         },
         redial: () => transport?.redial("manual"),
@@ -219,8 +224,15 @@ export async function runConsoleHost(
     // Handlers exist before asynchronous startup, so quitting during initialization works too.
     const boot = (async () => {
       try {
+        await runtime!.start();
+        if (closed) return;
+        // Permission/model/prompt/history failures must not open the microphone.
+        // Readiness reaches transport only after audio can receive remote tracks.
         await audio.start();
-        if (!closed) await runtime!.start();
+        if (closed) return;
+        audioReady = true;
+        const ready = runtime!.currentReady;
+        if (ready) transport?.handleReady(ready);
       } catch (error) {
         if (!closed) fail(error instanceof Error ? error.message : String(error));
       } finally {

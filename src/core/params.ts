@@ -13,6 +13,24 @@ import { validateFullAccessParams } from "./full-access.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
+// Codex 0.153.3 ThreadStartParams fields absent from ThreadResumeParams.
+// Filter after raw extra merges; unknown future fields remain passthrough.
+const START_ONLY_FIELDS = [
+  "allowProviderModelFallback",
+  "serviceName",
+  "multiAgentMode",
+  "ephemeral",
+  "historyMode",
+  "sessionStartSource",
+  "threadSource",
+  "projectId",
+  "environments",
+  "dynamicTools",
+  "selectedCapabilityRoots",
+  "mockExperimentalField",
+  "experimentalRawEvents",
+] as const;
+
 function setIfDefined(target: Record<string, unknown>, key: string, value: unknown): void {
   if (value !== undefined) target[key] = value;
 }
@@ -64,10 +82,36 @@ export function threadParams(
   // Thread identity is owned by AgentVoice, not the generic extra escape
   // hatch: inventory must remain reliable under every configuration.
   if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;
+  else for (const field of START_ONLY_FIELDS) delete merged[field];
   validateFullAccessParams(merged);
   // A raw matching built-in profile is allowed, but Codex rejects both selectors.
   if (merged["permissions"] !== undefined) delete merged["sandbox"];
   return merged;
+}
+
+/** Raw passthrough is available for experiments, not an implementation of every native mode. */
+export function passthroughWarnings(config: ServerConfig, prompts: Prompts): string[] {
+  const warnings: string[] = [];
+  const thread = threadParams(config, prompts, "start");
+  const realtime = realtimeParams(config, prompts, "", "", "");
+  if (Array.isArray(thread["dynamicTools"]) && thread["dynamicTools"].length > 0)
+    warnings.push(
+      "Raw dynamicTools are advertised only on new conversations. AgentVoice has no client tool handlers; calls will fail. Use native Codex tools for working tools.",
+    );
+  if (realtime["clientManagedHandoffs"] === true)
+    warnings.push(
+      "clientManagedHandoffs disables native response forwarding. AgentVoice does not implement client handoffs; Codex work may not reach the voice. Omit this setting or set it to false.",
+    );
+  const transport = realtime["transport"] as { type?: string; sdp?: string } | null;
+  if (
+    transport?.type !== "webrtc" ||
+    transport.sdp !== "" ||
+    realtime["outputModality"] !== "audio"
+  )
+    warnings.push(
+      "Raw transport/outputModality overrides replace AgentVoice's generated WebRTC offer or audio output. This TUI cannot carry alternate media paths; remove these overrides if voice fails.",
+    );
+  return warnings;
 }
 
 /**

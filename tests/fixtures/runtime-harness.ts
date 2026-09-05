@@ -112,7 +112,6 @@ export function runtimeHarness(values: ConfigValues = {}, options: RuntimeOption
     onReady: (info) => ready.push(info),
     onAnswer() {},
     onClosed: (reason) => closed.push(reason),
-    onRedial() {},
     onError() {},
     onFatal: (message) => fatal.push(message),
     onStatus() {},

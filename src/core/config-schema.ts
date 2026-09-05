@@ -154,7 +154,7 @@ export const orchestratorValuesSchema = z
       "Raw ~/.codex/config.toml overrides, applied to this thread only. Permission selectors must match danger-full-access / never. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history.",
     ).optional(),
     extra: passthrough(
-      "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Permission selectors must match danger-full-access / never. Conflicting cwd and threadId/path/history overrides are rejected. Upstream can silently ignore unknown or start-only fields on resume; consult its protocol.",
+      "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Permission selectors must match danger-full-access / never. Conflicting cwd and threadId/path/history overrides are rejected. Known start-only fields are stripped on resume after merging extra (Codex 0.153.3). Nonempty dynamicTools warns: metadata is passed on start but this client has no handlers. Raw fields can override named CLI flags; extra.config replaces the assembled config object. Unknown native fields may be silently ignored.",
     ).optional(),
   })
   .meta({
@@ -177,7 +177,7 @@ export const voiceValuesSchema = z
     name: z
       .string()
       .describe(
-        "Voice timbre, validated against the effective native protocol. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through.",
+        "Voice timbre, validated by Codex when voice starts. Loaded once per launch; restart to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through.",
       )
       .optional(),
     version: z
@@ -226,12 +226,11 @@ export const voiceValuesSchema = z
       .boolean()
       .meta({
         description:
-          "SHARP EDGE: true stops app-server from forwarding orchestrator output to the voice agent, expecting the client to append it explicitly. agentvoice never does, so true silently severs the two agents. Default: false.",
-        default: false,
+          "Unsupported client mode: true disables native response forwarding, expecting explicit client append calls that AgentVoice does not implement. A visible launch warning explains the broken handoff; the raw value is still forwarded. Omitted defers to Codex (currently false).",
       })
       .optional(),
     extra: passthrough(
-      "Raw thread/realtime/start passthrough, merged last. threadId and realtimeSessionId overrides are rejected. Changing transport or outputModality can disable this TUI's audio path.",
+      "Raw thread/realtime/start passthrough, merged last. threadId and realtimeSessionId overrides are rejected. Overriding the generated WebRTC transport or selecting non-audio output warns visibly: this TUI has no alternate media path. Raw values still forward; this is not a supported-mode guarantee.",
     ).optional(),
   })
   .meta({

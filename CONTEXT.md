@@ -53,14 +53,19 @@ only trigger migration warnings. Not shipped doctrine or a copied transcript.
 inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
+**Launch settings** — AgentVoice configuration and explicit prompt contents read
+once at launch, reused for redial and Fresh. Restart to apply edits, including
+voice name; native Codex settings/history retain their own rules.
+
 **Startup config** — Explicit codex-config string array or repeatable -c /
 --codex-config key=value, forwarded as native Codex -c arguments. File entries
 precede CLI entries. This sets launch-wide native defaults, distinct from later
 conversation/realtime overrides and persisted resume settings. Nothing is seeded
 or hot-reloaded; --config still selects AgentVoice's JSON file.
 
-**Mute / hold** — Persistent channel assignment versus a temporary unmute.
-Each input source releases only its own hold; the last release restores mute.
+**Mute / hold** — M/S and channel clicks toggle the persistent mute assignment.
+Space (with key releases) and the pointer PTT band temporarily unmute the mic;
+each source releases only its own hold, and release never commits a toggle.
 
 **Historical terms** — Resident, Server, Remote console, control attachment,
 paired device, discovery, custom Worker, Worker report, account profile and idle

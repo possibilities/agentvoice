@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
-import { realtimeParams, threadParams } from "../src/core/params.ts";
+import { passthroughWarnings, realtimeParams, threadParams } from "../src/core/params.ts";
 
 const HOME = "/home/tester";
 
@@ -109,15 +109,44 @@ describe("threadParams", () => {
     expect(params).not.toHaveProperty("baseInstructions");
   });
 
-  test("resume omits the start-only fields", () => {
-    const values: ConfigValues = {
-      orchestrator: { ephemeral: true, "history-mode": "legacy", model: "m" },
+  test("resume filters raw start-only fields after merging extra and keeps future passthrough", () => {
+    const extra = {
+      allowProviderModelFallback: false,
+      serviceName: "test",
+      multiAgentMode: "test",
+      ephemeral: true,
+      historyMode: "legacy",
+      sessionStartSource: "test",
+      threadSource: "ignored",
+      projectId: "test",
+      environments: [],
+      dynamicTools: [{ name: "test", inputSchema: {} }],
+      selectedCapabilityRoots: [],
+      mockExperimentalField: "test",
+      experimentalRawEvents: true,
     };
+    const values: ConfigValues = {
+      orchestrator: {
+        ephemeral: false,
+        "history-mode": "paginated",
+        model: "m",
+        extra: {
+          ...extra,
+          futureField: { enabled: false },
+          config: { model_reasoning_effort: "low" },
+        },
+      },
+    };
+    const started = thread(values);
+    expect(started["ephemeral"]).toBe(true);
+    expect(started["dynamicTools"]).toEqual(extra.dynamicTools);
     const resumed = thread(values, {}, "resume");
-    expect(resumed).not.toHaveProperty("ephemeral");
-    expect(resumed).not.toHaveProperty("historyMode");
-    expect(resumed).not.toHaveProperty("dynamicTools");
-    expect(resumed["model"]).toBe("m");
+    for (const key of Object.keys(extra)) expect(resumed).not.toHaveProperty(key);
+    expect(resumed).toMatchObject({
+      model: "m",
+      futureField: { enabled: false },
+      config: { model_reasoning_effort: "low" },
+    });
   });
 
   test("extra merges last but cannot change the full-access posture", () => {
@@ -372,4 +401,45 @@ describe("native skill config passthrough", () => {
       }
     });
   }
+});
+
+describe("unsupported raw modes", () => {
+  test("baseline and explicitly native handoffs add no warnings", () => {
+    expect(passthroughWarnings(configure(), {})).toEqual([]);
+    expect(
+      passthroughWarnings(
+        configure({
+          voice: { "client-managed-handoffs": true, extra: { clientManagedHandoffs: false } },
+          orchestrator: { extra: { dynamicTools: [] } },
+        }),
+        {},
+      ),
+    ).toEqual([]);
+  });
+  test("warns about the final raw handoff, dynamic tool and media modes without rewriting them", () => {
+    const values: ConfigValues = {
+      orchestrator: { extra: { dynamicTools: [{ name: "custom" }] } },
+      voice: {
+        "client-managed-handoffs": false,
+        extra: {
+          clientManagedHandoffs: true,
+          transport: { type: "websocket" },
+          outputModality: "text",
+        },
+      },
+    };
+    const warnings = passthroughWarnings(configure(values), {});
+    expect(warnings).toHaveLength(3);
+    expect(warnings.join(" ")).toContain("no client tool handlers");
+    expect(warnings.join(" ")).toContain("does not implement client handoffs");
+    expect(realtime(values)).toMatchObject(values.voice!.extra!);
+    expect(
+      passthroughWarnings(
+        configure({
+          voice: { extra: { transport: { type: "webrtc", sdp: "fixed stale offer" } } },
+        }),
+        {},
+      ),
+    ).toHaveLength(1);
+  });
 });

@@ -86,7 +86,7 @@ describe("closed attribution", () => {
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
-    manager.handleClientGone();
+    void manager.shutdown();
     expect(kinds()).toEqual(["start", "stop"]);
     manager.handleNotification("thread/realtime/closed", { reason: "requested" });
     expect(kinds()).toEqual(["start", "stop"]); // consumed, not forwarded
@@ -103,7 +103,6 @@ describe("closed attribution", () => {
       { kind: "closed", detail: "transport_closed" },
       { kind: "ready" },
     ]);
-    expect(manager.hasSession).toBe(false);
   });
 
   test("closed with no session is ignored", () => {
@@ -152,7 +151,7 @@ describe("errors", () => {
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
-    manager.handleClientGone();
+    void manager.shutdown();
     await tick();
     // Next session's genuine requested-close is NOT eaten by the failed stop.
     manager.handleOffer("offer-2");
@@ -172,7 +171,7 @@ describe("reset", () => {
     manager.handleNotification("thread/realtime/started", {
       realtimeSessionId: startIds[0],
     });
-    manager.handleClientGone(); // one pending requested close
+    void manager.shutdown(); // one pending requested close
     manager.reset(); // app-server died; the close will never arrive
     manager.handleOffer("offer-2");
     manager.handleNotification("thread/realtime/started", {

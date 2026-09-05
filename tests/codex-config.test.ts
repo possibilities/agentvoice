@@ -5,8 +5,7 @@ import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
 import { validateCodexConfig } from "../src/core/codex-config.ts";
 import { parseJsonConfig, resolveConfig } from "../src/core/config.ts";
-import { ConfigWatcher } from "../src/core/config-watch.ts";
-import { configLoader, parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs, parseConsoleCommand } from "../src/main.ts";
 import { nativeFullAccess, runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("native startup configuration", () => {
@@ -68,10 +67,10 @@ describe("native startup configuration", () => {
     const cli = ["model=cli", 'unknown="./relative value"'];
     try {
       writeFileSync(join(root, "settings.json"), JSON.stringify({ "codex-config": file }));
-      const config = await configLoader(
+      const config = await loadLaunchConfig(
         parseArgs(["--config", "settings.json", "-c", cli[0]!, "--codex-config", cli[1]!]),
         root,
-      ).loadResolvedConfig();
+      );
       expect(config.codexConfig).toEqual([...file, ...cli]);
       expect(config.orchestrator.config).toBeUndefined();
       expect(config.orchestrator.model).toBeUndefined();
@@ -259,30 +258,6 @@ describe("native startup configuration", () => {
       } finally {
         await h.cleanup();
       }
-    }
-  });
-
-  test("startup config edits never replace the child or hot-reload settings, including on Fresh", async () => {
-    const h = runtimeHarness({ "codex-config": ["model=launch-model"] });
-    const changed = { ...h.config, codexConfig: ["model=later-model"] };
-    const redials: unknown[] = [];
-    const watcher = new ConfigWatcher({ path: "/unused", load: async () => changed }, h.config, {
-      voiceNameChanged: (name) => redials.push(name),
-      rejected: (error) => {
-        throw error;
-      },
-    });
-    try {
-      await h.runtime.start();
-      const options = h.native.options;
-      await watcher.reload();
-      await h.runtime.fresh();
-      expect(redials).toEqual([]);
-      expect(h.native.options).toBe(options);
-      expect(options.argv).toEqual(appServerArgv("codex", ["model=launch-model"]));
-    } finally {
-      watcher.stop();
-      await h.cleanup();
     }
   });
 

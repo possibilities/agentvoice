@@ -41,14 +41,19 @@ The generated server.schema.json is authoritative for spelling and types.
 
 Startup config belongs to the owned child, not its conversation requests. Later
 orchestrator.config can override it; continue/resume may retain saved model/effort.
-Use --model/--effort for explicit conversation changes. Startup edits require a
+Use --model/--effort for explicit conversation changes. Named CLI settings beat
+their named file counterparts, but raw extra fields merge later; explicit config
+effort wins over --effort, and extra.config replaces the entire assembled object.
+In Codex 0.153.3, an explicit effort request can also prevent saved model/provider
+restoration on resume; specify the desired model when needed. Startup edits require a
 relaunch, not Fresh. --config still selects AgentVoice JSON. Native paths inside
 startup values are not rewritten; global native config is never edited by this feature.
 
 Not every setting is a CLI flag: --help lists the common flags; server.json and
 the passthrough objects expose the larger surface. Passthrough is not validation:
 unknown native fields may be ignored, and unsupported transport/output values
-can disable audio. --fast selects the working model's advertised native Fast
+can disable audio (visible launch warning). Known start-only fields are stripped
+after raw resume merges; saved metadata still belongs to native history. --fast selects the working model's advertised native Fast
 tier (higher usage/cost); --no-fast explicitly selects standard. Neither changes
 the model, reasoning effort or realtime speech. With neither flag, tier/config
 passthrough stays unchanged. The flags win over file/config/extra tier values;
@@ -58,8 +63,9 @@ missing tier metadata or a different per-thread provider fail clearly. Start/res
 responses confirm the applied setting when available; TUI labels missing data
 as requested. The indicator is configured tier, not billing telemetry.
 
-Only voice.name hot reloads. Prompts load only from explicit prompt-files references,
-once at launch, and are reused on redial and Fresh. Paths are relative to the selected
+All AgentVoice settings and prompt contents load once at launch and are reused
+on redial and Fresh. There is no config watcher; even voice-name edits need a
+restart. Prompts load only from explicit prompt-files references. Paths are relative to the selected
 config directory (absolute and ~/ also work); missing/unreadable/non-file references
 fail before native startup. Unreferenced conventional files only produce visible
 migration warnings, with no content reads. Main prompt settings ride thread/start or resume; session-boundary
@@ -137,7 +143,8 @@ An explicitly selected existing home supplies native configuration and history;
 there is no app-managed cross-home migration or shared-state reconciliation.
 
 TUI/media: signal field, status/elapsed timer, working-model tier, dB meters, command palette,
-mouse and keyboard mute/PTT, device selection, Opus/WebRTC, make-before-break
+conversation/workspace identity and native-reported model/effort/protocol,
+visible media warnings, mouse and keyboard mute/PTT, device selection, Opus/WebRTC, make-before-break
 redial, automatic renewal and debug metrics. There is no echo cancellation,
 text-chat transcript pane or interactive approval UI.
 
@@ -155,8 +162,11 @@ keys error even when false. Old
 tool definitions persisted by Codex may remain on resume: those calls fail with
 a retirement notice. Fresh starts without them; nothing silently rewrites or
 replaces a conversation. Native Codex tools/subagents/handoffs stay native.
-Explicit raw dynamicTools metadata still passes through, without a client-side
-implementation; unknown dynamic calls receive protocol errors.
+Explicit raw dynamicTools metadata passes through on start with a visible warning,
+without a client implementation; unknown dynamic calls receive protocol errors.
+Client-managed handoffs and alternate raw media paths also warn; supported
+baseline handoffs stay native. Voice-name hot reload and tap/hold classification
+are removed: M/S toggle, Space and pointer PTT only hold.
 
 Retired accounts configuration errors even when empty or balance is false;
 remove the entire section. Existing account-profile directories, credentials
@@ -176,6 +186,6 @@ choice, not automatic discovery; see README migration notes.
 Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
 and native --fast/--no-fast are implemented. They do not settle the items above.
 
-Workflow: one contextual sketch at a time, approval before implementation.
-After each completed change, present the next sketch automatically until the
-queue is exhausted; do not ask whether to reinventory.
+Native readiness checks complete before audio hardware opens; negotiation waits
+for audio readiness. LIVE is a media state, not work completion. Live audio,
+latency/buffering and first-install validation remain separate checks.

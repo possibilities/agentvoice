@@ -46,8 +46,11 @@ Prompts are opt-in: name files in server.json's prompt-files section, or use
 native fields in orchestrator.extra / voice.extra. No filename auto-loading.
 Relative prompt-file paths resolve beside the selected config, not the workspace.
 
-Keys: [m] microphone · [s] speaker · [r] redial · [f] fresh · [q] quit
-      [ctrl+k] commands · [space] push-to-talk (key-release capable terminal)
+Settings and explicit prompt files load once per launch; restart to apply edits.
+Raw extra fields can override named CLI settings; see README for precedence.
+
+Keys: [m] toggle microphone · [s] toggle speaker · [r] redial · [f] fresh · [q] quit
+      [ctrl+k] commands · [space] hold to talk (muted mic, key-release capable terminal)
 `;
 
 export interface FlagSpec {
@@ -208,7 +211,7 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   };
 }
 
-export function configLoader(parsed: ParsedArgs, launchCwd = process.cwd()) {
+export async function loadLaunchConfig(parsed: ParsedArgs, launchCwd = process.cwd()) {
   const home = homedir();
   const configPath = parsed.configPath
     ? resolve(launchCwd, expandTilde(parsed.configPath, home))
@@ -221,25 +224,21 @@ export function configLoader(parsed: ParsedArgs, launchCwd = process.cwd()) {
   } = parsed.values;
   const cliValues = cliToConfigValues(values);
   if (parsed.codexConfig) cliValues["codex-config"] = parsed.codexConfig;
-  const loadResolvedConfig = async () => {
-    const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
-    const config = resolveConfig(cliValues, fileValues, process.env, home, {
-      debug: parsed.debug,
-      configDir: dirname(configPath),
-      launchCwd,
-    });
-    try {
-      if (!statSync(config.orchestrator.workspace).isDirectory())
-        throw new Error("not a directory");
-      config.orchestrator.workspace = realpathSync(config.orchestrator.workspace);
-    } catch (error) {
-      throw new ConfigError(
-        `Cannot use workspace ${config.orchestrator.workspace}: ${String(error)}`,
-      );
-    }
-    return config;
-  };
-  return { configPath, loadResolvedConfig };
+  const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
+  const config = resolveConfig(cliValues, fileValues, process.env, home, {
+    debug: parsed.debug,
+    configDir: dirname(configPath),
+    launchCwd,
+  });
+  try {
+    if (!statSync(config.orchestrator.workspace).isDirectory()) throw new Error("not a directory");
+    config.orchestrator.workspace = realpathSync(config.orchestrator.workspace);
+  } catch (error) {
+    throw new ConfigError(
+      `Cannot use workspace ${config.orchestrator.workspace}: ${String(error)}`,
+    );
+  }
+  return config;
 }
 
 async function runConsoleCommand(argv: string[]): Promise<number> {
@@ -248,8 +247,7 @@ async function runConsoleCommand(argv: string[]): Promise<number> {
     console.log(USAGE);
     return 0;
   }
-  const { configPath, loadResolvedConfig } = configLoader(command.parsed);
-  const config = await loadResolvedConfig();
+  const config = await loadLaunchConfig(command.parsed);
   await runConsoleHost(config, VERSION, {
     media: {
       deviceIndex: command.options.deviceIndex,
@@ -260,7 +258,6 @@ async function runConsoleCommand(argv: string[]): Promise<number> {
       fresh: command.options.fresh,
       resume: command.options.resume,
       fast: command.parsed.fast,
-      configSource: { path: configPath, load: loadResolvedConfig },
     },
   });
   return 0;

@@ -26,12 +26,6 @@ export interface VoiceAudioOptions {
   debug?(line: string): void;
 }
 
-export interface CaptureDeviceInfo {
-  index: number;
-  name: string;
-  isDefault: boolean;
-}
-
 const SILENCE_WARN_CHUNKS = 50;
 const CAPTURE_POLL_MS = 5;
 const MAX_CAPTURE_CHUNKS_PER_POLL = 32;
@@ -128,10 +122,6 @@ export class DuplexVoiceAudio {
     if (muted === this.speakerMutedValue) return;
     this.speakerMutedValue = muted;
     if (muted) this.device?.clearPlayback();
-  }
-
-  captureDevices(): CaptureDeviceInfo[] {
-    return this.device?.captureDevices() ?? [];
   }
 
   async start(): Promise<void> {

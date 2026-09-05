@@ -8,8 +8,10 @@ export interface ReadyInfo {
   /** Native configured tier, not per-request billing/execution telemetry. */
   serviceTier?: string | null;
   requestedServiceTier?: string;
+  /** Reported by Codex; null means no reported effort. */
   effort: string | null;
-  voiceModel: string | null;
-  voice: string | null;
+  conversationMode: "started" | "continued";
+  /** Reported for the current voice session, never inferred from config. */
+  voiceVersion: string | null;
   prompts: string[];
 }

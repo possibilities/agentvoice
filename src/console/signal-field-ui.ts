@@ -1,5 +1,5 @@
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
-import type { VoicePhase } from "../core/voice-types.ts";
+import type { ReadyInfo, VoicePhase } from "../core/voice-types.ts";
 import { formatClock } from "./dsp.ts";
 import { type SignalFieldFrame, signalFieldWashColor } from "./signal-field.ts";
 import { SIGNAL_GLYPHS, VOICE_TONES } from "./theme.ts";
@@ -144,6 +144,7 @@ export function instrumentRuns(
   you: InstrumentVoice & { talking: boolean },
   agent: InstrumentVoice,
   pttOpen: boolean,
+  conversation: string[] = [],
 ): InstrumentTextRun[] {
   const pttTop = height - (pttOpen ? pttRowCount(height) : 0);
   const center = Math.floor(width / 2);
@@ -165,7 +166,10 @@ export function instrumentRuns(
     });
   }
 
-  const boxTop = 1;
+  conversation.forEach((text, index) => {
+    runs.push({ x: centered(text, center), y: index + 1, text, color: VOICE_TONES.dim });
+  });
+  const boxTop = 1 + conversation.length;
   const boxBottom = pttTop - 1;
   runs.push(...outlineRuns(0, boxTop, center - 1, boxBottom, VOICE_TONES.youDim));
   runs.push(...outlineRuns(center + 1, boxTop, width - 1, boxBottom, VOICE_TONES.agentDim));
@@ -302,4 +306,36 @@ export function styledInstrumentField(
     if (rowIndex < height - 1) chunks.push(fg(colors.faint)("\n"));
   });
   return new StyledText(chunks);
+}
+
+/** Compact identity; requested settings must never masquerade as native reports. */
+export function conversationLines(
+  workspace: string | undefined,
+  info: ReadyInfo | undefined,
+  width: number,
+): string[] {
+  if (!workspace) return [];
+  const clip = (text: string, tail = false, limit = width): string => {
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Render path/model controls as spaces, never extra rows.
+    const chars = [...text.replace(/[\x00-\x1f\x7f]/g, " ")];
+    if (chars.length <= limit) return chars.join("");
+    if (limit <= 1) return "…";
+    return tail
+      ? `…${chars.slice(-(limit - 1)).join("")}`
+      : `${chars.slice(0, limit - 1).join("")}…`;
+  };
+  // The command trigger occupies the right seven cells of this row.
+  const label = width >= 40 ? "Workspace: " : "";
+  const lines = [label + clip(workspace, true, Math.max(1, width - 14 - label.length))];
+  if (info) {
+    lines.push(
+      clip(`${info.conversationMode === "continued" ? "Continued" : "Started"}: ${info.threadId}`),
+    );
+    lines.push(
+      clip(
+        `Model: ${info.model ?? "unknown"}${info.effort ? ` · ${info.effort}` : ""}${info.voiceVersion ? ` · Voice ${info.voiceVersion}` : ""}`,
+      ),
+    );
+  }
+  return lines;
 }
