@@ -292,8 +292,8 @@ describe("baseline readiness and feedback", () => {
     });
     try {
       await setup.waitFor(() => setup.captureCharFrame().includes("LIVE"));
-      h.warnAudio("microphone is delivering pure silence — check microphone permission");
-      await setup.waitFor(() => setup.captureCharFrame().includes("pure silence"));
+      h.warnAudio("agent audio decode failed: invalid Opus packet");
+      await setup.waitFor(() => setup.captureCharFrame().includes("decode failed"));
       expect(setup.captureCharFrame()).toContain("LIVE");
       h.failTransport("answer rejected: invalid SDP");
       for (const width of [40, 80, 120]) {
