@@ -19,6 +19,7 @@ describe("WebRTC compatibility default", () => {
       transport: { type: "webrtc", sdp: "sdp" },
       outputModality: "audio",
       version: "v3",
+      includeStartupContext: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);
@@ -104,10 +105,10 @@ describe("WebRTC compatibility default", () => {
         h.native.main("existing", h.directory);
         try {
           await h.runtime.start();
-          h.runtime.offer("offer-1");
-          h.runtime.offer("redial");
+          await h.runtime.offer("offer-1");
+          await h.runtime.offer("redial");
           await h.runtime.fresh();
-          h.runtime.offer("fresh-offer");
+          await h.runtime.offer("fresh-offer");
           const starts = h.native.calls.filter((c) => c.method === "thread/realtime/start");
           expect(starts).toHaveLength(3);
           for (const start of starts) {

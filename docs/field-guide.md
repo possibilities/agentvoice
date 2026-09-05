@@ -34,7 +34,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Main agent | model, effort, personality, fixed full-access/never posture, native approvals-reviewer (no execution approvals under never), model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
-| Voice | model, name, version, quiet-resume (frontend policy), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
+| Voice | model, name, version, quiet-resume and replay-spoken-history (frontend policies), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
 | Explicit prompt-files | voice, orchestrator, orchestrator-base, orchestrator-session-start/end, voice-seed-developer/user/assistant file references |
 | Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
@@ -112,7 +112,7 @@ requests are refused through native denials or protocol errors with a persistent
 TUI explanation, not an approval UI or invented answers.
 
 Still application-owned: full-access-only posture, visible refusal handling,
-WebRTC/audio transport, workspace-local selection, quiet-resume guidance and renewal policy. The project
+WebRTC/audio transport, workspace-local selection, spoken-history replay, quiet-resume guidance and renewal policy. The project
 is not yet fully vanilla in defaults, nor a complete passthrough for every future
 Codex option.
 
@@ -130,7 +130,7 @@ reachable paths, not evidence of the operator's active rollout values.
 | Protocol, speech model and voice name | Desktop can explicitly force v3; stock WebRTC omission instead selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Restore v3 compatibility in AgentVoice; leave model/name resolution and explicit overrides native. |
 | Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows status and meters, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
 | Session prompts and handoffs | Native Codex has voice start/end instructions and automatic handoff forwarding. Desktop adds its own session instructions/tools and can create calls itself. AgentVoice keeps Codex in charge of both the call and handoffs. | Keep native instructions and forwarding. Copying desktop instructions/tool metadata requires corresponding frontend handlers; it is not a compatibility prerequisite. |
-| Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | Preserve the operator's explicit decision to leave these controls unset. Desktop values cannot be treated as independent, universally native defaults. |
+| Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | AgentVoice now defaults startup context off to avoid importing old topics into fresh conversations. Explicit true opts in. Tail flush remains unset; native defaults are not desktop parity. |
 | Work model, effort, Fast and history | Resume can restore saved settings; history mode also depends on native thread-store capabilities. Desktop can supply product/rollout settings. An omitted field does not necessarily mean config.toml is consulted. | Keep native resolution and existing Fast checks. Correct schema claims that history simply inherits config and that ultra guarantees proactive subagents. |
 | Microphone processing | Desktop requests browser microphone noise suppression. AgentVoice's native duplex PCM path has no echo cancellation/noise suppression stage. App-server cannot supply capture processing to a client-owned microphone. | Existing audio-quality limitation, not fixed by omission or by v3. Keep the headphones recommendation; assess audio processing with real use before adding DSP. |
 | Selection, permissions and transport | AgentVoice supplies required realtime gates, WebRTC/audio fields, exact-workspace history filters, and full-access policy. Stock 0.153.3 lists this third-party app-server client's threads as `vscode` and may omit `threadSource` from list rows, so selection queries `appServer` plus `vscode` and verifies candidates with `thread/read`. | Keep these explicit choices: omitting them would change the product or break the client. Re-probe list/read metadata on native upgrades. |
@@ -149,8 +149,7 @@ the new call received the old answer in native startup context but no new user
 message. Desktop contains its own silence instruction and optional transcript
 continuity machinery; stock app-server does not supply those semantics.
 [ADR 0010](adr/0010-quiet-voice-resume.md) records the evidence and the narrow
-AgentVoice quiet-resume policy. That model instruction still needs live acceptance;
-it neither restores every voice-only exchange nor establishes desktop parity.
+AgentVoice quiet-resume policy. That model instruction alone could not restore the last spoken reply. ADR 0011 adds actual saved-speech restoration; live acceptance still remains.
 
 ## Native voice context levers retained
 
@@ -160,23 +159,30 @@ it neither restores every voice-only exchange nor establishes desktop parity.
 | orchestrator.config.experimental_realtime_ws_startup_context | Replaces that snapshot when startup context is enabled; an explicit empty string suppresses its text | Replace the voice system prompt or bypass include-startup-context=false |
 | voice.flush-transcript-tail-on-session-end | Delivers leftover speech transcript text to the working agent at voice-session end; can trigger a turn | Replay it through an AgentVoice-managed next-session buffer |
 
-Decision: keep all three configurable but unset; experience the app-server baseline
-before tuning them. Omitted flags are omitted on the wire, including across
-continue, explicit resume, redial and Fresh. AgentVoice does not populate a
-startup override or rewrite native/user config. The upstream WebRTC behavior previously
-verified here enables startup context and disables tail flush. Native startup
-context can include recent work from other threads: workspace-local selection
-is not memory isolation. Quit may interrupt tail-flush work; the app does not
-wait for background completion. The README's optional examples are not shipped
-configuration; remove a key to restore native resolution, not an empty/false value.
+Decision (ADR 0011): default native startup context off on all calls, including
+Fresh. Explicit voice.include-startup-context=true opts into the complete native
+snapshot; raw null restores native resolution. Native tail flush and startup-text
+overrides stay unset by default. Global/workspace instructions still apply.
 
-Explicit voice-seed file references are operator-provided initial items, not a
-transcript captured from the previous call. No AgentVoice transcript replay
-layer was introduced. Separately, quiet-resume defaults to one developer initial
-item on WebRTC v3 continue/resume/redial, asking the model to wait for new input.
-First calls on fresh conversations get none. Explicit initial items or
-voice.quiet-resume=false disable the default. Startup context and tail flush
-remain unset: this policy does not replace or disable the native history snapshot.
+Frontend settings are independent of those native controls:
+
+| AgentVoice setting | Default | Effect |
+| --- | --- | --- |
+| voice.replay-spoken-history | true | Restore recent saved speech from the selected native thread on continue/resume/redial; false skips read/replay without changing working-thread continuation. |
+| voice.quiet-resume | true | Ask the reconnected voice model to wait for new input; does not enforce silence in the transport. |
+
+Neither key is forwarded as a similarly named RPC field. They build native v3
+initialItems, keeping the native voice base prompt intact. Explicit initial items
+(seed files or raw initialItems, including []/null) replace both automatic behaviors.
+Fresh starts with neither; it never reads another conversation for speech replay.
+
+Native timeline reads are preferred. Stock 0.153.4 rejects timeline reads for
+legacy history; the fallback reads the verified local JSONL rollout returned by
+thread/read, never a separate transcript database. It rejects unsupported shared,
+forked, compressed or damaged fallback history rather than claiming recall.
+Replay retains at most 64 speech segments and 24,000 UTF-8 bytes; the fallback scans
+a bounded 8 MiB tail. Limits are visible, read errors stop that voice startup, and
+replay-spoken-history=false is an explicit escape hatch. No history is rewritten.
 
 ## Optional features still present
 
@@ -221,7 +227,7 @@ choice, not automatic discovery; see README migration notes.
 
 - Native passthrough now covers startup, conversation and realtime settings;
   full-access-only, WebRTC v3 compatibility, quiet-resume guidance and explicit-only
-  file/session-boundary overrides are implemented. Native voice-context controls remain unset. This is
+  file/session-boundary overrides are implemented. Startup context defaults off; other native context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - AgentVoice-specific skill isolation and selective seeding.
 - Spoken conversation and audio latency/buffering validation. The editable command

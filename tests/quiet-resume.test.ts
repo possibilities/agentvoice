@@ -13,7 +13,7 @@ describe("quiet voice resume", () => {
     expect(first).not.toHaveProperty("initialItems");
     expect(params()).toEqual({ ...first, initialItems: instruction });
     expect(params()).not.toHaveProperty("prompt");
-    expect(params()).not.toHaveProperty("includeStartupContext");
+    expect(params()["includeStartupContext"]).toBe(false);
     expect(params()).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
     expect(params()).not.toHaveProperty("quietResume");
   });
@@ -41,12 +41,12 @@ describe("quiet voice resume", () => {
   });
 
   for (const resume of [undefined, "existing"]) {
-    test(`${resume ? "explicit resume" : "continue"} preserves identity and adds no replay or work turn`, async () => {
+    test(`${resume ? "explicit resume" : "continue"} with no saved speech preserves identity and adds no work turn`, async () => {
       const h = runtimeHarness({}, { resume });
       h.native.main("existing", h.directory);
       try {
         await h.runtime.start();
-        h.runtime.offer("reconnect");
+        await h.runtime.offer("reconnect");
         expect(h.native.calls.at(-1)!.params).toMatchObject({
           threadId: "existing",
           initialItems: instruction,
@@ -63,35 +63,35 @@ describe("quiet voice resume", () => {
 
   test("first connection stays native, closed/error calls redial quietly, Fresh resets the boundary", async () => {
     const h = runtimeHarness({}, { fresh: true });
-    const offer = (quiet: boolean) => {
-      h.runtime.offer("sdp");
+    const offer = async (quiet: boolean) => {
+      await h.runtime.offer("sdp");
       const call = h.native.calls.at(-1)!;
       expect(call.params["initialItems"]).toEqual(quiet ? instruction : undefined);
       return call.params;
     };
     try {
       await h.runtime.start();
-      const first = offer(false);
+      const first = await offer(false);
       // An obsolete notification must not turn a failed first attempt into a reconnect.
       h.native.options.onNotification("thread/realtime/started", {
         threadId: first["threadId"],
         realtimeSessionId: "obsolete",
       });
-      const retry = offer(false);
+      const retry = await offer(false);
       h.native.options.onNotification("thread/realtime/started", retry);
-      offer(true);
+      await offer(true);
       h.native.options.onNotification("thread/realtime/closed", {
         threadId: first["threadId"],
         reason: "transport_closed",
       });
-      offer(true);
+      await offer(true);
       h.native.options.onNotification("thread/realtime/error", {
         threadId: first["threadId"],
         message: "transport failed",
       });
-      offer(true);
+      await offer(true);
       await h.runtime.fresh();
-      const fresh = offer(false);
+      const fresh = await offer(false);
       expect(fresh["threadId"]).not.toBe(first["threadId"]);
     } finally {
       await h.cleanup();
@@ -102,14 +102,14 @@ describe("quiet voice resume", () => {
     const h = runtimeHarness({}, { fresh: true });
     try {
       await h.runtime.start();
-      h.runtime.offer("first");
+      await h.runtime.offer("first");
       const first = h.native.calls.at(-1)!.params;
       h.native.options.onNotification("thread/realtime/started", first);
       h.native.override = (method) =>
         method === "thread/start" ? Promise.reject(new Error("new thread failed")) : undefined;
       await h.runtime.fresh();
       expect(first["threadId"]).toBe(h.runtime.currentReady!.threadId);
-      h.runtime.offer("reconnect after failed Fresh");
+      await h.runtime.offer("reconnect after failed Fresh");
       expect(h.native.calls.at(-1)!.params["initialItems"]).toEqual(instruction);
     } finally {
       await h.cleanup();

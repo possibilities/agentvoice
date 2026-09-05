@@ -18,6 +18,7 @@ Usage:
 Options:
   --allow-full-access      Required each launch: unrestricted files/network, no approvals
   --workspace <dir>        Conversation root (default: launch directory)
+  --continue              Continue this workspace's conversation (default)
   --no-continue            Start a new conversation (--fresh is an alias)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
@@ -79,6 +80,7 @@ const LAUNCH_FLAGS: FlagSpec = {
     "--debug",
     "--fresh",
     "--no-continue",
+    "--continue",
     "--fast",
     "--no-fast",
     "--help",
@@ -151,6 +153,8 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
 
   if (!help && fresh && values["resume"] !== undefined)
     throw new UsageError("--resume cannot be combined with --no-continue/--fresh");
+  if (!help && seen.has("--continue") && (fresh || values["resume"] !== undefined))
+    throw new UsageError("--continue cannot be combined with --no-continue/--fresh or --resume");
   if (!help && values["resume"] !== undefined && !values["resume"].trim())
     throw new UsageError("--resume requires a non-empty id");
   if (!help && seen.has("--fast") && seen.has("--no-fast"))

@@ -207,7 +207,7 @@ describe("Fast runtime propagation", () => {
         );
         expect(starts).toHaveLength(2);
         expect(starts.every((c) => c.params["serviceTier"] === expected)).toBe(true);
-        h.runtime.offer("sdp");
+        await h.runtime.offer("sdp");
         await Bun.sleep(5);
         const voice = h.native.calls.find((c) => c.method === "thread/realtime/start");
         expect(voice).toBeDefined();

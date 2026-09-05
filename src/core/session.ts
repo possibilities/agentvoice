@@ -26,7 +26,7 @@ export interface VoiceSessionEffects {
   /** Re-announce readiness: offers are accepted again. */
   sendReady(): void;
   /** thread/realtime/start with this session id and SDP offer. */
-  startRealtime(realtimeSessionId: string, sdp: string): Promise<void>;
+  startRealtime(realtimeSessionId: string, sdp: string, current: () => boolean): Promise<void>;
   /** thread/realtime/stop; always yields exactly one closed("requested"). */
   stopRealtime(): Promise<void>;
   debug?(line: string): void;
@@ -64,7 +64,7 @@ export class VoiceSessionManager {
   }
 
   /** A new offer supersedes whatever is running — renewal and retry alike. */
-  handleOffer(sdp: string): void {
+  handleOffer(sdp: string): Promise<void> {
     if (this.session?.startTimer) clearTimeout(this.session.startTimer);
     const next: Session = {
       id: crypto.randomUUID(),
@@ -78,10 +78,12 @@ export class VoiceSessionManager {
       this.fail(next, `realtime session did not start within ${this.startTimeoutMs}ms`);
     }, this.startTimeoutMs);
     this.effects.debug?.(`starting realtime session ${next.id}`);
-    void this.effects.startRealtime(next.id, sdp).catch((error) => {
-      if (this.session !== next) return;
-      this.fail(next, error instanceof Error ? error.message : String(error));
-    });
+    return this.effects
+      .startRealtime(next.id, sdp, () => this.session === next)
+      .catch((error) => {
+        if (this.session !== next) return;
+        this.fail(next, error instanceof Error ? error.message : String(error));
+      });
   }
 
   handleNotification(method: string, params: Record<string, unknown>): void {

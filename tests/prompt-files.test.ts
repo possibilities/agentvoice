@@ -116,10 +116,10 @@ describe("explicit prompt files", () => {
     }
     try {
       await h.runtime.start();
-      h.runtime.offer("first");
-      h.runtime.offer("redial");
+      await h.runtime.offer("first");
+      await h.runtime.offer("redial");
       await h.runtime.fresh();
-      h.runtime.offer("fresh");
+      await h.runtime.offer("fresh");
       expect(h.runtime.currentReady!.prompts).toEqual([]);
       expect(
         warnings.filter((line) => line.startsWith("Ignoring legacy prompt file")),
@@ -231,12 +231,12 @@ describe("explicit prompt files", () => {
           writeFileSync(path, key === "voice" ? "" : key);
         try {
           await h.runtime.start();
-          h.runtime.offer("first");
+          await h.runtime.offer("first");
           for (const path of Object.values(h.config.promptFiles!))
             writeFileSync(path!, "Changed after launch");
-          h.runtime.offer("redial");
+          await h.runtime.offer("redial");
           await h.runtime.fresh();
-          h.runtime.offer("fresh");
+          await h.runtime.offer("fresh");
           expect(h.runtime.currentReady!.prompts).toEqual(promptPaths(h.config));
           expect(
             warnings.some((line) => line.includes("replaces Codex's entire base prompt")),
@@ -272,7 +272,7 @@ describe("explicit prompt files", () => {
                     { role: "assistant", text: "voice-seed-assistant" },
                   ],
             );
-            expect(call.params).not.toHaveProperty("includeStartupContext");
+            expect(call.params["includeStartupContext"]).toBe(false);
             expect(call.params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
           }
         } finally {
