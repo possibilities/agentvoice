@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 /** Build the client-owned miniaudio duplex library for the current host. */
 
-import { mkdirSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 const root = dirname(import.meta.dir);
@@ -19,6 +27,9 @@ if (!compiler) {
 }
 
 mkdirSync(dirname(output), { recursive: true });
+// A failed compile must not truncate the library used by an existing editable install.
+const staging = mkdtempSync(join(dirname(output), ".audio-build-"));
+const candidate = join(staging, `libagentvoice_audio.${extension}`);
 
 const argv = [
   compiler,
@@ -32,18 +43,24 @@ const argv = [
   ...(process.platform === "win32" ? [] : ["-fvisibility=hidden"]),
   source,
   "-o",
-  output,
+  candidate,
   ...(process.platform === "linux" ? ["-pthread", "-ldl", "-lm"] : []),
 ];
 
 console.log(`building ${target} duplex audio with ${compiler}${zig ? " cc" : ""}`);
-const child = Bun.spawn(argv, {
-  cwd: root,
-  stdin: "inherit",
-  stdout: "inherit",
-  stderr: "inherit",
-});
-const code = await child.exited;
-if (code !== 0) process.exit(code || 1);
-
-console.log(`built ${output} (${statSync(output).size.toLocaleString()} bytes)`);
+try {
+  const child = Bun.spawn(argv, {
+    cwd: root,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const code = await child.exited;
+  if (code !== 0) throw new Error(`compiler failed (exit ${code})`);
+  if (statSync(candidate).size === 0) throw new Error("compiler produced an empty library");
+  renameSync(candidate, output);
+  console.log(`built ${output} (${statSync(output).size.toLocaleString()} bytes)`);
+} finally {
+  if (existsSync(candidate)) unlinkSync(candidate);
+  rmdirSync(staging);
+}

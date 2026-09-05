@@ -170,8 +170,8 @@ choice, not automatic discovery; see README migration notes.
   overrides are implemented. Native voice-context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - AgentVoice-specific skill isolation and selective seeding.
-- AgentStart installation wiring and actual installation/first live voice use.
-  Its current source installer has no AgentVoice entry; no install was run.
+- Actual installation and first live voice use. AgentStart now delegates to the
+  hardened repository-owned installer; only disposable installation tests were run.
 
 Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
 and native --fast/--no-fast are implemented. They do not settle the items above.

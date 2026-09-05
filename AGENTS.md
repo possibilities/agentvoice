@@ -19,9 +19,16 @@ implementation.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
   an owned stock child, no turns/audio. Verify before Codex runtime upgrades.
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
+- `scripts/install.sh --install` / `bun run cli:install` — same command-only
+  editable installer, called by AgentStart. Requires explicit installation scope;
+  never use the live destination to test. Installer tests use disposable checkouts,
+  local-only dependencies, a fake compiler and a Codex invocation sentinel.
 
 ## Source map
 
+- scripts/install.ts: clean checkout, frozen dependencies, staged native build,
+  ownership-safe editable command publication and deployed-sha receipt. No launch,
+  configuration, service, prompt/skill setup or legacy command cleanup.
 - src/main.ts: foreground CLI, console alias, workspace canonicalization;
   former accounts/service/remote verbs error.
 - src/paths.ts: config/state locations and tilde expansion.

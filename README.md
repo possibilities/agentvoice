@@ -60,10 +60,35 @@ echo cancellation. The original voice semantics were verified on Codex 0.147;
 run the native protocol probe before changing the supported runtime.
 
 Installation is deliberately separate. `bun run setup` checks prerequisites
-and builds audio; `bun run native:build` rebuilds it. The existing
-`bun run cli:install` script installs dependencies, runs setup and links the
-command. **AgentStart's current installer does not invoke AgentVoice**; wiring
-that contract remains deferred. These commands do not install services.
+and builds audio; `bun run native:build` rebuilds it. Both build without opening
+an audio device. `scripts/install.sh --install` is the single editable installer;
+`bun run cli:install` is an alias, and AgentStart's `install-agent-clis` delegates
+to the same contract. **Source wiring is ready; actual installation and first
+live voice use have not been performed as part of this change.**
+
+The installer requires Bun 1.3+, an executable stock Codex (`CODEX_PATH` or PATH),
+a C11 compiler (Zig, clang or cc), and a clean checkout with the AgentVoice GitHub
+origin. Codex is checked for presence, not invoked; login and realtime compatibility
+are separate runtime prerequisites. It runs `bun install --frozen-lockfile`, builds
+native audio to a temporary file, then atomically links `~/.local/bin/agentvoice`
+directly to `src/main.ts` and records the commit in
+`~/.local/state/agentvoice/deployed-sha` (`XDG_STATE_HOME` honored). The link preserves
+caller cwd. TypeScript edits are live; native source changes need a rebuild.
+This is an editable checkout, not an immutable deployment or rollback of dependencies.
+
+Rerunning is safe: unrelated files/links, unsafe paths/receipts and dirty source
+are refused. A link to another checkout requires its matching receipt; an existing
+link into this checkout can be adopted or refreshed. The receipt records the last
+installation, not the current state of subsequent edits. Build failures leave the
+command/receipt untouched; a failed compile preserves the prior native library.
+Interrupted link/receipt publication is recoverable by rerunning after clearing
+any stale `.install-lock`; check for a running installer before manual removal.
+If another command shadows the link on PATH, installation warns without deleting it.
+
+For disposable tests or alternate destinations, set absolute
+`AGENTVOICE_INSTALL_BIN_DIR` and `AGENTVOICE_INSTALL_STATE_DIR` paths. The installer
+changes no services, prompts, skills, credentials, Codex configuration or shell
+profiles, and does not launch the TUI. `--allow-full-access` is still required at launch.
 
 ## Conversations and workspaces
 
