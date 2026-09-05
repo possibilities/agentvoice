@@ -14,7 +14,7 @@ import { configFileSchema } from "../src/core/config-schema.ts";
 
 const TITLE = "agentvoice configuration";
 const DESCRIPTION =
-  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.";
+  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.";
 
 type Schema = Record<string, unknown>;
 
@@ -97,7 +97,7 @@ export function buildSchema(): Schema {
   const schema: Schema = { $schema, title: TITLE, description: DESCRIPTION, ...rest };
 
   const top = properties(schema, "top level");
-  for (const section of ["prompt-files", "orchestrator", "voice"]) hoistDescription(top, section);
+  for (const section of ["orchestrator", "voice"]) hoistDescription(top, section);
   const orchestrator = properties(top["orchestrator"], "orchestrator");
   const voice = properties(top["voice"], "voice");
   openPassthrough(orchestrator, "orchestrator", "config");
@@ -106,7 +106,6 @@ export function buildSchema(): Schema {
   dropVacuousPropertyNames(voice, "voice", "codex-response-handoff-channel-prefixes");
 
   assertDocumented(top, "");
-  assertDocumented(properties(top["prompt-files"], "prompt-files"), "prompt-files.");
   assertDocumented(orchestrator, "orchestrator.");
   assertDocumented(voice, "voice.");
 

@@ -282,13 +282,12 @@ describe("launch configuration and reported identity", () => {
   test("file edits do not change settings or prompt contents on redial or Fresh", async () => {
     const h = runtimeHarness();
     const configPath = join(h.directory, "server.json");
-    const promptPath = join(h.directory, "chosen.md");
+    const promptPath = join(h.directory, "VOICE_AGENT_SYSTEM_PROMPT.md");
     writeFileSync(
       configPath,
       JSON.stringify({
         "codex-config": ["model=launch-model"],
         voice: { name: "cove", "include-startup-context": false },
-        "prompt-files": { voice: "chosen.md" },
       }),
     );
     writeFileSync(promptPath, "launch prompt");

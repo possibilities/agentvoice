@@ -28,16 +28,6 @@ describe("quiet voice resume", () => {
       expect(params({ voice: { version: "v3", extra: { transport } } })).not.toHaveProperty(
         "initialItems",
       );
-    expect(
-      realtimeParams(
-        resolveConfig({}, {}, {}, "/test"),
-        { voiceSeedDeveloper: "" },
-        "thread",
-        "call",
-        "sdp",
-        true,
-      )["initialItems"],
-    ).toEqual([{ role: "developer", text: "" }]);
   });
 
   for (const resume of [undefined, "existing"]) {

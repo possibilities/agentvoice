@@ -43,11 +43,14 @@ Full access is mandatory and verified with Codex; no config/environment opt-in.
 No permission dialogs. Connector consent/tool questions are refused visibly.
 No background services or remote attachment.
 
-Prompts are opt-in: name files in server.json's prompt-files section, or use
-native fields in orchestrator.extra / voice.extra. No filename auto-loading.
-Relative prompt-file paths resolve beside the selected config, not the workspace.
+Prompts are opt-in files beside the selected config (not the workspace), each one
+native Codex control: VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
+VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md,
+VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md. An override
+and an append for the same agent cannot both be present. Raw native fields remain
+available in orchestrator.extra / voice.extra.
 
-Settings and explicit prompt files load once per launch; restart to apply edits.
+Settings and prompt files load once per launch; restart to apply edits.
 Raw extra fields can override named CLI settings; see README for precedence.
 
 Keys: [m] toggle microphone · [s] toggle speaker · [r] redial · [f] fresh · [q] quit

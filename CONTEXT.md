@@ -35,7 +35,7 @@ changes the voice session but not the conversation or workspace.
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
 This frontend default is separate from native fallback (v1 in Codex 0.153.3),
-the work model and --fast. Initial seed items require effective v3.
+the work model and --fast. Initial items require effective v3.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
 Old history remains; native work in the old conversation stays there.
@@ -44,7 +44,7 @@ Old history remains; native work in the old conversation stays there.
 **Continue / resume** — Resume native eligible working-thread history; default
 and --continue select the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. New voice calls restore recent saved speech from
-that same thread unless voice.replay-spoken-history=false or explicit seeds win.
+that same thread unless voice.replay-spoken-history=false or raw initial items win.
 
 **Quiet resume** — AgentVoice's default WebRTC v3 reconnect instruction: wait
 for new input instead of repeating old context. A developer initial item leaves
@@ -62,16 +62,27 @@ history, other recent conversations and machine/workspace layout. AgentVoice
 defaults voice.include-startup-context to false; explicit true opts in. Separate
 from selected-thread speech replay and native global/workspace instructions.
 
-**Prompt files** — Optional files explicitly named in server.json's prompt-files
-section. Relative paths use that config's directory. No reference sends no file
-override; a referenced empty file sends an empty string. Conventional filenames
-only trigger migration warnings. Not shipped doctrine or a copied transcript.
+**Prompt files** — Optional convention-named files in the selected config's
+directory (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
+VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md,
+VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md), each one
+native Codex control. Absent sends nothing; an empty file sends an empty string;
+an override and an append for the same agent cannot coexist. Former names only
+trigger warnings. Not shipped doctrine or a copied transcript. _Avoid_: prompt-files
+(retired config key), seed files.
+
+**Voice append** — VOICE_AGENT_APPEND_SYSTEM_PROMPT.md: text Codex concatenates
+after its built-in voice prompt through the startup-context slot
+(includeStartupContext true plus experimental_realtime_ws_startup_context). The
+slot has one owner, so explicit startup-context settings conflict with the file.
+_Avoid_: developer seed, startup snapshot (that is the native Recent Work text
+the file displaces).
 
 **CODEX_HOME** — Native Codex configuration/authentication/history location,
 inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
-**Launch settings** — AgentVoice configuration and explicit prompt contents read
+**Launch settings** — AgentVoice configuration and prompt file contents read
 once at launch, reused for redial and Fresh. Restart to apply edits, including
 voice name; native Codex settings/history retain their own rules.
 

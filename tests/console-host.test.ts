@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BoxRenderable, type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -36,7 +36,7 @@ describe("foreground console host", () => {
       );
       const frame = setup.captureCharFrame();
       expect(frame).toContain("VOICE.md");
-      expect(frame).toContain("prompt-files");
+      expect(frame).toContain("rename it");
       expect(frame).not.toContain("LEGACY BODY MUST NOT APPEAR");
       expect(h.native.alive).toBe(true);
       expect(
@@ -341,13 +341,8 @@ describe("baseline readiness and feedback", () => {
 
   test("invalid prompt, protocol, permissions and Fast readiness never open audio", async () => {
     for (const failure of ["prompt", "protocol", "permissions", "fast"] as const) {
-      const h = hostHarness(
-        failure === "prompt"
-          ? { "prompt-files": { voice: "missing.md" } }
-          : failure === "protocol"
-            ? { voice: { version: "v2" } }
-            : {},
-      );
+      const h = hostHarness(failure === "protocol" ? { voice: { version: "v2" } } : {});
+      if (failure === "prompt") mkdirSync(join(h.directory, "VOICE_AGENT_SYSTEM_PROMPT.md"));
       if (failure === "permissions")
         h.native.override = (method) =>
           method === "thread/start"

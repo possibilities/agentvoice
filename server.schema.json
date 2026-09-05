@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -18,45 +18,6 @@
     "codex": {
       "type": "string",
       "description": "The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else \"codex\" on PATH."
-    },
-    "prompt-files": {
-      "type": "object",
-      "description": "Explicit prompt-file references only; no files are loaded by conventional filename. Paths are tilde-expanded and relative to the selected config directory, not the workspace. Missing/unreadable/non-file references fail before Codex starts. Contents load once per launch; raw extra fields still win. Omitted means no file overrides.",
-      "properties": {
-        "voice": {
-          "type": "string",
-          "description": "File for the native realtime prompt. Explicit empty text is sent empty; omission leaves native resolution alone."
-        },
-        "orchestrator": {
-          "type": "string",
-          "description": "File for native thread developerInstructions."
-        },
-        "orchestrator-base": {
-          "type": "string",
-          "description": "File for native thread baseInstructions; replaces the entire base prompt (sharp edge)."
-        },
-        "orchestrator-session-start": {
-          "type": "string",
-          "description": "File for native realtimeStartInstructions to the working agent, sent on each realtime start/redial."
-        },
-        "orchestrator-session-end": {
-          "type": "string",
-          "description": "File for native realtimeEndInstructions to the working agent, sent on each realtime start/redial."
-        },
-        "voice-seed-developer": {
-          "type": "string",
-          "description": "File for a developer-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
-        },
-        "voice-seed-user": {
-          "type": "string",
-          "description": "File for a user-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
-        },
-        "voice-seed-assistant": {
-          "type": "string",
-          "description": "File for an assistant-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text."
-        }
-      },
-      "additionalProperties": false
     },
     "orchestrator": {
       "type": "object",
@@ -163,13 +124,13 @@
         "quiet-resume": {
           "type": "boolean",
           "title": "AgentVoice: quiet resume",
-          "description": "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
+          "description": "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit raw initial items (including [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
           "default": true
         },
         "replay-spoken-history": {
           "type": "boolean",
           "title": "AgentVoice: replay spoken history",
-          "description": "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit initial items (including seed files, [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
+          "description": "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
           "default": true
         },
         "include-startup-context": {

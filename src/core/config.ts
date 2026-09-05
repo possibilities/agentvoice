@@ -14,10 +14,11 @@
  * This module owns everything around it: file discovery, CLI mapping,
  * precedence, and resolution.
  *
- * Prompt files load only through explicit `prompt-files` references. Legacy
- * filenames are checked for migration warnings, never read implicitly.
+ * Prompt overrides are convention-named files beside the selected config:
+ * each filename maps to exactly one native Codex control, presence loads it,
+ * absence sends nothing. Retired filenames only warn and are never read.
  */
-import { lstat, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
@@ -33,8 +34,6 @@ import {
   ORCHESTRATOR_KEYS,
   type OrchestratorValues,
   type Personality,
-  PROMPT_FILE_KEYS,
-  type PromptFilesValues,
   type RealtimeVersion,
   SANDBOX_MODES,
   type SandboxMode,
@@ -52,7 +51,6 @@ export type {
   HistoryMode,
   OrchestratorValues,
   Personality,
-  PromptFilesValues,
   RealtimeVersion,
   SandboxMode,
   VoiceValues,
@@ -64,7 +62,6 @@ export {
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
   PERSONALITIES,
-  PROMPT_FILE_KEYS,
   REALTIME_VERSIONS,
   SANDBOX_MODES,
   SERVER_KEYS,
@@ -120,10 +117,8 @@ export interface ServerConfig {
   /** Ordered native startup -c arguments; never shell-evaluated or hot-reloaded. */
   codexConfig?: string[];
   debug: boolean;
-  /** Base for explicit relative prompt-file paths; legacy warnings only otherwise. */
+  /** Directory scanned for convention-named prompt files and legacy warnings. */
   configDir: string;
-  /** Explicit references resolved to absolute paths; omission stays unset. */
-  promptFiles?: PromptFilesValues;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
 }
@@ -131,77 +126,116 @@ export interface ServerConfig {
 export class ConfigError extends Error {}
 
 // ---------------------------------------------------------------------------
-// Explicit prompt-file inputs and metadata-only legacy warnings
+// Convention prompt files — one native control per filename
 // ---------------------------------------------------------------------------
+
+/**
+ * Filenames looked up in the selected config directory. Each is one native
+ * Codex control; nothing here is an AgentVoice-shaped overlay:
+ * - VOICE_AGENT_SYSTEM_PROMPT replaces the realtime `prompt`.
+ * - VOICE_AGENT_APPEND_SYSTEM_PROMPT rides Codex's startup-context slot, which
+ *   native code renders after the built-in prompt (see params.ts).
+ * - VOICE_ORCHESTRATOR_SYSTEM_PROMPT replaces thread `baseInstructions`.
+ * - VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT is thread `developerInstructions`,
+ *   Codex's own developer message after the base prompt.
+ * - The SESSION files replace the realtime start/end instructions the
+ *   orchestrator receives when a voice session opens or closes.
+ */
+export const PROMPT_FILES = {
+  voicePrompt: "VOICE_AGENT_SYSTEM_PROMPT.md",
+  voiceAppend: "VOICE_AGENT_APPEND_SYSTEM_PROMPT.md",
+  orchestratorBaseInstructions: "VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md",
+  orchestratorDeveloperInstructions: "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md",
+  orchestratorSessionStart: "VOICE_ORCHESTRATOR_SESSION_START.md",
+  orchestratorSessionEnd: "VOICE_ORCHESTRATOR_SESSION_END.md",
+} as const;
+
+export type PromptName = keyof typeof PROMPT_FILES;
+export type Prompts = Partial<Record<PromptName, string>>;
+
+/**
+ * Codex renders this config value after the realtime prompt (`prompt`, blank
+ * line, context) whenever includeStartupContext is true, replacing its
+ * synthesized Recent Work snapshot. That is the only native path that appends
+ * text to the built-in voice prompt, so VOICE_AGENT_APPEND_SYSTEM_PROMPT rides
+ * it (params.ts). The slot has one owner: explicit startup-context settings,
+ * including startup -c entries, conflict with the file.
+ */
+export const STARTUP_CONTEXT_KEY = "experimental_realtime_ws_startup_context";
+
+/** Override and append for the same agent are one choice, not two layers. */
+export const EXCLUSIVE_PROMPT_PAIRS: ReadonlyArray<readonly [PromptName, PromptName]> = [
+  ["voicePrompt", "voiceAppend"],
+  ["orchestratorBaseInstructions", "orchestratorDeveloperInstructions"],
+];
 
 /**
  * Retired filenames are retained solely for migration warnings. Their presence
  * never causes their contents to be read or injected.
  */
-export const LEGACY_PROMPT_FILES = {
-  voicePrompt: "VOICE.md",
-  voiceSeedDeveloper: "VOICE_SEED_DEVELOPER.md",
-  voiceSeedUser: "VOICE_SEED_USER.md",
-  voiceSeedAssistant: "VOICE_SEED_ASSISTANT.md",
-  orchestratorDeveloperInstructions: "ORCHESTRATOR.md",
-  orchestratorBaseInstructions: "ORCHESTRATOR_BASE.md",
-  orchestratorSessionStart: "ORCHESTRATOR_SESSION_START.md",
-  orchestratorSessionEnd: "ORCHESTRATOR_SESSION_END.md",
-} as const;
+export const LEGACY_PROMPT_FILES = [
+  "VOICE.md",
+  "VOICE_SEED_DEVELOPER.md",
+  "VOICE_SEED_USER.md",
+  "VOICE_SEED_ASSISTANT.md",
+  "ORCHESTRATOR.md",
+  "ORCHESTRATOR_BASE.md",
+  "ORCHESTRATOR_SESSION_START.md",
+  "ORCHESTRATOR_SESSION_END.md",
+] as const;
 
-export type PromptName = keyof typeof LEGACY_PROMPT_FILES;
-export type Prompts = Partial<Record<PromptName, string>>;
-
-export const PROMPT_FIELDS = {
-  voice: "voicePrompt",
-  orchestrator: "orchestratorDeveloperInstructions",
-  "orchestrator-base": "orchestratorBaseInstructions",
-  "orchestrator-session-start": "orchestratorSessionStart",
-  "orchestrator-session-end": "orchestratorSessionEnd",
-  "voice-seed-developer": "voiceSeedDeveloper",
-  "voice-seed-user": "voiceSeedUser",
-  "voice-seed-assistant": "voiceSeedAssistant",
-} as const satisfies Record<keyof PromptFilesValues, PromptName>;
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
 
 /**
- * Explicit seed files become `initialItems` in this fixed order. Interleaving
- * or repeated roles can be expressed directly through `voice.extra.initialItems`.
+ * A name that exists must load: a broken link, directory or unreadable file
+ * fails before Codex starts rather than silently sending nothing.
  */
-export const VOICE_SEEDS: ReadonlyArray<readonly [PromptName, "developer" | "user" | "assistant"]> =
-  [
-    ["voiceSeedDeveloper", "developer"],
-    ["voiceSeedUser", "user"],
-    ["voiceSeedAssistant", "assistant"],
-  ];
-
 export async function readPrompts(
-  config: Pick<ServerConfig, "configDir" | "promptFiles">,
+  config: Pick<ServerConfig, "configDir" | "codexConfig">,
   warn: (message: string) => void = () => {},
 ): Promise<Prompts> {
   const prompts: Prompts = {};
-  const loadedPaths = new Set<string>();
-  for (const [key, name] of Object.entries(PROMPT_FIELDS)) {
-    const path = config.promptFiles?.[key as keyof PromptFilesValues];
-    if (path === undefined) continue;
+  for (const [name, filename] of Object.entries(PROMPT_FILES) as [PromptName, string][]) {
+    const path = join(config.configDir, filename);
+    try {
+      await lstat(path);
+    } catch (error) {
+      if (isMissing(error)) continue;
+      throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
+    }
     try {
       if (!(await stat(path)).isFile()) throw new Error("expected a regular file");
       prompts[name] = await readFile(path, "utf8");
-      loadedPaths.add(await realpath(path));
     } catch (error) {
-      throw new ConfigError(`prompt-files.${key}: cannot read ${path}: ${String(error)}`);
+      throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
     }
   }
-  for (const filename of Object.values(LEGACY_PROMPT_FILES)) {
+  for (const [override, append] of EXCLUSIVE_PROMPT_PAIRS) {
+    if (prompts[override] !== undefined && prompts[append] !== undefined)
+      throw new ConfigError(
+        `${PROMPT_FILES[override]} and ${PROMPT_FILES[append]} cannot both be present in ${config.configDir}; keep one`,
+      );
+  }
+  if (
+    prompts.voiceAppend !== undefined &&
+    config.codexConfig?.some(
+      (entry) => entry.slice(0, entry.indexOf("=")).trim() === STARTUP_CONTEXT_KEY,
+    )
+  )
+    throw new ConfigError(
+      `${PROMPT_FILES.voiceAppend} uses Codex's startup-context slot; remove the ${STARTUP_CONTEXT_KEY} codex-config entry or the file`,
+    );
+  for (const filename of LEGACY_PROMPT_FILES) {
     const path = join(config.configDir, filename);
     try {
-      await lstat(path); // Includes broken links; never reads unreferenced file contents.
-      const target = await realpath(path).catch(() => path);
-      if (loadedPaths.has(target)) continue;
+      await lstat(path); // Includes broken links; never reads legacy contents.
       warn(
-        `Ignoring legacy prompt file ${path}; filenames no longer activate prompts. Add an explicit prompt-files reference to use it. No contents were loaded.`,
+        `Ignoring legacy prompt file ${path}; rename it to a VOICE_AGENT_* or VOICE_ORCHESTRATOR_* convention file to use it. No contents were loaded.`,
       );
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      if (!isMissing(error))
         warn(
           `Could not check legacy prompt path ${path}; no contents were loaded: ${String(error)}`,
         );
@@ -210,12 +244,11 @@ export async function readPrompts(
   return prompts;
 }
 
-/** Configured paths, in stable role order; call only after successful loading. */
-export function promptPaths(config: Pick<ServerConfig, "promptFiles">): string[] {
-  return Object.keys(PROMPT_FIELDS).flatMap((key) => {
-    const path = config.promptFiles?.[key as keyof PromptFilesValues];
-    return path === undefined ? [] : [path];
-  });
+/** Paths of the files that loaded, in stable role order; call only after successful loading. */
+export function promptPaths(config: Pick<ServerConfig, "configDir">, prompts: Prompts): string[] {
+  return (Object.keys(PROMPT_FILES) as PromptName[]).flatMap((name) =>
+    prompts[name] === undefined ? [] : [join(config.configDir, PROMPT_FILES[name])],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +287,6 @@ function unknownKeyMessage(path: string, known: readonly string[]): string {
 
 /** The strict section objects, by dotted path, for unknown-key messages. */
 const KNOWN_KEYS: Record<string, readonly string[]> = {
-  "prompt-files": PROMPT_FILE_KEYS,
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
 };
@@ -455,7 +487,7 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
 export interface ResolveOptions {
   launchCwd?: string;
   debug?: boolean;
-  /** Base for explicit prompt paths; defaults to the default config directory. */
+  /** Directory scanned for convention prompt files; defaults to the default config directory. */
   configDir?: string;
 }
 
@@ -483,14 +515,6 @@ export function resolveConfig(
     options.launchCwd ?? process.cwd(),
     options.configDir ?? dirname(defaultConfigPath(env, home)),
   );
-  const promptFiles: PromptFilesValues = {};
-  for (const key of Object.keys(PROMPT_FIELDS) as (keyof PromptFilesValues)[]) {
-    const path = cli["prompt-files"]?.[key] ?? file["prompt-files"]?.[key];
-    if (path === undefined) continue;
-    if (!path.trim()) throw new ConfigError(`prompt-files.${key} must be a non-empty file path`);
-    promptFiles[key] = resolve(configDir, expandTilde(path, home));
-  }
-
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
   if (permissions !== undefined && explicitSandbox !== undefined) {
@@ -581,7 +605,6 @@ export function resolveConfig(
     ...(codexConfig.length > 0 ? { codexConfig } : {}),
     debug: options.debug ?? false,
     configDir,
-    ...(Object.keys(promptFiles).length > 0 ? { promptFiles } : {}),
     orchestrator,
     voice,
   };

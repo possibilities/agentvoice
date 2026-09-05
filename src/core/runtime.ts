@@ -147,7 +147,7 @@ export class VoiceRuntime {
       // Reject known option conflicts before spawning Codex or resuming history.
       realtimeParams(this.config, this.prompts, "", "", "");
       warnings.push(...passthroughWarnings(this.config, this.prompts));
-      this.foundPrompts = promptPaths(this.config);
+      this.foundPrompts = promptPaths(this.config, this.prompts);
       if (threadParams(this.config, this.prompts, "start")["baseInstructions"] != null) {
         warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
       }

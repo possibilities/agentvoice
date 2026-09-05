@@ -109,6 +109,33 @@ describe("threadParams", () => {
     expect(params).not.toHaveProperty("baseInstructions");
   });
 
+  test("the voice append occupies the startup-context config slot on start and resume", () => {
+    for (const kind of ["start", "resume"] as const) {
+      const params = thread(
+        { orchestrator: { effort: "high", config: { other: 1 } } },
+        { voiceAppend: "More voice guidance" },
+        kind,
+      );
+      expect(params["config"]).toEqual({
+        model_reasoning_effort: "high",
+        other: 1,
+        experimental_realtime_ws_startup_context: "More voice guidance",
+      });
+    }
+    expect(thread({}, { voiceAppend: "" })["config"]).toEqual({
+      experimental_realtime_ws_startup_context: "",
+    });
+    expect(() =>
+      thread(
+        { orchestrator: { config: { experimental_realtime_ws_startup_context: "" } } },
+        { voiceAppend: "x" },
+      ),
+    ).toThrow("startup-context slot");
+    expect(() =>
+      thread({ orchestrator: { extra: { config: { model: "x" } } } }, { voiceAppend: "x" }),
+    ).toThrow("orchestrator.extra.config");
+  });
+
   test("resume filters raw start-only fields after merging extra and keeps future passthrough", () => {
     const extra = {
       allowProviderModelFallback: false,
@@ -210,31 +237,38 @@ describe("realtimeParams", () => {
     });
   });
 
-  test("VOICE.md replaces the prompt; empty strips it", () => {
+  test("VOICE_AGENT_SYSTEM_PROMPT.md replaces the prompt; empty strips it", () => {
     expect(realtime({}, { voicePrompt: "be terse" })["prompt"]).toBe("be terse");
     expect(realtime({}, { voicePrompt: "" })["prompt"]).toBe("");
     expect(realtime()).not.toHaveProperty("prompt");
   });
 
-  test("seeds become initial items in developer, user, assistant order", () => {
+  test("initial items come only from raw extra; prompt files never synthesize them", () => {
+    const items = [{ role: "user", text: "only" }];
+    expect(realtime({ voice: { extra: { initialItems: items } } })["initialItems"]).toEqual(items);
     expect(
-      realtime(
-        { voice: { version: "v3" } },
-        {
-          voiceSeedAssistant: "hello",
-          voiceSeedUser: "do the thing",
-          voiceSeedDeveloper: "guidance",
-        },
-      )["initialItems"],
-    ).toEqual([
-      { role: "developer", text: "guidance" },
-      { role: "user", text: "do the thing" },
-      { role: "assistant", text: "hello" },
-    ]);
-    expect(
-      realtime({ voice: { version: "v3" } }, { voiceSeedUser: "only" })["initialItems"],
-    ).toEqual([{ role: "user", text: "only" }]);
+      realtime({}, { voicePrompt: "p", orchestratorDeveloperInstructions: "d" }),
+    ).not.toHaveProperty("initialItems");
     expect(realtime()).not.toHaveProperty("initialItems");
+  });
+
+  test("the voice append forces startup context on and leaves the built-in prompt alone", () => {
+    const params = realtime({}, { voiceAppend: "More voice guidance" });
+    expect(params["includeStartupContext"]).toBe(true);
+    expect(params).not.toHaveProperty("prompt");
+    expect(
+      realtime({ voice: { extra: { includeStartupContext: true } } }, { voiceAppend: "x" })[
+        "includeStartupContext"
+      ],
+    ).toBe(true);
+    const conflicts: ConfigValues[] = [
+      { voice: { "include-startup-context": true } },
+      { voice: { "include-startup-context": false } },
+      { voice: { extra: { includeStartupContext: false } } },
+      { voice: { extra: { includeStartupContext: null } } },
+    ];
+    for (const values of conflicts)
+      expect(() => realtime(values, { voiceAppend: "x" })).toThrow("startup-context slot");
   });
 
   test("session-boundary prompts prime the orchestrator over this call", () => {
@@ -331,19 +365,20 @@ describe("native voice context controls", () => {
     });
   }
 
-  test("startup and tail opt-outs do not strip explicit prompt and seed files", () => {
+  test("startup and tail opt-outs do not strip an explicit prompt or raw initial items", () => {
     const params = realtime(
       {
         voice: {
           version: "v3",
           "include-startup-context": false,
           "flush-transcript-tail-on-session-end": false,
+          extra: { initialItems: [{ role: "user", text: "Explicit item" }] },
         },
       },
-      { voicePrompt: "Voice instructions", voiceSeedUser: "Explicit seed" },
+      { voicePrompt: "Voice instructions" },
     );
     expect(params["prompt"]).toBe("Voice instructions");
-    expect(params["initialItems"]).toEqual([{ role: "user", text: "Explicit seed" }]);
+    expect(params["initialItems"]).toEqual([{ role: "user", text: "Explicit item" }]);
   });
 });
 

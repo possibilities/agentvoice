@@ -9,7 +9,8 @@
  *   key must stay unset through parse. Documented application defaults apply
  *   during resolution or request construction; other unset fields stay omitted.
  *   The `default` entries in `.meta()` document behavior, not parse-time values.
- * - The root, `prompt-files`, `orchestrator`, and `voice` reject unknown keys.
+ * - The root, `orchestrator`, and `voice` reject unknown keys. Prompt overrides are
+ *   convention-named files beside the config, not keys (see config.ts).
  *   `strictObject` alone does not finish that job: zod skips a literal own
  *   `__proto__` key, so `config.ts` scans the raw document for it separately.
  *   `orchestrator.config`, `orchestrator.extra`, and `voice.extra` are open
@@ -41,42 +42,6 @@ export const DEFAULT_WEBRTC_VERSION: RealtimeVersion = "v3";
 
 /** An object whose contents forward verbatim — never recursed or validated. */
 const passthrough = (description: string) => z.looseObject({}).describe(description);
-
-const promptPath = (description: string) =>
-  z
-    .string()
-    .refine((path) => path.trim().length > 0, "must be a non-empty file path")
-    .describe(description)
-    .optional();
-
-export const promptFilesSchema = z
-  .strictObject({
-    voice: promptPath(
-      "File for the native realtime prompt. Explicit empty text is sent empty; omission leaves native resolution alone.",
-    ),
-    orchestrator: promptPath("File for native thread developerInstructions."),
-    "orchestrator-base": promptPath(
-      "File for native thread baseInstructions; replaces the entire base prompt (sharp edge).",
-    ),
-    "orchestrator-session-start": promptPath(
-      "File for native realtimeStartInstructions to the working agent, sent on each realtime start/redial.",
-    ),
-    "orchestrator-session-end": promptPath(
-      "File for native realtimeEndInstructions to the working agent, sent on each realtime start/redial.",
-    ),
-    "voice-seed-developer": promptPath(
-      "File for a developer-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
-    ),
-    "voice-seed-user": promptPath(
-      "File for a user-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
-    ),
-    "voice-seed-assistant": promptPath(
-      "File for an assistant-role initial voice item. Requires effective realtime v3 (the WebRTC default), even for empty text.",
-    ),
-  })
-  .describe(
-    "Explicit prompt-file references only; no files are loaded by conventional filename. Paths are tilde-expanded and relative to the selected config directory, not the workspace. Missing/unreadable/non-file references fail before Codex starts. Contents load once per launch; raw extra fields still win. Omitted means no file overrides.",
-  );
 
 export const orchestratorValuesSchema = z
   .strictObject({
@@ -198,7 +163,7 @@ export const voiceValuesSchema = z
       .meta({
         title: "AgentVoice: quiet resume",
         description:
-          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
+          "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit raw initial items (including [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
         default: true,
       })
       .optional(),
@@ -207,7 +172,7 @@ export const voiceValuesSchema = z
       .meta({
         title: "AgentVoice: replay spoken history",
         description:
-          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit initial items (including seed files, [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
+          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
         default: true,
       })
       .optional(),
@@ -282,7 +247,6 @@ const serverShape = {
       'The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else "codex" on PATH.',
     )
     .optional(),
-  "prompt-files": promptFilesSchema.optional(),
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
 };
@@ -299,12 +263,10 @@ export const configFileSchema = z.strictObject({
   ...serverShape,
 });
 
-export type PromptFilesValues = z.infer<typeof promptFilesSchema>;
 export type OrchestratorValues = z.infer<typeof orchestratorValuesSchema>;
 export type VoiceValues = z.infer<typeof voiceValuesSchema>;
 export type ConfigValues = z.infer<typeof configValuesSchema>;
 
 export const SERVER_KEYS: ReadonlyArray<string> = Object.keys(serverShape);
-export const PROMPT_FILE_KEYS: ReadonlyArray<string> = Object.keys(promptFilesSchema.shape);
 export const ORCHESTRATOR_KEYS: ReadonlyArray<string> = Object.keys(orchestratorValuesSchema.shape);
 export const VOICE_KEYS: ReadonlyArray<string> = Object.keys(voiceValuesSchema.shape);

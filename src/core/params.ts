@@ -8,12 +8,22 @@
  * where absent leaves codex's default in place.
  */
 import type { Prompts, ServerConfig } from "./config.ts";
-import { ConfigError, VOICE_SEEDS } from "./config.ts";
+import { ConfigError, PROMPT_FILES, STARTUP_CONTEXT_KEY } from "./config.ts";
 import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
 import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function appendSlotConflict(setting: string): ConfigError {
+  return new ConfigError(
+    `${PROMPT_FILES.voiceAppend} uses Codex's startup-context slot; remove ${setting} or the file`,
+  );
+}
 
 // The desktop has its own silence instruction for continuity. Stock app-server
 // startup context alone does not distinguish old answers from speech to deliver.
@@ -91,10 +101,15 @@ export function threadParams(
   setIfDefined(params, "developerInstructions", prompts.orchestratorDeveloperInstructions);
 
   // `effort` is shorthand for a config entry, so an explicit entry wins.
-  const codexConfig = {
+  const codexConfig: Record<string, unknown> = {
     ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
     ...orchestrator.config,
   };
+  if (prompts.voiceAppend !== undefined) {
+    if (Object.hasOwn(codexConfig, STARTUP_CONTEXT_KEY))
+      throw appendSlotConflict(`orchestrator.config.${STARTUP_CONTEXT_KEY}`);
+    codexConfig[STARTUP_CONTEXT_KEY] = prompts.voiceAppend;
+  }
   if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
 
   if (kind === "start") {
@@ -113,6 +128,11 @@ export function threadParams(
   validateFullAccessParams(merged);
   // A raw matching built-in profile is allowed, but Codex rejects both selectors.
   if (merged["permissions"] !== undefined) delete merged["sandbox"];
+  if (prompts.voiceAppend !== undefined) {
+    const config = merged["config"];
+    if (!record(config) || config[STARTUP_CONTEXT_KEY] !== prompts.voiceAppend)
+      throw appendSlotConflict("orchestrator.extra.config");
+  }
   return merged;
 }
 
@@ -168,13 +188,11 @@ export function realtimeParams(
   setIfDefined(params, "realtimeStartInstructions", prompts.orchestratorSessionStart);
   setIfDefined(params, "realtimeEndInstructions", prompts.orchestratorSessionEnd);
 
-  const initialItems = VOICE_SEEDS.flatMap(([name, role]) => {
-    const text = prompts[name];
-    return text === undefined ? [] : [{ role, text }];
-  });
-  if (initialItems.length > 0) params["initialItems"] = initialItems;
-
-  params["includeStartupContext"] = voice.includeStartupContext ?? false;
+  if (prompts.voiceAppend !== undefined) {
+    if (voice.includeStartupContext !== undefined)
+      throw appendSlotConflict("voice.include-startup-context");
+    params["includeStartupContext"] = true;
+  } else params["includeStartupContext"] = voice.includeStartupContext ?? false;
   setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);
@@ -188,6 +206,8 @@ export function realtimeParams(
   setIfDefined(params, "clientManagedHandoffs", voice.clientManagedHandoffs);
 
   const merged = { ...params, ...voice.extra };
+  if (prompts.voiceAppend !== undefined && merged["includeStartupContext"] !== true)
+    throw appendSlotConflict("voice.extra.includeStartupContext");
   const transport = merged["transport"] as { type?: string } | null;
   // Stock 0.153.3 falls back to WebRTC v1, which the current service rejects.
   // Keep explicit overrides (including null) and alternate transports intact.
@@ -217,7 +237,7 @@ export function realtimeParams(
   const items = merged["initialItems"];
   if (Array.isArray(items) && items.length > 0 && version !== "v3")
     throw new ConfigError(
-      'Initial voice items (prompt-files voice-seed references or voice.extra.initialItems) require effective realtime v3. Use AgentVoice\'s WebRTC default or set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or replace an explicit protocol choice.',
+      'Initial voice items (voice.extra.initialItems) require effective realtime v3. Use AgentVoice\'s WebRTC default or set voice.version to "v3" (and check voice.extra.version), or remove the items. AgentVoice will not discard them or replace an explicit protocol choice.',
     );
   return merged;
 }

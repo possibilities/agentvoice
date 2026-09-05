@@ -150,9 +150,9 @@ For example, continue the working thread without restoring old speech:
 
 The two AgentVoice settings are not forwarded as similarly named RPC fields.
 They build native `initialItems`; the built-in voice base prompt stays intact.
-Explicit initial items (seed files or raw `voice.extra.initialItems`, including
-`[]` or `null`) replace automatic replay and quiet-resume guidance. Other
-versions/transports receive no automatic initial items.
+Explicit raw `voice.extra.initialItems` (including `[]` or `null`) replace
+automatic replay and quiet-resume guidance. Other versions/transports receive no
+automatic initial items.
 
 Speech stays in Codex's native history; AgentVoice adds no persistent transcript
 database. It prefers the native timeline API, with a verified read-only JSONL
@@ -323,11 +323,9 @@ share a voice-name family. Protocol selection does not select the working model,
 reasoning or Fast tier, or change startup-context/tail-flush settings. The separate
 quiet-resume policy above uses a developer initial item on reconnect.
 
-Explicit `prompt-files` voice-seed references and nonempty `voice.extra.initialItems`
-require effective v3, which the normal WebRTC default satisfies. Even an empty
-referenced seed file creates an item. Conflicting explicit protocols and WebRTC
-v2 fail before Codex starts. Checks use the final merged request; an explicit
-`initialItems: []` can still replace file seeds. Seeds are never silently dropped.
+Nonempty `voice.extra.initialItems` require effective v3, which the normal WebRTC
+default satisfies. Conflicting explicit protocols and WebRTC v2 fail before Codex
+starts. Checks use the final merged request. Items are never silently dropped.
 
 For the related audit of prompts, context, handoffs and frontend responsibilities,
 see the [default comparison audit](docs/field-guide.md#default-comparison-audit).
@@ -373,56 +371,54 @@ This is the native configured tier, not per-request billing telemetry or a
 guaranteed speedup. A native null tier means no accelerated tier; a missing
 field means unknown. See the [official Fast documentation](https://learn.chatgpt.com/docs/agent-configuration/speed).
 
-### Explicit prompt overrides
+### Prompt override files
 
-Nothing is loaded merely because it is named `VOICE.md` or `ORCHESTRATOR.md`.
-With no `prompt-files` configuration, AgentVoice sends no file-based prompt
-overrides. Existing unreferenced conventional files produce a visible migration
-warning without reading their contents. No custom prompt files ship with the app.
+Prompt overrides are files with fixed names in the directory of the selected
+config file (`~/.config/agentvoice/` by default, or beside `--config`), **not**
+the workspace. Each name is exactly one native Codex control; there is no
+AgentVoice-shaped overlay. A present file loads, an absent file sends nothing,
+and an empty file sends empty text. No custom prompt files ship with the app.
 
-For an intentional override, name the file in your chosen `server.json`:
-
-```json
-{
-  "prompt-files": {
-    "voice": "./my-voice.md",
-    "orchestrator": "./my-work-instructions.md"
-  }
-}
-```
-
-This is an opt-in example, not baseline configuration. Filenames are arbitrary.
-Relative paths resolve beside the selected config file, **not** the workspace;
-absolute paths and leading `~/` are supported. Missing, unreadable, directory
-or other non-file references fail before Codex starts, even if a raw field would
-override the contents. An omitted reference sends nothing; a referenced empty
-file sends an empty string. An empty path is an error, not an empty prompt.
-
-| `prompt-files` key | Native field / effect | Former automatic filename |
+| File | Agent | Native control |
 | --- | --- | --- |
-| `voice` | Realtime `prompt` | `VOICE.md` |
-| `orchestrator` | Thread `developerInstructions` | `ORCHESTRATOR.md` |
-| `orchestrator-base` | Thread `baseInstructions`: replaces the entire base prompt (visible warning) | `ORCHESTRATOR_BASE.md` |
-| `orchestrator-session-start` | Realtime `realtimeStartInstructions` to the working agent | `ORCHESTRATOR_SESSION_START.md` |
-| `orchestrator-session-end` | Realtime `realtimeEndInstructions` to the working agent | `ORCHESTRATOR_SESSION_END.md` |
-| `voice-seed-developer` | Developer-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_DEVELOPER.md` |
-| `voice-seed-user` | User-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_USER.md` |
-| `voice-seed-assistant` | Assistant-role `initialItems` entry; effective v3 required (WebRTC default) | `VOICE_SEED_ASSISTANT.md` |
+| `VOICE_AGENT_SYSTEM_PROMPT.md` | voice | Realtime `prompt`: replaces Codex's built-in voice prompt |
+| `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` | voice | Text Codex renders after its built-in voice prompt, through the startup-context slot (below) |
+| `VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md` | orchestrator | Thread `baseInstructions`: replaces the entire base prompt (visible warning; `personality` no longer applies) |
+| `VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md` | orchestrator | Thread `developerInstructions`: Codex's developer message after the base prompt |
+| `VOICE_ORCHESTRATOR_SESSION_START.md` | orchestrator | `realtimeStartInstructions`: replaces the built-in developer message sent when a voice session starts |
+| `VOICE_ORCHESTRATOR_SESSION_END.md` | orchestrator | `realtimeEndInstructions`: same, when a voice session ends |
 
-Contents load once at launch and are reused on redial and Fresh. Seed roles are sent developer, user, assistant; raw `initialItems`
-can express any supported ordering/repetition. Session-boundary instructions and
-voice prompts/items ride every realtime start, including redial. Explicit seeds
-replace automatic spoken-history replay and quiet-resume's initial item, so their
-author owns startup behavior. Without explicit seeds, replay reads the selected
-conversation's saved native speech at reconnect.
+An override and an append for the same agent are one choice: both
+`VOICE_AGENT_*` files, or both `VOICE_ORCHESTRATOR_*_SYSTEM_PROMPT` files, present
+at once is a launch error. The voice append is literal concatenation: Codex has no
+append field, but when startup context is enabled it renders
+`prompt`, a blank line, then the `experimental_realtime_ws_startup_context`
+config text in place of its Recent Work snapshot. AgentVoice sends that text and
+`includeStartupContext: true` for the file, so the slot has one owner: an
+explicit `voice.include-startup-context`, a raw `includeStartupContext` override,
+an `orchestrator.config` or `orchestrator.extra.config` entry for that key, or a
+`codex-config` entry for it conflicts with the file and fails at launch. The
+orchestrator append is a developer message, not a suffix, because its default
+prompt is per model and partly remote; Codex's own append channel is used as is.
 
-Migration: leave old files untouched or back them up, then explicitly reference
-only the ones you want. For a native baseline, leave the section unset. The app
-does not delete files or migrate configuration automatically. Removing an override
-does not erase earlier instructions/messages from a resumed native conversation;
-use `--no-continue` for a new conversation when testing the baseline. Native global
-and workspace instructions, skills, MCPs and hooks still apply, even to Fresh.
-AgentVoice does not automatically enable AgentStart skills or isolate native state.
+A present name must load: an unreadable file, a directory or a broken link fails
+before Codex starts, even if a raw field would override the contents. Symlinks to
+regular files work. Contents load once at launch and are reused on redial and
+Fresh. Session-boundary instructions and voice prompts ride every realtime start,
+including redial. Voice history items are not files: raw `voice.extra.initialItems`
+replaces automatic spoken-history replay and quiet-resume's initial item.
+
+The former names (`VOICE.md`, `ORCHESTRATOR.md`, `ORCHESTRATOR_BASE.md`,
+`ORCHESTRATOR_SESSION_START.md`, `ORCHESTRATOR_SESSION_END.md`,
+`VOICE_SEED_DEVELOPER.md`, `VOICE_SEED_USER.md`, `VOICE_SEED_ASSISTANT.md`) and
+the retired `prompt-files` config section no longer load anything: a leftover file
+produces a visible warning without being read, and the config key is an unknown
+option. Rename or remove them yourself; nothing is migrated or deleted. Removing
+an override does not erase earlier instructions/messages from a resumed native
+conversation; use `--no-continue` for a new conversation when testing the
+baseline. Native global and workspace instructions, skills, MCPs and hooks still
+apply, even to Fresh. AgentVoice does not automatically enable AgentStart skills
+or isolate native state.
 
 The two request escape hatches are `orchestrator.extra` and `voice.extra`;
 `orchestrator.config` carries native Codex config overrides. Extra values
@@ -486,9 +482,11 @@ Replace the generated startup snapshot with your own text:
 }
 ```
 
-An explicit empty string for that override suppresses its text; it is not the
-same as leaving the key out. `include-startup-context: false` skips both the
-generated snapshot and any override. Neither control erases the working agent's
+`VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` is this same pair, written for you, so it
+cannot be combined with either setting. An explicit empty string for that
+override suppresses its text; it is not the same as leaving the key out.
+`include-startup-context: false` skips both the generated snapshot and any
+override. Neither control erases the working agent's
 history or prevents later recall through delegation. A native snapshot may
 include other threads, so workspace-local conversation selection is not memory
 isolation.

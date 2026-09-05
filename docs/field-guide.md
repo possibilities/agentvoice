@@ -36,7 +36,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
 | Voice | model, name, version, quiet-resume and replay-spoken-history (frontend policies), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
-| Explicit prompt-files | voice, orchestrator, orchestrator-base, orchestrator-session-start/end, voice-seed-developer/user/assistant file references |
+| Prompt files | Convention names beside the selected config: VOICE_AGENT_SYSTEM_PROMPT / VOICE_AGENT_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SYSTEM_PROMPT / VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SESSION_START / _END (.md); one native control each, override and append exclusive per agent |
 | Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
 
 Startup config belongs to the owned child, not its conversation requests. Later
@@ -65,19 +65,21 @@ as requested. The indicator is configured tier, not billing telemetry.
 
 All AgentVoice settings and prompt contents load once at launch and are reused
 on redial and Fresh. There is no config watcher; even voice-name edits need a
-restart. Prompts load only from explicit prompt-files references. Paths are relative to the selected
-config directory (absolute and ~/ also work); missing/unreadable/non-file references
-fail before native startup. Unreferenced conventional files only produce visible
-migration warnings, with no content reads. Main prompt settings ride thread/start or resume; session-boundary
-instructions and voice prompts/items ride each realtime start. Start-only native
+restart. Prompts load from convention-named files in the selected config directory,
+never the workspace; a present name that is unreadable, a directory or a broken
+link fails before native startup. Former names only produce visible migration
+warnings, with no content reads. Main prompt settings ride thread/start or resume;
+session-boundary instructions and voice prompts ride each realtime start. The voice
+append rides thread config as experimental_realtime_ws_startup_context plus
+includeStartupContext true on each realtime start. Start-only native
 metadata such as dynamic tools is persisted by Codex and cannot be removed merely
 by omitting it on resume.
 
 Voice protocol: AgentVoice selects v3 on final WebRTC requests with no version.
 This is a documented frontend compatibility default, not stock app-server's
 fallback. Explicit version overrides (including raw null) remain authoritative;
-alternate raw transports receive no default. Initial items require effective v3,
-including empty seed-file contents. A conflicting explicit protocol fails early.
+alternate raw transports receive no default. Raw initial items require effective
+v3. A conflicting explicit protocol fails early.
 
 On September 5, 2026, native WebRTC omission on stock 0.153.3 was rejected with
 `invalid_quicksilver_alpha_header`; explicit v3 connected and the operator
@@ -89,11 +91,12 @@ notifications do not bypass the retry delay.
 
 ## What ships versus what is native
 
-AgentVoice supplies no default custom prompt files. Explicit prompt-files references
-or raw native prompt fields intentionally override behavior; orchestrator-base
+AgentVoice supplies no default custom prompt files. Convention prompt files or raw
+native prompt fields intentionally override behavior; VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md
 maps to baseInstructions and replaces the full base prompt. Raw extra fields win
-over files, including explicit null/empty values. Unset sends nothing; a referenced
-empty file sends empty text. Removing references does not erase saved instructions:
+over files, including explicit null/empty values, except the startup-context slot,
+which the voice append file owns outright. Unset sends nothing; a present empty
+file sends empty text. Removing files does not erase saved instructions:
 --no-continue tests a new conversation without changing native global/project guidance.
 Global Codex configuration can itself override voice prompts or introduce
 instructions, skills, MCPs and hooks. Removing deliberate AgentStart skill
@@ -172,8 +175,8 @@ Frontend settings are independent of those native controls:
 | voice.quiet-resume | true | Ask the reconnected voice model to wait for new input; does not enforce silence in the transport. |
 
 Neither key is forwarded as a similarly named RPC field. They build native v3
-initialItems, keeping the native voice base prompt intact. Explicit initial items
-(seed files or raw initialItems, including []/null) replace both automatic behaviors.
+initialItems, keeping the native voice base prompt intact. Explicit raw initialItems
+(including []/null) replace both automatic behaviors.
 Fresh starts with neither; it never reads another conversation for speech replay.
 
 Native timeline reads are preferred. Stock 0.153.4 rejects timeline reads for

@@ -34,8 +34,9 @@ implementation.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
-- src/core/config.ts: named CLI > file > default resolution and explicit prompt-files
-  loading. Legacy filename checks only warn; never read unreferenced contents.
+- src/core/config.ts: named CLI > file > default resolution and convention prompt
+  files beside the selected config (PROMPT_FILES, one native control each; override
+  plus append for one agent errors). Legacy filename checks only warn, never read.
 - src/core/codex-config.ts: ordered native startup overrides; validate only argv
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
@@ -43,11 +44,14 @@ implementation.
   Default effective WebRTC requests to v3 for compatibility after raw merging.
   Explicit versions/null and alternate transports win; never call this Codex's native default.
   Quiet resume adds one developer initial item on WebRTC v3 reconnects only;
-  quiet-resume=false or explicit initial items (including seed files, []/null) win.
+  quiet-resume=false or explicit raw initial items (including []/null) win.
   Native startup context defaults false; explicit true/null passthrough still wins.
+  VOICE_AGENT_APPEND_SYSTEM_PROMPT.md owns the startup-context slot: it sends
+  includeStartupContext true plus experimental_realtime_ws_startup_context in
+  thread config; any other owner of that slot is a launch error, never a merge.
   Spoken history replay is a separate frontend behavior (default true); explicit
   initial items or replay-spoken-history=false skip automatic history reads/replay.
-  Validate final merged seeds/version and WebRTC v2 conflicts before child startup.
+  Validate final merged initial items/version and WebRTC v2 conflicts before child startup.
 - src/core/spoken-history.ts: selected-thread native speech reads only. Prefer
   timeline API; legacy -32601 falls back to the exact verified native JSONL path
   from thread/read. No file scan, separate ledger, history migration or rewriting.
@@ -111,7 +115,7 @@ an old background version or another client does not participate in that guard.
 
 App state: thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
-remain ~/.config/agentvoice/server.json and explicitly referenced prompt files. Inherit
+remain ~/.config/agentvoice/server.json and convention prompt files beside it. Inherit
 CODEX_HOME unchanged (including omission); native Codex owns authentication,
 credential storage/refresh, configuration and history. Never discover, create or
 reconcile profile homes, read auth.json, invoke account tools/login, or replace
@@ -162,16 +166,19 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 7. `prompt` is a double-option upstream: omitted keeps codex's built-in
    `backend_prompt.md`, while both `null` and `""` yield an empty prompt
    (`codex-rs/core/src/realtime_prompt.rs`). Prompt files encode that as
-   unreferenced vs. explicitly referenced with empty contents. A non-empty
+   absent vs. present with empty contents. A non-empty
    `experimental_realtime_ws_backend_prompt` in `~/.codex/config.toml` silently
-   outranks the request `prompt`, and we cannot see it.
+   outranks the request `prompt`, and we cannot see it. There is no native
+   append field: with includeStartupContext true, Codex renders `prompt`, a
+   blank line, then `experimental_realtime_ws_startup_context` (or its Recent
+   Work snapshot when that key is unset) — the only literal suffix path.
 8. Thread and realtime params are serde-lenient: unknown fields are ignored,
    never rejected. A misspelled key in an `extra:` block fails silently, and
    `thread/resume` quietly drops start-only fields rather than erroring
    — hence `params.ts` filters known fields after the raw extra merge (0.153.3).
 9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
-   text tokens. Require effective v3 for nonempty initial items (including empty
-   seed-file text). AgentVoice supplies v3 for WebRTC when version is unset;
+   text tokens. Require effective v3 for nonempty initial items. AgentVoice
+   supplies v3 for WebRTC when version is unset;
    explicit voice.extra.version:null still reaches native fallback. In Codex
    0.153.3, that fallback selects v1 independently of general realtime config and
    ignores the native configured voice. Explicit v3 honors that voice config.
@@ -216,20 +223,23 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   startup entries; resumed model settings can outrank native startup defaults.
   The opt-in scripts/startup-config-probe.ts uses disposable state, network denial
   and ephemeral threads without turns/media to verify stock precedence on macOS.
-- Prompt files require explicit prompt-files references; absent means no override.
-  Paths resolve from the selected config directory, not the workspace. Preserve
-  empty contents and final raw extra precedence; bad explicit references fail
-  before native startup even when extra would replace their values. Contents load
-  once per launch and are reused, never hot-reloaded or copied between sessions.
-  Legacy names are metadata-only warnings, visible without debug; never silently
-  delete/migrate user files. Removing overrides does not rewrite saved history or
-  suppress native global/project instructions. Skill isolation is still separate.
+- Prompt files are convention names in the selected config directory, not the
+  workspace; absent means no override. Each name is one native control; do not add
+  AgentVoice-shaped prompt overlays (the seed files were removed for that reason).
+  Preserve empty contents and final raw extra precedence; a present name that
+  cannot load fails before native startup even when extra would replace its value.
+  Contents load once per launch and are reused, never hot-reloaded or copied
+  between sessions. Legacy names and the retired prompt-files key are metadata-only
+  warnings/errors, visible without debug; never silently delete/migrate user files.
+  Removing overrides does not rewrite saved history or suppress native
+  global/project instructions. Skill isolation is still separate.
 - Do not manufacture skill policy or conversation summaries. The operator now
   authorizes replay of actual saved speech from the selected native thread (ADR
   0011), independently configurable with voice.replay-spoken-history=false.
   includeStartupContext defaults false on every call, including Fresh; explicit
   true enables the entire native snapshot, and raw null restores native resolution.
-  Tail flush and experimental_realtime_ws_startup_context remain unset by default.
+  Tail flush and experimental_realtime_ws_startup_context remain unset by default
+  unless VOICE_AGENT_APPEND_SYSTEM_PROMPT.md claims the latter (ADR 0012).
   Preserve explicit overrides; no user-config writes, forced tail-flush work,
   transcript database, or migration. Skill isolation remains a separate decision.
 - Quiet resume is the documented exception to unmodified voice startup behavior:

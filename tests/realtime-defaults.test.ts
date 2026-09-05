@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams } from "../src/core/params.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
@@ -37,37 +35,30 @@ describe("WebRTC compatibility default", () => {
     expect(params({ voice: { version: "v3", extra: { version: null } } })["version"]).toBeNull();
   });
 
-  test("seed files use default v3 and still reject explicit incompatible protocols", () => {
-    for (const key of ["voiceSeedDeveloper", "voiceSeedUser", "voiceSeedAssistant"] as const) {
-      for (const text of ["", "seed text"]) {
-        const prompts = { [key]: text };
-        expect(() => params({ voice: { version: "v1" } }, prompts)).toThrow(
-          "require effective realtime v3",
-        );
-        expect(params({}, prompts)["initialItems"]).toEqual([
-          { role: key.slice(9).toLowerCase(), text },
-        ]);
-        expect(() =>
-          params({ voice: { version: "v3", extra: { version: null } } }, prompts),
-        ).toThrow("require effective realtime v3");
-      }
+  test("raw initial items use default v3 and still reject explicit incompatible protocols", () => {
+    for (const text of ["", "seed text"]) {
+      const initialItems = [{ role: "developer", text }];
+      expect(() => params({ voice: { version: "v1", extra: { initialItems } } })).toThrow(
+        "require effective realtime v3",
+      );
+      expect(params({ voice: { extra: { initialItems } } })["initialItems"]).toEqual(initialItems);
+      expect(() =>
+        params({ voice: { version: "v3", extra: { version: null, initialItems } } }),
+      ).toThrow("require effective realtime v3");
     }
   });
 
-  test("checks the final merged seed array and version; intentional empty overrides remain possible", () => {
+  test("checks the final merged item array and version; intentional empty overrides remain possible", () => {
     const seed = [{ role: "user", text: "seed" }];
     expect(params({ voice: { extra: { initialItems: seed } } })).toMatchObject({
       version: "v3",
       initialItems: seed,
     });
-    expect(
-      params({ voice: { extra: { initialItems: [] } } }, { voiceSeedUser: "replaced explicitly" })[
-        "initialItems"
-      ],
-    ).toEqual([]);
-    expect(
-      params({ voice: { extra: { version: "v3" } } }, { voiceSeedUser: "seed" }),
-    ).toMatchObject({ version: "v3", initialItems: seed });
+    expect(params({ voice: { extra: { initialItems: [] } } })["initialItems"]).toEqual([]);
+    expect(params({ voice: { extra: { version: "v3", initialItems: seed } } })).toMatchObject({
+      version: "v3",
+      initialItems: seed,
+    });
   });
 
   test("rejects WebRTC v2 but leaves a raw websocket transport's protocol choice alone", () => {
@@ -82,12 +73,11 @@ describe("WebRTC compatibility default", () => {
       expect(params({ voice: { extra: { version } } })["version"]).toBe(version);
   });
 
-  test("invalid seed setup fails before any native connection, history lookup or resume", async () => {
+  test("invalid initial-item setup fails before any native connection, history lookup or resume", async () => {
     const h = runtimeHarness(
-      { voice: { version: "v1" }, "prompt-files": { "voice-seed-user": "./VOICE_SEED_USER.md" } },
+      { voice: { version: "v1", extra: { initialItems: [{ role: "user", text: "seed" }] } } },
       { resume: "existing" },
     );
-    writeFileSync(join(h.directory, "VOICE_SEED_USER.md"), "seed");
     try {
       await expect(h.runtime.start()).rejects.toThrow("require effective realtime v3");
       expect(h.native.options).toBeUndefined();

@@ -11,94 +11,79 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type ConfigValues,
   LEGACY_PROMPT_FILES,
-  PROMPT_FIELDS,
-  type PromptFilesValues,
+  PROMPT_FILES,
+  type PromptName,
   parseJsonConfig,
   promptPaths,
   readPrompts,
   resolveConfig,
+  STARTUP_CONTEXT_KEY,
 } from "../src/core/config.ts";
 import { loadLaunchConfig, parseArgs } from "../src/main.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
-describe("explicit prompt files", () => {
-  test("strict optional paths; empty text is a file content choice, not an empty path", () => {
-    expect(parseJsonConfig("{}", "settings")).not.toHaveProperty("prompt-files");
+const OVERRIDES: readonly PromptName[] = [
+  "voicePrompt",
+  "orchestratorBaseInstructions",
+  "orchestratorSessionStart",
+  "orchestratorSessionEnd",
+];
+const APPENDS: readonly PromptName[] = [
+  "voiceAppend",
+  "orchestratorDeveloperInstructions",
+  "orchestratorSessionStart",
+  "orchestratorSessionEnd",
+];
+const NATIVE_PROMPT_FIELDS = [
+  "prompt",
+  "realtimeStartInstructions",
+  "realtimeEndInstructions",
+  "baseInstructions",
+  "developerInstructions",
+];
+
+function write(
+  directory: string,
+  names: readonly PromptName[],
+  text: (name: PromptName) => string = (name) => name,
+): void {
+  for (const name of names) writeFileSync(join(directory, PROMPT_FILES[name]), text(name));
+}
+
+describe("convention prompt files", () => {
+  test("the retired prompt-files section is an unknown option; resolution carries no references", () => {
+    expect(() => parseJsonConfig('{"prompt-files":{"voice":"x.md"}}', "settings")).toThrow(
+      'unknown option "prompt-files"',
+    );
     expect(resolveConfig({}, {}, {}, "/test")).not.toHaveProperty("promptFiles");
-    expect(parseJsonConfig('{"prompt-files":{}}', "settings")).toEqual({ "prompt-files": {} });
-    for (const key of Object.keys(PROMPT_FIELDS)) {
-      expect(
-        parseJsonConfig(
-          JSON.stringify({ "prompt-files": { [key]: "../my prompt.md" } }),
-          "settings",
-        ),
-      ).toEqual({ "prompt-files": { [key]: "../my prompt.md" } });
-      for (const value of ["", " \n ", null, false, 42, [], {}])
-        expect(() =>
-          parseJsonConfig(JSON.stringify({ "prompt-files": { [key]: value } }), "settings"),
-        ).toThrow(`prompt-files.${key}`);
-    }
-    expect(() => parseJsonConfig('{"prompt-files":{"typo":"x"}}', "settings")).toThrow(
-      'unknown option "prompt-files.typo"',
-    );
-    expect(() =>
-      parseJsonConfig('{"prompt-files":{"__proto__":{"polluted":true}}}', "settings"),
-    ).toThrow('unknown option "prompt-files.__proto__"');
-    for (const value of [null, [], "file"])
-      expect(() => parseJsonConfig(JSON.stringify({ "prompt-files": value }), "settings")).toThrow(
-        "prompt-files",
-      );
   });
 
-  test("paths use the selected config directory, not workspace; CLI values win per role", () => {
-    const config = resolveConfig(
-      { "prompt-files": { voice: "cli.md", orchestrator: undefined } },
-      {
-        orchestrator: { workspace: "/workspace" },
-        "prompt-files": {
-          voice: "file.md",
-          orchestrator: "~/work.md",
-          "voice-seed-user": "/shared/seed.md",
-        },
-      },
-      {},
-      "/test-home",
-      { configDir: "/settings", launchCwd: "/launch" },
-    );
-    expect(config.promptFiles).toEqual({
-      voice: "/settings/cli.md",
-      orchestrator: "/test-home/work.md",
-      "voice-seed-user": "/shared/seed.md",
-    });
-    expect(promptPaths(config)).toEqual([
-      "/settings/cli.md",
-      "/test-home/work.md",
-      "/shared/seed.md",
-    ]);
-  });
-
-  test("--config relocation loads arbitrary explicit names and preserves empty/Unicode text", async () => {
-    const root = mkdtempSync(join(tmpdir(), "agentvoice-explicit-prompts-"));
+  test("files are discovered beside the selected config, not the workspace; empty and Unicode text survive", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agentvoice-convention-prompts-"));
     try {
       mkdirSync(join(root, "settings"));
-      writeFileSync(join(root, "settings/voice.txt"), "");
-      writeFileSync(join(root, "settings/work.txt"), "Speak precisely 🎤\n");
+      writeFileSync(join(root, "settings/settings.json"), "{}");
+      writeFileSync(join(root, "settings", PROMPT_FILES.voicePrompt), "");
       writeFileSync(
-        join(root, "settings/settings.json"),
-        JSON.stringify({ "prompt-files": { voice: "voice.txt", orchestrator: "work.txt" } }),
+        join(root, "settings", PROMPT_FILES.orchestratorDeveloperInstructions),
+        "Speak precisely 🎤\n",
       );
+      // The launch directory is the workspace; files there must not load.
+      writeFileSync(join(root, PROMPT_FILES.orchestratorSessionStart), "wrong directory");
       const config = await loadLaunchConfig(
         parseArgs(["--config", "settings/settings.json"]),
         root,
       );
-      expect(await readPrompts(config)).toEqual({
+      const prompts = await readPrompts(config);
+      expect(prompts).toEqual({
         voicePrompt: "",
         orchestratorDeveloperInstructions: "Speak precisely 🎤\n",
       });
-      expect(promptPaths(config)).toEqual([
-        join(root, "settings/voice.txt"),
-        join(root, "settings/work.txt"),
+      expect(promptPaths(config, prompts)).toEqual([
+        join(root, "settings", PROMPT_FILES.voicePrompt),
+        join(root, "settings", PROMPT_FILES.orchestratorDeveloperInstructions),
       ]);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -110,7 +95,7 @@ describe("explicit prompt files", () => {
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);
     h.native.main("existing", h.directory);
-    for (const name of Object.values(LEGACY_PROMPT_FILES)) {
+    for (const name of LEGACY_PROMPT_FILES) {
       writeFileSync(join(h.directory, name), "DO NOT LOAD THIS LEGACY TEXT");
       chmodSync(join(h.directory, name), 0o000);
     }
@@ -123,56 +108,49 @@ describe("explicit prompt files", () => {
       expect(h.runtime.currentReady!.prompts).toEqual([]);
       expect(
         warnings.filter((line) => line.startsWith("Ignoring legacy prompt file")),
-      ).toHaveLength(8);
+      ).toHaveLength(LEGACY_PROMPT_FILES.length);
       expect(warnings.join()).not.toContain("DO NOT LOAD THIS LEGACY TEXT");
       for (const call of h.native.calls) {
-        for (const key of [
-          "prompt",
-          "realtimeStartInstructions",
-          "realtimeEndInstructions",
-          "baseInstructions",
-          "developerInstructions",
-        ])
+        for (const key of [...NATIVE_PROMPT_FIELDS, "config"])
           expect(call.params).not.toHaveProperty(key);
         expect(JSON.stringify(call.params)).not.toContain("DO NOT LOAD THIS LEGACY TEXT");
       }
     } finally {
-      for (const name of Object.values(LEGACY_PROMPT_FILES))
-        chmodSync(join(h.directory, name), 0o600);
+      for (const name of LEGACY_PROMPT_FILES) chmodSync(join(h.directory, name), 0o600);
       await h.cleanup();
     }
   });
 
-  test("broken legacy links warn, while a deliberately referenced legacy filename loads once", async () => {
-    const h = runtimeHarness({ "prompt-files": { voice: "chosen.md" } });
+  test("a symlinked convention name loads; legacy names still warn, broken or not", async () => {
+    const h = runtimeHarness();
     const warnings: string[] = [];
     writeFileSync(join(h.directory, "VOICE.md"), "chosen");
-    symlinkSync(join(h.directory, "VOICE.md"), join(h.directory, "chosen.md"));
+    symlinkSync(join(h.directory, "VOICE.md"), join(h.directory, PROMPT_FILES.voicePrompt));
     symlinkSync(join(h.directory, "missing"), join(h.directory, "ORCHESTRATOR.md"));
     try {
       expect(await readPrompts(h.config, (line) => warnings.push(line))).toEqual({
         voicePrompt: "chosen",
       });
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain("ORCHESTRATOR.md");
+      expect(warnings).toHaveLength(2);
+      expect(warnings.join("\n")).toContain("VOICE.md");
+      expect(warnings.join("\n")).toContain("ORCHESTRATOR.md");
       expect(readFileSync(join(h.directory, "VOICE.md"), "utf8")).toBe("chosen");
     } finally {
       await h.cleanup();
     }
   });
 
-  for (const kind of ["missing", "unreadable", "directory", "broken-link"]) {
+  for (const kind of ["unreadable", "directory", "broken-link"]) {
     // Root and Windows do not enforce these POSIX read bits in the same way.
     test.skipIf(
       kind === "unreadable" && (process.platform === "win32" || process.getuid?.() === 0),
     )(
-      `${kind} references fail before native startup, even if raw text overrides them`,
+      `a ${kind} convention name fails before native startup, even if raw text overrides it`,
       async () => {
         const h = runtimeHarness({
-          "prompt-files": { voice: "selected" },
-          voice: { extra: { prompt: "raw wins, but references must still be valid" } },
+          voice: { extra: { prompt: "raw wins, but a present file must still load" } },
         });
-        const path = join(h.directory, "selected");
+        const path = join(h.directory, PROMPT_FILES.voicePrompt);
         if (kind === "unreadable") {
           writeFileSync(path, "private");
           chmodSync(path, 0o000);
@@ -180,7 +158,9 @@ describe("explicit prompt files", () => {
         if (kind === "directory") mkdirSync(path);
         if (kind === "broken-link") symlinkSync(join(h.directory, "missing"), path);
         try {
-          await expect(h.runtime.start()).rejects.toThrow("prompt-files.voice: cannot read");
+          await expect(h.runtime.start()).rejects.toThrow(
+            `${PROMPT_FILES.voicePrompt}: cannot read`,
+          );
           expect(h.native.options).toBeUndefined();
           expect(h.native.calls).toEqual([]);
           expect(h.ready).toEqual([]);
@@ -192,15 +172,31 @@ describe("explicit prompt files", () => {
     );
   }
 
+  test("an override and an append for the same agent cannot both be present", async () => {
+    const pairs = [
+      ["voicePrompt", "voiceAppend"],
+      ["orchestratorBaseInstructions", "orchestratorDeveloperInstructions"],
+    ] as const;
+    for (const [override, append] of pairs) {
+      const h = runtimeHarness();
+      write(h.directory, [override, append]);
+      try {
+        await expect(h.runtime.start()).rejects.toThrow(
+          `${PROMPT_FILES[override]} and ${PROMPT_FILES[append]} cannot both be present`,
+        );
+        expect(h.native.options).toBeUndefined();
+        expect(h.native.calls).toEqual([]);
+      } finally {
+        await h.cleanup();
+      }
+    }
+  });
+
   for (const mode of ["fresh", "continue", "resume"] as const) {
     for (const raw of [false, true]) {
-      test(`${mode}: every role is explicit and launch-cached; raw override=${raw}`, async () => {
-        const refs: PromptFilesValues = {};
-        for (const key of Object.keys(PROMPT_FIELDS) as (keyof PromptFilesValues)[])
-          refs[key] = `${key}.txt`;
+      test(`${mode}: override files map to native fields and are launch-cached; raw override=${raw}`, async () => {
         const h = runtimeHarness(
           {
-            "prompt-files": refs,
             voice: {
               version: "v3",
               ...(raw
@@ -227,17 +223,17 @@ describe("explicit prompt files", () => {
         h.native.main("existing", h.directory);
         const warnings: string[] = [];
         h.events.onStatus = (line) => warnings.push(line);
-        for (const [key, path] of Object.entries(h.config.promptFiles!))
-          writeFileSync(path, key === "voice" ? "" : key);
+        write(h.directory, OVERRIDES, (name) => (name === "voicePrompt" ? "" : name));
         try {
           await h.runtime.start();
           await h.runtime.offer("first");
-          for (const path of Object.values(h.config.promptFiles!))
-            writeFileSync(path!, "Changed after launch");
+          write(h.directory, OVERRIDES, () => "Changed after launch");
           await h.runtime.offer("redial");
           await h.runtime.fresh();
           await h.runtime.offer("fresh");
-          expect(h.runtime.currentReady!.prompts).toEqual(promptPaths(h.config));
+          expect(h.runtime.currentReady!.prompts).toEqual(
+            OVERRIDES.map((name) => join(h.directory, PROMPT_FILES[name])),
+          );
           expect(
             warnings.some((line) => line.includes("replaces Codex's entire base prompt")),
           ).toBe(!raw);
@@ -246,11 +242,11 @@ describe("explicit prompt files", () => {
           );
           expect(threads).toHaveLength(2);
           for (const call of threads) {
-            expect(call.params["baseInstructions"]).toBe(raw ? null : "orchestrator-base");
-            expect(call.params["developerInstructions"]).toBe(
-              raw ? "raw instructions" : "orchestrator",
+            expect(call.params["baseInstructions"]).toBe(
+              raw ? null : "orchestratorBaseInstructions",
             );
-            expect(call.params).not.toHaveProperty("promptFiles");
+            if (raw) expect(call.params["developerInstructions"]).toBe("raw instructions");
+            else expect(call.params).not.toHaveProperty("developerInstructions");
             expect(call.params).not.toHaveProperty("config");
           }
           const starts = h.native.calls.filter((call) => call.method === "thread/realtime/start");
@@ -258,27 +254,88 @@ describe("explicit prompt files", () => {
           for (const call of starts) {
             expect(call.params["prompt"]).toBe(raw ? null : "");
             expect(call.params["realtimeStartInstructions"]).toBe(
-              raw ? "" : "orchestrator-session-start",
+              raw ? "" : "orchestratorSessionStart",
             );
             expect(call.params["realtimeEndInstructions"]).toBe(
-              raw ? null : "orchestrator-session-end",
+              raw ? null : "orchestratorSessionEnd",
             );
-            expect(call.params["initialItems"]).toEqual(
-              raw
-                ? []
-                : [
-                    { role: "developer", text: "voice-seed-developer" },
-                    { role: "user", text: "voice-seed-user" },
-                    { role: "assistant", text: "voice-seed-assistant" },
-                  ],
-            );
+            if (raw) expect(call.params["initialItems"]).toEqual([]);
             expect(call.params["includeStartupContext"]).toBe(false);
             expect(call.params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
+            expect(JSON.stringify(call.params)).not.toContain("Changed after launch");
           }
         } finally {
           await h.cleanup();
         }
       });
     }
+  }
+
+  test("append files ride developerInstructions and the startup-context slot on resume, Fresh and every call", async () => {
+    const h = runtimeHarness({ orchestrator: { effort: "high" } }, { resume: "existing" });
+    h.native.main("existing", h.directory);
+    const warnings: string[] = [];
+    h.events.onStatus = (line) => warnings.push(line);
+    write(h.directory, APPENDS);
+    try {
+      await h.runtime.start();
+      await h.runtime.offer("first");
+      await h.runtime.fresh();
+      await h.runtime.offer("fresh");
+      expect(h.runtime.currentReady!.prompts).toEqual(
+        APPENDS.map((name) => join(h.directory, PROMPT_FILES[name])),
+      );
+      expect(warnings.some((line) => line.includes("entire base prompt"))).toBe(false);
+      const threads = h.native.calls.filter((call) =>
+        ["thread/resume", "thread/start"].includes(call.method),
+      );
+      expect(threads.map((call) => call.method)).toEqual(["thread/resume", "thread/start"]);
+      for (const call of threads) {
+        expect(call.params["developerInstructions"]).toBe("orchestratorDeveloperInstructions");
+        expect(call.params).not.toHaveProperty("baseInstructions");
+        expect(call.params["config"]).toEqual({
+          model_reasoning_effort: "high",
+          [STARTUP_CONTEXT_KEY]: "voiceAppend",
+        });
+      }
+      const starts = h.native.calls.filter((call) => call.method === "thread/realtime/start");
+      expect(starts).toHaveLength(2);
+      for (const call of starts) {
+        expect(call.params).not.toHaveProperty("prompt");
+        expect(call.params["includeStartupContext"]).toBe(true);
+        expect(call.params["realtimeStartInstructions"]).toBe("orchestratorSessionStart");
+        expect(call.params["realtimeEndInstructions"]).toBe("orchestratorSessionEnd");
+      }
+    } finally {
+      await h.cleanup();
+    }
+  });
+
+  const conflicts: ReadonlyArray<[string, ConfigValues]> = [
+    ["voice.include-startup-context", { voice: { "include-startup-context": true } }],
+    [
+      `orchestrator.config.${STARTUP_CONTEXT_KEY}`,
+      { orchestrator: { config: { [STARTUP_CONTEXT_KEY]: "mine" } } },
+    ],
+    [
+      `${STARTUP_CONTEXT_KEY} codex-config entry`,
+      { "codex-config": [`${STARTUP_CONTEXT_KEY}="mine"`] },
+    ],
+  ];
+  for (const [setting, values] of conflicts) {
+    test(`the append slot has one owner: ${setting} conflicts before native startup`, async () => {
+      const h = runtimeHarness(values);
+      write(h.directory, ["voiceAppend"]);
+      try {
+        await expect(h.runtime.start()).rejects.toThrow(
+          `${PROMPT_FILES.voiceAppend} uses Codex's startup-context slot`,
+        );
+        expect(h.native.options).toBeUndefined();
+        expect(h.native.calls).toEqual([]);
+        expect(h.ready).toEqual([]);
+      } finally {
+        await h.cleanup();
+      }
+    });
   }
 });
