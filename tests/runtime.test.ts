@@ -40,10 +40,18 @@ describe("foreground runtime ownership", () => {
   test("continues native history by default and verifies it before resuming", async () => {
     const h = runtimeHarness();
     h.native.main("existing", h.directory);
+    h.native.override = (method) =>
+      method === "thread/list"
+        ? Promise.resolve({
+            data: h.native.threads.map((thread) => ({ ...thread, threadSource: null })),
+            nextCursor: null,
+          })
+        : undefined;
     try {
       await h.runtime.start();
       expect(h.native.calls.map((c) => c.method)).toEqual([
         "thread/list",
+        "thread/read",
         "thread/read",
         "thread/resume",
       ]);

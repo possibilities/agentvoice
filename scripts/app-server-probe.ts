@@ -13,7 +13,7 @@ const connection = await AppServerConnection.connect({
 try {
   const result = await connection.request<{ data?: unknown[] }>("thread/list", {
     cwd: realpathSync(process.cwd()),
-    sourceKinds: ["appServer"],
+    sourceKinds: ["appServer", "vscode"],
     archived: false,
     modelProviders: [],
     sortKey: "updated_at",
