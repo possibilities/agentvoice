@@ -48,12 +48,11 @@ implementation.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
-- src/core/runtime.ts: launch/resume/Fresh, session and per-parent worker managers,
-  child lifecycle, idle account rotation, config watcher. No reattachment/restart
-  adoption. Keep old parent identity/locks while workers can still report there.
+- src/core/runtime.ts: launch/resume/Fresh, voice session, child lifecycle,
+  idle account rotation, config watcher. No reattachment/restart adoption,
+  custom worker manager, tool callback or submitted report/follow-up turns.
+  Keep old main-thread locks until quit; native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
-- src/core/workers.ts: optional dynamic dispatch/check/cancel, report composition,
-  archival retries. In-memory per-parent state only, disposed on quit.
 - src/core/accounts.ts: optional balancer selection, account-profile symlink farm,
   distinct login grants and native shared history; no launchctl.
 - src/console/host.ts: direct in-process runtime/media/TUI wiring and quit cleanup.
@@ -67,14 +66,14 @@ implementation.
 
 Public voice launches require --allow-full-access before config/child/media
 startup, every time. No prompt or config/env bypass. Help/accounts are exempt.
-Full access / never is an intentional product invariant for main and workers,
+Full access / never is an intentional product invariant for main conversations,
 not a default to inherit or weaken. Confirm native start/resume responses on
-launch, Fresh, rotation and workers. Unexpected human interaction is refused
+launch, Fresh and rotation. Unexpected human interaction is refused
 with a persistent TUI notice; never add automatic consent or invented answers.
 
 Resolve one existing absolute real workspace before spawning the child:
 CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
-thread start/resume and workers; relative runtime roots use it too. Reject
+thread start/resume; relative runtime roots use it too. Reject
 conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
 
@@ -83,8 +82,8 @@ sourceKinds appServer (the upstream default excludes it), all providers, exact c
 agentvoice-orchestrator source, no parent and non-ephemeral. Explicit resume
 must be found in that inventory. Do not hide lookup/resume failures as Fresh.
 
-Fresh cuts media before switching identity. Keep workers tied to their original
-parent, even once a new conversation is active. Quitting ends voice and app-owned
+Fresh cuts media before switching identity. Native work in an old main thread
+stays there, even once a new conversation is active. Quitting ends voice and app-owned
 work and closes the child. Old thread.json/workers.json and native history are
 never rewritten, imported or removed. Per-thread locks allow independent launches;
 an old background version or another client does not participate in that guard.
@@ -180,7 +179,13 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   experimental_realtime_ws_startup_context override. Preserve omission and
   explicit false/empty values through continue, resume, redial and Fresh.
   Do not seed these into user config or server.json.example. Skill isolation
-  remains a separate decision. Optional dispatch/account behavior stays opt-in.
+  remains a separate decision. Optional account behavior stays opt-in.
+- No AgentVoice worker tools, registry, archival, reports, or custom turn
+  submission. Native Codex tools, subagents and voice handoffs stay native.
+  Retired dispatch/dispatch-reports config keys error, including explicit false.
+  Saved custom tool calls receive an immediate failed tool result and visible
+  retirement notice; never resurrect a handler or rewrite native history.
+  Raw dynamicTools metadata still passes through but has no client implementation.
 
 ## The fleet
 

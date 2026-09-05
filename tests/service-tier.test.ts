@@ -239,42 +239,11 @@ describe("Fast runtime propagation", () => {
     }
   });
 
-  test("a rejected worker tier never submits a turn", async () => {
-    const h = runtimeHarness({ orchestrator: { dispatch: true } }, { fast: true });
-    h.native.tiers = true;
-    try {
-      await h.runtime.start();
-      h.native.override = (method, params) =>
-        method === "thread/start" && params["threadSource"] === "agentvoice-worker"
-          ? Promise.resolve({
-              thread: { id: "rejected-worker" },
-              ...nativeFullAccess,
-              model: "native-model",
-              serviceTier: "default",
-            })
-          : undefined;
-      const result = await h.native.options.onRequest!("item/tool/call", {
-        threadId: h.runtime.currentReady!.threadId,
-        tool: "dispatch_worker",
-        arguments: { title: "inspect", brief: "inspect" },
-      });
-      expect(JSON.stringify(result)).toContain("did not apply --fast");
-      expect(h.native.calls.some((c) => c.method === "turn/start")).toBe(false);
-      expect(
-        h.native.calls.some(
-          (c) => c.method === "thread/archive" && c.params["threadId"] === "rejected-worker",
-        ),
-      ).toBe(true);
-    } finally {
-      await h.cleanup();
-    }
-  });
-
-  test("Fast and standard reach continue, Fresh and workers without changing voice requests", async () => {
+  test("Fast and standard reach continue and Fresh without changing voice requests", async () => {
     for (const fast of [true, false]) {
       const h = runtimeHarness(
         {
-          orchestrator: { dispatch: true, "service-tier": "flex", extra: { serviceTier: "flex" } },
+          orchestrator: { "service-tier": "flex", extra: { serviceTier: "flex" } },
         },
         { fast },
       );
@@ -285,15 +254,10 @@ describe("Fast runtime propagation", () => {
         const expected = fast ? "priority" : "default";
         expect(h.runtime.currentReady?.serviceTier).toBe(expected);
         await h.runtime.fresh();
-        await h.native.options.onRequest!("item/tool/call", {
-          threadId: h.runtime.currentReady!.threadId,
-          tool: "dispatch_worker",
-          arguments: { title: "inspect", brief: "inspect" },
-        });
         const starts = h.native.calls.filter(
           (c) => c.method === "thread/start" || c.method === "thread/resume",
         );
-        expect(starts).toHaveLength(3);
+        expect(starts).toHaveLength(2);
         expect(starts.every((c) => c.params["serviceTier"] === expected)).toBe(true);
         h.runtime.offer("sdp");
         await Bun.sleep(5);

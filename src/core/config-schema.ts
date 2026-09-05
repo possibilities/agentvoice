@@ -70,24 +70,8 @@ export const orchestratorValuesSchema = z
     workspace: z
       .string()
       .describe(
-        "The conversation workspace: native session selection, the Codex thread, and workers use this root. Tilde-expanded; relative paths use the launch directory. Default: launch cwd. --workspace overrides this value.",
+        "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: launch cwd. --workspace overrides this value.",
       )
-      .optional(),
-    dispatch: z
-      .boolean()
-      .meta({
-        description:
-          "Declare three dynamic tools on the orchestrator's thread — dispatch_worker, check_workers, cancel_worker — so it can run asynchronous work as sibling worker threads. Workers inherit the execution posture (sandbox, approvals, model, config) but no prompt files and no dispatch tools. Pull-only by default: results are read with check_workers. Default: false.",
-        default: false,
-      })
-      .optional(),
-    "dispatch-reports": z
-      .boolean()
-      .meta({
-        description:
-          "Additionally push a <worker_report> turn at the orchestrator when a worker finishes — the evented mode a doctrine written for fire-and-forget expects. The tool descriptions promise whichever mode is on. Requires dispatch: true. Default: false.",
-        default: false,
-      })
       .optional(),
     model: z
       .string()
@@ -170,17 +154,6 @@ export const orchestratorValuesSchema = z
     allOf: [
       {
         not: { required: ["permissions", "sandbox"] },
-      },
-      {
-        if: {
-          properties: { "dispatch-reports": { const: true } },
-          required: ["dispatch-reports"],
-        },
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the JSON Schema conditional keyword, not a thenable.
-        then: {
-          properties: { dispatch: { const: true } },
-          required: ["dispatch"],
-        },
       },
     ],
   });

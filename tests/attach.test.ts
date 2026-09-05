@@ -89,19 +89,62 @@ describe("owned native stdio", () => {
       await c.close();
     }
   });
-  test("delivers notifications, answers tools, and preserves fail-closed approvals", async () => {
+  test("delivers native tool/turn notifications unchanged and preserves fail-closed approvals", async () => {
     const notices: Array<[string, Record<string, unknown>]> = [];
     const c = await connect("", {
       onNotification: (m, p) => notices.push([m, p]),
-      onRequest: (m) => (m === "item/tool/call" ? Promise.resolve({ success: true }) : null),
     });
     try {
       await c.request("approval", {});
-      await c.request("dynamic", {});
-      await until(() => notices.filter(([m]) => m === "test/answer").length === 2);
+      const native: Array<[string, Record<string, unknown>]> = [
+        ["item/started", { threadId: "main", item: { type: "commandExecution", id: "tool" } }],
+        [
+          "item/completed",
+          { threadId: "main", item: { type: "commandExecution", id: "tool", exitCode: 0 } },
+        ],
+        ["turn/completed", { threadId: "main", turn: { id: "turn", status: "completed" } }],
+      ];
+      for (const [method, params] of native) await c.request("notification", { method, params });
+      await until(() => notices.some(([m]) => m === "turn/completed"));
       expect(notices).toContainEqual(["test/initialized", {}]);
       expect(notices).toContainEqual(["test/answer", { decision: "decline" }]);
-      expect(notices).toContainEqual(["test/answer", { success: true }]);
+      for (const entry of native) expect(notices).toContainEqual(entry);
+    } finally {
+      await c.close();
+    }
+  });
+
+  test("retired worker calls fail promptly and visibly without a callback or replacement work", async () => {
+    const responses: Record<string, unknown>[] = [];
+    const refusals: string[] = [];
+    const c = await connect("", {
+      onNotification: (method, params) => {
+        if (method === "test/response") responses.push(params);
+      },
+      onRefusal: (message) => refusals.push(message),
+    });
+    try {
+      for (const tool of ["dispatch_worker", "check_workers", "cancel_worker"]) {
+        const count = responses.length;
+        await c.request("server-request", {
+          method: "item/tool/call",
+          params: { threadId: "saved-conversation", tool, arguments: { brief: "must not run" } },
+        });
+        await until(() => responses.length === count + 1);
+        expect(responses.at(-1)).toMatchObject({
+          id: "server-request",
+          result: { success: false },
+        });
+        const message = refusals.at(-1)!;
+        expect(message).toContain(`Refused ${tool}`);
+        expect(message).toContain("retired");
+        expect(message).toContain("Fresh or --no-continue");
+        expect(responses.at(-1)!["result"]).toEqual({
+          success: false,
+          contentItems: [{ type: "inputText", text: message }],
+        });
+      }
+      expect(await c.request<{ alive: boolean }>("echo", { alive: true })).toEqual({ alive: true });
     } finally {
       await c.close();
     }
@@ -164,25 +207,6 @@ describe("owned native stdio", () => {
     const c = await connect();
     try {
       await expect(c.request("invalid", {})).rejects.toThrow("invalid JSON");
-    } finally {
-      await c.close();
-    }
-  });
-  test("a throwing tool handler denies the request without killing the connection", async () => {
-    const notices: unknown[] = [];
-    const c = await connect("", {
-      onRequest() {
-        throw new Error("handler failed");
-      },
-      onNotification: (m, p) => {
-        if (m === "test/answer") notices.push(p);
-      },
-    });
-    try {
-      await c.request("approval", {});
-      await until(() => notices.length === 1);
-      expect(notices[0]).toEqual({ decision: "decline" });
-      expect(c.alive).toBe(true);
     } finally {
       await c.close();
     }

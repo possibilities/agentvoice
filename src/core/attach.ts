@@ -56,10 +56,6 @@ export interface AttachOptions {
   signal?: AbortSignal;
   clientVersion: string;
   onNotification(method: string, params: Record<string, unknown>): void;
-  onRequest?(
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<Record<string, unknown> | null> | null;
   onClose(info: { expected: boolean; error?: string }): void;
   onRefusal?(message: string): void;
   debug?(line: string): void;
@@ -278,29 +274,11 @@ export class AppServerConnection {
     }
 
     if (id !== undefined && typeof method === "string") {
-      // Server→client request. A handler may answer it (dispatch tool calls);
-      // everything else — and a handler that declines or throws — fail-closes
-      // with an immediate denial so no request ever parks a turn.
+      // This client supplies no tools or human-input UI. Refuse immediately
+      // rather than leaving an unsupported server request parked indefinitely.
       const requestId = id as number | string;
       const params = (message["params"] ?? {}) as Record<string, unknown>;
-      let handled: Promise<Record<string, unknown> | null> | null | undefined;
-      try {
-        handled = this.options.onRequest?.(method, params);
-      } catch {
-        handled = null;
-      }
-      if (handled) {
-        handled
-          .then((response) => {
-            if (response == null) this.refuse(requestId, method);
-            else this.respond(requestId, response);
-          })
-          .catch(() => {
-            this.refuse(requestId, method);
-          });
-      } else {
-        this.refuse(requestId, method);
-      }
+      this.refuse(requestId, method, params);
       return;
     }
 
@@ -317,9 +295,19 @@ export class AppServerConnection {
     }
   }
 
-  private refuse(id: number | string, method: string): void {
-    const message = `Refused ${method}: AgentVoice has no approval/input UI. Full access does not grant connector consent or answer tool questions. Use a supported Codex client for required interaction.`;
-    const result = buildDenialResponse(method);
+  private refuse(id: number | string, method: string, params: Record<string, unknown>): void {
+    const tool = params["tool"];
+    const retired =
+      method === "item/tool/call" &&
+      (tool === "dispatch_worker" || tool === "check_workers" || tool === "cancel_worker");
+    const message = retired
+      ? `Refused ${tool}: AgentVoice's custom worker tools have been retired. This saved conversation may retain their definitions; use Fresh or --no-continue for a conversation without them. Native Codex tools and voice handoffs are unchanged; no work was started or cancelled.`
+      : method === "item/tool/call"
+        ? "Refused item/tool/call: AgentVoice does not implement client-defined dynamic tools. Use a Codex client that implements this tool."
+        : `Refused ${method}: AgentVoice has no approval/input UI. Full access does not grant connector consent or answer tool questions. Use a supported Codex client for required interaction.`;
+    const result = retired
+      ? { success: false, contentItems: [{ type: "inputText", text: message }] }
+      : buildDenialResponse(method);
     try {
       if (result !== null) this.respond(id, result);
       else this.send({ jsonrpc: "2.0", id, error: { code: -32601, message } });

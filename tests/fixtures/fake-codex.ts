@@ -26,12 +26,16 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   } else if (message.method === "approval") {
     send({ id: message.id, result: {} });
     send({ id: "approval", method: "item/commandExecution/requestApproval", params: {} });
-  } else if (message.method === "dynamic") {
+  } else if (message.method === "notification") {
     send({ id: message.id, result: {} });
-    send({ id: "dynamic", method: "item/tool/call", params: { tool: "test" } });
+    send({ method: message.params.method, params: message.params.params });
   } else if (message.method === "server-request") {
     send({ id: message.id, result: {} });
-    send({ id: "server-request", method: message.params.method, params: {} });
+    send({
+      id: "server-request",
+      method: message.params.method,
+      params: message.params.params ?? {},
+    });
   } else if (message.method === "fail") {
     send({ id: message.id, error: { code: 42, message: "refused" } });
   } else if (message.method === "crash") {
@@ -47,7 +51,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     // No reply: exercise cancellation and request timeout.
   } else if (message.id === "server-request") {
     send({ method: "test/response", params: message });
-  } else if (message.id === "approval" || message.id === "dynamic") {
+  } else if (message.id === "approval") {
     send({ method: "test/answer", params: message.result });
   }
 });

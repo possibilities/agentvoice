@@ -144,7 +144,6 @@ export async function runConsoleHost(
         transport?.handleError(message, isFatal);
       },
       onFatal: fail,
-      onWorker: (worker) => feed(`worker ${worker.id}: ${worker.status}`),
       onStatus: feed,
       debug: debugLog,
     },

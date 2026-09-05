@@ -24,24 +24,12 @@ import {
 import { PROMPT_FILES, promptFilenames, readPrompts, type ServerConfig } from "./config.ts";
 import { ConfigWatcher, configWithVoiceName, type WatchedConfigSource } from "./config-watch.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
-import {
-  ORCHESTRATOR_THREAD_SOURCE,
-  realtimeParams,
-  threadParams,
-  workerThreadParams,
-} from "./params.ts";
+import { ORCHESTRATOR_THREAD_SOURCE, realtimeParams, threadParams } from "./params.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { lockThread } from "./thread-lock.ts";
 import { type SessionSelection, selectThread } from "./thread-selection.ts";
 import type { ReadyInfo } from "./voice-types.ts";
-import {
-  archiveWorkerThread,
-  deleteWorkerThread,
-  WorkerManager,
-  type WorkerSnapshot,
-  WorkerTurnStartError,
-} from "./workers.ts";
 
 export type { ReadyInfo } from "./voice-types.ts";
 
@@ -52,7 +40,6 @@ export interface RuntimeEvents {
   onRedial(reason: string): void;
   onError(message: string, fatal: boolean): void;
   onFatal(message: string): void;
-  onWorker(worker: WorkerSnapshot): void;
   onStatus(line: string): void;
   debug?(line: string): void;
 }
@@ -84,9 +71,7 @@ export class VoiceRuntime {
   private shutdownPromise: Promise<void> | null = null;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
-  private readonly managers = new Map<string, WorkerManager>();
   private readonly activeTurns = new Map<string, string>();
-  private pendingReports = 0;
   private readonly sessions: VoiceSessionManager;
   private configWatcher: ConfigWatcher | null = null;
   private tierSelection: ServiceTierSelection | null = null;
@@ -144,10 +129,6 @@ export class VoiceRuntime {
     };
   }
 
-  workerSnapshots(): WorkerSnapshot[] {
-    return this.managers.get(this.threadId ?? "")?.snapshots() ?? [];
-  }
-
   async start(): Promise<void> {
     try {
       const workspace = this.config.orchestrator.workspace;
@@ -184,7 +165,6 @@ export class VoiceRuntime {
       );
       this.assertRunning();
       this.threadId = id ? await this.resumeThread(id) : await this.startThread();
-      this.ensureManager(this.threadId);
       this.threadReady = true;
       this.emitReady();
       if (this.options.configSource) {
@@ -223,7 +203,6 @@ export class VoiceRuntime {
       this.sessions.reset();
       this.assertRunning();
       this.threadId = await this.startThread();
-      this.ensureManager(this.threadId);
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
       if (error instanceof FullAccessError) {
@@ -244,7 +223,6 @@ export class VoiceRuntime {
     this.shuttingDown = true;
     this.threadReady = false;
     this.configWatcher?.stop();
-    for (const manager of this.managers.values()) manager.dispose();
     this.shutdownPromise = (async () => {
       try {
         await this.sessions.shutdown();
@@ -347,105 +325,6 @@ export class VoiceRuntime {
     return id;
   }
 
-  private ensureManager(parentId: string): void {
-    if (this.config.orchestrator.dispatch === true && !this.managers.has(parentId)) {
-      this.managers.set(parentId, this.buildWorkerManager(parentId));
-    }
-  }
-
-  private buildWorkerManager(parentId: string): WorkerManager {
-    const request = (method: string, params: unknown) => {
-      const attachment = this.attachment;
-      if (!attachment || this.shuttingDown)
-        return Promise.reject(new AppServerError("not attached to the app-server"));
-      return attachment.request(method, params);
-    };
-    const manager = new WorkerManager(
-      {
-        startWorkerThread: async () => {
-          const selection = this.tierSelection!;
-          const params = await selection.prepare(workerThreadParams(this.config));
-          const result = await request("thread/start", params);
-          const threadId = extractThreadId(result);
-          try {
-            confirmFullAccess(result);
-            await selection.confirm(result, params);
-            this.assertRunning();
-          } catch (error) {
-            this.events.onError(`Worker refused: ${String(error)}`, false);
-            // No turn was submitted. Preserve the original refusal and make any
-            // cleanup failure visible rather than silently orphaning the root.
-            try {
-              await archiveWorkerThread(request, threadId);
-            } catch (cleanupError) {
-              throw new Error(
-                `${String(error)}; cleanup of worker ${threadId} failed: ${String(cleanupError)}`,
-              );
-            }
-            throw error;
-          }
-          return { threadId };
-        },
-        startWorkerTurn: async (workerThreadId, brief) => {
-          let turn: { turn?: { id?: string } };
-          try {
-            turn = (await request("turn/start", {
-              threadId: workerThreadId,
-              input: [{ type: "text", text: brief }],
-            })) as { turn?: { id?: string } };
-          } catch (error) {
-            const detail = error instanceof Error ? error.message : String(error);
-            // A JSON-RPC error means submission was rejected; a timeout or
-            // detachment can lose a response after core accepted the turn.
-            const mayHaveStarted = !(error instanceof AppServerError && error.code !== undefined);
-            throw new WorkerTurnStartError(detail, mayHaveStarted);
-          }
-          const turnId = turn?.turn?.id;
-          if (!turnId) {
-            throw new WorkerTurnStartError("app-server returned no turn id for the worker", true);
-          }
-          return { turnId };
-        },
-        interruptWorker: async (workerThreadId, turnId) => {
-          await request("turn/interrupt", { threadId: workerThreadId, turnId });
-        },
-        archiveWorker: (workerThreadId) =>
-          archiveWorkerThread((method, params) => request(method, params), workerThreadId),
-        deleteWorker: (workerThreadId) =>
-          deleteWorkerThread((method, params) => request(method, params), workerThreadId),
-        scheduleCleanupRetry(run, delayMs) {
-          setTimeout(run, delayMs).unref();
-        },
-        reportToOrchestrator: (text) => this.reportToOrchestrator(parentId, text),
-        onWorkerUpdate: (worker) => {
-          if (this.shuttingDown || this.threadId !== parentId) return;
-          this.events.onWorker(worker);
-        },
-        onWorkSettled: () => {
-          if (this.shuttingDown) return;
-
-          this.maybeRotate();
-        },
-        now: () => Date.now(),
-        debug: (line) => this.events.debug?.(line),
-      },
-      this.config.orchestrator.dispatchReports === true,
-    );
-    return manager;
-  }
-
-  private reportToOrchestrator(parentId: string, text: string): void {
-    if (this.shuttingDown || !this.attachment?.alive) return;
-    this.pendingReports++;
-    void this.attachment
-      .request("turn/start", { threadId: parentId, input: [{ type: "text", text }] })
-      .catch((error) => this.events.onStatus(`worker report failed: ${String(error)}`))
-      .finally(() => {
-        this.pendingReports--;
-        this.maybeRotate();
-      });
-  }
-
   private emitReady(): void {
     const info = this.currentReady;
     if (info) this.events.onReady(info);
@@ -458,20 +337,10 @@ export class VoiceRuntime {
     if (typeof id === "string") {
       if (method === "turn/started" && typeof turn["id"] === "string")
         this.activeTurns.set(id, turn["id"]);
-      if (method === "turn/completed") {
-        this.activeTurns.delete(id);
-        for (const manager of this.managers.values()) {
-          if (manager.ownsThread(id)) manager.handleTurnCompleted(id, turn);
-        }
-      }
+      if (method === "turn/completed") this.activeTurns.delete(id);
       if (id === this.threadId && method.startsWith("thread/realtime/"))
         this.sessions.handleNotification(method, params);
-      if (
-        method === "thread/settings/updated" &&
-        (id === this.threadId ||
-          this.managers.has(id) ||
-          [...this.managers.values()].some((manager) => manager.ownsThread(id)))
-      ) {
+      if (method === "thread/settings/updated" && this.locks.has(id)) {
         const settings = params["threadSettings"] as Record<string, unknown> | undefined;
         try {
           confirmFullAccess(settings, true);
@@ -495,20 +364,6 @@ export class VoiceRuntime {
         used !== null && used >= this.config.accounts.switchThreshold ? used : null;
     }
     this.maybeRotate();
-  }
-
-  private handleRequest(
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<Record<string, unknown> | null> | null {
-    if (this.shuttingDown || method !== "item/tool/call") return null;
-    const id = params["threadId"];
-    const manager = typeof id === "string" ? this.managers.get(id) : undefined;
-    if (!manager) return null;
-    return manager.handleToolCall(
-      typeof params["tool"] === "string" ? params["tool"] : "",
-      (params["arguments"] ?? {}) as Record<string, unknown>,
-    );
   }
 
   private async pickAccount(): Promise<AccountSelection> {
@@ -539,7 +394,6 @@ export class VoiceRuntime {
       signal: this.abort.signal,
       clientVersion: this.version,
       onNotification: (method, params) => this.handleNotification(method, params),
-      onRequest: (method, params) => this.handleRequest(method, params),
       onRefusal: (message) => this.events.onError(message, false),
       onClose: (info) => {
         if (this.shuttingDown || this.attachment !== connection || info.expected) return;
@@ -572,9 +426,7 @@ export class VoiceRuntime {
       !this.freshInFlight &&
       this.threadReady &&
       !this.sessions.hasSession &&
-      this.activeTurns.size === 0 &&
-      this.pendingReports === 0 &&
-      ![...this.managers.values()].some((manager) => manager.hasUnfinishedWork())
+      this.activeTurns.size === 0
     );
   }
 

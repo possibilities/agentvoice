@@ -6,7 +6,7 @@ child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
 Full access is an intentional product exception (see below). The defaults audit
-is not finished: optional workers, account balancing and remaining prompt/settings passthrough need review.
+is not finished: account balancing and remaining prompt/settings passthrough need review.
 
 ## Start here
 
@@ -34,8 +34,7 @@ administration remain available without it.
 
 This permits unrestricted command filesystem/network access with native
 `danger-full-access` and approval policy `never`. Workspace selection does **not**
-confine file access. Main conversations and optional workers use the same policy;
-AgentVoice verifies Codex's effective start/resume responses, including Fresh and
+confine file access. AgentVoice verifies Codex's effective start/resume responses, including Fresh and
 account rotation. Missing/restricted permission reports fail closed. Managed Codex
 requirements are never bypassed or rewritten to make launch succeed.
 
@@ -75,15 +74,14 @@ workspace. Symlink paths canonicalize to the same directory.
 
 Default launch lists native unarchived app-server history, newest-updated first,
 and continues the latest non-ephemeral AgentVoice main conversation whose cwd
-matches exactly. Workers, child threads and other clients' threads are excluded.
+matches exactly. Legacy worker threads, child threads and other clients' threads are excluded.
 If none exists, a new conversation starts. Lookup/resume failures are errors,
 not an excuse to silently create a replacement. Explicit `--resume` must match
 an eligible conversation in the selected workspace.
 
 Fresh changes the conversation, not the workspace. It cuts the old media path
-before opening the new one. Old native history is not deleted. Optional workers
-already running still belong to their original parent, and never report into
-the fresh conversation. A per-thread kernel lock prevents two AgentVoice
+before opening the new one. Old native history is not deleted, and any native
+work still active in the old conversation stays there. A per-thread kernel lock prevents two AgentVoice
 launches from controlling the same conversation; other workspaces and explicit
 fresh conversations can run independently.
 
@@ -107,7 +105,7 @@ continued after exit. Workspace selection is not a memory or security sandbox.
 - Redial renews voice on the same conversation using overlapping WebRTC peers;
   automatic renewal uses the same path. Fresh closes old media first.
 - Device selection, model/effort/voice overrides, config/prompt passthrough,
-  voice-name hot reload, optional worker dispatch and account balancing.
+  voice-name hot reload and optional account balancing.
 - Per-launch opt-in debug logs; no phone remote, pairing, listener/discovery,
   Android packaging, separate Server, resident service or Herdr integration.
 
@@ -172,8 +170,8 @@ change the realtime speech model, speech speed, prompts or voice context.
 `--no-fast` explicitly requests standard processing. The flags conflict with
 each other; omitting both preserves existing AgentVoice/native tier settings.
 
-These are launch overrides, including for continued conversations, Fresh and
-optional workers. They beat `orchestrator.service-tier`, native config overrides
+These are launch overrides, including for continued conversations and Fresh.
+They beat `orchestrator.service-tier`, native config overrides
 and `orchestrator.extra.serviceTier`. Raw configuration remains unchanged when
 neither flag is supplied. Fast enables only the thread-local native feature
 gate; AgentVoice never saves this choice to global Codex configuration.
@@ -275,21 +273,34 @@ To return to native resolution, remove the relevant keys; do not substitute
 the named voice controls, and `orchestrator.extra.config` replaces
 `orchestrator.config` as a whole, so remove conflicting raw overrides too.
 
-## Optional workers and accounts
+## Native work, no custom worker layer
 
-`orchestrator.dispatch: true` declares `dispatch_worker`, `check_workers`
-and `cancel_worker` on new main conversations. Workers inherit workspace and
-execution settings, not prompt files or dispatch tools. Results are pull-only
-unless `dispatch-reports: true` additionally submits a tagged report to their
-original parent. Completed worker roots are archived with retries; native
-history is preserved. Dynamic tools are native start-only/persisted metadata.
+Codex owns the voice-to-working-agent handoff, tools, subagents and their native
+events. AgentVoice does not add worker tools, start extra worker threads, compose
+completion reports, submit follow-up turns, or archive/delete completed work.
+It generates no worker-specific instructions; optional operator prompt overrides
+still pass through.
+
+`orchestrator.dispatch` and `orchestrator.dispatch-reports` are retired: remove
+both keys from old configuration, even when set to `false`. Existing conversation
+history is untouched. Codex can retain old dynamic tool definitions on resume;
+calls to `dispatch_worker`, `check_workers` or `cancel_worker` now receive an
+immediate failed tool result and a visible retirement notice. Fresh or
+`--no-continue` starts without the old definitions; there is no automatic switch,
+history rewrite or transcript copying.
+
+The native `orchestrator.extra.dynamicTools` escape hatch still passes through
+explicit metadata, but AgentVoice implements no client-defined tools. Unknown
+tool requests receive a protocol error. This does not disable Codex's own tools.
+
+## Optional accounts
 
 `accounts.balance: true` asks `agentusage balance codex`, with
 `codex-swap select` fallback, for an account at launch and idle rotation.
 `agentvoice accounts add <slug>` creates/logs in a profile;
 `accounts list` lists profiles. Each profile has a distinct authentication
 grant and shared native session/config state. Never copy rotating grants.
-No rotation while voice, turns, workers, cleanup or reports are active.
+No rotation while voice or native turns are active.
 Account selection remains opt-in.
 
 ## State and migration

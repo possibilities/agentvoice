@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ConfigValues, type Prompts, resolveConfig } from "../src/core/config.ts";
-import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
+import { realtimeParams, threadParams } from "../src/core/params.ts";
 
 const HOME = "/home/tester";
 
@@ -21,6 +21,20 @@ function realtime(values: ConfigValues = {}, prompts: Prompts = {}) {
 }
 
 describe("threadParams", () => {
+  test("adds no custom tools; raw native metadata still passes through without an implementation", () => {
+    for (const kind of ["start", "resume"] as const)
+      expect(thread({}, {}, kind)).not.toHaveProperty("dynamicTools");
+    const dynamicTools = [
+      {
+        name: "explicit-external-tool",
+        description: "Operator supplied",
+        inputSchema: { type: "object" },
+      },
+    ];
+    expect(thread({ orchestrator: { extra: { dynamicTools } } })["dynamicTools"]).toEqual(
+      dynamicTools,
+    );
+  });
   test("sends nothing beyond the server's own defaults", () => {
     expect(thread()).toEqual({
       cwd: process.cwd(),
@@ -97,36 +111,13 @@ describe("threadParams", () => {
 
   test("resume omits the start-only fields", () => {
     const values: ConfigValues = {
-      orchestrator: { ephemeral: true, "history-mode": "legacy", model: "m", dispatch: true },
+      orchestrator: { ephemeral: true, "history-mode": "legacy", model: "m" },
     };
     const resumed = thread(values, {}, "resume");
     expect(resumed).not.toHaveProperty("ephemeral");
     expect(resumed).not.toHaveProperty("historyMode");
     expect(resumed).not.toHaveProperty("dynamicTools");
     expect(resumed["model"]).toBe("m");
-  });
-
-  test("dispatch declares the worker tools at start only", () => {
-    const on = thread({ orchestrator: { dispatch: true } });
-    const tools = on["dynamicTools"] as Array<Record<string, unknown>>;
-    expect(tools.map((tool) => tool["name"])).toEqual([
-      "dispatch_worker",
-      "check_workers",
-      "cancel_worker",
-    ]);
-    expect(thread()).not.toHaveProperty("dynamicTools");
-    expect(thread({ orchestrator: { dispatch: false } })).not.toHaveProperty("dynamicTools");
-  });
-
-  test("dispatch-reports flips the tools' promised behavior on the wire", () => {
-    const description = (values: ConfigValues) =>
-      String(
-        (thread(values)["dynamicTools"] as Array<Record<string, unknown>>)[0]?.["description"],
-      );
-    expect(description({ orchestrator: { dispatch: true } })).toContain("check_workers");
-    expect(description({ orchestrator: { dispatch: true, "dispatch-reports": true } })).toContain(
-      "report arrives",
-    );
   });
 
   test("extra merges last but cannot change the full-access posture", () => {
@@ -329,7 +320,6 @@ describe("native skill config passthrough", () => {
   for (const kind of ["start", "resume"] as const) {
     test(`${kind}: no config is manufactured when unset`, () => {
       expect(thread({}, {}, kind)).not.toHaveProperty("config");
-      expect(workerThreadParams(configure(), kind)).not.toHaveProperty("config");
     });
 
     test(`${kind}: other config entries do not cause skill overrides`, () => {
@@ -338,7 +328,6 @@ describe("native skill config passthrough", () => {
       };
       const expected = { model_reasoning_effort: "high", agents: { enabled: false } };
       expect(thread(values, {}, kind)["config"]).toEqual(expected);
-      expect(workerThreadParams(configure(values), kind)["config"]).toEqual(expected);
     });
 
     test(`${kind}: explicit skill rules pass through unchanged and in order`, () => {
@@ -352,15 +341,11 @@ describe("native skill config passthrough", () => {
       };
       const expected = { model_reasoning_effort: "high", "skills.config": supplied };
       expect(thread(values, {}, kind)["config"]).toEqual(expected);
-      expect(workerThreadParams(configure(values), kind)["config"]).toEqual(expected);
     });
 
     test(`${kind}: an explicit empty skill list stays empty`, () => {
       const values: ConfigValues = { orchestrator: { config: { "skills.config": [] } } };
       expect(thread(values, {}, kind)["config"]).toEqual({ "skills.config": [] });
-      expect(workerThreadParams(configure(values), kind)["config"]).toEqual({
-        "skills.config": [],
-      });
     });
 
     test(`${kind}: extra.config replaces the orchestrator config without augmentation`, () => {
@@ -373,11 +358,6 @@ describe("native skill config passthrough", () => {
         },
       };
       expect(thread(values, {}, kind)["config"]).toEqual(extraConfig);
-      // Workers inherit orchestrator.config, not its identity/extra escape hatch.
-      expect(workerThreadParams(configure(values), kind)["config"]).toEqual({
-        model_reasoning_effort: "high",
-        "skills.config": [{ name: "agent:wiki", enabled: true }],
-      });
     });
 
     test(`${kind}: extra.config may remove skill overrides entirely`, () => {
@@ -392,48 +372,4 @@ describe("native skill config passthrough", () => {
       }
     });
   }
-});
-
-describe("workerThreadParams", () => {
-  test("inherits the execution posture but not the identity", () => {
-    const params = workerThreadParams(
-      configure({
-        orchestrator: {
-          dispatch: true,
-          model: "m",
-          effort: "high",
-          sandbox: "danger-full-access",
-          "approval-policy": "never",
-          "approvals-reviewer": "auto_review",
-          config: { agents: { enabled: false } },
-        },
-      }),
-    );
-    expect(params["cwd"]).toBe(process.cwd());
-    expect(params["sandbox"]).toBe("danger-full-access");
-    expect(params["approvalPolicy"]).toBe("never");
-    expect(params["threadSource"]).toBe("agentvoice-worker");
-    expect(params["approvalsReviewer"]).toBe("auto_review");
-    expect(params["model"]).toBe("m");
-    expect(params["config"]).toEqual({
-      model_reasoning_effort: "high",
-      agents: { enabled: false },
-    });
-    expect(params).not.toHaveProperty("dynamicTools");
-    expect(params).not.toHaveProperty("developerInstructions");
-    expect(params).not.toHaveProperty("baseInstructions");
-    expect(params).not.toHaveProperty("personality");
-  });
-
-  test("accepts only the built-in full-access permission profile, like the orchestrator", () => {
-    const params = workerThreadParams(
-      configure({ orchestrator: { permissions: ":danger-full-access" } }),
-    );
-    expect(params["permissions"]).toBe(":danger-full-access");
-    expect(params).not.toHaveProperty("sandbox");
-  });
-
-  test("resume omits the start-only identity", () => {
-    expect(workerThreadParams(configure(), "resume")).not.toHaveProperty("threadSource");
-  });
 });

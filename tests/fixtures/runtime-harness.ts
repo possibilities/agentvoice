@@ -115,7 +115,6 @@ export function runtimeHarness(values: ConfigValues = {}, options: RuntimeOption
     onRedial() {},
     onError() {},
     onFatal: (message) => fatal.push(message),
-    onWorker() {},
     onStatus() {},
   };
   const runtimeOptions = {

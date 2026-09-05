@@ -10,10 +10,8 @@
 import type { Prompts, ServerConfig } from "./config.ts";
 import { ConfigError, VOICE_SEEDS } from "./config.ts";
 import { validateFullAccessParams } from "./full-access.ts";
-import { dispatchTools } from "./workers.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
-export const WORKER_THREAD_SOURCE = "agentvoice-worker";
 
 function setIfDefined(target: Record<string, unknown>, key: string, value: unknown): void {
   if (value !== undefined) target[key] = value;
@@ -57,12 +55,6 @@ export function threadParams(
   if (kind === "start") {
     setIfDefined(params, "ephemeral", orchestrator.ephemeral);
     setIfDefined(params, "historyMode", orchestrator.historyMode);
-    // Start-only on purpose: upstream persists dynamic tools in the session
-    // meta and restores them on resume, so re-sending would be a lie about
-    // what resuming applies (same reasoning as the fields above).
-    if (orchestrator.dispatch === true) {
-      params["dynamicTools"] = dispatchTools(orchestrator.dispatchReports === true);
-    }
   }
   const merged: Record<string, unknown> = {
     ...params,
@@ -76,41 +68,6 @@ export function threadParams(
   // A raw matching built-in profile is allowed, but Codex rejects both selectors.
   if (merged["permissions"] !== undefined) delete merged["sandbox"];
   return merged;
-}
-
-/**
- * A worker thread's priming: the orchestrator's execution posture — sandbox,
- * approvals, model, effort, config layer — without its identity. No doctrine
- * prompts (a worker is vanilla codex plus the workspace's AGENTS.md chain)
- * and no dispatch tools (workers do not dispatch workers). `threadSource` is
- * start-only; resume quietly ignores it rather than validating it.
- */
-export function workerThreadParams(
-  config: ServerConfig,
-  kind: "start" | "resume" = "start",
-): Record<string, unknown> {
-  const orchestrator = config.orchestrator;
-  const params: Record<string, unknown> = {
-    cwd: orchestrator.workspace,
-    approvalPolicy: orchestrator.approvalPolicy,
-  };
-  if (kind === "start") params["threadSource"] = WORKER_THREAD_SOURCE;
-  if (orchestrator.permissions !== undefined) params["permissions"] = orchestrator.permissions;
-  else params["sandbox"] = orchestrator.sandbox;
-
-  setIfDefined(params, "model", orchestrator.model);
-  setIfDefined(params, "modelProvider", orchestrator.modelProvider);
-  setIfDefined(params, "serviceTier", orchestrator.serviceTier);
-  setIfDefined(params, "approvalsReviewer", orchestrator.approvalsReviewer);
-  setIfDefined(params, "runtimeWorkspaceRoots", orchestrator.runtimeWorkspaceRoots);
-
-  const codexConfig = {
-    ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
-    ...orchestrator.config,
-  };
-  if (Object.keys(codexConfig).length > 0) params["config"] = codexConfig;
-  validateFullAccessParams(params, "worker");
-  return params;
 }
 
 /**

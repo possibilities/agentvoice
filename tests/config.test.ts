@@ -97,23 +97,6 @@ describe("resolveConfig", () => {
     );
   });
 
-  test("dispatch-reports requires dispatch", () => {
-    expect(() =>
-      resolveConfig({}, { orchestrator: { "dispatch-reports": true } }, {}, HOME),
-    ).toThrow(/requires orchestrator.dispatch/);
-    const config = resolveConfig(
-      {},
-      { orchestrator: { dispatch: true, "dispatch-reports": true } },
-      {},
-      HOME,
-    );
-    expect(config.orchestrator.dispatch).toBe(true);
-    expect(config.orchestrator.dispatchReports).toBe(true);
-    expect(
-      resolveConfig({}, { orchestrator: { dispatch: true } }, {}, HOME).orchestrator,
-    ).toHaveProperty("dispatchReports", undefined);
-  });
-
   test("configDir defaults to the config directory", () => {
     expect(resolveConfig({}, {}, {}, HOME).configDir).toBe("/home/tester/.config/agentvoice");
     expect(resolveConfig({}, {}, {}, HOME, { configDir: "/etc/avn" }).configDir).toBe("/etc/avn");
@@ -121,6 +104,18 @@ describe("resolveConfig", () => {
 });
 
 describe("parseJsonConfig", () => {
+  for (const key of ["dispatch", "dispatch-reports"]) {
+    for (const value of [true, false]) {
+      test(`retired orchestrator.${key}=${value} errors with a removal instruction`, () => {
+        const document = JSON.stringify({ orchestrator: { [key]: value } });
+        expect(() => parseJsonConfig(document, "legacy.json")).toThrow(
+          `legacy.json: orchestrator.${key} has been retired`,
+        );
+        expect(() => parseJsonConfig(document, "legacy.json")).toThrow("remove this key");
+      });
+    }
+  }
+
   test("parses nested sections", () => {
     const values = parseJsonConfig(
       JSON.stringify({
@@ -202,15 +197,6 @@ describe("parseJsonConfig", () => {
     expect(() =>
       parseJsonConfig('{"voice": {"include-startup-context": "yep"}}', "server.json"),
     ).toThrow(/must be true or false/);
-    expect(() => parseJsonConfig('{"orchestrator": {"dispatch": "yep"}}', "server.json")).toThrow(
-      /must be true or false/,
-    );
-    expect(parseJsonConfig('{"orchestrator": {"dispatch": true}}', "server.json")).toEqual({
-      orchestrator: { dispatch: true },
-    });
-    expect(() =>
-      parseJsonConfig('{"orchestrator": {"dispatch-reports": "yep"}}', "server.json"),
-    ).toThrow(/must be true or false/);
     expect(() => parseJsonConfig('{"orchestrator": 3}', "server.json")).toThrow(
       /must be an object/,
     );
@@ -235,7 +221,7 @@ describe("parseJsonConfig", () => {
     ).toThrow(/unknown option "accounts.__proto__"; known keys: balance, switch-threshold/);
     expect(() =>
       parseJsonConfig('{"orchestrator": {"__proto__": {"polluted": true}}}', "server.json"),
-    ).toThrow(/unknown option "orchestrator.__proto__"; known keys: workspace, dispatch/);
+    ).toThrow(/unknown option "orchestrator.__proto__"; known keys: workspace, model/);
     expect(() =>
       parseJsonConfig('{"voice": {"__proto__": {"polluted": true}}}', "server.json"),
     ).toThrow(/unknown option "voice.__proto__"; known keys: model, name, version/);
@@ -652,8 +638,6 @@ describe("resolveConfig characterization", () => {
     // (params.ts drops undefined); resolution must never default-inject.
     const { orchestrator, voice } = resolveConfig({}, {}, {}, HOME);
     const orchestratorLeaves = [
-      "dispatch",
-      "dispatchReports",
       "model",
       "effort",
       "personality",
@@ -682,12 +666,6 @@ describe("resolveConfig characterization", () => {
       "extra",
     ] as const;
     for (const key of voiceLeaves) expect(voice[key]).toBeUndefined();
-  });
-
-  test("dispatch-reports: false needs no dispatch", () => {
-    const config = resolveConfig({}, { orchestrator: { "dispatch-reports": false } }, {}, HOME);
-    expect(config.orchestrator.dispatchReports).toBe(false);
-    expect(config.orchestrator.dispatch).toBeUndefined();
   });
 
   test("config and extra pass through resolution unchanged", () => {

@@ -2,6 +2,12 @@
 
 Accepted 2026-09-04. Supersedes the topology in ADRs 0002–0005.
 
+Amendment 2026-09-04: the optional worker-manager/reporting portions below are
+retired. AgentVoice now supplies no custom worker tools, follow-up turns or
+worker cleanup. Native work/history remains Codex-owned; old main threads keep
+their locks until quit. See README's "Native work, no custom worker layer" for
+the config and saved-tool migration. The foreground/workspace topology stands.
+
 Bare AgentVoice now runs its TUI, audio, WebRTC and coordination in one process.
 It owns a stock Codex app-server child over native stdio. No Codex fork, embed,
 background Server, resident service, remote client or replacement supervisor.

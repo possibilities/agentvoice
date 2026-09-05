@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseJsonConfig, resolveConfig } from "../src/core/config.ts";
-import { realtimeParams, threadParams, workerThreadParams } from "../src/core/params.ts";
+import { realtimeParams, threadParams } from "../src/core/params.ts";
 import { configLoader, parseArgs, parseConsoleCommand } from "../src/main.ts";
 
 describe("workspace launch", () => {
@@ -29,7 +29,6 @@ describe("workspace launch", () => {
       "/shared",
     ]);
     expect(threadParams(config, {}, "start")["cwd"]).toBe("/home/test/code");
-    expect(workerThreadParams(config)["cwd"]).toBe("/home/test/code");
   });
   test("canonicalizes symlink launches once and rejects nonexistent/file workspaces", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "agentvoice-workspace-")));

@@ -38,18 +38,11 @@ not necessarily the general realtime config or another Codex UI. Explicit v3 is
 required for initial seed items; this is separate from the work model and --fast.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
-Old history remains. Old workers retain their old parent; reports never move
-to the new conversation. --no-continue/--fresh selects this policy at launch.
+Old history remains; native work in the old conversation stays there.
+--no-continue/--fresh selects this policy at launch.
 
 **Continue / resume** — Read/resume native eligible history, with no transcript
 copying or global thread.json pointer. --resume additionally chooses an exact ID.
-
-**Worker** — An optional sibling Codex thread dispatched through AgentVoice's
-dynamic tools. It uses the parent workspace/settings, runs only while the app
-is open, and is archived after settlement. Registry state is in-memory.
-
-**Worker report** — An opt-in tagged turn delivered to the worker's original
-parent. With dispatch-reports off, check_workers is the only report surface.
 
 **Prompt files** — Optional operator-provided markdown beside server.json.
 Absent is native behavior; present and empty sends an empty string. Not a
@@ -63,5 +56,6 @@ app's child, not a launchd job.
 Each input source releases only its own hold; the last release restores mute.
 
 **Historical terms** — Resident, Server, Remote console, control attachment,
-paired device and discovery refer to retired implementations in old ADRs,
-not current runtime components.
+paired device, discovery, custom Worker and Worker report refer to retired
+implementations in old ADRs, not current runtime components. Native Codex
+subagents are separate from the removed AgentVoice worker system.

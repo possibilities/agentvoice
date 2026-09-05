@@ -52,6 +52,11 @@ function spec(properties: Record<string, Spec>, key: string): Spec {
 }
 
 describe("generated schema invariants", () => {
+  test("retired worker controls are no longer advertised", () => {
+    const orchestrator = sectionProperties("orchestrator");
+    expect(orchestrator).not.toHaveProperty("dispatch");
+    expect(orchestrator).not.toHaveProperty("dispatch-reports");
+  });
   test("keeps draft-07 and the verbatim title and prompt-file contract text", () => {
     const schema = buildSchema();
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");

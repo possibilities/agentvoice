@@ -133,35 +133,37 @@ describe("foreground runtime ownership", () => {
     expect(h.native.closes).toBe(1);
     await h.cleanup();
   });
-  test("worker reports stay with their originating parent after Fresh; quit interrupts both", async () => {
-    const h = runtimeHarness({ orchestrator: { dispatch: true, "dispatch-reports": true } });
+  test("native completions never trigger report turns; Fresh preserves active conversation cleanup", async () => {
+    const h = runtimeHarness();
     try {
       await h.runtime.start();
       const parent = h.runtime.currentReady!.threadId;
-      await h.native.options.onRequest!("item/tool/call", {
+      h.native.options.onNotification("turn/started", {
         threadId: parent,
-        tool: "dispatch_worker",
-        arguments: { title: "check", brief: "inspect only" },
+        turn: { id: "parent-turn" },
       });
-      const worker = h.native.threads.find((t) => t.threadSource === "agentvoice-worker")!;
-      expect(worker.cwd).toBe(h.directory);
       await h.runtime.fresh();
       const fresh = h.runtime.currentReady!.threadId;
       h.native.options.onNotification("turn/completed", {
-        threadId: worker.id,
+        threadId: "native-child",
         turn: {
           id: "turn-1",
           status: "completed",
           items: [{ type: "agentMessage", text: "done" }],
         },
       });
-      await until(() =>
-        h.native.calls.some((c) => c.method === "turn/start" && c.params["threadId"] === parent),
-      );
       expect(
-        h.native.calls.some((c) => c.method === "turn/start" && c.params["threadId"] === fresh),
+        h.native.calls.some((c) =>
+          ["turn/start", "turn/steer", "thread/archive", "thread/delete"].includes(c.method),
+        ),
       ).toBe(false);
-      expect(h.runtime.workerSnapshots()).toEqual([]);
+      expect(h.native.threads).toHaveLength(2);
+      for (const call of h.native.calls.filter((c) => c.method === "thread/start")) {
+        expect(call.params).not.toHaveProperty("dynamicTools");
+        expect(call.params).not.toHaveProperty("baseInstructions");
+        expect(call.params).not.toHaveProperty("developerInstructions");
+      }
+      expect(h.native.options).not.toHaveProperty("onRequest");
       h.native.options.onNotification("turn/started", {
         threadId: fresh,
         turn: { id: "fresh-turn" },
@@ -188,10 +190,10 @@ describe("foreground runtime ownership", () => {
       await h.cleanup();
     }
   });
-  test("quota selection waits for active turns and outstanding worker report submissions", async () => {
+  test("quota selection waits for native active turns without injecting a follow-up", async () => {
     let picks = 0;
     const h = runtimeHarness(
-      { accounts: { balance: true }, orchestrator: { dispatch: true, "dispatch-reports": true } },
+      { accounts: { balance: true } },
       {
         pickAccount: async () => {
           picks++;
@@ -199,32 +201,24 @@ describe("foreground runtime ownership", () => {
         },
       },
     );
-    const report = deferred<unknown>();
     try {
       await h.runtime.start();
       const parent = h.runtime.currentReady!.threadId;
-      await h.native.options.onRequest!("item/tool/call", {
+      h.native.options.onNotification("turn/started", {
         threadId: parent,
-        tool: "dispatch_worker",
-        arguments: { title: "check", brief: "inspect" },
+        turn: { id: "native-turn" },
       });
-      const worker = h.native.threads.find((t) => t.threadSource === "agentvoice-worker")!;
       h.native.options.onNotification("account/rateLimits/updated", {
         rateLimits: { primary: { usedPercent: 99 } },
       });
       expect(picks).toBe(1);
-      h.native.override = (m, p) =>
-        m === "turn/start" && p["threadId"] === parent ? report.promise : undefined;
       h.native.options.onNotification("turn/completed", {
-        threadId: worker.id,
-        turn: { id: "turn-1", status: "completed", items: [] },
+        threadId: parent,
+        turn: { id: "native-turn", status: "completed", items: [] },
       });
-      await Bun.sleep(10);
-      expect(picks).toBe(1);
-      report.resolve({ turn: { id: "report" } });
       await until(() => picks === 2);
+      expect(h.native.calls.some((c) => c.method === "turn/start")).toBe(false);
     } finally {
-      report.resolve({});
       await h.cleanup();
     }
   });

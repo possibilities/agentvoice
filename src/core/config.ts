@@ -79,10 +79,6 @@ export interface OrchestratorConfig {
   workspace: string;
   sandbox: SandboxMode;
   approvalPolicy: ApprovalPolicy;
-  /** Declare the worker-dispatch tools on the orchestrator's thread. */
-  dispatch?: boolean;
-  /** Push `<worker_report>` turns at the orchestrator when workers finish. */
-  dispatchReports?: boolean;
   model?: string;
   effort?: string;
   personality?: Personality;
@@ -332,6 +328,15 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
   }
 
   const raw = document as Record<string, unknown>;
+  const orchestrator = raw["orchestrator"];
+  if (orchestrator && typeof orchestrator === "object") {
+    for (const key of ["dispatch", "dispatch-reports"]) {
+      if (Object.hasOwn(orchestrator, key))
+        throw new ConfigError(
+          `${source}: orchestrator.${key} has been retired with AgentVoice's custom worker tools; remove this key. Native Codex tools and voice handoffs are unchanged.`,
+        );
+    }
+  }
   if (Object.hasOwn(raw, "remote"))
     throw new ConfigError(
       `${source}: remote configuration has been retired; remove the remote section to use the foreground TUI`,
@@ -438,14 +443,6 @@ export function resolveConfig(
     );
   }
 
-  const dispatch = pickOrchestrator("dispatch");
-  const dispatchReports = pickOrchestrator("dispatch-reports");
-  if (dispatchReports === true && dispatch !== true) {
-    throw new ConfigError(
-      `orchestrator.dispatch-reports requires orchestrator.dispatch: true — there are no workers to report without the dispatch tools`,
-    );
-  }
-
   const launchCwd = options.launchCwd ?? process.cwd();
   const workspaceValue = pickOrchestrator("workspace") ?? launchCwd;
   if (!workspaceValue.trim()) throw new ConfigError("workspace must be a non-empty directory");
@@ -477,8 +474,6 @@ export function resolveConfig(
     workspace,
     sandbox: explicitSandbox ?? "danger-full-access",
     approvalPolicy: pickOrchestrator("approval-policy") ?? "never",
-    dispatch,
-    dispatchReports,
     model: pickOrchestrator("model"),
     effort: pickOrchestrator("effort"),
     personality: pickOrchestrator("personality"),

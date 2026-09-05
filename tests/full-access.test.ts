@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { type ConfigValues, resolveConfig } from "../src/core/config.ts";
 import { confirmFullAccess } from "../src/core/full-access.ts";
-import { threadParams, workerThreadParams } from "../src/core/params.ts";
+import { threadParams } from "../src/core/params.ts";
 import { VoiceRuntime } from "../src/core/runtime.ts";
 import { parseArgs, parseConsoleCommand } from "../src/main.ts";
 import { NativeStub, nativeFullAccess, runtimeHarness } from "./fixtures/runtime-harness.ts";
@@ -89,7 +89,7 @@ describe("mandatory full access", () => {
     ).toThrow("--allow-full-access");
   });
 
-  test("matching legacy settings and unrelated passthrough still work for main/resume/workers", () => {
+  test("matching legacy settings and unrelated passthrough still work for start/resume", () => {
     const config = resolveConfig(
       {},
       {
@@ -107,11 +107,7 @@ describe("mandatory full access", () => {
       {},
       "/test",
     );
-    for (const params of [
-      threadParams(config, {}, "start"),
-      threadParams(config, {}, "resume"),
-      workerThreadParams(config),
-    ])
+    for (const params of [threadParams(config, {}, "start"), threadParams(config, {}, "resume")])
       expect(params).toMatchObject({
         sandbox: "danger-full-access",
         approvalPolicy: "never",
@@ -186,32 +182,6 @@ describe("mandatory full access", () => {
       expect(h.runtime.currentReady).toBeNull();
       expect(h.native.closes).toBe(1);
       expect(h.ready).toHaveLength(1);
-    } finally {
-      await h.cleanup();
-    }
-  });
-
-  test("workers never submit work on unverified permissions and surface the refusal", async () => {
-    const h = runtimeHarness({ orchestrator: { dispatch: true } });
-    const errors: string[] = [];
-    h.events.onError = (message) => errors.push(message);
-    try {
-      await h.runtime.start();
-      h.native.override = (m) =>
-        m === "thread/start" ? Promise.resolve({ thread: { id: "bad-worker" } }) : undefined;
-      const result = await h.native.options.onRequest!("item/tool/call", {
-        threadId: h.runtime.currentReady!.threadId,
-        tool: "dispatch_worker",
-        arguments: { title: "test", brief: "test" },
-      });
-      expect(result?.["success"]).toBe(false);
-      expect(errors.join()).toContain("did not confirm");
-      expect(h.native.calls.some((c) => c.method === "turn/start")).toBe(false);
-      expect(
-        h.native.calls.some(
-          (c) => c.method === "thread/archive" && c.params["threadId"] === "bad-worker",
-        ),
-      ).toBe(true);
     } finally {
       await h.cleanup();
     }
