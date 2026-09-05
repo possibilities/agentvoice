@@ -101,6 +101,7 @@ export interface VoiceConfig {
   version?: RealtimeVersion;
   model?: string;
   name?: string;
+  quietResume?: boolean;
   includeStartupContext?: boolean;
   delegationAckFiller?: boolean;
   codexResponseHandoffMode?: HandoffMode;
@@ -546,6 +547,7 @@ export function resolveConfig(
     version: pickVoice("version"),
     model: pickVoice("model"),
     name: pickVoice("name"),
+    quietResume: pickVoice("quiet-resume"),
     includeStartupContext: pickVoice("include-startup-context"),
     delegationAckFiller: pickVoice("delegation-ack-filler"),
     codexResponseHandoffMode: pickVoice("codex-response-handoff-mode"),

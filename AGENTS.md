@@ -42,6 +42,9 @@ implementation.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Default effective WebRTC requests to v3 for compatibility after raw merging.
   Explicit versions/null and alternate transports win; never call this Codex's native default.
+  Quiet resume adds one developer initial item on WebRTC v3 reconnects only;
+  quiet-resume=false or explicit initial items (including seed files, []/null) win.
+  This is a frontend turn-taking instruction, not transcript replay or guaranteed silence.
   Validate final merged seeds/version and WebRTC v2 conflicts before child startup.
 - src/core/full-access.ts: reject incompatible permission selectors and require
   effective dangerFullAccess/never on start/resume/settings reports. Never infer
@@ -222,6 +225,13 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   explicit false/empty values through continue, resume, redial and Fresh.
   Do not seed these into user config or server.json.example. Skill isolation
   remains a separate decision. No AgentVoice account-management policy remains.
+- Quiet resume is the documented exception to unmodified voice startup behavior:
+  one developer initial item asks resumed/redialed v3 calls to wait for new input.
+  Keep the native prompt and context controls intact; no fabricated transcript,
+  default tail-flush work or history rewriting. First call of Fresh is unchanged.
+  A valid started notification marks later calls as reconnects; stale starts do not.
+  See ADR 0010 for stock 0.153.3 and desktop 26.831.20005 evidence. Fake protocol
+  tests do not establish live silence or complete voice-only recall.
 - No AgentVoice worker tools, registry, archival, reports, or custom turn
   submission. Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.

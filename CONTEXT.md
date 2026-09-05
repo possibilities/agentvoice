@@ -44,6 +44,12 @@ Old history remains; native work in the old conversation stays there.
 **Continue / resume** — Read/resume native eligible history, with no transcript
 copying or global thread.json pointer. --resume additionally chooses an exact ID.
 
+**Quiet resume** — AgentVoice's default WebRTC v3 reconnect instruction: wait
+for new input instead of repeating old context. A developer initial item leaves
+the native voice prompt intact. Explicit initial items or voice.quiet-resume=false
+disable this default. It is model guidance, not a silence guarantee; native
+working-thread history does not restore every voice-only exchange.
+
 **Prompt files** — Optional files explicitly named in server.json's prompt-files
 section. Relative paths use that config's directory. No reference sends no file
 override; a referenced empty file sends an empty string. Conventional filenames
