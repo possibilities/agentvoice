@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
-import { VoiceRuntime } from "../src/core/runtime.ts";
 import { observeTier, ServiceTierSelection, tierLabel } from "../src/core/service-tier.ts";
 import { parseArgs, parseConsoleCommand } from "../src/main.ts";
 import {
@@ -189,56 +187,6 @@ describe("native Fast launch policy", () => {
 });
 
 describe("Fast runtime propagation", () => {
-  test("each account rotation rechecks its own catalog before resuming", async () => {
-    for (const supported of [true, false]) {
-      const h = runtimeHarness({ accounts: { balance: true } });
-      const replacement = new NativeStub();
-      h.native.tiers = replacement.tiers = true;
-      h.native.main("persisted", h.directory);
-      replacement.main("persisted", h.directory);
-      if (!supported) replacement.models = [];
-      let opens = 0;
-      let picks = 0;
-      const runtime = new VoiceRuntime(h.config, "test", h.events, {
-        fast: true,
-        locksDir: join(h.directory, "locks"),
-        connect: (options) => (++opens === 1 ? h.native : replacement).connect(options),
-        pickAccount: async () =>
-          ++picks === 1
-            ? { kind: "canonical", reason: "initial" }
-            : {
-                kind: "profile",
-                email: "test@example.invalid",
-                reason: "test",
-                profile: { directory: join(h.directory, "profile"), slug: "test", identity: null },
-              },
-      });
-      try {
-        await runtime.start();
-        h.native.options.onNotification("account/rateLimits/updated", {
-          rateLimits: { primary: { usedPercent: 99 } },
-        });
-        const end = Date.now() + 2_000;
-        while (h.ready.length < 2 && !h.fatal.length && Date.now() < end) await Bun.sleep(5);
-        expect(replacement.calls.some((c) => c.method === "model/list")).toBe(true);
-        if (supported) {
-          expect(runtime.currentReady?.serviceTier).toBe("priority");
-          expect(
-            replacement.calls.find((c) => c.method === "thread/resume")?.params["serviceTier"],
-          ).toBe("priority");
-          expect(h.fatal).toEqual([]);
-        } else {
-          expect(h.fatal[0]).toContain("Cannot verify --fast");
-          expect(replacement.calls.some((c) => c.method === "thread/resume")).toBe(false);
-          expect(runtime.currentReady).toBeNull();
-        }
-      } finally {
-        await runtime.shutdown();
-        await h.cleanup();
-      }
-    }
-  });
-
   test("Fast and standard reach continue and Fresh without changing voice requests", async () => {
     for (const fast of [true, false]) {
       const h = runtimeHarness(

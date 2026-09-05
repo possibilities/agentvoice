@@ -9,7 +9,7 @@
  *   key must stay unset through parse so resolution can keep it unset and
  *   never send it to codex at all. The `default` entries in `.meta()` are
  *   schema documentation of resolution-time behavior, not parse-time values.
- * - The root, `accounts`, `orchestrator`, and `voice` reject unknown keys.
+ * - The root, `orchestrator`, and `voice` reject unknown keys.
  *   `strictObject` alone does not finish that job: zod skips a literal own
  *   `__proto__` key, so `config.ts` scans the raw document for it separately.
  *   `orchestrator.config`, `orchestrator.extra`, and `voice.extra` are open
@@ -35,35 +35,8 @@ export type HistoryMode = (typeof HISTORY_MODES)[number];
 export type RealtimeVersion = (typeof REALTIME_VERSIONS)[number];
 export type HandoffMode = (typeof HANDOFF_MODES)[number];
 
-export const DEFAULT_SWITCH_THRESHOLD = 95;
-
 /** An object whose contents forward verbatim — never recursed or validated. */
 const passthrough = (description: string) => z.looseObject({}).describe(description);
-
-export const accountsValuesSchema = z
-  .strictObject({
-    balance: z
-      .boolean()
-      .meta({
-        description:
-          "Ask the balancer (`agentusage balance codex`, falling back to `codex-swap select`) which account to run on at every app-server child spawn. Needs profiles: `agentvoice accounts add <slug>` once per account — with codex-swap installed and none logged in, boot exits with the exact onboarding commands. Without the balancer CLIs, or on transient refusals, the app falls back to the canonical home loudly. Default: false (the canonical ~/.codex and whatever `codex login` put there).",
-        default: false,
-      })
-      .optional(),
-    "switch-threshold": z
-      .int()
-      .min(50)
-      .max(100)
-      .meta({
-        description: "Utilization percent at which an idle child rotates to a better account.",
-        default: DEFAULT_SWITCH_THRESHOLD,
-      })
-      .optional(),
-  })
-  .meta({
-    description:
-      "Opt-in multi-account balancing over account profiles: per-account CODEX_HOMEs under ~/.local/state/agentvoice/accounts/, each holding its own auth.json and private app-server control directory, with session/config state symlinked to the canonical ~/.codex so every account shares one session store (threads resume across accounts).",
-  });
 
 export const orchestratorValuesSchema = z
   .strictObject({
@@ -76,7 +49,7 @@ export const orchestratorValuesSchema = z
     model: z
       .string()
       .describe(
-        "Orchestrator model id. Mind the auth class: codex-branded models (gpt-5.3-codex …) are rejected on ChatGPT-account auth. Default: codex config.",
+        "Working-agent model id passed to Codex. Availability depends on the native provider and authentication. Default: Codex configuration.",
       )
       .optional(),
     effort: z
@@ -235,7 +208,6 @@ const serverShape = {
       'The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else "codex" on PATH.',
     )
     .optional(),
-  accounts: accountsValuesSchema.optional(),
   orchestrator: orchestratorValuesSchema.optional(),
   voice: voiceValuesSchema.optional(),
 };
@@ -252,12 +224,10 @@ export const configFileSchema = z.strictObject({
   ...serverShape,
 });
 
-export type AccountsValues = z.infer<typeof accountsValuesSchema>;
 export type OrchestratorValues = z.infer<typeof orchestratorValuesSchema>;
 export type VoiceValues = z.infer<typeof voiceValuesSchema>;
 export type ConfigValues = z.infer<typeof configValuesSchema>;
 
 export const SERVER_KEYS: ReadonlyArray<string> = Object.keys(serverShape);
-export const ACCOUNTS_KEYS: ReadonlyArray<string> = Object.keys(accountsValuesSchema.shape);
 export const ORCHESTRATOR_KEYS: ReadonlyArray<string> = Object.keys(orchestratorValuesSchema.shape);
 export const VOICE_KEYS: ReadonlyArray<string> = Object.keys(voiceValuesSchema.shape);

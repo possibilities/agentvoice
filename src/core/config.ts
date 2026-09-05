@@ -20,14 +20,11 @@ import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
 import {
-  ACCOUNTS_KEYS,
-  type AccountsValues,
   APPROVAL_POLICIES,
   type ApprovalPolicy,
   type ApprovalsReviewer,
   type ConfigValues,
   configValuesSchema,
-  DEFAULT_SWITCH_THRESHOLD,
   type HandoffMode,
   type HistoryMode,
   ORCHESTRATOR_KEYS,
@@ -43,7 +40,6 @@ import {
 import { validateFullAccessParams } from "./full-access.ts";
 
 export type {
-  AccountsValues,
   ApprovalPolicy,
   ApprovalsReviewer,
   ConfigValues,
@@ -56,10 +52,8 @@ export type {
   VoiceValues,
 } from "./config-schema.ts";
 export {
-  ACCOUNTS_KEYS,
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
-  DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
@@ -112,20 +106,11 @@ export interface VoiceConfig {
   extra?: Record<string, unknown>;
 }
 
-/** Opt-in multi-account balancing over account profiles. */
-export interface AccountsConfig {
-  /** Select the spawn account via the balancer; off means the canonical home. */
-  balance: boolean;
-  /** Utilization percent at which an idle child rotates to a better account. */
-  switchThreshold: number;
-}
-
 export interface ServerConfig {
   codex: string;
   debug: boolean;
   /** Directory prompt files are discovered in. */
   configDir: string;
-  accounts: AccountsConfig;
   orchestrator: OrchestratorConfig;
   voice: VoiceConfig;
 }
@@ -219,7 +204,6 @@ function unknownKeyMessage(path: string, known: readonly string[]): string {
 
 /** The strict section objects, by dotted path, for unknown-key messages. */
 const KNOWN_KEYS: Record<string, readonly string[]> = {
-  accounts: ACCOUNTS_KEYS,
   orchestrator: ORCHESTRATOR_KEYS,
   voice: VOICE_KEYS,
 };
@@ -328,6 +312,10 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
   }
 
   const raw = document as Record<string, unknown>;
+  if (Object.hasOwn(raw, "accounts"))
+    throw new ConfigError(
+      `${source}: accounts configuration has been retired; remove the entire accounts section, including balance: false. AgentVoice inherits native Codex authentication and CODEX_HOME. Existing profiles and credentials are untouched; see README migration notes.`,
+    );
   const orchestrator = raw["orchestrator"];
   if (orchestrator && typeof orchestrator === "object") {
     for (const key of ["dispatch", "dispatch-reports"]) {
@@ -428,8 +416,6 @@ export function resolveConfig(
   options: ResolveOptions = {},
 ): ServerConfig {
   const pickTop = <K extends keyof ConfigValues>(key: K): ConfigValues[K] => cli[key] ?? file[key];
-  const pickAccounts = <K extends keyof AccountsValues>(key: K): AccountsValues[K] =>
-    cli.accounts?.[key] ?? file.accounts?.[key];
   const pickOrchestrator = <K extends keyof OrchestratorValues>(key: K): OrchestratorValues[K] =>
     cli.orchestrator?.[key] ?? file.orchestrator?.[key];
   const pickVoice = <K extends keyof VoiceValues>(key: K): VoiceValues[K] =>
@@ -522,10 +508,6 @@ export function resolveConfig(
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     debug: options.debug ?? false,
     configDir: options.configDir ?? dirname(defaultConfigPath(env, home)),
-    accounts: {
-      balance: pickAccounts("balance") ?? false,
-      switchThreshold: pickAccounts("switch-threshold") ?? DEFAULT_SWITCH_THRESHOLD,
-    },
     orchestrator,
     voice,
   };

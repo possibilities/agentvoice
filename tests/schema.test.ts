@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { buildSchema } from "../scripts/generate-schema.ts";
 import {
-  ACCOUNTS_KEYS,
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
-  DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
   ORCHESTRATOR_KEYS,
@@ -52,7 +50,8 @@ function spec(properties: Record<string, Spec>, key: string): Spec {
 }
 
 describe("generated schema invariants", () => {
-  test("retired worker controls are no longer advertised", () => {
+  test("retired account and worker controls are no longer advertised", () => {
+    expect(topProperties()).not.toHaveProperty("accounts");
     const orchestrator = sectionProperties("orchestrator");
     expect(orchestrator).not.toHaveProperty("dispatch");
     expect(orchestrator).not.toHaveProperty("dispatch-reports");
@@ -66,11 +65,11 @@ describe("generated schema invariants", () => {
     );
   });
 
-  test("strict at root, accounts, orchestrator, voice; open in the passthrough subtrees", () => {
+  test("strict at root, orchestrator, voice; open in the passthrough subtrees", () => {
     const schema = buildSchema();
     expect(schema["additionalProperties"]).toBe(false);
     const properties = topProperties();
-    for (const section of ["accounts", "orchestrator", "voice"]) {
+    for (const section of ["orchestrator", "voice"]) {
       expect(spec(properties, section)["additionalProperties"]).toBe(false);
     }
     // config/extra forward to the codex key space: they must never close.
@@ -90,7 +89,6 @@ describe("generated schema invariants", () => {
 
   test("documents exactly the config keys plus $schema", () => {
     expect(Object.keys(topProperties()).sort()).toEqual(["$schema", ...SERVER_KEYS].sort());
-    expect(Object.keys(sectionProperties("accounts")).sort()).toEqual([...ACCOUNTS_KEYS].sort());
     expect(Object.keys(sectionProperties("orchestrator")).sort()).toEqual(
       [...ORCHESTRATOR_KEYS].sort(),
     );
@@ -99,12 +97,6 @@ describe("generated schema invariants", () => {
   });
 
   test("enums, bounds, and defaults mirror config.ts", () => {
-    const accounts = sectionProperties("accounts");
-    expect(spec(accounts, "balance")["default"]).toBe(false);
-    expect(spec(accounts, "switch-threshold")["minimum"]).toBe(50);
-    expect(spec(accounts, "switch-threshold")["maximum"]).toBe(100);
-    expect(spec(accounts, "switch-threshold")["default"]).toBe(DEFAULT_SWITCH_THRESHOLD);
-
     const orchestrator = sectionProperties("orchestrator");
     expect(spec(orchestrator, "personality")["enum"]).toEqual([...PERSONALITIES]);
     expect(spec(orchestrator, "sandbox")["enum"]).toEqual([...SANDBOX_MODES]);
@@ -133,7 +125,6 @@ describe("generated schema invariants", () => {
   test("every key carries documentation", () => {
     const sections = [
       topProperties(),
-      sectionProperties("accounts"),
       sectionProperties("orchestrator"),
       sectionProperties("voice"),
     ];

@@ -46,7 +46,7 @@ interface Catalog {
   provider: string;
 }
 
-/** One instance per child/account, so account rotation never reuses another catalog. */
+/** One instance per owned Codex child; model capabilities come from that child's catalog. */
 export class ServiceTierSelection {
   private catalog: Promise<Catalog> | undefined;
 

@@ -12,25 +12,6 @@
       "type": "string",
       "description": "The codex binary to spawn. Tilde-expanded. Default: $CODEX_PATH, else \"codex\" on PATH."
     },
-    "accounts": {
-      "type": "object",
-      "description": "Opt-in multi-account balancing over account profiles: per-account CODEX_HOMEs under ~/.local/state/agentvoice/accounts/, each holding its own auth.json and private app-server control directory, with session/config state symlinked to the canonical ~/.codex so every account shares one session store (threads resume across accounts).",
-      "properties": {
-        "balance": {
-          "type": "boolean",
-          "description": "Ask the balancer (`agentusage balance codex`, falling back to `codex-swap select`) which account to run on at every app-server child spawn. Needs profiles: `agentvoice accounts add <slug>` once per account — with codex-swap installed and none logged in, boot exits with the exact onboarding commands. Without the balancer CLIs, or on transient refusals, the app falls back to the canonical home loudly. Default: false (the canonical ~/.codex and whatever `codex login` put there).",
-          "default": false
-        },
-        "switch-threshold": {
-          "type": "integer",
-          "minimum": 50,
-          "maximum": 100,
-          "description": "Utilization percent at which an idle child rotates to a better account.",
-          "default": 95
-        }
-      },
-      "additionalProperties": false
-    },
     "orchestrator": {
       "type": "object",
       "description": "Primes the orchestrator agent — the codex thread that does the actual work.",
@@ -41,7 +22,7 @@
         },
         "model": {
           "type": "string",
-          "description": "Orchestrator model id. Mind the auth class: codex-branded models (gpt-5.3-codex …) are rejected on ChatGPT-account auth. Default: codex config."
+          "description": "Working-agent model id passed to Codex. Availability depends on the native provider and authentication. Default: Codex configuration."
         },
         "effort": {
           "type": "string",

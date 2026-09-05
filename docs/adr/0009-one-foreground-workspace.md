@@ -8,6 +8,15 @@ worker cleanup. Native work/history remains Codex-owned; old main threads keep
 their locks until quit. See README's "Native work, no custom worker layer" for
 the config and saved-tool migration. The foreground/workspace topology stands.
 
+Amendment 2026-09-04: the optional account-profile/balancing portions below are
+also retired. The owned child inherits CODEX_HOME unchanged; Codex alone handles
+login state and credential refresh. No account-tool calls, profile reconciliation,
+quota-triggered child replacement or account probe remain. Retired accounts
+commands/config fail clearly, including false/empty config. Existing profile
+directories, credentials, symlinks and native history are preserved; selecting
+an existing home is an explicit operator environment choice. See README's
+"Native authentication" for migration. This does not change child ownership.
+
 Bare AgentVoice now runs its TUI, audio, WebRTC and coordination in one process.
 It owns a stock Codex app-server child over native stdio. No Codex fork, embed,
 background Server, resident service, remote client or replacement supervisor.

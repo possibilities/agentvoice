@@ -3,9 +3,8 @@ import { join } from "node:path";
 import { type ConfigValues, resolveConfig } from "../src/core/config.ts";
 import { confirmFullAccess } from "../src/core/full-access.ts";
 import { threadParams } from "../src/core/params.ts";
-import { VoiceRuntime } from "../src/core/runtime.ts";
 import { parseArgs, parseConsoleCommand } from "../src/main.ts";
-import { NativeStub, nativeFullAccess, runtimeHarness } from "./fixtures/runtime-harness.ts";
+import { nativeFullAccess, runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("mandatory full access", () => {
   test("launch requires the exact valueless opt-in; help is exempt", () => {
@@ -183,47 +182,6 @@ describe("mandatory full access", () => {
       expect(h.native.closes).toBe(1);
       expect(h.ready).toHaveLength(1);
     } finally {
-      await h.cleanup();
-    }
-  });
-
-  test("an account replacement must reconfirm permissions", async () => {
-    const h = runtimeHarness({ accounts: { balance: true } });
-    const replacement = new NativeStub();
-    h.native.main("persisted", h.directory);
-    replacement.main("persisted", h.directory);
-    replacement.override = (m) =>
-      m === "thread/resume" ? Promise.resolve({ thread: { id: "persisted" } }) : undefined;
-    let opens = 0;
-    let picks = 0;
-    const runtime = new VoiceRuntime(h.config, "test", h.events, {
-      locksDir: join(h.directory, "locks"),
-      connect: (options) => (++opens === 1 ? h.native : replacement).connect(options),
-      pickAccount: async () =>
-        ++picks === 1
-          ? { kind: "canonical", reason: "test" }
-          : {
-              kind: "profile",
-              email: "test@example.invalid",
-              reason: "test",
-              profile: { directory: join(h.directory, "profile"), slug: "test", identity: null },
-            },
-    });
-    try {
-      await runtime.start();
-      h.native.options.onNotification("account/rateLimits/updated", {
-        rateLimits: { primary: { usedPercent: 99 } },
-      });
-      const deadline = Date.now() + 2000;
-      while (!h.fatal.length && Date.now() < deadline) await Bun.sleep(5);
-      expect(h.fatal.join()).toContain("did not confirm");
-      expect(h.ready).toHaveLength(1);
-      expect(runtime.currentReady).toBeNull();
-      expect(
-        replacement.calls.some((c) => ["thread/realtime/start", "turn/start"].includes(c.method)),
-      ).toBe(false);
-    } finally {
-      await runtime.shutdown();
       await h.cleanup();
     }
   });

@@ -6,7 +6,7 @@ child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
 Full access is an intentional product exception (see below). The defaults audit
-is not finished: account balancing and remaining prompt/settings passthrough need review.
+is not finished: remaining prompt/settings passthrough still needs review.
 
 ## Start here
 
@@ -29,13 +29,13 @@ alias; `--fresh` is an alias for `--no-continue`.
 Every voice launch requires `--allow-full-access`, including `console`, continue
 and resume. Without it the command errors (exit 2) before reading config, starting
 Codex or opening the microphone. No confirmation dialog, environment variable,
-config key or remembered consent substitutes for the flag. Help and `accounts`
-administration remain available without it.
+config key or remembered consent substitutes for the flag. Help remains available
+without it; retired commands report their migration errors without launching.
 
 This permits unrestricted command filesystem/network access with native
 `danger-full-access` and approval policy `never`. Workspace selection does **not**
-confine file access. AgentVoice verifies Codex's effective start/resume responses, including Fresh and
-account rotation. Missing/restricted permission reports fail closed. Managed Codex
+confine file access. AgentVoice verifies Codex's effective start/resume responses,
+including Fresh. Missing/restricted permission reports fail closed. Managed Codex
 requirements are never bypassed or rewritten to make launch succeed.
 
 Incompatible `sandbox`, `approval-policy`, named permission profiles and native
@@ -105,7 +105,7 @@ continued after exit. Workspace selection is not a memory or security sandbox.
 - Redial renews voice on the same conversation using overlapping WebRTC peers;
   automatic renewal uses the same path. Fresh closes old media first.
 - Device selection, model/effort/voice overrides, config/prompt passthrough,
-  voice-name hot reload and optional account balancing.
+  voice-name hot reload.
 - Per-launch opt-in debug logs; no phone remote, pairing, listener/discovery,
   Android packaging, separate Server, resident service or Herdr integration.
 
@@ -177,8 +177,8 @@ neither flag is supplied. Fast enables only the thread-local native feature
 gate; AgentVoice never saves this choice to global Codex configuration.
 Native thread history/settings still follow Codex's own persistence rules.
 
-Fast checks the current child's paginated model catalog, including hidden models,
-and rechecks after account rotation. Unknown/unsupported models or unavailable
+Fast checks the current child's paginated model catalog, including hidden models.
+Unknown/unsupported models or unavailable
 capability information produce an error, not a model substitution or silent
 fallback. A per-thread provider override differing from the child's catalog
 provider cannot be verified; configure that provider natively or omit `--fast`.
@@ -293,21 +293,48 @@ The native `orchestrator.extra.dynamicTools` escape hatch still passes through
 explicit metadata, but AgentVoice implements no client-defined tools. Unknown
 tool requests receive a protocol error. This does not disable Codex's own tools.
 
-## Optional accounts
+## Native authentication
 
-`accounts.balance: true` asks `agentusage balance codex`, with
-`codex-swap select` fallback, for an account at launch and idle rotation.
-`agentvoice accounts add <slug>` creates/logs in a profile;
-`accounts list` lists profiles. Each profile has a distinct authentication
-grant and shared native session/config state. Never copy rotating grants.
-No rotation while voice or native turns are active.
-Account selection remains opt-in.
+Log in with stock `codex login` before launching AgentVoice. The owned child
+inherits your environment, including `CODEX_HOME`; if unset, Codex resolves its
+own default home (`~/.codex`). Codex owns credential storage and refresh—AgentVoice
+does not read credentials, launch login, select accounts or replace its child
+in response to quota updates. Native credential-store settings remain native.
+See [Codex authentication](https://learn.chatgpt.com/docs/auth#credential-storage).
+
+To deliberately use another existing native home, pass the same environment to
+both commands (examples only; nothing is configured automatically):
+
+```sh
+CODEX_HOME=/absolute/path/to/codex-home codex login
+CODEX_HOME=/absolute/path/to/codex-home agentvoice --allow-full-access
+```
+
+Use the same stock Codex executable for login and AgentVoice's `--codex` option
+if your shell's `codex` is a custom wrapper. Changing `CODEX_HOME` also changes
+the native configuration/history available for workspace-local continuation.
+AgentVoice does not merge or migrate those stores.
+
+### Migrating former account profiles
+
+The entire `accounts` config section and `agentvoice accounts` commands are
+retired. Remove the section from your chosen `server.json`, even if it only says
+`balance: false` or is empty; launch otherwise errors before starting Codex/audio.
+The old account-profile/inference probe is also removed.
+
+Existing `~/.local/state/agentvoice/accounts/<slug>` directories (or the XDG
+equivalent), credentials and symlinks are preserved, never reconciled or deleted.
+To keep using one intentionally, set `CODEX_HOME` to its existing absolute path.
+Its existing shared-state links still apply; AgentVoice no longer maintains them.
+Without that explicit selection, no old profile is chosen automatically. Do not
+copy authentication grants between stores; use native login if needed. No global
+configuration, services or other account tools are changed by this removal.
 
 ## State and migration
 
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
-`thread-locks/`, optional `accounts/`, and `runs/<time>-<pid>.log` with
+`thread-locks/` and `runs/<time>-<pid>.log` with
 `--debug`. Lock files are inert after exit; the kernel owns their lifetime.
 Debug logs may contain prompts, transcripts and protocol details—keep them private.
 They also record the selected workspace and conversation ID.
@@ -336,7 +363,7 @@ bun run app-server:probe
 
 Unit tests use fake protocol/media boundaries and no microphone or inference.
 The native probe starts its own stock child, initializes, lists workspace
-history, and closes—no turns or audio. `audio:probe` uses hardware;
-`accounts:probe` may use real accounts/inference and is a separate explicit check.
+history, and closes—no turns or audio. `audio:probe` uses hardware and requires
+an explicit live check.
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for the ownership decision.

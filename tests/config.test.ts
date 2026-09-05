@@ -211,14 +211,11 @@ describe("parseJsonConfig", () => {
   // language and would not create the own property this exercises.
   test("a __proto__ key is an unknown option at every strict level", () => {
     expect(() => parseJsonConfig('{"__proto__": {"polluted": true}}', "server.json")).toThrow(
-      /unknown option "__proto__"; known keys: codex, accounts, orchestrator, voice/,
+      /unknown option "__proto__"; known keys: codex, orchestrator, voice/,
     );
     expect(() =>
       parseJsonConfig('{"codex": "codex", "__proto__": {"polluted": true}}', "server.json"),
     ).toThrow(/unknown option "__proto__"/);
-    expect(() =>
-      parseJsonConfig('{"accounts": {"__proto__": {"polluted": true}}}', "server.json"),
-    ).toThrow(/unknown option "accounts.__proto__"; known keys: balance, switch-threshold/);
     expect(() =>
       parseJsonConfig('{"orchestrator": {"__proto__": {"polluted": true}}}', "server.json"),
     ).toThrow(/unknown option "orchestrator.__proto__"; known keys: workspace, model/);
@@ -409,32 +406,6 @@ describe("parseJsonConfig characterization", () => {
     expect(() => parseJsonConfig('{"codex": 3}', "server.json")).toThrow(/codex/);
   });
 
-  test("accounts: shape, balance type, and unknown keys are named", () => {
-    expect(
-      parseJsonConfig('{"accounts": {"balance": true, "switch-threshold": 80}}', "server.json"),
-    ).toEqual({ accounts: { balance: true, "switch-threshold": 80 } });
-    expect(() => parseJsonConfig('{"accounts": 3}', "server.json")).toThrow(/accounts/);
-    expect(() => parseJsonConfig('{"accounts": {"balance": "yes"}}', "server.json")).toThrow(
-      /accounts\.balance/,
-    );
-    expect(() => parseJsonConfig('{"accounts": {"nope": 1}}', "server.json")).toThrow(
-      /accounts\.nope/,
-    );
-  });
-
-  test("accounts.switch-threshold is an integer between 50 and 100", () => {
-    for (const threshold of [50, 95, 100]) {
-      expect(
-        parseJsonConfig(`{"accounts": {"switch-threshold": ${threshold}}}`, "server.json"),
-      ).toEqual({ accounts: { "switch-threshold": threshold } });
-    }
-    for (const bad of ["49", "101", "95.5", '"95"', "true"]) {
-      expect(() =>
-        parseJsonConfig(`{"accounts": {"switch-threshold": ${bad}}}`, "server.json"),
-      ).toThrow(/accounts\.switch-threshold/);
-    }
-  });
-
   test("orchestrator string options are named on type errors", () => {
     const keys = ["workspace", "model", "effort", "permissions", "model-provider", "service-tier"];
     for (const key of keys) {
@@ -594,24 +565,6 @@ describe("cliToConfigValues characterization", () => {
 });
 
 describe("resolveConfig characterization", () => {
-  test("accounts defaults, file values, and CLI precedence", () => {
-    expect(resolveConfig({}, {}, {}, HOME).accounts).toEqual({
-      balance: false,
-      switchThreshold: 95,
-    });
-    expect(
-      resolveConfig({}, { accounts: { balance: true, "switch-threshold": 80 } }, {}, HOME).accounts,
-    ).toEqual({ balance: true, switchThreshold: 80 });
-    expect(
-      resolveConfig(
-        { accounts: { "switch-threshold": 60 } },
-        { accounts: { "switch-threshold": 80 } },
-        {},
-        HOME,
-      ).accounts.switchThreshold,
-    ).toBe(60);
-  });
-
   test("codex: CLI beats file beats $CODEX_PATH beats the bare default", () => {
     const env = { CODEX_PATH: "/env/codex" };
     expect(resolveConfig({ codex: "/cli/codex" }, { codex: "/file/codex" }, env, HOME).codex).toBe(

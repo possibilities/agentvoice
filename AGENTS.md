@@ -18,13 +18,12 @@ implementation.
   The latter opens hardware; never substitute it for a no-microphone UI test.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
   an owned stock child, no turns/audio. Verify before Codex runtime upgrades.
-- `bun run accounts:probe` — separate live account/profile/inference probe.
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
 
 ## Source map
 
 - src/main.ts: foreground CLI, console alias, workspace canonicalization;
-  accounts subcommand remains separate. Former service/remote verbs error.
+  former accounts/service/remote verbs error.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
@@ -49,12 +48,10 @@ implementation.
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/core/runtime.ts: launch/resume/Fresh, voice session, child lifecycle,
-  idle account rotation, config watcher. No reattachment/restart adoption,
+  config watcher. No account selection/rotation, reattachment/restart adoption,
   custom worker manager, tool callback or submitted report/follow-up turns.
   Keep old main-thread locks until quit; native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
-- src/core/accounts.ts: optional balancer selection, account-profile symlink farm,
-  distinct login grants and native shared history; no launchctl.
 - src/console/host.ts: direct in-process runtime/media/TUI wiring and quit cleanup.
 - src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
@@ -65,10 +62,11 @@ implementation.
 ## Ownership and state invariants
 
 Public voice launches require --allow-full-access before config/child/media
-startup, every time. No prompt or config/env bypass. Help/accounts are exempt.
+startup, every time. No prompt or config/env bypass. Help is exempt;
+retired commands report migration errors without launching.
 Full access / never is an intentional product invariant for main conversations,
 not a default to inherit or weaken. Confirm native start/resume responses on
-launch, Fresh and rotation. Unexpected human interaction is refused
+launch and Fresh. Unexpected human interaction is refused
 with a persistent TUI notice; never add automatic consent or invented answers.
 
 Resolve one existing absolute real workspace before spawning the child:
@@ -88,10 +86,14 @@ work and closes the child. Old thread.json/workers.json and native history are
 never rewritten, imported or removed. Per-thread locks allow independent launches;
 an old background version or another client does not participate in that guard.
 
-App state: thread-locks/, optional accounts/, and opt-in unique runs/ logs under
+App state: thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
-remain ~/.config/agentvoice/server.json and adjacent markdown files. Account
-profile homes keep independent auth.json and share canonical native state.
+remain ~/.config/agentvoice/server.json and adjacent markdown files. Inherit
+CODEX_HOME unchanged (including omission); native Codex owns authentication,
+credential storage/refresh, configuration and history. Never discover, create or
+reconcile profile homes, read auth.json, invoke account tools/login, or replace
+the child on quota events. Existing profile directories/links stay untouched.
+Retired accounts configuration errors even if false/empty; no automatic migration.
 
 Do not silently install, restart/uninstall old services, change global config,
 edit archive checkouts or start inference/audio probes. Those require scope.
@@ -154,12 +156,6 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
     session's model provider (`client.rs`, `REALTIME_CALLS_ENDPOINT`), so any
     provider-swapping wrapper (e.g. a localhost credential proxy) silently
     breaks realtime even when threads still work.
-11. ChatGPT refresh tokens rotate with server-side reuse detection
-    (`login/src/auth/manager.rs`, `refresh_token_reused`): exactly one party
-    may ever refresh a grant. Account profiles therefore hold their own
-    grant's `auth.json` and codex alone refreshes it — never copy credentials
-    between stores. Cross-profile resume and grant coexistence are re-verified
-    by `bun run accounts:probe`.
 
 
 ## Conventions
@@ -179,7 +175,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   experimental_realtime_ws_startup_context override. Preserve omission and
   explicit false/empty values through continue, resume, redial and Fresh.
   Do not seed these into user config or server.json.example. Skill isolation
-  remains a separate decision. Optional account behavior stays opt-in.
+  remains a separate decision. No AgentVoice account-management policy remains.
 - No AgentVoice worker tools, registry, archival, reports, or custom turn
   submission. Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.

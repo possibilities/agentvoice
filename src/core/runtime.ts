@@ -4,18 +4,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { stateDirectory } from "../paths.ts";
 import {
-  type AccountSelection,
-  accountsDirectory,
-  balancerCliPresent,
-  discoverProfiles,
-  listPoolAccounts,
-  maxUsedPercent,
-  onboardingFailureMessage,
-  reconcileFarm,
-  runBalancerCommand,
-  selectAccount,
-} from "./accounts.ts";
-import {
   AppServerConnection,
   AppServerError,
   type AttachOptions,
@@ -52,7 +40,6 @@ export interface RuntimeOptions extends SessionSelection {
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
-  pickAccount?: () => Promise<AccountSelection>;
 }
 
 export class VoiceRuntime {
@@ -62,10 +49,6 @@ export class VoiceRuntime {
   private prompts: Awaited<ReturnType<typeof readPrompts>> = {};
   private foundPrompts: string[] = [];
   private activeVoiceName: string | undefined;
-  private activeAccount: string | null = null;
-  private exhaustedPercent: number | null = null;
-  private rotating = false;
-  private rotationPromise: Promise<void> | null = null;
   private freshInFlight = false;
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
@@ -147,16 +130,7 @@ export class VoiceRuntime {
           `warning: ${PROMPT_FILES.orchestratorBaseInstructions} replaces Codex's entire system prompt`,
         );
       }
-      if (this.config.accounts.balance && !this.options.pickAccount && balancerCliPresent()) {
-        if (!discoverProfiles(accountsDirectory(process.env, homedir())).some((p) => p.identity)) {
-          throw new Error(
-            onboardingFailureMessage(
-              await listPoolAccounts((argv, ms) => runBalancerCommand(argv, ms, this.abort.signal)),
-            ),
-          );
-        }
-      }
-      await this.openConnection(await this.pickAccount());
+      await this.openConnection();
       const connection = this.requireConnection();
       const id = await selectThread(
         (method, params) => connection.request(method, params),
@@ -188,12 +162,12 @@ export class VoiceRuntime {
   }
 
   offer(sdp: string): void {
-    if (!this.threadReady || this.shuttingDown || this.rotating) return;
+    if (!this.threadReady || this.shuttingDown) return;
     this.sessions.handleOffer(sdp);
   }
 
   async fresh(): Promise<void> {
-    if (!this.threadReady || this.freshInFlight || this.rotating || this.shuttingDown) return;
+    if (!this.threadReady || this.freshInFlight || this.shuttingDown) return;
     this.freshInFlight = true;
     this.threadReady = false;
     try {
@@ -237,9 +211,6 @@ export class VoiceRuntime {
       } finally {
         this.abort.abort();
         await this.attachment?.close();
-        // Rotation may own an old child that is no longer the attachment,
-        // or a new child still initializing. Do not exit before it is reaped.
-        await this.rotationPromise;
         this.attachment = null;
         this.sessions.reset();
         for (const release of this.locks.values()) release();
@@ -358,39 +329,15 @@ export class VoiceRuntime {
         }
       }
     }
-    if (method === "account/rateLimits/updated" && this.config.accounts.balance) {
-      const used = maxUsedPercent(params);
-      this.exhaustedPercent =
-        used !== null && used >= this.config.accounts.switchThreshold ? used : null;
-    }
-    this.maybeRotate();
   }
 
-  private async pickAccount(): Promise<AccountSelection> {
+  private async openConnection(): Promise<void> {
     this.assertRunning();
-    if (!this.config.accounts.balance) return { kind: "canonical", reason: "balancing disabled" };
-    if (this.options.pickAccount) return this.options.pickAccount();
-    return selectAccount(discoverProfiles(accountsDirectory(process.env, homedir())), (argv, ms) =>
-      runBalancerCommand(argv, ms, this.abort.signal),
-    );
-  }
-
-  private async openConnection(selection: AccountSelection): Promise<void> {
-    this.assertRunning();
-    const env = { ...process.env };
-    if (selection.kind === "profile") {
-      reconcileFarm(
-        env["CODEX_HOME"] ?? join(homedir(), ".codex"),
-        selection.profile.directory,
-        (line) => this.events.onStatus(line),
-      );
-      env["CODEX_HOME"] = selection.profile.directory;
-    }
     let connection: RuntimeConnection | null = null;
     connection = await (this.options.connect ?? AppServerConnection.connect)({
       argv: appServerArgv(this.config.codex),
       cwd: this.config.orchestrator.workspace,
-      env,
+      env: { ...process.env },
       signal: this.abort.signal,
       clientVersion: this.version,
       onNotification: (method, params) => this.handleNotification(method, params),
@@ -416,53 +363,6 @@ export class VoiceRuntime {
       this.config.orchestrator.workspace,
       this.options.fast,
     );
-    this.activeAccount = selection.kind === "profile" ? selection.email : null;
-    this.exhaustedPercent = null;
-  }
-
-  private idle(): boolean {
-    return (
-      !this.shuttingDown &&
-      !this.freshInFlight &&
-      this.threadReady &&
-      !this.sessions.hasSession &&
-      this.activeTurns.size === 0
-    );
-  }
-
-  private maybeRotate(): void {
-    if (
-      !this.config.accounts.balance ||
-      this.exhaustedPercent === null ||
-      this.rotating ||
-      !this.idle()
-    )
-      return;
-    this.rotating = true;
-    this.rotationPromise = (async () => {
-      try {
-        const selection = await this.pickAccount();
-        if (!this.idle()) return;
-        if (selection.kind === "canonical" || selection.email === this.activeAccount) {
-          this.exhaustedPercent = null;
-          return;
-        }
-        this.threadReady = false;
-        const old = this.attachment;
-        this.attachment = null;
-        await old?.close();
-        await this.openConnection(selection);
-        if (this.threadId) await this.resumeThread(this.threadId);
-        this.threadReady = true;
-        this.events.onStatus(`rotated to ${selection.email}`);
-        this.rotating = false;
-        this.emitReady();
-      } catch (error) {
-        if (!this.shuttingDown) this.events.onFatal(`account rotation failed: ${String(error)}`);
-      } finally {
-        this.rotating = false;
-      }
-    })();
   }
 }
 

@@ -1,18 +1,10 @@
 #!/usr/bin/env bun
 /** Foreground voice application; console is a compatibility alias. */
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import packageJson from "../package.json";
 import { runConsoleHost } from "./console/host.ts";
-import {
-  AUTH_FILE,
-  accountsDirectory,
-  discoverProfiles,
-  listPoolAccounts,
-  onboardingCommands,
-  reconcileFarm,
-} from "./core/accounts.ts";
 import { ConfigError, cliToConfigValues, loadConfigFile, resolveConfig } from "./core/config.ts";
 import { defaultConfigPath, expandTilde } from "./paths.ts";
 
@@ -22,7 +14,6 @@ const USAGE = `agentvoice — a foreground Codex voice TUI
 Usage:
   agentvoice --allow-full-access [options]          Continue this workspace's conversation
   agentvoice console --allow-full-access [options]  Compatibility alias
-  agentvoice accounts <command>  Manage optional account profiles
 
 Options:
   --allow-full-access      Required each launch: unrestricted files/network, no approvals
@@ -56,22 +47,6 @@ Prompts are optional files beside the config:
 
 Keys: [m] microphone · [s] speaker · [r] redial · [f] fresh · [q] quit
       [ctrl+k] commands · [space] push-to-talk (key-release capable terminal)
-`;
-
-const ACCOUNTS_USAGE = `agentvoice accounts — account profiles for multi-account balancing
-
-A profile is a per-account CODEX_HOME under the state directory: its own
-auth.json and private app-server control directory, with session/config state
-symlinked to the canonical ~/.codex so all accounts share one session store.
-Enable selection with accounts.balance in server.json.
-
-Usage:
-  agentvoice accounts add <slug>   Create a profile and log it in
-                                   (runs codex login --device-auth inside it)
-  agentvoice accounts list         Show profiles and their identities
-
-The slug is a local label (lowercase letters, digits, hyphens) — pick one
-per ChatGPT account, e.g. "personal" or "work".
 `;
 
 export interface FlagSpec {
@@ -282,96 +257,6 @@ async function runConsoleCommand(argv: string[]): Promise<number> {
   return 0;
 }
 
-async function runAccountsCommand(argv: string[]): Promise<number> {
-  const subcommand = argv[0];
-  if (subcommand === undefined || subcommand === "--help" || subcommand === "help") {
-    console.log(ACCOUNTS_USAGE);
-    return subcommand === undefined ? 2 : 0;
-  }
-  const home = homedir();
-  const canonicalHome = process.env["CODEX_HOME"] ?? join(home, ".codex");
-  const accountsDir = accountsDirectory(process.env, home);
-
-  if (subcommand === "list") {
-    const profiles = discoverProfiles(accountsDir);
-    if (profiles.length === 0) console.log(`no account profiles in ${accountsDir}`);
-    for (const profile of profiles) {
-      const identity = profile.identity;
-      console.log(
-        identity
-          ? `${profile.slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`
-          : `${profile.slug}  (not logged in — rerun \`agentvoice accounts add ${profile.slug}\`)`,
-      );
-    }
-    const missing = onboardingCommands(await listPoolAccounts(), profiles);
-    if (missing.length > 0) {
-      console.log("\nregistered with codex-swap but still without a profile:");
-      for (const command of missing) console.log(`  ${command}`);
-    }
-    return 0;
-  }
-
-  if (subcommand === "add") {
-    const slug = argv[1];
-    if (slug === undefined || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-      throw new UsageError("accounts add requires a slug of lowercase letters, digits, hyphens");
-    }
-    if (!existsSync(canonicalHome)) {
-      throw new UsageError(`canonical codex home ${canonicalHome} does not exist; run codex once`);
-    }
-    const profileDir = join(accountsDir, slug);
-    reconcileFarm(canonicalHome, profileDir, (message) => console.error(`accounts: ${message}`));
-    const authPath = join(profileDir, AUTH_FILE);
-    if (!existsSync(authPath)) {
-      // codex owns the whole OAuth flow; the profile only scopes where the
-      // grant lands. Device auth works headless and never binds port 1455.
-      console.log(`logging in profile ${slug} (codex login --device-auth)…`);
-      console.log(
-        "This profile binds to whichever ChatGPT account approves the device\ncode — use a browser window signed into the account you mean.\n",
-      );
-      const child = Bun.spawn(["codex", "login", "--device-auth"], {
-        env: { ...process.env, CODEX_HOME: profileDir },
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-      if ((await child.exited) !== 0) {
-        console.error(`codex login failed for profile ${slug}`);
-        return 1;
-      }
-    }
-    const profile = discoverProfiles(accountsDir).find((candidate) => candidate.slug === slug);
-    const identity = profile?.identity;
-    if (!identity) {
-      console.error(`profile ${slug} has no readable identity; login may not have completed`);
-      return 1;
-    }
-    console.log(`${slug}  ${identity.email}  ${identity.plan ?? "(unknown plan)"}`);
-    const profiles = discoverProfiles(accountsDir);
-    const duplicate = profiles.find(
-      (candidate) => candidate.slug !== slug && candidate.identity?.email === identity.email,
-    );
-    if (duplicate) {
-      console.error(
-        `warning: ${duplicate.slug} holds the same account; selection maps by email and needs one profile per account`,
-      );
-    }
-    const pool = await listPoolAccounts();
-    const missing = onboardingCommands(pool, profiles);
-    if (missing.length > 0) {
-      console.log("\nstill without a profile:");
-      for (const command of missing) console.log(`  ${command}`);
-    } else if (pool.length > 0) {
-      console.log(
-        "\nevery codex-swap account has a profile; launch agentvoice --allow-full-access with accounts.balance enabled",
-      );
-    }
-    return 0;
-  }
-
-  throw new UsageError(`unknown accounts command "${subcommand}"`);
-}
-
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0];
   try {
@@ -379,7 +264,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(USAGE);
       return 0;
     }
-    if (command === "accounts") return await runAccountsCommand(argv.slice(1));
+    if (command === "accounts")
+      throw new UsageError(
+        "AgentVoice account management has been retired. Use codex login (optionally with CODEX_HOME set), then launch AgentVoice with the same environment. Existing profiles and credentials are untouched; see README migration notes.",
+      );
     if (command === "server" || command === "resident" || command === "remote") {
       throw new UsageError(
         `${command} has been retired. Run agentvoice --allow-full-access [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,

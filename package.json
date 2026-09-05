@@ -17,7 +17,6 @@
     "setup": "bun run scripts/setup.ts",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",
-    "accounts:probe": "bun run scripts/account-profiles-probe.ts",
     "field:demo": "bun run scripts/signal-field-demo.ts",
     "cli:install": "bun run scripts/install.ts",
     "generate:schema": "bun run scripts/generate-schema.ts && biome check --write server.schema.json",

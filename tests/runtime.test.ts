@@ -4,11 +4,6 @@ import { VoiceRuntime } from "../src/core/runtime.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
 import { deferred, NativeStub, runtimeHarness } from "./fixtures/runtime-harness.ts";
 
-async function until(predicate: () => boolean) {
-  const end = Date.now() + 2_000;
-  while (!predicate() && Date.now() < end) await Bun.sleep(5);
-  expect(predicate()).toBe(true);
-}
 describe("foreground runtime ownership", () => {
   test("new starts share the canonical workspace; Fresh changes identity and clears media", async () => {
     const h = runtimeHarness();
@@ -190,99 +185,56 @@ describe("foreground runtime ownership", () => {
       await h.cleanup();
     }
   });
-  test("quota selection waits for native active turns without injecting a follow-up", async () => {
-    let picks = 0;
-    const h = runtimeHarness(
-      { accounts: { balance: true } },
-      {
-        pickAccount: async () => {
-          picks++;
-          return { kind: "canonical", reason: "test" };
-        },
-      },
-    );
-    try {
-      await h.runtime.start();
-      const parent = h.runtime.currentReady!.threadId;
-      h.native.options.onNotification("turn/started", {
-        threadId: parent,
-        turn: { id: "native-turn" },
-      });
-      h.native.options.onNotification("account/rateLimits/updated", {
-        rateLimits: { primary: { usedPercent: 99 } },
-      });
-      expect(picks).toBe(1);
-      h.native.options.onNotification("turn/completed", {
-        threadId: parent,
-        turn: { id: "native-turn", status: "completed", items: [] },
-      });
-      await until(() => picks === 2);
-      expect(h.native.calls.some((c) => c.method === "turn/start")).toBe(false);
-    } finally {
-      await h.cleanup();
-    }
-  });
-  test("idle rotation replaces only this launch's child and resumes the same workspace/thread", async () => {
-    let picks = 0;
-    const h = runtimeHarness({ accounts: { balance: true } });
-    const replacement = new NativeStub();
-    h.native.main("persisted", h.directory);
-    replacement.main("persisted", h.directory);
+  test("quota and account events never replace the child, resume or submit work", async () => {
     let opens = 0;
-    const profileDir = join(h.directory, "profile");
+    const h = runtimeHarness();
     const runtime = new VoiceRuntime(h.config, "test", h.events, {
-      locksDir: join(h.directory, "locks"),
-      connect: (options) => (++opens === 1 ? h.native : replacement).connect(options),
-      pickAccount: async () =>
-        ++picks === 1
-          ? { kind: "canonical", reason: "initial" }
-          : {
-              kind: "profile",
-              email: "test@example.invalid",
-              reason: "test",
-              profile: { directory: profileDir, slug: "test", identity: null },
-            },
+      ...h.runtimeOptions,
+      connect: (options) => {
+        opens++;
+        return h.native.connect(options);
+      },
     });
     try {
       await runtime.start();
-      h.native.options.onNotification("account/rateLimits/updated", {
-        rateLimits: { primary: { usedPercent: 99 } },
-      });
-      await until(() => replacement.calls.some((c) => c.method === "thread/resume"));
-      await until(() => h.ready.length === 2);
-      expect(h.native.closes).toBe(1);
-      expect(runtime.currentReady?.threadId).toBe("persisted");
-      expect(replacement.options.cwd).toBe(h.directory);
-      expect(replacement.options.env?.["CODEX_HOME"]).toBe(profileDir);
-      expect(replacement.calls.some((c) => c.method === "thread/start")).toBe(false);
+      const id = runtime.currentReady!.threadId;
+      const before = [...h.native.calls];
+      for (const busy of [false, true]) {
+        if (busy)
+          h.native.options.onNotification("turn/started", {
+            threadId: id,
+            turn: { id: "native-turn" },
+          });
+        for (const usedPercent of [95, 99, 100]) {
+          h.native.options.onNotification("account/rateLimits/updated", {
+            rateLimits: { primary: { usedPercent }, secondary: { usedPercent } },
+          });
+          h.native.options.onNotification("account/updated", { authMode: "chatgpt" });
+        }
+        if (busy)
+          h.native.options.onNotification("turn/completed", {
+            threadId: id,
+            turn: { id: "native-turn", status: "completed" },
+          });
+        await Bun.sleep(10);
+        expect(opens).toBe(1);
+        expect(h.native.closes).toBe(0);
+        expect(h.native.calls).toEqual(before);
+        expect(runtime.currentReady!.threadId).toBe(id);
+      }
+      await runtime.fresh();
+      expect(opens).toBe(1);
+      expect(h.native.closes).toBe(0);
       expect(h.fatal).toEqual([]);
     } finally {
       await runtime.shutdown();
       await h.cleanup();
     }
   });
-  test("quit waits for the old child already closing during rotation", async () => {
-    let picks = 0;
+  test("quit waits for its child to close and is idempotent", async () => {
     const closing = deferred();
     const entered = deferred();
-    const h = runtimeHarness(
-      { accounts: { balance: true } },
-      {
-        pickAccount: async () =>
-          ++picks === 1
-            ? { kind: "canonical", reason: "initial" }
-            : {
-                kind: "profile",
-                email: "test@example.invalid",
-                reason: "test",
-                profile: {
-                  directory: "/unused-agentvoice-test-profile",
-                  slug: "test",
-                  identity: null,
-                },
-              },
-      },
-    );
+    const h = runtimeHarness();
     h.native.close = async () => {
       entered.resolve();
       await closing.promise;
@@ -291,14 +243,13 @@ describe("foreground runtime ownership", () => {
     };
     try {
       await h.runtime.start();
-      h.native.options.onNotification("account/rateLimits/updated", {
-        rateLimits: { primary: { usedPercent: 99 } },
-      });
-      await entered.promise;
       let done = false;
-      const shutdown = h.runtime.shutdown().then(() => {
+      const shutdown = h.runtime.shutdown();
+      expect(h.runtime.shutdown()).toBe(shutdown);
+      void shutdown.then(() => {
         done = true;
       });
+      await entered.promise;
       await Bun.sleep(10);
       expect(done).toBe(false);
       closing.resolve();

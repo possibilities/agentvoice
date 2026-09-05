@@ -36,7 +36,6 @@ The generated server.schema.json is authoritative for spelling and types.
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
 | Voice | model, name, version, include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
-| Accounts | balance, switch-threshold; accounts add/list commands |
 | Prompt files | VOICE, ORCHESTRATOR, ORCHESTRATOR_BASE, ORCHESTRATOR_SESSION_START/END, VOICE_SEED_DEVELOPER/USER/ASSISTANT markdown |
 
 Not every setting is a CLI flag: --help lists the common flags; server.json and
@@ -78,19 +77,20 @@ injection does not isolate those native inputs.
 
 Full access is a deliberate exception to vanilla settings: every launch needs
 --allow-full-access or errors before config/child/microphone startup. There is no
-confirmation dialog or environment/config bypass; help/accounts are exempt.
+confirmation dialog or environment/config bypass; help is exempt and retired
+commands report migration errors without launching.
 Matching legacy permission values are accepted, incompatible typed/raw selectors
 error, and the only supported profile is :danger-full-access. Native effective
-dangerFullAccess/never must be verified on start/resume, Fresh and account rotation.
+dangerFullAccess/never must be verified on start/resume and Fresh.
 Managed restrictions are never bypassed. A settings downgrade stops
 the child. Full access does not grant connector consent or answer tool questions:
 requests are refused through native denials or protocol errors with a persistent
 TUI explanation, not an approval UI or invented answers.
 
 Still application-owned: full-access-only posture, visible refusal handling,
-WebRTC/audio transport, workspace-local selection,
-renewal policy, and optional account policy. The project is not yet
-fully vanilla in defaults, nor a complete passthrough for every future Codex option.
+WebRTC/audio transport, workspace-local selection and renewal policy. The project
+is not yet fully vanilla in defaults, nor a complete passthrough for every future
+Codex option.
 
 ## Native voice context levers retained
 
@@ -116,9 +116,11 @@ layer was introduced.
 
 ## Optional features still present
 
-Accounts: independently logged-in profile homes, shared native history/config,
-balancer preference/fallback, quota observation, idle-only child replacement.
-Selection remains opt-in. Never copy auth grants between stores.
+Authentication: native Codex login, credential storage and refresh. CODEX_HOME
+passes through unchanged; Codex resolves its default when unset. AgentVoice
+never selects accounts or reacts to quota updates by replacing its child.
+An explicitly selected existing home supplies native configuration and history;
+there is no app-managed cross-home migration or shared-state reconciliation.
 
 TUI/media: signal field, status/elapsed timer, working-model tier, dB meters, command palette,
 mouse and keyboard mute/PTT, device selection, Opus/WebRTC, make-before-break
@@ -132,13 +134,20 @@ peers; phone/remote mode; pairing, identity/certificate management and network
 discovery/listeners; Android packaging; global thread selection and worker
 restart/adoption registry; active Herdr integration; deliberate AgentStart
 skill enabling; custom worker dispatch/check/cancel, completion-report turns,
-registry, archival retries and UI callbacks. Native history and private legacy
-state are untouched. Retired dispatch config keys error even when false. Old
+registry, archival retries and UI callbacks; account selection/balancer calls,
+profile creation/reconciliation, account commands/probe and idle quota rotation.
+Native history and private legacy state are untouched. Retired dispatch config
+keys error even when false. Old
 tool definitions persisted by Codex may remain on resume: those calls fail with
 a retirement notice. Fresh starts without them; nothing silently rewrites or
 replaces a conversation. Native Codex tools/subagents/handoffs stay native.
 Explicit raw dynamicTools metadata still passes through, without a client-side
 implementation; unknown dynamic calls receive protocol errors.
+
+Retired accounts configuration errors even when empty or balance is false;
+remove the entire section. Existing account-profile directories, credentials
+and shared-state links remain untouched. Reusing one is an explicit CODEX_HOME
+choice, not automatic discovery; see README migration notes.
 
 ## Deferred requests and decisions
 
@@ -146,7 +155,6 @@ implementation; unknown dynamic calls receive protocol errors.
   seed/session-boundary controls. Full-access-only and native protocol omission
   are decided and implemented.
 - AgentVoice-specific skill isolation and selective seeding.
-- Review optional account features through a subsequent sketch.
 - AgentStart installation wiring and actual installation/first live voice use.
   Its current source installer has no AgentVoice entry; no install was run.
 

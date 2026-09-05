@@ -97,7 +97,7 @@ export function buildSchema(): Schema {
   const schema: Schema = { $schema, title: TITLE, description: DESCRIPTION, ...rest };
 
   const top = properties(schema, "top level");
-  for (const section of ["accounts", "orchestrator", "voice"]) hoistDescription(top, section);
+  for (const section of ["orchestrator", "voice"]) hoistDescription(top, section);
   const orchestrator = properties(top["orchestrator"], "orchestrator");
   const voice = properties(top["voice"], "voice");
   openPassthrough(orchestrator, "orchestrator", "config");
@@ -106,7 +106,6 @@ export function buildSchema(): Schema {
   dropVacuousPropertyNames(voice, "voice", "codex-response-handoff-channel-prefixes");
 
   assertDocumented(top, "");
-  assertDocumented(properties(top["accounts"], "accounts"), "accounts.");
   assertDocumented(orchestrator, "orchestrator.");
   assertDocumented(voice, "voice.");
 

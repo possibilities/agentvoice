@@ -48,14 +48,14 @@ copying or global thread.json pointer. --resume additionally chooses an exact ID
 Absent is native behavior; present and empty sends an empty string. Not a
 shipped doctrine or automatically copied transcript.
 
-**Account profile** — An optional per-account CODEX_HOME with its own login grant
-and links to shared canonical session/config state. Idle rotation replaces this
-app's child, not a launchd job.
+**CODEX_HOME** — Native Codex configuration/authentication/history location,
+inherited unchanged from the launch environment. Codex resolves its default when
+unset. AgentVoice does not manage login, profile homes or account switching.
 
 **Mute / hold** — Persistent channel assignment versus a temporary unmute.
 Each input source releases only its own hold; the last release restores mute.
 
 **Historical terms** — Resident, Server, Remote console, control attachment,
-paired device, discovery, custom Worker and Worker report refer to retired
-implementations in old ADRs, not current runtime components. Native Codex
-subagents are separate from the removed AgentVoice worker system.
+paired device, discovery, custom Worker, Worker report, account profile and idle
+account rotation refer to retired implementations in old ADRs, not current runtime
+components. Native Codex subagents are separate from the removed AgentVoice worker system.

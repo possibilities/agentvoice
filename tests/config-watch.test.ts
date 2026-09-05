@@ -8,7 +8,6 @@ function config(voiceName: string | undefined, model = "orchestrator-a"): Server
     codex: "codex",
     debug: false,
     configDir: "/config",
-    accounts: { balance: false, switchThreshold: 95 },
     orchestrator: {
       workspace: "/workspace",
       sandbox: "read-only",
