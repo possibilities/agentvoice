@@ -27,7 +27,7 @@ const V3_VOICES = [
 ] as const;
 
 const VOICES_BY_VERSION: Record<RealtimeVersion, ReadonlySet<string>> = {
-  v1: new Set(LEGACY_VOICES),
+  v1: new Set(V3_VOICES),
   v2: new Set(LEGACY_VOICES),
   v3: new Set(V3_VOICES),
 };
@@ -48,8 +48,10 @@ export interface ConfigWatchEffects {
   rejected(error: unknown): void;
 }
 
-function validateVoiceName(name: string | undefined, version: RealtimeVersion): void {
-  if (name === undefined) return;
+function validateVoiceName(name: string | undefined, version: RealtimeVersion | undefined): void {
+  // Do not invent an effective version for native-default or raw future modes.
+  // Codex validates the requested voice when the replacement session starts.
+  if (name === undefined || version === undefined) return;
   const supported = VOICES_BY_VERSION[version];
   if (!supported.has(name)) {
     throw new ConfigError(
@@ -74,10 +76,14 @@ export class ConfigWatcher {
     private readonly effects: ConfigWatchEffects,
   ) {
     this.voiceName = initialConfig.voice.name;
-    this.voiceVersion = initialConfig.voice.version;
+    const extra = initialConfig.voice.extra;
+    const version =
+      extra && Object.hasOwn(extra, "version") ? extra["version"] : initialConfig.voice.version;
+    this.voiceVersion =
+      version === "v1" || version === "v2" || version === "v3" ? version : undefined;
   }
 
-  private readonly voiceVersion: RealtimeVersion;
+  private readonly voiceVersion: RealtimeVersion | undefined;
 
   private readonly listener = (): void => {
     void this.reload();

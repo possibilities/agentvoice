@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -153,13 +153,12 @@
         },
         "name": {
           "type": "string",
-          "description": "Voice timbre. v3 timbres: arbor breeze cove ember juniper maple sol spruce vale (alloy ash ballad cedar coral echo marin sage shimmer verse are v2-only and REJECTED under v3). Default: upstream."
+          "description": "Voice timbre, validated against the effective native protocol. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through."
         },
         "version": {
           "type": "string",
           "enum": ["v1", "v2", "v3"],
-          "description": "Realtime protocol version. agentvoice defaults to v3 rather than deferring to codex config: seed items are v3-only, and the verified session semantics are v3's.",
-          "default": "v3"
+          "description": "Optional native realtime protocol override. Unset omits version, preserving Codex's transport-specific default (WebRTC uses v1 in Codex 0.153.3, not the general realtime config). Set v3 explicitly to preserve AgentVoice's former protocol or use initial seed items. WebRTC rejects v2."
         },
         "include-startup-context": {
           "type": "boolean",

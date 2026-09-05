@@ -3,12 +3,12 @@
  * the mapping from config and prompt files to wire fields is testable: a wrong
  * field name here is silently ignored upstream rather than rejected.
  *
- * Unset options are never sent, so codex's own configuration applies. A prompt
+ * Unset options are never sent, preserving native defaults/configuration. A prompt
  * that resolved to the empty string IS sent — empty strips a built-in prompt,
  * where absent leaves codex's default in place.
  */
 import type { Prompts, ServerConfig } from "./config.ts";
-import { VOICE_SEEDS } from "./config.ts";
+import { ConfigError, VOICE_SEEDS } from "./config.ts";
 import { validateFullAccessParams } from "./full-access.ts";
 import { dispatchTools } from "./workers.ts";
 
@@ -128,10 +128,10 @@ export function realtimeParams(
   const params: Record<string, unknown> = {
     threadId,
     realtimeSessionId,
-    version: voice.version,
     outputModality: "audio",
     transport: { type: "webrtc", sdp },
   };
+  setIfDefined(params, "version", voice.version);
   setIfDefined(params, "model", voice.model);
   setIfDefined(params, "voice", voice.name);
   setIfDefined(params, "prompt", prompts.voicePrompt);
@@ -157,5 +157,17 @@ export function realtimeParams(
   setIfDefined(params, "flushTranscriptTailOnSessionEnd", voice.flushTranscriptTailOnSessionEnd);
   setIfDefined(params, "clientManagedHandoffs", voice.clientManagedHandoffs);
 
-  return { ...params, ...voice.extra };
+  const merged = { ...params, ...voice.extra };
+  const version = merged["version"];
+  const transport = merged["transport"] as { type?: string } | null;
+  if (transport?.type === "webrtc" && version === "v2")
+    throw new ConfigError(
+      "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for the native default or explicitly select v1/v3 (also check voice.extra.version).",
+    );
+  const items = merged["initialItems"];
+  if (Array.isArray(items) && items.length > 0 && version !== "v3")
+    throw new ConfigError(
+      'Initial voice items (VOICE_SEED_*.md or voice.extra.initialItems) require explicit realtime v3. Set voice.version to "v3" (and check voice.extra.version), or remove the seeds. AgentVoice will not discard them or choose a protocol for you.',
+    );
+  return merged;
 }

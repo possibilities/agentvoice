@@ -5,7 +5,6 @@ import {
   ACCOUNTS_KEYS,
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
-  DEFAULT_REALTIME_VERSION,
   DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
@@ -58,7 +57,7 @@ describe("generated schema invariants", () => {
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema["title"]).toBe("agentvoice configuration");
     expect(schema["description"]).toBe(
-      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. An option left unset is NOT sent to codex at all, so your ~/.codex/config.toml applies — which is why copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
+      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Optional unset settings are NOT sent to Codex, preserving its native defaults/configuration; documented application invariants still apply. Copying server.json.example verbatim is a no-op. Prompt files (VOICE.md, VOICE_SEED_DEVELOPER/USER/ASSISTANT.md, ORCHESTRATOR.md, ORCHESTRATOR_BASE.md, ORCHESTRATOR_SESSION_START/END.md) are discovered by convention in this file's own directory and are never named here; absent leaves codex's built-in prompt, present-but-empty strips it. See README.md for the prompt-file contract.",
     );
   });
 
@@ -112,7 +111,7 @@ describe("generated schema invariants", () => {
 
     const voice = sectionProperties("voice");
     expect(spec(voice, "version")["enum"]).toEqual([...REALTIME_VERSIONS]);
-    expect(spec(voice, "version")["default"]).toBe(DEFAULT_REALTIME_VERSION);
+    expect(spec(voice, "version")).not.toHaveProperty("default");
     expect(spec(voice, "codex-response-handoff-mode")["enum"]).toEqual([...HANDOFF_MODES]);
   });
 

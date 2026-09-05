@@ -27,7 +27,6 @@ import {
   type ApprovalsReviewer,
   type ConfigValues,
   configValuesSchema,
-  DEFAULT_REALTIME_VERSION,
   DEFAULT_SWITCH_THRESHOLD,
   type HandoffMode,
   type HistoryMode,
@@ -60,7 +59,6 @@ export {
   ACCOUNTS_KEYS,
   APPROVAL_POLICIES,
   APPROVALS_REVIEWERS,
-  DEFAULT_REALTIME_VERSION,
   DEFAULT_SWITCH_THRESHOLD,
   HANDOFF_MODES,
   HISTORY_MODES,
@@ -103,7 +101,7 @@ export interface OrchestratorConfig {
 
 /** Primes the voice agent: the realtime speech model the user talks to. */
 export interface VoiceConfig {
-  version: RealtimeVersion;
+  version?: RealtimeVersion;
   model?: string;
   name?: string;
   includeStartupContext?: boolean;
@@ -496,7 +494,7 @@ export function resolveConfig(
   };
 
   const voice: VoiceConfig = {
-    version: pickVoice("version") ?? DEFAULT_REALTIME_VERSION,
+    version: pickVoice("version"),
     model: pickVoice("model"),
     name: pickVoice("name"),
     includeStartupContext: pickVoice("include-startup-context"),

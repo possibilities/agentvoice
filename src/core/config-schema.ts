@@ -35,12 +35,6 @@ export type HistoryMode = (typeof HISTORY_MODES)[number];
 export type RealtimeVersion = (typeof REALTIME_VERSIONS)[number];
 export type HandoffMode = (typeof HANDOFF_MODES)[number];
 
-/**
- * agentvoice pins realtime v3 rather than deferring to codex: initial items
- * are v3-only, and the verified session semantics in AGENTS.md are v3's.
- */
-export const DEFAULT_REALTIME_VERSION: RealtimeVersion = "v3";
-
 export const DEFAULT_SWITCH_THRESHOLD = 95;
 
 /** An object whose contents forward verbatim — never recursed or validated. */
@@ -200,16 +194,14 @@ export const voiceValuesSchema = z
     name: z
       .string()
       .describe(
-        "Voice timbre. v3 timbres: arbor breeze cove ember juniper maple sol spruce vale (alloy ash ballad cedar coral echo marin sage shimmer verse are v2-only and REJECTED under v3). Default: upstream.",
+        "Voice timbre, validated against the effective native protocol. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. Unset uses native transport-specific behavior; omitting version also ignores Codex's configured realtime voice on WebRTC (Codex 0.153.3). Explicit voice.name is still passed through.",
       )
       .optional(),
     version: z
       .enum(REALTIME_VERSIONS)
-      .meta({
-        description:
-          "Realtime protocol version. agentvoice defaults to v3 rather than deferring to codex config: seed items are v3-only, and the verified session semantics are v3's.",
-        default: DEFAULT_REALTIME_VERSION,
-      })
+      .describe(
+        "Optional native realtime protocol override. Unset omits version, preserving Codex's transport-specific default (WebRTC uses v1 in Codex 0.153.3, not the general realtime config). Set v3 explicitly to preserve AgentVoice's former protocol or use initial seed items. WebRTC rejects v2.",
+      )
       .optional(),
     "include-startup-context": z
       .boolean()

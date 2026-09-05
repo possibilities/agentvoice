@@ -6,7 +6,7 @@ child owns the agents, tools and native conversation history.
 
 The direction is vanilla Codex with configurable prompts and settings.
 Full access is an intentional product exception (see below). The defaults audit
-is not finished: pinned realtime v3, optional workers and account balancing remain.
+is not finished: optional workers, account balancing and prompt/context controls remain.
 
 ## Start here
 
@@ -132,9 +132,37 @@ agentvoice --allow-full-access --config ./voice-settings.json --debug
 ```
 
 CLI options beat file values. Optional unset settings stay off the wire so Codex
-can use its own configuration. Exceptions are the mandatory full-access/never
-policy above and the retained realtime version `v3`. Restricted sandbox modes
-are not supported by this app.
+can use its own defaults/configuration. The intentional permissions exception is
+the mandatory full-access/never policy above. Restricted sandbox modes are not
+supported by this app.
+
+### Native voice protocol
+
+Unconfigured `voice.version` is now omitted from `thread/realtime/start`.
+This follows stock Codex's **WebRTC interface default**, not a promise to match
+every Codex product UI. An offline validation probe against Codex 0.153.3 confirmed
+that omission follows v1; upstream source selects it independently of the general
+native realtime version config. AgentVoice does not hardcode that default.
+
+To preserve the former explicit v3 choice, put this in your chosen server.json:
+
+```json
+{ "voice": { "version": "v3" } }
+```
+
+Changing protocols can change the native default speech model and behavior.
+In Codex 0.153.3, omitted version on WebRTC also ignores the native configured
+realtime voice; explicit AgentVoice `voice.name` / `--voice` still passes through.
+Current v1 and v3 share the same voice-name family. No new prompt, seed or
+startup-context/tail-flush policy is added by this change.
+
+`VOICE_SEED_*.md` and nonempty `voice.extra.initialItems` require explicit v3.
+Even a present-but-empty seed file creates an initial item. Incompatible seed
+settings and WebRTC v2 fail locally before Codex starts; seeds are never silently
+dropped and protocols are never automatically switched. Checks use the final
+merged request: `voice.extra.version` wins, and an explicit `initialItems: []`
+can still intentionally replace file seeds. Explicit v1/v3 remain configurable;
+the raw transport escape hatch remains unchanged.
 
 ### Native Fast mode
 
@@ -175,7 +203,7 @@ Prompt files are optional and live beside the config:
 | `ORCHESTRATOR.md` | Developer instructions for the working Codex agent |
 | `ORCHESTRATOR_BASE.md` | Replace the entire Codex base prompt (sharp edge) |
 | `ORCHESTRATOR_SESSION_START.md`, `ORCHESTRATOR_SESSION_END.md` | Native session-boundary instructions to the working agent |
-| `VOICE_SEED_DEVELOPER.md`, `VOICE_SEED_USER.md`, `VOICE_SEED_ASSISTANT.md` | Explicit initial voice items, in that order |
+| `VOICE_SEED_DEVELOPER.md`, `VOICE_SEED_USER.md`, `VOICE_SEED_ASSISTANT.md` | Explicit initial voice items, in that order; require explicit realtime v3 |
 
 Absent files leave native behavior alone; present-but-empty files are sent as
 empty strings. Files load once at app launch. Only `voice.name` hot reloads;

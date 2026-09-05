@@ -148,11 +148,10 @@ describe("threadParams", () => {
 });
 
 describe("realtimeParams", () => {
-  test("carries the transport and pins v3 with nothing configured", () => {
+  test("carries the transport but leaves protocol selection to Codex when unset", () => {
     expect(realtime()).toEqual({
       threadId: "th_1",
       realtimeSessionId: "rt_1",
-      version: "v3",
       outputModality: "audio",
       transport: { type: "webrtc", sdp: "v=0" },
     });
@@ -162,8 +161,8 @@ describe("realtimeParams", () => {
     const params = realtime({
       voice: {
         model: "gpt-realtime",
-        name: "marin",
-        version: "v2",
+        name: "cove",
+        version: "v3",
         "include-startup-context": false,
         "delegation-ack-filler": true,
         "codex-response-handoff-mode": "commentary",
@@ -176,8 +175,8 @@ describe("realtimeParams", () => {
     });
     expect(params).toMatchObject({
       model: "gpt-realtime",
-      voice: "marin",
-      version: "v2",
+      voice: "cove",
+      version: "v3",
       includeStartupContext: false,
       delegationAckFiller: true,
       codexResponseHandoffMode: "commentary",
@@ -198,7 +197,7 @@ describe("realtimeParams", () => {
   test("seeds become initial items in developer, user, assistant order", () => {
     expect(
       realtime(
-        {},
+        { voice: { version: "v3" } },
         {
           voiceSeedAssistant: "hello",
           voiceSeedUser: "do the thing",
@@ -210,9 +209,9 @@ describe("realtimeParams", () => {
       { role: "user", text: "do the thing" },
       { role: "assistant", text: "hello" },
     ]);
-    expect(realtime({}, { voiceSeedUser: "only" })["initialItems"]).toEqual([
-      { role: "user", text: "only" },
-    ]);
+    expect(
+      realtime({ voice: { version: "v3" } }, { voiceSeedUser: "only" })["initialItems"],
+    ).toEqual([{ role: "user", text: "only" }]);
     expect(realtime()).not.toHaveProperty("initialItems");
   });
 
@@ -314,6 +313,7 @@ describe("native voice context controls", () => {
     const params = realtime(
       {
         voice: {
+          version: "v3",
           "include-startup-context": false,
           "flush-transcript-tail-on-session-end": false,
         },

@@ -59,6 +59,16 @@ instructions and voice prompts/items ride each realtime start. Start-only native
 metadata such as dynamic tools is persisted by Codex and cannot be removed merely
 by omitting it on resume.
 
+Voice protocol: unset voice.version stays off the wire. Stock Codex 0.153.3
+uses v1 for WebRTC omission, independently of the general native realtime config;
+it also ignores the native configured voice in that case, while an explicit
+request voice still applies. This is the API's default, not necessarily every
+Codex UI's choice. Explicit v3 preserves AgentVoice's former protocol and is
+required for initial seed items. WebRTC v2 and non-v3 seed combinations fail
+before child startup. Final extra overrides are checked; no seeds are silently
+discarded and no protocol is auto-selected. Protocol changes may change the
+default speech model/behavior. Current v1/v3 share a voice-name family.
+
 ## What ships versus what is native
 
 AgentVoice supplies no default custom prompt files. Optional files intentionally
@@ -79,7 +89,7 @@ requests are refused through native denials or protocol errors with a persistent
 TUI explanation, not an approval UI or invented answers.
 
 Still application-owned: full-access-only posture, visible refusal handling,
-realtime v3, WebRTC/audio transport, workspace-local selection,
+WebRTC/audio transport, workspace-local selection,
 renewal policy, and optional dispatch/account policy. The project is not yet
 fully vanilla in defaults, nor a complete passthrough for every future Codex option.
 
@@ -128,12 +138,17 @@ skill enabling. Native history and private legacy state are untouched.
 ## Deferred requests and decisions
 
 - Remaining vanilla-defaults and prompt/settings passthrough audit, particularly
-  realtime v3 and seed/session-boundary controls. Full-access-only is decided.
+  seed/session-boundary controls. Full-access-only and native protocol omission
+  are decided and implemented.
 - Reconsider the three native voice-context levers above.
 - AgentVoice-specific skill isolation and selective seeding.
-- Reinventory/review optional worker/report and account features before more cuts.
+- Review optional worker/report and account features through subsequent sketches.
 - AgentStart installation wiring and actual installation/first live voice use.
   Its current source installer has no AgentVoice entry; no install was run.
 
 Continue/workspace selection, one foreground AgentVoice process (ADR 0009),
 and native --fast/--no-fast are implemented. They do not settle the items above.
+
+Workflow: one contextual sketch at a time, approval before implementation.
+After each completed change, present the next sketch automatically until the
+queue is exhausted; do not ask whether to reinventory.

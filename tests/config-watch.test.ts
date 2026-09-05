@@ -45,6 +45,42 @@ function harness(initialName = "cove") {
 }
 
 describe("reactive voice config", () => {
+  test("native-default voice changes do not invent a version or apply a stale voice whitelist", async () => {
+    const initial = config("cove");
+    delete initial.voice.version;
+    const next = configWithVoiceName(initial, "future-native-voice");
+    const changed: unknown[] = [];
+    const watcher = new ConfigWatcher({ path: "/test", load: async () => next }, initial, {
+      voiceNameChanged: (name) => changed.push(name),
+      rejected: (error) => {
+        throw error;
+      },
+    });
+    await watcher.reload();
+    expect(changed).toEqual(["future-native-voice"]);
+    expect(realtimeParams(next, {}, "t", "s", "sdp")).not.toHaveProperty("version");
+  });
+
+  test("voice validation follows the launch-time raw version override, including null", async () => {
+    for (const version of ["v1", "v2", null] as const) {
+      const initial = config("cove");
+      initial.voice.extra = { version };
+      const name = version === "v1" ? "ember" : version === "v2" ? "marin" : "future-native-voice";
+      const changed: unknown[] = [];
+      const watcher = new ConfigWatcher(
+        { path: "/test", load: async () => configWithVoiceName(initial, name) },
+        initial,
+        {
+          voiceNameChanged: (name) => changed.push(name),
+          rejected: (error) => {
+            throw error;
+          },
+        },
+      );
+      await watcher.reload();
+      expect(changed).toEqual([name]);
+    }
+  });
   test("applies a valid voice.name change once", async () => {
     const run = harness();
     run.setNext(config("ember"));

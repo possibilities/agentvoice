@@ -25,7 +25,7 @@ describe("resolveConfig", () => {
     expect(config.orchestrator.model).toBeUndefined();
     expect(config.orchestrator.effort).toBeUndefined();
     expect(config.orchestrator.personality).toBeUndefined();
-    expect(config.voice.version).toBe("v3");
+    expect(config.voice.version).toBeUndefined();
     expect(config.voice.model).toBeUndefined();
     expect(config.voice.includeStartupContext).toBeUndefined();
   });

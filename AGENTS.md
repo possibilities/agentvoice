@@ -31,6 +31,8 @@ implementation.
 - src/core/config.ts: CLI > file > default resolution and prompt-file loading.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
+  Omit unset voice.version; never replace it with an inferred native default.
+  Validate final merged seeds/version and WebRTC v2 conflicts before child startup.
 - src/core/full-access.ts: reject incompatible permission selectors and require
   effective dangerFullAccess/never on start/resume/settings reports. Never infer
   effective permissions from the request or bypass managed native requirements.
@@ -95,7 +97,11 @@ profile homes keep independent auth.json and share canonical native state.
 Do not silently install, restart/uninstall old services, change global config,
 edit archive checkouts or start inference/audio probes. Those require scope.
 
-## Upstream realtime semantics (verified against codex 0.147 source + probes)
+## Upstream realtime semantics
+
+Baseline lifecycle verified against Codex 0.147 source + probes. Version/default
+and invalid-combination checks refreshed against stock 0.153.3 with network denied,
+an isolated disposable CODEX_HOME, and deliberately invalid requests; no live audio.
 
 These invariants are load-bearing for `session.ts`; re-verify them before
 bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs`,
@@ -135,8 +141,12 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
    `thread/resume` quietly drops the 12 start-only fields rather than erroring
    — hence `params.ts` filters them itself.
 9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
-   text tokens. This is why `voice.version` defaults to v3 rather than
-   deferring to codex config.
+   text tokens. Require explicit v3 for nonempty initial items (including empty
+   seed-file text). Unset voice.version is omitted. In Codex 0.153.3, WebRTC
+   omission selects v1 independently of general realtime config and ignores
+   the native configured voice, but still honors an explicit request voice.
+   WebRTC rejects v2; v1 and v3 use the same voice-name family. Do not infer
+   that this transport default matches every Codex product UI.
 10. The webrtc transport is load-bearing for auth, not just media: the
     websocket transport hard-requires an API key (`realtime_api_key`,
     `realtime_conversation.rs`), while webrtc authorizes the SDP POST and the

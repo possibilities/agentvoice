@@ -157,6 +157,9 @@ export class VoiceRuntime {
       if (realpathSync(workspace) !== workspace)
         throw new Error("Workspace must be a canonical absolute directory");
       this.prompts = await readPrompts(this.config.configDir);
+      // Pure preflight: these placeholder IDs/SDP never leave this process.
+      // Reject known option conflicts before spawning Codex or resuming history.
+      realtimeParams(this.config, this.prompts, "", "", "");
       this.foundPrompts = promptFilenames(this.prompts);
       if (this.prompts.orchestratorBaseInstructions !== undefined) {
         this.events.onStatus(
