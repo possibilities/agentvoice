@@ -1,6 +1,8 @@
 # 0010: Quiet voice reconnects
 
-2026-09-05. Implementation verified with fake protocol tests; live acceptance pending.
+2026-09-05. Superseded by ADR 0012 the same day: the quiet-resume instruction and
+its `voice.quiet-resume` key were removed. Implementation had been verified with
+fake protocol tests only; live acceptance never happened.
 This qualifies ADR 0008's baseline. ADR 0011 subsequently adds spoken-history
 restoration and changes the startup-context default; this document records the
 earlier quiet-only change.

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ConfigValues, parseJsonConfig } from "../src/core/config.ts";
-import { QUIET_RESUME_INSTRUCTION } from "../src/core/params.ts";
 import type { RuntimeOptions } from "../src/core/runtime.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
@@ -90,15 +89,12 @@ describe("native voice context across call and conversation boundaries", () => {
           if (mode === "fresh") expect(originalThread).not.toBe("existing");
           else expect(originalThread).toBe("existing");
 
-          const offer = async (
-            sdp: string,
-            threadId: string,
-            reconnect: boolean,
-          ): Promise<void> => {
+          const offer = async (sdp: string, threadId: string): Promise<void> => {
             await h.runtime.offer(sdp);
             const call = h.native.calls.at(-1)!;
             expect(call.method).toBe("thread/realtime/start");
-            // Quiet reconnect adds no transcript or context/tail-flush override.
+            // Default reconnects add no AgentVoice initial items, transcript or
+            // context/tail-flush override: the call matches a first connection.
             expect(call.params).toEqual({
               version: "v3",
               includeStartupContext: false,
@@ -106,9 +102,6 @@ describe("native voice context across call and conversation boundaries", () => {
               realtimeSessionId: expect.any(String),
               outputModality: "audio",
               transport: { type: "webrtc", sdp },
-              ...(reconnect
-                ? { initialItems: [{ role: "developer", text: QUIET_RESUME_INSTRUCTION }] }
-                : {}),
               ...scenario.realtime,
             });
             h.native.options.onNotification("thread/realtime/started", {
@@ -116,12 +109,12 @@ describe("native voice context across call and conversation boundaries", () => {
               realtimeSessionId: call.params["realtimeSessionId"],
             });
           };
-          await offer("initial", originalThread, mode !== "fresh");
-          await offer("redial", originalThread, true);
+          await offer("initial", originalThread);
+          await offer("redial", originalThread);
           await h.runtime.fresh();
           const freshThread = h.ready.at(-1)!.threadId;
           expect(freshThread).not.toBe(originalThread);
-          await offer("fresh", freshThread, false);
+          await offer("fresh", freshThread);
           await h.runtime.shutdown();
 
           const threads = h.native.calls.filter(

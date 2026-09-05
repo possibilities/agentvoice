@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -160,17 +160,11 @@
           "description": "Realtime protocol override. AgentVoice defaults WebRTC requests to v3 for service compatibility; this is a frontend transport default, not Codex's omitted-version fallback. Explicit values and final voice.extra.version overrides win, including null for native fallback (WebRTC v1 in Codex 0.153.3, currently rejected by the service tested here). Alternate raw transports receive no compatibility default. WebRTC rejects v2; initial seed items require effective v3.",
           "default": "v3"
         },
-        "quiet-resume": {
-          "type": "boolean",
-          "title": "AgentVoice: quiet resume",
-          "description": "AgentVoice reconnect policy, not a native Codex setting. On continue/resume and redial, add a developer initial item asking the voice to wait for new user input instead of repeating old context. Default: true for WebRTC v3. Independent of spoken replay and native startup context; keeps the native base prompt. False disables this instruction; explicit initial items (including seed files, raw [] or null) replace it. Fresh's first call receives no instruction. This is model guidance, not a transport-enforced silence guarantee.",
-          "default": true
-        },
         "replay-spoken-history": {
           "type": "boolean",
           "title": "AgentVoice: replay spoken history",
-          "description": "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial. False skips history reads and replay without changing working-thread continuation, quiet-resume, or native startup context. Explicit initial items (including seed files, [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
-          "default": true
+          "description": "AgentVoice behavior, not a native passthrough. Default false: reconnects send no AgentVoice initial items, matching stock app-server. Explicit true restores recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. Explicit initial items (including seed files, [] or null) replace replay. Independent of native startup context. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
+          "default": false
         },
         "include-startup-context": {
           "type": "boolean",

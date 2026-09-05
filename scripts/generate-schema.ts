@@ -14,7 +14,7 @@ import { configFileSchema } from "../src/core/config-schema.ts";
 
 const TITLE = "agentvoice configuration";
 const DESCRIPTION =
-  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off, spoken-history replay and quiet-resume guidance. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.";
+  "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt files load only through explicit prompt-files references; paths resolve relative to this file's directory. Unset sends no file override; explicit empty contents are sent empty. Conventional filenames only trigger migration warnings, never loading. See README.md for the prompt-file contract.";
 
 type Schema = Record<string, unknown>;
 
