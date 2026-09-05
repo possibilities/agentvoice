@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
+import { realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 /** Foreground voice application; console is a compatibility alias. */
 import packageJson from "../package.json";
+import { discoverMcpConnection } from "./control/discovery.ts";
 import { loadLaunchConfig } from "./core/launch-config.ts";
+import { expandTilde, stateDirectory } from "./paths.ts";
 
 export { loadLaunchConfig } from "./core/launch-config.ts";
 
@@ -11,6 +16,8 @@ const USAGE = `agentvoice — a foreground Codex voice TUI
 Usage:
   agentvoice --allow-full-access [options]          Continue this workspace's conversation
   agentvoice console --allow-full-access [options]  Compatibility alias
+  agentvoice mcp-config [--workspace <dir>] [--thread <id>]
+                                                  Print a live MCP client configuration
 
 Options:
   --allow-full-access      Required each launch: unrestricted files/network, no approvals
@@ -51,6 +58,10 @@ available in orchestrator.extra / voice.extra.
 
 Settings and prompt files load per runtime generation; runtime restart rereads them.
 Raw extra fields can override named CLI settings; see README for precedence.
+
+MCP config export selects one live controller by canonical workspace (the launch
+directory by default). Use --thread when more than one controller is live there.
+It prints an authenticated mcpServers JSON object for Claude Code and Inspector.
 
 Keys: [m] toggle microphone · [s] toggle speaker · [r] redial · [f] fresh · [q] quit
       [ctrl+k] commands · [space] hold to talk (muted mic, key-release capable terminal)
@@ -218,6 +229,66 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   };
 }
 
+const MCP_CONFIG_FLAGS: FlagSpec = {
+  value: new Set(["--workspace", "--thread"]),
+  bool: new Set(["--help"]),
+};
+
+export type ParsedMcpConfigCommand =
+  | { help: true }
+  | { help: false; workspace: string; threadId?: string };
+
+export function parseMcpConfigCommand(
+  argv: string[],
+  launchCwd = process.cwd(),
+  home = homedir(),
+): ParsedMcpConfigCommand {
+  const parsed = parseArgs(argv, MCP_CONFIG_FLAGS);
+  if (parsed.help) return { help: true };
+  const threadId = parsed.values["thread"];
+  if (threadId !== undefined && !threadId.trim())
+    throw new UsageError("--thread requires a non-empty id");
+  const selected = parsed.values["workspace"] ?? launchCwd;
+  if (!selected.trim()) throw new UsageError("--workspace requires a non-empty directory");
+  const workspacePath = resolve(launchCwd, expandTilde(selected, home));
+  try {
+    if (!statSync(workspacePath).isDirectory()) throw new Error("not a directory");
+    return {
+      help: false,
+      workspace: realpathSync(workspacePath),
+      ...(threadId === undefined ? {} : { threadId }),
+    };
+  } catch (error) {
+    throw new UsageError(`Cannot use workspace ${workspacePath}: ${String(error)}`);
+  }
+}
+
+export async function runMcpConfigCommand(
+  argv: string[],
+  options: {
+    launchCwd?: string;
+    home?: string;
+    env?: Record<string, string | undefined>;
+    write?: (text: string) => void | Promise<void>;
+  } = {},
+): Promise<number> {
+  const home = options.home ?? homedir();
+  const command = parseMcpConfigCommand(argv, options.launchCwd ?? process.cwd(), home);
+  if (command.help) {
+    await (options.write ?? ((text) => Bun.write(Bun.stdout, text)))(USAGE);
+    return 0;
+  }
+  const config = await discoverMcpConnection(
+    stateDirectory(options.env ?? process.env, home),
+    command.workspace,
+    command.threadId,
+  );
+  await (options.write ?? ((text) => Bun.write(Bun.stdout, text)))(
+    `${JSON.stringify(config, null, 2)}\n`,
+  );
+  return 0;
+}
+
 async function runConsoleCommand(argv: string[]): Promise<number> {
   const command = parseConsoleCommand(argv);
   if (command.help) {
@@ -240,6 +311,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(USAGE);
       return 0;
     }
+    if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")
       throw new UsageError(
         "AgentVoice account management has been retired. Use codex login (optionally with CODEX_HOME set), then launch AgentVoice with the same environment. Existing profiles and credentials are untouched; see README migration notes.",

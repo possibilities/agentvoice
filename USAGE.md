@@ -10,6 +10,31 @@ start, resume, and Fresh. It is required, but connection/catalog readiness is
 checked separately; tool registration does not force a model to select a tool.
 There is no global `CODEX_HOME` write and no permanent user MCP configuration.
 
+## Connect another local MCP client
+
+Use the fleet-standard config export while the target AgentVoice controller is
+already running:
+
+```sh
+agentvoice mcp-config --workspace /absolute/workspace
+claude --mcp-config <(agentvoice mcp-config --workspace /absolute/workspace)
+```
+
+It prints only a pretty-printed `mcpServers` JSON object with the controller's
+live loopback URL and bearer header. The workspace defaults to the command's
+current directory and is canonicalized. If more than one controller matches,
+pass `--thread <exact-id>`; zero matches and remaining ambiguity are errors.
+Claude Code and MCP Inspector consume this JSON shape directly. Codex's native
+MCP configuration has a different shape and does not consume this file directly.
+
+The command discovers an existing controller; it does not launch or restart
+AgentVoice, load launch settings, open media, or require
+`--allow-full-access`. It can export a controller whose voice runtime is failed,
+which permits inspection and recovery through the still-live control endpoint.
+The JSON contains a bearer capability, so do not log or retain it beyond that
+controller session. Regenerate it after every launch because the token and
+controller identity are fresh even if the operating system reuses a port.
+
 Use the MCP tools when you are operating the conversation that supplied them:
 
 ```text
@@ -133,9 +158,10 @@ socket.write(`${JSON.stringify(request)}\n`);
 ```
 
 Socket permissions protect the local Unix API. The MCP endpoint is loopback
-only but still requires its per-instance bearer capability. Do not log or
-serialize that token. Multiple AgentVoice launches have distinct controller
-identities and endpoint capabilities, even for the same user or workspace.
+only but still requires its per-instance bearer capability. Do not log that
+token or serialize it outside the explicit `mcp-config` export. Multiple
+AgentVoice launches have distinct controller identities and endpoint capabilities,
+even for the same user or workspace.
 
 The complete method, result, error, transport, and compatibility reference is
 in [`docs/api.md`](docs/api.md). Agentmux is the relevant precedent for shared

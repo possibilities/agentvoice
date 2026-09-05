@@ -84,8 +84,9 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
 - src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
   Never adopt an old journal across a full quit/relaunch.
-- src/control/: shared Zod contract/dispatch, private UDS NDJSON server and
-  loopback Streamable HTTP MCP projection. Keep them semantically identical.
+- src/control/: shared Zod contract/dispatch, private UDS NDJSON server,
+  loopback Streamable HTTP MCP projection, and private live-controller discovery
+  for the explicit `mcp-config` export. Keep both transports semantically identical.
 - src/core/runtime.ts: a voice runtime's launch/resume/Fresh, voice session,
   child lifecycle, and runtime-cached settings. No account selection/rotation,
   reattachment/restart adoption, custom worker manager, tool callback or
@@ -139,6 +140,14 @@ credential storage/refresh, configuration and history. Never discover, create or
 reconcile profile homes, read auth.json, invoke account tools/login, or replace
 the child on quota events. Existing profile directories/links stay untouched.
 Retired accounts configuration errors even if false/empty; no automatic migration.
+
+Live controllers also own atomic mode-0600 transport descriptors below the
+mode-0700 control directory. They may contain the bearer capability only for the
+explicit `agentvoice mcp-config` export, are removed on normal close, and must be
+selected through a bounded live UDS status check by exact canonical workspace
+and optional thread. Never put the token in status or diagnostics, trust mutable
+identity from the descriptor, choose the newest ambiguous controller, or clean
+up an unowned stale record while reading.
 
 Do not silently install, restart/uninstall old services, change global config,
 edit archive checkouts or start inference/audio probes. Those require scope.

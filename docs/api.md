@@ -17,15 +17,34 @@ state directory, in a `control/` directory with mode `0700`; its socket mode
 is `0600`. A live controller owns an exclusive lock while it probes stale
 residue and binds, so a second launch cannot take over a live instance. The
 owned Codex child receives the exact path in `AGENTVOICE_CONTROL_SOCKET`; this
-is the supported Unix-socket discovery mechanism. It is per-controller, so an
-agent must use its inherited value rather than derive a path from a workspace or
-guess another instance's endpoint.
+is its inherited Unix-socket discovery mechanism.
 
 Every controller instance has a different loopback URL and a random bearer
 capability. MCP requests must send `Authorization: Bearer <capability>`. The
 capability is supplied to the owned Codex child only in the per-instance
 environment variable named by `bearer_token_env_var`; it is never written to
 the native MCP configuration or printed in diagnostics.
+
+For an explicitly requested external-client connection,
+`agentvoice mcp-config [--workspace <dir>] [--thread <exact-id>]` reads controller-owned discovery
+records under `$XDG_STATE_HOME/agentvoice/control/instances/` (or the default
+state location). The directory is mode `0700`; each descriptor is an atomically
+published mode `0600` regular file containing only immutable version, controller
+identity/PID, socket path, loopback URL, and bearer capability. Normal shutdown
+removes the owned descriptor. Readers reject unsafe directories, files, links,
+and sockets, bound directory entry count and file sizes, and probe all candidate sockets within
+a fixed deadline. A well-permissioned malformed record or stale crash record is
+ignored and never deleted by the reader.
+
+Selection never trusts workspace or thread data in a descriptor. It calls
+`agentvoice.status` on each live Unix socket, verifies that the returned instance
+identity matches the descriptor, then matches the current canonical workspace
+and optional exact thread. This reflects Fresh immediately and remains available
+when the runtime phase is `failed`. Zero matches and ambiguity fail rather than
+selecting the newest record. Successful output is the fleet-standard
+`mcpServers` JSON with an `Authorization: Bearer …` header for Claude Code and
+MCP Inspector. The JSON is an explicit capability export for the current
+controller lifetime; Codex's native MCP configuration uses a different shape.
 
 AgentVoice registers this MCP server for each orchestration thread as
 `agentvoice_control`. Its native configuration has `required: true`,

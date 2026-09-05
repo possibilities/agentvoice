@@ -27,6 +27,28 @@ examples, replace the checkout path if needed. Once installed, `agentvoice`
 is shorthand for the same entrypoint. `agentvoice console` is a compatibility
 alias; `--fresh` is an alias for `--no-continue`.
 
+To connect Claude Code or MCP Inspector to one controller that is already
+running, export its authenticated MCP client configuration:
+
+```sh
+agentvoice mcp-config --workspace ~/code/myapp
+claude --mcp-config <(agentvoice mcp-config --workspace ~/code/myapp)
+```
+
+The command follows the fleet's `agentmux mcp-config` convention and prints one
+`mcpServers` JSON object containing the live loopback URL and bearer header. It
+defaults to the current directory, canonicalizes the workspace, and refuses an
+ambiguous match; add `--thread <exact-id>` when several AgentVoice controllers
+are running in that workspace. It remains usable when the voice runtime has
+failed because discovery belongs to the foreground controller. The export does
+not start AgentVoice, load its launch configuration, open media, or require
+`--allow-full-access`.
+
+The printed bearer token grants access to that controller until it exits. Keep
+the JSON private and generate it again after a new launch. Claude Code and MCP
+Inspector accept this JSON shape directly. Codex uses a different native MCP
+configuration shape, so this output is not a Codex configuration file.
+
 ### Full access is required
 
 Every voice launch requires `--allow-full-access`, including `console`, continue
@@ -199,8 +221,8 @@ continued after exit. Workspace selection is not a memory or security sandbox.
 - Device selection, model/effort/voice overrides and config/prompt passthrough.
   Redial and Fresh use the active runtime snapshot; a full runtime restart
   rereads the pinned launch inputs.
-- Per-launch opt-in debug logs; no phone remote, pairing, listener/discovery,
-  Android packaging, separate Server, resident service or Herdr integration.
+- Per-launch opt-in debug logs; no phone remote, pairing, Android packaging,
+  separate Server, resident service or Herdr integration.
 
 The upper field shows workspace, whether the conversation was started or continued,
 and its native ID (truncated to fit). Model, effort and voice protocol reflect
@@ -612,8 +634,12 @@ configuration, services or other account tools are changed by this removal.
 
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
-`thread-locks/` and `runs/<time>-<pid>.log` with
-`--debug`. Lock files are inert after exit; the kernel owns their lifetime.
+`thread-locks/`, private live-controller discovery records under `control/`, and
+`runs/<time>-<pid>.log` with `--debug`. Lock files are inert after exit; the
+kernel owns their lifetime. Discovery records contain the loopback bearer
+capability, use private directory and file modes, and are removed on normal
+controller shutdown. `mcp-config` validates the live control socket and ignores
+stale crash residue rather than choosing it or deleting it.
 Debug logs may contain prompts, transcripts and protocol details—keep them private.
 They also record the selected workspace and conversation ID.
 

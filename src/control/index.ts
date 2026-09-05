@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { publishControlDescriptor } from "./discovery.ts";
 import { ControlMcpHttpHost } from "./mcp.ts";
 import { ControlSocketServer, controlSocketPath } from "./socket.ts";
 import {
@@ -34,6 +35,14 @@ export async function startControlServer(
       .slice(0, 16)
       .toUpperCase();
     const bearerTokenEnvVar = `AGENTVOICE_CONTROL_BEARER_${suffix}`;
+    const removeDescriptor = publishControlDescriptor(options.stateDir, {
+      version: 1,
+      instanceId: options.instanceId,
+      controllerPid: process.pid,
+      socketPath,
+      url: httpUrl,
+      token: http.token,
+    });
     return {
       socketPath,
       socketEnvVar: CONTROL_SOCKET_ENV,
@@ -49,8 +58,12 @@ export async function startControlServer(
         enabled_tools: CONTROL_MCP_TOOLS,
       },
       close: async () => {
-        await http.close();
-        socket.close();
+        try {
+          removeDescriptor();
+        } finally {
+          await http.close();
+          socket.close();
+        }
       },
     };
   } catch (error) {
