@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { VoiceTuiState } from "../src/console/tui.ts";
 import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
+import type { ControllerEvent } from "../src/events/contract.ts";
 import { parseArgs } from "../src/main.ts";
 import { RuntimeController } from "../src/runtime-control/controller.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "../src/runtime-control/process.ts";
@@ -96,6 +97,10 @@ describe("persistent controller and disposable runtime", () => {
       expectedGeneration: controller.status().generation,
       scope: "runtime" as const,
     });
+    const voiceEvents: ControllerEvent[] = [];
+    controller.lifecycle.listen((event) => {
+      if (event.event.startsWith("voice.")) voiceEvents.push(event);
+    });
     try {
       await controller.start();
       expect(controller.status().runtime.phase).toBe("ready");
@@ -138,7 +143,10 @@ describe("persistent controller and disposable runtime", () => {
       expect(JSON.stringify(second)).not.toContain("private handoff");
       expect(second.threadId).toBe(first.threadId);
       expect(second.generation).toBe(2);
-      await until(() => controller.lifecycle.snapshot().threads[0]?.turn?.id === "handoff-turn");
+      await until(() => {
+        const thread = controller.lifecycle.snapshot().threads[0];
+        return thread?.turn?.id === "handoff-turn" && thread.status === "active";
+      });
       expect(controller.lifecycle.snapshot()).toMatchObject({
         generation: 2,
         threads: [{ id: first.threadId, status: "active" }],
@@ -181,6 +189,25 @@ describe("persistent controller and disposable runtime", () => {
       });
       expect(newCalls.findIndex((call) => call.method === "turn/start")).toBeGreaterThan(
         newCalls.findIndex((call) => call.method === "mcpServerStatus/list"),
+      );
+      await until(() => voiceEvents.length === 3);
+      expect(voiceEvents.map((event) => event.event)).toEqual([
+        "voice.item.started",
+        "voice.item.transcript.delta",
+        "voice.item.completed",
+      ]);
+      expect(voiceEvents.every((event) => event.data.generation === 2)).toBe(true);
+      expect(voiceEvents[1]).toMatchObject({
+        type: "event",
+        data: {
+          threadId: first.threadId,
+          itemId: "voice-fixture-item",
+          delta: "native voice fixture",
+        },
+      });
+      expect(JSON.stringify(controller.lifecycle.snapshot())).not.toContain("native voice fixture");
+      expect(readFileSync(join(root, "operations/integration.jsonl"), "utf8")).not.toContain(
+        "native voice fixture",
       );
       expect(newCalls.some((call) => call.method === "thread/list")).toBe(false);
       expect(newCalls.find((call) => call.method === "thread/resume").params).toMatchObject({
@@ -346,6 +373,20 @@ describe("persistent controller and disposable runtime", () => {
       ]);
       expect((await controller.restart(first)).phase).toBe("failed");
       const completedRetry = await controller.restart(retryRequest);
+      const voiceEvents: ControllerEvent[] = [];
+      controller.lifecycle.listen((event) => {
+        if (event.event.startsWith("voice.")) voiceEvents.push(event);
+      });
+      const voice = {
+        event: "voice.item.transcript.delta",
+        data: { threadId: "saved", itemId: "native", delta: "private voice" },
+      };
+      callbacks[0]!("voice", voice);
+      expect(voiceEvents).toHaveLength(0);
+      callbacks[2]!("voice", voice);
+      expect(voiceEvents).toHaveLength(1);
+      callbacks[2]!("voice", { ...voice, data: { ...voice.data, audio: "must not leak" } });
+      expect(voiceEvents).toHaveLength(1);
       callbacks[2]!("threads", {
         complete: true,
         threads: [
@@ -364,6 +405,8 @@ describe("persistent controller and disposable runtime", () => {
       expect(controller.lifecycle.snapshot().inventory).toBe("incomplete");
       expect(JSON.stringify(controller.lifecycle.snapshot())).not.toContain("must not leak");
       callbacks[2]!("fatal", { message: "terminal native failure" });
+      callbacks[2]!("voice", voice);
+      expect(voiceEvents).toHaveLength(1);
       callbacks[2]!("state", ready);
       callbacks[2]!("threads", { complete: true, threads: [] });
       expect(controller.lifecycle.snapshot()).toMatchObject({

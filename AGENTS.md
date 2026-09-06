@@ -79,11 +79,15 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
   readiness; never stop healthy media on a handoff refusal or ambiguous result.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
+- src/runtime-control/sender.ts: bounded worker writes; drop transient voice events
+  at the soft limit without replacing deltas or failing healthy media.
 - src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
   Never adopt an old journal across a full quit/relaunch.
-- src/events/: controller-owned read-only lifecycle socket, native-state projection,
-  prefix subscriptions and sequence-watermarked snapshots. No prompts, content,
-  capabilities or media; no mutation/MCP methods. Runtime replacements reset the
+- src/events/: controller-owned read-only socket with prefix subscriptions,
+  sequence-watermarked lifecycle snapshots, and transient native voice items/deltas.
+  No transcript state, persistence, replay, backfill, or UI. Never discard voice
+  events using lifecycle snapshot watermarks or infer missing native identity.
+  No audio/bearer capabilities or mutation/MCP methods. Runtime replacements reset
   inventory; stale incarnations never publish into a successor. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.

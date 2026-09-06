@@ -90,6 +90,75 @@ async function harness() {
 }
 
 describe("lifecycle event socket", () => {
+  test("wildcards deliver ordered voice events that snapshots never replay or supersede", async () => {
+    const h = await harness();
+    try {
+      const all = await h.connect();
+      const voice = await h.connect();
+      await all.request("event.subscribe");
+      await voice.request("event.subscribe", { events: ["voice.*"] });
+      const data = {
+        threadId: "old-fresh-thread",
+        itemId: "native-item",
+        delta: "private live speech",
+      };
+      h.feed.voice({ event: "voice.item.transcript.delta", data });
+      h.feed.update({ complete: true, threads: [thread("main")] });
+      h.feed.voice({
+        event: "voice.item.completed",
+        data: {
+          threadId: data.threadId,
+          item: {
+            id: data.itemId,
+            realtimeSessionId: "native-old-session",
+            type: "transcriptSegment",
+            role: "user",
+            text: data.delta,
+          },
+        },
+      });
+      const snapshot = (await all.request("state.get")).result;
+      expect(JSON.stringify(snapshot)).not.toContain(data.delta);
+      const events = all.frames.filter((frame) => frame.type === "event");
+      expect(events.map((frame) => frame.event)).toEqual([
+        "voice.item.transcript.delta",
+        "threads.changed",
+        "voice.item.completed",
+      ]);
+      expect(events.map((frame) => frame.data?.sequence)).toEqual([1, 2, 3]);
+      expect(events[0] as unknown).toEqual({
+        v: 1,
+        type: "event",
+        event: "voice.item.transcript.delta",
+        data: { ...data, instanceId: "test", generation: 1, sequence: 1 },
+      });
+      expect(snapshot.sequence).toBe(3);
+      await voice.request("state.get");
+      expect(
+        voice.frames.filter((frame) => frame.type === "event").map((frame) => frame.event),
+      ).toEqual(["voice.item.transcript.delta", "voice.item.completed"]);
+      const later = await h.connect();
+      await later.request("event.subscribe", { events: ["voice.*"] });
+      await later.request("state.get");
+      expect(later.frames.filter((frame) => frame.type === "event")).toEqual([]);
+      h.feed.runtime(2, { phase: "quiescing", workspace: "/work", mainThreadId: "main" });
+      h.feed.voice({ event: "voice.item.transcript.delta", data });
+      h.feed.runtime(2, { phase: "starting", workspace: "/work", mainThreadId: "main" });
+      h.feed.voice({
+        event: "voice.item.transcript.delta",
+        data: { ...data, delta: "new generation" },
+      });
+      await later.request("state.get");
+      expect(later.frames.filter((frame) => frame.type === "event")).toMatchObject([
+        {
+          event: "voice.item.transcript.delta",
+          data: { generation: 2, sequence: 6, delta: "new generation" },
+        },
+      ]);
+    } finally {
+      h.close();
+    }
+  });
   test("exact and trailing-star matching follows agentsource's literal prefix rules", () => {
     expect(eventMatches(["*"], "thread.state.changed")).toBe(true);
     expect(eventMatches(["thread.*"], "thread.state.changed")).toBe(true);

@@ -1,7 +1,7 @@
-# AgentVoice lifecycle events
+# AgentVoice lifecycle and live voice events
 
 The retained foreground controller owns a **separate read-only Unix socket** for
-thread-state consumers. Control protocol 2 and its MCP tools are unchanged. The
+thread-state consumers and transient native voice items. Control protocol 2 and its MCP tools are unchanged. The
 event endpoint uses protocol 1 and survives voice runtime replacement. Fully quit
 and relaunch AgentVoice to start a controller with this endpoint; runtime restart
 alone cannot add it to an older controller.
@@ -91,8 +91,10 @@ To connect or reconnect:
 
 1. Register your event reader, call `event.subscribe`, and await its response.
 2. Request `state.get`, buffering incoming events until its response arrives.
-3. Replace local state with that snapshot. Discard buffered events at or below
-   its sequence, then apply newer events in order.
+3. Replace local lifecycle state with that snapshot. Discard buffered **lifecycle**
+   events at or below its sequence, then apply newer lifecycle events in order.
+   Deliver every received `voice.*` event independently, including those at or
+   below the snapshot watermark: the snapshot contains no voice items or text.
 4. On socket loss, mark observation unavailable. Reconnect and repeat.
 
 Snapshots and event updates are serialized in the controller's event loop.
@@ -154,11 +156,79 @@ the current main thread but preserves other loaded rows. Old runtime incarnation
 cannot publish into a replacement generation. Subscriptions remain connected
 through replacement because the controller owns them.
 
-This is a current-state feed. Worker-to-controller updates may coalesce under
-IPC pressure; intermediate transitions are not a guaranteed audit trail. It
-carries no prompts, message bodies, tool arguments/results, transcript text,
-audio, SDP, or bearer capabilities. The controller validates the bounded shape
-before publishing. Conversation content APIs are outside this contract.
+The lifecycle projection is a current-state feed. Worker-to-controller lifecycle
+updates may coalesce under IPC pressure; intermediate transitions are not a
+guaranteed audit trail. Lifecycle payloads contain no conversation bodies. The
+controller validates bounded shapes before publishing. Neither event family
+forwards audio, SDP, control bearer capabilities, or arbitrary tool payloads.
+Native voice text can of course contain sensitive user-spoken content.
+
+## Transient native voice items
+
+The same endpoint publishes three additional events. `event.subscribe` with
+`voice.*` selects only these; `*` includes both lifecycle and voice. Consumers
+interested only in thread state should use the three lifecycle event names
+above. All events share the controller's sequence, instanceId, and generation.
+
+| Event | Native notification | Other data |
+| --- | --- | --- |
+| `voice.item.started` | `thread/realtime/item/started` | `{threadId, item}` |
+| `voice.item.transcript.delta` | `thread/realtime/item/transcript/delta` | `{threadId, itemId, delta}` |
+| `voice.item.completed` | `thread/realtime/item/completed` | `{threadId, item}` |
+
+The native item shape is preserved, verified against Codex 0.153.4 and the local
+upstream source:
+
+```ts
+type VoiceItem = { id: string; realtimeSessionId: string } & (
+  | { type: "realtimeSessionStarted" }
+  | { type: "transcriptSegment"; role: "user" | "assistant"; text: string }
+  | { type: "bemItemPromoted"; turnId: string; itemId: string;
+      presentation: { type: "wholeItem" } | { type: "inlineMarkdown" }
+        | { type: "inlineVisualization"; index: number } }
+  | { type: "realtimeSessionClosed"; outcome: "ended" | "failed" }
+);
+```
+
+```json
+{"v":1,"type":"event","event":"voice.item.transcript.delta","data":{"instanceId":"controller-id","generation":2,"sequence":20,"threadId":"native-thread","itemId":"native-item","delta":"Hello"}}
+```
+
+Deltas have no native role or session ID. AgentVoice does not add either or infer
+identity from the currently active call. Consumers can correlate native item
+IDs within their thread using started/completed items. Those items retain their
+reported realtimeSessionId even if the call has since been replaced. User and
+assistant segments may interleave; promoted-work references remain references.
+No referenced work is fetched. AgentVoice does not combine the legacy flat
+transcript events with this stream.
+
+Started/completed payloads include their native item text when present. A
+completed item can be useful even when a consumer missed its start or deltas;
+it describes native canonical completion, not proof the human heard every word.
+Observed voice items from old Fresh threads retain their original thread ID.
+Obsolete runtime generations cannot publish into the replacement generation.
+
+**Live delivery only.** AgentVoice does not accumulate text, store transcript
+files or database rows, backfill history, replay events, or provide a transcript
+UI. There is no delivery acknowledgment or recovery promise. `state.get` remains
+lifecycle-only, even though its sequence includes voice events already published.
+Never discard voice events using a lifecycle snapshot watermark. A new
+subscription gets future events; reconnect does not recover missed speech.
+
+Malformed/unknown native item shapes and events over 64 KiB serialized as
+`{event,data}` are dropped whole, without truncating text or inventing identity.
+IDs are nonempty strings of at most 256 characters. At 16 pending runtime IPC
+writes, new voice events are dropped immediately; they are never coalesced by
+replacing earlier deltas and never enter the control queue's hard-overflow path.
+Later events may still arrive, including a completed item. Accepted events retain
+native arrival order. Socket backpressure can disconnect a slow subscriber;
+restart/shutdown can also lose trailing items. Sequence gaps alone cannot
+distinguish filtering from missing content, and drops before publication do not
+allocate a sequence.
+
+These item notification bodies are omitted from native receive debug logs.
+Existing opt-in general debug logs can still contain other native conversation
+content; this feature adds no transcript logging or persistence.
 
 ## Limits
 

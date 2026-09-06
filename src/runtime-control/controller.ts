@@ -35,6 +35,7 @@ import { lockThread } from "../core/thread-lock.ts";
 import { threadInventorySchema } from "../events/contract.ts";
 import { LifecycleFeed } from "../events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../events/socket.ts";
+import { voiceNotification } from "../events/voice.ts";
 import { stateDirectory } from "../paths.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
@@ -160,6 +161,11 @@ export class RuntimeController implements ControlBackend {
   }
   private event(incarnation: number, method: string, params: unknown) {
     if (incarnation !== this.activeIncarnation || this.closed) return;
+    if (method === "voice") {
+      const checked = voiceNotification(params);
+      if (checked) this.lifecycle.voice(checked);
+      return;
+    }
     if (method === "threads") {
       const checked = threadInventorySchema.safeParse(params);
       if (checked.success) this.lifecycle.update(checked.data);

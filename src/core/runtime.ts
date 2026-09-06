@@ -3,6 +3,7 @@ import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ThreadInventory } from "../events/contract.ts";
+import { nativeVoiceNotification, type VoiceNotification } from "../events/voice.ts";
 import { stateDirectory } from "../paths.ts";
 import {
   AppServerConnection,
@@ -53,7 +54,6 @@ const UNUSED_STREAM_NOTIFICATIONS = [
   "thread/tokenUsage/updated",
   "thread/realtime/transcript/delta",
   "thread/realtime/transcript/done",
-  "thread/realtime/item/transcript/delta",
   "thread/realtime/outputAudio/delta",
 ] as const;
 
@@ -89,6 +89,7 @@ export interface RuntimeOptions extends SessionSelection {
   onChildPid?: (pid: number) => void;
   onChildReaped?: () => void;
   onThreads?: (inventory: ThreadInventory) => void;
+  onVoice?: (notification: VoiceNotification) => void;
   onShutdownOutcome?: (forced: boolean) => void;
 }
 
@@ -495,6 +496,10 @@ export class VoiceRuntime {
   private handleNotification(method: string, params: Record<string, unknown>): void {
     if (this.shuttingDown) return;
     this.threadObserver?.notification(method, params);
+    if (this.options.onVoice) {
+      const notification = nativeVoiceNotification(method, params);
+      if (notification) this.options.onVoice(notification);
+    }
     const id = params["threadId"];
     const turn = (params["turn"] ?? {}) as Record<string, unknown>;
     if (typeof id === "string") {

@@ -1,15 +1,17 @@
 import {
+  type ControllerEvent,
   EVENT_PROTOCOL_VERSION,
   type LifecycleEvent,
   type RuntimeView,
   type ThreadInventory,
   type ThreadSnapshot,
 } from "./contract.ts";
+import type { VoiceNotification } from "./voice.ts";
 
-/** Controller-lifetime state. No native payloads or conversation content are retained here. */
+/** Retained lifecycle projection plus transient voice events; no conversation state. */
 export class LifecycleFeed {
   private value: ThreadSnapshot;
-  private readonly listeners = new Set<(event: LifecycleEvent) => void>();
+  private readonly listeners = new Set<(event: ControllerEvent) => void>();
   constructor(instanceId: string) {
     this.value = {
       instanceId,
@@ -23,7 +25,7 @@ export class LifecycleFeed {
   snapshot(): ThreadSnapshot {
     return structuredClone(this.value);
   }
-  listen(listener: (event: LifecycleEvent) => void): () => void {
+  listen(listener: (event: ControllerEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -66,6 +68,21 @@ export class LifecycleFeed {
           this.emit("thread.state.changed", { thread: next[index] });
       }
   }
+  voice(notification: VoiceNotification): void {
+    if (!["starting", "ready"].includes(this.value.runtime.phase)) return;
+    this.publish(
+      Object.assign({}, notification, {
+        v: EVENT_PROTOCOL_VERSION as typeof EVENT_PROTOCOL_VERSION,
+        type: "event" as const,
+        data: {
+          ...notification.data,
+          instanceId: this.value.instanceId,
+          generation: this.value.generation,
+          sequence: ++this.value.sequence,
+        },
+      }),
+    );
+  }
   private emit(event: LifecycleEvent["event"], data: Record<string, unknown>): void {
     const frame: LifecycleEvent = {
       v: EVENT_PROTOCOL_VERSION,
@@ -78,6 +95,9 @@ export class LifecycleFeed {
         sequence: ++this.value.sequence,
       },
     };
+    this.publish(frame);
+  }
+  private publish(frame: ControllerEvent): void {
     for (const listener of this.listeners) listener(structuredClone(frame));
   }
 }

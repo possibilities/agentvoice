@@ -30,6 +30,35 @@ function isRunning(pid: number) {
 }
 
 describe("owned native stdio", () => {
+  test("native voice item notifications retain bodies in delivery but omit them from debug logs", async () => {
+    const logs: string[] = [];
+    const observed: unknown[] = [];
+    const c = await connect("", {
+      debug: (line) => logs.push(line),
+      onNotification: (method, params) => {
+        if (method.startsWith("thread/realtime/item/")) observed.push(params);
+      },
+    });
+    try {
+      for (const method of [
+        "thread/realtime/item/started",
+        "thread/realtime/item/transcript/delta",
+        "thread/realtime/item/completed",
+      ]) {
+        const params = { threadId: "thread", delta: "PRIVATE VOICE CONTENT" };
+        await c.request("notification", { method, params });
+      }
+      await until(() => observed.length === 3);
+      expect(JSON.stringify(observed)).toContain("PRIVATE VOICE CONTENT");
+      // The test request itself contains the fixture payload; only native receipt is relevant.
+      expect(logs.filter((line) => line.startsWith("<- ")).join("\n")).not.toContain(
+        "PRIVATE VOICE CONTENT",
+      );
+      expect(logs.filter((line) => line.includes("[voice item content omitted]"))).toHaveLength(3);
+    } finally {
+      await c.close();
+    }
+  });
   test("forwards notification opt-outs without opting out of native requests", async () => {
     const c = await connect("", { optOutNotificationMethods: ["item/agentMessage/delta"] });
     try {

@@ -55,7 +55,9 @@ configuration shape, so this output is not a Codex configuration file.
 Unix endpoint for a live controller. UIs subscribe with `event.subscribe`, then
 read `state.get` for the current inventory and a sequence watermark. The endpoint
 reports native thread state and runtime availability across Fresh and runtime
-restart, including native subagents, without conversation content. See the
+restart, including native subagents. The same endpoint also carries typed
+`voice.*` items and transcript deltas as a live-only stream, without history
+backfill or transcript storage. `state.get` remains lifecycle-only. See the
 [event protocol](docs/events.md) for prefix matching, snapshots, and limits.
 A full foreground relaunch is required to activate the new controller endpoint.
 
@@ -229,7 +231,8 @@ rows hide below 12 terminal rows. `LIVE` means the media link is connected, not
 that Codex work completed. The most recent audio/transport or interaction notice
 stays visible without `--debug`; detailed media tracing remains opt-in.
 Without `--debug`, AgentVoice asks Codex to omit unused text, reasoning, tool-output,
-plan/diff, usage, and realtime transcript/audio streams. Lifecycle and settings
+plan/diff, usage, and legacy flat realtime transcript/audio streams. Native
+item transcript deltas remain enabled for the event socket. Lifecycle and settings
 notifications remain enabled. Debug launches retain those streams and decode
 WebRTC data-channel events for diagnostics; ordinary launches skip that work.
 

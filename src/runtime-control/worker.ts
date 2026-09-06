@@ -8,13 +8,8 @@ import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import type { ThreadInventory } from "../events/contract.ts";
-import {
-  IPC_VERSION,
-  type IpcMessage,
-  ipcMessage,
-  type RuntimeActivation,
-  type RuntimeLaunch,
-} from "./protocol.ts";
+import { ipcMessage, type RuntimeActivation, type RuntimeLaunch } from "./protocol.ts";
+import { runtimeSender } from "./sender.ts";
 
 export function runRuntimeWorker(
   dependencies: { mediaFactory?: ConsoleHostOptions["mediaFactory"] } = {},
@@ -41,7 +36,6 @@ export function runRuntimeWorker(
   let mediaEnabled = false;
   let terminalFailure = false;
   let desiredMute = { mic: true, speaker: true };
-  let outgoing = 0;
   let threadInventory: ThreadInventory | undefined;
   let next = 1;
   const leases = new Map<
@@ -55,24 +49,17 @@ export function runRuntimeWorker(
     }
     return message;
   }
-  function send(message: Omit<IpcMessage, "version" | "generation">): void {
-    if (!process.connected) return;
-    if (outgoing >= 16 && message.method === "state") return;
-    if (outgoing >= 64) {
-      void shutdown().finally(() => process.exit(1));
-      return;
-    }
-    outgoing++;
-    try {
-      process.send?.({ ...message, version: IPC_VERSION, generation }, (error: Error | null) => {
-        outgoing--;
-        if (error && !stopping) void shutdown().finally(() => process.exit(1));
-      });
-    } catch {
-      outgoing--;
-      void shutdown().finally(() => process.exit(1));
-    }
-  }
+  const sender = runtimeSender({
+    generation,
+    connected: () => process.connected,
+    write: (message, done) => {
+      process.send?.(message, done);
+    },
+    failed: () => {
+      if (!stopping) void shutdown().finally(() => process.exit(1));
+    },
+  });
+  const send = sender.send;
   function event(method: string, params?: unknown) {
     send({ method, params });
   }
@@ -135,7 +122,7 @@ export function runRuntimeWorker(
   }
   function publish() {
     if (!host || stopping || terminalFailure) return;
-    if (threadInventory && outgoing < 16) {
+    if (threadInventory && sender.pending < 16) {
       event("threads", threadInventory);
       threadInventory = undefined;
     }
@@ -183,6 +170,9 @@ export function runRuntimeWorker(
           onThreads: (inventory) => {
             threadInventory = inventory;
             publish();
+          },
+          onVoice: (notification) => {
+            if (!stopping && !terminalFailure) event("voice", notification);
           },
           onChildPid: (pid) => event("native-pid", { pid }),
           onShutdownOutcome: (value) => {

@@ -141,4 +141,10 @@ the removed AgentVoice worker system.
 current native thread state, inventory completeness, and runtime availability.
 It survives runtime replacement, projects only bounded metadata, and provides
 sequence-watermarked snapshots rather than a conversation log. _Avoid_: pipe,
-control socket, transcript stream.
+control socket.
+
+**Live voice item stream** — Typed native realtime item starts, transcript deltas,
+and completions on the same read-only event endpoint. Preserves native identity
+and content only in transit, with bounded best-effort delivery. No accumulation,
+backfill, persistence or replay; lifecycle snapshots never supersede voice events.
+_Avoid_: transcript database, speech-history replay, delivery guarantee.

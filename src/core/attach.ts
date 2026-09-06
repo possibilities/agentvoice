@@ -318,8 +318,10 @@ export class AppServerConnection {
     }
     if (typeof frame !== "object" || frame === null) return;
     const message = frame as Record<string, unknown>;
-    this.options.debug?.(`<- ${text}`);
     const { id, method } = message;
+    if (typeof method === "string" && method.startsWith("thread/realtime/item/"))
+      this.options.debug?.(`<- ${method} [voice item content omitted]`);
+    else this.options.debug?.(`<- ${text}`);
 
     if (id !== undefined && method === undefined) {
       const pending = this.pending.get(id as number);

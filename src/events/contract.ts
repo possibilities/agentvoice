@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { VoiceNotification } from "./voice.ts";
 
 export const EVENT_PROTOCOL_VERSION = 1;
 export const MAX_THREADS = 256;
@@ -45,3 +46,9 @@ export type LifecycleEvent = {
   event: "threads.changed" | "thread.state.changed" | "runtime.state.changed";
   data: EventContext & Record<string, unknown>;
 };
+export type VoiceEvent = VoiceNotification & {
+  v: typeof EVENT_PROTOCOL_VERSION;
+  type: "event";
+  data: EventContext;
+};
+export type ControllerEvent = LifecycleEvent | VoiceEvent;

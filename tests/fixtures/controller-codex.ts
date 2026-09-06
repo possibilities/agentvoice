@@ -75,6 +75,25 @@ for await (const line of input) {
   }
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
   if (request.method === "turn/start" && (result as { turn?: { id?: string } }).turn?.id) {
+    const item = {
+      id: "voice-fixture-item",
+      realtimeSessionId: "native-session",
+      type: "transcriptSegment",
+      role: "assistant",
+      text: "",
+    };
+    for (const [method, data] of [
+      ["thread/realtime/item/started", { threadId: params.threadId, item }],
+      [
+        "thread/realtime/item/transcript/delta",
+        { threadId: params.threadId, itemId: item.id, delta: "native voice fixture" },
+      ],
+      [
+        "thread/realtime/item/completed",
+        { threadId: params.threadId, item: { ...item, text: "native voice fixture" } },
+      ],
+    ])
+      process.stdout.write(`${JSON.stringify({ method, params: data })}\n`);
     process.stdout.write(
       `${JSON.stringify({ method: "turn/started", params: { threadId: params.threadId, turn: (result as { turn: unknown }).turn } })}\n`,
     );
