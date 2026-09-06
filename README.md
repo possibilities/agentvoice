@@ -190,8 +190,9 @@ initial items. The former `quiet-resume` key is retired and errors at load.
 Speech stays in Codex's native history; AgentVoice adds no persistent transcript
 database. It prefers the native timeline API, with a verified read-only JSONL
 rollout fallback for legacy threads. Replay is bounded to 64 recent speech
-segments and 24,000 UTF-8 bytes; truncation is visible. Unsupported or unreadable
-history errors visibly instead of pretending recall succeeded. Saved transcripts
+segments and 24,000 UTF-8 bytes; routine truncation is recorded only in debug logs.
+Unsupported or unreadable history errors visibly instead of pretending recall
+succeeded. Saved transcripts
 cannot establish which audio reached the speaker, and unsaved audio lost on a
 hard kill cannot be restored. See [ADR 0011](docs/adr/0011-spoken-history-continuity.md)
 for the native probe evidence and pending live acceptance test.

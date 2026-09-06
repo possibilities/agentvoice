@@ -62,7 +62,8 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - src/core/spoken-history.ts: selected-thread native speech reads only. Prefer
   timeline API; legacy -32601 falls back to the exact verified native JSONL path
   from thread/read. No file scan, separate ledger, history migration or rewriting.
-  Bound recent speech and report limits/errors; obsolete reads cannot start calls.
+  Bound recent speech; ordinary truncation is a debug diagnostic, while history
+  errors remain visible. Obsolete reads cannot start calls.
 - src/core/full-access.ts: reject incompatible permission selectors and require
   effective dangerFullAccess/never on start/resume/settings reports. Never infer
   effective permissions from the request or bypass managed native requirements.

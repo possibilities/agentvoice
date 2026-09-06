@@ -160,7 +160,7 @@ export class VoiceRuntime {
         // History reads must never allow an obsolete offer to start after Fresh/quit/redial.
         if (!current()) return;
         if (history?.truncated)
-          this.events.onWarning?.(
+          this.debug(
             "Spoken history was limited to its recent saved tail; older speech is not in this voice call.",
           );
         await connection.request(
