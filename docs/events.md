@@ -28,6 +28,8 @@ To print only completed user and assistant voice messages from a checkout:
 
 ```sh
 bun run voice:messages --workspace ~/code/myapp
+# Stream partial text as it arrives:
+bun run voice:messages --workspace ~/code/myapp --stream
 # Optional when several controllers use that workspace:
 bun run voice:messages --workspace ~/code/myapp --thread <main-thread-id>
 ```
@@ -39,6 +41,14 @@ the current directory. It subscribes only to `voice.item.completed` and prints
 connection notices on stderr. It shows future completed voice segments, without
 Codex conversation events or speech backfill. Completion does not mean audio
 playback finished. Stop with Ctrl+C; rerun after disconnection to reconnect.
+With `--stream`, the script also subscribes to starts and transcript deltas.
+It prints partial text immediately, starts a new labeled line when speakers
+interleave, and uses completion to append missing text. If completion revises
+already printed text, it prints a labeled `(final)` line. Deltas without a known
+start are skipped until completion supplies the role; joining mid-speech therefore
+may still wait for completion. Streaming reflects native text events, not audio
+playback timing.
+
 The script and controller must use the current event protocol. After a protocol
 change, fully quit and relaunch AgentVoice from the current checkout; restarting
 only the voice runtime leaves the old controller running. There is no version

@@ -3,14 +3,16 @@ import { createConnection } from "node:net";
 import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
 import { voiceItemSchema } from "../src/events/voice.ts";
 import { runEventSocketCommand } from "../src/main.ts";
+import { VoiceMessageStream } from "./voice-message-stream.ts";
 
 const usage = `Print completed user/assistant voice messages from a running AgentVoice.
 
-Usage: bun run scripts/voice-messages.ts [--workspace <dir>] [--thread <main-thread-id>]
+Usage: bun run scripts/voice-messages.ts [--workspace <dir>] [--thread <main-thread-id>] [--stream]
 
 Workspace defaults to the current directory. Use --thread to select a controller
 when several are running there. Only future completed voice segments are shown;
-missed speech is not replayed. Completion does not mean audio playback finished.
+missed speech is not replayed. Add --stream to print text deltas as they arrive.
+Completion does not mean audio playback finished.
 Press Ctrl+C to stop.
 `;
 
@@ -20,12 +22,17 @@ async function main(): Promise<void> {
     console.log(usage);
     return;
   }
+  const streaming = argv.includes("--stream");
+  const stream = new VoiceMessageStream((text) => process.stdout.write(text));
   let path = "";
-  await runEventSocketCommand(argv, {
-    write: (output) => {
-      path = output.trim();
+  await runEventSocketCommand(
+    argv.filter((arg) => arg !== "--stream"),
+    {
+      write: (output) => {
+        path = output.trim();
+      },
     },
-  });
+  );
   const socket = createConnection(path);
   socket.setEncoding("utf8");
   socket.write(
@@ -34,7 +41,7 @@ async function main(): Promise<void> {
       type: "request",
       id: "subscribe",
       method: "event.subscribe",
-      params: { events: ["voice.item.completed"] },
+      params: { events: streaming ? ["voice.item.*"] : ["voice.item.completed"] },
     })}\n`,
   );
   let pending = "";
@@ -59,7 +66,13 @@ async function main(): Promise<void> {
           if (!frame.ok) throw new Error(frame.error?.message ?? "Voice subscription failed");
           subscribed = true;
           clearTimeout(timeout);
-          console.error("Listening for completed voice messages. Ctrl+C to stop.");
+          console.error(
+            streaming
+              ? "Streaming voice messages. Ctrl+C to stop."
+              : "Listening for completed voice messages. Ctrl+C to stop.",
+          );
+        } else if (streaming && frame.type === "event") {
+          stream.accept(frame);
         } else if (frame.type === "event" && frame.event === "voice.item.completed") {
           const item = voiceItemSchema.parse(frame.data.item);
           if (item.type === "transcriptSegment") console.log(`${item.role}: ${item.text.trim()}`);
@@ -72,6 +85,7 @@ async function main(): Promise<void> {
     if (!subscribed) throw new Error("Connection closed before voice subscription");
     console.error("Voice event connection closed. Run the script again to reconnect.");
   } finally {
+    stream.finish();
     clearTimeout(timeout);
     socket.destroy();
   }
