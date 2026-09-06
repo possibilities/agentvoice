@@ -23,12 +23,16 @@ describe("foreground console host", () => {
     const h = hostHarness();
     writeFileSync(join(h.directory, "VOICE.md"), "LEGACY BODY MUST NOT APPEAR");
     const setup = await createTestRenderer({ width: 100, height: 30, exitOnCtrlC: false });
+    const started = deferred();
     const run = runConsoleHost(h.config, "test", {
+      onStarted: started.resolve,
       mediaFactory: h.mediaFactory,
       runtime: h.runtimeOptions,
       tui: { createRenderer: async () => setup.renderer },
     });
     try {
+      // The first host lazily imports the TUI; wait for startup before polling an idle renderer.
+      await started.promise;
       await setup.waitFor(
         () =>
           setup.captureCharFrame().includes("LIVE") &&
