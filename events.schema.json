@@ -1,0 +1,835 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/requests"
+    },
+    {
+      "$ref": "#/$defs/responses"
+    },
+    {
+      "$ref": "#/$defs/events"
+    }
+  ],
+  "$defs": {
+    "requests": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema0"
+        },
+        {
+          "$ref": "#/$defs/__schema6"
+        }
+      ]
+    },
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "event.subscribe"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "events": {
+                  "default": ["*"],
+                  "$ref": "#/$defs/__schema4"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["v", "type", "id", "method"],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema2": {
+      "type": "string",
+      "const": "request"
+    },
+    "__schema3": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema4": {
+      "minItems": 1,
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema5"
+      }
+    },
+    "__schema5": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(?:\\*|[a-z][a-z0-9._:/-]*\\*?)$"
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "state.get"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["v", "type", "id", "method"],
+      "additionalProperties": false
+    },
+    "responses": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema7"
+        },
+        {
+          "$ref": "#/$defs/__schema11"
+        },
+        {
+          "$ref": "#/$defs/__schema21"
+        }
+      ]
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "subscribed": {
+              "type": "boolean",
+              "const": true
+            },
+            "events": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": ["subscribed", "events"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema8": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema9": {
+      "type": "string",
+      "const": "response"
+    },
+    "__schema10": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema11": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "$ref": "#/$defs/__schema12"
+            },
+            "generation": {
+              "$ref": "#/$defs/__schema13"
+            },
+            "sequence": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "runtime": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "inventory": {
+              "$ref": "#/$defs/__schema16"
+            },
+            "threads": {
+              "$ref": "#/$defs/__schema17"
+            }
+          },
+          "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
+          "additionalProperties": false,
+          "description": "Lifecycle state only. Its watermark never supersedes transient voice events."
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema12": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producer lifetime ID; changes on full restart."
+    },
+    "__schema13": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Runtime generation within that lifetime."
+    },
+    "__schema14": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Monotonic publication sequence, not a replay cursor."
+    },
+    "__schema15": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        },
+        "mainThreadId": {
+          "type": "string"
+        }
+      },
+      "required": ["phase", "workspace", "mainThreadId"],
+      "additionalProperties": false
+    },
+    "__schema16": {
+      "type": "string",
+      "enum": ["pending", "ready", "incomplete", "unavailable"]
+    },
+    "__schema17": {
+      "maxItems": 256,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema18"
+      }
+    },
+    "__schema18": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema19"
+        },
+        "parentThreadId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema19"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["unknown", "notLoaded", "idle", "active", "systemError"]
+        },
+        "activeFlags": {
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema20"
+          }
+        },
+        "turn": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/__schema19"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["inProgress", "completed", "interrupted", "failed"]
+                }
+              },
+              "required": ["id", "status"],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["id", "parentThreadId", "name", "status", "activeFlags", "turn"],
+      "additionalProperties": false
+    },
+    "__schema19": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "__schema20": {
+      "type": "string",
+      "enum": ["waitingOnApproval", "waitingOnUserInput"]
+    },
+    "__schema21": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": ["invalid_request", "invalid_params", "unknown_method", "internal_error"]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": ["code", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "error"],
+      "additionalProperties": false
+    },
+    "events": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/threads.changed"
+        },
+        {
+          "$ref": "#/$defs/thread.state.changed"
+        },
+        {
+          "$ref": "#/$defs/runtime.state.changed"
+        },
+        {
+          "$ref": "#/$defs/voice.item.started"
+        },
+        {
+          "$ref": "#/$defs/voice.item.transcript.delta"
+        },
+        {
+          "$ref": "#/$defs/voice.item.completed"
+        }
+      ]
+    },
+    "threads.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema24"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema25"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Current state: replace thread inventory."
+    },
+    "__schema22": {
+      "type": "number",
+      "const": 1
+    },
+    "__schema23": {
+      "type": "string",
+      "const": "event"
+    },
+    "__schema24": {
+      "type": "string",
+      "const": "threads.changed"
+    },
+    "__schema25": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "inventory": {
+          "$ref": "#/$defs/__schema16"
+        },
+        "threads": {
+          "$ref": "#/$defs/__schema17"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "inventory", "threads"],
+      "additionalProperties": false
+    },
+    "thread.state.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema26"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema27"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Current state: replace one thread row."
+    },
+    "__schema26": {
+      "type": "string",
+      "const": "thread.state.changed"
+    },
+    "__schema27": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "thread": {
+          "$ref": "#/$defs/__schema18"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "thread"],
+      "additionalProperties": false
+    },
+    "runtime.state.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema29"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Current state: replace runtime and inventory; generation reset boundary."
+    },
+    "__schema28": {
+      "type": "string",
+      "const": "runtime.state.changed"
+    },
+    "__schema29": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "runtime": {
+          "$ref": "#/$defs/__schema15"
+        },
+        "inventory": {
+          "$ref": "#/$defs/__schema16"
+        },
+        "threads": {
+          "$ref": "#/$defs/__schema17"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
+      "additionalProperties": false
+    },
+    "voice.item.started": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema31"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
+    },
+    "__schema30": {
+      "type": "string",
+      "const": "voice.item.started"
+    },
+    "__schema31": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema32"
+        },
+        "item": {
+          "$ref": "#/$defs/__schema33"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "item"],
+      "additionalProperties": false
+    },
+    "__schema32": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "__schema33": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "realtimeSessionId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "type": {
+              "type": "string",
+              "const": "realtimeSessionStarted"
+            }
+          },
+          "required": ["id", "realtimeSessionId", "type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "realtimeSessionId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "type": {
+              "type": "string",
+              "const": "transcriptSegment"
+            },
+            "role": {
+              "type": "string",
+              "enum": ["user", "assistant"]
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          },
+          "required": ["id", "realtimeSessionId", "type", "role", "text"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "realtimeSessionId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "type": {
+              "type": "string",
+              "const": "bemItemPromoted"
+            },
+            "turnId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "itemId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "presentation": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "wholeItem"
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "inlineMarkdown"
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "inlineVisualization"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": ["type", "index"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["id", "realtimeSessionId", "type", "turnId", "itemId", "presentation"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "realtimeSessionId": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "type": {
+              "type": "string",
+              "const": "realtimeSessionClosed"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": ["ended", "failed"]
+            }
+          },
+          "required": ["id", "realtimeSessionId", "type", "outcome"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "voice.item.transcript.delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema34"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema35"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
+    },
+    "__schema34": {
+      "type": "string",
+      "const": "voice.item.transcript.delta"
+    },
+    "__schema35": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema32"
+        },
+        "itemId": {
+          "$ref": "#/$defs/__schema32"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "itemId", "delta"],
+      "additionalProperties": false
+    },
+    "voice.item.completed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema36"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema37"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
+    },
+    "__schema36": {
+      "type": "string",
+      "const": "voice.item.completed"
+    },
+    "__schema37": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema32"
+        },
+        "item": {
+          "$ref": "#/$defs/__schema33"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "item"],
+      "additionalProperties": false
+    }
+  },
+  "title": "AgentVoice event socket",
+  "description": "Fleet NDJSON event contract: event.subscribe and state.get, correlated responses, and named typed events. Lifecycle events reconcile by snapshot watermark; transient voice events never do. Filtering, ordering, byte limits and delivery semantics are documented in docs/events.md."
+}

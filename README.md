@@ -58,7 +58,8 @@ reports native thread state and runtime availability across Fresh and runtime
 restart, including native subagents. The same endpoint also carries typed
 `voice.*` items and transcript deltas as a live-only stream, without history
 backfill or transcript storage. `state.get` remains lifecycle-only. See the
-[event protocol](docs/events.md) for prefix matching, snapshots, and limits.
+[event protocol](docs/events.md) for prefix matching, snapshots, and limits, and
+[events.schema.json](events.schema.json) for the machine-readable event types.
 A full foreground relaunch is required to activate the new controller endpoint.
 
 ### Full access is required

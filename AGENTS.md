@@ -19,6 +19,8 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
   an owned stock child, no turns/audio. Verify before Codex runtime upgrades.
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
+- `bun run generate:events-schema` — regenerate the repo-local events.schema.json
+  contract and named event catalog; keep its drift and socket-frame tests passing.
 - `scripts/install.sh --install` / `bun run cli:install` — same command-only
   editable installer, called by AgentStart. Requires explicit installation scope;
   never use the live destination to test. Installer tests use disposable checkouts,

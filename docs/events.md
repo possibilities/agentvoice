@@ -26,6 +26,23 @@ The directory is mode 0700 and the socket 0600. Both endpoints belong to the sam
 foreground controller and close when it quits. Read-only is the API's contract,
 not isolation from other processes running as the same Unix user.
 
+## Published schema
+
+Every feed follows the repo-local `events.schema.json` convention. AgentVoice's
+[checked-in JSON Schema](../events.schema.json) describes requests, responses,
+and all six event types. `$defs.events.anyOf` lists references to definitions
+named after their `event` value, such as `$defs["voice.item.completed"]`. Each
+definition describes whether it is current state or transient content and gives
+its payload shape. Clients can use this file to generate types or validate frames,
+then filter by those event names through `event.subscribe`.
+
+The fleet shares envelope fields, method/filter semantics, filename, and catalog
+structure. Domain event names and payloads vary by app. Schemas live in each repo;
+there is no runtime catalog request. Regenerate AgentVoice's file with
+`bun run generate:events-schema`; drift tests and real socket-frame validation
+keep it aligned with source. JSON Schema describes shape; ordering, byte-size
+limits, and live-only delivery remain the behavioral contract below.
+
 ## Wire contract
 
 One UTF-8 JSON object per line, over a long-lived duplex connection. Envelopes

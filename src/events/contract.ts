@@ -52,3 +52,19 @@ export type VoiceEvent = VoiceNotification & {
   data: EventContext;
 };
 export type ControllerEvent = LifecycleEvent | VoiceEvent;
+
+export const emptyEventParams = z.object({}).strict();
+export const eventSubscriptionSchema = z
+  .object({
+    events: z
+      .array(
+        z
+          .string()
+          .max(128)
+          .regex(/^(?:\*|[a-z][a-z0-9._:/-]*\*?)$/u),
+      )
+      .min(1)
+      .max(32)
+      .default(["*"]),
+  })
+  .strict();

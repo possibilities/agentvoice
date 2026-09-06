@@ -6,6 +6,7 @@ import { startControlServer } from "../src/control/index.ts";
 import { CONTROL_PROTOCOL_VERSION } from "../src/control/types.ts";
 import type { ThreadSnapshot, ThreadView } from "../src/events/contract.ts";
 import { LifecycleFeed } from "../src/events/feed.ts";
+import { eventSocketFrameSchema } from "../src/events/schema.ts";
 import { EventSocketServer, eventMatches, eventSocketPath } from "../src/events/socket.ts";
 import { runEventSocketCommand } from "../src/main.ts";
 
@@ -38,7 +39,9 @@ async function client(path: string) {
     for (;;) {
       const index = partial.indexOf("\n");
       if (index < 0) break;
-      frames.push(JSON.parse(partial.slice(0, index)));
+      const frame = JSON.parse(partial.slice(0, index));
+      expect(eventSocketFrameSchema.safeParse(frame).success).toBe(true);
+      frames.push(frame);
       partial = partial.slice(index + 1);
     }
   });

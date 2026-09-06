@@ -1,24 +1,8 @@
-import { z } from "zod";
 import { controlSocketPath } from "../control/socket.ts";
 import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
-import { EVENT_PROTOCOL_VERSION } from "./contract.ts";
+import { EVENT_PROTOCOL_VERSION, emptyEventParams, eventSubscriptionSchema } from "./contract.ts";
 import type { LifecycleFeed } from "./feed.ts";
 
-const empty = z.object({}).strict();
-const subscription = z
-  .object({
-    events: z
-      .array(
-        z
-          .string()
-          .max(128)
-          .regex(/^(?:\*|[a-z][a-z0-9._:/-]*\*?)$/u),
-      )
-      .min(1)
-      .max(32)
-      .default(["*"]),
-  })
-  .strict();
 export function eventMatches(patterns: readonly string[], event: string): boolean {
   return patterns.some((pattern) =>
     pattern.endsWith("*") ? event.startsWith(pattern.slice(0, -1)) : event === pattern,
@@ -39,7 +23,7 @@ export class EventSocketServer extends JsonSocketServer {
             error: { code: "unknown_method", message: "unknown event method" },
           });
         } else if (request.method === "event.subscribe") {
-          const checked = subscription.safeParse(request.params ?? {});
+          const checked = eventSubscriptionSchema.safeParse(request.params ?? {});
           if (!checked.success) {
             respond({
               ok: false,
@@ -54,7 +38,7 @@ export class EventSocketServer extends JsonSocketServer {
           // Synchronous handlers and updates share the controller event loop.
           subscribers.set(peer.id, { peer, events });
           respond({ ok: true, result: { subscribed: true, events } });
-        } else if (!empty.safeParse(request.params ?? {}).success) {
+        } else if (!emptyEventParams.safeParse(request.params ?? {}).success) {
           respond({
             ok: false,
             error: { code: "invalid_params", message: "expected empty params" },
