@@ -53,6 +53,13 @@ loss and quit revoke attachment before teardown; redial preserves it. Watcher
 loss terminates the TUI to prevent reconnect from replaying input. An ordinary
 TUI detach leaves voice and native work running.
 
+The attachment launcher tracks its owned process descendants because a configured
+Codex executable can launch through wrappers. Revocation, watcher loss and launcher
+termination stop that entire observed tree, escalating to SIGKILL after a bounded
+grace period. Cleanup continues after an intermediate wrapper exits, before the
+launcher restores terminal modes. A normal watcher close permits a brief graceful
+TUI exit but cannot leave an indefinitely running client.
+
 Validation used stock Codex 0.153.4 with a disposable HOME/CODEX_HOME/workspace,
 localhost fake Responses API, external network denied and no audio. The stock
 TUI displayed an approval raised before attachment on a workspace-write/on-request
