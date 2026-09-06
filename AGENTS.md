@@ -134,7 +134,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   sequence-watermarked lifecycle snapshots, transient native voice items/deltas,
   and typed conversation observation. Conversation content has bounded in-memory
   replay and live-item snapshots; native history pages come from the owned child.
-  No on-disk transcript store, automatic speech replay, or UI. Never discard voice
+  No controller-owned on-disk transcript store, automatic speech replay, or UI.
+  The explicit scripts/voice-record.ts observer may save received voice events to
+  private per-conversation JSONL for external viewing; never feed recordings back
+  into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
   No audio/bearer capabilities or mutation/MCP methods. Runtime replacements reset
   inventory; stale incarnations never publish into a successor. See docs/events.md.

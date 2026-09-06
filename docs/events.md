@@ -62,6 +62,74 @@ The directory is mode 0700 and the socket 0600. Both endpoints belong to the sam
 foreground controller and close when it quits. Read-only is the API's contract,
 not isolation from other processes running as the same Unix user.
 
+## Record and view voice conversations
+
+Run the observer explicitly in a separate terminal while AgentVoice is running:
+
+```sh
+bun run voice:record --workspace ~/code/myapp --out-dir ~/voice-recordings/myapp
+# Optional selector when the workspace has several controllers:
+bun run voice:record --workspace ~/code/myapp --thread <main-thread-id> --out-dir ~/voice-recordings/myapp
+```
+
+The recorder prints each absolute JSONL path to stdout as it opens it, including
+an initial file before any speech. Notices go to stderr. In another terminal:
+
+```sh
+~/code/codex-viewer/bin/codex-viewer --voice-jsonl ~/voice-recordings/myapp/<thread-id>.jsonl --follow
+# Later, view the saved recording without following:
+~/code/codex-viewer/bin/codex-viewer --voice-jsonl ~/voice-recordings/myapp/<thread-id>.jsonl
+```
+
+Use the updated codex-viewer build that supports `--voice-jsonl`. This path renders
+native Codex user/assistant cells without starting app-server or reading Codex
+threads. Scroll upward to pause tail-following; End returns to the latest text.
+Ctrl+C exits either observer without affecting AgentVoice.
+
+One file belongs to one canonical workspace and native main-thread identity.
+Fresh opens a different file; redials and runtime replacements for the same
+thread append to its file. Old-thread events keep their original identity.
+Rerunning the recorder against the same directory appends with a new recording
+boundary. Ordinary thread IDs are filenames; other IDs use a SHA-256 filename.
+The header always retains the original ID. New directories are mode 0700 and
+files 0600. Only one recorder can hold an output directory at a time.
+
+The file contract is UTF-8 JSONL, one complete record per newline:
+
+- `voice_transcript`: first record, with `format: "agentvoice"`, `workspace`,
+  `threadId`, and `observedAt`.
+- `recording.started`: a new recorder run, with a unique `recordingId`.
+- Original current-contract `voice.item.*` event envelopes, plus `observedAt`.
+  Item/session IDs, producer instance/generation/sequence, speaker, raw text and
+  canonical completions are preserved. Promoted Codex work references are omitted;
+  realtime session boundaries remain. No conversation/thread content is fetched.
+- `recording.gap`: `reason` describes an observed runtime interruption, replacement,
+  or recovery of an unfinished last record.
+- `recording.ended`: `recordingId` and `reason` (`stopped`, `disconnected`, or `error`).
+
+All records have an observer wall-clock `observedAt` timestamp; it is not an audio
+playback timestamp. Completions replace draft text for the same producer, generation,
+thread and item. The viewer trims display whitespace, preserves interleaved speakers,
+waits for a known role before displaying orphan deltas, and marks unfinished
+segments at recording/session boundaries. Completed text may still arrive after
+an interruption and correct that item. Recorded text is never injected into a
+voice call, native history, or model context.
+
+Recording begins at subscription, with no speech backfill. The observer cannot
+detect every dropped native event; publication sequence gaps also include filtered
+events. A completion can repair missing draft text, but neither the file nor UI
+promises a complete or audio-heard transcript. No automatic reconnect occurs;
+rerun after disconnect. Stop with Ctrl+C to fsync a recording end marker. Complete
+items, boundaries and gaps are fsynced; a crash can lose trailing drafts. Reopening
+removes only an unfinished final JSONL suffix and records a recovery gap.
+
+Records are bounded at 1 MiB; each recorder can open 128 conversation files per
+run. The viewer limits each item to 256 KiB and total text to 64 MiB / 100,000
+entries, and fails explicitly at these limits. Follow mode waits for incomplete
+final lines and polls every 100 ms. Saved mode labels an incomplete tail. Truncated
+or replaced files require reopening the viewer. JSONL is the source of truth;
+there is no transcript database or additional socket API.
+
 ## Published schema
 
 Every feed follows the repo-local `events.schema.json` convention. AgentVoice's
@@ -264,9 +332,9 @@ it describes native canonical completion, not proof the human heard every word.
 Observed voice items from old Fresh threads retain their original thread ID.
 Obsolete runtime generations cannot publish into the replacement generation.
 
-**Live voice delivery only.** AgentVoice does not accumulate voice text, store
+**Live voice delivery only.** The controller does not accumulate voice text, store
 voice transcript files or database rows, backfill speech, replay voice events,
-or provide a transcript UI. Conversation replay/history is a separate API. There is no delivery acknowledgment or recovery promise. `state.get` remains
+or provide a transcript UI. The explicit observer recorder below can save received events to independent files. Conversation replay/history is a separate API. There is no delivery acknowledgment or recovery promise. `state.get` remains
 lifecycle-only, even though its sequence includes voice events already published.
 Never discard voice events using a lifecycle snapshot watermark. A new
 subscription gets future events; reconnect does not recover missed speech.
@@ -284,7 +352,7 @@ allocate a sequence.
 
 These item notification bodies are omitted from native receive debug logs.
 Existing opt-in general debug logs can still contain other native conversation
-content; this feature adds no transcript logging or persistence.
+content; the socket itself adds no transcript logging or persistence.
 
 ## Limits
 

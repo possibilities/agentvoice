@@ -19,6 +19,7 @@
     "audio:probe": "bun run scripts/audio-probe.ts",
     "field:demo": "bun run scripts/signal-field-demo.ts",
     "voice:messages": "bun run scripts/voice-messages.ts",
+    "voice:record": "bun run scripts/voice-record.ts",
     "cli:install": "bash scripts/install.sh --install",
     "generate:schema": "bun run scripts/generate-schema.ts && biome check --write server.schema.json",
     "generate:events-schema": "bun run scripts/generate-events-schema.ts && biome check --write events.schema.json",

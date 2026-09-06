@@ -60,7 +60,9 @@ read `state.get` for the current inventory and a sequence watermark. The endpoin
 reports native thread state and runtime availability across Fresh and runtime
 restart, including native subagents. The same endpoint also carries typed
 `voice.*` items and transcript deltas as a live-only stream, without history
-backfill or transcript storage. `state.get` remains lifecycle-only. See the
+backfill or controller transcript storage. An explicit `bun run voice:record
+--workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for live
+and saved `codex-viewer --voice-jsonl <file> [--follow]` viewing. `state.get` remains lifecycle-only. See the
 [event protocol](docs/events.md) for prefix matching, snapshots, and limits, and
 [events.schema.json](events.schema.json) for the machine-readable event types.
 
