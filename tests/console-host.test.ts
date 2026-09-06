@@ -339,18 +339,14 @@ describe("baseline readiness and feedback", () => {
     }
   });
 
-  test("invalid prompt, protocol, permissions and Fast readiness never open audio", async () => {
+  test("invalid prompt, protocol, native requirements and Fast readiness never open audio", async () => {
     for (const failure of ["prompt", "protocol", "permissions", "fast"] as const) {
       const h = hostHarness(failure === "protocol" ? { voice: { version: "v2" } } : {});
       if (failure === "prompt") mkdirSync(join(h.directory, "VOICE_AGENT_SYSTEM_PROMPT.md"));
       if (failure === "permissions")
         h.native.override = (method) =>
           method === "thread/start"
-            ? Promise.resolve({
-                thread: { id: "denied" },
-                sandbox: { type: "readOnly" },
-                approvalPolicy: "never",
-              })
+            ? Promise.reject(new Error("native managed requirements rejected thread"))
             : undefined;
       if (failure === "fast") h.native.models = [];
       const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });

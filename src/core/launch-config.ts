@@ -22,6 +22,7 @@ export async function loadLaunchConfig(parsed: ParsedArgs, launchCwd = process.c
   const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);
   const config = resolveConfig(cliValues, fileValues, process.env, home, {
     debug: parsed.debug,
+    allowFullAccess: parsed.allowFullAccess,
     configDir: dirname(configPath),
     launchCwd,
   });

@@ -1,73 +1,40 @@
-/** Product invariant, not a native default or a permission escalation fallback. */
-export const FULL_ACCESS = "danger-full-access";
-export const FULL_ACCESS_PROFILE = ":danger-full-access";
-export class FullAccessError extends Error {}
+import type { ServerConfig } from "./config.ts";
 
-function record(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+const NATIVE_PERMISSION_OVERRIDES = {
+  sandbox_mode: "danger-full-access",
+  approval_policy: "never",
+  default_permissions: ":danger-full-access",
+} as const;
+
+/** Last startup overrides win without rewriting operator-supplied argv. */
+export function fullAccessStartupConfig(config: ServerConfig): string[] | undefined {
+  if (!config.allowFullAccess) return config.codexConfig;
+  return [
+    ...(config.codexConfig ?? []),
+    ...Object.entries(NATIVE_PERMISSION_OVERRIDES).map(([key, value]) => `${key}="${value}"`),
+  ];
 }
 
-function requireValue(value: unknown, expected: string, path: string): void {
-  if (value !== undefined && value !== expected)
-    throw new Error(
-      `${path} conflicts with AgentVoice's full-access-only mode; requires ${expected}`,
-    );
-}
-
-/** Native config accepts dotted keys; check equivalent nested forms as well. */
-function validateNativeConfig(value: unknown, path: string): void {
-  if (value == null) return;
-  const config = record(value);
-  if (!config) throw new Error(`${path} must be a native config object`);
-  for (const [key, entry] of Object.entries(config)) {
-    const parts = key.split(".");
-    const index = parts[0] === "profiles" ? 2 : 0;
-    const expected = (
-      {
-        sandbox_mode: FULL_ACCESS,
-        approval_policy: "never",
-        default_permissions: FULL_ACCESS_PROFILE,
-      } as Record<string, string>
-    )[parts[index] ?? ""];
-    if (expected !== undefined) {
-      if (parts.length !== index + 1)
-        throw new Error(
-          `${path}.${key} conflicts with AgentVoice's full-access-only mode; requires ${expected}`,
-        );
-      requireValue(entry, expected, `${path}.${key}`);
-    }
-    // Only profiles can select another execution posture; other native tables
-    // (MCP tools, hooks, etc.) retain their independent consent/settings policy.
-    if (key === "profiles") {
-      for (const [name, profile] of Object.entries(record(entry) ?? {}))
-        validateNativeConfig(profile, `${path}.profiles.${name}`);
-    } else if (key.startsWith("profiles.") && record(entry)) {
-      validateNativeConfig(entry, `${path}.${key}`);
-    }
-  }
-}
-
-export function validateFullAccessParams(params: Record<string, unknown>, path = "thread"): void {
-  requireValue(params["sandbox"], FULL_ACCESS, `${path}.sandbox`);
-  requireValue(params["approvalPolicy"], "never", `${path}.approvalPolicy`);
-  requireValue(params["permissions"], FULL_ACCESS_PROFILE, `${path}.permissions`);
-  validateNativeConfig(params["config"], `${path}.config`);
-}
-
-/** Require effective server state, never infer permission success from our request. */
-export function confirmFullAccess(result: unknown, settings = false): void {
-  const response = record(result);
-  const sandbox = record(response?.[settings ? "sandboxPolicy" : "sandbox"]);
-  const profile = response?.["activePermissionProfile"];
-  if (
-    response?.["approvalPolicy"] !== "never" ||
-    sandbox?.["type"] !== "dangerFullAccess" ||
-    (profile != null && record(profile)?.["id"] !== FULL_ACCESS_PROFILE)
-  ) {
-    throw new FullAccessError(
-      "Codex did not confirm danger-full-access / never. AgentVoice cannot run with restricted or unknown permissions; check native configuration/managed requirements. No policy was bypassed.",
-    );
+/**
+ * Explicit opt-in wins only permission selectors, after raw thread merging.
+ * Native 0.153.4 uses the typed sandbox to override configured/persisted profiles.
+ * Also replace native config selectors: it validates configured approval_policy
+ * before applying the typed approvalPolicy override (notably for untrusted).
+ * Managed requirements still constrain or reject these ordinary native requests.
+ */
+export function applyFullAccessOptIn(params: Record<string, unknown>): void {
+  params["sandbox"] = "danger-full-access";
+  params["approvalPolicy"] = "never";
+  delete params["permissions"];
+  const raw = params["config"];
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    params["config"] = {
+      ...Object.fromEntries(
+        Object.entries(raw).filter(
+          ([key]) => !Object.hasOwn(NATIVE_PERMISSION_OVERRIDES, key.split(".")[0]!),
+        ),
+      ),
+      ...NATIVE_PERMISSION_OVERRIDES,
+    };
   }
 }

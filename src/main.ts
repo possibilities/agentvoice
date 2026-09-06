@@ -15,15 +15,15 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a foreground Codex voice TUI
 
 Usage:
-  agentvoice --allow-full-access [options]          Continue this workspace's conversation
-  agentvoice console --allow-full-access [options]  Compatibility alias
+  agentvoice [options]                              Continue this workspace's conversation
+  agentvoice console [options]                      Compatibility alias
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                                   Print a live MCP client configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
                                                   Print a live read-only event socket path
 
 Options:
-  --allow-full-access      Required each launch: unrestricted files/network, no approvals
+  --allow-full-access      Opt in to unrestricted files/network and no approvals
   --workspace <dir>        Conversation root (default: launch directory)
   --continue              Continue this workspace's conversation (default)
   --no-continue            Start a new conversation (--fresh is an alias)
@@ -40,16 +40,17 @@ Options:
   --voice <name>           Voice timbre
   --device <index>         Microphone device (default: system default)
   --output-device <index>  Speaker device (default: system default)
-  --sandbox <mode>         Only danger-full-access is supported
-  --approval-policy <p>    Only never is supported
+  --sandbox <mode>         Native sandbox mode (default: native configuration)
+  --approval-policy <p>    Native approval policy (default: native configuration)
   --codex <path>           Stock Codex executable (default: $CODEX_PATH or codex)
   --debug                 Per-launch protocol/media log under the state directory
   --help                  Show help
 
 The foreground controller retains a disposable voice runtime and its stock Codex child.
 Quitting stops running work; native conversation history remains resumable.
-Full access is mandatory and verified with Codex; no config/environment opt-in.
-No permission dialogs. Connector consent/tool questions are refused visibly.
+Permissions follow native configuration unless explicitly overridden.
+--allow-full-access wins permission settings; native managed requirements still apply.
+No permission dialogs. Approval-dependent work may not proceed; requests are refused visibly.
 No background services or remote attachment.
 
 Prompts are opt-in files beside the selected config (not the workspace), each one
@@ -60,7 +61,7 @@ and an append for the same agent cannot both be present. Raw native fields remai
 available in orchestrator.extra / voice.extra.
 
 Settings and prompt files load per runtime generation; runtime restart rereads them.
-Raw extra fields can override named CLI settings; see README for precedence.
+Raw extra fields can override named CLI settings except --allow-full-access; see README.
 
 MCP config export selects one live controller by canonical workspace (the launch
 directory by default). Use --thread when more than one controller is live there.
@@ -210,10 +211,6 @@ export type ParsedConsoleCommand =
 export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   const parsed = parseArgs(argv);
   if (parsed.help) return { help: true };
-  if (!parsed.allowFullAccess)
-    throw new UsageError(
-      "AgentVoice requires --allow-full-access on every launch: unrestricted filesystem/network access and no command/file approval prompts.",
-    );
   const device = parsed.values["device"];
   const outputDevice = parsed.values["output-device"];
   const resume = parsed.values["resume"];
@@ -353,7 +350,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       );
     if (command === "server" || command === "resident" || command === "remote") {
       throw new UsageError(
-        `${command} has been retired. Run agentvoice --allow-full-access [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
+        `${command} has been retired. Run agentvoice [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
       );
     }
     return await runConsoleCommand(command === "console" ? argv.slice(1) : argv);

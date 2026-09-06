@@ -71,30 +71,26 @@ export const orchestratorValuesSchema = z
       .optional(),
     sandbox: z
       .enum(SANDBOX_MODES)
-      .meta({
-        description:
-          "Full-access-only product policy: only danger-full-access is accepted at launch. Incompatible values error. NOT combinable with permissions.",
-        default: "danger-full-access",
-      })
+      .describe(
+        "Native sandbox mode. Unset inherits native configuration. NOT combinable with permissions. --allow-full-access overrides permission selectors at launch; managed requirements still apply.",
+      )
       .optional(),
     "approval-policy": z
       .enum(APPROVAL_POLICIES)
-      .meta({
-        description:
-          "Full-access-only product policy: only never is accepted at launch. No approval UI is provided.",
-        default: "never",
-      })
+      .describe(
+        "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. No approval UI is provided; requests needing human approval are refused visibly.",
+      )
       .optional(),
     "approvals-reviewer": z
       .enum(APPROVALS_REVIEWERS)
       .describe(
-        "Native reviewer passthrough; execution approvals are disabled by the mandatory never policy. This does not grant connector consent or answer questions. Default: native configuration.",
+        "Native reviewer passthrough; --allow-full-access requests the never approval policy. This does not grant connector consent or answer questions. Default: native configuration.",
       )
       .optional(),
     permissions: z
       .string()
       .describe(
-        "Only the built-in :danger-full-access profile is supported; other profiles error at launch. NOT combinable with sandbox.",
+        "Native permission profile. Unset inherits native configuration. NOT combinable with sandbox. --allow-full-access overrides this selection at launch.",
       )
       .optional(),
     "model-provider": z.string().describe("Model provider id. Default: codex config.").optional(),
@@ -121,10 +117,10 @@ export const orchestratorValuesSchema = z
       )
       .optional(),
     config: passthrough(
-      "Raw ~/.codex/config.toml overrides, applied to this thread only. Permission selectors must match danger-full-access / never. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history.",
+      "Raw ~/.codex/config.toml overrides, applied to this thread only. --allow-full-access overrides permission selectors; native managed requirements still apply. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history.",
     ).optional(),
     extra: passthrough(
-      "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Permission selectors must match danger-full-access / never. Conflicting cwd and threadId/path/history overrides are rejected. Known start-only fields are stripped on resume after merging extra (Codex 0.153.3). Nonempty dynamicTools warns: metadata is passed on start but this client has no handlers. Raw fields can override named CLI flags; extra.config replaces the assembled config object. Unknown native fields may be silently ignored.",
+      "Raw thread/start or thread/resume passthrough, merged last except workspace, AgentVoice source identity and explicit --allow-full-access. --allow-full-access overrides permission selectors; native managed requirements still apply. Conflicting cwd and threadId/path/history overrides are rejected. Known start-only fields are stripped on resume after merging extra (Codex 0.153.3). Nonempty dynamicTools warns: metadata is passed on start but this client has no handlers. Raw fields can override named CLI flags; extra.config replaces the assembled config object. Unknown native fields may be silently ignored.",
     ).optional(),
   })
   .meta({
@@ -220,7 +216,7 @@ const serverShape = {
       }),
     )
     .describe(
-      "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; full-access/workspace/realtime invariants still apply.",
+      "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; workspace/realtime invariants still apply. --allow-full-access appends native permission overrides after these entries.",
     )
     .optional(),
   codex: z
