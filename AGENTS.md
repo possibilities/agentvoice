@@ -3,9 +3,11 @@
 A foreground Codex voice TUI: a retained controller owns UI, exact thread
 identity, leases, control transports, and operation records; its disposable
 runtime child owns audio, WebRTC, runtime code, config/prompt/role loading, and
-an owned stock Codex app-server child over native stdio. No background Server,
+an owned stock Codex app-server child over native stdio by default. Opt-in local
+stock TUI attachment uses private native WebSocket plus a guarded gateway (ADR 0021).
+No background Server,
 resident, remote mode, or arbitrary control attachment. Read README.md for
-usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
+usage, CONTEXT.md for vocabulary, and ADRs 0015/0021 for the active topology.
 
 ## What vanilla Codex means
 
@@ -100,6 +102,17 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/core/attach.ts: owned child, native UTF-8 JSONL framing, correlated RPC,
   notifications, visible refusal callback, native denial payloads or JSON-RPC
   errors for unsupported human input, bounded shutdown of its process group.
+- src/core/native-listener.ts + src/attachment/: launch-only --allow-tui-attach,
+  private authenticated native loopback listener, exact-thread policy gateway,
+  controller bootstrap and stock TUI launcher. Never expose the native credential,
+  forward client answers to server questions, or allow other-thread/config/account
+  mutations. Validate before native dispatch; unknown null placeholders are stripped.
+  Attachment requires confirmed dangerFullAccess/never; restricted or missing
+  native permissions revoke/refuse TUI grants while voice keeps running (ADR 0020).
+  Keep these guards under src/attachment/, not in ordinary voice launch policy.
+  Watcher revocation terminates the TUI before automatic reconnect can replay input.
+  Fresh/restart/quit revoke before teardown; redial preserves attachment. Ordinary
+  acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
@@ -126,7 +139,8 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   for both Unix endpoints. Never remove another listener or an unrelated file.
 - src/control/: shared Zod contract/dispatch, private UDS NDJSON server,
   loopback Streamable HTTP MCP projection, and private live-controller discovery
-  for the explicit `mcp-config` export. Keep both transports semantically identical.
+  for the explicit `mcp-config` export and local attachment bootstrap. Keep the
+  MCP and Unix control operations semantically identical.
 - src/core/runtime.ts: a voice runtime's launch/resume/Fresh, voice session,
   child lifecycle, and runtime-cached settings. No account selection/rotation,
   reattachment/restart adoption, custom worker manager, tool callback or
@@ -186,8 +200,8 @@ the child on quota events. Existing profile directories/links stay untouched.
 Retired accounts configuration errors even if false/empty; no automatic migration.
 
 Live controllers also own atomic mode-0600 transport descriptors below the
-mode-0700 control directory. They may contain the bearer capability only for the
-explicit `agentvoice mcp-config` export, are removed on normal close, and must be
+mode-0700 control directory. They may contain the bearer capability for the
+explicit `agentvoice mcp-config` export and local `attach` bootstrap, are removed on normal close, and must be
 selected through a bounded live UDS status check by exact canonical workspace
 and optional thread. Never put the token in status or diagnostics, trust mutable
 identity from the descriptor, choose the newest ambiguous controller, or clean

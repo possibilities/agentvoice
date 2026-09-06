@@ -1,20 +1,22 @@
 # Current AgentVoice field guide
 
-Updated for the foreground/workspace design (ADR 0009). This replaces the
-resident/remote-era inventory; that history remains available in Git and the
+Updated for the retained foreground controller and local attachment (ADRs
+0015/0021). This replaces the resident/remote-era inventory; that history remains available in Git and the
 superseded ADRs.
 
 ## Architecture in a minute
 
 ```text
-One AgentVoice process
-  TUI and input → host → runtime → stock Codex child (stdio JSONL)
-  microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
-                                Codex owns native voice/work handoffs
+Foreground controller (TUI, leases, control API)
+  → disposable runtime → owned stock Codex child (stdio by default)
+    microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
+    optional stock TUI → guarded gateway → private native WebSocket
+                              Codex owns native voice/work handoffs
 ```
 
 The TUI does not run inference itself. The runtime selects a native Codex
-conversation and negotiates voice; it supplies no worker tools or custom turns.
+conversation and negotiates voice; it supplies no worker tools. Explicit restart
+handoffs and attached TUI input use native turns.
 The child does tools and maintains history. Audio is a native library inside
 the app, not another AgentVoice daemon.
 
@@ -24,13 +26,95 @@ Fresh changes thread identity; redial changes only the realtime session.
 Quit stops work. A workspace is a conversation-selection boundary, not a
 security boundary or a guarantee against native memory of other work.
 
+## Stock TUI attachment boundary probe
+
+Opt-in attachment is implemented behind a guarded gateway (ADR 0021). A direct
+authenticated connection to the owned Codex app-server is insufficient for an
+exact-thread TUI attachment that preserves its selected full-access/never posture and human-input refusal policy.
+
+Verified against stock Codex 0.153.4 on September 5 and 6, 2026:
+
+```sh
+CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-boundary-probe.ts
+```
+
+The opt-in macOS probe uses disposable HOME/CODEX_HOME/workspace directories,
+an authenticated loopback listener, an environment without inherited provider
+keys, and sandbox-exec denying external network access. It starts two protocol
+clients and ephemeral threads, but no turns, inference, realtime sessions or
+audio. It verifies these boundaries and cleans up its child and temporary state:
+
+- The owner starts a thread with confirmed `dangerFullAccess` / `never`.
+- The second client successfully changes that thread's approval policy to
+  `on-request` through `thread/settings/update`. The owner receives the applied
+  settings afterward, too late to prevent the mutation. Startup
+  `-c approval_policy=never` is not a lock.
+- The second client can create another thread. The bearer capability authorizes
+  the app-server, not one thread or one runtime-generation attachment.
+
+Source review of upstream commit
+`008bbd5884122dc95aaece19ecfe0fc6a59dcf36` also found that
+`app-server/src/outgoing_message.rs` broadcasts a server request to subscribed
+clients and consumes one shared callback on the first answer. Letting the stock
+TUI answer while AgentVoice refuses is therefore a race. Native TUI shutdown
+normally unsubscribes, but its running-task Exit action can explicitly interrupt
+work (`tui/src/app/event_dispatch.rs`). Simultaneous live voice/TUI testing remains outstanding; this protocol probe
+does not establish live audio behavior.
+
+The gateway checks target identity and permitted operations before forwarding,
+keeps server questions with AgentVoice, and revokes before Fresh or runtime
+replacement. Native credentials remain private. Default launches still use stdio.
+Voice now accepts native/configured permissions (ADR 0020). Only TUI admission
+requires confirmed full access; restricted or unreported native permissions revoke
+TUI tickets and prevent attachment without stopping the voice runtime.
+
+A second opt-in macOS fixture tests the stock TUI with a localhost fake Responses
+API and disposable native history; its native child cannot contact the external
+network and it opens no media:
+
+```sh
+CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-tui-probe.ts
+```
+
+Its READY line gives the isolated HOME/CODEX_HOME/workspace/state for a separate
+terminal running this checkout's `attach` command. Set HOME, CODEX_HOME and
+XDG_STATE_HOME to those fixture paths. Stdin commands `hold`, `stream`, `owner`, `release`,
+`revoke`, and `quit` control only this fixture. `hold` delays the next fake model
+response; `owner` starts a native owner turn so typing in the TUI exercises steer.
+`stream` sends text deltas for the next response and holds completion until
+`release`. Complete lines must appear before release, including on successive
+owner turns. Stock TUI rendering is newline-gated: an unfinished line can remain
+invisible until completion, even when the delta has arrived.
+The fixture has a ten-minute deadline and removes its child and temporary state.
+
+Stock 0.153.4 PTY checks, repeated on 2026-09-06, established: exact warm resume and history display;
+successive owner-originated input and streaming replies appearing in the TUI
+before completion, while the owner opts out of text deltas; idle typed `turn/start`; active
+`turn/steer` reaching the fake provider after the held response completed; and
+launcher termination on revocation. Stock `/quit` acknowledges unsubscribe but
+can close TCP without a normal WebSocket close handshake, so the gateway tracks
+the latest successful unsubscribe for normal detach (verified launcher exit 0;
+revocation exits 1). Unknown `plugin/list` and
+`thread/name/set` calls are refused; core conversation interaction still works.
+Fake-media controller tests separately cover bootstrap, Fresh, redial, runtime
+restart, stale-generation rejection and shutdown. These checks establish neither
+audible response delivery nor simultaneous live voice behavior. The TUI intentionally
+shows native orchestrator messages, not a voice transcript.
+
+Upstream `core/src/session/turn.rs::realtime_text_for_event` excludes user messages;
+`core/src/session/mod.rs::maybe_mirror_event_text_to_realtime` relays assistant
+output, and `core/src/realtime_conversation.rs` sends a standalone context update
+even without an active handoff. The stock backend prompt explicitly accounts for
+typed backend input and spoken summaries of visible output. This establishes the
+intended typed-input route without claiming the prior live trial verified it.
+
 ## Complete configurable surface
 
 The generated server.schema.json is authoritative for spelling and types.
 
 | Area | Keys / controls |
 | --- | --- |
-| Launch | optional --allow-full-access, workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
+| Launch | opt-in --allow-tui-attach, optional --allow-full-access, workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
 | Main agent | model, effort, personality, native sandbox/approval modes, native approvals-reviewer, model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
