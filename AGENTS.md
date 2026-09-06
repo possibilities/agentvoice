@@ -24,6 +24,12 @@ product decision or operator configuration. Existing product policies remain
 in effect until individually changed; this principle does not silently replace
 them, clone all desktop internals or revive retired features.
 
+For desktop voice choices, inspect the JavaScript bundled in the installed
+app's `Contents/Resources/app.asar` alongside the public Codex server source.
+The frontend assets may be minified/generated JavaScript; they are not a
+desktop TypeScript source checkout in the CLI repo. Retain exact asset names
+and bounded excerpts so client-default findings can be rechecked after updates.
+
 Realtime v3 is the concrete example: the inspected desktop's client-owned-call
 path explicitly selects it, while omitted WebRTC version on stock app-server
 0.153.4 selects v1. Do not label v3 non-vanilla merely because it differs from
