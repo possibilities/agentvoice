@@ -189,7 +189,7 @@ export function realtimeParams(
     if (voice.includeStartupContext !== undefined)
       throw appendSlotConflict("voice.include-startup-context");
     params["includeStartupContext"] = true;
-  } else params["includeStartupContext"] = voice.includeStartupContext ?? false;
+  } else setIfDefined(params, "includeStartupContext", voice.includeStartupContext);
   setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);

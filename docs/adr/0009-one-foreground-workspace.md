@@ -1,5 +1,7 @@
 # 0009: One foreground app, one workspace per launch
 
+**Historical policies:** ADR 0015 supersedes the single-process topology. [ADR 0020](0020-native-launch-defaults.md) makes ordinary launch fresh and full access optional; explicit continuation and ownership checks remain.
+
 Accepted 2026-09-04; consolidated 2026-09-05. Supersedes the topology in ADRs
 0002–0005. Former worker/account provisions are retired; their history is in Git.
 

@@ -41,7 +41,7 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   Do not run bare `bun test`: it can discover dependency/vendor tests.
 - `bun run typecheck` — strict TypeScript, no emit.
 - `bun run lint` / `bun run format` — Biome checks / fixes.
-- `bun run console --allow-full-access` — foreground TUI; needs Codex login and built native audio.
+- `bun run console` — foreground TUI; needs Codex login and built native audio.
 - `bun run native:build` / `bun run audio:probe` — build / exercise audio.
   The latter opens hardware; never substitute it for a no-microphone UI test.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
@@ -82,14 +82,14 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   selection from app-server omission; v3 aligns with the desktop path noted above.
   No automatic speech-history reads, initial items or reconnect instructions.
   quiet-resume and replay-spoken-history are retired; their config keys error.
-  AgentVoice defaults native startup context to false; explicit true/null
+  AgentVoice leaves native startup context unset; explicit true/false/null
   passthrough and raw initialItems ([]/null included) still win.
   VOICE_AGENT_APPEND_SYSTEM_PROMPT.md owns the startup-context slot: it sends
   includeStartupContext true plus experimental_realtime_ws_startup_context in
   thread config; any other owner of that slot is a launch error, never a merge.
   Validate final merged initial items/version and WebRTC v2 conflicts before child startup.
-- src/core/full-access.ts: reject incompatible permission selectors and require
-  effective dangerFullAccess/never on start/resume/settings reports. Never infer
+- src/core/full-access.ts: explicit full-access flag overrides native permission
+  selectors only; absent flag leaves native/configured modes intact. Never infer
   effective permissions from the request or bypass managed native requirements.
 - src/core/service-tier.ts: launch-only Fast/standard override, per-child native
   catalog preflight, response checks and requested-versus-reported tier labels.
@@ -146,13 +146,13 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 
 ## Ownership and state invariants
 
-Public voice launches require --allow-full-access before config/child/media
-startup, every time. No prompt or config/env bypass. Help is exempt;
-retired commands report migration errors without launching.
-Full access / never is an intentional product invariant for main conversations,
-not a default to inherit or weaken. Confirm native start/resume responses on
-launch and Fresh. Unexpected human interaction is refused
-with a persistent TUI notice; never add automatic consent or invented answers.
+Public voice launches support native/configured permissions without a flag.
+--allow-full-access explicitly requests danger-full-access/never; it wins over
+conflicting permission selectors, not unrelated settings. Do not reject launch,
+Fresh, resume or settings reports solely because permissions are restricted or
+unreported. Preserve native managed requirements. Unsupported human interaction
+is refused with a persistent TUI notice; never add automatic consent or invented
+answers. No approval UI is implemented in this scope (ADR 0020).
 
 Resolve one existing absolute real workspace before spawning the child:
 CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
@@ -160,7 +160,8 @@ thread start/resume; relative runtime roots use it too. Reject
 conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
 
-Default continue uses native unarchived history, newest updated first, with
+Ordinary launch creates a new conversation without resume-selection history
+lookup. Explicit --continue uses native unarchived history, newest updated first, with
 sourceKinds appServer plus vscode, all providers and exact cwd. Stock 0.153.3
 classifies this third-party app-server client as vscode and can omit threadSource
 from list rows, so verify candidate ownership with thread/read before selecting
@@ -289,8 +290,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   CLI entries after file entries and pass each as a separate native -c argument
   after app-server. Never shell-evaluate, expand paths or log their values here.
   Native parses TOML, applies ordered dotted keys, and owns unknown-key behavior.
-  Local interpretation is only for full-access and required realtime guards;
-  effective thread permissions still must be confirmed. Startup values do not
+  Local interpretation covers explicit full-access overrides and required realtime
+  guards. Preserve unrelated values verbatim. Startup values do not
   hot-reload or get copied into RPC config. Native request config can override
   startup entries; resumed model settings can outrank native startup defaults.
   The opt-in scripts/startup-config-probe.ts uses disposable state, network denial
@@ -309,8 +310,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   the prompt source for its launch; config-directory files then warn, never merge.
 - Do not manufacture skill policy, conversation summaries or speech-history
   replay. ADR 0017 removes the automatic replay layer and its configuration.
-  includeStartupContext defaults false on every call, including Fresh; explicit
-  true enables the entire native snapshot, and raw null restores native resolution.
+  includeStartupContext stays omitted on every call unless explicitly configured;
+  native server resolution currently includes its snapshot. Explicit false skips
+  it, true requests it, and raw null restores native resolution (ADR 0020).
   Tail flush and experimental_realtime_ws_startup_context remain unset by default
   unless VOICE_AGENT_APPEND_SYSTEM_PROMPT.md claims the latter (ADR 0013).
   Preserve explicit overrides; no user-config writes, forced tail-flush work,

@@ -17,7 +17,6 @@ describe("WebRTC compatibility default", () => {
       transport: { type: "webrtc", sdp: "sdp" },
       outputModality: "audio",
       version: "v3",
-      includeStartupContext: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);

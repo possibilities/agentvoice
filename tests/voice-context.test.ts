@@ -19,7 +19,7 @@ describe("voice context passthrough", () => {
       "realtimeEndInstructions",
     ])
       expect(request).not.toHaveProperty(key);
-    expect(request["includeStartupContext"]).toBe(false);
+    expect(request).not.toHaveProperty("includeStartupContext");
     expect(request).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
   });
 
@@ -64,7 +64,7 @@ describe("native voice continuity without application replay", () => {
         expect(request["threadId"]).toBe(h.runtime.currentReady!.threadId);
         expect(request).not.toHaveProperty("initialItems");
         expect(request).not.toHaveProperty("prompt");
-        expect(request["includeStartupContext"]).toBe(false);
+        expect(request).not.toHaveProperty("includeStartupContext");
         h.native.options.onNotification("thread/realtime/started", request);
       };
       try {
@@ -214,7 +214,6 @@ describe("native voice context across call and conversation boundaries", () => {
             // AgentVoice adds no history items or reconnect-specific overrides.
             expect(call.params).toEqual({
               version: "v3",
-              includeStartupContext: false,
               threadId,
               realtimeSessionId: expect.any(String),
               outputModality: "audio",

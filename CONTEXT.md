@@ -28,14 +28,15 @@ quit closes the owned child/process group.
 to launch cwd unless explicitly configured or overridden by --workspace. Used
 for native conversation lookup and all AgentVoice-created threads. Not a sandbox.
 
-**Full access** — Required execution posture: native danger-full-access / never,
-verified on every thread start/resume. --allow-full-access is mandatory launch
-consent, not a config setting. No approval UI; connector/tool interaction is
-refused visibly and remains distinct from execution permissions.
+**Full access** — Optional launch override: --allow-full-access explicitly selects
+native danger-full-access / never. Without the flag, unset permission fields defer
+to Codex; configured modes/profiles are accepted. Managed requirements still apply.
+No approval UI; unsupported human interaction is refused visibly and can block work.
 
 **Conversation / main thread** — A native Codex thread tagged
 agentvoice-orchestrator. Its saved history can continue across app launches.
-The latest eligible thread in the exact workspace is the default selection.
+Ordinary launch creates a new thread; explicit --continue selects the latest
+eligible thread in the exact workspace.
 
 **Orchestrator agent** — The working Codex agent on that main thread: tools,
 filesystem work and native voice handoffs. The term is retained in config keys;
@@ -76,10 +77,10 @@ require effective v3.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
 Old history remains; native work in the old conversation stays there.
---no-continue/--fresh selects this policy at launch.
+Ordinary launch uses this policy; --no-continue/--fresh makes it explicit.
 
-**Continue / resume** — Resume native eligible working-thread history; default
-and --continue select the latest eligible thread, --resume chooses an exact ID.
+**Continue / resume** — Explicitly resume native eligible working-thread history:
+--continue selects the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. AgentVoice does not read or inject saved speech
 into new voice calls. Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
 is a separate native task submission after connection readiness.
@@ -91,7 +92,8 @@ Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
-defaults voice.include-startup-context to false; explicit true opts in. Separate
+omits voice.include-startup-context unless configured, allowing native inclusion.
+Explicit false skips it and true requests it. Separate
 from working-thread continuation and native global/workspace instructions.
 
 **Prompt files** — Optional convention-named files in the selected config's

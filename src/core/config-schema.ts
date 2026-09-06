@@ -162,8 +162,7 @@ export const voiceValuesSchema = z
       .boolean()
       .meta({
         description:
-          "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
-        default: false,
+          "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. Omitted defers to Codex's native resolution (currently includes the snapshot for a new voice call). Explicit false skips it; true includes the whole snapshot. Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
       })
       .optional(),
     "delegation-ack-filler": z
