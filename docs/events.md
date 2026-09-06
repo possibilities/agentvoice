@@ -24,6 +24,26 @@ and an error on ambiguity. It does not start AgentVoice, load voice configuratio
 open audio, or export a control bearer token. `--allow-full-access` is not needed.
 The owned Codex child also receives the path in `AGENTVOICE_EVENTS_SOCKET`.
 
+To print only completed user and assistant voice messages from a checkout:
+
+```sh
+bun run voice:messages --workspace ~/code/myapp
+# Optional when several controllers use that workspace:
+bun run voice:messages --workspace ~/code/myapp --thread <main-thread-id>
+```
+
+The developer script (`scripts/voice-messages.ts`) uses the checkout's discovery
+code; an installed `agentvoice` command is not required. Workspace defaults to
+the current directory. It subscribes only to `voice.item.completed` and prints
+`transcriptSegment` items as `user: ...` or `assistant: ...` on stdout, with
+connection notices on stderr. It shows future completed voice segments, without
+Codex conversation events or speech backfill. Completion does not mean audio
+playback finished. Stop with Ctrl+C; rerun after disconnection to reconnect.
+The script and controller must use the current event protocol. After a protocol
+change, fully quit and relaunch AgentVoice from the current checkout; restarting
+only the voice runtime leaves the old controller running. There is no version
+negotiation or legacy compatibility path.
+
 The endpoint is `<controller-hash>.events.sock` beside the control socket under
 `$XDG_STATE_HOME/agentvoice/control/` (default `~/.local/state/agentvoice/control/`).
 The directory is mode 0700 and the socket 0600. Both endpoints belong to the same
