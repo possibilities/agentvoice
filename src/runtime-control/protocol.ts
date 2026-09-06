@@ -20,6 +20,7 @@ export interface RuntimeLaunch {
   version: string;
   control: ControlMcpRegistration;
   workspace?: string;
+  tuiNativeStateDir?: string;
 }
 export interface RuntimeActivation {
   threadId?: string;

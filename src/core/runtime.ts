@@ -2,6 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AttachmentGateway, type AttachmentTicket } from "../attachment/gateway.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import { nativeVoiceNotification, type VoiceNotification } from "../events/voice.ts";
 import { stateDirectory } from "../paths.ts";
@@ -25,6 +26,7 @@ import {
   handoffRequestSchema,
   handoffUnknown,
 } from "./handoff.ts";
+import { resolveNativeExecutable } from "./native-listener.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
   passthroughWarnings,
@@ -71,10 +73,13 @@ export interface RuntimeEvents {
 
 export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive"> & {
   readonly shutdownForced?: boolean;
+  readonly nativeEndpoint?: import("./native-listener.ts").NativeEndpoint;
 };
 export interface RuntimeOptions extends SessionSelection {
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
+  tuiNativeStateDir?: string;
+  onAttachmentReady?: (issue: () => AttachmentTicket, revoke: () => void) => void;
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
@@ -143,6 +148,7 @@ export class VoiceRuntime {
   private conversationMode: "started" | "continued" = "started";
   private freshInFlight = false;
   private shuttingDown = false;
+  private tuiGateway: AttachmentGateway | undefined;
   private shutdownPromise: Promise<void> | null = null;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
@@ -264,6 +270,7 @@ export class VoiceRuntime {
 
   async fresh(): Promise<void> {
     if (!this.threadReady || this.freshInFlight || this.shuttingDown) return;
+    this.tuiGateway?.revoke();
     this.freshInFlight = true;
     this.threadReady = false;
     try {
@@ -347,6 +354,7 @@ export class VoiceRuntime {
 
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
+    this.tuiGateway?.close();
     this.shuttingDown = true;
     this.threadObserver?.stop();
     this.threadReady = false;
@@ -531,9 +539,13 @@ export class VoiceRuntime {
 
   private async openConnection(): Promise<void> {
     this.assertRunning();
+    const codex = this.options.tuiNativeStateDir
+      ? resolveNativeExecutable(this.config.codex, this.config.orchestrator.workspace)
+      : this.config.codex;
     let connection: RuntimeConnection | null = null;
     connection = await (this.options.connect ?? AppServerConnection.connect)({
-      argv: appServerArgv(this.config.codex, this.config.codexConfig),
+      argv: appServerArgv(codex, this.config.codexConfig),
+      tuiNativeStateDir: this.options.tuiNativeStateDir,
       cwd: this.config.orchestrator.workspace,
       env: { ...process.env, ...this.options.controlMcp?.env },
       onSpawn: this.options.onChildPid,
@@ -556,6 +568,21 @@ export class VoiceRuntime {
       throw new Error("Codex stopped during startup");
     }
     this.attachment = connection;
+    if (this.options.tuiNativeStateDir) {
+      if (!connection.nativeEndpoint) throw new Error("Native attachment listener unavailable");
+      this.tuiGateway = new AttachmentGateway(connection.nativeEndpoint, codex);
+      this.options.onAttachmentReady?.(
+        () => {
+          if (!this.threadReady || this.shuttingDown || this.freshInFlight || !this.threadId)
+            throw new Error("Voice thread is not ready for attachment");
+          return this.tuiGateway!.issue({
+            threadId: this.threadId,
+            workspace: this.config.orchestrator.workspace,
+          });
+        },
+        () => this.tuiGateway?.revoke(),
+      );
+    }
     this.tierSelection = new ServiceTierSelection(
       (method, params) => {
         this.assertRunning();

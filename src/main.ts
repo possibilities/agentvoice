@@ -17,6 +17,8 @@ const USAGE = `agentvoice — a foreground Codex voice TUI
 Usage:
   agentvoice --allow-full-access [options]          Continue this workspace's conversation
   agentvoice console --allow-full-access [options]  Compatibility alias
+  agentvoice attach --allow-full-access [--workspace <dir>] [--thread <id>]
+                                                  Attach a stock Codex TUI to live work
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                                   Print a live MCP client configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
@@ -24,6 +26,7 @@ Usage:
 
 Options:
   --allow-full-access      Required each launch: unrestricted files/network, no approvals
+  --allow-tui-attach       Enable guarded local stock Codex TUI attachment
   --workspace <dir>        Conversation root (default: launch directory)
   --continue              Continue this workspace's conversation (default)
   --no-continue            Start a new conversation (--fresh is an alias)
@@ -50,7 +53,7 @@ The foreground controller retains a disposable voice runtime and its stock Codex
 Quitting stops running work; native conversation history remains resumable.
 Full access is mandatory and verified with Codex; no config/environment opt-in.
 No permission dialogs. Connector consent/tool questions are refused visibly.
-No background services or remote attachment.
+Local TUI attachment is opt-in; no background service or cross-machine attachment.
 
 Prompts are opt-in files beside the selected config (not the workspace), each one
 native Codex control: VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
@@ -94,6 +97,7 @@ const LAUNCH_FLAGS: FlagSpec = {
   ]),
   bool: new Set([
     "--allow-full-access",
+    "--allow-tui-attach",
     "--debug",
     "--fresh",
     "--no-continue",
@@ -115,6 +119,7 @@ export interface ParsedArgs {
   help: boolean;
   fast?: boolean;
   allowFullAccess?: boolean;
+  allowTuiAttach?: boolean;
 }
 
 export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): ParsedArgs {
@@ -184,6 +189,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     fresh,
     help,
     ...(fast === undefined ? {} : { fast }),
+    ...(seen.has("--allow-tui-attach") ? { allowTuiAttach: true } : {}),
     ...(seen.has("--allow-full-access") ? { allowFullAccess: true } : {}),
   };
 }
@@ -346,6 +352,24 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
+
+    if (command === "attach") {
+      const parsed = parseArgs(argv.slice(1), {
+        value: MCP_CONFIG_FLAGS.value,
+        bool: new Set(["--help", "--allow-full-access"]),
+      });
+      if (parsed.help) {
+        console.log(USAGE);
+        return 0;
+      }
+      if (!parsed.allowFullAccess) throw new UsageError("Attachment requires --allow-full-access");
+      const selected = parseMcpConfigCommand(
+        argv.slice(1).filter((arg) => arg !== "--allow-full-access"),
+      );
+      if (selected.help) return 0;
+      const { runAttachment } = await import("./attachment/launcher.ts");
+      return await runAttachment(selected, stateDirectory(process.env, homedir()));
+    }
     if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")
       throw new UsageError(
