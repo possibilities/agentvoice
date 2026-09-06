@@ -63,8 +63,8 @@ describe("foreground runtime ownership", () => {
       await h.cleanup();
     }
   });
-  test("continues native history by default and verifies it before resuming", async () => {
-    const h = runtimeHarness();
+  test("explicit continue selects native history and verifies it before resuming", async () => {
+    const h = runtimeHarness({}, { continue: true });
     h.native.main("existing", h.directory);
     h.native.override = (method) =>
       method === "thread/list"
@@ -86,23 +86,29 @@ describe("foreground runtime ownership", () => {
       await h.cleanup();
     }
   });
-  test("fresh skips lookup, while explicit resume errors never create a replacement", async () => {
-    const h = runtimeHarness({}, { fresh: true });
+  test("default and explicit fresh skip lookup, while resume errors never create a replacement", async () => {
+    const h = runtimeHarness();
+    const explicit = runtimeHarness({}, { fresh: true });
     const missing = runtimeHarness({}, { resume: "missing" });
     try {
       await h.runtime.start();
       expect(h.native.calls[0]?.method).toBe("thread/start");
+      expect(h.native.calls.some((c) => c.method === "thread/list")).toBe(false);
+      await explicit.runtime.start();
+      expect(explicit.native.calls[0]?.method).toBe("thread/start");
+      expect(explicit.native.calls.some((c) => c.method === "thread/list")).toBe(false);
       await expect(missing.runtime.start()).rejects.toThrow("no unarchived AgentVoice");
       expect(missing.native.calls.some((c) => c.method === "thread/start")).toBe(false);
       expect(missing.native.closes).toBe(1);
     } finally {
       await h.cleanup();
+      await explicit.cleanup();
       await missing.cleanup();
     }
   });
   test("refuses a changed workspace or identity and releases failed-start locks", async () => {
     for (const failure of ["workspace", "identity", "resume"]) {
-      const h = runtimeHarness();
+      const h = runtimeHarness({}, { continue: true });
       h.native.main("existing", h.directory);
       h.native.override = (m) => {
         if (m === "thread/read" && failure !== "resume")
@@ -126,7 +132,7 @@ describe("foreground runtime ownership", () => {
     }
   });
   test("two workspaces can run independently; two owners of the same conversation cannot", async () => {
-    const h = runtimeHarness();
+    const h = runtimeHarness({}, { continue: true });
     const elsewhere = runtimeHarness();
     const secondNative = new NativeStub();
     h.native.main("shared", h.directory);
@@ -356,10 +362,13 @@ describe("launch configuration and reported identity", () => {
   });
 
   test("status uses native model/effort reports and attributes protocol to the current session", async () => {
-    const h = runtimeHarness({
-      orchestrator: { model: "requested", effort: "high" },
-      voice: { version: "v3" },
-    });
+    const h = runtimeHarness(
+      {
+        orchestrator: { model: "requested", effort: "high" },
+        voice: { version: "v3" },
+      },
+      { continue: true },
+    );
     h.native.main("saved", h.directory);
     h.native.override = (method) =>
       method === "thread/resume"

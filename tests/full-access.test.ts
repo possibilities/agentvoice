@@ -143,7 +143,7 @@ describe("mandatory full access", () => {
   test("start and resume fail closed without readiness/voice/turns; native requirements errors stay errors", async () => {
     for (const resume of [false, true])
       for (const managedError of [false, true]) {
-        const h = runtimeHarness();
+        const h = runtimeHarness({}, resume ? { resume: "persisted" } : {});
         if (resume) h.native.main("persisted", h.directory);
         h.native.override = (method) =>
           method === (resume ? "thread/resume" : "thread/start")

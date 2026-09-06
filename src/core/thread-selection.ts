@@ -2,6 +2,7 @@ import { ORCHESTRATOR_THREAD_SOURCE } from "./params.ts";
 
 export interface SessionSelection {
   fresh?: boolean;
+  continue?: boolean;
   resume?: string;
 }
 
@@ -49,7 +50,9 @@ export async function selectThread(
 ): Promise<string | null> {
   if (selection.fresh && selection.resume)
     throw new Error("--resume cannot be combined with --no-continue/--fresh");
-  if (selection.fresh) return null;
+  if (selection.continue && (selection.fresh || selection.resume))
+    throw new Error("--continue cannot be combined with --no-continue/--fresh or --resume");
+  if (!selection.continue && !selection.resume) return null;
   const cursors = new Set<string>();
   let cursor: string | undefined;
   do {

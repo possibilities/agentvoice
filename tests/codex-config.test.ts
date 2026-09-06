@@ -144,7 +144,11 @@ describe("native startup configuration", () => {
           orchestrator: { model: "thread-model", config: { model_reasoning_effort: "high" } },
           voice: { extra: { prompt: "request prompt" } },
         },
-        mode === "resume" ? { resume: "existing" } : mode === "fresh" ? { fresh: true } : {},
+        mode === "resume"
+          ? { resume: "existing" }
+          : mode === "continue"
+            ? { continue: true }
+            : { fresh: true },
       );
       h.native.main("existing", h.directory);
       try {
@@ -221,7 +225,7 @@ describe("native startup configuration", () => {
     for (const fresh of [true, false]) {
       const h = runtimeHarness(
         { "codex-config": ["model=startup-model", "service_tier=default"] },
-        { fresh, fast: true },
+        { fresh, continue: !fresh, fast: true },
       );
       h.native.tiers = true;
       h.native.nativeConfig = { model: "startup-model", model_provider: "openai" };

@@ -228,7 +228,7 @@ describe("foreground console host", () => {
   });
 
   test("startup failure restores terminal and closes child/media", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     h.native.override = (m) =>
       m === "thread/list" ? Promise.reject(new Error("lookup failed")) : undefined;
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
@@ -311,7 +311,7 @@ describe("baseline readiness and feedback", () => {
   });
 
   test("shows conversation selection, reported model and Fresh identity", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     h.native.main("saved-conversation", h.directory);
     h.native.tiers = true;
     const setup = await createTestRenderer({ width: 120, height: 24, exitOnCtrlC: false });
@@ -372,7 +372,7 @@ describe("baseline readiness and feedback", () => {
   });
 
   test("quit during native readiness closes the child without opening audio", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     const pending = deferred<unknown>();
     const entered = deferred();
     h.native.override = (method) => {

@@ -193,7 +193,7 @@ describe("Fast runtime propagation", () => {
         {
           orchestrator: { "service-tier": "flex", extra: { serviceTier: "flex" } },
         },
-        { fast },
+        { fast, continue: true },
       );
       h.native.tiers = true;
       h.native.main("existing", h.directory);

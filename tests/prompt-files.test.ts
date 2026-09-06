@@ -90,7 +90,7 @@ describe("convention prompt files", () => {
   });
 
   test("all legacy filenames are ignored across continue/redial/Fresh, including unreadable files", async () => {
-    const h = runtimeHarness();
+    const h = runtimeHarness({}, { continue: true });
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);
     h.native.main("existing", h.directory);
@@ -217,7 +217,11 @@ describe("convention prompt files", () => {
                 }
               : {}),
           },
-          mode === "resume" ? { resume: "existing" } : mode === "fresh" ? { fresh: true } : {},
+          mode === "resume"
+            ? { resume: "existing" }
+            : mode === "continue"
+              ? { continue: true }
+              : { fresh: true },
         );
         h.native.main("existing", h.directory);
         const warnings: string[] = [];

@@ -48,7 +48,11 @@ describe("native voice continuity without application replay", () => {
     test(`${mode}, redial and Fresh never read or inject speech history`, async () => {
       const h = runtimeHarness(
         {},
-        mode === "resume" ? { resume: "existing" } : { fresh: mode === "fresh" },
+        mode === "resume"
+          ? { resume: "existing" }
+          : mode === "continue"
+            ? { continue: true }
+            : { fresh: true },
       );
       h.native.main("existing", h.directory);
       h.native.override = (method) =>
@@ -98,7 +102,7 @@ describe("native voice continuity without application replay", () => {
     [{ version: "v1" }, { version: "v1" }],
   ] satisfies [NonNullable<ConfigValues["voice"]>, Record<string, unknown>][]) {
     test(`native overrides survive resume and redial: ${JSON.stringify(voice)}`, async () => {
-      const h = runtimeHarness({ voice });
+      const h = runtimeHarness({ voice }, { continue: true });
       h.native.main("existing", h.directory);
       try {
         await h.runtime.start();
@@ -198,7 +202,11 @@ describe("native voice context across call and conversation boundaries", () => {
       test(`${mode}: ${scenario.label} survives redial and Fresh`, async () => {
         const values = parseJsonConfig(JSON.stringify(scenario.values), "test config");
         const options: RuntimeOptions =
-          mode === "resume" ? { resume: "existing" } : mode === "fresh" ? { fresh: true } : {};
+          mode === "resume"
+            ? { resume: "existing" }
+            : mode === "continue"
+              ? { continue: true }
+              : { fresh: true };
         const h = runtimeHarness(values, options);
         h.native.main("existing", h.directory);
         try {
