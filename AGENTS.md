@@ -112,6 +112,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   first-answer resolution and pending-request replay on resume. Joining strips
   local TUI resume overrides to preserve live settings; subsequent native settings
   changes, including permissions, are allowed. Do not gate attachment on full access.
+  scripts/voice-speak.ts uses the same exact-thread gateway for explicit
+  thread/realtime/appendSpeech (nonempty text, 64 KiB maximum); other realtime
+  mutations remain denied. Never retry speech automatically or report acceptance
+  as playback confirmation.
   Validate before native dispatch; unknown null placeholders are stripped.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
   Fresh/restart/quit revoke before teardown; redial preserves attachment. Ordinary
