@@ -7,6 +7,28 @@ an owned stock Codex app-server child over native stdio. No background Server,
 resident, remote mode, or arbitrary control attachment. Read README.md for
 usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 
+## What vanilla Codex means
+
+The default reference is the Codex client-and-server experience, including both
+the voice frontend and working agent. AgentVoice replaces the frontend, so
+matching that experience can require sending values that Codex's own client
+sends. An explicit request field is not by itself an AgentVoice customization;
+omitting it is not by itself vanilla behavior.
+
+When auditing a default, trace the relevant Codex client's selection and the
+app-server's resolution separately. Record versions, transport and any feature
+gate or remote-config uncertainty; do not infer the active rollout from a
+reachable source branch. Identify client parity, server fallback and deliberate
+AgentVoice policy separately. New departures from that baseline need an explicit
+product decision or operator configuration. Existing product policies remain
+in effect until individually changed; this principle does not silently replace
+them, clone all desktop internals or revive retired features.
+
+Realtime v3 is the concrete example: the inspected desktop's client-owned-call
+path explicitly selects it, while omitted WebRTC version on stock app-server
+0.153.4 selects v1. Do not label v3 non-vanilla merely because it differs from
+that server fallback. See ADR 0019 and the field guide's default comparison audit.
+
 ## Commands
 
 - `bun run test` — tests in tests/, fake protocol/media, no credentials or mic.
@@ -50,11 +72,12 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Default effective WebRTC requests to v3 for compatibility after raw merging.
-  Explicit versions/null and alternate transports win; never call this Codex's native default.
+  Explicit versions/null and alternate transports win. Distinguish Codex client
+  selection from app-server omission; v3 aligns with the desktop path noted above.
   No automatic speech-history reads, initial items or reconnect instructions.
   quiet-resume and replay-spoken-history are retired; their config keys error.
-  Native startup context defaults false; explicit true/null passthrough and raw
-  initialItems ([]/null included) still win.
+  AgentVoice defaults native startup context to false; explicit true/null
+  passthrough and raw initialItems ([]/null included) still win.
   VOICE_AGENT_APPEND_SYSTEM_PROMPT.md owns the startup-context slot: it sends
   includeStartupContext true plus experimental_realtime_ws_startup_context in
   thread config; any other owner of that slot is a launch error, never a merge.
@@ -175,7 +198,9 @@ On September 5, 2026, a live startup check with stock 0.153.3 and the local nati
 login rejected omitted WebRTC version with invalid_quicksilver_alpha_header;
 explicit v3 connected (no microphone/speaker). See README's compatibility note.
 The operator confirmed the v3 launch works and approved restoring it as AgentVoice's
-documented WebRTC compatibility default. This is not a new native app-server default.
+documented WebRTC compatibility default. Desktop inspection on September 6 also
+confirmed explicit v3 selection on its client-owned-call path; this is client
+alignment, while the app-server's omitted-version fallback remains v1.
 
 These invariants are load-bearing for `session.ts`; re-verify them before
 bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs`,

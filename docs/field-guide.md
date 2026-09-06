@@ -77,8 +77,10 @@ metadata such as dynamic tools is persisted by Codex and cannot be removed merel
 by omitting it on resume.
 
 Voice protocol: AgentVoice selects v3 on final WebRTC requests with no version.
-This is a documented frontend compatibility default, not stock app-server's
-fallback. Explicit version overrides (including raw null) remain authoritative;
+This frontend compatibility default aligns with the inspected desktop's newer
+client-owned-call path. Stock app-server's omission fallback is a separate fact;
+it does not by itself define the vanilla voice experience.
+Explicit version overrides (including raw null) remain authoritative;
 alternate raw transports receive no default. Raw initial items require effective
 v3. A conflicting explicit protocol fails early.
 
@@ -122,6 +124,12 @@ Codex option.
 
 ## Default comparison audit
 
+The reference for vanilla behavior is Codex's client-and-server experience,
+including both voice and the working agent. Audit the relevant client's outgoing
+choices alongside server fallback behavior; an explicit client-selected value
+can be vanilla. Separate that alignment from deliberate AgentVoice policy and
+operator customization. See [ADR 0019](adr/0019-client-server-default-baseline.md).
+
 Rechecked September 5, 2026 against stock app-server 0.153.3 source and the
 installed desktop client 26.831.20005 build 7524 (bundled Codex 0.152.0).
 Desktop evidence is its shipped `webview/assets/app-initial-592a0643ed17.js`:
@@ -129,9 +137,21 @@ Desktop evidence is its shipped `webview/assets/app-initial-592a0643ed17.js`:
 rollout configuration, and `Upr` builds its prompt/context settings. These are
 reachable paths, not evidence of the operator's active rollout values.
 
+Protocol selection rechecked September 6 against installed CLI 0.153.4 and the
+same desktop build: `bps` explicitly selects v3 when the host is `durable`, or
+the backend supports `threadRealtimeExistingCall` and gate `206132468` is enabled.
+It then attaches the call with `transport: existingCall` and `version: v3`.
+The other path uses WebRTC with dynamic-config overrides (`Lhs`, config
+`3566525122`), whose version schema fallback is v1 but can receive another value.
+The app-server forwards version unchanged; core selects v1 for omitted WebRTC
+or existing-call version. This confirms a real desktop v3 path, not a universal
+active rollout. These are Codex realtime protocol versions, not WebRTC standard
+versions. This documentation correction makes no runtime changes; the decisions
+below retain their historical scope pending individual review.
+
 | Area | Finding and consequence | Decision |
 | --- | --- | --- |
-| Protocol, speech model and voice name | Desktop can explicitly force v3; stock WebRTC omission instead selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Restore v3 compatibility in AgentVoice; leave model/name resolution and explicit overrides native. |
+| Protocol, speech model and voice name | Desktop's conditional client-owned-call path explicitly selects v3; stock app-server WebRTC omission selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Current v3 behavior aligns with that desktop path and service compatibility; leave model/name resolution and explicit overrides native. Do not classify it as non-vanilla solely from server omission. |
 | Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows status and meters, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
 | Session prompts and handoffs | Native Codex has voice start/end instructions and automatic handoff forwarding. Desktop adds its own session instructions/tools and can create calls itself. AgentVoice keeps Codex in charge of both the call and handoffs. | Keep native instructions and forwarding. Copying desktop instructions/tool metadata requires corresponding frontend handlers; it is not a compatibility prerequisite. |
 | Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | AgentVoice now defaults startup context off to avoid importing old topics into fresh conversations. Explicit true opts in. Tail flush remains unset; native defaults are not desktop parity. |

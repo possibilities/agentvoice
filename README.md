@@ -6,7 +6,10 @@ plane. Its disposable runtime child owns audio, WebRTC, AgentVoice runtime code,
 and an unmodified `codex app-server` child that owns agents, tools, and native
 conversation history.
 
-The direction is vanilla Codex with configurable prompts and settings.
+The direction is vanilla Codex with configurable prompts and settings: the
+client-and-server experience, including voice, is the baseline. Because AgentVoice
+implements its own frontend, matching Codex can require the same explicit values
+that Codex's client sends; simply omitting fields does not establish parity.
 Full access and workspace-local conversation selection are intentional product
 policies. Raw native settings remain available, with visible warnings for modes
 that this frontend cannot implement; passthrough is not a claim of feature parity.
@@ -101,7 +104,10 @@ run the native protocol probe before changing the supported runtime.
 
 AgentVoice sends realtime **v3 by default** for WebRTC. Ordinary launches need
 no personal configuration workaround. This is a documented frontend transport
-choice; the owned Codex app-server remains unmodified.
+choice that aligns with the inspected Codex desktop's newer client-owned-call
+path; the owned Codex app-server remains unmodified. That desktop path is
+conditional, so it does not establish every account's active version. See the
+[client/server comparison](docs/field-guide.md#default-comparison-audit).
 
 On September 5, 2026, stock Codex 0.153.3's omitted-version WebRTC request was
 rejected with `AVAS requires OpenAI-Alpha: quicksilver=v2.` Explicit v3 connected,
@@ -269,9 +275,10 @@ later: `orchestrator.extra.model` beats `--model`, an explicit
 `voice.extra.voice` beats `--voice`. `orchestrator.extra.config` replaces the
 assembled request config as a whole. Fast flags are the explicit exception and
 win over raw tier settings. Unset settings stay off the wire except the documented
-full-access/never policy and WebRTC v3 compatibility default. Native app-server
-defaults do not imply desktop-client parity. Restricted sandbox modes are not
-supported by this app.
+application defaults described here, including full-access/never, WebRTC v3 and
+startup context off. Evaluate these against both client selection and server
+resolution; server omission alone does not define vanilla Codex. Restricted
+sandbox modes are not supported by this app.
 
 ### Native startup settings
 

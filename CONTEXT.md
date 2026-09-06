@@ -1,5 +1,11 @@
 # AgentVoice vocabulary
 
+**Vanilla Codex** — The Codex client-and-server experience, including the voice
+frontend and working agent. AgentVoice supplies its own frontend, so an explicit
+value matching Codex's client can be part of vanilla behavior. Distinguish client
+selection, app-server omission fallback and deliberate AgentVoice policy; omission
+alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
+
 **AgentVoice controller / Console** — The retained foreground process: terminal
 UI, exact workspace/thread identity, thread leases, durable control operations,
 and private control transports. It is not a resident service and ends when the
@@ -63,8 +69,10 @@ share one validated handler. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
-This frontend default is separate from native fallback (v1 in Codex 0.153.3),
-the work model and --fast. Initial items require effective v3.
+It aligns with the inspected desktop's conditional client-owned-call path.
+The app-server's omitted-version fallback (v1 in Codex 0.153.3/0.153.4) is a
+different reference, separate from the work model and --fast. Initial items
+require effective v3.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
 Old history remains; native work in the old conversation stays there.
