@@ -1,5 +1,7 @@
 # 0010: Quiet voice reconnects
 
+**Historical:** ADR 0012 retired quiet resume; [ADR 0017](0017-remove-spoken-history-replay.md) later removed automatic spoken-history replay. The evidence below describes the earlier behavior.
+
 2026-09-05. Superseded by ADR 0012 the same day: the quiet-resume instruction and
 its `voice.quiet-resume` key were removed. Implementation had been verified with
 fake protocol tests only; live acceptance never happened.

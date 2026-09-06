@@ -158,44 +158,22 @@ If none exists, a new conversation starts. Lookup/resume failures are errors,
 not an excuse to silently create a replacement. Explicit `--resume` must match
 an eligible conversation in the selected workspace.
 
-Default launch and explicit `--continue` resume the selected working thread and
-restore its recent saved speech into a new WebRTC v3 call. This uses the actual
-spoken user/assistant segments, which can differ from the working agent's text.
-Redial reads the latest saved speech again. A first call after `--no-continue`
-or Fresh receives no old speech. AgentVoice adds no instruction of its own to a
-reconnect; with replay off, the call is built like a stock app-server realtime
-start. The native cross-conversation startup snapshot (including Recent Work) is
-off by default, with an explicit opt-in below.
+Default launch and explicit `--continue` resume the selected working thread.
+Each voice connection starts without AgentVoice reading or injecting earlier
+speech or adding its own reconnect instruction. This applies to continue,
+explicit resume, redial and Fresh. Native saved conversation history remains intact.
 
-These independent settings live under `voice` in your selected `server.json`:
+The native startup snapshot (including Recent Work) stays off by default.
+To opt in, set `voice.include-startup-context` to `true` in your selected
+`server.json`. Explicit raw `voice.extra.initialItems` also remain supported,
+including `[]` and `null`; populated initial items require effective realtime v3.
+Prompt files and other native config overrides keep their existing behavior.
 
-| Setting | Default | Ownership and effect |
-| --- | --- | --- |
-| `replay-spoken-history` | `true` | AgentVoice behavior: restore saved speech from this conversation on continue/resume/redial. `false` skips history reads/replay while keeping working-thread continuation. |
-| `include-startup-context` | `false` | Native passthrough with an AgentVoice default: `true` opts into the whole Codex snapshot, including Recent Work from other conversations. |
-
-For example, continue the working thread without restoring old speech:
-
-```json
-{ "voice": { "replay-spoken-history": false } }
-```
-
-The replay setting is not forwarded as a similarly named RPC field. It builds
-native `initialItems`: one developer item marking the segments as past
-conversation, then the segments; the built-in voice base prompt stays intact.
-Explicit raw `voice.extra.initialItems` (including `[]` or `null`) replace
-replay. Other versions/transports receive no automatic
-initial items. The former `quiet-resume` key is retired and errors at load.
-
-Speech stays in Codex's native history; AgentVoice adds no persistent transcript
-database. It prefers the native timeline API, with a verified read-only JSONL
-rollout fallback for legacy threads. Replay is bounded to 64 recent speech
-segments and 24,000 UTF-8 bytes; routine truncation is recorded only in debug logs.
-Unsupported or unreadable history errors visibly instead of pretending recall
-succeeded. Saved transcripts
-cannot establish which audio reached the speaker, and unsaved audio lost on a
-hard kill cannot be restored. See [ADR 0011](docs/adr/0011-spoken-history-continuity.md)
-for the native probe evidence and pending live acceptance test.
+Automatic spoken-history replay has been removed. If your config contains
+`voice.replay-spoken-history`, remove that key, even if its value is `false`.
+It errors at load with removal guidance, as does the older `voice.quiet-resume`
+key. AgentVoice does not migrate or delete your configuration or saved history.
+See [ADR 0017](docs/adr/0017-remove-spoken-history-replay.md) for the decision.
 
 Fresh changes the conversation, not the workspace. It cuts the old media path
 before opening the new one. Old native history is not deleted, and any native
@@ -447,8 +425,8 @@ A present name must load: an unreadable file, a directory or a broken link fails
 before Codex starts, even if a raw field would override the contents. Symlinks to
 regular files work. Contents are cached by the active runtime for redial and
 Fresh, then reread by a full runtime restart. Session-boundary instructions and voice prompts ride every realtime start,
-including redial. Voice history items are not files: raw `voice.extra.initialItems`
-replaces automatic spoken-history replay.
+including redial. Explicit voice context items use raw `voice.extra.initialItems`,
+not prompt files; AgentVoice generates no history items of its own.
 
 The former names (`VOICE.md`, `ORCHESTRATOR.md`, `ORCHESTRATOR_BASE.md`,
 `ORCHESTRATOR_SESSION_START.md`, `ORCHESTRATOR_SESSION_END.md`,
@@ -523,16 +501,15 @@ turns. Verified on stock Codex 0.153.4 on September 5, 2026 with
 
 ### Native voice context: baseline first
 
-All three controls below are configurable but **unset by default**. No setup is
-needed: AgentVoice omits them and leaves native Codex behavior/configuration in
-charge. The shipped `server.json.example` does not configure them. Continue,
-explicit resume, redial and Fresh do not manufacture overrides.
+The controls below are configurable. AgentVoice defaults `include-startup-context`
+to **false**; tail flush and startup-text overrides remain unset, leaving their
+native resolution in charge. The shipped `server.json.example` does not configure
+them. These defaults apply to continue, explicit resume, redial and Fresh.
 
 A saved conversation is not the same as a voice call: redial starts another
 call on the same conversation; Fresh starts a new conversation. Codex can give
 each call a startup snapshot and can deliver leftover speech to the working
-agent when a call ends. These native mechanisms are independent of AgentVoice's
-`replay-spoken-history` setting, which restores already-saved spoken segments.
+agent when a call ends. AgentVoice adds no automatic speech replay between calls.
 
 The following are optional overrides. Merge the setting into your config and relaunch;
 these controls do not hot reload.

@@ -26,7 +26,6 @@ describe("resolveConfig", () => {
     expect(config.voice.version).toBeUndefined();
     expect(config.voice.model).toBeUndefined();
     expect(config.voice.includeStartupContext).toBeUndefined();
-    expect(config.voice.replaySpokenHistory).toBeUndefined();
   });
 
   test("CLI beats file beats default, per leaf", () => {
@@ -457,7 +456,6 @@ describe("parseJsonConfig characterization", () => {
 
   test("voice boolean options are named on type errors", () => {
     const keys = [
-      "replay-spoken-history",
       "include-startup-context",
       "delegation-ack-filler",
       "codex-responses-as-items",

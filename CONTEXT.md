@@ -72,21 +72,19 @@ Old history remains; native work in the old conversation stays there.
 
 **Continue / resume** — Resume native eligible working-thread history; default
 and --continue select the latest eligible thread, --resume chooses an exact ID.
-No global thread.json pointer. New voice calls restore recent saved speech from
-that same thread unless voice.replay-spoken-history=false or raw initial items win;
-Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
+No global thread.json pointer. AgentVoice does not read or inject saved speech
+into new voice calls. Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
 is a separate native task submission after connection readiness.
 
-**Spoken history replay** — AgentVoice reads native saved speech and sends it as
-past conversation in v3 initialItems, without a separate persistent store. The
-frontend setting voice.replay-spoken-history defaults true; false leaves the
-working thread resumed but skips this read/replay, so the reconnect matches a
-stock app-server realtime start. It cannot restore unsaved audio.
+**Native voice context** — Explicit voice.extra.initialItems are passed through
+unchanged, including empty and null values. Automatic spoken-history replay was
+removed (ADR 0017); voice.replay-spoken-history is retired and errors at load.
+Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
 defaults voice.include-startup-context to false; explicit true opts in. Separate
-from selected-thread speech replay and native global/workspace instructions.
+from working-thread continuation and native global/workspace instructions.
 
 **Prompt files** — Optional convention-named files in the selected config's
 directory (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,

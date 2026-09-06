@@ -158,20 +158,11 @@ export const voiceValuesSchema = z
         default: DEFAULT_WEBRTC_VERSION,
       })
       .optional(),
-    "replay-spoken-history": z
-      .boolean()
-      .meta({
-        title: "AgentVoice: replay spoken history",
-        description:
-          "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. False skips history reads and replay without changing working-thread continuation or native startup context; the reconnect then carries no AgentVoice items, matching stock app-server. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
-        default: true,
-      })
-      .optional(),
     "include-startup-context": z
       .boolean()
       .meta({
         description:
-          "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of replay-spoken-history and working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
+          "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
         default: false,
       })
       .optional(),

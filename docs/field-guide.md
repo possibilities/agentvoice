@@ -34,7 +34,7 @@ The generated server.schema.json is authoritative for spelling and types.
 | Main agent | model, effort, personality, fixed full-access/never posture, native approvals-reviewer (no execution approvals under never), model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
-| Voice | model, name, version, replay-spoken-history (frontend policy), include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
+| Voice | model, name, version, include-startup-context, delegation-ack-filler, codex-response-handoff-mode, codex-responses-as-items, codex-response-item-prefix, codex-response-handoff-channel-prefixes, flush-transcript-tail-on-session-end, client-managed-handoffs |
 | Realtime RPC escape hatch | voice.extra; threadId/realtimeSessionId are rejected |
 | Prompt files | Convention names beside the selected config: VOICE_AGENT_SYSTEM_PROMPT / VOICE_AGENT_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SYSTEM_PROMPT / VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT, VOICE_ORCHESTRATOR_SESSION_START / _END (.md); one native control each, override and append exclusive per agent |
 | Native startup config | codex-config array / repeatable -c or --codex-config key=value; TOML values, file then CLI entries, no defaults |
@@ -116,7 +116,7 @@ requests are refused through native denials or protocol errors with a persistent
 TUI explanation, not an approval UI or invented answers.
 
 Still application-owned: full-access-only posture, visible refusal handling,
-WebRTC/audio transport, workspace-local selection, spoken-history replay and renewal policy. The project
+WebRTC/audio transport, workspace-local selection and renewal policy. The project
 is not yet fully vanilla in defaults, nor a complete passthrough for every future
 Codex option.
 
@@ -155,8 +155,9 @@ continuity machinery; stock app-server does not supply those semantics.
 [ADR 0010](adr/0010-quiet-voice-resume.md) records the evidence and the
 quiet-resume instruction that briefly addressed it; ADR 0011 added saved-speech
 restoration. [ADR 0012](adr/0012-vanilla-voice-reconnects.md) then retired the
-instruction: a reconnect carries replayed speech and nothing else AgentVoice
-authored, so that stock repetition can recur when startup context is enabled.
+instruction. [ADR 0017](adr/0017-remove-spoken-history-replay.md) subsequently
+removed automatic saved-speech replay entirely. AgentVoice now adds neither
+replay items nor reconnect instructions; native startup context remains opt-in.
 
 ## Native voice context levers retained
 
@@ -171,25 +172,16 @@ Fresh. Explicit voice.include-startup-context=true opts into the complete native
 snapshot; raw null restores native resolution. Native tail flush and startup-text
 overrides stay unset by default. Global/workspace instructions still apply.
 
-Frontend settings are independent of those native controls:
+AgentVoice generates no initial items and does not read saved speech at voice
+startup. Explicit raw `voice.extra.initialItems` (including `[]`/`null`) still
+pass through; populated initial items require effective v3. Native thread resume
+and explicit prompt/config customization are unchanged.
 
-| AgentVoice setting | Default | Effect |
-| --- | --- | --- |
-| voice.replay-spoken-history | true | Restore recent saved speech from the selected native thread on continue/resume/redial; false skips read/replay without changing working-thread continuation. |
-
-The key is not forwarded as a similarly named RPC field. It builds native v3
-initialItems, keeping the native voice base prompt intact. Explicit raw
-initialItems (including []/null) replace it.
-Fresh's first call never replays, and no other conversation is read for speech.
-The former voice.quiet-resume key is retired and errors at load (ADR 0012).
-
-Native timeline reads are preferred. Stock 0.153.4 rejects timeline reads for
-legacy history; the fallback reads the verified local JSONL rollout returned by
-thread/read, never a separate transcript database. It rejects unsupported shared,
-forked, compressed or damaged fallback history rather than claiming recall.
-Replay retains at most 64 speech segments and 24,000 UTF-8 bytes; the fallback scans
-a bounded 8 MiB tail. Limits are visible, read errors stop that voice startup, and
-replay-spoken-history=false is an explicit escape hatch. No history is rewritten.
+The former `voice.replay-spoken-history` key is retired (ADR 0017), alongside
+`voice.quiet-resume` (ADR 0012). Remove either key even when set to false; launch
+errors provide removal guidance. There is no automatic migration or history
+rewriting. The timeline reader, legacy rollout fallback, replay limits and
+replay probe have been removed.
 
 ## Optional features still present
 
@@ -233,7 +225,7 @@ choice, not automatic discovery; see README migration notes.
 ## Deferred requests and decisions
 
 - Native passthrough now covers startup, conversation and realtime settings;
-  full-access-only, WebRTC v3 compatibility, spoken replay and explicit-only
+  full-access-only, WebRTC v3 compatibility and explicit-only
   file/session-boundary overrides are implemented. Startup context defaults off; other native context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - Selective seeding of global skills. Role skills are isolated to the owned child

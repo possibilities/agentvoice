@@ -52,7 +52,6 @@ export class NativeStub implements RuntimeConnection {
     if (method === "config/read") result = { config: this.nativeConfig };
     if (method === "model/list") result = { data: this.models, nextCursor: null };
     if (method === "thread/list") result = { data: this.threads, nextCursor: null };
-    if (method === "thread/timeline/list") result = { data: [], nextCursor: null };
     if (method === "thread/start") {
       const thread = {
         id: `thread-${++this.counter}`,

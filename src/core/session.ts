@@ -26,7 +26,7 @@ export interface VoiceSessionEffects {
   /** Re-announce readiness: offers are accepted again. */
   sendReady(): void;
   /** thread/realtime/start with this session id and SDP offer. */
-  startRealtime(realtimeSessionId: string, sdp: string, current: () => boolean): Promise<void>;
+  startRealtime(realtimeSessionId: string, sdp: string): Promise<void>;
   /** thread/realtime/stop; always yields exactly one closed("requested"). */
   stopRealtime(): Promise<void>;
   debug?(line: string): void;
@@ -46,7 +46,6 @@ export class VoiceSessionManager {
   private readonly effects: VoiceSessionEffects;
   private readonly startTimeoutMs: number;
   private session: Session | null = null;
-  private startedInConversation = false;
   /** Stops we have issued whose closed("requested") has not yet arrived. */
   private pendingRequestedCloses = 0;
 
@@ -57,10 +56,6 @@ export class VoiceSessionManager {
 
   get version(): string | null {
     return this.session?.version ?? null;
-  }
-
-  get hasStarted(): boolean {
-    return this.startedInConversation;
   }
 
   /** A new offer supersedes whatever is running — renewal and retry alike. */
@@ -78,12 +73,10 @@ export class VoiceSessionManager {
       this.fail(next, `realtime session did not start within ${this.startTimeoutMs}ms`);
     }, this.startTimeoutMs);
     this.effects.debug?.(`starting realtime session ${next.id}`);
-    return this.effects
-      .startRealtime(next.id, sdp, () => this.session === next)
-      .catch((error) => {
-        if (this.session !== next) return;
-        this.fail(next, error instanceof Error ? error.message : String(error));
-      });
+    return this.effects.startRealtime(next.id, sdp).catch((error) => {
+      if (this.session !== next) return;
+      this.fail(next, error instanceof Error ? error.message : String(error));
+    });
   }
 
   handleNotification(method: string, params: Record<string, unknown>): void {
@@ -92,7 +85,6 @@ export class VoiceSessionManager {
         // A stale id is a superseded or stopped start coming up late; the
         // supersede or our ordered stop already covers it — ignore.
         if (this.session && params["realtimeSessionId"] === this.session.id) {
-          this.startedInConversation = true;
           this.session.active = true;
           this.session.version = typeof params["version"] === "string" ? params["version"] : null;
           if (this.session.startTimer) {
@@ -144,7 +136,6 @@ export class VoiceSessionManager {
   /** New conversation or dead child; no old voice session remains to stop. */
   reset(): void {
     this.clearSession();
-    this.startedInConversation = false;
     this.pendingRequestedCloses = 0;
   }
 

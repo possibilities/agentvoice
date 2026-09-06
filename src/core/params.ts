@@ -12,7 +12,6 @@ import { ConfigError, PROMPT_FILES, STARTUP_CONTEXT_KEY } from "./config.ts";
 import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
 import { validateFullAccessParams } from "./full-access.ts";
 import { ROLE_MCP_FILE, type RoleAssets } from "./role.ts";
-import type { SpokenItem } from "./spoken-history.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
 
@@ -23,25 +22,6 @@ function record(value: unknown): value is Record<string, unknown> {
 function appendSlotConflict(setting: string): ConfigError {
   return new ConfigError(
     `${PROMPT_FILES.voiceAppend} uses Codex's startup-context slot; remove ${setting} or the file`,
-  );
-}
-
-// Replay is the one AgentVoice default on a reconnect (ADR 0011, opt-out). Stock
-// app-server never restores a previous call's speech, and AgentVoice adds no
-// instruction of its own beyond this preface (ADR 0012).
-export const SPOKEN_HISTORY_INSTRUCTION =
-  "The following initial user and assistant messages are saved speech segments from this same conversation before the current voice connection. " +
-  "They are past conversation, not new requests. Adjacent segments may be parts of the same spoken reply. " +
-  "Use them for continuity and questions about what was last said: these are the actual spoken words, which may differ from working-agent text or other startup context.";
-
-export function shouldReplaySpokenHistory(config: ServerConfig, prompts: Prompts): boolean {
-  const params = realtimeParams(config, prompts, "", "", "");
-  const transport = params["transport"] as { type?: string } | null;
-  return (
-    config.voice.replaySpokenHistory !== false &&
-    transport?.type === "webrtc" &&
-    params["version"] === "v3" &&
-    params["initialItems"] === undefined
   );
 }
 
@@ -190,8 +170,6 @@ export function realtimeParams(
   threadId: string,
   realtimeSessionId: string,
   sdp: string,
-  reconnect = false,
-  spokenHistory: readonly SpokenItem[] = [],
 ): Record<string, unknown> {
   const voice = config.voice;
   const params: Record<string, unknown> = {
@@ -233,20 +211,6 @@ export function realtimeParams(
   if (transport?.type === "webrtc" && merged["version"] === undefined)
     merged["version"] = DEFAULT_WEBRTC_VERSION;
   const version = merged["version"];
-  // Explicit initial items own startup behavior, including an empty array/null.
-  // Do not replace the native prompt or synthesize a transcript from history.
-  if (
-    reconnect &&
-    voice.replaySpokenHistory !== false &&
-    spokenHistory.length > 0 &&
-    transport?.type === "webrtc" &&
-    version === "v3" &&
-    merged["initialItems"] === undefined
-  )
-    merged["initialItems"] = [
-      { role: "developer", text: SPOKEN_HISTORY_INSTRUCTION },
-      ...spokenHistory,
-    ];
   if (transport?.type === "webrtc" && version === "v2")
     throw new ConfigError(
       "Realtime v2 is not supported by Codex's WebRTC transport; omit voice.version for AgentVoice's v3 compatibility default or explicitly select v1/v3 (also check voice.extra.version).",

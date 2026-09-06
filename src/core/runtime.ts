@@ -27,13 +27,11 @@ import {
   ORCHESTRATOR_THREAD_SOURCE,
   passthroughWarnings,
   realtimeParams,
-  shouldReplaySpokenHistory,
   threadParams,
 } from "./params.ts";
 import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
-import { SpokenHistoryReader } from "./spoken-history.ts";
 import { lockThread } from "./thread-lock.ts";
 import { type SessionSelection, selectThread } from "./thread-selection.ts";
 import type { ReadyInfo } from "./voice-types.ts";
@@ -132,9 +130,6 @@ export class VoiceRuntime {
   private readonly sessions: VoiceSessionManager;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
-  private readonly spokenHistory = new SpokenHistoryReader((method, params) =>
-    this.requireConnection().request(method, params),
-  );
 
   constructor(
     private readonly config: ServerConfig,
@@ -147,33 +142,14 @@ export class VoiceRuntime {
       sendClosed: (reason) => this.events.onClosed(reason),
       sendFailed: (message) => this.events.onError(message, true),
       sendReady: () => this.emitReady(),
-      startRealtime: async (sessionId, sdp, current) => {
+      startRealtime: async (sessionId, sdp) => {
         const connection = this.attachment;
         const threadId = this.threadId;
         if (!connection || !threadId || this.shuttingDown)
           throw new AppServerError("Codex is not ready");
-        const reconnect = this.conversationMode === "continued" || this.sessions.hasStarted;
-        const history =
-          reconnect && shouldReplaySpokenHistory(this.config, this.prompts)
-            ? await this.spokenHistory.read(threadId, this.config.orchestrator.workspace, current)
-            : undefined;
-        // History reads must never allow an obsolete offer to start after Fresh/quit/redial.
-        if (!current()) return;
-        if (history?.truncated)
-          this.debug(
-            "Spoken history was limited to its recent saved tail; older speech is not in this voice call.",
-          );
         await connection.request(
           "thread/realtime/start",
-          realtimeParams(
-            this.config,
-            this.prompts,
-            threadId,
-            sessionId,
-            sdp,
-            reconnect,
-            history?.items,
-          ),
+          realtimeParams(this.config, this.prompts, threadId, sessionId, sdp),
         );
       },
       stopRealtime: async () => {

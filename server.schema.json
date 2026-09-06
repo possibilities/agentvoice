@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off and spoken-history replay. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -125,15 +125,9 @@
           "description": "Realtime protocol override. AgentVoice defaults WebRTC requests to v3 for service compatibility; this is a frontend transport default, not Codex's omitted-version fallback. Explicit values and final voice.extra.version overrides win, including null for native fallback (WebRTC v1 in Codex 0.153.3, currently rejected by the service tested here). Alternate raw transports receive no compatibility default. WebRTC rejects v2; initial seed items require effective v3.",
           "default": "v3"
         },
-        "replay-spoken-history": {
-          "type": "boolean",
-          "title": "AgentVoice: replay spoken history",
-          "description": "AgentVoice behavior, not a native passthrough. Default true: restore recent saved user/assistant speech from this conversation into WebRTC v3 on continue/resume/redial, prefaced by one developer item marking it as past conversation. False skips history reads and replay without changing working-thread continuation or native startup context; the reconnect then carries no AgentVoice items, matching stock app-server. Explicit raw initial items (including [] or null) replace replay. Reads native history only; no separate transcript store. Bounded to 64 segments and 24000 UTF-8 bytes; incomplete or unsaved audio cannot be restored.",
-          "default": true
-        },
         "include-startup-context": {
           "type": "boolean",
-          "description": "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of replay-spoken-history and working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
+          "description": "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
           "default": false
         },
         "delegation-ack-filler": {

@@ -1,5 +1,7 @@
 # 0011: Continue the spoken conversation
 
+**Superseded for replay by [ADR 0017](0017-remove-spoken-history-replay.md):** automatic replay, its setting, reader and probe have been removed. The startup-context-off default remains current. The decisions and probe evidence below are historical.
+
 2026-09-05. Supersedes ADR 0008's no-replay/startup-context policy and extends
 ADR 0010's quiet-only reconnect behavior. The operator approved saved-speech
 restoration, native Recent Work as an opt-in, and an independent replay opt-out.

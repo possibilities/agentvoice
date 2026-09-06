@@ -1,5 +1,7 @@
 # 0012: Reconnect voice calls without AgentVoice instructions
 
+**Partially superseded by [ADR 0017](0017-remove-spoken-history-replay.md):** quiet resume remains retired, and the saved-speech replay exception described below has now also been removed.
+
 2026-09-05. Supersedes ADR 0010. The operator ruled that the vanilla-by-default
 direction outranks the quiet-resume instruction ADR 0010 installed as a default,
 while keeping ADR 0011's saved-speech replay as an opt-out default.

@@ -53,7 +53,6 @@ for await (const line of input) {
       nextCursor: null,
     };
   }
-  if (request.method === "thread/timeline/list") result = { data: [], nextCursor: null };
   if (request.method === "turn/start") {
     const mode = existsSync(join(root, "handoff-mode"))
       ? readFileSync(join(root, "handoff-mode"), "utf8")

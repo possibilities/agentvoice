@@ -62,7 +62,7 @@ describe("generated schema invariants", () => {
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema["title"]).toBe("agentvoice configuration");
     expect(schema["description"]).toBe(
-      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, startup snapshot off and spoken-history replay. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
+      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
     );
   });
 
@@ -113,17 +113,14 @@ describe("generated schema invariants", () => {
     expect(spec(voice, "codex-response-handoff-mode")["enum"]).toEqual([...HANDOFF_MODES]);
   });
 
-  test("voice context and frontend replay controls remain optional with distinct defaults", () => {
+  test("native voice context controls remain optional without a frontend replay setting", () => {
     const voice = sectionProperties("voice");
     for (const key of ["include-startup-context", "flush-transcript-tail-on-session-end"]) {
       expect(spec(voice, key)["type"]).toBe("boolean");
     }
     expect(spec(voice, "include-startup-context")["default"]).toBe(false);
     expect(spec(voice, "flush-transcript-tail-on-session-end")).not.toHaveProperty("default");
-    expect(spec(voice, "replay-spoken-history")["default"]).toBe(true);
-    expect(spec(voice, "replay-spoken-history")["description"]).toContain(
-      "not a native passthrough",
-    );
+    expect(voice).not.toHaveProperty("replay-spoken-history");
     expect(topProperties()["voice"]).not.toHaveProperty("required");
   });
 

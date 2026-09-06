@@ -100,7 +100,6 @@ export interface VoiceConfig {
   version?: RealtimeVersion;
   model?: string;
   name?: string;
-  replaySpokenHistory?: boolean;
   includeStartupContext?: boolean;
   delegationAckFiller?: boolean;
   codexResponseHandoffMode?: HandoffMode;
@@ -480,10 +479,14 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
     }
   }
   const voice = raw["voice"];
-  if (voice && typeof voice === "object" && Object.hasOwn(voice, "quiet-resume"))
-    throw new ConfigError(
-      `${source}: voice.quiet-resume has been retired; remove this key. AgentVoice no longer adds its own reconnect instruction; spoken-history replay stays opt-in through voice.replay-spoken-history.`,
-    );
+  if (voice && typeof voice === "object") {
+    for (const key of ["quiet-resume", "replay-spoken-history"]) {
+      if (Object.hasOwn(voice, key))
+        throw new ConfigError(
+          `${source}: voice.${key} has been retired; remove this key. AgentVoice no longer injects speech history or its own reconnect instructions. Native working-thread continuation is unchanged.`,
+        );
+    }
+  }
   if (Object.hasOwn(raw, "remote"))
     throw new ConfigError(
       `${source}: remote configuration has been retired; remove the remote section to use the foreground TUI`,
@@ -656,7 +659,6 @@ export function resolveConfig(
     version: pickVoice("version"),
     model: pickVoice("model"),
     name: pickVoice("name"),
-    replaySpokenHistory: pickVoice("replay-spoken-history"),
     includeStartupContext: pickVoice("include-startup-context"),
     delegationAckFiller: pickVoice("delegation-ack-filler"),
     codexResponseHandoffMode: pickVoice("codex-response-handoff-mode"),
