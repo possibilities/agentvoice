@@ -1,26 +1,27 @@
-/** A real stdio child for transport tests; no network or credentials. */
+/** A real loopback WebSocket child for transport tests; no external network or credentials. */
 
 import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
+import { readFileSync } from "node:fs";
+import type { ServerWebSocket } from "bun";
 
 const mode = process.argv[2];
-const send = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
 let capabilities: unknown;
 if (mode === "stubborn") {
   process.on("SIGTERM", () => {});
   setInterval(() => {}, 1_000);
 }
 if (mode === "no-initialize") setInterval(() => {}, 1_000);
-if (mode === "delayed-eof") {
+if (mode === "delayed-shutdown") {
   const hold = setInterval(() => {}, 1_000);
-  process.stdin.on("end", () =>
+  process.on("SIGTERM", () =>
     setTimeout(() => {
       clearInterval(hold);
       process.exit(0);
     }, 1_200),
   );
 }
-createInterface({ input: process.stdin }).on("line", (line) => {
+function handle(peer: ServerWebSocket<undefined>, line: string) {
+  const send = (value: unknown) => peer.send(JSON.stringify(value));
   const message = JSON.parse(line);
   if (message.method === "initialize") {
     capabilities = message.params.capabilities;
@@ -34,10 +35,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   } else if (message.method === "test/capabilities") {
     send({ id: message.id, result: capabilities });
   } else if (message.method === "fragmented") {
-    const bytes = Buffer.from(`${JSON.stringify({ id: message.id, result: "voice 🎤 café" })}\n`);
-    const split = bytes.indexOf(Buffer.from("🎤")) + 1;
-    process.stdout.write(bytes.subarray(0, split));
-    setTimeout(() => process.stdout.write(bytes.subarray(split)), 5);
+    send({ id: message.id, result: "voice 🎤 café" });
   } else if (message.method === "approval") {
     send({ id: message.id, result: {} });
     send({ id: "approval", method: "item/commandExecution/requestApproval", params: {} });
@@ -78,7 +76,9 @@ setInterval(()=>{},1000);`,
       send({ id: message.id, result: { pid: child.pid, grandchildPid: Number(text.trim()) } });
     });
   } else if (message.method === "invalid") {
-    process.stdout.write("not-json\n");
+    peer.send("not-json");
+  } else if (message.method === "disconnect") {
+    peer.close();
   } else if (message.method === "hang") {
     // No reply: exercise cancellation and request timeout.
   } else if (message.id === "server-request") {
@@ -86,4 +86,21 @@ setInterval(()=>{},1000);`,
   } else if (message.id === "approval") {
     send({ method: "test/answer", params: message.result });
   }
+}
+const token = readFileSync(process.argv[process.argv.indexOf("--ws-token-file") + 1]!, "utf8");
+const server = Bun.serve<undefined>({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch(request, server) {
+    if (request.headers.get("authorization") !== `Bearer ${token}`)
+      return new Response("unauthorized", { status: 401 });
+    if (!server.upgrade(request, { data: undefined }))
+      return new Response("upgrade required", { status: 400 });
+  },
+  websocket: {
+    message(peer, text) {
+      handle(peer, String(text));
+    },
+  },
 });
+console.log(`listening on: ws://127.0.0.1:${server.port}`);

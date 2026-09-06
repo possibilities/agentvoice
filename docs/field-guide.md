@@ -1,14 +1,14 @@
 # Current AgentVoice field guide
 
 Updated for the retained foreground controller and local attachment (ADRs
-0015/0021). This replaces the resident/remote-era inventory; that history remains available in Git and the
+0015/0022). This replaces the resident/remote-era inventory; that history remains available in Git and the
 superseded ADRs.
 
 ## Architecture in a minute
 
 ```text
 Foreground controller (TUI, leases, control API)
-  → disposable runtime → owned stock Codex child (stdio by default)
+  → disposable runtime → private native WebSocket → owned stock Codex child
     microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
     optional stock TUI → guarded gateway → private native WebSocket
                               Codex owns native voice/work handoffs
@@ -28,9 +28,11 @@ security boundary or a guarantee against native memory of other work.
 
 ## Stock TUI attachment boundary probe
 
-Opt-in attachment is implemented behind a guarded gateway (ADR 0021). A direct
-authenticated connection to the owned Codex app-server is insufficient for an
-exact-thread TUI attachment that preserves its selected full-access/never posture and human-input refusal policy.
+Attachment is always available through a guarded gateway (ADR 0022). A direct
+authenticated connection to the owned Codex app-server is not scoped to the
+selected thread. The original boundary probe also established why native startup
+permission defaults cannot enforce a full-access-only attachment policy, which
+has since been removed.
 
 Verified against stock Codex 0.153.4 on September 5 and 6, 2026:
 
@@ -58,15 +60,17 @@ Source review of upstream commit
 clients and consumes one shared callback on the first answer. Letting the stock
 TUI answer while AgentVoice refuses is therefore a race. Native TUI shutdown
 normally unsubscribes, but its running-task Exit action can explicitly interrupt
-work (`tui/src/app/event_dispatch.rs`). Simultaneous live voice/TUI testing remains outstanding; this protocol probe
-does not establish live audio behavior.
+work (`tui/src/app/event_dispatch.rs`). This protocol probe does not establish
+live audio behavior.
 
 The gateway checks target identity and permitted operations before forwarding,
-keeps server questions with AgentVoice, and revokes before Fresh or runtime
-replacement. Native credentials remain private. Default launches still use stdio.
-Voice now accepts native/configured permissions (ADR 0020). Only TUI admission
-requires confirmed full access; restricted or unreported native permissions revoke
-TUI tickets and prevent attachment without stopping the voice runtime.
+forwards native human questions and TUI answers, and revokes before Fresh or
+runtime replacement. Native credentials remain private. Every launch uses native
+WebSocket RPC. Voice and TUI attachment accept native/configured permissions;
+joining preserves live thread settings. Explicit settings changes remain native.
+AgentVoice leaves supported human requests pending, so it cannot race the TUI
+with a refusal. Native `replay_requests_to_connection_for_thread` retains and
+replays unanswered questions on resume; AgentVoice stores no second queue.
 
 A second opt-in macOS fixture tests the stock TUI with a localhost fake Responses
 API and disposable native history; its native child cannot contact the external
@@ -79,12 +83,15 @@ CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-tui-probe.ts
 Its READY line gives the isolated HOME/CODEX_HOME/workspace/state for a separate
 terminal running this checkout's `attach` command. Set HOME, CODEX_HOME and
 XDG_STATE_HOME to those fixture paths. Stdin commands `hold`, `stream`, `owner`, `release`,
-`revoke`, and `quit` control only this fixture. `hold` delays the next fake model
+`approval`, `revoke`, and `quit` control only this fixture. `hold` delays the next fake model
 response; `owner` starts a native owner turn so typing in the TUI exercises steer.
 `stream` sends text deltas for the next response and holds completion until
 `release`. Complete lines must appear before release, including on successive
 owner turns. Stock TUI rendering is newline-gated: an unfinished line can remain
-invisible until completion, even when the delta has arrived.
+invisible until completion, even when the delta has arrived. `approval` makes the
+next fake response request a harmless command with native escalation. The thread
+uses workspace-write/on-request: issue `approval` then `owner` before attaching
+to test native replay, or while attached to test live delivery.
 The fixture has a ten-minute deadline and removes its child and temporary state.
 
 Stock 0.153.4 PTY checks, repeated on 2026-09-06, established: exact warm resume and history display;
@@ -97,8 +104,11 @@ the latest successful unsubscribe for normal detach (verified launcher exit 0;
 revocation exits 1). Unknown `plugin/list` and
 `thread/name/set` calls are refused; core conversation interaction still works.
 Fake-media controller tests separately cover bootstrap, Fresh, redial, runtime
-restart, stale-generation rejection and shutdown. These checks establish neither
-audible response delivery nor simultaneous live voice behavior. The TUI intentionally
+restart, stale-generation rejection and shutdown. The new permission checks
+established native approval replay before first attachment, acceptance and tool
+output, and pending-request survival across TUI loss and reattachment. These
+isolated checks establish neither audible response delivery nor simultaneous
+live voice behavior. The TUI intentionally
 shows native orchestrator messages, not a voice transcript.
 
 Upstream `core/src/session/turn.rs::realtime_text_for_event` excludes user messages;
@@ -106,7 +116,10 @@ Upstream `core/src/session/turn.rs::realtime_text_for_event` excludes user messa
 output, and `core/src/realtime_conversation.rs` sends a standalone context update
 even without an active handoff. The stock backend prompt explicitly accounts for
 typed backend input and spoken summaries of visible output. This establishes the
-intended typed-input route without claiming the prior live trial verified it.
+intended typed-input route. A separate live trial on 2026-09-06 confirmed continued
+orchestrator updates, typed steering and an audible response with the official
+0.153.4 TUI; the operator confirmed the spoken result. That live trial used the
+earlier full-access attachment path, not the new restricted-permission flow.
 
 ## Complete configurable surface
 
@@ -114,7 +127,7 @@ The generated server.schema.json is authoritative for spelling and types.
 
 | Area | Keys / controls |
 | --- | --- |
-| Launch | opt-in --allow-tui-attach, optional --allow-full-access, workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
+| Launch | optional --allow-full-access, workspace, config path, fresh/no-continue, resume ID, fast/no-fast, debug, microphone/output device indices, Codex executable |
 | Main agent | model, effort, personality, native sandbox/approval modes, native approvals-reviewer, model-provider, service-tier, ephemeral, history-mode, runtime-workspace-roots |
 | Native Codex config | orchestrator.config (including native experimental realtime config overrides) |
 | Thread RPC escape hatch | orchestrator.extra; workspace and main source identity are protected, threadId/path/history are rejected |
@@ -193,10 +206,10 @@ Permissions defer to native/configured behavior when --allow-full-access is
 absent. The flag explicitly selects danger-full-access/never and wins over
 conflicting permission controls, including raw selectors. Native managed
 requirements still apply. Restricted or missing permission reports do not stop
-the child. Full access does not grant connector consent or answer tool questions:
-unsupported requests are refused through native denials or protocol errors with
-a persistent TUI explanation. Approval-dependent work may be blocked because
-this frontend has no approval UI.
+the child or prevent attachment. Full access does not grant connector consent or
+answer tool questions. Native approvals, tool questions and MCP elicitations stay
+pending until an attached stock TUI answers. Unsupported client requests still
+receive native denials or protocol errors with a persistent TUI explanation.
 
 Still application-owned: visible refusal handling, WebRTC/audio transport,
 explicit continuation's workspace filters and renewal policy. These are not a

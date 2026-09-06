@@ -11,7 +11,6 @@ export function attachmentArgv(ticket: AttachmentTicket): string[] {
     ticket.url,
     "--remote-auth-token-env",
     TUI_TOKEN_ENV,
-    "--dangerously-bypass-approvals-and-sandbox",
     "-C",
     ticket.workspace,
     ticket.threadId,

@@ -67,14 +67,14 @@ A full foreground relaunch is required to activate the new controller endpoint.
 
 ### Attach a stock Codex TUI
 
-Opt in when starting the voice app, then attach from a second terminal:
+Every voice launch supports attachment from a second terminal:
 
 ```sh
 # First terminal, from this prepared checkout:
-bun run src/main.ts --allow-full-access --allow-tui-attach --workspace ~/code/myapp
+bun run src/main.ts --workspace ~/code/myapp
 
 # Second terminal, from the same checkout:
-bun run src/main.ts attach --allow-full-access --workspace ~/code/myapp
+bun run src/main.ts attach --workspace ~/code/myapp
 ```
 
 Installed commands use the same flags with `agentvoice`. Attachment selects a
@@ -88,23 +88,25 @@ This is the native orchestrator conversation, including raw voice handoff messag
 such as `<realtime_delegation>`. Speech that stays within the voice agent produces
 no new orchestrator turn. Typed input goes to the orchestrator; native Codex relays
 its assistant output to an active voice session for a spoken response. The text
-itself is not inserted into the voice transcript. That route is supported by the
-upstream implementation; its timing and audible behavior still need a live trial.
+itself is not inserted into the voice transcript. A live trial confirmed typed
+steering, continued orchestrator updates and an audible response on stock 0.153.4.
 
-This experimental path was checked with stock Codex **0.153.4**. It requires a
-new launch with `--allow-tui-attach`; an existing stdio-only launch cannot gain
-attachment through runtime restart. Default launches keep native stdio.
-Attachment currently supports threads reporting `dangerFullAccess` / `never`.
-Restricted or unreported permissions leave voice running, but prevent attachment
-and revoke existing TUI tickets. The attachment does not upgrade a restricted thread.
+This experimental path was checked with stock Codex **0.153.4**. The runtime
+always uses an authenticated private loopback WebSocket for native RPC. There
+is no stdio transport or attachment enable/disable flag. Relaunch AgentVoice
+after upgrading an older controller to use this behavior. Attaching preserves
+the live thread's settings, including restricted permissions; the TUI's local
+startup defaults do not replace them.
 
 The attachment gateway permits selected-thread reads, typed turns, interruption,
-and compatible session settings. New/forked threads, history mutations,
+and native session settings, including permission changes. New/forked threads, history mutations,
 persistent configuration/account changes, plugin controls and realtime control
 are unsupported. The TUI does not show a live voice transcript or carry audio.
-It cannot answer tool questions: AgentVoice continues to refuse those visibly.
-The gateway checks requests before forwarding them, preserving full access / never
-and the selected workspace/thread.
+It shows native command/file/permission approvals, tool questions and MCP
+elicitations for the selected thread, and forwards your answers to Codex.
+AgentVoice leaves those questions pending in native Codex when no TUI is
+attached; attaching later replays them. The gateway checks requests before
+forwarding them, preserving the selected workspace/thread.
 
 Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
 interrupt or running-task Exit action can interrupt native work. Redial preserves
@@ -115,9 +117,11 @@ TUI's printed reconnect command, whose one-use ticket has ended.
 Native and gateway credentials remain private;
 there is no arbitrary endpoint flag or cross-machine mode.
 
-Tests establish later owner turns, streaming replies, and typed steering using local fake model
-responses, plus controller lifecycle behavior with fake media. Simultaneous live
-voice and TUI operation still needs a live trial. See [ADR 0021](docs/adr/0021-guarded-tui-attachment.md).
+Isolated stock TUI tests establish later owner turns, streaming replies, typed
+steering and native approval round trips using local fake model responses.
+Controller lifecycle tests use fake media. The earlier live trial established
+simultaneous voice and TUI operation; it did not exercise every permission mode.
+See [ADR 0022](docs/adr/0022-websocket-native-tui.md).
 
 ### Permissions
 
@@ -131,13 +135,14 @@ policy `never`, overriding conflicting launch/request permission settings.
 Unrelated raw native settings retain their normal precedence. The flag does not
 bypass managed Codex requirements or grant connector consent.
 
-AgentVoice has no approval UI. Command/file/permission requests are denied, MCP
-elicitations declined, and unsupported input/auth/unknown requests receive a
-protocol error, never invented answers or empty successes. A persistent TUI
-notice explains the refusal without stopping the whole conversation. Actions
-requiring that interaction may remain blocked; perform them in a supporting
-Codex client. Restricted or missing permission reports are no longer treated as
-an application-wide failure.
+Use `agentvoice attach` for native approvals, tool questions and MCP elicitations.
+The voice console shows an interaction notice; Codex retains the pending request
+until an attached TUI answers or native work is cancelled. AgentVoice neither
+auto-approves nor auto-refuses these requests and maintains no approval queue.
+Unsupported client-defined tools, auth callbacks, legacy requests and unknown
+methods still receive a visible refusal or protocol error. Retired worker tools
+remain retired. Restricted or missing permission reports do not stop voice or
+prevent attachment.
 
 Native protocol reference: [Codex approvals and connector interaction](https://learn.chatgpt.com/docs/app-server#approvals).
 
@@ -388,8 +393,8 @@ read by a preflighted runtime candidate and cached for that runtime. Fresh and
 redial reuse the active runtime snapshot; a full runtime restart rereads the
 pinned launch inputs and replaces Codex. It cannot adopt later shell-environment
 changes. Disabled realtime support fails clearly; `cwd` must be selected with
-`--workspace`. The owned native transport is stdio unless local TUI attachment
-is enabled. Native keys remain passthrough, not a promise that your Codex version
+`--workspace`. The owned native RPC transport is always WebSocket. Native keys
+remain passthrough, not a promise that your Codex version
 supports them or detects typos. No global config, prompt or skill
 policy is written. See [native override syntax](https://developers.openai.com/codex/config-advanced/#one-off-overrides-from-the-cli).
 
@@ -706,8 +711,8 @@ configuration, services or other account tools are changed by this removal.
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
 `thread-locks/`, private live-controller discovery records under `control/`, and
-`runs/<time>-<pid>.log` with `--debug`. Opt-in TUI attachment also creates a
-private `tui-native-*` directory holding the owned listener token; normal runtime
+`runs/<time>-<pid>.log` with `--debug`. Every runtime also creates a
+private `native-ws-*` directory holding the owned listener token; normal runtime
 shutdown removes it. Lock files are inert after exit; the
 kernel owns their lifetime. Discovery records contain the loopback bearer
 capability, use private directory and file modes, and are removed on normal

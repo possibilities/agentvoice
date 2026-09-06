@@ -2,7 +2,6 @@
 /** Disposable protocol fixture: native-like durable history, no auth/network/inference. */
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
 const root = process.cwd();
 const store = join(root, "native-threads.json");
@@ -104,25 +103,19 @@ function handle(line: string, send: (text: string) => void) {
   }
 }
 
-const listen = process.argv[process.argv.indexOf("--listen") + 1];
-if (listen === "ws://127.0.0.1:0") {
-  const token = readFileSync(process.argv[process.argv.indexOf("--ws-token-file") + 1]!, "utf8");
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request, server) {
-      if (request.headers.get("authorization") !== `Bearer ${token}`)
-        return new Response("unauthorized", { status: 401 });
-      if (!server.upgrade(request)) return new Response("upgrade required", { status: 400 });
+const token = readFileSync(process.argv[process.argv.indexOf("--ws-token-file") + 1]!, "utf8");
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch(request, server) {
+    if (request.headers.get("authorization") !== `Bearer ${token}`)
+      return new Response("unauthorized", { status: 401 });
+    if (!server.upgrade(request)) return new Response("upgrade required", { status: 400 });
+  },
+  websocket: {
+    message(peer, text) {
+      handle(String(text), (response) => peer.send(response.trim()));
     },
-    websocket: {
-      message(peer, text) {
-        handle(String(text), (response) => peer.send(response.trim()));
-      },
-    },
-  });
-  console.log(`listening on: ws://127.0.0.1:${server.port}`);
-} else {
-  const input = createInterface({ input: process.stdin });
-  for await (const line of input) handle(line, (response) => process.stdout.write(response));
-}
+  },
+});
+console.log(`listening on: ws://127.0.0.1:${server.port}`);

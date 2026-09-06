@@ -5,6 +5,7 @@ import {
   type AttachmentIdentity,
   attachmentNotification,
   attachmentResult,
+  attachmentServerRequest,
   object,
   validateAttachmentRequest,
 } from "./policy.ts";
@@ -28,6 +29,7 @@ type Peer = {
     { method: string; sequence: number; timer: ReturnType<typeof setTimeout> }
   >;
   initialized: boolean;
+  serverRequests: Set<string | number>;
   initializing: boolean;
   unsubscribed: boolean;
   sequence: number;
@@ -78,6 +80,7 @@ export class AttachmentGateway {
           queued: [],
           pending: new Map(),
           initialized: false,
+          serverRequests: new Set(),
           initializing: false,
           unsubscribed: false,
           sequence: 0,
@@ -139,6 +142,7 @@ export class AttachmentGateway {
     for (const peer of grant.peers) {
       for (const request of peer.data.pending.values()) clearTimeout(request.timer);
       peer.data.pending.clear();
+      peer.data.serverRequests.clear();
       peer.data.upstream?.close();
       peer.close(
         code,
@@ -188,9 +192,16 @@ export class AttachmentGateway {
         const frame = object(JSON.parse(data));
         const id = frame["id"];
         const method = frame["method"];
-        // The owner handles all native server requests. Never give the TUI a competing answer path.
-        if (id !== undefined && method !== undefined) return;
-        if (id !== undefined) {
+        if (id !== undefined && typeof method === "string") {
+          if (
+            (typeof id !== "string" && typeof id !== "number") ||
+            !attachmentServerRequest(method, object(frame["params"] ?? {}), state.grant.identity)
+          )
+            return;
+          if (state.serverRequests.size >= 64 && !state.serverRequests.has(id))
+            throw new Error("Too many native questions");
+          state.serverRequests.add(id);
+        } else if (id !== undefined) {
           const request = state.pending.get(id as string | number);
           if (!request) throw new Error("Uncorrelated native response");
           state.pending.delete(id as string | number);
@@ -211,6 +222,8 @@ export class AttachmentGateway {
           !attachmentNotification(method, object(frame["params"] ?? {}), state.grant.identity)
         )
           return;
+        if (method === "serverRequest/resolved")
+          state.serverRequests.delete(object(frame["params"])["requestId"] as string | number);
         peer.send(JSON.stringify(frame).replaceAll(this.native.token, "[redacted]"));
       } catch {
         this.drop(state.grant);
@@ -228,9 +241,20 @@ export class AttachmentGateway {
     try {
       if (state.watch || typeof data !== "string") throw new Error("Invalid attachment frame");
       const frame = object(JSON.parse(data));
+      if (typeof frame["id"] === "string" || typeof frame["id"] === "number") id = frame["id"];
+      if (id !== undefined && frame["method"] === undefined) {
+        if (
+          Object.keys(frame).some((key) => !["id", "result", "error", "jsonrpc"].includes(key)) ||
+          Object.hasOwn(frame, "result") === Object.hasOwn(frame, "error")
+        )
+          throw new Error("Invalid client answer");
+        // Another client may already have answered. Native owns resolution and replay.
+        if (!state.serverRequests.delete(id)) return;
+        this.forward(peer, JSON.stringify(frame));
+        return;
+      }
       if (Object.keys(frame).some((key) => !["id", "method", "params", "jsonrpc"].includes(key)))
         throw new Error("Unsupported client frame");
-      if (typeof frame["id"] === "string" || typeof frame["id"] === "number") id = frame["id"];
       if (typeof frame["method"] !== "string" || "result" in frame || "error" in frame)
         throw new Error("Client responses are not supported");
       method = frame["method"];
@@ -259,18 +283,7 @@ export class AttachmentGateway {
       if (!this.active(state.grant)) return;
       const forwarded = JSON.stringify(frame);
       this.trace?.(method, "forwarded");
-      if (state.upstream?.readyState === WebSocket.OPEN) {
-        if (state.upstream.bufferedAmount > MAX_BYTES)
-          throw new Error("Native attachment is congested");
-        state.upstream.send(forwarded);
-      } else {
-        if (
-          state.queued.length >= 64 ||
-          state.queued.reduce((sum, text) => sum + text.length, data.length) > MAX_BYTES
-        )
-          throw new Error("Attachment startup queue full");
-        state.queued.push(forwarded);
-      }
+      this.forward(peer, forwarded);
     } catch (error) {
       this.trace?.(method, error instanceof Error ? error.message : "rejected");
       if (id === undefined || registered) this.drop(state.grant);
@@ -284,6 +297,21 @@ export class AttachmentGateway {
             },
           }),
         );
+    }
+  }
+  private forward(peer: ServerWebSocket<Peer>, forwarded: string): void {
+    const state = peer.data;
+    if (state.upstream?.readyState === WebSocket.OPEN) {
+      if (state.upstream.bufferedAmount > MAX_BYTES)
+        throw new Error("Native attachment is congested");
+      state.upstream.send(forwarded);
+    } else {
+      if (
+        state.queued.length >= 64 ||
+        state.queued.reduce((sum, text) => sum + text.length, forwarded.length) > MAX_BYTES
+      )
+        throw new Error("Attachment startup queue full");
+      state.queued.push(forwarded);
     }
   }
 }

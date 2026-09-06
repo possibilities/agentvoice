@@ -78,7 +78,7 @@ export const orchestratorValuesSchema = z
     "approval-policy": z
       .enum(APPROVAL_POLICIES)
       .describe(
-        "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. No approval UI is provided; requests needing human approval are refused visibly.",
+        "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. Use agentvoice attach to answer native approvals and tool questions; Codex keeps them pending when no TUI is attached.",
       )
       .optional(),
     "approvals-reviewer": z

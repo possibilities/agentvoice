@@ -168,7 +168,7 @@ export function runRuntimeWorker(
           exactResume: params.threadId,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,
-          tuiNativeStateDir: currentLaunch.tuiNativeStateDir,
+          nativeStateDir: currentLaunch.nativeStateDir,
           onAttachmentReady: (issue, revoke) => {
             issueAttachment = issue;
             revokeAttachment = revoke;

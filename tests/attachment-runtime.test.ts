@@ -15,12 +15,12 @@ async function until(predicate: () => boolean) {
   for (let i = 0; i < 500 && !predicate(); i++) await Bun.sleep(10);
   expect(predicate()).toBe(true);
 }
-test("native permission changes revoke TUI admission without stopping voice", async () => {
+test("native permission changes preserve TUI admission and voice", async () => {
   let issue: (() => AttachmentTicket) | undefined;
   const h = runtimeHarness(
     { codex: process.execPath },
     {
-      tuiNativeStateDir: tmpdir(),
+      nativeStateDir: tmpdir(),
       onAttachmentReady: (create) => {
         issue = create;
       },
@@ -50,8 +50,8 @@ test("native permission changes revoke TUI admission without stopping voice", as
         threadId,
         threadSettings: permissions,
       });
-      await until(() => watch.readyState === WebSocket.CLOSED);
-      expect(() => issue!()).toThrow("confirmed danger-full-access / never");
+      expect(watch.readyState).toBe(WebSocket.OPEN);
+      expect(issue!().threadId).toBe(threadId);
       expect(h.runtime.currentReady?.threadId).toBe(threadId);
       expect(h.native.alive).toBe(true);
       expect(h.fatal).toEqual([]);
@@ -89,8 +89,6 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     stateDir,
     provenance: {
       parsed: parseArgs([
-        "--allow-full-access",
-        "--allow-tui-attach",
         "--config",
         configPath,
         "--workspace",
@@ -163,7 +161,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
       }),
     ).rejects.toThrow();
     const final = await watch(resumed.url, resumed.token);
-    // Native requirements can narrow an explicit opt-in; voice remains usable but TUI must not escalate it.
+    // Restricted and unreported permissions also support attachment across runtime replacement.
     for (const [index, permissions] of [
       { approvalPolicy: "on-request", sandbox: { type: "readOnly" } },
       {},
@@ -181,7 +179,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
           controller.status().currentOperation?.phase === "ready",
       );
       expect(controller.status().runtime.phase).toBe("ready");
-      await expect(acquireAttachment(stateDir, root)).rejects.toThrow("Attachment unavailable");
+      expect((await acquireAttachment(stateDir, root)).threadId).toBe(fresh.threadId);
     }
     await controller.shutdown();
     await until(() => final.readyState === WebSocket.CLOSED);

@@ -5,7 +5,14 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { confirmFullAccess } from "../src/attachment/full-access.ts";
+
+function confirmFullAccess(result: Record<string, unknown>, settings = false) {
+  assert.equal(result["approvalPolicy"], "never");
+  assert.equal(
+    (result[settings ? "sandboxPolicy" : "sandbox"] as Record<string, unknown>)["type"],
+    "dangerFullAccess",
+  );
+}
 
 type Json = Record<string, unknown>;
 const TIMEOUT_MS = 10_000;

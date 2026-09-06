@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { confirmFullAccess, validateFullAccessParams } from "./full-access.ts";
+import { nativeHumanRequest } from "../core/human-input.ts";
 
 export type Json = Record<string, unknown>;
 export type AttachmentIdentity = { threadId: string; workspace: string };
@@ -38,14 +38,6 @@ const SETTINGS = [
 ];
 function settings(params: Json, identity: AttachmentIdentity): void {
   cwd(params["cwd"], identity.workspace);
-  validateFullAccessParams(
-    Object.fromEntries(Object.entries(params).filter(([, value]) => value != null)),
-  );
-  if (params["sandboxPolicy"] != null) {
-    const sandbox = object(params["sandboxPolicy"]);
-    if (sandbox["type"] !== "dangerFullAccess" || Object.keys(sandbox).length !== 1)
-      throw new Error("Attachment requires dangerFullAccess / never");
-  }
   if (params["runtimeWorkspaceRoots"] != null) {
     if (!Array.isArray(params["runtimeWorkspaceRoots"])) throw new Error("Invalid workspace roots");
     for (const root of params["runtimeWorkspaceRoots"]) cwd(root, identity.workspace);
@@ -70,39 +62,10 @@ export function validateAttachmentRequest(
       keys(params, ["clientInfo", "capabilities"]);
       break;
     case "thread/resume":
-      keys(params, [
-        "threadId",
-        "cwd",
-        "approvalPolicy",
-        "sandbox",
-        "permissions",
-        "excludeTurns",
-        "initialTurnsPage",
-        "runtimeWorkspaceRoots",
-        "approvalsReviewer",
-        "model",
-        "serviceTier",
-        "config",
-      ]);
       settings(params, identity);
-      if (params["config"] != null) {
-        const config = object(params["config"]);
-        keys(config, [
-          "default_permissions",
-          "model_reasoning_effort",
-          "model_reasoning_summary",
-          "model_verbosity",
-          "personality",
-          "web_search",
-          "features",
-        ]);
-        if (config["features"] != null) {
-          const features = object(config["features"]);
-          keys(features, ["realtime_conversation"]);
-          if (features["realtime_conversation"] !== true)
-            throw new Error("Attachment cannot disable realtime");
-        }
-      }
+      // Stock TUI startup may send local defaults. Joining must preserve the live thread.
+      for (const key of Object.keys(params))
+        if (!["threadId", "excludeTurns", "initialTurnsPage"].includes(key)) delete params[key];
       break;
     case "thread/read":
       keys(params, ["threadId", "includeTurns"]);
@@ -196,7 +159,6 @@ export function attachmentResult(
 ): unknown {
   const data = object(result);
   if (method === "thread/resume") {
-    confirmFullAccess(data);
     const thread = object(data["thread"]);
     if (thread["id"] !== identity.threadId || thread["cwd"] !== identity.workspace)
       throw new Error("Native attachment identity mismatch");
@@ -236,4 +198,12 @@ export function attachmentNotification(
     "deprecationNotice",
     "serverRequest/resolved",
   ].includes(method);
+}
+
+export function attachmentServerRequest(
+  method: string,
+  params: Json,
+  identity: AttachmentIdentity,
+): boolean {
+  return nativeHumanRequest(method) && params["threadId"] === identity.threadId;
 }

@@ -3,11 +3,11 @@
 A foreground Codex voice TUI: a retained controller owns UI, exact thread
 identity, leases, control transports, and operation records; its disposable
 runtime child owns audio, WebRTC, runtime code, config/prompt/role loading, and
-an owned stock Codex app-server child over native stdio by default. Opt-in local
-stock TUI attachment uses private native WebSocket plus a guarded gateway (ADR 0021).
+an owned stock Codex app-server child over private native WebSocket. Local stock
+TUI attachment is always available through a guarded gateway (ADR 0022).
 No background Server,
 resident, remote mode, or arbitrary control attachment. Read README.md for
-usage, CONTEXT.md for vocabulary, and ADRs 0015/0021 for the active topology.
+usage, CONTEXT.md for vocabulary, and ADRs 0015/0022 for the active topology.
 
 ## What vanilla Codex means
 
@@ -99,17 +99,20 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   native off can report default or null (disabled Fast gate). Missing is unknown.
   The resume-model preflight mirrors upstream has_model_resume_override; reverify
   when upgrading Codex. Never switch models to satisfy Fast.
-- src/core/attach.ts: owned child, native UTF-8 JSONL framing, correlated RPC,
-  notifications, visible refusal callback, native denial payloads or JSON-RPC
-  errors for unsupported human input, bounded shutdown of its process group.
-- src/core/native-listener.ts + src/attachment/: launch-only --allow-tui-attach,
-  private authenticated native loopback listener, exact-thread policy gateway,
-  controller bootstrap and stock TUI launcher. Never expose the native credential,
-  forward client answers to server questions, or allow other-thread/config/account
-  mutations. Validate before native dispatch; unknown null placeholders are stripped.
-  Attachment requires confirmed dangerFullAccess/never; restricted or missing
-  native permissions revoke/refuse TUI grants while voice keeps running (ADR 0020).
-  Keep these guards under src/attachment/, not in ordinary voice launch policy.
+- src/core/attach.ts: owned child, native WebSocket RPC, notifications, visible
+  interaction/refusal callbacks and bounded shutdown of its process group. Human
+  requests recognized by human-input.ts remain pending in native Codex; never
+  auto-answer or retain a second approval queue. Unsupported client requests
+  receive native denial payloads or JSON-RPC errors; retired tools stay retired.
+- src/core/native-listener.ts + src/attachment/: always-on private authenticated
+  native loopback listener, exact-thread policy gateway, controller bootstrap and
+  stock TUI launcher. No stdio RPC or attachment enable/disable flags. Never expose
+  the native credential or allow other-thread/config/account mutations. Forward
+  selected-thread native human requests and their correlated answers. Native owns
+  first-answer resolution and pending-request replay on resume. Joining strips
+  local TUI resume overrides to preserve live settings; subsequent native settings
+  changes, including permissions, are allowed. Do not gate attachment on full access.
+  Validate before native dispatch; unknown null placeholders are stripped.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
   Fresh/restart/quit revoke before teardown; redial preserves attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
@@ -164,9 +167,12 @@ Public voice launches support native/configured permissions without a flag.
 --allow-full-access explicitly requests danger-full-access/never; it wins over
 conflicting permission selectors, not unrelated settings. Do not reject launch,
 Fresh, resume or settings reports solely because permissions are restricted or
-unreported. Preserve native managed requirements. Unsupported human interaction
-is refused with a persistent TUI notice; never add automatic consent or invented
-answers. No approval UI is implemented in this scope (ADR 0020).
+unreported. Preserve native managed requirements. Command/file/permission approvals,
+tool questions and MCP elicitations flow through an attached stock TUI. The voice
+console shows an interaction notice; without a TUI, native Codex retains the request and
+replays it on attachment. Never add automatic consent, refusals that race the TUI,
+invented answers or an AgentVoice approval queue. Unsupported client tools/auth/
+legacy/unknown requests are still refused visibly. See ADRs 0020/0022.
 
 Resolve one existing absolute real workspace before spawning the child:
 CLI workspace > explicit file workspace > launch cwd. Use it for lookup,

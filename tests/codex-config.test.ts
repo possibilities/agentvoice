@@ -79,7 +79,7 @@ describe("native startup configuration", () => {
         "--enable",
         "realtime_conversation",
         "--listen",
-        "stdio://",
+        "ws://127.0.0.1:0",
       ]);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -268,7 +268,9 @@ describe("native startup configuration", () => {
       onClose() {},
     });
     try {
-      expect(await c.request<string[]>("test/argv", {})).toEqual(argv.slice(1));
+      const received = await c.request<string[]>("test/argv", {});
+      expect(received.slice(0, -4)).toEqual(argv.slice(1));
+      expect(received.slice(-4, -1)).toEqual(["--ws-auth", "capability-token", "--ws-token-file"]);
     } finally {
       await c.close();
     }

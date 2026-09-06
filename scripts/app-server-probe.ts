@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Read-only native stdio smoke probe: no turns, audio, or service changes.
+ * Read-only native WebSocket smoke probe: no turns, audio, or service changes.
  * Also proves the process-local skill root registration roles rely on.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -18,8 +18,9 @@ writeFileSync(
 );
 const connection = await AppServerConnection.connect({
   argv: appServerArgv(process.env["CODEX_PATH"] ?? "codex"),
+  nativeStateDir: skillsRoot,
   cwd,
-  clientVersion: "stdio-probe",
+  clientVersion: "websocket-probe",
   onNotification() {},
   onClose() {},
 });
@@ -33,7 +34,7 @@ try {
     limit: 1,
   });
   if (!Array.isArray(result.data)) throw new Error("thread/list returned no data array");
-  console.log("native stdio initialize + workspace-filtered thread/list: PASS");
+  console.log("native WebSocket initialize + workspace-filtered thread/list: PASS");
 
   await connection.request("skills/extraRoots/set", { extraRoots: [skillsRoot] });
   const skills = await connection.request<{

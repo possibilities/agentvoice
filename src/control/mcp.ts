@@ -81,10 +81,9 @@ export class ControlMcpHttpHost {
         const result = await this.options.attachment(await request.json());
         return Response.json(result, { headers: { "Cache-Control": "no-store" } });
       } catch {
-        return new Response(
-          "Attachment unavailable; use --allow-tui-attach and the current live thread",
-          { status: 409 },
-        );
+        return new Response("Attachment unavailable; select the current live thread", {
+          status: 409,
+        });
       }
     }
     await this.expireSessions();

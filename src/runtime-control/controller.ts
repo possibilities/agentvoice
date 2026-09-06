@@ -117,10 +117,8 @@ export class RuntimeController implements ControlBackend {
       target.generation === this.generation &&
       target.threadId === this.threadId &&
       target.workspace === this.workspace;
-    if (!this.options.provenance.parsed.allowTuiAttach || !current() || !this.active)
-      throw new Error(
-        "Attachment unavailable; launch with --allow-tui-attach and select the current live thread",
-      );
+    if (!current() || !this.active)
+      throw new Error("Attachment unavailable; select the current live thread");
     const active = this.active;
     const ticket = await active.request<AttachmentTicket>("attachment-ticket", {
       threadId: this.threadId,
@@ -257,9 +255,7 @@ export class RuntimeController implements ControlBackend {
         version: this.options.version,
         control: this.options.control,
         workspace: this.workspace || undefined,
-        tuiNativeStateDir: this.options.provenance.parsed.allowTuiAttach
-          ? this.options.stateDir
-          : undefined,
+        nativeStateDir: this.options.stateDir,
       };
       const info = await candidate.process.request<CandidateInfo>("preflight", launch);
       this.assertOpen();

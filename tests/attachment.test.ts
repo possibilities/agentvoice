@@ -48,7 +48,7 @@ function fixture(holdUnsubscribe = false) {
       message(peer, text) {
         const frame = JSON.parse(String(text));
         calls.push(frame);
-        if (frame.id !== undefined) {
+        if (frame.id !== undefined && frame.method !== undefined) {
           const respond = () =>
             peer.send(
               JSON.stringify({
@@ -143,11 +143,11 @@ describe("guarded TUI attachment", () => {
             `console.log("listening on: ws://127.0.0.1:${native.port}"); setInterval(() => {}, 1000);`,
             "--",
             "--listen",
-            "stdio://",
+            "ws://127.0.0.1:0",
           ],
           cwd: root,
           clientVersion: "test",
-          tuiNativeStateDir: root,
+          nativeStateDir: root,
           shutdownGraceMs: 50,
           onNotification() {},
           onClose() {},
@@ -159,9 +159,9 @@ describe("guarded TUI attachment", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
-  test("opt-in is launch-only and TUI argv pins endpoint, workspace and full access", () => {
-    expect(parseArgs(["--allow-full-access", "--allow-tui-attach"]).allowTuiAttach).toBe(true);
-    expect(parseArgs(["--allow-full-access"]).allowTuiAttach).toBeUndefined();
+  test("attachment has no enable flags or permission overrides", () => {
+    for (const flag of ["--allow-tui-attach", "--no-tui-attach"])
+      expect(() => parseArgs([flag])).toThrow();
     const argv = attachmentArgv({
       ...identity,
       token: "private",
@@ -169,10 +169,10 @@ describe("guarded TUI attachment", () => {
       codex: "/stock/codex",
     });
     expect(argv).not.toContain("private");
-    expect(argv).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(argv).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(argv.at(-1)).toBe(identity.threadId);
   });
-  test("rejects permission, identity, workspace and hidden override changes before dispatch", () => {
+  test("allows native permission settings while rejecting identity and workspace changes", () => {
     expect(() =>
       validateAttachmentRequest("thread/settings/update", settings, identity),
     ).not.toThrow();
@@ -180,6 +180,11 @@ describe("guarded TUI attachment", () => {
       { ...settings, approvalPolicy: "on-request" },
       { ...settings, sandboxPolicy: { type: "readOnly" } },
       { ...settings, permissions: ":workspace" },
+    ])
+      expect(() =>
+        validateAttachmentRequest("thread/settings/update", params, identity),
+      ).not.toThrow();
+    for (const params of [
       { ...settings, threadId: "other" },
       { ...settings, cwd: "/" },
       { ...settings, config: { approval_policy: "on-request" } },
@@ -370,43 +375,111 @@ describe("guarded TUI attachment", () => {
       f.close();
     }
   });
-  test("forwards valid calls, refuses invalid mutations locally and never forwards TUI answers", async () => {
+  test("forwards native human questions and correlated answers, including errors", async () => {
+    const f = fixture();
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      for (const [index, method] of [
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval",
+        "item/permissions/requestApproval",
+        "item/tool/requestUserInput",
+        "mcpServer/elicitation/request",
+      ].entries()) {
+        const question = {
+          id: `question-${index}`,
+          method,
+          params: { threadId: identity.threadId },
+        };
+        for (const peer of f.peers) peer.send(JSON.stringify(question));
+        await until(() => client.frames.some((frame) => frame["id"] === question.id));
+        expect(client.frames.find((frame) => frame["id"] === question.id)).toEqual(question);
+        const answer =
+          index === 4
+            ? { id: question.id, error: { code: -32601, message: "unsupported form" } }
+            : { id: question.id, result: { decision: "decline" } };
+        client.socket.send(JSON.stringify(answer));
+        await until(() => f.calls.some((frame) => frame["id"] === question.id));
+        expect(f.calls.find((frame) => frame["id"] === question.id)).toEqual(answer);
+      }
+      const prior = f.calls.length;
+      client.socket.send(JSON.stringify({ id: "unseen", result: { decision: "accept" } }));
+      client.socket.send(
+        JSON.stringify({ id: 77, method: "thread/read", params: { threadId: identity.threadId } }),
+      );
+      await until(() => f.calls.some((frame) => frame["id"] === 77));
+      expect(f.calls.length).toBe(prior + 1);
+    } finally {
+      f.close();
+    }
+  });
+  test("resume preserves existing permissions and other native settings", async () => {
     const f = fixture();
     try {
       const client = await f.client(f.gateway.issue(identity));
       client.socket.send(
-        JSON.stringify({ id: 2, method: "thread/read", params: { threadId: identity.threadId } }),
-      );
-      await until(() => client.frames.length === 2);
-      expect(f.calls.some((call) => call["method"] === "thread/read")).toBe(true);
-      client.socket.send(
         JSON.stringify({
-          id: 3,
-          method: "thread/settings/update",
-          params: { ...settings, approvalPolicy: "on-request" },
+          id: 2,
+          method: "thread/resume",
+          params: {
+            threadId: identity.threadId,
+            cwd: identity.workspace,
+            sandbox: "danger-full-access",
+            approvalPolicy: "never",
+            config: { default_permissions: ":danger-full-access" },
+            model: "local-default",
+            excludeTurns: true,
+          },
         }),
       );
-      await until(() => client.frames.length === 3);
-      expect(client.frames[2]).toHaveProperty("error");
-      expect(f.calls.some((call) => call["method"] === "thread/settings/update")).toBe(false);
-      for (const peer of f.peers)
+      await until(() => client.frames.length === 2);
+      expect(f.calls.find((call) => call["method"] === "thread/resume")?.["params"]).toEqual({
+        threadId: identity.threadId,
+        excludeTurns: true,
+      });
+    } finally {
+      f.close();
+    }
+  });
+  test("resolved and other-thread questions cannot be answered through the attachment", async () => {
+    const f = fixture();
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      for (const peer of f.peers) {
         peer.send(
           JSON.stringify({
-            id: "question",
-            method: "item/tool/requestUserInput",
+            id: "other",
+            method: "item/commandExecution/requestApproval",
+            params: { threadId: "other" },
+          }),
+        );
+        peer.send(
+          JSON.stringify({
+            id: "resolved",
+            method: "item/commandExecution/requestApproval",
             params: { threadId: identity.threadId },
           }),
         );
-      client.socket.send(
-        JSON.stringify({ id: "question", result: { answers: { q: { answers: ["yes"] } } } }),
+        peer.send(
+          JSON.stringify({
+            method: "serverRequest/resolved",
+            params: { threadId: identity.threadId, requestId: "resolved" },
+          }),
+        );
+      }
+      await until(() =>
+        client.frames.some((frame) => frame["method"] === "serverRequest/resolved"),
       );
-      await until(() => client.socket.readyState === WebSocket.CLOSED);
-      expect(client.frames.some((frame) => frame["method"] === "item/tool/requestUserInput")).toBe(
+      client.socket.send(JSON.stringify({ id: "other", result: { decision: "accept" } }));
+      client.socket.send(JSON.stringify({ id: "resolved", result: { decision: "accept" } }));
+      client.socket.send(
+        JSON.stringify({ id: 78, method: "thread/read", params: { threadId: identity.threadId } }),
+      );
+      await until(() => f.calls.some((frame) => frame["id"] === 78));
+      expect(f.calls.some((frame) => frame["id"] === "other" || frame["id"] === "resolved")).toBe(
         false,
       );
-      expect(f.calls.some((frame) => frame["result"] !== undefined)).toBe(false);
-      client.socket.close();
-      client.watch.close();
+      expect(client.frames.some((frame) => frame["id"] === "other")).toBe(false);
     } finally {
       f.close();
     }

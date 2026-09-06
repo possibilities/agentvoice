@@ -35,10 +35,7 @@ export async function acquireAttachment(stateDir: string, workspace: string, thr
     signal: AbortSignal.timeout(5_000),
     redirect: "error",
   });
-  if (!response.ok)
-    throw new Error(
-      "Attachment unavailable; launch with --allow-tui-attach and select the current live thread",
-    );
+  if (!response.ok) throw new Error("Attachment unavailable; select the current live thread");
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Invalid attachment ticket");
   const chunks: Uint8Array[] = [];

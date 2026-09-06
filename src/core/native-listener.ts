@@ -23,7 +23,7 @@ export class NativeListener {
 
   constructor(stateDir: string) {
     mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    this.directory = mkdtempSync(join(stateDir, "tui-native-"));
+    this.directory = mkdtempSync(join(stateDir, "native-ws-"));
     this.tokenFile = join(this.directory, "token");
     try {
       writeFileSync(this.tokenFile, this.token, { mode: 0o600 });
@@ -35,12 +35,7 @@ export class NativeListener {
   }
 
   argv(argv: string[]): string[] {
-    const index = argv.lastIndexOf("--listen");
-    if (index < 0 || argv[index + 1] !== "stdio://")
-      throw new Error("Attachment requires the owned native app-server launch");
-    const result = [...argv];
-    result[index + 1] = "ws://127.0.0.1:0";
-    return [...result, "--ws-auth", "capability-token", "--ws-token-file", this.tokenFile];
+    return [...argv, "--ws-auth", "capability-token", "--ws-token-file", this.tokenFile];
   }
 
   observe(chunk: string): void {
@@ -99,9 +94,9 @@ export class NativeListener {
     this.socket.send(text);
   }
 
-  close(): void {
+  close(error = new Error("Native listener closed")): void {
     this.closed = true;
-    this.listening.reject(new Error("Native listener closed"));
+    this.listening.reject(error);
     this.socket?.close();
     this.endpointValue = undefined;
   }

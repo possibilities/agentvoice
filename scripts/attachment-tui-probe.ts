@@ -27,6 +27,7 @@ const done = Promise.withResolvers<void>();
 const stop = () => done.resolve();
 let holdNext = false;
 let streamNext = false;
+let approvalNext = false;
 let held: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 let count = 0;
 const turnEnded = Promise.withResolvers<void>();
@@ -43,6 +44,43 @@ try {
       const body = (await request.json()) as { input?: unknown };
       const sequence = ++count;
       console.log(`MOCK TURN ${sequence}: ${JSON.stringify(body.input).slice(-300)}`);
+      if (approvalNext) {
+        approvalNext = false;
+        const item = {
+          type: "function_call",
+          id: `tool-${sequence}`,
+          call_id: `call-${sequence}`,
+          name: "exec_command",
+          arguments: JSON.stringify({
+            cmd: "printf native-approval-confirmed",
+            sandbox_permissions: "require_escalated",
+            justification: "Run the harmless local attachment approval test?",
+          }),
+        };
+        const frames = [
+          {
+            type: "response.created",
+            response: { id: `response-${sequence}`, status: "in_progress", output: [] },
+          },
+          { type: "response.output_item.added", output_index: 0, item: { ...item, arguments: "" } },
+          { type: "response.output_item.done", output_index: 0, item },
+          {
+            type: "response.completed",
+            response: {
+              id: `response-${sequence}`,
+              status: "completed",
+              output: [item],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            },
+          },
+        ];
+        return new Response(
+          frames
+            .map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`)
+            .join(""),
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      }
       if (holdNext) {
         holdNext = false;
         held = Promise.withResolvers<void>();
@@ -152,21 +190,26 @@ try {
       '(version 1) (allow default) (deny network*) (allow network-bind (local ip "localhost:*")) (allow network-inbound (local ip "localhost:*")) (allow network-outbound (remote ip "localhost:*"))',
       ...appServerArgv(codex),
     ],
-    tuiNativeStateDir: stateDir,
+    nativeStateDir: stateDir,
     cwd: workspace,
     env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: root, CODEX_HOME: nativeHome },
     clientVersion: "attachment-tui-probe",
     // Match the owner connection's production opt-outs; the TUI has its own subscription.
     optOutNotificationMethods: ["item/agentMessage/delta", "item/commandExecution/outputDelta"],
-    onNotification(method) {
+    onNotification(method, params) {
       if (method === "turn/completed") turnEnded.resolve();
+      if (method === "thread/settings/updated")
+        console.log(`SETTINGS ${JSON.stringify(params["threadSettings"])}`);
+    },
+    onInteraction(message) {
+      console.log(message);
     },
     onClose() {},
   });
   const started = await connection.request<{ thread: { id: string } }>("thread/start", {
     cwd: workspace,
-    sandbox: "danger-full-access",
-    approvalPolicy: "never",
+    sandbox: "workspace-write",
+    approvalPolicy: "on-request",
   });
   const threadId = started.thread.id;
   await connection.request("turn/start", {
@@ -222,6 +265,10 @@ try {
     if (line === "stream") {
       streamNext = true;
       console.log("STREAM ARMED");
+    }
+    if (line === "approval") {
+      approvalNext = true;
+      console.log("APPROVAL ARMED");
     }
     if (line === "owner") {
       void connection!

@@ -1,5 +1,10 @@
 # 0021: Attach a stock TUI through a guarded local gateway
 
+The opt-in transport, full-access-only admission and human-answer suppression
+below are superseded by [ADR 0022](0022-websocket-native-tui.md). The local
+identity, credential and lifecycle boundaries remain. A later 2026-09-06 live
+trial confirmed continued updates, typed steering and operator-heard speech.
+
 Accepted 2026-09-05 for an opt-in worktree implementation; restored 2026-09-06
 from the unmerged experiment and adapted to the current events/controller code.
 Numbered 0021 on integration to preserve the intervening default-policy ADRs. Extends ADR 0015's

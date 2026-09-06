@@ -52,7 +52,7 @@
         "approval-policy": {
           "type": "string",
           "enum": ["never", "on-request", "untrusted"],
-          "description": "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. No approval UI is provided; requests needing human approval are refused visibly."
+          "description": "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. Use agentvoice attach to answer native approvals and tool questions; Codex keeps them pending when no TUI is attached."
         },
         "approvals-reviewer": {
           "type": "string",

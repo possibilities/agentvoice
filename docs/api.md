@@ -62,34 +62,38 @@ set before it reports the bridge ready.
 
 ## Private TUI launcher bootstrap
 
-`agentvoice attach --allow-full-access [--workspace <dir>] [--thread <id>]`
+`agentvoice attach [--workspace <dir>] [--thread <id>]`
 reuses live Unix status discovery. It then sends an authenticated `POST /tui/attach`
 to the controller's loopback HTTP host with `{instanceId, generation, threadId,
 workspace}`. This is a launcher-only endpoint, not a fourth MCP tool or Unix
 operation. It accepts no Origin and requires the same exact Host and bearer.
 
-The controller must have launched with `--allow-tui-attach`, be ready and idle
+The controller must be ready and idle
 with respect to lifecycle operations, and still match the target before and after
 its private runtime request. The result contains the selected thread/workspace,
 absolute Codex executable, gateway URL and an ephemeral bearer ticket. It is
 returned with `Cache-Control: no-store`, never in status, diagnostics or tool
-results. Discovery's descriptor token can bootstrap attachments only when this
-launch opt-in is enabled. The native app-server token never leaves the runtime.
-The runtime requires confirmed native dangerFullAccess/never before issuing a
-ticket. Restricted or missing permission reports revoke TUI grants while voice
-continues under its native permissions.
+results. Every controller supports attachment; there is no opt-in or permission
+gate. The native app-server token never leaves the runtime. The runtime uses
+WebSocket for all native RPC, with no stdio transport branch.
 
 The launcher must open its watcher before the TUI connects. Tickets admit one
 watcher/TUI pair within 30 seconds, with at most eight grants per runtime. The
 watcher controls launcher lifetime; native protocol initialization and correlation
 remain per-client. Frames are capped at 4 MiB, pending requests at 64, and request
 timeouts at 30 seconds. Requests outside the selected-thread allowlist are
-rejected before native dispatch. The gateway never forwards server questions or
-client answers; AgentVoice retains refusal ownership.
+rejected before native dispatch. Native command/file/permission approvals, tool
+questions and MCP elicitations for the selected thread are forwarded to the TUI;
+only answers matching a forwarded request ID pass back to native. Pending human
+request IDs are bounded at 64 per connection, without a response deadline.
+Native Codex owns pending requests, first-answer resolution and replay on resume.
+AgentVoice neither auto-refuses them nor stores another approval queue. TUI resume
+overrides are stripped to preserve the live settings; explicit settings updates
+can change native permissions.
 
 Fresh and runtime teardown revoke all grants before changing identity or stopping
 media. Redial keeps them. Lost connections require explicit reattachment and do
-not replay input. See [ADR 0021](adr/0021-guarded-tui-attachment.md) for scope and
+not replay input. See [ADR 0022](adr/0022-websocket-native-tui.md) for scope and
 [README](../README.md#attach-a-stock-codex-tui) for launch instructions.
 
 ## Unix socket transport
