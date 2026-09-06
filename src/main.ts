@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-import { realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 /** Foreground voice application; console is a compatibility alias. */
 import packageJson from "../package.json";
-import { discoverMcpConnection } from "./control/discovery.ts";
+import { discoverController, discoverMcpConnection } from "./control/discovery.ts";
 import { loadLaunchConfig } from "./core/launch-config.ts";
+import { eventSocketPath } from "./events/socket.ts";
 import { expandTilde, stateDirectory } from "./paths.ts";
 
 export { loadLaunchConfig } from "./core/launch-config.ts";
@@ -18,6 +19,8 @@ Usage:
   agentvoice console --allow-full-access [options]  Compatibility alias
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                                   Print a live MCP client configuration
+  agentvoice event-socket [--workspace <dir>] [--thread <id>]
+                                                  Print a live read-only event socket path
 
 Options:
   --allow-full-access      Required each launch: unrestricted files/network, no approvals
@@ -289,6 +292,37 @@ export async function runMcpConfigCommand(
   return 0;
 }
 
+export async function runEventSocketCommand(
+  argv: string[],
+  options: {
+    launchCwd?: string;
+    home?: string;
+    env?: Record<string, string | undefined>;
+    write?: (text: string) => void | Promise<void>;
+  } = {},
+): Promise<number> {
+  const home = options.home ?? homedir();
+  const command = parseMcpConfigCommand(argv, options.launchCwd ?? process.cwd(), home);
+  const write = options.write ?? ((text: string) => Bun.write(Bun.stdout, text));
+  if (command.help) {
+    await write(USAGE);
+    return 0;
+  }
+  const stateDir = stateDirectory(options.env ?? process.env, home);
+  const descriptor = await discoverController(stateDir, command.workspace, command.threadId);
+  const path = eventSocketPath(stateDir, descriptor.instanceId);
+  const info = lstatSync(path);
+  if (
+    !info.isSocket() ||
+    info.isSymbolicLink() ||
+    info.uid !== process.getuid?.() ||
+    (info.mode & 0o077) !== 0
+  )
+    throw new Error("unsafe AgentVoice event socket");
+  await write(`${path}\n`);
+  return 0;
+}
+
 async function runConsoleCommand(argv: string[]): Promise<number> {
   const command = parseConsoleCommand(argv);
   if (command.help) {
@@ -311,6 +345,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(USAGE);
       return 0;
     }
+    if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
     if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")
       throw new UsageError(

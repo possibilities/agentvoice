@@ -136,3 +136,9 @@ implementations in old ADRs, not current runtime components. The current
 controller/runtime split is a foreground parent/child topology, not a resident
 server or remote attachment feature. Native Codex subagents are separate from
 the removed AgentVoice worker system.
+
+**Lifecycle feed** — The retained controller's read-only Unix event endpoint for
+current native thread state, inventory completeness, and runtime availability.
+It survives runtime replacement, projects only bounded metadata, and provides
+sequence-watermarked snapshots rather than a conversation log. _Avoid_: pipe,
+control socket, transcript stream.

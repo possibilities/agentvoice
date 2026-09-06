@@ -152,16 +152,6 @@ export async function dispatchControl(
   return output.data;
 }
 
-export const socketRequestSchema = z
-  .object({
-    v: z.literal(CONTROL_PROTOCOL_VERSION),
-    type: z.literal("request"),
-    id: z.string().min(1).max(128),
-    method: z.string().min(1).max(128),
-    params: z.unknown().optional(),
-  })
-  .strict();
-
 export type SocketResponse =
   | { v: number; type: "response"; id: string | null; ok: true; result: unknown }
   | {

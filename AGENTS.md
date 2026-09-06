@@ -81,6 +81,14 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
 - src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
   Never adopt an old journal across a full quit/relaunch.
+- src/events/: controller-owned read-only lifecycle socket, native-state projection,
+  prefix subscriptions and sequence-watermarked snapshots. No prompts, content,
+  capabilities or media; no mutation/MCP methods. Runtime replacements reset the
+  inventory; stale incarnations never publish into a successor. See docs/events.md.
+- src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
+  never history hydration, resume, or turns. Preserve newer notifications over late reads.
+- src/ipc/json-socket.ts: shared private NDJSON framing, ownership and bounded writes
+  for both Unix endpoints. Never remove another listener or an unrelated file.
 - src/control/: shared Zod contract/dispatch, private UDS NDJSON server,
   loopback Streamable HTTP MCP projection, and private live-controller discovery
   for the explicit `mcp-config` export. Keep both transports semantically identical.

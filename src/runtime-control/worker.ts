@@ -7,6 +7,7 @@ import type { VoiceTuiHost, VoiceTuiState } from "../console/tui.ts";
 import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
+import type { ThreadInventory } from "../events/contract.ts";
 import {
   IPC_VERSION,
   type IpcMessage,
@@ -41,6 +42,7 @@ export function runRuntimeWorker(
   let terminalFailure = false;
   let desiredMute = { mic: true, speaker: true };
   let outgoing = 0;
+  let threadInventory: ThreadInventory | undefined;
   let next = 1;
   const leases = new Map<
     number,
@@ -133,6 +135,10 @@ export function runRuntimeWorker(
   }
   function publish() {
     if (!host || stopping || terminalFailure) return;
+    if (threadInventory && outgoing < 16) {
+      event("threads", threadInventory);
+      threadInventory = undefined;
+    }
     const state: VoiceTuiState = host.state();
     if (state.notice) state.notice = redact(state.notice);
     event("state", state);
@@ -174,6 +180,10 @@ export function runRuntimeWorker(
           controlMcp: currentLaunch.control,
           acquireLease,
           onVerifiedThread: (identity) => event("identity", identity),
+          onThreads: (inventory) => {
+            threadInventory = inventory;
+            publish();
+          },
           onChildPid: (pid) => event("native-pid", { pid }),
           onShutdownOutcome: (value) => {
             forced = value;

@@ -2,6 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ThreadInventory } from "../events/contract.ts";
 import { stateDirectory } from "../paths.ts";
 import {
   AppServerConnection,
@@ -33,6 +34,7 @@ import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { lockThread } from "./thread-lock.ts";
+import { ThreadObserver } from "./thread-observer.ts";
 import { type SessionSelection, selectThread } from "./thread-selection.ts";
 import type { ReadyInfo } from "./voice-types.ts";
 
@@ -86,6 +88,7 @@ export interface RuntimeOptions extends SessionSelection {
   onVerifiedThread?: (identity: { threadId: string; workspace: string }) => void;
   onChildPid?: (pid: number) => void;
   onChildReaped?: () => void;
+  onThreads?: (inventory: ThreadInventory) => void;
   onShutdownOutcome?: (forced: boolean) => void;
 }
 
@@ -145,6 +148,7 @@ export class VoiceRuntime {
   private readonly activeTurns = new Map<string, string>();
   private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
+  private readonly threadObserver: ThreadObserver | undefined;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
 
@@ -154,6 +158,12 @@ export class VoiceRuntime {
     private readonly events: RuntimeEvents,
     private readonly options: RuntimeOptions = {},
   ) {
+    this.threadObserver = options.onThreads
+      ? new ThreadObserver(
+          (method, params, timeout) => this.requireConnection().request(method, params, timeout),
+          options.onThreads,
+        )
+      : undefined;
     this.sessions = new VoiceSessionManager({
       sendAnswer: (sdp) => this.events.onAnswer(sdp),
       sendClosed: (reason) => this.events.onClosed(reason),
@@ -238,6 +248,7 @@ export class VoiceRuntime {
       });
       await this.confirmControlReady();
       this.threadReady = true;
+      void this.threadObserver?.start();
       this.emitReady();
     } catch (error) {
       await this.shutdown();
@@ -336,6 +347,7 @@ export class VoiceRuntime {
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
+    this.threadObserver?.stop();
     this.threadReady = false;
     this.shutdownPromise = (async () => {
       try {
@@ -418,6 +430,7 @@ export class VoiceRuntime {
     const id = extractThreadId(result);
     await this.acquire(id);
     confirmFullAccess(result);
+    this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
@@ -464,6 +477,7 @@ export class VoiceRuntime {
     this.assertRunning();
     if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
     confirmFullAccess(result);
+    this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
     this.tier = tier;
@@ -480,6 +494,7 @@ export class VoiceRuntime {
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
     if (this.shuttingDown) return;
+    this.threadObserver?.notification(method, params);
     const id = params["threadId"];
     const turn = (params["turn"] ?? {}) as Record<string, unknown>;
     if (typeof id === "string") {

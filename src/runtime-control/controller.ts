@@ -32,6 +32,9 @@ import {
   handoffUnknown,
 } from "../core/handoff.ts";
 import { lockThread } from "../core/thread-lock.ts";
+import { threadInventorySchema } from "../events/contract.ts";
+import { LifecycleFeed } from "../events/feed.ts";
+import { EventSocketServer, eventSocketPath } from "../events/socket.ts";
 import { stateDirectory } from "../paths.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
@@ -43,6 +46,7 @@ export interface ControllerOptions {
   provenance: LaunchProvenance;
   version: string;
   control: ControlMcpRegistration;
+  lifecycle?: LifecycleFeed;
   changed?(): void;
   cancelInputs?(): void;
   spawn?: typeof spawnRuntimeProcess;
@@ -50,6 +54,7 @@ export interface ControllerOptions {
 }
 
 export class RuntimeController implements ControlBackend {
+  readonly lifecycle: LifecycleFeed;
   private readonly journal: OperationJournal;
   private readonly leases = new Map<string, () => void>();
   private active: RuntimeProcess | undefined;
@@ -77,6 +82,7 @@ export class RuntimeController implements ControlBackend {
   readonly speaker = new MuteGate();
 
   constructor(private readonly options: ControllerOptions) {
+    this.lifecycle = options.lifecycle ?? new LifecycleFeed(options.instanceId);
     this.journal = new OperationJournal(
       join(options.stateDir, "operations", `${options.instanceId}.jsonl`),
     );
@@ -117,6 +123,11 @@ export class RuntimeController implements ControlBackend {
     };
   }
   private changed() {
+    this.lifecycle.runtime(this.generation, {
+      phase: this.phase,
+      workspace: this.workspace,
+      mainThreadId: this.threadId,
+    });
     this.options.changed?.();
   }
   private notice(message: string) {
@@ -149,6 +160,12 @@ export class RuntimeController implements ControlBackend {
   }
   private event(incarnation: number, method: string, params: unknown) {
     if (incarnation !== this.activeIncarnation || this.closed) return;
+    if (method === "threads") {
+      const checked = threadInventorySchema.safeParse(params);
+      if (checked.success) this.lifecycle.update(checked.data);
+      else this.lifecycle.update({ threads: this.lifecycle.snapshot().threads, complete: false });
+      return;
+    }
     if (method === "identity") {
       if (this.phase === "failed") return;
       const identity = params as { threadId: string; workspace: string };
@@ -490,8 +507,11 @@ export class RuntimeController implements ControlBackend {
   }
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
-    this.shutdownPromise = (async () => {
-      this.closed = true;
+    this.closed = true;
+    // Publish only after the promise exists: changed callbacks may request shutdown too.
+    this.shutdownPromise = Promise.resolve().then(async () => {
+      this.phase = "stopping";
+      this.changed();
       this.activeIncarnation = 0;
       const stopped = await Promise.allSettled([this.active?.stop(), this.candidate?.stop()]);
       await this.background;
@@ -500,7 +520,7 @@ export class RuntimeController implements ControlBackend {
       this.journal.close();
       const failed = stopped.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
-    })();
+    });
     return this.shutdownPromise;
   }
 }
@@ -511,6 +531,8 @@ export async function runController(provenance: LaunchProvenance, version: strin
   let controller: RuntimeController | undefined;
   let tui: VoiceTui | undefined;
   let control: ControlServer | undefined;
+  const lifecycle = new LifecycleFeed(instanceId);
+  const events = new EventSocketServer(eventSocketPath(stateDir, instanceId), lifecycle);
   let cleanupError: unknown;
   const current = () => {
     if (!controller) throw new ControlError("unavailable", "Controller is initializing");
@@ -522,10 +544,12 @@ export async function runController(provenance: LaunchProvenance, version: strin
     restart: (request) => current().restart(request),
   };
   try {
+    await events.start();
     control = await startControlServer({ backend, stateDir, instanceId });
     controller = new RuntimeController({
       instanceId,
       stateDir,
+      lifecycle,
       provenance,
       version,
       control: {
@@ -535,6 +559,7 @@ export async function runController(provenance: LaunchProvenance, version: strin
         env: {
           [control.bearerTokenEnvVar]: control.bearerToken,
           [control.socketEnvVar]: control.socketPath,
+          AGENTVOICE_EVENTS_SOCKET: events.path,
         },
       },
       changed: () => tui?.refresh(),
@@ -580,6 +605,7 @@ export async function runController(provenance: LaunchProvenance, version: strin
       control?.close(),
       tui?.shutdown(),
     ]);
+    events.close();
     const failed = cleanup.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") cleanupError = failed.reason;
   }

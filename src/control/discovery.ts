@@ -362,11 +362,11 @@ function statusFromSocket(
   });
 }
 
-export async function discoverMcpConnection(
+export async function discoverController(
   stateDir: string,
   workspace: string,
   threadId?: string,
-): Promise<McpConnectionConfig> {
+): Promise<ControlDiscoveryDescriptor> {
   const descriptors = readDescriptors(stateDir);
   const statuses = await Promise.all(
     descriptors.map(async (descriptor) => ({
@@ -390,7 +390,15 @@ export async function discoverMcpConnection(
         ? `multiple live AgentVoice controllers found for workspace ${workspace}; pass --thread <id>`
         : `multiple live AgentVoice controllers found for workspace ${workspace} and thread ${threadId}`,
     );
-  const { descriptor } = matches[0]!;
+  return matches[0]!.descriptor;
+}
+
+export async function discoverMcpConnection(
+  stateDir: string,
+  workspace: string,
+  threadId?: string,
+): Promise<McpConnectionConfig> {
+  const descriptor = await discoverController(stateDir, workspace, threadId);
   return {
     mcpServers: {
       agentvoice: {

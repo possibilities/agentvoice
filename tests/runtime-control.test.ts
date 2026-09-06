@@ -103,6 +103,10 @@ describe("persistent controller and disposable runtime", () => {
       expect(controller.state().notice).toContain("start-muted:true:true");
       const first = controller.status();
       expect(first.threadId).toBe("test-thread-1");
+      await until(() => controller.lifecycle.snapshot().inventory === "ready");
+      expect(controller.lifecycle.snapshot().threads).toMatchObject([
+        { id: first.threadId, status: "idle" },
+      ]);
       const firstNative = children[0]!.nativePid!;
       expect(firstNative).toBeGreaterThan(0);
       expect(() => lockThread(join(root, "thread-locks"), first.threadId)).toThrow("already open");
@@ -134,6 +138,12 @@ describe("persistent controller and disposable runtime", () => {
       expect(JSON.stringify(second)).not.toContain("private handoff");
       expect(second.threadId).toBe(first.threadId);
       expect(second.generation).toBe(2);
+      await until(() => controller.lifecycle.snapshot().threads[0]?.turn?.id === "handoff-turn");
+      expect(controller.lifecycle.snapshot()).toMatchObject({
+        generation: 2,
+        threads: [{ id: first.threadId, status: "active" }],
+      });
+      expect(JSON.stringify(controller.lifecycle.snapshot())).not.toContain("private handoff");
       expect(second.runtime.pid).not.toBe(first.runtime.pid);
       expect(second.runtime.buildId).not.toBe(first.runtime.buildId);
       expect(() => process.kill(first.runtime.pid!, 0)).toThrow();
@@ -310,6 +320,23 @@ describe("persistent controller and disposable runtime", () => {
         conversation: { ...ready.conversation, threadId: "stale" },
       });
       expect(controller.status().threadId).toBe("saved");
+      callbacks[0]!("threads", {
+        complete: true,
+        threads: [
+          {
+            id: "stale",
+            name: null,
+            parentThreadId: null,
+            status: "active",
+            activeFlags: [],
+            turn: null,
+          },
+        ],
+      });
+      expect(controller.lifecycle.snapshot()).toMatchObject({
+        inventory: "unavailable",
+        threads: [],
+      });
       const retryRequest = request("retry");
       await controller.restart(retryRequest);
       await until(() => controller.status().currentOperation?.phase === "ready");
@@ -319,8 +346,30 @@ describe("persistent controller and disposable runtime", () => {
       ]);
       expect((await controller.restart(first)).phase).toBe("failed");
       const completedRetry = await controller.restart(retryRequest);
+      callbacks[2]!("threads", {
+        complete: true,
+        threads: [
+          {
+            id: "saved",
+            name: null,
+            parentThreadId: null,
+            status: "active",
+            activeFlags: [],
+            turn: null,
+          },
+        ],
+      });
+      expect(controller.lifecycle.snapshot().threads).toHaveLength(1);
+      callbacks[2]!("threads", { complete: true, threads: [], privatePrompt: "must not leak" });
+      expect(controller.lifecycle.snapshot().inventory).toBe("incomplete");
+      expect(JSON.stringify(controller.lifecycle.snapshot())).not.toContain("must not leak");
       callbacks[2]!("fatal", { message: "terminal native failure" });
       callbacks[2]!("state", ready);
+      callbacks[2]!("threads", { complete: true, threads: [] });
+      expect(controller.lifecycle.snapshot()).toMatchObject({
+        inventory: "unavailable",
+        threads: [],
+      });
       expect(controller.state().phase).toBe("failed");
       expect(controller.state().notice).toBe("terminal native failure");
       await controller.restart(request("retry-after-fatal"));

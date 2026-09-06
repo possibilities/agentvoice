@@ -89,7 +89,8 @@ Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
 and `internal_error`. A timeout or disconnected socket says nothing about
 whether a mutation was accepted; query status before retrying.
 
-There are no unsolicited event frames in version 2. Poll `agentvoice.status`
+The separate [lifecycle event socket](events.md) serves read-only state subscribers.
+There are no unsolicited event frames in control version 2. Poll `agentvoice.status`
 for an operation's state. This keeps a replacement runtime from inheriting a
 caller connection, event subscription, or pending request.
 

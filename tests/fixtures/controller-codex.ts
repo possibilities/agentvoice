@@ -10,6 +10,7 @@ const threads: Array<Record<string, unknown>> = existsSync(store)
   ? JSON.parse(readFileSync(store, "utf8"))
   : [];
 let config: Record<string, unknown> = {};
+const loaded = new Set<string>();
 const full = { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
 const input = createInterface({ input: process.stdin });
 for await (const line of input) {
@@ -22,19 +23,25 @@ for await (const line of input) {
   if (request.id === undefined) continue;
   let result: unknown = {};
   if (request.method === "thread/list") result = { data: threads, nextCursor: null };
+  if (request.method === "thread/loaded/list") result = { data: [...loaded], nextCursor: null };
   if (request.method === "thread/start") {
     const thread = {
       id: `test-thread-${threads.length + 1}`,
       cwd: root,
       threadSource: params.threadSource,
+      status: { type: "idle" },
     };
     threads.unshift(thread);
+    loaded.add(thread.id);
     writeFileSync(store, JSON.stringify(threads));
     config = params.config ?? {};
     result = { thread, ...full, model: params.model ?? "native-default" };
   }
   if (request.method === "thread/read" || request.method === "thread/resume") {
-    if (request.method === "thread/resume") config = params.config ?? {};
+    if (request.method === "thread/resume") {
+      config = params.config ?? {};
+      loaded.add(params.threadId);
+    }
     result = {
       thread: threads.find((t) => t["id"] === params.threadId),
       ...full,
@@ -67,4 +74,12 @@ for await (const line of input) {
       mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
   }
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
+  if (request.method === "turn/start" && (result as { turn?: { id?: string } }).turn?.id) {
+    process.stdout.write(
+      `${JSON.stringify({ method: "turn/started", params: { threadId: params.threadId, turn: (result as { turn: unknown }).turn } })}\n`,
+    );
+    process.stdout.write(
+      `${JSON.stringify({ method: "thread/status/changed", params: { threadId: params.threadId, status: { type: "active", activeFlags: [] } } })}\n`,
+    );
+  }
 }

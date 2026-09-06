@@ -49,6 +49,16 @@ the JSON private and generate it again after a new launch. Claude Code and MCP
 Inspector accept this JSON shape directly. Codex uses a different native MCP
 configuration shape, so this output is not a Codex configuration file.
 
+### Observe thread state
+
+`agentvoice event-socket --workspace ~/code/myapp` prints the separate read-only
+Unix endpoint for a live controller. UIs subscribe with `event.subscribe`, then
+read `state.get` for the current inventory and a sequence watermark. The endpoint
+reports native thread state and runtime availability across Fresh and runtime
+restart, including native subagents, without conversation content. See the
+[event protocol](docs/events.md) for prefix matching, snapshots, and limits.
+A full foreground relaunch is required to activate the new controller endpoint.
+
 ### Full access is required
 
 Every voice launch requires `--allow-full-access`, including `console`, continue
