@@ -15,8 +15,8 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a foreground Codex voice TUI
 
 Usage:
-  agentvoice [options]                              Continue this workspace's conversation
-  agentvoice console [options]                      Compatibility alias
+  agentvoice [options]                            Start a new conversation in this workspace
+  agentvoice console [options]                    Compatibility alias
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                                   Print a live MCP client configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
@@ -25,8 +25,8 @@ Usage:
 Options:
   --allow-full-access      Opt in to unrestricted files/network and no approvals
   --workspace <dir>        Conversation root (default: launch directory)
-  --continue              Continue this workspace's conversation (default)
-  --no-continue            Start a new conversation (--fresh is an alias)
+  --continue              Continue the most recent eligible conversation in this workspace
+  --fresh, --no-continue   Start a new conversation (default)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
   --role <name|path>       Role directory (name under ~/.config/agentroles or a path):
                            its skills, mcp.json and prompt files apply to this launch only
@@ -61,7 +61,7 @@ and an append for the same agent cannot both be present. Raw native fields remai
 available in orchestrator.extra / voice.extra.
 
 Settings and prompt files load per runtime generation; runtime restart rereads them.
-Raw extra fields can override named CLI settings except --allow-full-access; see README.
+Raw extra fields can override named CLI settings except Fast/full-access flags; see README.
 
 MCP config export selects one live controller by canonical workspace (the launch
 directory by default). Use --thread when more than one controller is live there.
@@ -113,6 +113,7 @@ export interface ParsedArgs {
   configPath?: string;
   debug: boolean;
   fresh: boolean;
+  continue: boolean;
   help: boolean;
   fast?: boolean;
   allowFullAccess?: boolean;
@@ -125,6 +126,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
   let configPath: string | undefined;
   let debug = false;
   let fresh = false;
+  let continueLatest = false;
   let help = false;
   let fast: boolean | undefined;
 
@@ -151,6 +153,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
       else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
+      else if (flag === "--continue") continueLatest = true;
       else if (flag === "--fast" || flag === "--no-fast") fast = flag === "--fast";
       else if (flag === "--help") help = true;
       continue;
@@ -183,6 +186,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     configPath,
     debug,
     fresh,
+    continue: continueLatest,
     help,
     ...(fast === undefined ? {} : { fast }),
     ...(seen.has("--allow-full-access") ? { allowFullAccess: true } : {}),
@@ -202,6 +206,7 @@ export interface ConsoleOptions {
   outputDeviceIndex?: number;
   debug: boolean;
   fresh: boolean;
+  continue: boolean;
   resume?: string;
 }
 export type ParsedConsoleCommand =
@@ -224,6 +229,7 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
         : { outputDeviceIndex: parseDeviceIndex("--output-device", outputDevice) }),
       debug: parsed.debug,
       fresh: parsed.fresh,
+      continue: parsed.continue,
       ...(resume === undefined ? {} : { resume }),
     },
   };

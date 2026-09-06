@@ -25,7 +25,7 @@ export function lockThread(directory: string, threadId: string): () => void {
     locked = library.symbols.flock(fd, 2 | 4) === 0; // LOCK_EX | LOCK_NB
     if (!locked)
       throw new Error(
-        `Conversation ${threadId} is already open in another AgentVoice process; use --no-continue for a separate conversation`,
+        `Conversation ${threadId} is already open in another AgentVoice process; start without --continue/--resume for a separate conversation`,
       );
   } finally {
     if (!locked) closeSync(fd);

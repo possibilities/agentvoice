@@ -634,10 +634,10 @@ describe("parseArgs characterization", () => {
 });
 
 describe("parseConsoleCommand", () => {
-  test("defaults to system devices, resume, and no debug", () => {
+  test("defaults to system devices, a fresh conversation, and no debug", () => {
     expect(parseConsoleCommand(["--allow-full-access"])).toMatchObject({
       help: false,
-      options: { debug: false, fresh: false },
+      options: { debug: false, fresh: false, continue: false },
     });
   });
 
@@ -656,6 +656,7 @@ describe("parseConsoleCommand", () => {
       outputDeviceIndex: 2,
       debug: true,
       fresh: true,
+      continue: false,
     });
   });
 

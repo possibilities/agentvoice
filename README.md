@@ -267,8 +267,8 @@ Named CLI options beat the same named file settings. Raw native overrides merge
 later: `orchestrator.extra.model` beats `--model`, an explicit
 `orchestrator.config.model_reasoning_effort` beats `--effort`, and
 `voice.extra.voice` beats `--voice`. `orchestrator.extra.config` replaces the
-assembled request config as a whole. Fast flags and `--allow-full-access` are explicit exceptions: they win over
-raw settings for their respective controls. Unset settings stay off the wire
+assembled request config as a whole. Fast flags and `--allow-full-access` are
+explicit exceptions: they win over raw settings for their respective controls. Unset settings stay off the wire
 except documented application defaults such as WebRTC v3. Evaluate these against
 both client selection and server resolution; server omission alone does not
 define vanilla Codex.
@@ -277,8 +277,8 @@ define vanilla Codex.
 
 `--config` selects AgentVoice's JSON file. Repeatable `-c` / `--codex-config`
 instead supplies **native Codex startup configuration**, just like Codex's own
-`-c key=value`. No entries are supplied by default. With `--allow-full-access`, explicit native
-permission overrides follow the user entries so the flag wins.
+`-c key=value`. No entries are supplied by default. With `--allow-full-access`,
+explicit native permission overrides follow the user entries so the flag wins.
 
 ```sh
 agentvoice -c model_reasoning_effort=high
