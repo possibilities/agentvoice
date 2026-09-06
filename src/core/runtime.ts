@@ -2,6 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { confirmFullAccess } from "../attachment/full-access.ts";
 import { AttachmentGateway, type AttachmentTicket } from "../attachment/gateway.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import { nativeVoiceNotification, type VoiceNotification } from "../events/voice.ts";
@@ -18,7 +19,7 @@ import {
   injectControlMcp,
   requireControlMcpReady,
 } from "./control-mcp.ts";
-import { confirmFullAccess, FullAccessError } from "./full-access.ts";
+import { fullAccessStartupConfig } from "./full-access.ts";
 import {
   type HandoffRequest,
   type HandoffResult,
@@ -149,6 +150,7 @@ export class VoiceRuntime {
   private freshInFlight = false;
   private shuttingDown = false;
   private tuiGateway: AttachmentGateway | undefined;
+  private tuiPermissionsConfirmed = false;
   private shutdownPromise: Promise<void> | null = null;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
@@ -288,7 +290,7 @@ export class VoiceRuntime {
       this.sessions.reset();
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
-      if (error instanceof FullAccessError || this.options.controlMcp) {
+      if (this.options.controlMcp) {
         this.events.onFatal(error instanceof Error ? error.message : String(error));
         await this.shutdown();
       } else if (!this.shuttingDown)
@@ -438,7 +440,7 @@ export class VoiceRuntime {
     this.assertRunning();
     const id = extractThreadId(result);
     await this.acquire(id);
-    confirmFullAccess(result);
+    this.observeAttachmentPermissions(result);
     this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
@@ -485,7 +487,7 @@ export class VoiceRuntime {
     const result = await connection.request("thread/resume", params);
     this.assertRunning();
     if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
-    confirmFullAccess(result);
+    this.observeAttachmentPermissions(result);
     this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
@@ -499,6 +501,17 @@ export class VoiceRuntime {
   private emitReady(): void {
     const info = this.currentReady;
     if (info) this.events.onReady(info);
+  }
+
+  private observeAttachmentPermissions(result: unknown, settings = false): void {
+    if (!this.options.tuiNativeStateDir) return;
+    try {
+      confirmFullAccess(result, settings);
+      this.tuiPermissionsConfirmed = true;
+    } catch {
+      this.tuiPermissionsConfirmed = false;
+      this.tuiGateway?.revoke();
+    }
   }
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
@@ -518,14 +531,7 @@ export class VoiceRuntime {
         this.sessions.handleNotification(method, params);
       if (method === "thread/settings/updated" && this.locks.has(id)) {
         const settings = params["threadSettings"] as Record<string, unknown> | undefined;
-        try {
-          confirmFullAccess(settings, true);
-        } catch (error) {
-          this.threadReady = false;
-          this.events.onFatal(String(error));
-          void this.shutdown();
-          return;
-        }
+        if (id === this.threadId) this.observeAttachmentPermissions(settings, true);
         if (settings && id === this.threadId) {
           if (typeof settings["model"] === "string") this.tier.model = settings["model"];
           if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
@@ -544,7 +550,7 @@ export class VoiceRuntime {
       : this.config.codex;
     let connection: RuntimeConnection | null = null;
     connection = await (this.options.connect ?? AppServerConnection.connect)({
-      argv: appServerArgv(codex, this.config.codexConfig),
+      argv: appServerArgv(codex, fullAccessStartupConfig(this.config)),
       tuiNativeStateDir: this.options.tuiNativeStateDir,
       cwd: this.config.orchestrator.workspace,
       env: { ...process.env, ...this.options.controlMcp?.env },
@@ -575,6 +581,8 @@ export class VoiceRuntime {
         () => {
           if (!this.threadReady || this.shuttingDown || this.freshInFlight || !this.threadId)
             throw new Error("Voice thread is not ready for attachment");
+          if (!this.tuiPermissionsConfirmed)
+            throw new Error("TUI attachment requires confirmed danger-full-access / never");
           return this.tuiGateway!.issue({
             threadId: this.threadId,
             workspace: this.config.orchestrator.workspace,

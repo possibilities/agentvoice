@@ -90,7 +90,7 @@ describe("convention prompt files", () => {
   });
 
   test("all legacy filenames are ignored across continue/redial/Fresh, including unreadable files", async () => {
-    const h = runtimeHarness();
+    const h = runtimeHarness({}, { continue: true });
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);
     h.native.main("existing", h.directory);
@@ -217,7 +217,11 @@ describe("convention prompt files", () => {
                 }
               : {}),
           },
-          mode === "resume" ? { resume: "existing" } : mode === "fresh" ? { fresh: true } : {},
+          mode === "resume"
+            ? { resume: "existing" }
+            : mode === "continue"
+              ? { continue: true }
+              : { fresh: true },
         );
         h.native.main("existing", h.directory);
         const warnings: string[] = [];
@@ -259,7 +263,7 @@ describe("convention prompt files", () => {
               raw ? null : "orchestratorSessionEnd",
             );
             if (raw) expect(call.params["initialItems"]).toEqual([]);
-            expect(call.params["includeStartupContext"]).toBe(false);
+            expect(call.params).not.toHaveProperty("includeStartupContext");
             expect(call.params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
             expect(JSON.stringify(call.params)).not.toContain("Changed after launch");
           }

@@ -1,5 +1,7 @@
 # Remove automatic spoken-history replay
 
+**Partial policy update:** [ADR 0020](0020-native-launch-defaults.md) replaces the retained startup-context false default with native resolution and makes ordinary launch fresh. The replay removal remains current.
+
 2026-09-05. Supersedes the replay decisions in ADRs 0011 and 0012. The operator
 asked to remove the feature completely and try the product without automatic
 voice memory before adding more application policy. AgentVoice should remain

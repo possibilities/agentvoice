@@ -11,7 +11,9 @@ const threads: Array<Record<string, unknown>> = existsSync(store)
   : [];
 let config: Record<string, unknown> = {};
 const loaded = new Set<string>();
-const full = { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
+const full = existsSync(join(root, "native-permissions.json"))
+  ? JSON.parse(readFileSync(join(root, "native-permissions.json"), "utf8"))
+  : { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
 function handle(line: string, send: (text: string) => void) {
   const request = JSON.parse(line);
   const params = request.params ?? {};

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "agentvoice configuration",
-  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
+  "description": "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: WebRTC v3 compatibility. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -13,7 +13,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; full-access/workspace/realtime invariants still apply."
+      "description": "Explicit native startup overrides as key=value strings (TOML values, dotted keys). Forwarded unchanged as separate Codex -c arguments, with file entries before repeatable CLI entries; later entries win within that layer. Empty/unset adds nothing. Launch-only, no global config writes. Conversation-level overrides remain separate; workspace/realtime invariants still apply. --allow-full-access appends native permission overrides after these entries."
     },
     "codex": {
       "type": "string",
@@ -47,23 +47,21 @@
         "sandbox": {
           "type": "string",
           "enum": ["read-only", "workspace-write", "danger-full-access"],
-          "description": "Full-access-only product policy: only danger-full-access is accepted at launch. Incompatible values error. NOT combinable with permissions.",
-          "default": "danger-full-access"
+          "description": "Native sandbox mode. Unset inherits native configuration. NOT combinable with permissions. --allow-full-access overrides permission selectors at launch; managed requirements still apply."
         },
         "approval-policy": {
           "type": "string",
           "enum": ["never", "on-request", "untrusted"],
-          "description": "Full-access-only product policy: only never is accepted at launch. No approval UI is provided.",
-          "default": "never"
+          "description": "Native approval policy. Unset inherits native configuration. --allow-full-access requests never. No approval UI is provided; requests needing human approval are refused visibly."
         },
         "approvals-reviewer": {
           "type": "string",
           "enum": ["user", "auto_review", "guardian_subagent"],
-          "description": "Native reviewer passthrough; execution approvals are disabled by the mandatory never policy. This does not grant connector consent or answer questions. Default: native configuration."
+          "description": "Native reviewer passthrough; --allow-full-access requests the never approval policy. This does not grant connector consent or answer questions. Default: native configuration."
         },
         "permissions": {
           "type": "string",
-          "description": "Only the built-in :danger-full-access profile is supported; other profiles error at launch. NOT combinable with sandbox."
+          "description": "Native permission profile. Unset inherits native configuration. NOT combinable with sandbox. --allow-full-access overrides this selection at launch."
         },
         "model-provider": {
           "type": "string",
@@ -91,11 +89,11 @@
         },
         "config": {
           "type": "object",
-          "description": "Raw ~/.codex/config.toml overrides, applied to this thread only. Permission selectors must match danger-full-access / never. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history."
+          "description": "Raw ~/.codex/config.toml overrides, applied to this thread only. --allow-full-access overrides permission selectors; native managed requirements still apply. An entry here beats the effort shorthand above. experimental_realtime_ws_startup_context replaces Codex's generated voice startup snapshot when startup context is enabled; an empty string suppresses that snapshot without erasing thread history."
         },
         "extra": {
           "type": "object",
-          "description": "Raw thread/start or thread/resume passthrough, merged last except workspace and AgentVoice source identity. Permission selectors must match danger-full-access / never. Conflicting cwd and threadId/path/history overrides are rejected. Known start-only fields are stripped on resume after merging extra (Codex 0.153.3). Nonempty dynamicTools warns: metadata is passed on start but this client has no handlers. Raw fields can override named CLI flags; extra.config replaces the assembled config object. Unknown native fields may be silently ignored."
+          "description": "Raw thread/start or thread/resume passthrough, merged last except workspace, AgentVoice source identity and explicit --allow-full-access. --allow-full-access overrides permission selectors; native managed requirements still apply. Conflicting cwd and threadId/path/history overrides are rejected. Known start-only fields are stripped on resume after merging extra (Codex 0.153.3). Nonempty dynamicTools warns: metadata is passed on start but this client has no handlers. Raw fields can override named CLI flags; extra.config replaces the assembled config object. Unknown native fields may be silently ignored."
         }
       },
       "additionalProperties": false,
@@ -127,8 +125,7 @@
         },
         "include-startup-context": {
           "type": "boolean",
-          "description": "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. AgentVoice defaults this to false, including Fresh, so old topics do not enter a new conversation automatically. Explicit true opts into the whole native snapshot; Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution.",
-          "default": false
+          "description": "Native startup snapshot: working-thread history, Recent Work from other conversations, and a machine/workspace map. Omitted defers to Codex's native resolution (currently includes the snapshot for a new voice call). Explicit false skips it; true includes the whole snapshot. Codex has no Recent Work-only switch. Independent of working-thread continuation. When enabled, orchestrator.config.experimental_realtime_ws_startup_context replaces the snapshot (empty string suppresses it). Raw voice.extra.includeStartupContext still wins, including null for native resolution."
         },
         "delegation-ack-filler": {
           "type": "boolean",

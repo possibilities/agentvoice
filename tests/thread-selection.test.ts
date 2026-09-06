@@ -30,7 +30,7 @@ describe("native workspace conversation selection", () => {
       expect(params).toEqual({ threadId: "newest", includeTurns: false });
       return { thread: main("newest") };
     };
-    expect(await selectThread(request, "/workspace", {})).toBe("newest");
+    expect(await selectThread(request, "/workspace", { continue: true })).toBe("newest");
   });
   test("reads list candidates to ignore other clients, workers, workspaces, children, and ephemeral history", async () => {
     const cursors: unknown[] = [];
@@ -62,7 +62,7 @@ describe("native workspace conversation selection", () => {
             nextCursor: "page2",
           };
     };
-    expect(await selectThread(request, "/workspace", {})).toBe("correct");
+    expect(await selectThread(request, "/workspace", { continue: true })).toBe("correct");
     expect(cursors).toEqual([undefined, "page2"]);
     expect(reads).toEqual(["ordinary-vscode", "correct"]);
   });
@@ -77,14 +77,19 @@ describe("native workspace conversation selection", () => {
     await expect(selectThread(request, "/workspace", { resume: "missing" })).rejects.toThrow(
       "no unarchived AgentVoice",
     );
-    expect(await selectThread(async () => ({ data: [] }), "/workspace", {})).toBeNull();
+    expect(
+      await selectThread(async () => ({ data: [] }), "/workspace", { continue: true }),
+    ).toBeNull();
   });
-  test("fresh skips history; lookup failures and bad/repeated cursors fail visibly", async () => {
+  test("default and explicit fresh skip history; requested lookup failures fail visibly", async () => {
     const fails: NativeRequest = async () => {
       throw new Error("lookup failed");
     };
+    expect(await selectThread(fails, "/workspace", {})).toBeNull();
     expect(await selectThread(fails, "/workspace", { fresh: true })).toBeNull();
-    await expect(selectThread(fails, "/workspace", {})).rejects.toThrow("lookup failed");
+    await expect(selectThread(fails, "/workspace", { continue: true })).rejects.toThrow(
+      "lookup failed",
+    );
     await expect(selectThread(fails, "/workspace", { fresh: true, resume: "id" })).rejects.toThrow(
       "cannot be combined",
     );
@@ -95,7 +100,9 @@ describe("native workspace conversation selection", () => {
       { data: [], nextCursor: "" },
       { data: [], nextCursor: "repeated" },
     ]) {
-      await expect(selectThread(async () => page, "/workspace", {})).rejects.toThrow();
+      await expect(
+        selectThread(async () => page, "/workspace", { continue: true }),
+      ).rejects.toThrow();
     }
     await expect(
       selectThread(
@@ -105,8 +112,11 @@ describe("native workspace conversation selection", () => {
           throw new Error("read failed");
         },
         "/workspace",
-        {},
+        { continue: true },
       ),
     ).rejects.toThrow("read failed");
+    await expect(
+      selectThread(fails, "/workspace", { continue: true, fresh: true }),
+    ).rejects.toThrow("cannot be combined");
   });
 });

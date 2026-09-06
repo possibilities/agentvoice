@@ -4,10 +4,38 @@ A foreground Codex voice TUI: a retained controller owns UI, exact thread
 identity, leases, control transports, and operation records; its disposable
 runtime child owns audio, WebRTC, runtime code, config/prompt/role loading, and
 an owned stock Codex app-server child over native stdio by default. Opt-in local
-stock TUI attachment uses private native WebSocket plus a guarded gateway (ADR 0019).
+stock TUI attachment uses private native WebSocket plus a guarded gateway (ADR 0021).
 No background Server,
 resident, remote mode, or arbitrary control attachment. Read README.md for
-usage, CONTEXT.md for vocabulary, and ADRs 0015/0019 for the active topology.
+usage, CONTEXT.md for vocabulary, and ADRs 0015/0021 for the active topology.
+
+## What vanilla Codex means
+
+The default reference is the Codex client-and-server experience, including both
+the voice frontend and working agent. AgentVoice replaces the frontend, so
+matching that experience can require sending values that Codex's own client
+sends. An explicit request field is not by itself an AgentVoice customization;
+omitting it is not by itself vanilla behavior.
+
+When auditing a default, trace the relevant Codex client's selection and the
+app-server's resolution separately. Record versions, transport and any feature
+gate or remote-config uncertainty; do not infer the active rollout from a
+reachable source branch. Identify client parity, server fallback and deliberate
+AgentVoice policy separately. New departures from that baseline need an explicit
+product decision or operator configuration. Existing product policies remain
+in effect until individually changed; this principle does not silently replace
+them, clone all desktop internals or revive retired features.
+
+For desktop voice choices, inspect the JavaScript bundled in the installed
+app's `Contents/Resources/app.asar` alongside the public Codex server source.
+The frontend assets may be minified/generated JavaScript; they are not a
+desktop TypeScript source checkout in the CLI repo. Retain exact asset names
+and bounded excerpts so client-default findings can be rechecked after updates.
+
+Realtime v3 is the concrete example: the inspected desktop's client-owned-call
+path explicitly selects it, while omitted WebRTC version on stock app-server
+0.153.4 selects v1. Do not label v3 non-vanilla merely because it differs from
+that server fallback. See ADR 0019 and the field guide's default comparison audit.
 
 ## Commands
 
@@ -15,7 +43,7 @@ usage, CONTEXT.md for vocabulary, and ADRs 0015/0019 for the active topology.
   Do not run bare `bun test`: it can discover dependency/vendor tests.
 - `bun run typecheck` — strict TypeScript, no emit.
 - `bun run lint` / `bun run format` — Biome checks / fixes.
-- `bun run console --allow-full-access` — foreground TUI; needs Codex login and built native audio.
+- `bun run console` — foreground TUI; needs Codex login and built native audio.
 - `bun run native:build` / `bun run audio:probe` — build / exercise audio.
   The latter opens hardware; never substitute it for a no-microphone UI test.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
@@ -52,17 +80,18 @@ usage, CONTEXT.md for vocabulary, and ADRs 0015/0019 for the active topology.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Default effective WebRTC requests to v3 for compatibility after raw merging.
-  Explicit versions/null and alternate transports win; never call this Codex's native default.
+  Explicit versions/null and alternate transports win. Distinguish Codex client
+  selection from app-server omission; v3 aligns with the desktop path noted above.
   No automatic speech-history reads, initial items or reconnect instructions.
   quiet-resume and replay-spoken-history are retired; their config keys error.
-  Native startup context defaults false; explicit true/null passthrough and raw
-  initialItems ([]/null included) still win.
+  AgentVoice leaves native startup context unset; explicit true/false/null
+  passthrough and raw initialItems ([]/null included) still win.
   VOICE_AGENT_APPEND_SYSTEM_PROMPT.md owns the startup-context slot: it sends
   includeStartupContext true plus experimental_realtime_ws_startup_context in
   thread config; any other owner of that slot is a launch error, never a merge.
   Validate final merged initial items/version and WebRTC v2 conflicts before child startup.
-- src/core/full-access.ts: reject incompatible permission selectors and require
-  effective dangerFullAccess/never on start/resume/settings reports. Never infer
+- src/core/full-access.ts: explicit full-access flag overrides native permission
+  selectors only; absent flag leaves native/configured modes intact. Never infer
   effective permissions from the request or bypass managed native requirements.
 - src/core/service-tier.ts: launch-only Fast/standard override, per-child native
   catalog preflight, response checks and requested-versus-reported tier labels.
@@ -78,6 +107,9 @@ usage, CONTEXT.md for vocabulary, and ADRs 0015/0019 for the active topology.
   controller bootstrap and stock TUI launcher. Never expose the native credential,
   forward client answers to server questions, or allow other-thread/config/account
   mutations. Validate before native dispatch; unknown null placeholders are stripped.
+  Attachment requires confirmed dangerFullAccess/never; restricted or missing
+  native permissions revoke/refuse TUI grants while voice keeps running (ADR 0020).
+  Keep these guards under src/attachment/, not in ordinary voice launch policy.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
   Fresh/restart/quit revoke before teardown; redial preserves attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
@@ -128,13 +160,13 @@ usage, CONTEXT.md for vocabulary, and ADRs 0015/0019 for the active topology.
 
 ## Ownership and state invariants
 
-Public voice launches require --allow-full-access before config/child/media
-startup, every time. No prompt or config/env bypass. Help is exempt;
-retired commands report migration errors without launching.
-Full access / never is an intentional product invariant for main conversations,
-not a default to inherit or weaken. Confirm native start/resume responses on
-launch and Fresh. Unexpected human interaction is refused
-with a persistent TUI notice; never add automatic consent or invented answers.
+Public voice launches support native/configured permissions without a flag.
+--allow-full-access explicitly requests danger-full-access/never; it wins over
+conflicting permission selectors, not unrelated settings. Do not reject launch,
+Fresh, resume or settings reports solely because permissions are restricted or
+unreported. Preserve native managed requirements. Unsupported human interaction
+is refused with a persistent TUI notice; never add automatic consent or invented
+answers. No approval UI is implemented in this scope (ADR 0020).
 
 Resolve one existing absolute real workspace before spawning the child:
 CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
@@ -142,7 +174,8 @@ thread start/resume; relative runtime roots use it too. Reject
 conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
 
-Default continue uses native unarchived history, newest updated first, with
+Ordinary launch creates a new conversation without resume-selection history
+lookup. Explicit --continue uses native unarchived history, newest updated first, with
 sourceKinds appServer plus vscode, all providers and exact cwd. Stock 0.153.3
 classifies this third-party app-server client as vscode and can omit threadSource
 from list rows, so verify candidate ownership with thread/read before selecting
@@ -186,7 +219,9 @@ On September 5, 2026, a live startup check with stock 0.153.3 and the local nati
 login rejected omitted WebRTC version with invalid_quicksilver_alpha_header;
 explicit v3 connected (no microphone/speaker). See README's compatibility note.
 The operator confirmed the v3 launch works and approved restoring it as AgentVoice's
-documented WebRTC compatibility default. This is not a new native app-server default.
+documented WebRTC compatibility default. Desktop inspection on September 6 also
+confirmed explicit v3 selection on its client-owned-call path; this is client
+alignment, while the app-server's omitted-version fallback remains v1.
 
 These invariants are load-bearing for `session.ts`; re-verify them before
 bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs`,
@@ -269,8 +304,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   CLI entries after file entries and pass each as a separate native -c argument
   after app-server. Never shell-evaluate, expand paths or log their values here.
   Native parses TOML, applies ordered dotted keys, and owns unknown-key behavior.
-  Local interpretation is only for full-access and required realtime guards;
-  effective thread permissions still must be confirmed. Startup values do not
+  Local interpretation covers explicit full-access overrides and required realtime
+  guards. Preserve unrelated values verbatim. Startup values do not
   hot-reload or get copied into RPC config. Native request config can override
   startup entries; resumed model settings can outrank native startup defaults.
   The opt-in scripts/startup-config-probe.ts uses disposable state, network denial
@@ -289,8 +324,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   the prompt source for its launch; config-directory files then warn, never merge.
 - Do not manufacture skill policy, conversation summaries or speech-history
   replay. ADR 0017 removes the automatic replay layer and its configuration.
-  includeStartupContext defaults false on every call, including Fresh; explicit
-  true enables the entire native snapshot, and raw null restores native resolution.
+  includeStartupContext stays omitted on every call unless explicitly configured;
+  native server resolution currently includes its snapshot. Explicit false skips
+  it, true requests it, and raw null restores native resolution (ADR 0020).
   Tail flush and experimental_realtime_ws_startup_context remain unset by default
   unless VOICE_AGENT_APPEND_SYSTEM_PROMPT.md claims the latter (ADR 0013).
   Preserve explicit overrides; no user-config writes, forced tail-flush work,

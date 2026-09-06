@@ -23,12 +23,16 @@ describe("foreground console host", () => {
     const h = hostHarness();
     writeFileSync(join(h.directory, "VOICE.md"), "LEGACY BODY MUST NOT APPEAR");
     const setup = await createTestRenderer({ width: 100, height: 30, exitOnCtrlC: false });
+    const started = deferred();
     const run = runConsoleHost(h.config, "test", {
+      onStarted: started.resolve,
       mediaFactory: h.mediaFactory,
       runtime: h.runtimeOptions,
       tui: { createRenderer: async () => setup.renderer },
     });
     try {
+      // The first host lazily imports the TUI; wait for startup before polling an idle renderer.
+      await started.promise;
       await setup.waitFor(
         () =>
           setup.captureCharFrame().includes("LIVE") &&
@@ -228,7 +232,7 @@ describe("foreground console host", () => {
   });
 
   test("startup failure restores terminal and closes child/media", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     h.native.override = (m) =>
       m === "thread/list" ? Promise.reject(new Error("lookup failed")) : undefined;
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
@@ -311,7 +315,7 @@ describe("baseline readiness and feedback", () => {
   });
 
   test("shows conversation selection, reported model and Fresh identity", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     h.native.main("saved-conversation", h.directory);
     h.native.tiers = true;
     const setup = await createTestRenderer({ width: 120, height: 24, exitOnCtrlC: false });
@@ -339,18 +343,14 @@ describe("baseline readiness and feedback", () => {
     }
   });
 
-  test("invalid prompt, protocol, permissions and Fast readiness never open audio", async () => {
+  test("invalid prompt, protocol, native requirements and Fast readiness never open audio", async () => {
     for (const failure of ["prompt", "protocol", "permissions", "fast"] as const) {
       const h = hostHarness(failure === "protocol" ? { voice: { version: "v2" } } : {});
       if (failure === "prompt") mkdirSync(join(h.directory, "VOICE_AGENT_SYSTEM_PROMPT.md"));
       if (failure === "permissions")
         h.native.override = (method) =>
           method === "thread/start"
-            ? Promise.resolve({
-                thread: { id: "denied" },
-                sandbox: { type: "readOnly" },
-                approvalPolicy: "never",
-              })
+            ? Promise.reject(new Error("native managed requirements rejected thread"))
             : undefined;
       if (failure === "fast") h.native.models = [];
       const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
@@ -372,7 +372,7 @@ describe("baseline readiness and feedback", () => {
   });
 
   test("quit during native readiness closes the child without opening audio", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     const pending = deferred<unknown>();
     const entered = deferred();
     h.native.override = (method) => {

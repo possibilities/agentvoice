@@ -17,7 +17,6 @@ describe("WebRTC compatibility default", () => {
       transport: { type: "webrtc", sdp: "sdp" },
       outputModality: "audio",
       version: "v3",
-      includeStartupContext: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);
@@ -91,7 +90,7 @@ describe("WebRTC compatibility default", () => {
   test("compatibility default and explicit overrides survive continue, resume, redial and Fresh", async () => {
     for (const resume of [undefined, "existing"]) {
       for (const extra of [{}, { version: "v1" }, { version: null }]) {
-        const h = runtimeHarness({ voice: { extra } }, { resume });
+        const h = runtimeHarness({ voice: { extra } }, resume ? { resume } : { continue: true });
         h.native.main("existing", h.directory);
         try {
           await h.runtime.start();

@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { confirmFullAccess } from "../src/core/full-access.ts";
+import { confirmFullAccess } from "../src/attachment/full-access.ts";
 
 type Json = Record<string, unknown>;
 const TIMEOUT_MS = 10_000;

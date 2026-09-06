@@ -1,8 +1,8 @@
-# 0019: Attach a stock TUI through a guarded local gateway
+# 0021: Attach a stock TUI through a guarded local gateway
 
 Accepted 2026-09-05 for an opt-in worktree implementation; restored 2026-09-06
 from the unmerged experiment and adapted to the current events/controller code.
-Numbered 0019 to preserve the subsequent replay-removal and events ADRs. Extends ADR 0015's
+Numbered 0021 on integration to preserve the intervening default-policy ADRs. Extends ADR 0015's
 owned-child topology and ADR 0016's native text submission path. Default voice
 launches retain stdio; live voice plus TUI behavior requires a separate trial.
 
@@ -32,6 +32,13 @@ workspace and thread. This adds no MCP tool or Unix control operation. The
 controller verifies identity/readiness on both sides of the runtime request.
 The runtime issues a one-use watcher/TUI admission ticket valid for 30 seconds,
 bound to its current exact thread by gateway lifetime and revocation.
+
+ADR 0020 makes full access optional for voice. This initial attachment path still
+supports only threads whose native start/resume/settings reports confirm
+dangerFullAccess/never. Restricted or missing reports refuse new tickets and
+revoke existing ones without stopping voice. The attachment-specific permission
+guards live under `src/attachment/`; they do not restore the retired launch policy
+or infer effective access from an explicit flag.
 
 The launcher opens a watcher, then runs the same absolute stock executable with
 `resume --remote`, exact thread/workspace and full access / never. The bearer

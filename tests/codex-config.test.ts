@@ -28,9 +28,7 @@ describe("native startup configuration", () => {
     for (const args of [["-c"], ["--codex-config"], ["-c", "--help"], ["-c", "-c"]])
       expect(() => parseArgs(args)).toThrow("requires a value");
     expect(() => parseArgs(["--model", "a", "--model", "b"])).toThrow("more than once");
-    expect(() => parseConsoleCommand(["-c", "approval_policy=never"])).toThrow(
-      "--allow-full-access",
-    );
+    expect(parseConsoleCommand(["-c", "approval_policy=never"])).toMatchObject({ help: false });
     expect(parseConsoleCommand(["--help", "-c", "model=x"])).toEqual({ help: true });
   });
 
@@ -88,15 +86,8 @@ describe("native startup configuration", () => {
     }
   });
 
-  test("guard final permission/gate choices, including nested tables and native bare strings", () => {
+  test("guard final gate choices and accept native permission settings, including nested tables and native bare strings", () => {
     for (const entry of [
-      "sandbox_mode=read-only",
-      'approval_policy="on-request"',
-      "default_permissions=custom",
-      'profiles={ voice = { approval_policy = "untrusted" } }',
-      'profiles.voice={sandbox_mode="workspace-write"}',
-      "profiles.voice.default_permissions=custom",
-      "approval_policy.granular.mcp=false",
       "features.realtime_conversation=false",
       "features={realtime_conversation=false}",
       "features.realtime_conversation.enabled=false",
@@ -106,6 +97,13 @@ describe("native startup configuration", () => {
     ])
       expect(() => validateCodexConfig([entry])).toThrow();
     for (const entries of [
+      ["sandbox_mode=read-only"],
+      ['approval_policy="on-request"'],
+      ["default_permissions=custom"],
+      ['profiles={ voice = { approval_policy = "untrusted" } }'],
+      ['profiles.voice={sandbox_mode="workspace-write"}'],
+      ["profiles.voice.default_permissions=custom"],
+      ["approval_policy.granular.mcp=false"],
       [
         "sandbox_mode=danger-full-access",
         "approval_policy='never'",
@@ -144,7 +142,11 @@ describe("native startup configuration", () => {
           orchestrator: { model: "thread-model", config: { model_reasoning_effort: "high" } },
           voice: { extra: { prompt: "request prompt" } },
         },
-        mode === "resume" ? { resume: "existing" } : mode === "fresh" ? { fresh: true } : {},
+        mode === "resume"
+          ? { resume: "existing" }
+          : mode === "continue"
+            ? { continue: true }
+            : { fresh: true },
       );
       h.native.main("existing", h.directory);
       try {
@@ -164,8 +166,6 @@ describe("native startup configuration", () => {
           expect(call.params).toMatchObject({
             cwd: h.directory,
             model: "thread-model",
-            sandbox: "danger-full-access",
-            approvalPolicy: "never",
             config: { model_reasoning_effort: "high" },
           });
         for (const call of h.native.calls) {
@@ -180,7 +180,7 @@ describe("native startup configuration", () => {
     });
   }
 
-  test("startup passthrough does not weaken effective full-access checks", async () => {
+  test("startup passthrough accepts native restricted effective permissions", async () => {
     const h = runtimeHarness({ "codex-config": ["model=chosen"] });
     h.native.override = (method) =>
       method === "thread/start"
@@ -191,20 +191,16 @@ describe("native startup configuration", () => {
           })
         : undefined;
     try {
-      await expect(h.runtime.start()).rejects.toThrow("did not confirm");
-      expect(h.ready).toEqual([]);
-      expect(h.native.alive).toBe(false);
+      await h.runtime.start();
+      expect(h.ready).toHaveLength(1);
+      expect(h.native.alive).toBe(true);
     } finally {
       await h.cleanup();
     }
   });
 
   test("invalid startup overrides fail before child startup even if config was supplied directly", async () => {
-    for (const entry of [
-      "missing-equals",
-      "features.realtime_conversation=false",
-      "approval_policy=on-request",
-    ]) {
+    for (const entry of ["missing-equals", "features.realtime_conversation=false"]) {
       const h = runtimeHarness();
       h.config.codexConfig = [entry];
       try {
@@ -221,7 +217,7 @@ describe("native startup configuration", () => {
     for (const fresh of [true, false]) {
       const h = runtimeHarness(
         { "codex-config": ["model=startup-model", "service_tier=default"] },
-        { fresh, fast: true },
+        { fresh, continue: !fresh, fast: true },
       );
       h.native.tiers = true;
       h.native.nativeConfig = { model: "startup-model", model_provider: "openai" };

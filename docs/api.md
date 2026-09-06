@@ -75,6 +75,9 @@ absolute Codex executable, gateway URL and an ephemeral bearer ticket. It is
 returned with `Cache-Control: no-store`, never in status, diagnostics or tool
 results. Discovery's descriptor token can bootstrap attachments only when this
 launch opt-in is enabled. The native app-server token never leaves the runtime.
+The runtime requires confirmed native dangerFullAccess/never before issuing a
+ticket. Restricted or missing permission reports revoke TUI grants while voice
+continues under its native permissions.
 
 The launcher must open its watcher before the TUI connects. Tickets admit one
 watcher/TUI pair within 30 seconds, with at most eight grants per runtime. The
@@ -86,7 +89,7 @@ client answers; AgentVoice retains refusal ownership.
 
 Fresh and runtime teardown revoke all grants before changing identity or stopping
 media. Redial keeps them. Lost connections require explicit reattachment and do
-not replay input. See [ADR 0019](adr/0019-guarded-tui-attachment.md) for scope and
+not replay input. See [ADR 0021](adr/0021-guarded-tui-attachment.md) for scope and
 [README](../README.md#attach-a-stock-codex-tui) for launch instructions.
 
 ## Unix socket transport

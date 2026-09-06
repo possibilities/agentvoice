@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { confirmFullAccess, validateFullAccessParams } from "../core/full-access.ts";
+import { confirmFullAccess, validateFullAccessParams } from "./full-access.ts";
 
 export type Json = Record<string, unknown>;
 export type AttachmentIdentity = { threadId: string; workspace: string };

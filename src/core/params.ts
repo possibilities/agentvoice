@@ -10,7 +10,7 @@
 import type { Prompts, ServerConfig } from "./config.ts";
 import { ConfigError, PROMPT_FILES, STARTUP_CONTEXT_KEY } from "./config.ts";
 import { DEFAULT_WEBRTC_VERSION } from "./config-schema.ts";
-import { validateFullAccessParams } from "./full-access.ts";
+import { applyFullAccessOptIn } from "./full-access.ts";
 import { ROLE_MCP_FILE, type RoleAssets } from "./role.ts";
 
 export const ORCHESTRATOR_THREAD_SOURCE = "agentvoice-orchestrator";
@@ -62,11 +62,11 @@ export function threadParams(
   const orchestrator = config.orchestrator;
   const params: Record<string, unknown> = {
     cwd: orchestrator.workspace,
-    approvalPolicy: orchestrator.approvalPolicy,
   };
-  // Upstream rejects the pair; resolveConfig rejects setting both.
+  // Upstream rejects the pair; select the profile before the launch opt-in override.
   if (orchestrator.permissions !== undefined) params["permissions"] = orchestrator.permissions;
-  else params["sandbox"] = orchestrator.sandbox;
+  else setIfDefined(params, "sandbox", orchestrator.sandbox);
+  setIfDefined(params, "approvalPolicy", orchestrator.approvalPolicy);
 
   setIfDefined(params, "model", orchestrator.model);
   setIfDefined(params, "modelProvider", orchestrator.modelProvider);
@@ -114,8 +114,8 @@ export function threadParams(
   // hatch: inventory must remain reliable under every configuration.
   if (kind === "start") merged["threadSource"] = ORCHESTRATOR_THREAD_SOURCE;
   else for (const field of START_ONLY_FIELDS) delete merged[field];
-  validateFullAccessParams(merged);
-  // A raw matching built-in profile is allowed, but Codex rejects both selectors.
+  if (config.allowFullAccess) applyFullAccessOptIn(merged);
+  // Codex rejects both selectors; an explicit profile replaces the sandbox.
   if (merged["permissions"] !== undefined) delete merged["sandbox"];
   if (prompts.voiceAppend !== undefined) {
     const config = merged["config"];
@@ -189,7 +189,7 @@ export function realtimeParams(
     if (voice.includeStartupContext !== undefined)
       throw appendSlotConflict("voice.include-startup-context");
     params["includeStartupContext"] = true;
-  } else params["includeStartupContext"] = voice.includeStartupContext ?? false;
+  } else setIfDefined(params, "includeStartupContext", voice.includeStartupContext);
   setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);

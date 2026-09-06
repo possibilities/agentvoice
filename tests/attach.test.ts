@@ -201,7 +201,7 @@ describe("owned native stdio", () => {
         const message = refusals.at(-1)!;
         expect(message).toContain(`Refused ${tool}`);
         expect(message).toContain("retired");
-        expect(message).toContain("Fresh or --no-continue");
+        expect(message).toContain("Fresh or start AgentVoice without --continue/--resume");
         expect(responses.at(-1)!["result"]).toEqual({
           success: false,
           contentItems: [{ type: "inputText", text: message }],

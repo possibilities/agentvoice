@@ -196,7 +196,11 @@ function controllerHarness() {
     instanceId: "handoff",
     stateDir: root,
     version: "test",
-    provenance: { parsed: parseArgs([]), options: { debug: false, fresh: false }, launchCwd: root },
+    provenance: {
+      parsed: parseArgs([]),
+      options: { debug: false, fresh: false, continue: false },
+      launchCwd: root,
+    },
     control: { name: "agentvoice_control", tools: [], server: {}, env: {} },
     lease: () => () => {},
     changed: () => options.changed?.(),
