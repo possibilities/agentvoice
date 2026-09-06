@@ -7,13 +7,14 @@ import { CONTROL_PROTOCOL_VERSION } from "../src/control/types.ts";
 import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
 import { eventSocketPath } from "../src/events/socket.ts";
 
-for (const streaming of [false, true]) {
+for (const flags of [[], ["--stream"], ["--completed"]]) {
+  const streaming = !flags.includes("--completed");
   for (const version of [
     EVENT_PROTOCOL_VERSION - 1,
     EVENT_PROTOCOL_VERSION,
     EVENT_PROTOCOL_VERSION + 1,
   ]) {
-    test(`voice viewer handles controller event protocol ${version}, streaming=${streaming}`, async () => {
+    test(`voice viewer handles controller event protocol ${version}, flags=${JSON.stringify(flags)}`, async () => {
       const root = realpathSync(mkdtempSync("/tmp/av-viewer-"));
       const stateDir = join(root, "agentvoice");
       const control = await startControlServer({
@@ -97,7 +98,7 @@ for (const streaming of [false, true]) {
             join(import.meta.dir, "../scripts/voice-messages.ts"),
             "--workspace",
             root,
-            ...(streaming ? ["--stream"] : []),
+            ...flags,
           ],
           { env: { ...process.env, XDG_STATE_HOME: root }, stdout: "pipe", stderr: "pipe" },
         );

@@ -24,24 +24,26 @@ and an error on ambiguity. It does not start AgentVoice, load voice configuratio
 open audio, or export a control bearer token. `--allow-full-access` is not needed.
 The owned Codex child also receives the path in `AGENTVOICE_EVENTS_SOCKET`.
 
-To print only completed user and assistant voice messages from a checkout:
+To stream user and assistant voice messages from a checkout:
 
 ```sh
 bun run voice:messages --workspace ~/code/myapp
-# Stream partial text as it arrives:
-bun run voice:messages --workspace ~/code/myapp --stream
+# Wait for completed messages instead:
+bun run voice:messages --workspace ~/code/myapp --completed
 # Optional when several controllers use that workspace:
 bun run voice:messages --workspace ~/code/myapp --thread <main-thread-id>
 ```
 
 The developer script (`scripts/voice-messages.ts`) uses the checkout's discovery
 code; an installed `agentvoice` command is not required. Workspace defaults to
-the current directory. It subscribes only to `voice.item.completed` and prints
+the current directory. With `--completed`, it subscribes only to `voice.item.completed` and prints
 `transcriptSegment` items as `user: ...` or `assistant: ...` on stdout, with
 connection notices on stderr. It shows future completed voice segments, without
 Codex conversation events or speech backfill. Completion does not mean audio
 playback finished. Stop with Ctrl+C; rerun after disconnection to reconnect.
-With `--stream`, the script also subscribes to starts and transcript deltas.
+By default, the script also subscribes to starts and transcript deltas.
+`--stream` remains accepted as an explicit alias for the default; `--completed`
+takes precedence if both flags are supplied.
 It prints partial text immediately, starts a new labeled line when speakers
 interleave, and uses completion to append missing text. If completion revises
 already printed text, it prints a labeled `(final)` line. Deltas without a known

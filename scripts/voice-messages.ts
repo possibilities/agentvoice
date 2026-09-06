@@ -5,13 +5,13 @@ import { voiceItemSchema } from "../src/events/voice.ts";
 import { runEventSocketCommand } from "../src/main.ts";
 import { VoiceMessageStream } from "./voice-message-stream.ts";
 
-const usage = `Print completed user/assistant voice messages from a running AgentVoice.
+const usage = `Stream user/assistant voice messages from a running AgentVoice.
 
-Usage: bun run scripts/voice-messages.ts [--workspace <dir>] [--thread <main-thread-id>] [--stream]
+Usage: bun run scripts/voice-messages.ts [--workspace <dir>] [--thread <main-thread-id>] [--completed]
 
 Workspace defaults to the current directory. Use --thread to select a controller
-when several are running there. Only future completed voice segments are shown;
-missed speech is not replayed. Add --stream to print text deltas as they arrive.
+when several are running there. Text streams as it arrives; missed speech is not
+replayed. Use --completed to wait for whole segments. --stream is also accepted.
 Completion does not mean audio playback finished.
 Press Ctrl+C to stop.
 `;
@@ -22,11 +22,11 @@ async function main(): Promise<void> {
     console.log(usage);
     return;
   }
-  const streaming = argv.includes("--stream");
+  const streaming = !argv.includes("--completed");
   const stream = new VoiceMessageStream((text) => process.stdout.write(text));
   let path = "";
   await runEventSocketCommand(
-    argv.filter((arg) => arg !== "--stream"),
+    argv.filter((arg) => arg !== "--stream" && arg !== "--completed"),
     {
       write: (output) => {
         path = output.trim();
