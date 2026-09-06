@@ -232,7 +232,7 @@ describe("foreground console host", () => {
   });
 
   test("startup failure restores terminal and closes child/media", async () => {
-    const h = hostHarness();
+    const h = hostHarness({}, { continue: true });
     h.native.override = (m) =>
       m === "thread/list" ? Promise.reject(new Error("lookup failed")) : undefined;
     const setup = await createTestRenderer({ width: 49, height: 28, exitOnCtrlC: false });
