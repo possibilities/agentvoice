@@ -19,6 +19,27 @@
         },
         {
           "$ref": "#/$defs/__schema6"
+        },
+        {
+          "$ref": "#/$defs/__schema8"
+        },
+        {
+          "$ref": "#/$defs/__schema12"
+        },
+        {
+          "$ref": "#/$defs/__schema13"
+        },
+        {
+          "$ref": "#/$defs/__schema16"
+        },
+        {
+          "$ref": "#/$defs/__schema17"
+        },
+        {
+          "$ref": "#/$defs/__schema18"
+        },
+        {
+          "$ref": "#/$defs/__schema19"
         }
       ]
     },
@@ -61,7 +82,7 @@
     },
     "__schema1": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "__schema2": {
       "type": "string",
@@ -104,9 +125,340 @@
         "params": {
           "anyOf": [
             {
-              "type": "object",
-              "properties": {},
-              "additionalProperties": false
+              "$ref": "#/$defs/__schema7"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["v", "type", "id", "method"],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.live.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "threadId": {
+              "$ref": "#/$defs/__schema11"
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "__schema10": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema11": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "__schema12": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.thread.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "threadId": {
+              "$ref": "#/$defs/__schema11"
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema13": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.threads.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema14": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "__schema15": {
+      "default": 20,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "__schema16": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.turns.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "threadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "sortDirection": {
+              "default": "desc",
+              "type": "string",
+              "enum": ["asc", "desc"]
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.items.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "threadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "turnId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "sortDirection": {
+              "default": "asc",
+              "type": "string",
+              "enum": ["asc", "desc"]
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.replay"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "afterSequence": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "limit": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "afterSequence"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema19": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.capabilities"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema7"
             },
             {
               "type": "null"
@@ -120,27 +472,3156 @@
     "responses": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema20"
         },
         {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema73"
         },
         {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema74"
+        },
+        {
+          "$ref": "#/$defs/__schema82"
+        },
+        {
+          "$ref": "#/$defs/__schema83"
+        },
+        {
+          "$ref": "#/$defs/__schema90"
+        },
+        {
+          "$ref": "#/$defs/__schema140"
         }
       ]
     },
-    "__schema7": {
+    "__schema20": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema21"
         },
         "type": {
-          "$ref": "#/$defs/__schema9"
+          "$ref": "#/$defs/__schema22"
         },
         "id": {
-          "$ref": "#/$defs/__schema10"
+          "$ref": "#/$defs/__schema23"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "items": {
+              "maxItems": 128,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema24"
+              }
+            },
+            "turns": {
+              "maxItems": 128,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema51"
+              }
+            },
+            "updates": {
+              "maxItems": 5,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema53"
+              }
+            },
+            "coverage": {
+              "type": "string",
+              "const": "partial",
+              "description": "Bounded observation since runtime startup; never a complete native transcript."
+            },
+            "throughSequence": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "instanceId": {
+              "$ref": "#/$defs/__schema71"
+            },
+            "generation": {
+              "$ref": "#/$defs/__schema72"
+            }
+          },
+          "required": [
+            "threadId",
+            "items",
+            "turns",
+            "updates",
+            "coverage",
+            "throughSequence",
+            "revision",
+            "instanceId",
+            "generation"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema21": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema22": {
+      "type": "string",
+      "const": "response"
+    },
+    "__schema23": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema24": {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "$ref": "#/$defs/__schema11"
+        },
+        "item": {
+          "$ref": "#/$defs/__schema25"
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "A start and every observed delta were applied, or a canonical completion replaced the item."
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "output": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "progress": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": ["turnId", "item", "complete", "completed"],
+      "additionalProperties": false
+    },
+    "__schema25": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "clientId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "content": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema26"
+                  }
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "userMessage"
+                }
+              },
+              "required": ["content", "id", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fragments": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema29"
+                  }
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "hookPrompt"
+                }
+              },
+              "required": ["fragments", "id", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "delivery": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "async"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "memoryCitation": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "entries": {
+                          "maxItems": 1024,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema30"
+                          }
+                        },
+                        "threadIds": {
+                          "maxItems": 1024,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema31"
+                          }
+                        }
+                      },
+                      "required": ["entries", "threadIds"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "phase": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "commentary"
+                        },
+                        {
+                          "type": "string",
+                          "const": "final_answer"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "questions": {
+                  "anyOf": [
+                    {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema32"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "agentMessage"
+                }
+              },
+              "required": ["id", "text", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "namespace": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "output": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema34"
+                      }
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "functionCallOutput"
+                }
+              },
+              "required": ["id", "name", "output", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "plan"
+                }
+              },
+              "required": ["id", "text", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema35"
+                  }
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "summary": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema36"
+                  }
+                },
+                "type": {
+                  "type": "string",
+                  "const": "reasoning"
+                }
+              },
+              "required": ["id", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "aggregatedOutput": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "command": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "commandActions": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema37"
+                  }
+                },
+                "cwd": {
+                  "$ref": "#/$defs/__schema38"
+                },
+                "durationMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "exitCode": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "pluginId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "processId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scriptPath": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "agent"
+                    },
+                    {
+                      "type": "string",
+                      "const": "userShell"
+                    },
+                    {
+                      "type": "string",
+                      "const": "unifiedExecStartup"
+                    },
+                    {
+                      "type": "string",
+                      "const": "unifiedExecInteraction"
+                    }
+                  ]
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "inProgress"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "declined"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "commandExecution"
+                }
+              },
+              "required": ["command", "commandActions", "cwd", "id", "status", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "changes": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema39"
+                  }
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "inProgress"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "declined"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "fileChange"
+                }
+              },
+              "required": ["changes", "id", "status", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "appContext": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "actionName": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 262144
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "appName": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 262144
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "connectorId": {
+                          "type": "string",
+                          "maxLength": 262144
+                        },
+                        "linkId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 262144
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "resourceUri": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 262144
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["connectorId"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "arguments": {
+                  "$ref": "#/$defs/__schema40"
+                },
+                "durationMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "maxLength": 262144
+                        }
+                      },
+                      "required": ["message"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "mcpAppResourceUri": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pluginId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "readOnlyHint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "_meta": {
+                          "$ref": "#/$defs/__schema41"
+                        },
+                        "content": {
+                          "maxItems": 1024,
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema42"
+                          }
+                        },
+                        "structuredContent": {
+                          "$ref": "#/$defs/__schema43"
+                        }
+                      },
+                      "required": ["content"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "server": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "inProgress"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "failed"
+                    }
+                  ]
+                },
+                "tool": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "mcpToolCall"
+                }
+              },
+              "required": ["arguments", "id", "server", "status", "tool", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "arguments": {
+                  "$ref": "#/$defs/__schema44"
+                },
+                "contentItems": {
+                  "anyOf": [
+                    {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema45"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "durationMs": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "namespace": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "inProgress"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "failed"
+                    }
+                  ]
+                },
+                "success": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tool": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "dynamicToolCall"
+                }
+              },
+              "required": ["arguments", "id", "status", "tool", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "agentsStates": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 262144
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "pendingInit"
+                          },
+                          {
+                            "type": "string",
+                            "const": "running"
+                          },
+                          {
+                            "type": "string",
+                            "const": "interrupted"
+                          },
+                          {
+                            "type": "string",
+                            "const": "completed"
+                          },
+                          {
+                            "type": "string",
+                            "const": "errored"
+                          },
+                          {
+                            "type": "string",
+                            "const": "shutdown"
+                          },
+                          {
+                            "type": "string",
+                            "const": "notFound"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["status"]
+                  }
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "model": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "prompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reasoningEffort": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/__schema46"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "receiverThreadIds": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema47"
+                  }
+                },
+                "senderThreadId": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "inProgress"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "interrupted"
+                    }
+                  ]
+                },
+                "tool": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "spawnAgent"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sendInput"
+                    },
+                    {
+                      "type": "string",
+                      "const": "resumeAgent"
+                    },
+                    {
+                      "type": "string",
+                      "const": "wait"
+                    },
+                    {
+                      "type": "string",
+                      "const": "closeAgent"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sendMessage"
+                    },
+                    {
+                      "type": "string",
+                      "const": "followupTask"
+                    },
+                    {
+                      "type": "string",
+                      "const": "interruptAgent"
+                    },
+                    {
+                      "type": "string",
+                      "const": "listAgents"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "collabAgentToolCall"
+                }
+              },
+              "required": [
+                "agentsStates",
+                "id",
+                "receiverThreadIds",
+                "senderThreadId",
+                "status",
+                "tool",
+                "type"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "agentPath": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "agentThreadId": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "started"
+                    },
+                    {
+                      "type": "string",
+                      "const": "interacted"
+                    },
+                    {
+                      "type": "string",
+                      "const": "interrupted"
+                    },
+                    {
+                      "type": "string",
+                      "const": "completed"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "subAgentActivity"
+                }
+              },
+              "required": ["agentPath", "agentThreadId", "id", "kind", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "queries": {
+                              "anyOf": [
+                                {
+                                  "maxItems": 1024,
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/$defs/__schema48"
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "query": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 262144
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "search"
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "openPage"
+                            },
+                            "url": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 262144
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pattern": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 262144
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "findInPage"
+                            },
+                            "url": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 262144
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "other"
+                            }
+                          },
+                          "required": ["type"]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "query": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "results": {
+                  "anyOf": [
+                    {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema49"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "webSearch"
+                }
+              },
+              "required": ["id", "query", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "path": {
+                  "$ref": "#/$defs/__schema38"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "imageView"
+                }
+              },
+              "required": ["id", "path", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "durationMs": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "sleep"
+                }
+              },
+              "required": ["durationMs", "id", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "failure": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "limitId": {
+                              "type": "string",
+                              "maxLength": 262144
+                            },
+                            "resetsAt": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "usageLimitExceeded"
+                            }
+                          },
+                          "required": ["limitId", "type"]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "revisedPrompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "savedPath": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/__schema50"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "transparentBackground": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "imageGeneration"
+                }
+              },
+              "required": ["id", "status", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "review": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "enteredReviewMode"
+                }
+              },
+              "required": ["id", "review", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "review": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "exitedReviewMode"
+                }
+              },
+              "required": ["id", "review", "type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "type": {
+                  "type": "string",
+                  "const": "contextCompaction"
+                }
+              },
+              "required": ["id", "type"]
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unavailable"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "nativeType": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "reason": {
+              "type": "string",
+              "enum": ["unsupported", "oversized", "media"]
+            }
+          },
+          "required": ["type", "id", "nativeType", "reason"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema26": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "text_elements": {
+              "maxItems": 1024,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema27"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": ["text", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema28"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "image"
+            },
+            "url": {
+              "type": "string",
+              "maxLength": 262144
+            }
+          },
+          "required": ["type", "url"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema28"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "localImage"
+            }
+          },
+          "required": ["path", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "audio"
+            },
+            "url": {
+              "type": "string",
+              "maxLength": 262144
+            }
+          },
+          "required": ["type", "url"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "localAudio"
+            }
+          },
+          "required": ["path", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "skill"
+            }
+          },
+          "required": ["name", "path", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "mention"
+            }
+          },
+          "required": ["name", "path", "type"]
+        }
+      ]
+    },
+    "__schema27": {
+      "type": "object",
+      "properties": {
+        "byteRange": {
+          "type": "object",
+          "properties": {
+            "end": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "start": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["end", "start"]
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["byteRange"]
+    },
+    "__schema28": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "type": "string",
+          "const": "low"
+        },
+        {
+          "type": "string",
+          "const": "high"
+        },
+        {
+          "type": "string",
+          "const": "original"
+        }
+      ]
+    },
+    "__schema29": {
+      "type": "object",
+      "properties": {
+        "hookRunId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["hookRunId", "text"]
+    },
+    "__schema30": {
+      "type": "object",
+      "properties": {
+        "lineEnd": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "lineStart": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["lineEnd", "lineStart", "note", "path"]
+    },
+    "__schema31": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema32": {
+      "type": "object",
+      "properties": {
+        "options": {
+          "anyOf": [
+            {
+              "maxItems": 1024,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema33"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["title"]
+    },
+    "__schema33": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema34": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "input_text"
+            }
+          },
+          "required": ["text", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema28"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "image_url": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "input_image"
+            }
+          },
+          "required": ["image_url", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "audio_url": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "input_audio"
+            }
+          },
+          "required": ["audio_url", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "encrypted_content": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "encrypted_content"
+            }
+          },
+          "required": ["encrypted_content", "type"]
+        }
+      ]
+    },
+    "__schema35": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema36": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema37": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "path": {
+              "$ref": "#/$defs/__schema38"
+            },
+            "type": {
+              "type": "string",
+              "const": "read"
+            }
+          },
+          "required": ["command", "name", "path", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "path": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "listFiles"
+            }
+          },
+          "required": ["command", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "path": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "query": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "search"
+            }
+          },
+          "required": ["command", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "unknown"
+            }
+          },
+          "required": ["command", "type"]
+        }
+      ]
+    },
+    "__schema38": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema39": {
+      "type": "object",
+      "properties": {
+        "diff": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "add"
+                }
+              },
+              "required": ["type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "delete"
+                }
+              },
+              "required": ["type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "move_path": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "update"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["diff", "kind", "path"]
+    },
+    "__schema40": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema40"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema40"
+          }
+        }
+      ]
+    },
+    "__schema41": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema41"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema41"
+          }
+        }
+      ]
+    },
+    "__schema42": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema42"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema42"
+          }
+        }
+      ]
+    },
+    "__schema43": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema43"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema43"
+          }
+        }
+      ]
+    },
+    "__schema44": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema44"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema44"
+          }
+        }
+      ]
+    },
+    "__schema45": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "inputText"
+            }
+          },
+          "required": ["text", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "imageUrl": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "inputImage"
+            }
+          },
+          "required": ["imageUrl", "type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "audioUrl": {
+              "type": "string",
+              "maxLength": 262144
+            },
+            "type": {
+              "type": "string",
+              "const": "inputAudio"
+            }
+          },
+          "required": ["audioUrl", "type"]
+        }
+      ]
+    },
+    "__schema46": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema47": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema48": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema49": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema49"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema49"
+          }
+        }
+      ]
+    },
+    "__schema50": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema51": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema52"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "completed"
+            },
+            {
+              "type": "string",
+              "const": "interrupted"
+            },
+            {
+              "type": "string",
+              "const": "failed"
+            },
+            {
+              "type": "string",
+              "const": "inProgress"
+            }
+          ]
+        }
+      },
+      "required": ["id", "status"]
+    },
+    "__schema52": {
+      "type": "object",
+      "properties": {
+        "additionalDetails": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "codexErrorInfo": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "contextWindowExceeded"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sessionBudgetExceeded"
+                    },
+                    {
+                      "type": "string",
+                      "const": "usageLimitExceeded"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rateLimitExceeded"
+                    },
+                    {
+                      "type": "string",
+                      "const": "serverOverloaded"
+                    },
+                    {
+                      "type": "string",
+                      "const": "cyberPolicy"
+                    },
+                    {
+                      "type": "string",
+                      "const": "misalignmentPolicyViolation"
+                    },
+                    {
+                      "type": "string",
+                      "const": "internalServerError"
+                    },
+                    {
+                      "type": "string",
+                      "const": "unauthorized"
+                    },
+                    {
+                      "type": "string",
+                      "const": "badRequest"
+                    },
+                    {
+                      "type": "string",
+                      "const": "threadRollbackFailed"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sandboxError"
+                    },
+                    {
+                      "type": "string",
+                      "const": "other"
+                    }
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "httpConnectionFailed": {
+                      "type": "object",
+                      "properties": {
+                        "httpStatusCode": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": ["httpConnectionFailed"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "responseStreamConnectionFailed": {
+                      "type": "object",
+                      "properties": {
+                        "httpStatusCode": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": ["responseStreamConnectionFailed"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "responseStreamDisconnected": {
+                      "type": "object",
+                      "properties": {
+                        "httpStatusCode": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": ["responseStreamDisconnected"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "responseTooManyFailedAttempts": {
+                      "type": "object",
+                      "properties": {
+                        "httpStatusCode": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": ["responseTooManyFailedAttempts"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "activeTurnNotSteerable": {
+                      "type": "object",
+                      "properties": {
+                        "turnKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "review"
+                            },
+                            {
+                              "type": "string",
+                              "const": "compact"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["turnKind"]
+                    }
+                  },
+                  "required": ["activeTurnNotSteerable"]
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "misalignment": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "detailedExplanation": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errorType": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "steer": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string",
+                          "maxLength": 262144
+                        }
+                      },
+                      "required": ["message"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["message"]
+    },
+    "__schema53": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "conversation.turn.diff.updated"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "diff": {
+                  "$ref": "#/$defs/__schema54"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema55"
+                },
+                "turnId": {
+                  "$ref": "#/$defs/__schema56"
+                }
+              },
+              "required": ["diff", "threadId", "turnId"]
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["event", "data", "revision"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "conversation.turn.plan.updated"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "explanation": {
+                  "$ref": "#/$defs/__schema57"
+                },
+                "plan": {
+                  "$ref": "#/$defs/__schema58"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema60"
+                },
+                "turnId": {
+                  "$ref": "#/$defs/__schema61"
+                }
+              },
+              "required": ["plan", "threadId", "turnId"]
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["event", "data", "revision"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "conversation.thread.token_usage.updated"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "threadId": {
+                  "$ref": "#/$defs/__schema62"
+                },
+                "tokenUsage": {
+                  "$ref": "#/$defs/__schema63"
+                },
+                "turnId": {
+                  "$ref": "#/$defs/__schema65"
+                }
+              },
+              "required": ["threadId", "tokenUsage", "turnId"]
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["event", "data", "revision"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "conversation.thread.settings.updated"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "threadId": {
+                  "$ref": "#/$defs/__schema66"
+                },
+                "threadSettings": {
+                  "$ref": "#/$defs/__schema67"
+                }
+              },
+              "required": ["threadId", "threadSettings"]
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["event", "data", "revision"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "conversation.error"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "$ref": "#/$defs/__schema52"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema68"
+                },
+                "turnId": {
+                  "$ref": "#/$defs/__schema69"
+                },
+                "willRetry": {
+                  "$ref": "#/$defs/__schema70"
+                }
+              },
+              "required": ["error", "threadId", "turnId", "willRetry"]
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["event", "data", "revision"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema54": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema55": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema56": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema57": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 262144
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema58": {
+      "maxItems": 1024,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema59"
+      }
+    },
+    "__schema59": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "pending"
+            },
+            {
+              "type": "string",
+              "const": "inProgress"
+            },
+            {
+              "type": "string",
+              "const": "completed"
+            }
+          ]
+        },
+        "step": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["status", "step"]
+    },
+    "__schema60": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema61": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema62": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema63": {
+      "type": "object",
+      "properties": {
+        "last": {
+          "$ref": "#/$defs/__schema64"
+        },
+        "modelContextWindow": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "$ref": "#/$defs/__schema64"
+        }
+      },
+      "required": ["last", "total"]
+    },
+    "__schema64": {
+      "type": "object",
+      "properties": {
+        "cacheWriteInputTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cachedInputTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "inputTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "reasoningOutputTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "cachedInputTokens",
+        "inputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "totalTokens"
+      ]
+    },
+    "__schema65": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema66": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema67": {
+      "type": "object",
+      "properties": {
+        "activePermissionProfile": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "extends": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["id"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approvalPolicy": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "untrusted"
+                },
+                {
+                  "type": "string",
+                  "const": "on-request"
+                },
+                {
+                  "type": "string",
+                  "const": "never"
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "granular": {
+                  "type": "object",
+                  "properties": {
+                    "mcp_elicitations": {
+                      "type": "boolean"
+                    },
+                    "request_permissions": {
+                      "type": "boolean"
+                    },
+                    "rules": {
+                      "type": "boolean"
+                    },
+                    "sandbox_approval": {
+                      "type": "boolean"
+                    },
+                    "skill_approval": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["mcp_elicitations", "rules", "sandbox_approval"]
+                }
+              },
+              "required": ["granular"]
+            }
+          ]
+        },
+        "approvalsReviewer": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "user"
+            },
+            {
+              "type": "string",
+              "const": "auto_review"
+            },
+            {
+              "type": "string",
+              "const": "guardian_subagent"
+            }
+          ]
+        },
+        "collaborationMode": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "plan"
+                },
+                {
+                  "type": "string",
+                  "const": "default"
+                }
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "developer_instructions": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 262144
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "model": {
+                  "type": "string",
+                  "maxLength": 262144
+                },
+                "reasoning_effort": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/__schema46"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["model"]
+            }
+          },
+          "required": ["mode", "settings"]
+        },
+        "cwd": {
+          "$ref": "#/$defs/__schema50"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema46"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "modelProvider": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "multiAgentMode": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "explicitRequestOnly"
+                },
+                {
+                  "type": "string",
+                  "const": "proactive"
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "custom": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["custom"]
+            }
+          ]
+        },
+        "personality": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "none"
+                },
+                {
+                  "type": "string",
+                  "const": "friendly"
+                },
+                {
+                  "type": "string",
+                  "const": "pragmatic"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sandboxPolicy": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "dangerFullAccess"
+                }
+              },
+              "required": ["type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "networkAccess": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "readOnly"
+                }
+              },
+              "required": ["type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "networkAccess": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "restricted"
+                    },
+                    {
+                      "type": "string",
+                      "const": "enabled"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "externalSandbox"
+                }
+              },
+              "required": ["type"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "excludeSlashTmp": {
+                  "type": "boolean"
+                },
+                "excludeTmpdirEnvVar": {
+                  "type": "boolean"
+                },
+                "networkAccess": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "workspaceWrite"
+                },
+                "writableRoots": {
+                  "maxItems": 1024,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema50"
+                  }
+                }
+              },
+              "required": ["type"]
+            }
+          ]
+        },
+        "serviceTier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    },
+                    {
+                      "type": "string",
+                      "const": "concise"
+                    },
+                    {
+                      "type": "string",
+                      "const": "detailed"
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "const": "none"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "approvalPolicy",
+        "approvalsReviewer",
+        "collaborationMode",
+        "cwd",
+        "model",
+        "modelProvider",
+        "sandboxPolicy"
+      ]
+    },
+    "__schema68": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema69": {
+      "type": "string",
+      "maxLength": 262144
+    },
+    "__schema70": {
+      "type": "boolean"
+    },
+    "__schema71": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producer lifetime ID; changes on full restart."
+    },
+    "__schema72": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Runtime generation within that lifetime."
+    },
+    "__schema73": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema23"
         },
         "ok": {
           "type": "boolean",
@@ -164,30 +3645,17 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema8": {
-      "type": "number",
-      "const": 1
-    },
-    "__schema9": {
-      "type": "string",
-      "const": "response"
-    },
-    "__schema10": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "__schema11": {
+    "__schema74": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema21"
         },
         "type": {
-          "$ref": "#/$defs/__schema9"
+          "$ref": "#/$defs/__schema22"
         },
         "id": {
-          "$ref": "#/$defs/__schema10"
+          "$ref": "#/$defs/__schema23"
         },
         "ok": {
           "type": "boolean",
@@ -197,22 +3665,22 @@
           "type": "object",
           "properties": {
             "instanceId": {
-              "$ref": "#/$defs/__schema12"
+              "$ref": "#/$defs/__schema71"
             },
             "generation": {
-              "$ref": "#/$defs/__schema13"
+              "$ref": "#/$defs/__schema72"
             },
             "sequence": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema75"
             },
             "runtime": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema76"
             },
             "inventory": {
-              "$ref": "#/$defs/__schema16"
+              "$ref": "#/$defs/__schema77"
             },
             "threads": {
-              "$ref": "#/$defs/__schema17"
+              "$ref": "#/$defs/__schema78"
             }
           },
           "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
@@ -223,24 +3691,13 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema12": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Producer lifetime ID; changes on full restart."
-    },
-    "__schema13": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991,
-      "description": "Runtime generation within that lifetime."
-    },
-    "__schema14": {
+    "__schema75": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991,
       "description": "Monotonic publication sequence, not a replay cursor."
     },
-    "__schema15": {
+    "__schema76": {
       "type": "object",
       "properties": {
         "phase": {
@@ -256,27 +3713,27 @@
       "required": ["phase", "workspace", "mainThreadId"],
       "additionalProperties": false
     },
-    "__schema16": {
+    "__schema77": {
       "type": "string",
       "enum": ["pending", "ready", "incomplete", "unavailable"]
     },
-    "__schema17": {
+    "__schema78": {
       "maxItems": 256,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema18"
+        "$ref": "#/$defs/__schema79"
       }
     },
-    "__schema18": {
+    "__schema79": {
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/__schema19"
+          "$ref": "#/$defs/__schema80"
         },
         "parentThreadId": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema19"
+              "$ref": "#/$defs/__schema80"
             },
             {
               "type": "null"
@@ -302,7 +3759,7 @@
           "maxItems": 2,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema20"
+            "$ref": "#/$defs/__schema81"
           }
         },
         "turn": {
@@ -311,7 +3768,7 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "$ref": "#/$defs/__schema19"
+                  "$ref": "#/$defs/__schema80"
                 },
                 "status": {
                   "type": "string",
@@ -330,24 +3787,2403 @@
       "required": ["id", "parentThreadId", "name", "status", "activeFlags", "turn"],
       "additionalProperties": false
     },
-    "__schema19": {
+    "__schema80": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[A-Za-z0-9._:-]+$"
     },
-    "__schema20": {
+    "__schema81": {
       "type": "string",
       "enum": ["waitingOnApproval", "waitingOnUserInput"]
     },
-    "__schema21": {
+    "__schema82": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema21"
         },
         "type": {
-          "$ref": "#/$defs/__schema9"
+          "$ref": "#/$defs/__schema22"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "nativeSchemaVersion": {
+              "type": "string"
+            },
+            "methods": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "history": {
+              "type": "string",
+              "const": "native-paginated"
+            },
+            "liveCoverage": {
+              "type": "string",
+              "const": "owned-child-notifications"
+            },
+            "replayMaxEvents": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "replayMaxBytes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "maxEventBytes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "maxHistoryBytes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "maxPageSize": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "maxConcurrentReads": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "cursorTtlMs": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "nativeSchemaVersion",
+            "methods",
+            "events",
+            "history",
+            "liveCoverage",
+            "replayMaxEvents",
+            "replayMaxBytes",
+            "maxEventBytes",
+            "maxHistoryBytes",
+            "maxPageSize",
+            "maxConcurrentReads",
+            "cursorTtlMs"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema83": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "revisionBefore": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "revisionAfter": {
+                  "$ref": "#/$defs/__schema85"
+                },
+                "changedDuringRead": {
+                  "$ref": "#/$defs/__schema86"
+                },
+                "nextCursor": {
+                  "type": "null"
+                },
+                "method": {
+                  "type": "string",
+                  "const": "conversation.thread.get"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "data": {
+                  "$ref": "#/$defs/__schema87"
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema71"
+                },
+                "generation": {
+                  "$ref": "#/$defs/__schema72"
+                }
+              },
+              "required": [
+                "rootThreadId",
+                "revisionBefore",
+                "revisionAfter",
+                "changedDuringRead",
+                "nextCursor",
+                "method",
+                "threadId",
+                "data",
+                "instanceId",
+                "generation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "revisionBefore": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "revisionAfter": {
+                  "$ref": "#/$defs/__schema85"
+                },
+                "changedDuringRead": {
+                  "$ref": "#/$defs/__schema86"
+                },
+                "nextCursor": {
+                  "type": "null"
+                },
+                "method": {
+                  "type": "string",
+                  "const": "conversation.live.get"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "data": {
+                  "$ref": "#/$defs/__schema87"
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema71"
+                },
+                "generation": {
+                  "$ref": "#/$defs/__schema72"
+                }
+              },
+              "required": [
+                "rootThreadId",
+                "revisionBefore",
+                "revisionAfter",
+                "changedDuringRead",
+                "nextCursor",
+                "method",
+                "threadId",
+                "data",
+                "instanceId",
+                "generation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "revisionBefore": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "revisionAfter": {
+                  "$ref": "#/$defs/__schema85"
+                },
+                "changedDuringRead": {
+                  "$ref": "#/$defs/__schema86"
+                },
+                "nextCursor": {
+                  "$ref": "#/$defs/__schema88"
+                },
+                "method": {
+                  "type": "string",
+                  "const": "conversation.threads.list"
+                },
+                "data": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema87"
+                  }
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema71"
+                },
+                "generation": {
+                  "$ref": "#/$defs/__schema72"
+                }
+              },
+              "required": [
+                "rootThreadId",
+                "revisionBefore",
+                "revisionAfter",
+                "changedDuringRead",
+                "nextCursor",
+                "method",
+                "data",
+                "instanceId",
+                "generation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "revisionBefore": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "revisionAfter": {
+                  "$ref": "#/$defs/__schema85"
+                },
+                "changedDuringRead": {
+                  "$ref": "#/$defs/__schema86"
+                },
+                "nextCursor": {
+                  "$ref": "#/$defs/__schema88"
+                },
+                "method": {
+                  "type": "string",
+                  "const": "conversation.turns.list"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "data": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema51"
+                  }
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema71"
+                },
+                "generation": {
+                  "$ref": "#/$defs/__schema72"
+                }
+              },
+              "required": [
+                "rootThreadId",
+                "revisionBefore",
+                "revisionAfter",
+                "changedDuringRead",
+                "nextCursor",
+                "method",
+                "threadId",
+                "data",
+                "instanceId",
+                "generation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "revisionBefore": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "revisionAfter": {
+                  "$ref": "#/$defs/__schema85"
+                },
+                "changedDuringRead": {
+                  "$ref": "#/$defs/__schema86"
+                },
+                "nextCursor": {
+                  "$ref": "#/$defs/__schema88"
+                },
+                "method": {
+                  "type": "string",
+                  "const": "conversation.items.list"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema11"
+                },
+                "data": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema89"
+                  }
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema71"
+                },
+                "generation": {
+                  "$ref": "#/$defs/__schema72"
+                }
+              },
+              "required": [
+                "rootThreadId",
+                "revisionBefore",
+                "revisionAfter",
+                "changedDuringRead",
+                "nextCursor",
+                "method",
+                "threadId",
+                "data",
+                "instanceId",
+                "generation"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema84": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "__schema85": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "__schema86": {
+      "type": "boolean"
+    },
+    "__schema87": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema11"
+        },
+        "parentThreadId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema11"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agentNickname": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agentRole": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cwd": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["notLoaded", "idle", "active", "systemError"]
+            },
+            "activeFlags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["waitingOnApproval", "waitingOnUserInput"]
+              }
+            }
+          },
+          "required": ["type"]
+        },
+        "createdAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modelProvider": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "reasoningEffort": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ephemeral": {
+          "type": "boolean"
+        },
+        "canAcceptDirectInput": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["id", "cwd", "status"]
+    },
+    "__schema88": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema89": {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "$ref": "#/$defs/__schema11"
+        },
+        "item": {
+          "$ref": "#/$defs/__schema25"
+        }
+      },
+      "required": ["turnId", "item"],
+      "additionalProperties": false
+    },
+    "__schema90": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema23"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "$ref": "#/$defs/__schema71"
+            },
+            "generation": {
+              "$ref": "#/$defs/__schema72"
+            },
+            "events": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema91"
+              }
+            },
+            "throughSequence": {
+              "$ref": "#/$defs/__schema75"
+            },
+            "hasMore": {
+              "type": "boolean"
+            }
+          },
+          "required": ["instanceId", "generation", "events", "throughSequence", "hasMore"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema91": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/conversation.item.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.agent_message.delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.plan.delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.command_execution.output_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.file_change.output_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.text_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.summary_text_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.summary_part_added"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.command_execution.terminal_interaction"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.mcp_tool_call.progress"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.diff.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.plan.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.token_usage.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.settings.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.reverted"
+        },
+        {
+          "$ref": "#/$defs/conversation.error"
+        },
+        {
+          "$ref": "#/$defs/conversation.hook.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.hook.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.gap"
+        }
+      ]
+    },
+    "conversation.item.started": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema94"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema95"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema92": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema93": {
+      "type": "string",
+      "const": "event"
+    },
+    "__schema94": {
+      "type": "string",
+      "const": "conversation.item.started"
+    },
+    "__schema95": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "item": {
+          "$ref": "#/$defs/__schema25"
+        },
+        "startedAtMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "item",
+        "startedAtMs",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.completed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema96"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema97"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema96": {
+      "type": "string",
+      "const": "conversation.item.completed"
+    },
+    "__schema97": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "completedAtMs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "item": {
+          "$ref": "#/$defs/__schema25"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "completedAtMs",
+        "item",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.agent_message.delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema98"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema99"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema98": {
+      "type": "string",
+      "const": "conversation.item.agent_message.delta"
+    },
+    "__schema99": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.plan.delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema100"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema101"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema100": {
+      "type": "string",
+      "const": "conversation.item.plan.delta"
+    },
+    "__schema101": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.command_execution.output_delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema102"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema103"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema102": {
+      "type": "string",
+      "const": "conversation.item.command_execution.output_delta"
+    },
+    "__schema103": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.file_change.output_delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema104"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema105"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema104": {
+      "type": "string",
+      "const": "conversation.item.file_change.output_delta"
+    },
+    "__schema105": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.reasoning.text_delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema106"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema107"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema106": {
+      "type": "string",
+      "const": "conversation.item.reasoning.text_delta"
+    },
+    "__schema107": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "contentIndex": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "contentIndex",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.reasoning.summary_text_delta": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema108"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema109"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema108": {
+      "type": "string",
+      "const": "conversation.item.reasoning.summary_text_delta"
+    },
+    "__schema109": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "summaryIndex": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "delta",
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.reasoning.summary_part_added": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema110"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema111"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema110": {
+      "type": "string",
+      "const": "conversation.item.reasoning.summary_part_added"
+    },
+    "__schema111": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "summaryIndex": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.command_execution.terminal_interaction": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema112"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema113"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema112": {
+      "type": "string",
+      "const": "conversation.item.command_execution.terminal_interaction"
+    },
+    "__schema113": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "processId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "stdin": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "itemId",
+        "processId",
+        "stdin",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.item.mcp_tool_call.progress": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema114"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema115"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema114": {
+      "type": "string",
+      "const": "conversation.item.mcp_tool_call.progress"
+    },
+    "__schema115": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "itemId",
+        "message",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.turn.started": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema116"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema117"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema116": {
+      "type": "string",
+      "const": "conversation.turn.started"
+    },
+    "__schema117": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turn": {
+          "$ref": "#/$defs/__schema51"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "turn", "revision"],
+      "additionalProperties": false
+    },
+    "conversation.turn.completed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema118"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema119"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema118": {
+      "type": "string",
+      "const": "conversation.turn.completed"
+    },
+    "__schema119": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turn": {
+          "$ref": "#/$defs/__schema51"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "turn", "revision"],
+      "additionalProperties": false
+    },
+    "conversation.turn.diff.updated": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema120"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema121"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema120": {
+      "type": "string",
+      "const": "conversation.turn.diff.updated"
+    },
+    "__schema121": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "diff": {
+          "$ref": "#/$defs/__schema54"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema55"
+        },
+        "turnId": {
+          "$ref": "#/$defs/__schema56"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "diff",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.turn.plan.updated": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema122"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema123"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema122": {
+      "type": "string",
+      "const": "conversation.turn.plan.updated"
+    },
+    "__schema123": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "explanation": {
+          "$ref": "#/$defs/__schema57"
+        },
+        "plan": {
+          "$ref": "#/$defs/__schema58"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema60"
+        },
+        "turnId": {
+          "$ref": "#/$defs/__schema61"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "plan",
+        "threadId",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.thread.token_usage.updated": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema124"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema125"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema124": {
+      "type": "string",
+      "const": "conversation.thread.token_usage.updated"
+    },
+    "__schema125": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema62"
+        },
+        "tokenUsage": {
+          "$ref": "#/$defs/__schema63"
+        },
+        "turnId": {
+          "$ref": "#/$defs/__schema65"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "threadId",
+        "tokenUsage",
+        "turnId",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.thread.settings.updated": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema126"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema127"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema126": {
+      "type": "string",
+      "const": "conversation.thread.settings.updated"
+    },
+    "__schema127": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema66"
+        },
+        "threadSettings": {
+          "$ref": "#/$defs/__schema67"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "threadId",
+        "threadSettings",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.thread.reverted": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema128"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema129"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema128": {
+      "type": "string",
+      "const": "conversation.thread.reverted"
+    },
+    "__schema129": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "revision"],
+      "additionalProperties": false
+    },
+    "conversation.error": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema130"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema131"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema130": {
+      "type": "string",
+      "const": "conversation.error"
+    },
+    "__schema131": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "error": {
+          "$ref": "#/$defs/__schema52"
+        },
+        "threadId": {
+          "$ref": "#/$defs/__schema68"
+        },
+        "turnId": {
+          "$ref": "#/$defs/__schema69"
+        },
+        "willRetry": {
+          "$ref": "#/$defs/__schema70"
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "error",
+        "threadId",
+        "turnId",
+        "willRetry",
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "conversation.hook.started": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema132"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema133"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema132": {
+      "type": "string",
+      "const": "conversation.hook.started"
+    },
+    "__schema133": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "run": {
+          "$ref": "#/$defs/__schema134"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "run", "threadId", "revision"],
+      "additionalProperties": false
+    },
+    "__schema134": {
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entries": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema135"
+          }
+        },
+        "eventName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "preToolUse"
+            },
+            {
+              "type": "string",
+              "const": "permissionRequest"
+            },
+            {
+              "type": "string",
+              "const": "postToolUse"
+            },
+            {
+              "type": "string",
+              "const": "preCompact"
+            },
+            {
+              "type": "string",
+              "const": "postCompact"
+            },
+            {
+              "type": "string",
+              "const": "sessionStart"
+            },
+            {
+              "type": "string",
+              "const": "sessionEnd"
+            },
+            {
+              "type": "string",
+              "const": "userPromptSubmit"
+            },
+            {
+              "type": "string",
+              "const": "subagentStart"
+            },
+            {
+              "type": "string",
+              "const": "subagentStop"
+            },
+            {
+              "type": "string",
+              "const": "stop"
+            },
+            {
+              "type": "string",
+              "const": "interrupt"
+            }
+          ]
+        },
+        "executionMode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "sync"
+            },
+            {
+              "type": "string",
+              "const": "async"
+            }
+          ]
+        },
+        "handlerType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "command"
+            },
+            {
+              "type": "string",
+              "const": "mcpTool"
+            },
+            {
+              "type": "string",
+              "const": "prompt"
+            },
+            {
+              "type": "string",
+              "const": "agent"
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "thread"
+            },
+            {
+              "type": "string",
+              "const": "turn"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "system"
+            },
+            {
+              "type": "string",
+              "const": "user"
+            },
+            {
+              "type": "string",
+              "const": "project"
+            },
+            {
+              "type": "string",
+              "const": "mdm"
+            },
+            {
+              "type": "string",
+              "const": "sessionFlags"
+            },
+            {
+              "type": "string",
+              "const": "plugin"
+            },
+            {
+              "type": "string",
+              "const": "cloudRequirements"
+            },
+            {
+              "type": "string",
+              "const": "cloudManagedConfig"
+            },
+            {
+              "type": "string",
+              "const": "legacyManagedConfigFile"
+            },
+            {
+              "type": "string",
+              "const": "legacyManagedConfigMdm"
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "sourcePath": {
+          "$ref": "#/$defs/__schema50"
+        },
+        "startedAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "running"
+            },
+            {
+              "type": "string",
+              "const": "completed"
+            },
+            {
+              "type": "string",
+              "const": "failed"
+            },
+            {
+              "type": "string",
+              "const": "blocked"
+            },
+            {
+              "type": "string",
+              "const": "stopped"
+            }
+          ]
+        },
+        "statusMessage": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "displayOrder",
+        "entries",
+        "eventName",
+        "executionMode",
+        "handlerType",
+        "id",
+        "scope",
+        "sourcePath",
+        "startedAt",
+        "status"
+      ]
+    },
+    "__schema135": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "warning"
+            },
+            {
+              "type": "string",
+              "const": "stop"
+            },
+            {
+              "type": "string",
+              "const": "feedback"
+            },
+            {
+              "type": "string",
+              "const": "context"
+            },
+            {
+              "type": "string",
+              "const": "error"
+            }
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 262144
+        }
+      },
+      "required": ["kind", "text"]
+    },
+    "conversation.hook.completed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema136"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema137"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema136": {
+      "type": "string",
+      "const": "conversation.hook.completed"
+    },
+    "__schema137": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "run": {
+          "$ref": "#/$defs/__schema134"
+        },
+        "threadId": {
+          "type": "string",
+          "maxLength": 262144
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "run", "threadId", "revision"],
+      "additionalProperties": false
+    },
+    "conversation.gap": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema92"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema93"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema138"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema139"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
+    },
+    "__schema138": {
+      "type": "string",
+      "const": "conversation.gap"
+    },
+    "__schema139": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema71"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema72"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema75"
+        },
+        "threadId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema11"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["unsupported", "oversized", "backpressure", "source_gap"]
+        },
+        "nativeMethod": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "revision": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "threadId", "reason", "revision"],
+      "additionalProperties": false
+    },
+    "__schema140": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema22"
         },
         "id": {
           "anyOf": [
@@ -368,8 +6204,29 @@
           "type": "object",
           "properties": {
             "code": {
-              "type": "string",
-              "enum": ["invalid_request", "invalid_params", "unknown_method", "internal_error"]
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["invalid_request", "unknown_method"]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "invalid_params",
+                    "unavailable",
+                    "stale_generation",
+                    "instance_mismatch",
+                    "forbidden_thread",
+                    "unsupported",
+                    "history_unavailable",
+                    "busy",
+                    "oversized",
+                    "cursor_expired",
+                    "resync_required",
+                    "internal_error"
+                  ]
+                }
+              ]
             },
             "message": {
               "type": "string"
@@ -401,6 +6258,72 @@
         },
         {
           "$ref": "#/$defs/voice.item.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.agent_message.delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.plan.delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.command_execution.output_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.file_change.output_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.text_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.summary_text_delta"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.reasoning.summary_part_added"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.command_execution.terminal_interaction"
+        },
+        {
+          "$ref": "#/$defs/conversation.item.mcp_tool_call.progress"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.diff.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.turn.plan.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.token_usage.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.settings.updated"
+        },
+        {
+          "$ref": "#/$defs/conversation.thread.reverted"
+        },
+        {
+          "$ref": "#/$defs/conversation.error"
+        },
+        {
+          "$ref": "#/$defs/conversation.hook.started"
+        },
+        {
+          "$ref": "#/$defs/conversation.hook.completed"
+        },
+        {
+          "$ref": "#/$defs/conversation.gap"
         }
       ]
     },
@@ -408,51 +6331,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema24"
+          "$ref": "#/$defs/__schema141"
         },
         "data": {
-          "$ref": "#/$defs/__schema25"
+          "$ref": "#/$defs/__schema142"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace thread inventory."
     },
-    "__schema22": {
-      "type": "number",
-      "const": 1
-    },
-    "__schema23": {
-      "type": "string",
-      "const": "event"
-    },
-    "__schema24": {
+    "__schema141": {
       "type": "string",
       "const": "threads.changed"
     },
-    "__schema25": {
+    "__schema142": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "inventory": {
-          "$ref": "#/$defs/__schema16"
+          "$ref": "#/$defs/__schema77"
         },
         "threads": {
-          "$ref": "#/$defs/__schema17"
+          "$ref": "#/$defs/__schema78"
         }
       },
       "required": ["instanceId", "generation", "sequence", "inventory", "threads"],
@@ -462,40 +6377,40 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema26"
+          "$ref": "#/$defs/__schema143"
         },
         "data": {
-          "$ref": "#/$defs/__schema27"
+          "$ref": "#/$defs/__schema144"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace one thread row."
     },
-    "__schema26": {
+    "__schema143": {
       "type": "string",
       "const": "thread.state.changed"
     },
-    "__schema27": {
+    "__schema144": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "thread": {
-          "$ref": "#/$defs/__schema18"
+          "$ref": "#/$defs/__schema79"
         }
       },
       "required": ["instanceId", "generation", "sequence", "thread"],
@@ -505,46 +6420,46 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema28"
+          "$ref": "#/$defs/__schema145"
         },
         "data": {
-          "$ref": "#/$defs/__schema29"
+          "$ref": "#/$defs/__schema146"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace runtime and inventory; generation reset boundary."
     },
-    "__schema28": {
+    "__schema145": {
       "type": "string",
       "const": "runtime.state.changed"
     },
-    "__schema29": {
+    "__schema146": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "runtime": {
-          "$ref": "#/$defs/__schema15"
+          "$ref": "#/$defs/__schema76"
         },
         "inventory": {
-          "$ref": "#/$defs/__schema16"
+          "$ref": "#/$defs/__schema77"
         },
         "threads": {
-          "$ref": "#/$defs/__schema17"
+          "$ref": "#/$defs/__schema78"
         }
       },
       "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
@@ -554,63 +6469,63 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema30"
+          "$ref": "#/$defs/__schema147"
         },
         "data": {
-          "$ref": "#/$defs/__schema31"
+          "$ref": "#/$defs/__schema148"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema30": {
+    "__schema147": {
       "type": "string",
       "const": "voice.item.started"
     },
-    "__schema31": {
+    "__schema148": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema32"
+          "$ref": "#/$defs/__schema149"
         },
         "item": {
-          "$ref": "#/$defs/__schema33"
+          "$ref": "#/$defs/__schema150"
         }
       },
       "required": ["instanceId", "generation", "sequence", "threadId", "item"],
       "additionalProperties": false
     },
-    "__schema32": {
+    "__schema149": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
     },
-    "__schema33": {
+    "__schema150": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "type": {
               "type": "string",
@@ -624,10 +6539,10 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "type": {
               "type": "string",
@@ -649,20 +6564,20 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "type": {
               "type": "string",
               "const": "bemItemPromoted"
             },
             "turnId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "itemId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "presentation": {
               "oneOf": [
@@ -714,10 +6629,10 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema149"
             },
             "type": {
               "type": "string",
@@ -737,43 +6652,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema34"
+          "$ref": "#/$defs/__schema151"
         },
         "data": {
-          "$ref": "#/$defs/__schema35"
+          "$ref": "#/$defs/__schema152"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema34": {
+    "__schema151": {
       "type": "string",
       "const": "voice.item.transcript.delta"
     },
-    "__schema35": {
+    "__schema152": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema32"
+          "$ref": "#/$defs/__schema149"
         },
         "itemId": {
-          "$ref": "#/$defs/__schema32"
+          "$ref": "#/$defs/__schema149"
         },
         "delta": {
           "type": "string",
@@ -787,43 +6702,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema92"
         },
         "type": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema93"
         },
         "event": {
-          "$ref": "#/$defs/__schema36"
+          "$ref": "#/$defs/__schema153"
         },
         "data": {
-          "$ref": "#/$defs/__schema37"
+          "$ref": "#/$defs/__schema154"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema36": {
+    "__schema153": {
       "type": "string",
       "const": "voice.item.completed"
     },
-    "__schema37": {
+    "__schema154": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema71"
         },
         "generation": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema72"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema75"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema32"
+          "$ref": "#/$defs/__schema149"
         },
         "item": {
-          "$ref": "#/$defs/__schema33"
+          "$ref": "#/$defs/__schema150"
         }
       },
       "required": ["instanceId", "generation", "sequence", "threadId", "item"],
@@ -831,5 +6746,5 @@
     }
   },
   "title": "AgentVoice event socket",
-  "description": "Fleet NDJSON event contract: event.subscribe and state.get, correlated responses, and named typed events. Lifecycle events reconcile by snapshot watermark; transient voice events never do. Filtering, ordering, byte limits and delivery semantics are documented in docs/events.md."
+  "description": "Protocol 2 fleet NDJSON event contract: lifecycle/voice events and typed conversation observation, live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md."
 }

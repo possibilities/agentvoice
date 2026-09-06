@@ -10,7 +10,7 @@ export function buildEventsSchema() {
     }),
     title: "AgentVoice event socket",
     description:
-      "Fleet NDJSON event contract: event.subscribe and state.get, correlated responses, and named typed events. Lifecycle events reconcile by snapshot watermark; transient voice events never do. Filtering, ordering, byte limits and delivery semantics are documented in docs/events.md.",
+      "Protocol 2 fleet NDJSON event contract: lifecycle/voice events and typed conversation observation, live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md.",
   };
 }
 if (import.meta.main) {

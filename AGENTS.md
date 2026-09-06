@@ -86,13 +86,21 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
 - src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
   Never adopt an old journal across a full quit/relaunch.
 - src/events/: controller-owned read-only socket with prefix subscriptions,
-  sequence-watermarked lifecycle snapshots, and transient native voice items/deltas.
-  No transcript state, persistence, replay, backfill, or UI. Never discard voice
+  sequence-watermarked lifecycle snapshots, transient native voice items/deltas,
+  and typed conversation observation. Conversation content has bounded in-memory
+  replay and live-item snapshots; native history pages come from the owned child.
+  No on-disk transcript store, automatic speech replay, or UI. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
   No audio/bearer capabilities or mutation/MCP methods. Runtime replacements reset
   inventory; stale incarnations never publish into a successor. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
+- src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
+  history for controller-leased roots and verified descendants. Scope cursors to
+  root/thread/turn/order and runtime generation; never resume or submit work for a
+  read. Stock 0.153.4 thread/items/list is a stub despite its schema: item pages use
+  thread/turns/list with full items, one turn per native page. Unmaterialized and
+  ephemeral history is unavailable, not empty. See docs/conversations.md.
 - src/ipc/json-socket.ts: shared private NDJSON framing, ownership and bounded writes
   for both Unix endpoints. Never remove another listener or an unrelated file.
 - src/control/: shared Zod contract/dispatch, private UDS NDJSON server,

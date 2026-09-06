@@ -33,6 +33,15 @@ import {
 } from "../core/handoff.ts";
 import { lockThread } from "../core/thread-lock.ts";
 import { threadInventorySchema } from "../events/contract.ts";
+import {
+  type ConversationReadMethod,
+  type ConversationReadParams,
+  conversationNotification,
+  conversationRequestSchemas,
+  ObservationError,
+  observationErrorCode,
+  readResultSchema,
+} from "../events/conversation.ts";
 import { LifecycleFeed } from "../events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../events/socket.ts";
 import { voiceNotification } from "../events/voice.ts";
@@ -69,6 +78,7 @@ export class RuntimeController implements ControlBackend {
   private phase = "starting";
   private operation: ControlOperation | undefined;
   private busy = false;
+  private observationPending = 0;
   private closed = false;
   private shutdownPromise: Promise<void> | undefined;
   private background: Promise<void> | undefined;
@@ -161,6 +171,11 @@ export class RuntimeController implements ControlBackend {
   }
   private event(incarnation: number, method: string, params: unknown) {
     if (incarnation !== this.activeIncarnation || this.closed) return;
+    if (method === "conversation") {
+      const checked = conversationNotification(params);
+      if (checked) this.lifecycle.conversation(checked);
+      return;
+    }
     if (method === "voice") {
       const checked = voiceNotification(params);
       if (checked) this.lifecycle.voice(checked);
@@ -511,6 +526,53 @@ export class RuntimeController implements ControlBackend {
       this.busy = false;
     }
   }
+  async readConversation(method: ConversationReadMethod, params: ConversationReadParams) {
+    const parsed = conversationRequestSchemas[method].safeParse(params);
+    if (!parsed.success) throw new ObservationError("invalid_params");
+    if (params.expectedInstanceId !== this.options.instanceId)
+      throw new ObservationError("instance_mismatch");
+    if (params.expectedGeneration !== this.generation)
+      throw new ObservationError("stale_generation");
+    if (this.closed || this.phase !== "ready" || !this.active)
+      throw new ObservationError("unavailable");
+    if (!this.leases.has(params.rootThreadId)) throw new ObservationError("forbidden_thread");
+    if (this.observationPending >= 4) throw new ObservationError("busy");
+    const active = this.active;
+    const incarnation = this.activeIncarnation;
+    let value: { ok?: boolean; result?: unknown; error?: { code?: unknown } };
+    this.observationPending++;
+    try {
+      value = await active.request(method, parsed.data, 8_000);
+    } catch {
+      throw new ObservationError("unavailable");
+    } finally {
+      this.observationPending--;
+    }
+    if (
+      this.closed ||
+      this.phase !== "ready" ||
+      this.active !== active ||
+      this.activeIncarnation !== incarnation ||
+      this.generation !== params.expectedGeneration
+    )
+      throw new ObservationError("stale_generation");
+    if (!value?.ok) {
+      const code = observationErrorCode.safeParse(value?.error?.code);
+      throw new ObservationError(code.success ? code.data : "unavailable");
+    }
+    const result = readResultSchema.safeParse(value.result);
+    if (
+      !result.success ||
+      result.data.method !== method ||
+      result.data.rootThreadId !== params.rootThreadId ||
+      ("threadId" in result.data ? result.data.threadId : undefined) !==
+        ("threadId" in params ? params.threadId : undefined)
+    )
+      throw new ObservationError("unsupported");
+    if (method === "conversation.live.get" && "threadId" in params)
+      return this.lifecycle.live(params.threadId);
+    return { instanceId: this.options.instanceId, generation: this.generation, ...result.data };
+  }
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.closed = true;
@@ -538,7 +600,11 @@ export async function runController(provenance: LaunchProvenance, version: strin
   let tui: VoiceTui | undefined;
   let control: ControlServer | undefined;
   const lifecycle = new LifecycleFeed(instanceId);
-  const events = new EventSocketServer(eventSocketPath(stateDir, instanceId), lifecycle);
+  const events = new EventSocketServer(
+    eventSocketPath(stateDir, instanceId),
+    lifecycle,
+    (method, params) => current().readConversation(method, params),
+  );
   let cleanupError: unknown;
   const current = () => {
     if (!controller) throw new ControlError("unavailable", "Controller is initializing");

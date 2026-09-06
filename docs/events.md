@@ -1,10 +1,14 @@
-# AgentVoice lifecycle and live voice events
+# AgentVoice event socket
 
 The retained foreground controller owns a **separate read-only Unix socket** for
-thread-state consumers and transient native voice items. Control protocol 2 and its MCP tools are unchanged. The
-event endpoint uses protocol 1 and survives voice runtime replacement. Fully quit
+thread-state consumers, transient native voice items and conversation observation.
+Control protocol 2 and its MCP tools are unchanged. The event endpoint uses protocol 2 and survives voice runtime replacement. Fully quit
 and relaunch AgentVoice to start a controller with this endpoint; runtime restart
-alone cannot add it to an older controller.
+alone cannot upgrade an older controller. Protocol-1 clients must update.
+
+For typed orchestrator/subagent content, live snapshots, bounded conversation
+replay and native history reads, see [conversation observation](conversations.md).
+The lifecycle and voice semantics below remain distinct from that content API.
 
 ## Discovery
 
@@ -30,7 +34,7 @@ not isolation from other processes running as the same Unix user.
 
 Every feed follows the repo-local `events.schema.json` convention. AgentVoice's
 [checked-in JSON Schema](../events.schema.json) describes requests, responses,
-and all six event types. `$defs.events.anyOf` lists references to definitions
+and all named event types. `$defs.events.anyOf` lists references to definitions
 named after their `event` value, such as `$defs["voice.item.completed"]`. Each
 definition describes whether it is current state or transient content and gives
 its payload shape. Clients can use this file to generate types or validate frames,
@@ -51,9 +55,9 @@ follow agentmux and smolmux: `v`, `type`, request/response `id`, and event
 and params reject unknown fields. Protocol versions are endpoint-local.
 
 ```json
-{"v":1,"type":"request","id":"subscribe","method":"event.subscribe","params":{"events":["thread*","runtime.*"]}}
-{"v":1,"type":"response","id":"subscribe","ok":true,"result":{"subscribed":true,"events":["thread*","runtime.*"]}}
-{"v":1,"type":"request","id":"snapshot","method":"state.get","params":{}}
+{"v":2,"type":"request","id":"subscribe","method":"event.subscribe","params":{"events":["thread*","runtime.*"]}}
+{"v":2,"type":"response","id":"subscribe","ok":true,"result":{"subscribed":true,"events":["thread*","runtime.*"]}}
+{"v":2,"type":"request","id":"snapshot","method":"state.get","params":{}}
 ```
 
 | Method | Params | Result |
@@ -72,12 +76,13 @@ or case folding. Names/prefixes use lowercase letters, digits, `.`, `_`, `:`,
 A new `event.subscribe` replaces this connection's entire filter. Its response
 marks the boundary: already queued events can precede it, subsequent events use
 the new filter. Invalid requests preserve the existing filter. Close the
-connection to unsubscribe. There are no control methods on this endpoint.
+connection to unsubscribe. There are no control methods on this endpoint; additional read-only
+`conversation.*` methods are documented in the conversation contract.
 
 Failures retain the request ID when recoverable:
 
 ```json
-{"v":1,"type":"response","id":"bad","ok":false,"error":{"code":"unknown_method","message":"unknown event method"}}
+{"v":2,"type":"response","id":"bad","ok":false,"error":{"code":"unknown_method","message":"unknown event method"}}
 ```
 
 Errors are `invalid_request`, `invalid_params`, `unknown_method`, or
@@ -102,7 +107,8 @@ and peers exceeding resource limits may be disconnected without a final reply.
 `instanceId` identifies this controller lifetime. `generation` identifies its
 runtime generation; `sequence` increases for every published event across that
 controller lifetime, including runtime replacements. A snapshot's sequence is
-its watermark. No events are replayed from a log.
+its watermark. Lifecycle and voice events are not replayed from a log.
+Conversation events have a separate bounded replay method.
 
 To connect or reconnect:
 
@@ -164,7 +170,7 @@ Every event's `data` includes `{instanceId, generation, sequence}`.
 | `runtime.state.changed` | `{runtime, inventory, threads}` | Replace runtime and inventory state; treat this as a reset boundary |
 
 ```json
-{"v":1,"type":"event","event":"thread.state.changed","data":{"instanceId":"controller-id","generation":2,"sequence":19,"thread":{"id":"thread-id","parentThreadId":null,"name":null,"status":"active","activeFlags":[],"turn":{"id":"turn-id","status":"inProgress"}}}}
+{"v":2,"type":"event","event":"thread.state.changed","data":{"instanceId":"controller-id","generation":2,"sequence":19,"thread":{"id":"thread-id","parentThreadId":null,"name":null,"status":"active","activeFlags":[],"turn":{"id":"turn-id","status":"inProgress"}}}}
 ```
 
 Quiescing, failed, and stopping runtimes clear the projection and report
@@ -176,8 +182,9 @@ through replacement because the controller owns them.
 The lifecycle projection is a current-state feed. Worker-to-controller lifecycle
 updates may coalesce under IPC pressure; intermediate transitions are not a
 guaranteed audit trail. Lifecycle payloads contain no conversation bodies. The
-controller validates bounded shapes before publishing. Neither event family
-forwards audio, SDP, control bearer capabilities, or arbitrary tool payloads.
+controller validates bounded shapes before publishing. Lifecycle and voice events
+forward no audio, SDP, control bearer capabilities, or arbitrary tool payloads.
+Conversation events separately project known native tool item fields.
 Native voice text can of course contain sensitive user-spoken content.
 
 ## Transient native voice items
@@ -208,7 +215,7 @@ type VoiceItem = { id: string; realtimeSessionId: string } & (
 ```
 
 ```json
-{"v":1,"type":"event","event":"voice.item.transcript.delta","data":{"instanceId":"controller-id","generation":2,"sequence":20,"threadId":"native-thread","itemId":"native-item","delta":"Hello"}}
+{"v":2,"type":"event","event":"voice.item.transcript.delta","data":{"instanceId":"controller-id","generation":2,"sequence":20,"threadId":"native-thread","itemId":"native-item","delta":"Hello"}}
 ```
 
 Deltas have no native role or session ID. AgentVoice does not add either or infer
@@ -225,9 +232,9 @@ it describes native canonical completion, not proof the human heard every word.
 Observed voice items from old Fresh threads retain their original thread ID.
 Obsolete runtime generations cannot publish into the replacement generation.
 
-**Live delivery only.** AgentVoice does not accumulate text, store transcript
-files or database rows, backfill history, replay events, or provide a transcript
-UI. There is no delivery acknowledgment or recovery promise. `state.get` remains
+**Live voice delivery only.** AgentVoice does not accumulate voice text, store
+voice transcript files or database rows, backfill speech, replay voice events,
+or provide a transcript UI. Conversation replay/history is a separate API. There is no delivery acknowledgment or recovery promise. `state.get` remains
 lifecycle-only, even though its sequence includes voice events already published.
 Never discard voice events using a lifecycle snapshot watermark. A new
 subscription gets future events; reconnect does not recover missed speech.

@@ -6,6 +6,11 @@ import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
 import { tierLabel } from "../core/service-tier.ts";
+import type {
+  ConversationReadMethod,
+  ConversationReadParams,
+  ConversationReadResult,
+} from "../events/conversation.ts";
 import { stateDirectory } from "../paths.ts";
 import { type AudioTarget, MuteGate } from "./audio-control.ts";
 import type { DuplexVoiceAudio, VoiceAudioOptions } from "./duplex-audio.ts";
@@ -46,6 +51,12 @@ export interface ConsoleHostOptions {
   onStarted?: () => void;
   /** Private controller delivery, separate from interactive UI commands. */
   onHandoffReady?: (submit: (request: HandoffRequest) => Promise<HandoffResult>) => void;
+  onObservationReady?: (
+    read: (
+      method: ConversationReadMethod,
+      params: ConversationReadParams,
+    ) => Promise<ConversationReadResult>,
+  ) => void;
   initialMute?: { mic: boolean; speaker: boolean };
   runtime?: RuntimeOptions;
   debug?: boolean;
@@ -180,6 +191,7 @@ export async function runConsoleHost(
       return handoffFailure("not_ready");
     return runtime.submitHandoff(request);
   });
+  options.onObservationReady?.((method, params) => runtime!.readConversation(method, params));
 
   function gate(target: AudioTarget): MuteGate {
     return target === "mic" ? microphone : speaker;

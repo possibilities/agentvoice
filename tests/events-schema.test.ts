@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { buildEventsSchema } from "../scripts/generate-events-schema.ts";
+import { conversationEventSchemas } from "../src/events/conversation.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
 
 test("events.schema.json matches its generator and exposes every named event type", async () => {
@@ -13,6 +14,7 @@ test("events.schema.json matches its generator and exposes every named event typ
     "voice.item.started",
     "voice.item.transcript.delta",
     "voice.item.completed",
+    ...Object.keys(conversationEventSchemas),
   ];
   expect(schema.$defs.events.anyOf.map((entry: { $ref: string }) => entry.$ref)).toEqual(
     names.map((name) => `#/$defs/${name}`),
@@ -23,17 +25,21 @@ test("events.schema.json matches its generator and exposes every named event typ
     expect(discriminator.const).toBe(name);
     expect(schema.$defs[name].required).toEqual(["v", "type", "event", "data"]);
     expect(schema.$defs[name].description).toContain(
-      name.startsWith("voice.") ? "Transient:" : "Current state:",
+      name.startsWith("conversation.")
+        ? "Conversation:"
+        : name.startsWith("voice.")
+          ? "Transient:"
+          : "Current state:",
     );
   }
 });
 
 test("published contract rejects untyped content and unknown fields while permitting subscription defaults", () => {
-  const request = { v: 1, type: "request", id: "sub", method: "event.subscribe" };
+  const request = { v: 2, type: "request", id: "sub", method: "event.subscribe" };
   for (const params of [undefined, null, {}, { events: ["voice.*"] }])
     expect(eventSocketFrameSchema.safeParse({ ...request, params }).success).toBe(true);
   const frame = {
-    v: 1,
+    v: 2,
     type: "event",
     event: "voice.item.transcript.delta",
     data: {

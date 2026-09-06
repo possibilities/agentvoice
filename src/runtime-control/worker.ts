@@ -8,6 +8,11 @@ import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import type { ThreadInventory } from "../events/contract.ts";
+import {
+  type ConversationReadMethod,
+  conversationRequestSchemas,
+  ObservationError,
+} from "../events/conversation.ts";
 import { ipcMessage, type RuntimeActivation, type RuntimeLaunch } from "./protocol.ts";
 import { runtimeSender } from "./sender.ts";
 
@@ -24,6 +29,9 @@ export function runRuntimeWorker(
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: VoiceTuiHost | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
+  let readConversation:
+    | Parameters<NonNullable<ConsoleHostOptions["onObservationReady"]>>[0]
+    | undefined;
   let hostRun: Promise<void> | undefined;
   let endHost: (() => void) | undefined;
   let tick: ReturnType<typeof setInterval> | undefined;
@@ -154,6 +162,9 @@ export function runRuntimeWorker(
         onHandoffReady: (submit) => {
           submitHandoff = submit;
         },
+        onObservationReady: (read) => {
+          readConversation = read;
+        },
         mediaFactory: factory,
         media: currentLaunch.provenance.options,
         debug: currentLaunch.provenance.options.debug,
@@ -173,6 +184,9 @@ export function runRuntimeWorker(
           },
           onVoice: (notification) => {
             if (!stopping && !terminalFailure) event("voice", notification);
+          },
+          onConversation: (notification) => {
+            if (!stopping && !terminalFailure) event("conversation", notification);
           },
           onChildPid: (pid) => event("native-pid", { pid }),
           onShutdownOutcome: (value) => {
@@ -229,6 +243,21 @@ export function runRuntimeWorker(
     return { forced };
   }
   async function command(method: string, params: unknown): Promise<unknown> {
+    if (Object.hasOwn(conversationRequestSchemas, method)) {
+      const key = method as ConversationReadMethod;
+      const parsed = conversationRequestSchemas[key].safeParse(params);
+      if (!parsed.success) return { ok: false, error: { code: "invalid_params" } };
+      if (stopping || terminalFailure || !readConversation)
+        return { ok: false, error: { code: "unavailable" } };
+      try {
+        return { ok: true, result: await readConversation(key, parsed.data) };
+      } catch (error) {
+        return {
+          ok: false,
+          error: { code: error instanceof ObservationError ? error.code : "unavailable" },
+        };
+      }
+    }
     switch (method) {
       case "preflight":
         return preflight(params as RuntimeLaunch);

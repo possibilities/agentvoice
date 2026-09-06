@@ -6,6 +6,15 @@ import {
   MAX_THREADS,
   threadViewSchema,
 } from "./contract.ts";
+import {
+  capabilitiesSchema,
+  conversationEventSchemas,
+  conversationRequestSchemas,
+  observationErrorCode,
+  readResultSchema,
+  replayRequestSchema,
+} from "./conversation.ts";
+import { liveSnapshotSchema } from "./conversation-projection.ts";
 import { voiceNotificationSchema } from "./voice.ts";
 
 const context = {
@@ -38,6 +47,14 @@ function event<T extends string, S extends z.ZodRawShape>(name: T, shape: S, des
     .describe(description)
     .meta({ id: name });
 }
+export const conversationFrameSchemas = Object.entries(conversationEventSchemas).map(
+  ([name, schema]) =>
+    event(
+      name,
+      { ...schema.shape, revision: z.number().int().positive().safe() },
+      "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark.",
+    ),
+);
 export const eventFrameSchema = z
   .union([
     event("threads.changed", { inventory, threads }, "Current state: replace thread inventory."),
@@ -58,6 +75,7 @@ export const eventFrameSchema = z
         "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark.",
       ),
     ),
+    ...conversationFrameSchemas,
   ])
   .meta({ id: "events" });
 
@@ -82,6 +100,23 @@ const requests = z
         params: emptyEventParams.nullish(),
       })
       .strict(),
+    ...Object.entries(conversationRequestSchemas).map(([method, params]) =>
+      z.object({ ...requestBase, method: z.literal(method), params }).strict(),
+    ),
+    z
+      .object({
+        ...requestBase,
+        method: z.literal("conversation.replay"),
+        params: replayRequestSchema,
+      })
+      .strict(),
+    z
+      .object({
+        ...requestBase,
+        method: z.literal("conversation.capabilities"),
+        params: emptyEventParams.nullish(),
+      })
+      .strict(),
   ])
   .meta({ id: "requests" });
 const responseBase = {
@@ -95,6 +130,16 @@ const responses = z
       .object({
         ...responseBase,
         ok: z.literal(true),
+        result: liveSnapshotSchema.extend({
+          instanceId: context.instanceId,
+          generation: context.generation,
+        }),
+      })
+      .strict(),
+    z
+      .object({
+        ...responseBase,
+        ok: z.literal(true),
         result: z
           .object({
             subscribed: z.literal(true),
@@ -104,6 +149,36 @@ const responses = z
       })
       .strict(),
     z.object({ ...responseBase, ok: z.literal(true), result: eventSnapshotSchema }).strict(),
+    z.object({ ...responseBase, ok: z.literal(true), result: capabilitiesSchema }).strict(),
+    z
+      .object({
+        ...responseBase,
+        ok: z.literal(true),
+        result: z.union(
+          readResultSchema.options.map((schema) =>
+            schema.extend({
+              instanceId: context.instanceId,
+              generation: context.generation,
+            }),
+          ),
+        ),
+      })
+      .strict(),
+    z
+      .object({
+        ...responseBase,
+        ok: z.literal(true),
+        result: z
+          .object({
+            instanceId: context.instanceId,
+            generation: context.generation,
+            events: z.array(z.union(conversationFrameSchemas)).max(100),
+            throughSequence: context.sequence,
+            hasMore: z.boolean(),
+          })
+          .strict(),
+      })
+      .strict(),
     z
       .object({
         ...responseBase,
@@ -111,7 +186,7 @@ const responses = z
         ok: z.literal(false),
         error: z
           .object({
-            code: z.enum(["invalid_request", "invalid_params", "unknown_method", "internal_error"]),
+            code: z.union([z.enum(["invalid_request", "unknown_method"]), observationErrorCode]),
             message: z.string(),
           })
           .strict(),

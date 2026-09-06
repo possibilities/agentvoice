@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { startControlServer } from "../src/control/index.ts";
 import { CONTROL_PROTOCOL_VERSION } from "../src/control/types.ts";
 import type { ThreadSnapshot, ThreadView } from "../src/events/contract.ts";
+import { projectNotification } from "../src/events/conversation.ts";
 import { LifecycleFeed } from "../src/events/feed.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
 import { EventSocketServer, eventMatches, eventSocketPath } from "../src/events/socket.ts";
@@ -55,7 +56,7 @@ async function client(path: string) {
     closed: () => closed,
     async request(method: string, params: unknown = {}) {
       const id = String(++next);
-      socket.write(`${JSON.stringify({ v: 1, type: "request", id, method, params })}\n`);
+      socket.write(`${JSON.stringify({ v: 2, type: "request", id, method, params })}\n`);
       await until(() => frames.some((frame) => frame["id"] === id));
       return frames.find((frame) => frame["id"] === id)!;
     },
@@ -69,10 +70,10 @@ const thread = (id: string, status: ThreadView["status"] = "idle"): ThreadView =
   activeFlags: [],
   turn: null,
 });
-async function harness() {
+async function harness(read?: ConstructorParameters<typeof EventSocketServer>[2]) {
   const root = mkdtempSync("/tmp/av-events-");
   const feed = new LifecycleFeed("test");
-  const server = new EventSocketServer(eventSocketPath(root, "test"), feed);
+  const server = new EventSocketServer(eventSocketPath(root, "test"), feed, read);
   await server.start();
   const clients: Socket[] = [];
   return {
@@ -93,6 +94,69 @@ async function harness() {
 }
 
 describe("lifecycle event socket", () => {
+  test("conversation discovery, reads and replay use correlated typed frames without leaking into voice subscriptions", async () => {
+    const calls: unknown[] = [];
+    const h = await harness(async (method, params) => {
+      calls.push({ method, params });
+      return h.feed.live("main");
+    });
+    try {
+      const peer = await h.connect();
+      const voice = await h.connect();
+      expect((await peer.request("conversation.capabilities")).result).toMatchObject({
+        nativeSchemaVersion: "0.153.4",
+        history: "native-paginated",
+      });
+      await peer.request("event.subscribe", { events: ["conversation.*"] });
+      await voice.request("event.subscribe", { events: ["voice.*"] });
+      h.feed.conversation(
+        projectNotification(
+          "item/started",
+          {
+            threadId: "main",
+            turnId: "turn",
+            startedAtMs: 1,
+            item: { id: "item", type: "agentMessage", text: "Live work" },
+          },
+          1,
+        )!,
+      );
+      const identity = {
+        expectedInstanceId: "test",
+        expectedGeneration: 1,
+        rootThreadId: "main",
+        threadId: "main",
+      };
+      expect((await peer.request("conversation.live.get", identity)).result).toMatchObject({
+        threadId: "main",
+        items: [{ item: { text: "Live work" } }],
+      });
+      const replayIdentity = {
+        expectedInstanceId: "test",
+        expectedGeneration: 1,
+        afterSequence: 0,
+      };
+      expect((await peer.request("conversation.replay", replayIdentity)).result).toMatchObject({
+        events: [{ event: "conversation.item.started" }],
+        hasMore: false,
+      });
+      expect(
+        (await peer.request("conversation.replay", { ...replayIdentity, expectedGeneration: 9 }))
+          .error.code,
+      ).toBe("stale_generation");
+      expect(
+        (await peer.request("conversation.items.list", { ...identity, path: "/arbitrary" })).error
+          .code,
+      ).toBe("invalid_params");
+      expect(calls).toHaveLength(1);
+      expect(voice.frames.filter((frame) => frame.type === "event")).toEqual([]);
+      expect((await peer.request("conversation.turn.start", identity)).error.code).toBe(
+        "unknown_method",
+      );
+    } finally {
+      h.close();
+    }
+  });
   test("wildcards deliver ordered voice events that snapshots never replay or supersede", async () => {
     const h = await harness();
     try {
@@ -130,7 +194,7 @@ describe("lifecycle event socket", () => {
       ]);
       expect(events.map((frame) => frame.data?.sequence)).toEqual([1, 2, 3]);
       expect(events[0] as unknown).toEqual({
-        v: 1,
+        v: 2,
         type: "event",
         event: "voice.item.transcript.delta",
         data: { ...data, instanceId: "test", generation: 1, sequence: 1 },

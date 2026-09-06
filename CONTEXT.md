@@ -148,3 +148,18 @@ and completions on the same read-only event endpoint. Preserves native identity
 and content only in transit, with bounded best-effort delivery. No accumulation,
 backfill, persistence or replay; lifecycle snapshots never supersede voice events.
 _Avoid_: transcript database, speech-history replay, delivery guarantee.
+
+**Conversation observation** — Read-only native orchestrator and subagent content
+on the controller's event socket: typed items/deltas, bounded controller-memory
+replay, live snapshots, and explicitly requested native history pages. It never
+starts or resumes work and never feeds content into a voice call.
+_Avoid_: speech replay, control attachment, transcript database.
+
+**Live conversation snapshot** — A bounded projection of conversation items and
+updates actually received by the controller, with an exact publication-sequence
+cut. Its coverage is always partial; it is independent of native persisted history.
+
+**Native history page** — An explicit read of persisted thread metadata, turns,
+or items through the owned Codex child, scoped to an owned root and verified
+descendants. Native reads are not atomic cuts of the event stream; revision fences
+report observed overlap without inventing native snapshot guarantees.

@@ -24,6 +24,31 @@ for await (const line of input) {
   let result: unknown = {};
   if (request.method === "thread/list") result = { data: threads, nextCursor: null };
   if (request.method === "thread/loaded/list") result = { data: [...loaded], nextCursor: null };
+  if (request.method === "thread/turns/list")
+    result = {
+      data: [
+        {
+          id: "handoff-turn",
+          status: "completed",
+          items:
+            params.itemsView === "full"
+              ? [{ id: "work-item", type: "agentMessage", text: "native conversation fixture" }]
+              : [],
+          itemsView: params.itemsView,
+        },
+      ],
+      nextCursor: null,
+    };
+  if (request.method === "thread/items/list")
+    result = {
+      data: [
+        {
+          turnId: "handoff-turn",
+          item: { id: "work-item", type: "agentMessage", text: "native conversation fixture" },
+        },
+      ],
+      nextCursor: null,
+    };
   if (request.method === "thread/start") {
     const thread = {
       id: `test-thread-${threads.length + 1}`,
@@ -100,5 +125,35 @@ for await (const line of input) {
     process.stdout.write(
       `${JSON.stringify({ method: "thread/status/changed", params: { threadId: params.threadId, status: { type: "active", activeFlags: [] } } })}\n`,
     );
+    for (const [method, data] of [
+      [
+        "item/started",
+        {
+          threadId: params.threadId,
+          turnId: "handoff-turn",
+          startedAtMs: 10,
+          item: { id: "work-item", type: "agentMessage", text: "" },
+        },
+      ],
+      [
+        "item/agentMessage/delta",
+        {
+          threadId: params.threadId,
+          turnId: "handoff-turn",
+          itemId: "work-item",
+          delta: "native conversation fixture",
+        },
+      ],
+      [
+        "item/completed",
+        {
+          threadId: params.threadId,
+          turnId: "handoff-turn",
+          completedAtMs: 20,
+          item: { id: "work-item", type: "agentMessage", text: "native conversation fixture" },
+        },
+      ],
+    ])
+      process.stdout.write(`${JSON.stringify({ method, params: data })}\n`);
   }
 }

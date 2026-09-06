@@ -1,7 +1,8 @@
 import { z } from "zod";
+import type { ConversationNotification } from "./conversation.ts";
 import type { VoiceNotification } from "./voice.ts";
 
-export const EVENT_PROTOCOL_VERSION = 1;
+export const EVENT_PROTOCOL_VERSION = 2;
 export const MAX_THREADS = 256;
 const id = z
   .string()
@@ -51,7 +52,13 @@ export type VoiceEvent = VoiceNotification & {
   type: "event";
   data: EventContext;
 };
-export type ControllerEvent = LifecycleEvent | VoiceEvent;
+export type ConversationEvent = {
+  v: typeof EVENT_PROTOCOL_VERSION;
+  type: "event";
+  event: string;
+  data: ConversationNotification["data"] & EventContext & { revision: number };
+};
+export type ControllerEvent = LifecycleEvent | VoiceEvent | ConversationEvent;
 
 export const emptyEventParams = z.object({}).strict();
 export const eventSubscriptionSchema = z

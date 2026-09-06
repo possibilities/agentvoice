@@ -60,7 +60,16 @@ restart, including native subagents. The same endpoint also carries typed
 backfill or transcript storage. `state.get` remains lifecycle-only. See the
 [event protocol](docs/events.md) for prefix matching, snapshots, and limits, and
 [events.schema.json](events.schema.json) for the machine-readable event types.
-A full foreground relaunch is required to activate the new controller endpoint.
+
+Event protocol **2** also exposes `conversation.*` messages, tool activity,
+plans/diffs, reasoning, usage and errors for the orchestrator and native subagents.
+Independent UIs can request an exact live-item snapshot, replay a bounded window
+of conversation events, and page native thread/turn/item history without resuming
+threads or submitting work. Use `runtime.mainThreadId` and native parent links to
+select a conversation family. See the [conversation contract](docs/conversations.md)
+for the methods and reconnect algorithm. Voice events remain live-only.
+A full foreground relaunch and updated protocol-2 clients are required; runtime
+restart does not upgrade the retained controller's socket protocol.
 
 ### Full access is required
 

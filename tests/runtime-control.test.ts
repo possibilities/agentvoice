@@ -209,6 +209,62 @@ describe("persistent controller and disposable runtime", () => {
       expect(readFileSync(join(root, "operations/integration.jsonl"), "utf8")).not.toContain(
         "native voice fixture",
       );
+      await until(() => controller.lifecycle.live(first.threadId).items.length === 1);
+      const observation = {
+        expectedInstanceId: "integration",
+        expectedGeneration: 2,
+        rootThreadId: first.threadId,
+        threadId: first.threadId,
+      };
+      expect(await controller.readConversation("conversation.live.get", observation)).toMatchObject(
+        {
+          generation: 2,
+          threadId: first.threadId,
+          items: [
+            {
+              turnId: "handoff-turn",
+              item: { id: "work-item", text: "native conversation fixture" },
+              completed: true,
+            },
+          ],
+        },
+      );
+      expect(
+        await controller.readConversation("conversation.items.list", {
+          ...observation,
+          limit: 20,
+          sortDirection: "asc",
+        }),
+      ).toMatchObject({
+        generation: 2,
+        data: [
+          {
+            turnId: "handoff-turn",
+            item: { id: "work-item", text: "native conversation fixture" },
+          },
+        ],
+      });
+      await expect(
+        controller.readConversation("conversation.thread.get", {
+          ...observation,
+          rootThreadId: "unowned",
+        }),
+      ).rejects.toThrow("forbidden_thread");
+      await expect(
+        controller.readConversation("conversation.thread.get", {
+          ...observation,
+          expectedGeneration: 1,
+        }),
+      ).rejects.toThrow("stale_generation");
+      await expect(
+        controller.readConversation("conversation.thread.get", {
+          ...observation,
+          expectedInstanceId: "other",
+        }),
+      ).rejects.toThrow("instance_mismatch");
+      expect(readFileSync(join(root, "operations/integration.jsonl"), "utf8")).not.toContain(
+        "native conversation fixture",
+      );
       expect(newCalls.some((call) => call.method === "thread/list")).toBe(false);
       expect(newCalls.find((call) => call.method === "thread/resume").params).toMatchObject({
         threadId: first.threadId,

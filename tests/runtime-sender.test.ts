@@ -71,3 +71,34 @@ test("runtime control retains its hard failure bound and write errors settle onc
   expect(broken.pending).toBe(0);
   expect(failures).toBe(2);
 });
+
+test("a trailing dropped conversation produces a gap when IPC drains, even without another native event", () => {
+  const writes: IpcMessage[] = [];
+  const callbacks: Array<(error: Error | null) => void> = [];
+  let failed = false;
+  const sender = runtimeSender({
+    generation: 1,
+    connected: () => true,
+    write: (message, done) => {
+      writes.push(message);
+      callbacks.push(done);
+    },
+    failed: () => {
+      failed = true;
+    },
+  });
+  const send = sender.send;
+  for (let revision = 1; revision <= 20; revision++)
+    send({ method: "conversation", params: { revision } });
+  send({ id: 99, result: "control" });
+  expect(writes).toHaveLength(17);
+  callbacks.shift()!(null);
+  callbacks.shift()!(null);
+  expect(writes.at(-1)).toMatchObject({
+    method: "conversation",
+    params: { revision: 20, event: "conversation.gap", data: { reason: "backpressure" } },
+  });
+  while (callbacks.length) callbacks.shift()!(null);
+  expect(sender.pending).toBe(0);
+  expect(failed).toBe(false);
+});

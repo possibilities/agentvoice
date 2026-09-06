@@ -3,6 +3,13 @@ import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ThreadInventory } from "../events/contract.ts";
+import {
+  type ConversationNotification,
+  type ConversationReadMethod,
+  type ConversationReadParams,
+  projectNotification,
+} from "../events/conversation.ts";
+import { nativeConversationSchemas } from "../events/conversation-native.ts";
 import { nativeVoiceNotification, type VoiceNotification } from "../events/voice.ts";
 import { stateDirectory } from "../paths.ts";
 import {
@@ -17,6 +24,7 @@ import {
   injectControlMcp,
   requireControlMcpReady,
 } from "./control-mcp.ts";
+import { ConversationReader } from "./conversation-reader.ts";
 import { confirmFullAccess, FullAccessError } from "./full-access.ts";
 import {
   type HandoffRequest,
@@ -90,6 +98,7 @@ export interface RuntimeOptions extends SessionSelection {
   onChildReaped?: () => void;
   onThreads?: (inventory: ThreadInventory) => void;
   onVoice?: (notification: VoiceNotification) => void;
+  onConversation?: (notification: ConversationNotification) => void;
   onShutdownOutcome?: (forced: boolean) => void;
 }
 
@@ -150,6 +159,8 @@ export class VoiceRuntime {
   private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
   private readonly threadObserver: ThreadObserver | undefined;
+  private conversationRevision = 0;
+  private readonly conversationReader: ConversationReader;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
 
@@ -159,6 +170,12 @@ export class VoiceRuntime {
     private readonly events: RuntimeEvents,
     private readonly options: RuntimeOptions = {},
   ) {
+    this.conversationReader = new ConversationReader(
+      (method, params, timeout) => this.requireConnection().request(method, params, timeout),
+      config.orchestrator.workspace,
+      () => this.conversationRevision,
+      Object.values(options.controlMcp?.env ?? {}),
+    );
     this.threadObserver = options.onThreads
       ? new ThreadObserver(
           (method, params, timeout) => this.requireConnection().request(method, params, timeout),
@@ -495,6 +512,18 @@ export class VoiceRuntime {
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
     if (this.shuttingDown) return;
+    if (Object.hasOwn(nativeConversationSchemas, method)) {
+      const revision = ++this.conversationRevision;
+      if (this.options.onConversation) {
+        const notification = projectNotification(
+          method,
+          params,
+          revision,
+          Object.values(this.options.controlMcp?.env ?? {}),
+        );
+        if (notification) this.options.onConversation(notification);
+      }
+    }
     this.threadObserver?.notification(method, params);
     if (this.options.onVoice) {
       const notification = nativeVoiceNotification(method, params);
@@ -540,7 +569,12 @@ export class VoiceRuntime {
       onReaped: this.options.onChildReaped,
       signal: this.abort.signal,
       clientVersion: this.version,
-      optOutNotificationMethods: this.events.debug ? undefined : UNUSED_STREAM_NOTIFICATIONS,
+      optOutNotificationMethods: this.events.debug
+        ? undefined
+        : UNUSED_STREAM_NOTIFICATIONS.filter(
+            (method) =>
+              !this.options.onConversation || !Object.hasOwn(nativeConversationSchemas, method),
+          ),
       onNotification: (method, params) => this.handleNotification(method, params),
       onRefusal: (message) => this.events.onError(message, false),
       onClose: (info) => {
@@ -564,6 +598,10 @@ export class VoiceRuntime {
       this.config.orchestrator.workspace,
       this.options.fast,
     );
+  }
+  readConversation(method: ConversationReadMethod, params: ConversationReadParams) {
+    this.assertRunning();
+    return this.conversationReader.read(method, params);
   }
 }
 
