@@ -24,6 +24,47 @@ Fresh changes thread identity; redial changes only the realtime session.
 Quit stops work. A workspace is a conversation-selection boundary, not a
 security boundary or a guarantee against native memory of other work.
 
+## Stock TUI attachment boundary probe
+
+Attachment is not implemented. A direct authenticated connection to the owned
+Codex app-server is insufficient for an exact-thread TUI attachment that preserves
+AgentVoice's full-access/never posture and human-input refusal policy.
+
+Verified against stock Codex 0.153.4 on September 5, 2026:
+
+```sh
+CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-boundary-probe.ts
+```
+
+The opt-in macOS probe uses disposable HOME/CODEX_HOME/workspace directories,
+an authenticated loopback listener, an environment without inherited provider
+keys, and sandbox-exec denying external network access. It starts two protocol
+clients and ephemeral threads, but no turns, inference, realtime sessions or
+audio. It verifies these boundaries and cleans up its child and temporary state:
+
+- The owner starts a thread with confirmed `dangerFullAccess` / `never`.
+- The second client successfully changes that thread's approval policy to
+  `on-request` through `thread/settings/update`. The owner receives the applied
+  settings afterward; its current runtime handler would report a fatal error
+  and stop the voice runtime. Startup `-c approval_policy=never` is not a lock.
+- The second client can create another thread. The bearer capability authorizes
+  the app-server, not one thread or one runtime-generation attachment.
+
+Source review of upstream commit
+`008bbd5884122dc95aaece19ecfe0fc6a59dcf36` also found that
+`app-server/src/outgoing_message.rs` broadcasts a server request to subscribed
+clients and consumes one shared callback on the first answer. Letting the stock
+TUI answer while AgentVoice refuses is therefore a race. Native TUI shutdown
+normally unsubscribes, but its running-task Exit action can explicitly interrupt
+work (`tui/src/app/event_dispatch.rs`). A full TUI/voice lifecycle test remains
+outstanding; this protocol probe does not establish live audio behavior.
+
+The implementation sketch must consequently use an attachment gateway that
+checks target identity and permitted operations before forwarding requests,
+keeps server-initiated questions owned by AgentVoice, and revokes attachment
+before Fresh or runtime replacement. Native credentials must stay behind that
+gateway. This is a proposed design revision, not an available feature.
+
 ## Complete configurable surface
 
 The generated server.schema.json is authoritative for spelling and types.
