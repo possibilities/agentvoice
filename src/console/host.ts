@@ -135,7 +135,9 @@ export async function runConsoleHost(
     onRemoteTrack: (track) => {
       if (!closed) audio.attachRemote(track);
     },
-    onOaiEvent: (event) => debugLog?.(`oai-event: ${JSON.stringify(event).slice(0, 400)}`),
+    onOaiEvent: debugLog
+      ? (event) => debugLog(`oai-event: ${JSON.stringify(event).slice(0, 400)}`)
+      : undefined,
     onInfo: feed,
     onError: (message) => showNotice(`Voice: ${message}`),
   });

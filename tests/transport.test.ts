@@ -16,6 +16,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const afterRetry = () => new Promise((resolve) => setTimeout(resolve, 1_100));
 
 class FakePeer {
+  dataChannel = { onmessage: undefined as ((event: unknown) => void) | undefined };
   closed = false;
   localDescription = { sdp: "fake-offer" };
   onState: (state: string) => void = () => {};
@@ -27,7 +28,7 @@ class FakePeer {
   onTrack = { subscribe() {} };
   addTransceiver() {}
   createDataChannel() {
-    return { onmessage: null };
+    return this.dataChannel;
   }
   async createOffer() {
     return this.localDescription;
@@ -40,7 +41,7 @@ class FakePeer {
   }
 }
 
-function harness() {
+function harness(options: { onOaiEvent?: (event: Record<string, unknown>) => void } = {}) {
   const peers: FakePeer[] = [];
   const starts: string[] = [];
   const errors: string[] = [];
@@ -55,7 +56,7 @@ function harness() {
     onPhase() {},
     onReady() {},
     onRemoteTrack() {},
-    onOaiEvent() {},
+    onOaiEvent: options.onOaiEvent,
     onInfo() {},
     onError: (line) => errors.push(line),
   });
@@ -87,6 +88,37 @@ function harness() {
     },
   };
 }
+
+describe("voice transport diagnostics", () => {
+  test("keeps the data channel but does not decode events without a consumer", async () => {
+    const h = harness();
+    try {
+      h.transport.handleReady(ready);
+      await tick();
+      expect(h.starts).toHaveLength(1);
+      h.peers[0]!.dataChannel.onmessage!({
+        get data() {
+          throw new Error("unused data must not be decoded");
+        },
+      });
+    } finally {
+      await h.stop();
+    }
+  });
+
+  test("delivers decoded data-channel events when diagnostics have a consumer", async () => {
+    const events: Record<string, unknown>[] = [];
+    const h = harness({ onOaiEvent: (event) => events.push(event) });
+    try {
+      h.transport.handleReady(ready);
+      await tick();
+      h.peers[0]!.dataChannel.onmessage!({ data: '{"type":"session.created"}' });
+      expect(events).toEqual([{ type: "session.created" }]);
+    } finally {
+      await h.stop();
+    }
+  });
+});
 
 describe("voice transport retries", () => {
   test("native failure/ready preserves the cause, delays retries and stops at three", async () => {

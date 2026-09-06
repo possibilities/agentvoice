@@ -15,6 +15,7 @@
  * exactly countable: every stop we issue consumes exactly one
  * closed("requested"), so any other closed belongs to the current session.
  */
+import { AppServerError } from "./attach.ts";
 
 export interface VoiceSessionEffects {
   /** Relay the answer for the current session. */
@@ -47,7 +48,7 @@ export class VoiceSessionManager {
   private readonly startTimeoutMs: number;
   private session: Session | null = null;
   /** Stops we have issued whose closed("requested") has not yet arrived. */
-  private pendingRequestedCloses = 0;
+  private readonly pendingRequestedCloses = new Set<symbol>();
 
   constructor(effects: VoiceSessionEffects, startTimeoutMs = REALTIME_START_TIMEOUT_MS) {
     this.effects = effects;
@@ -108,8 +109,9 @@ export class VoiceSessionManager {
       }
       case "thread/realtime/closed": {
         const reason = typeof params["reason"] === "string" ? params["reason"] : undefined;
-        if (reason === "requested" && this.pendingRequestedCloses > 0) {
-          this.pendingRequestedCloses--;
+        const pendingStop = this.pendingRequestedCloses.values().next().value;
+        if (reason === "requested" && pendingStop !== undefined) {
+          this.pendingRequestedCloses.delete(pendingStop);
           this.effects.debug?.("closed attributed to a stop we issued");
           return;
         }
@@ -136,7 +138,7 @@ export class VoiceSessionManager {
   /** New conversation or dead child; no old voice session remains to stop. */
   reset(): void {
     this.clearSession();
-    this.pendingRequestedCloses = 0;
+    this.pendingRequestedCloses.clear();
   }
 
   /** Bounded by the caller; resolves when the stop RPC is acknowledged. */
@@ -166,12 +168,16 @@ export class VoiceSessionManager {
   }
 
   private async stopCounted(): Promise<void> {
-    this.pendingRequestedCloses++;
+    const stop = Symbol();
+    this.pendingRequestedCloses.add(stop);
     try {
       await this.effects.stopRealtime();
-    } catch {
-      // The stop never reached app-server, so no closed will arrive for it.
-      this.pendingRequestedCloses = Math.max(0, this.pendingRequestedCloses - 1);
+    } catch (error) {
+      // A timeout/connection failure cannot prove non-delivery. Keep attribution
+      // until closed arrives or reset discards the old thread/connection.
+      // Delete this stop only: its close or a reset may already have consumed it.
+      if (error instanceof AppServerError && typeof error.code === "number" && !error.timedOut)
+        this.pendingRequestedCloses.delete(stop);
     }
   }
 }

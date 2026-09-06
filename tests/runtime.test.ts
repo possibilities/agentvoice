@@ -12,6 +12,32 @@ import {
 } from "./fixtures/runtime-harness.ts";
 
 describe("foreground runtime ownership", () => {
+  test.each([false, true])(
+    "debug=%s controls diagnostics and unused stream opt-outs",
+    async (debug) => {
+      const h = runtimeHarness();
+      if (debug) h.events.debug = () => {};
+      try {
+        await h.runtime.start();
+        expect(typeof h.native.options.debug === "function").toBe(debug);
+        const excluded = h.native.options.optOutNotificationMethods ?? [];
+        if (debug) expect(excluded).toEqual([]);
+        else expect(excluded).toContain("item/agentMessage/delta");
+        for (const method of [
+          "turn/started",
+          "turn/completed",
+          "thread/settings/updated",
+          "thread/realtime/started",
+          "thread/realtime/sdp",
+          "thread/realtime/closed",
+          "thread/realtime/error",
+        ])
+          expect(excluded).not.toContain(method);
+      } finally {
+        await h.cleanup();
+      }
+    },
+  );
   test("new starts share the canonical workspace; Fresh changes identity and clears media", async () => {
     const h = runtimeHarness();
     try {

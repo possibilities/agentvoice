@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 
 const mode = process.argv[2];
 const send = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
+let capabilities: unknown;
 if (mode === "stubborn") {
   process.on("SIGTERM", () => {});
   setInterval(() => {}, 1_000);
@@ -22,6 +23,7 @@ if (mode === "delayed-eof") {
 createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.method === "initialize") {
+    capabilities = message.params.capabilities;
     if (mode !== "no-initialize") send({ id: message.id, result: { userAgent: "fake" } });
   } else if (message.method === "initialized") {
     send({ method: "test/initialized", params: {} });
@@ -29,6 +31,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     send({ id: message.id, result: message.params });
   } else if (message.method === "test/argv") {
     send({ id: message.id, result: process.argv.slice(2) });
+  } else if (message.method === "test/capabilities") {
+    send({ id: message.id, result: capabilities });
   } else if (message.method === "fragmented") {
     const bytes = Buffer.from(`${JSON.stringify({ id: message.id, result: "voice 🎤 café" })}\n`);
     const split = bytes.indexOf(Buffer.from("🎤")) + 1;

@@ -61,6 +61,7 @@ export interface AttachOptions {
   onSpawn?(pid: number): void;
   onReaped?(): void;
   shutdownGraceMs?: number;
+  optOutNotificationMethods?: readonly string[];
   onNotification(method: string, params: Record<string, unknown>): void;
   onClose(info: { expected: boolean; error?: string }): void;
   onRefusal?(message: string): void;
@@ -107,7 +108,13 @@ export class AppServerConnection {
       options.signal?.addEventListener("abort", abort, { once: true });
       await connection.request("initialize", {
         clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
-        capabilities: { experimentalApi: true, requestAttestation: false },
+        capabilities: {
+          experimentalApi: true,
+          requestAttestation: false,
+          ...(options.optOutNotificationMethods
+            ? { optOutNotificationMethods: options.optOutNotificationMethods }
+            : {}),
+        },
       });
       connection.notify("initialized", {});
       return connection;

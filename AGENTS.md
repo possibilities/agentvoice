@@ -91,6 +91,8 @@ usage, CONTEXT.md for vocabulary, and ADR 0015 for the active topology.
   handoff through native turn/start (ADR 0016). Keep old main-thread locks until quit;
   native work may still be active there.
 - src/core/session.ts: counted native voice starts/stops and attribution.
+  Stop timeouts do not prove non-delivery: retain each expected requested-close
+  until notification or reset; a late refusal must remove only its own stop.
 - src/console/host.ts: native readiness before audio opens, negotiation after audio
   readiness, visible media notices, worker-local media wiring and quit cleanup.
 - src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.

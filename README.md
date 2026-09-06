@@ -218,6 +218,10 @@ Codex reports, not requested values; missing model data shows `unknown`. Identit
 rows hide below 12 terminal rows. `LIVE` means the media link is connected, not
 that Codex work completed. The most recent audio/transport or interaction notice
 stays visible without `--debug`; detailed media tracing remains opt-in.
+Without `--debug`, AgentVoice asks Codex to omit unused text, reasoning, tool-output,
+plan/diff, usage, and realtime transcript/audio streams. Lifecycle and settings
+notifications remain enabled. Debug launches retain those streams and decode
+WebRTC data-channel events for diagnostics; ordinary launches skip that work.
 
 Launch validates prompts/protocol, selects the native conversation and confirms
 permissions/Fast before opening audio. The WebRTC offer follows device readiness.

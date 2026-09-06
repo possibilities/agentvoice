@@ -38,6 +38,23 @@ import type { ReadyInfo } from "./voice-types.ts";
 
 export type { ReadyInfo } from "./voice-types.ts";
 
+// These streams have no runtime consumer. Debug launches retain them for diagnosis.
+const UNUSED_STREAM_NOTIFICATIONS = [
+  "item/agentMessage/delta",
+  "item/plan/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/outputDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "turn/diff/updated",
+  "turn/plan/updated",
+  "thread/tokenUsage/updated",
+  "thread/realtime/transcript/delta",
+  "thread/realtime/transcript/done",
+  "thread/realtime/item/transcript/delta",
+  "thread/realtime/outputAudio/delta",
+] as const;
+
 export interface RuntimeEvents {
   onReady(info: ReadyInfo): void;
   onAnswer(sdp: string): void;
@@ -126,7 +143,7 @@ export class VoiceRuntime {
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
   private readonly activeTurns = new Map<string, string>();
-  private privateHandoffPrompt: string | undefined;
+  private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
@@ -158,7 +175,7 @@ export class VoiceRuntime {
         if (connection && threadId)
           await connection.request("thread/realtime/stop", { threadId }, 1_000);
       },
-      debug: (line) => this.debug(line),
+      debug: this.events.debug ? (line) => this.debug(line) : undefined,
     });
   }
 
@@ -278,7 +295,11 @@ export class VoiceRuntime {
     )
       return handoffFailure("not_ready");
     const connection = this.attachment;
-    this.privateHandoffPrompt = input.prompt;
+    if (this.events.debug)
+      this.privateHandoffPrompt = {
+        raw: input.prompt,
+        escaped: JSON.stringify(input.prompt).slice(1, -1),
+      };
     try {
       // This native method starts an idle thread or steers an active regular turn.
       // clientUserMessageId is correlation, not native deduplication.
@@ -350,8 +371,9 @@ export class VoiceRuntime {
   }
 
   private debug(line: string): void {
+    if (!this.events.debug) return;
     const prompt = this.privateHandoffPrompt;
-    if (prompt && (line.includes(prompt) || line.includes(JSON.stringify(prompt).slice(1, -1))))
+    if (prompt && (line.includes(prompt.raw) || line.includes(prompt.escaped)))
       this.events.debug?.("[restart handoff content omitted]");
     else this.events.debug?.(line);
   }
@@ -498,6 +520,7 @@ export class VoiceRuntime {
       onReaped: this.options.onChildReaped,
       signal: this.abort.signal,
       clientVersion: this.version,
+      optOutNotificationMethods: this.events.debug ? undefined : UNUSED_STREAM_NOTIFICATIONS,
       onNotification: (method, params) => this.handleNotification(method, params),
       onRefusal: (message) => this.events.onError(message, false),
       onClose: (info) => {
@@ -506,7 +529,7 @@ export class VoiceRuntime {
         this.sessions.reset();
         this.events.onFatal(info.error ?? "Codex connection closed");
       },
-      debug: (line) => this.debug(line),
+      debug: this.events.debug ? (line) => this.debug(line) : undefined,
     });
     if (this.shuttingDown || !connection.alive) {
       await connection.close();

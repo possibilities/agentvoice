@@ -32,7 +32,7 @@ export interface TransportEvents {
   onPhase(phase: TransportPhase): void;
   onReady(info: ReadyInfo): void;
   onRemoteTrack(track: MediaStreamTrack): void;
-  onOaiEvent(event: Record<string, unknown>): void;
+  onOaiEvent?(event: Record<string, unknown>): void;
   /** One-line notices for the event feed. */
   onInfo(line: string): void;
   /** Errors worth surfacing prominently (fatal session failures, …). */
@@ -276,6 +276,7 @@ export class VoiceTransport {
     pc.addTransceiver(sendTrack, { direction: "sendrecv" });
     const dc = pc.createDataChannel("oai-events");
     dc.onmessage = (event) => {
+      if (!this.options.onOaiEvent) return;
       if (this.pending !== session && this.live !== session) return;
       const data = (event as { data?: unknown }).data ?? event;
       const text = typeof data === "string" ? data : new TextDecoder().decode(data as Uint8Array);

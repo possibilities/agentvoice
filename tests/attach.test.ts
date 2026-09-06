@@ -30,6 +30,18 @@ function isRunning(pid: number) {
 }
 
 describe("owned native stdio", () => {
+  test("forwards notification opt-outs without opting out of native requests", async () => {
+    const c = await connect("", { optOutNotificationMethods: ["item/agentMessage/delta"] });
+    try {
+      expect(await c.request<Record<string, unknown>>("test/capabilities", {})).toEqual({
+        experimentalApi: true,
+        requestAttestation: false,
+        optOutNotificationMethods: ["item/agentMessage/delta"],
+      });
+    } finally {
+      await c.close();
+    }
+  });
   test("refuses every human-interaction shape visibly, without answers or empty successes", async () => {
     const notices: Record<string, unknown>[] = [];
     const refusals: string[] = [];
