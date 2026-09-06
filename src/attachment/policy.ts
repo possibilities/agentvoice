@@ -58,6 +58,15 @@ export function validateAttachmentRequest(
       throw new Error("Attachment is bound to one thread");
   }
   switch (method) {
+    case "thread/realtime/appendSpeech":
+      keys(params, ["threadId", "text"]);
+      if (
+        typeof params["text"] !== "string" ||
+        !params["text"].trim() ||
+        Buffer.byteLength(params["text"]) > 64 * 1024
+      )
+        throw new Error("Speech text must be nonempty and at most 64 KiB");
+      break;
     case "initialize":
       keys(params, ["clientInfo", "capabilities"]);
       break;

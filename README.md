@@ -760,3 +760,28 @@ history, and closes—no turns or audio. `audio:probe` uses hardware and require
 an explicit live check.
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for the ownership decision.
+
+### Send text to the voice
+
+From the conversation's workspace:
+
+```sh
+bun ~/code/agentvoice/scripts/voice-speak.ts "Hello, bananafish."
+# Or select a workspace explicitly:
+bun run voice:speak --workspace ~/code/myapp "Hello, bananafish."
+```
+
+The script discovers the live controller by exact canonical workspace, like
+`voice:messages` and `agentvoice attach`. Add `--thread <main-thread-id>` if
+several controllers share that workspace. Use `--` before text beginning with
+a dash. Empty text and text over 64 KiB are rejected.
+
+It sends one native `thread/realtime/appendSpeech` request through the guarded
+attachment connection, without starting a working-agent turn or resuming a
+thread. Acceptance does not confirm audible playback or verbatim delivery.
+There are no automatic retries. An ambiguous disconnect may occur after the
+request was delivered; rerunning can repeat speech.
+
+An already-running runtime must be restarted from the updated checkout to load
+the gateway's appendSpeech support. The script does not restart the app or voice
+session. Other realtime mutations remain unavailable through attachment.

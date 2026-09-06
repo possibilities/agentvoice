@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseSpeechArgs, sendSpeech } from "../scripts/voice-speak.ts";
 import { AttachmentGateway, type AttachmentTicket } from "../src/attachment/gateway.ts";
 import { attachmentArgv } from "../src/attachment/launcher.ts";
 import { attachmentNotification, validateAttachmentRequest } from "../src/attachment/policy.ts";
@@ -25,7 +26,7 @@ async function until(predicate: () => boolean) {
   for (let i = 0; i < 200 && !predicate(); i++) await Bun.sleep(5);
   expect(predicate()).toBe(true);
 }
-function fixture(holdUnsubscribe = false) {
+function fixture(holdUnsubscribe = false, rejectSpeech = false) {
   const calls: Record<string, unknown>[] = [];
   const held: Array<() => void> = [];
   const peers = new Set<import("bun").ServerWebSocket<undefined>>();
@@ -48,6 +49,15 @@ function fixture(holdUnsubscribe = false) {
       message(peer, text) {
         const frame = JSON.parse(String(text));
         calls.push(frame);
+        if (rejectSpeech && frame.method === "thread/realtime/appendSpeech") {
+          peer.send(
+            JSON.stringify({
+              id: frame.id,
+              error: { code: -32600, message: "conversation is not running" },
+            }),
+          );
+          return;
+        }
         if (frame.id !== undefined && frame.method !== undefined) {
           const respond = () =>
             peer.send(
@@ -505,4 +515,69 @@ describe("guarded TUI attachment", () => {
       f.close();
     }
   });
+});
+
+test("speech CLI parses workspace selection and literal Unicode text", () => {
+  expect(parseSpeechArgs(["Hello café 👋"]).text).toBe("Hello café 👋");
+  expect(parseSpeechArgs(["Hello"]).workspace).toBe(identity.workspace);
+  expect(parseSpeechArgs(["--thread", "owned-thread", "--", "--hello"]).text).toBe("--hello");
+  expect(parseSpeechArgs(["--thread", "owned-thread", "hi"]).threadId).toBe("owned-thread");
+  expect(() => parseSpeechArgs([])).toThrow("nonempty");
+  expect(() => parseSpeechArgs(["--workspace"])).toThrow("Missing value");
+  expect(() => parseSpeechArgs(["--wat", "hi"])).toThrow("Unknown option");
+});
+
+test("speech uses the guarded connection once without a turn or resume", async () => {
+  const f = fixture();
+  try {
+    await sendSpeech(f.gateway.issue(identity), "Hello café 👋");
+    expect(f.calls.map((frame) => frame["method"])).toEqual([
+      "initialize",
+      "initialized",
+      "thread/realtime/appendSpeech",
+    ]);
+    expect(f.calls[2]!["params"]).toEqual({ threadId: identity.threadId, text: "Hello café 👋" });
+  } finally {
+    f.close();
+  }
+});
+
+test("speech admission remains exact-thread and rejects invalid payloads", () => {
+  const method = "thread/realtime/appendSpeech";
+  expect(() =>
+    validateAttachmentRequest(method, { threadId: identity.threadId, text: "Hello" }, identity),
+  ).not.toThrow();
+  for (const params of [
+    { threadId: "another-thread", text: "Hello" },
+    { threadId: identity.threadId, text: " " },
+    { threadId: identity.threadId, text: "x".repeat(65537) },
+    { threadId: identity.threadId, text: "Hello", role: "developer" },
+  ])
+    expect(() => validateAttachmentRequest(method, params, identity)).toThrow();
+});
+
+test("speech fails on revocation without retrying", async () => {
+  const f = fixture();
+  const ticket = f.gateway.issue(identity);
+  f.gateway.revoke();
+  try {
+    await expect(sendSpeech(ticket, "Hello")).rejects.toThrow();
+    expect(f.calls).toEqual([]);
+  } finally {
+    f.close();
+  }
+});
+
+test("speech surfaces native rejection without retries", async () => {
+  const f = fixture(false, true);
+  try {
+    await expect(sendSpeech(f.gateway.issue(identity), "Hello")).rejects.toThrow(
+      "conversation is not running",
+    );
+    expect(
+      f.calls.filter((frame) => frame["method"] === "thread/realtime/appendSpeech"),
+    ).toHaveLength(1);
+  } finally {
+    f.close();
+  }
 });
