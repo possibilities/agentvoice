@@ -2,6 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AttachmentGateway, type AttachmentTicket } from "../attachment/gateway.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import {
   type ConversationNotification,
@@ -25,7 +26,7 @@ import {
   requireControlMcpReady,
 } from "./control-mcp.ts";
 import { ConversationReader } from "./conversation-reader.ts";
-import { confirmFullAccess, FullAccessError } from "./full-access.ts";
+import { fullAccessStartupConfig } from "./full-access.ts";
 import {
   type HandoffRequest,
   type HandoffResult,
@@ -33,6 +34,7 @@ import {
   handoffRequestSchema,
   handoffUnknown,
 } from "./handoff.ts";
+import { resolveNativeExecutable } from "./native-listener.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
   passthroughWarnings,
@@ -79,10 +81,13 @@ export interface RuntimeEvents {
 
 export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | "alive"> & {
   readonly shutdownForced?: boolean;
+  readonly nativeEndpoint?: import("./native-listener.ts").NativeEndpoint;
 };
 export interface RuntimeOptions extends SessionSelection {
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
+  nativeStateDir?: string;
+  onAttachmentReady?: (issue: () => AttachmentTicket, revoke: () => void) => void;
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
@@ -152,6 +157,7 @@ export class VoiceRuntime {
   private conversationMode: "started" | "continued" = "started";
   private freshInFlight = false;
   private shuttingDown = false;
+  private tuiGateway: AttachmentGateway | undefined;
   private shutdownPromise: Promise<void> | null = null;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
@@ -281,6 +287,7 @@ export class VoiceRuntime {
 
   async fresh(): Promise<void> {
     if (!this.threadReady || this.freshInFlight || this.shuttingDown) return;
+    this.tuiGateway?.revoke();
     this.freshInFlight = true;
     this.threadReady = false;
     try {
@@ -298,7 +305,7 @@ export class VoiceRuntime {
       this.sessions.reset();
       this.events.onStatus(`new conversation: ${this.threadId}`);
     } catch (error) {
-      if (error instanceof FullAccessError || this.options.controlMcp) {
+      if (this.options.controlMcp) {
         this.events.onFatal(error instanceof Error ? error.message : String(error));
         await this.shutdown();
       } else if (!this.shuttingDown)
@@ -364,6 +371,7 @@ export class VoiceRuntime {
 
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
+    this.tuiGateway?.close();
     this.shuttingDown = true;
     this.threadObserver?.stop();
     this.threadReady = false;
@@ -447,7 +455,6 @@ export class VoiceRuntime {
     this.assertRunning();
     const id = extractThreadId(result);
     await this.acquire(id);
-    confirmFullAccess(result);
     this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
@@ -494,7 +501,6 @@ export class VoiceRuntime {
     const result = await connection.request("thread/resume", params);
     this.assertRunning();
     if (extractThreadId(result) !== id) throw new Error("Codex resumed a different conversation");
-    confirmFullAccess(result);
     this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();
@@ -539,14 +545,6 @@ export class VoiceRuntime {
         this.sessions.handleNotification(method, params);
       if (method === "thread/settings/updated" && this.locks.has(id)) {
         const settings = params["threadSettings"] as Record<string, unknown> | undefined;
-        try {
-          confirmFullAccess(settings, true);
-        } catch (error) {
-          this.threadReady = false;
-          this.events.onFatal(String(error));
-          void this.shutdown();
-          return;
-        }
         if (settings && id === this.threadId) {
           if (typeof settings["model"] === "string") this.tier.model = settings["model"];
           if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
@@ -560,9 +558,13 @@ export class VoiceRuntime {
 
   private async openConnection(): Promise<void> {
     this.assertRunning();
+    const codex = this.options.connect
+      ? this.config.codex
+      : resolveNativeExecutable(this.config.codex, this.config.orchestrator.workspace);
     let connection: RuntimeConnection | null = null;
     connection = await (this.options.connect ?? AppServerConnection.connect)({
-      argv: appServerArgv(this.config.codex, this.config.codexConfig),
+      argv: appServerArgv(codex, fullAccessStartupConfig(this.config)),
+      nativeStateDir: this.options.nativeStateDir,
       cwd: this.config.orchestrator.workspace,
       env: { ...process.env, ...this.options.controlMcp?.env },
       onSpawn: this.options.onChildPid,
@@ -577,6 +579,7 @@ export class VoiceRuntime {
           ),
       onNotification: (method, params) => this.handleNotification(method, params),
       onRefusal: (message) => this.events.onError(message, false),
+      onInteraction: (message) => this.events.onError(message, false),
       onClose: (info) => {
         if (this.shuttingDown || this.attachment !== connection || info.expected) return;
         this.threadReady = false;
@@ -590,6 +593,23 @@ export class VoiceRuntime {
       throw new Error("Codex stopped during startup");
     }
     this.attachment = connection;
+    if (connection.nativeEndpoint) {
+      this.tuiGateway = new AttachmentGateway(
+        connection.nativeEndpoint,
+        resolveNativeExecutable(codex, this.config.orchestrator.workspace),
+      );
+      this.options.onAttachmentReady?.(
+        () => {
+          if (!this.threadReady || this.shuttingDown || this.freshInFlight || !this.threadId)
+            throw new Error("Voice thread is not ready for attachment");
+          return this.tuiGateway!.issue({
+            threadId: this.threadId,
+            workspace: this.config.orchestrator.workspace,
+          });
+        },
+        () => this.tuiGateway?.revoke(),
+      );
+    }
     this.tierSelection = new ServiceTierSelection(
       (method, params) => {
         this.assertRunning();

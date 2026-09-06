@@ -217,7 +217,7 @@ The native generator explicitly removes turn item arrays and generated image
 bytes; runtime projection handles bounds and unavailable items. Review upstream
 changes instead of assuming schema presence proves implementation support.
 `bun scripts/conversation-probe.ts` verifies metadata, descendant listing and the
-unmaterialized-history error with disposable state, network denial and no turns
+unmaterialized-history error with disposable state, loopback-only networking and no turns
 or media. Fake-protocol/socket tests cover populated pages, nested ancestry,
 content routing, projection/replay and stale generations. Local Codex source
 auto-attaches initialized clients to newly created threads; that listener path is

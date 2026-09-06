@@ -38,8 +38,6 @@ describe("threadParams", () => {
   test("sends nothing beyond the server's own defaults", () => {
     expect(thread()).toEqual({
       cwd: process.cwd(),
-      approvalPolicy: "never",
-      sandbox: "danger-full-access",
       threadSource: "agentvoice-orchestrator",
     });
   });
@@ -176,9 +174,9 @@ describe("threadParams", () => {
     });
   });
 
-  test("extra merges last but cannot change the full-access posture", () => {
-    expect(() => thread({ orchestrator: { extra: { sandbox: "read-only" } } })).toThrow(
-      "full-access-only",
+  test("extra merges last including native permission selectors", () => {
+    expect(thread({ orchestrator: { extra: { sandbox: "read-only" } } })["sandbox"]).toBe(
+      "read-only",
     );
     const params = thread({
       orchestrator: { extra: { sandbox: "danger-full-access", newField: 7 } },
@@ -202,7 +200,6 @@ describe("realtimeParams", () => {
       outputModality: "audio",
       transport: { type: "webrtc", sdp: "v=0" },
       version: "v3",
-      includeStartupContext: false,
     });
   });
 
@@ -291,12 +288,12 @@ describe("realtimeParams", () => {
 });
 
 describe("native voice context controls", () => {
-  test("startup snapshot defaults off independently of native tail flush", () => {
+  test("startup snapshot and tail flush stay omitted for native resolution", () => {
     const config = configure();
     expect(config.voice.includeStartupContext).toBeUndefined();
     expect(config.voice.flushTranscriptTailOnSessionEnd).toBeUndefined();
     const params = realtime();
-    expect(params["includeStartupContext"]).toBe(false);
+    expect(params).not.toHaveProperty("includeStartupContext");
     expect(params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
     expect(params).not.toHaveProperty("initialItems");
     for (const kind of ["start", "resume"] as const) {

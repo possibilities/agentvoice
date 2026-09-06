@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerConnection, type AttachOptions, appServerArgv } from "../src/core/attach.ts";
 import { OwnedProcessTree } from "../src/core/owned-processes.ts";
@@ -6,7 +7,8 @@ import { OwnedProcessTree } from "../src/core/owned-processes.ts";
 const fixture = join(import.meta.dir, "fixtures/fake-codex.ts");
 async function connect(mode = "", extra: Partial<AttachOptions> = {}) {
   return AppServerConnection.connect({
-    argv: [process.execPath, fixture, mode],
+    argv: [process.execPath, fixture, mode, "--listen", "ws://127.0.0.1:0"],
+    nativeStateDir: tmpdir(),
     cwd: process.cwd(),
     clientVersion: "test",
     shutdownGraceMs: 50,
@@ -29,7 +31,7 @@ function isRunning(pid: number) {
   }
 }
 
-describe("owned native stdio", () => {
+describe("owned native WebSocket", () => {
   test("native voice item notifications retain bodies in delivery but omit them from debug logs", async () => {
     const logs: string[] = [];
     const observed: unknown[] = [];
@@ -71,7 +73,7 @@ describe("owned native stdio", () => {
       await c.close();
     }
   });
-  test("refuses every human-interaction shape visibly, without answers or empty successes", async () => {
+  test("refuses unsupported client tools and authentication without fabricating answers", async () => {
     const notices: Record<string, unknown>[] = [];
     const refusals: string[] = [];
     const c = await connect("", {
@@ -89,11 +91,6 @@ describe("owned native stdio", () => {
         "applyPatchApproval",
         { decision: { denied: { rejection: "agentvoice runs unattended and never approves" } } },
       ],
-      ["item/commandExecution/requestApproval", { decision: "decline" }],
-      ["item/fileChange/requestApproval", { decision: "decline" }],
-      ["item/permissions/requestApproval", { permissions: {}, scope: "turn" }],
-      ["mcpServer/elicitation/request", { action: "decline", content: null }],
-      ["item/tool/requestUserInput", null],
       ["tool/requestUserInput", null],
       ["item/tool/call", null],
       ["account/chatgptAuthTokens/refresh", null],
@@ -123,7 +120,7 @@ describe("owned native stdio", () => {
       "--enable",
       "realtime_conversation",
       "--listen",
-      "stdio://",
+      "ws://127.0.0.1:0",
     ]);
   });
   test("coalesces process snapshots instead of building an unbounded polling queue", async () => {
@@ -138,7 +135,7 @@ describe("owned native stdio", () => {
       await c.close();
     }
   });
-  test("round trips large frames and fragmented multibyte UTF-8", async () => {
+  test("round trips large frames and multibyte UTF-8", async () => {
     const c = await connect();
     try {
       const body = { text: "large 🎤".repeat(20_000) };
@@ -152,13 +149,22 @@ describe("owned native stdio", () => {
       await c.close();
     }
   });
-  test("delivers native tool/turn notifications unchanged and preserves fail-closed approvals", async () => {
+  test("delivers native tool/turn notifications while leaving human requests pending", async () => {
     const notices: Array<[string, Record<string, unknown>]> = [];
+    const interactions: string[] = [];
     const c = await connect("", {
       onNotification: (m, p) => notices.push([m, p]),
+      onInteraction: (message) => interactions.push(message),
     });
     try {
-      await c.request("approval", {});
+      for (const method of [
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval",
+        "item/permissions/requestApproval",
+        "item/tool/requestUserInput",
+        "mcpServer/elicitation/request",
+      ])
+        await c.request("server-request", { method });
       const native: Array<[string, Record<string, unknown>]> = [
         ["item/started", { threadId: "main", item: { type: "commandExecution", id: "tool" } }],
         [
@@ -170,7 +176,9 @@ describe("owned native stdio", () => {
       for (const [method, params] of native) await c.request("notification", { method, params });
       await until(() => notices.some(([m]) => m === "turn/completed"));
       expect(notices).toContainEqual(["test/initialized", {}]);
-      expect(notices).toContainEqual(["test/answer", { decision: "decline" }]);
+      expect(notices.some(([method]) => method === "test/response")).toBe(false);
+      expect(interactions).toHaveLength(5);
+      expect(interactions[0]).toContain("Run agentvoice attach");
       for (const entry of native) expect(notices).toContainEqual(entry);
     } finally {
       await c.close();
@@ -201,7 +209,7 @@ describe("owned native stdio", () => {
         const message = refusals.at(-1)!;
         expect(message).toContain(`Refused ${tool}`);
         expect(message).toContain("retired");
-        expect(message).toContain("Fresh or --no-continue");
+        expect(message).toContain("Fresh or start AgentVoice without --continue/--resume");
         expect(responses.at(-1)!["result"]).toEqual({
           success: false,
           contentItems: [{ type: "inputText", text: message }],
@@ -243,8 +251,8 @@ describe("owned native stdio", () => {
     expect(await pending).toBeInstanceOf(Error);
     expect(() => process.kill(pid, 0)).toThrow();
   });
-  test("native EOF drain may exceed the former one-second cutoff without forced termination", async () => {
-    const c = await connect("delayed-eof", { shutdownGraceMs: undefined });
+  test("native shutdown may exceed the former one-second cutoff without forced termination", async () => {
+    const c = await connect("delayed-shutdown", { shutdownGraceMs: undefined });
     const began = Date.now();
     await c.close();
     expect(Date.now() - began).toBeGreaterThanOrEqual(1_100);
@@ -319,7 +327,7 @@ describe("owned native stdio", () => {
       connect("", { argv: ["/definitely-not-an-agentvoice-executable"] }),
     ).rejects.toThrow(/could not start Codex/);
   });
-  test("malformed stdout fails pending requests instead of hanging", async () => {
+  test("malformed WebSocket fails pending requests instead of hanging", async () => {
     const c = await connect();
     try {
       await expect(c.request("invalid", {})).rejects.toThrow("invalid JSON");

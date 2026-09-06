@@ -17,6 +17,7 @@ export type StartControlServerOptions = {
   backend: ControlBackend;
   stateDir: string;
   instanceId: string;
+  attachment?: (value: unknown) => Promise<unknown>;
 };
 
 /** Start the controller-owned transports before any runtime is launched. */
@@ -25,7 +26,9 @@ export async function startControlServer(
 ): Promise<ControlServer> {
   const socketPath = controlSocketPath(options.stateDir, options.instanceId);
   const socket = new ControlSocketServer(socketPath, options.backend);
-  const http = new ControlMcpHttpHost(options.backend);
+  const http = new ControlMcpHttpHost(options.backend, undefined, {
+    attachment: options.attachment,
+  });
   try {
     await socket.start();
     const httpUrl = http.start();

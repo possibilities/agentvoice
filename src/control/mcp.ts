@@ -20,6 +20,7 @@ type Session = {
 };
 
 export type ControlMcpHttpOptions = {
+  attachment?: (value: unknown) => Promise<unknown>;
   maxRequestBytes?: number;
   maxSessions?: number;
   sessionIdleMs?: number;
@@ -67,11 +68,24 @@ export class ControlMcpHttpHost {
   }
 
   private async handle(request: Request): Promise<Response> {
-    if (new URL(request.url).pathname !== CONTROL_MCP_PATH)
+    const path = new URL(request.url).pathname;
+    if (path !== CONTROL_MCP_PATH && path !== "/tui/attach")
       return new Response("not found", { status: 404 });
     if (request.headers.get("authorization") !== `Bearer ${this.token}`)
       return new Response("unauthorized", { status: 401 });
     if (!this.loopbackHeadersAllowed(request)) return new Response("forbidden", { status: 403 });
+    if (path === "/tui/attach") {
+      if (request.headers.has("origin") || request.method !== "POST" || !this.options.attachment)
+        return new Response("forbidden", { status: 403 });
+      try {
+        const result = await this.options.attachment(await request.json());
+        return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+      } catch {
+        return new Response("Attachment unavailable; select the current live thread", {
+          status: 409,
+        });
+      }
+    }
     await this.expireSessions();
     const sessionId = request.headers.get("mcp-session-id");
     if (sessionId) {

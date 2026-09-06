@@ -1,12 +1,15 @@
-/** Native JSONL transport to the Codex child owned by this launch. */
+/** Native WebSocket transport to the Codex child owned by this launch. */
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { homedir } from "node:os";
+import { stateDirectory } from "../paths.ts";
 import { validateCodexConfig } from "./codex-config.ts";
+import { nativeHumanRequest } from "./human-input.ts";
+import { type NativeEndpoint, NativeListener } from "./native-listener.ts";
 import { type OwnedProcessOutcome, OwnedProcessTree } from "./owned-processes.ts";
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const CLOSE_GRACE_MS = 15_000;
 const TERMINATE_GRACE_MS = 2_000;
-const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 export class AppServerError extends Error {
   readonly code?: number;
@@ -19,10 +22,8 @@ export class AppServerError extends Error {
 }
 
 /**
- * Fail-closed answers for approval-bearing server→client requests. The console
- * runs unattended, so an unanswered request would park the agent turn forever;
- * Requests without a native refusal shape receive a JSON-RPC error, not an
- * empty success or fabricated answers to a tool's questions.
+ * Legacy v1 approvals have no supported TUI route. Current human requests stay
+ * pending in native Codex; unsupported requests receive a refusal or RPC error.
  */
 export function buildDenialResponse(method: string): Record<string, unknown> | null {
   switch (method) {
@@ -33,13 +34,6 @@ export function buildDenialResponse(method: string): Record<string, unknown> | n
           denied: { rejection: "agentvoice runs unattended and never approves" },
         },
       };
-    case "item/commandExecution/requestApproval":
-    case "item/fileChange/requestApproval":
-      return { decision: "decline" };
-    case "item/permissions/requestApproval":
-      return { permissions: {}, scope: "turn" };
-    case "mcpServer/elicitation/request":
-      return { action: "decline", content: null };
     default:
       return null;
   }
@@ -54,6 +48,7 @@ interface PendingRequest {
 
 export interface AttachOptions {
   argv: string[];
+  nativeStateDir?: string;
   cwd: string;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
@@ -65,6 +60,7 @@ export interface AttachOptions {
   onNotification(method: string, params: Record<string, unknown>): void;
   onClose(info: { expected: boolean; error?: string }): void;
   onRefusal?(message: string): void;
+  onInteraction?(message: string): void;
   debug?(line: string): void;
 }
 
@@ -77,18 +73,21 @@ export function appServerArgv(codex: string, overrides: readonly string[] = []):
     "--enable",
     "realtime_conversation",
     "--listen",
-    "stdio://",
+    "ws://127.0.0.1:0",
   ];
 }
 
 export class AppServerConnection {
   private child: ChildProcessWithoutNullStreams | null = null;
+  private listener: NativeListener | undefined;
+  get nativeEndpoint(): NativeEndpoint | undefined {
+    return this.listener?.endpoint;
+  }
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
   private closed = false;
   private closing = false;
   private closePromise: Promise<void> | null = null;
-  private buffered = "";
   private exited: Promise<void> = Promise.resolve();
   private reaped = false;
   private ownedProcesses: OwnedProcessTree | null = null;
@@ -106,6 +105,18 @@ export class AppServerConnection {
       if (options.signal?.aborted) throw new AppServerError("Codex startup cancelled");
       connection.open();
       options.signal?.addEventListener("abort", abort, { once: true });
+      await connection.listener!.connect(
+        (text) => {
+          try {
+            connection.dispatchText(text);
+          } catch (error) {
+            connection.fail(
+              error instanceof AppServerError ? error.message : "Invalid native WebSocket frame",
+            );
+          }
+        },
+        () => connection.fail("Native WebSocket closed"),
+      );
       await connection.request("initialize", {
         clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
         capabilities: {
@@ -134,7 +145,10 @@ export class AppServerConnection {
   }
 
   private open(): void {
-    const [bin, ...args] = this.options.argv;
+    this.listener = new NativeListener(
+      this.options.nativeStateDir ?? stateDirectory(process.env, homedir()),
+    );
+    const [bin, ...args] = this.listener.argv(this.options.argv);
     if (!bin) throw new AppServerError("no Codex executable configured");
     const child = spawn(bin, args, {
       cwd: this.options.cwd,
@@ -166,15 +180,15 @@ export class AppServerConnection {
     });
     child.stdin.on("error", (error) => this.fail(`Codex stdin: ${error.message}`));
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => this.handleData(chunk));
+    child.stdout.on("data", (chunk: string) => this.listener!.observe(chunk));
     child.stdout.on("end", () => {
       if (!this.closing && !this.closed) this.fail("Codex stdout closed");
     });
     child.stdout.on("error", (error) => this.fail(error.message));
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) =>
-      this.options.debug?.(`codex stderr: ${chunk.trimEnd()}`),
-    );
+    child.stderr.on("data", (chunk: string) => {
+      this.listener?.observe(chunk);
+    });
     child.stderr.on("error", (error) => this.options.debug?.(`Codex stderr: ${error.message}`));
   }
 
@@ -216,7 +230,8 @@ export class AppServerConnection {
       let cleanup: OwnedProcessOutcome | undefined;
       try {
         await this.ownedProcesses?.snapshotNow();
-        this.child?.stdin.end();
+        this.listener?.close();
+        if (!this.reaped) this.child?.kill("SIGTERM");
         await this.waitForExit(this.options.shutdownGraceMs ?? CLOSE_GRACE_MS);
         cleanup = await this.ownedProcesses?.waitForCapturedExit(0);
         this.shutdownForced = !this.reaped || cleanup?.complete === false;
@@ -255,6 +270,7 @@ export class AppServerConnection {
         this.ownedProcesses?.stopTracking();
         this.child?.stdout.destroy();
         this.child?.stderr.destroy();
+        this.listener?.cleanup();
       }
       if (failure) throw failure;
       if (!this.reaped || cleanup?.complete === false) {
@@ -283,30 +299,7 @@ export class AppServerConnection {
     if (!this.alive || !this.child) throw new AppServerError("Codex connection is closed");
     const text = JSON.stringify(message);
     this.options.debug?.(`-> ${text}`);
-    // Writable owns buffering/backpressure; a false return is not a partial write.
-    this.child.stdin.write(`${text}\n`);
-  }
-
-  private handleData(chunk: string): void {
-    if (this.closed) return;
-    this.buffered += chunk;
-    for (;;) {
-      const newline = this.buffered.indexOf("\n");
-      if (newline < 0) break;
-      const line = this.buffered.slice(0, newline);
-      this.buffered = this.buffered.slice(newline + 1);
-      if (Buffer.byteLength(line) > MAX_FRAME_BYTES) {
-        this.fail("Codex frame exceeds 32 MiB");
-        return;
-      }
-      try {
-        this.dispatchText(line);
-      } catch (error) {
-        this.fail(String(error));
-        return;
-      }
-    }
-    if (Buffer.byteLength(this.buffered) > MAX_FRAME_BYTES) this.fail("Codex frame exceeds 32 MiB");
+    this.listener!.send(text);
   }
 
   private dispatchText(text: string): void {
@@ -314,7 +307,7 @@ export class AppServerConnection {
     try {
       frame = JSON.parse(text);
     } catch {
-      throw new AppServerError("Codex stdout contained invalid JSON");
+      throw new AppServerError("Codex WebSocket contained invalid JSON");
     }
     if (typeof frame !== "object" || frame === null) return;
     const message = frame as Record<string, unknown>;
@@ -343,8 +336,17 @@ export class AppServerConnection {
     }
 
     if (id !== undefined && typeof method === "string") {
-      // This client supplies no tools or human-input UI. Refuse immediately
-      // rather than leaving an unsupported server request parked indefinitely.
+      // Native owns pending human requests and replays them when a TUI resumes.
+      if (nativeHumanRequest(method)) {
+        try {
+          this.options.onInteraction?.(
+            "Codex requested your input. Run agentvoice attach in this workspace to respond.",
+          );
+        } catch {
+          this.options.debug?.("interaction notice callback failed");
+        }
+        return;
+      }
       const requestId = id as number | string;
       const params = (message["params"] ?? {}) as Record<string, unknown>;
       this.refuse(requestId, method, params);
@@ -370,10 +372,10 @@ export class AppServerConnection {
       method === "item/tool/call" &&
       (tool === "dispatch_worker" || tool === "check_workers" || tool === "cancel_worker");
     const message = retired
-      ? `Refused ${tool}: AgentVoice's custom worker tools have been retired. This saved conversation may retain their definitions; use Fresh or --no-continue for a conversation without them. Native Codex tools and voice handoffs are unchanged; no work was started or cancelled.`
+      ? `Refused ${tool}: AgentVoice's custom worker tools have been retired. This saved conversation may retain their definitions; use Fresh or start AgentVoice without --continue/--resume for a conversation without them. Native Codex tools and voice handoffs are unchanged; no work was started or cancelled.`
       : method === "item/tool/call"
         ? "Refused item/tool/call: AgentVoice does not implement client-defined dynamic tools. Use a Codex client that implements this tool."
-        : `Refused ${method}: AgentVoice has no approval/input UI. Full access does not grant connector consent or answer tool questions. Use a supported Codex client for required interaction.`;
+        : `Refused ${method}: AgentVoice does not support this client request. Use a Codex client that implements it.`;
     const result = retired
       ? { success: false, contentItems: [{ type: "inputText", text: message }] }
       : buildDenialResponse(method);
@@ -399,6 +401,7 @@ export class AppServerConnection {
   private finish(expected: boolean, error?: string): void {
     if (this.closed) return;
     this.closed = true;
+    this.listener?.close(new AppServerError(error ?? "Codex connection closed"));
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(

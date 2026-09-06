@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
-/** Stock native read APIs only: disposable CODEX_HOME, network denied, no turns or media. */
+/** Stock native read APIs only: disposable CODEX_HOME, loopback only, no turns or media. */
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
 import { ConversationReader } from "../src/core/conversation-reader.ts";
-import { confirmFullAccess } from "../src/core/full-access.ts";
 import { conversationRequestSchemas, readResultSchema } from "../src/events/conversation.ts";
 
 if (process.platform !== "darwin")
@@ -22,12 +21,13 @@ try {
     argv: [
       "/usr/bin/sandbox-exec",
       "-p",
-      "(version 1) (allow default) (deny network*)",
+      '(version 1) (allow default) (deny network*) (allow network-bind (local ip "localhost:*")) (allow network-inbound (local ip "localhost:*")) (allow network-outbound (remote ip "localhost:*"))',
       ...appServerArgv(process.env["CODEX_PATH"] ?? "codex", [
         "sandbox_mode=danger-full-access",
         "approval_policy=never",
       ]),
     ],
+    nativeStateDir: root,
     cwd: workspace,
     env: { ...process.env, CODEX_HOME: nativeHome },
     clientVersion: "conversation-probe",
@@ -40,7 +40,6 @@ try {
     approvalPolicy: "never",
     threadSource: "agentvoice-orchestrator",
   });
-  confirmFullAccess(started);
   const reader = new ConversationReader(
     (method, params, timeout) => connection!.request(method, params, timeout),
     workspace,
@@ -73,7 +72,7 @@ try {
     if (method !== "conversation.thread.get") assert.deepEqual(result.data, []);
   }
   console.log(
-    "conversation read APIs: PASS (scoped metadata, descendant listing, explicit unmaterialized history; no turns, network, or media)",
+    "conversation read APIs: PASS (scoped metadata, descendant listing, explicit unmaterialized history; loopback only, no turns or media)",
   );
 } finally {
   await connection?.close();

@@ -5,7 +5,6 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
-import { confirmFullAccess } from "../src/core/full-access.ts";
 
 if (process.platform !== "darwin")
   throw new Error("This opt-in probe requires macOS sandbox-exec to deny network access.");
@@ -32,9 +31,10 @@ try {
     argv: [
       "/usr/bin/sandbox-exec",
       "-p",
-      "(version 1) (allow default) (deny network*)",
+      '(version 1) (allow default) (deny network*) (allow network-bind (local ip "localhost:*")) (allow network-inbound (local ip "localhost:*")) (allow network-outbound (remote ip "localhost:*"))',
       ...appServerArgv(process.env["CODEX_PATH"] ?? "codex", entries),
     ],
+    nativeStateDir: root,
     cwd: workspace,
     env: { ...process.env, CODEX_HOME: nativeHome },
     clientVersion: "startup-config-probe",
@@ -63,7 +63,8 @@ try {
         ...extra,
       },
     );
-    confirmFullAccess(response);
+    assert.equal(response["approvalPolicy"], "never");
+    assert.deepEqual(response["sandbox"], { type: "dangerFullAccess" });
     assert.equal(
       response["model"],
       "model" in extra

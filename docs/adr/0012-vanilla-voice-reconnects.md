@@ -1,6 +1,13 @@
 # 0012: Reconnect voice calls without AgentVoice instructions
 
+**Startup-context policy update:** [ADR 0020](0020-native-launch-defaults.md) removes the retained false default; explicit controls and the removal of reconnect instructions remain current.
+
 **Partially superseded by [ADR 0017](0017-remove-spoken-history-replay.md):** quiet resume remains retired, and the saved-speech replay exception described below has now also been removed.
+
+**Default-reference clarification, 2026-09-06:** [ADR 0019](0019-client-server-default-baseline.md)
+supersedes the app-server-only direction stated below. Vanilla now explicitly
+refers to the client-and-server experience, including voice. This does not
+reinstate quiet resume, saved-speech replay or any other retired behavior.
 
 2026-09-05. Supersedes ADR 0010. The operator ruled that the vanilla-by-default
 direction outranks the quiet-resume instruction ADR 0010 installed as a default,

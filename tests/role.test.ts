@@ -258,7 +258,8 @@ describe("role launch", () => {
       const methods = h.native.calls.map((call) => call.method);
       expect(methods[0]).toBe("skills/extraRoots/set");
       expect(h.native.calls[0]!.params).toEqual({ extraRoots: [join(h.dir, "skills")] });
-      expect(methods.indexOf("thread/list")).toBeGreaterThan(0);
+      expect(methods.indexOf("thread/start")).toBeGreaterThan(0);
+      expect(methods).not.toContain("thread/list");
       const start = h.native.calls.find((call) => call.method === "thread/start")!;
       expect(start.params["developerInstructions"]).toBe("role append");
       expect(start.params["config"]).toEqual({ mcp_servers: { srv: { command: "srv" } } });

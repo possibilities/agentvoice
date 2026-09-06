@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AttachmentTicket } from "../attachment/gateway.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceTuiHost, VoiceTuiState } from "../console/tui.ts";
 import type { ServerConfig } from "../core/config.ts";
@@ -28,6 +29,8 @@ export function runRuntimeWorker(
   let factory: ConsoleHostOptions["mediaFactory"];
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: VoiceTuiHost | undefined;
+  let revokeAttachment: (() => void) | undefined;
+  let issueAttachment: (() => AttachmentTicket) | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let readConversation:
     | Parameters<NonNullable<ConsoleHostOptions["onObservationReady"]>>[0]
@@ -171,10 +174,16 @@ export function runRuntimeWorker(
         initialMute: { mic: true, speaker: true },
         runtime: {
           fresh: params.threadId ? false : currentLaunch.provenance.options.fresh,
+          continue: params.threadId ? false : currentLaunch.provenance.options.continue,
           resume: params.threadId ? undefined : currentLaunch.provenance.options.resume,
           exactResume: params.threadId,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,
+          nativeStateDir: currentLaunch.nativeStateDir,
+          onAttachmentReady: (issue, revoke) => {
+            issueAttachment = issue;
+            revokeAttachment = revoke;
+          },
           controlMcp: currentLaunch.control,
           acquireLease,
           onVerifiedThread: (identity) => event("identity", identity),
@@ -236,6 +245,7 @@ export function runRuntimeWorker(
   }
   async function shutdown() {
     stopping = true;
+    revokeAttachment?.();
     clearInterval(tick);
     await host?.shutdown();
     endHost?.();
@@ -282,6 +292,14 @@ export function runRuntimeWorker(
       case "redial":
         await host?.redial();
         return null;
+      case "attachment-ticket": {
+        if (terminalFailure || stopping || !mediaEnabled || !issueAttachment)
+          throw new Error("Attachment is unavailable");
+        const ticket = issueAttachment();
+        if (ticket.threadId !== (params as { threadId?: string })?.threadId)
+          throw new Error("Attachment thread changed");
+        return ticket;
+      }
       case "handoff":
         if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
           return handoffFailure("not_ready");

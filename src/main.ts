@@ -15,18 +15,20 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a foreground Codex voice TUI
 
 Usage:
-  agentvoice --allow-full-access [options]          Continue this workspace's conversation
-  agentvoice console --allow-full-access [options]  Compatibility alias
+  agentvoice [options]                            Start a new conversation in this workspace
+  agentvoice console [options]                    Compatibility alias
+  agentvoice attach [--workspace <dir>] [--thread <id>]
+                                                  Attach a stock Codex TUI to live work
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                                   Print a live MCP client configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
                                                   Print a live read-only event socket path
 
 Options:
-  --allow-full-access      Required each launch: unrestricted files/network, no approvals
+  --allow-full-access      Opt in to unrestricted files/network and no approvals
   --workspace <dir>        Conversation root (default: launch directory)
-  --continue              Continue this workspace's conversation (default)
-  --no-continue            Start a new conversation (--fresh is an alias)
+  --continue              Continue the most recent eligible conversation in this workspace
+  --fresh, --no-continue   Start a new conversation (default)
   --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
   --role <name|path>       Role directory (name under ~/.config/agentroles or a path):
                            its skills, mcp.json and prompt files apply to this launch only
@@ -40,17 +42,18 @@ Options:
   --voice <name>           Voice timbre
   --device <index>         Microphone device (default: system default)
   --output-device <index>  Speaker device (default: system default)
-  --sandbox <mode>         Only danger-full-access is supported
-  --approval-policy <p>    Only never is supported
+  --sandbox <mode>         Native sandbox mode (default: native configuration)
+  --approval-policy <p>    Native approval policy (default: native configuration)
   --codex <path>           Stock Codex executable (default: $CODEX_PATH or codex)
   --debug                 Per-launch protocol/media log under the state directory
   --help                  Show help
 
 The foreground controller retains a disposable voice runtime and its stock Codex child.
 Quitting stops running work; native conversation history remains resumable.
-Full access is mandatory and verified with Codex; no config/environment opt-in.
-No permission dialogs. Connector consent/tool questions are refused visibly.
-No background services or remote attachment.
+Permissions follow native configuration unless explicitly overridden.
+--allow-full-access wins permission settings; native managed requirements still apply.
+Use agentvoice attach to answer native approvals and tool questions in the stock TUI.
+Local TUI attachment is always available; no background service or cross-machine attachment.
 
 Prompts are opt-in files beside the selected config (not the workspace), each one
 native Codex control: VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
@@ -60,7 +63,7 @@ and an append for the same agent cannot both be present. Raw native fields remai
 available in orchestrator.extra / voice.extra.
 
 Settings and prompt files load per runtime generation; runtime restart rereads them.
-Raw extra fields can override named CLI settings; see README for precedence.
+Raw extra fields can override named CLI settings except Fast/full-access flags; see README.
 
 MCP config export selects one live controller by canonical workspace (the launch
 directory by default). Use --thread when more than one controller is live there.
@@ -112,6 +115,7 @@ export interface ParsedArgs {
   configPath?: string;
   debug: boolean;
   fresh: boolean;
+  continue: boolean;
   help: boolean;
   fast?: boolean;
   allowFullAccess?: boolean;
@@ -124,6 +128,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
   let configPath: string | undefined;
   let debug = false;
   let fresh = false;
+  let continueLatest = false;
   let help = false;
   let fast: boolean | undefined;
 
@@ -150,6 +155,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
       else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
+      else if (flag === "--continue") continueLatest = true;
       else if (flag === "--fast" || flag === "--no-fast") fast = flag === "--fast";
       else if (flag === "--help") help = true;
       continue;
@@ -182,6 +188,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     configPath,
     debug,
     fresh,
+    continue: continueLatest,
     help,
     ...(fast === undefined ? {} : { fast }),
     ...(seen.has("--allow-full-access") ? { allowFullAccess: true } : {}),
@@ -201,6 +208,7 @@ export interface ConsoleOptions {
   outputDeviceIndex?: number;
   debug: boolean;
   fresh: boolean;
+  continue: boolean;
   resume?: string;
 }
 export type ParsedConsoleCommand =
@@ -210,10 +218,6 @@ export type ParsedConsoleCommand =
 export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
   const parsed = parseArgs(argv);
   if (parsed.help) return { help: true };
-  if (!parsed.allowFullAccess)
-    throw new UsageError(
-      "AgentVoice requires --allow-full-access on every launch: unrestricted filesystem/network access and no command/file approval prompts.",
-    );
   const device = parsed.values["device"];
   const outputDevice = parsed.values["output-device"];
   const resume = parsed.values["resume"];
@@ -227,6 +231,7 @@ export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
         : { outputDeviceIndex: parseDeviceIndex("--output-device", outputDevice) }),
       debug: parsed.debug,
       fresh: parsed.fresh,
+      continue: parsed.continue,
       ...(resume === undefined ? {} : { resume }),
     },
   };
@@ -346,6 +351,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
+
+    if (command === "attach") {
+      const selected = parseMcpConfigCommand(argv.slice(1));
+      if (selected.help) {
+        console.log(USAGE);
+        return 0;
+      }
+      const { runAttachment } = await import("./attachment/launcher.ts");
+      return await runAttachment(selected, stateDirectory(process.env, homedir()));
+    }
     if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")
       throw new UsageError(
@@ -353,7 +368,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       );
     if (command === "server" || command === "resident" || command === "remote") {
       throw new UsageError(
-        `${command} has been retired. Run agentvoice --allow-full-access [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
+        `${command} has been retired. Run agentvoice [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
       );
     }
     return await runConsoleCommand(command === "console" ? argv.slice(1) : argv);

@@ -5,7 +5,7 @@ The persistent foreground controller owns this API, the exact conversation
 identity, operation journal, Unix socket, and loopback MCP host. Its disposable
 voice runtime may be replaced without replacing this API.
 
-The controller exposes three operations: inspect status, redial
+The MCP and Unix control surfaces expose three operations: inspect status, redial
 voice/WebRTC, and replace the full runtime. It does not accept a thread ID,
 workspace, PID, socket path, or component selector from callers.
 
@@ -59,6 +59,42 @@ AgentVoice registers this MCP server for each orchestration thread as
 `bearer_token_env_var`. Registration is not readiness: the controller/runtime
 also checks the native MCP catalog for a connected server and the exact tool
 set before it reports the bridge ready.
+
+## Private TUI launcher bootstrap
+
+`agentvoice attach [--workspace <dir>] [--thread <id>]`
+reuses live Unix status discovery. It then sends an authenticated `POST /tui/attach`
+to the controller's loopback HTTP host with `{instanceId, generation, threadId,
+workspace}`. This is a launcher-only endpoint, not a fourth MCP tool or Unix
+operation. It accepts no Origin and requires the same exact Host and bearer.
+
+The controller must be ready and idle
+with respect to lifecycle operations, and still match the target before and after
+its private runtime request. The result contains the selected thread/workspace,
+absolute Codex executable, gateway URL and an ephemeral bearer ticket. It is
+returned with `Cache-Control: no-store`, never in status, diagnostics or tool
+results. Every controller supports attachment; there is no opt-in or permission
+gate. The native app-server token never leaves the runtime. The runtime uses
+WebSocket for all native RPC, with no stdio transport branch.
+
+The launcher must open its watcher before the TUI connects. Tickets admit one
+watcher/TUI pair within 30 seconds, with at most eight grants per runtime. The
+watcher controls launcher lifetime; native protocol initialization and correlation
+remain per-client. Frames are capped at 4 MiB, pending requests at 64, and request
+timeouts at 30 seconds. Requests outside the selected-thread allowlist are
+rejected before native dispatch. Native command/file/permission approvals, tool
+questions and MCP elicitations for the selected thread are forwarded to the TUI;
+only answers matching a forwarded request ID pass back to native. Pending human
+request IDs are bounded at 64 per connection, without a response deadline.
+Native Codex owns pending requests, first-answer resolution and replay on resume.
+AgentVoice neither auto-refuses them nor stores another approval queue. TUI resume
+overrides are stripped to preserve the live settings; explicit settings updates
+can change native permissions.
+
+Fresh and runtime teardown revoke all grants before changing identity or stopping
+media. Redial keeps them. Lost connections require explicit reattachment and do
+not replay input. See [ADR 0022](adr/0022-websocket-native-tui.md) for scope and
+[README](../README.md#attach-a-stock-codex-tui) for launch instructions.
 
 ## Unix socket transport
 

@@ -2,7 +2,6 @@
 /** Disposable protocol fixture: native-like durable history, no auth/network/inference. */
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
 const root = process.cwd();
 const store = join(root, "native-threads.json");
@@ -11,16 +10,17 @@ const threads: Array<Record<string, unknown>> = existsSync(store)
   : [];
 let config: Record<string, unknown> = {};
 const loaded = new Set<string>();
-const full = { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
-const input = createInterface({ input: process.stdin });
-for await (const line of input) {
+const full = existsSync(join(root, "native-permissions.json"))
+  ? JSON.parse(readFileSync(join(root, "native-permissions.json"), "utf8"))
+  : { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
+function handle(line: string, send: (text: string) => void) {
   const request = JSON.parse(line);
   const params = request.params ?? {};
   appendFileSync(
     join(root, "native-audit.jsonl"),
     `${JSON.stringify({ pid: process.pid, method: request.method, params })}\n`,
   );
-  if (request.id === undefined) continue;
+  if (request.id === undefined) return;
   let result: unknown = {};
   if (request.method === "thread/list") result = { data: threads, nextCursor: null };
   if (request.method === "thread/loaded/list") result = { data: [...loaded], nextCursor: null };
@@ -64,7 +64,7 @@ for await (const line of input) {
   }
   if (request.method === "thread/read" || request.method === "thread/resume") {
     if (request.method === "thread/resume") {
-      config = params.config ?? {};
+      if (params.config) config = params.config;
       loaded.add(params.threadId);
     }
     result = {
@@ -90,15 +90,15 @@ for await (const line of input) {
       ? readFileSync(join(root, "handoff-mode"), "utf8")
       : "accepted";
     if (mode === "refused") {
-      process.stdout.write(
+      send(
         `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32600, message: JSON.stringify(params) } })}\n`,
       );
-      continue;
+      return;
     }
     result =
       mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
   }
-  process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
+  send(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
   if (request.method === "turn/start" && (result as { turn?: { id?: string } }).turn?.id) {
     const item = {
       id: "voice-fixture-item",
@@ -118,11 +118,11 @@ for await (const line of input) {
         { threadId: params.threadId, item: { ...item, text: "native voice fixture" } },
       ],
     ])
-      process.stdout.write(`${JSON.stringify({ method, params: data })}\n`);
-    process.stdout.write(
+      send(`${JSON.stringify({ method, params: data })}\n`);
+    send(
       `${JSON.stringify({ method: "turn/started", params: { threadId: params.threadId, turn: (result as { turn: unknown }).turn } })}\n`,
     );
-    process.stdout.write(
+    send(
       `${JSON.stringify({ method: "thread/status/changed", params: { threadId: params.threadId, status: { type: "active", activeFlags: [] } } })}\n`,
     );
     for (const [method, data] of [
@@ -154,6 +154,23 @@ for await (const line of input) {
         },
       ],
     ])
-      process.stdout.write(`${JSON.stringify({ method, params: data })}\n`);
+      send(`${JSON.stringify({ method, params: data })}\n`);
   }
 }
+
+const token = readFileSync(process.argv[process.argv.indexOf("--ws-token-file") + 1]!, "utf8");
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch(request, server) {
+    if (request.headers.get("authorization") !== `Bearer ${token}`)
+      return new Response("unauthorized", { status: 401 });
+    if (!server.upgrade(request)) return new Response("upgrade required", { status: 400 });
+  },
+  websocket: {
+    message(peer, text) {
+      handle(String(text), (response) => peer.send(response.trim()));
+    },
+  },
+});
+console.log(`listening on: ws://127.0.0.1:${server.port}`);

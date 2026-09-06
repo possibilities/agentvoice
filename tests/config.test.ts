@@ -17,8 +17,8 @@ describe("resolveConfig", () => {
   test("applies defaults when nothing is set", () => {
     const config = resolveConfig({}, {}, {}, HOME);
     expect(config.codex).toBe("codex");
-    expect(config.orchestrator.sandbox).toBe("danger-full-access");
-    expect(config.orchestrator.approvalPolicy).toBe("never");
+    expect(config.orchestrator.sandbox).toBeUndefined();
+    expect(config.orchestrator.approvalPolicy).toBeUndefined();
     expect(config.orchestrator.workspace).toBe(process.cwd());
     expect(config.orchestrator.model).toBeUndefined();
     expect(config.orchestrator.effort).toBeUndefined();
@@ -90,9 +90,9 @@ describe("resolveConfig", () => {
     expect(() =>
       resolveConfig({}, { orchestrator: { permissions: "p", sandbox: "read-only" } }, {}, HOME),
     ).toThrow(/cannot be combined/);
-    expect(() => resolveConfig({}, { orchestrator: { permissions: "p" } }, {}, HOME)).toThrow(
-      "full-access-only",
-    );
+    expect(
+      resolveConfig({}, { orchestrator: { permissions: "p" } }, {}, HOME).orchestrator.permissions,
+    ).toBe("p");
   });
 
   test("configDir defaults to the config directory", () => {
@@ -634,10 +634,10 @@ describe("parseArgs characterization", () => {
 });
 
 describe("parseConsoleCommand", () => {
-  test("defaults to system devices, resume, and no debug", () => {
+  test("defaults to system devices, a fresh conversation, and no debug", () => {
     expect(parseConsoleCommand(["--allow-full-access"])).toMatchObject({
       help: false,
-      options: { debug: false, fresh: false },
+      options: { debug: false, fresh: false, continue: false },
     });
   });
 
@@ -656,6 +656,7 @@ describe("parseConsoleCommand", () => {
       outputDeviceIndex: 2,
       debug: true,
       fresh: true,
+      continue: false,
     });
   });
 

@@ -1,5 +1,11 @@
 # AgentVoice vocabulary
 
+**Vanilla Codex** — The Codex client-and-server experience, including the voice
+frontend and working agent. AgentVoice supplies its own frontend, so an explicit
+value matching Codex's client can be part of vanilla behavior. Distinguish client
+selection, app-server omission fallback and deliberate AgentVoice policy; omission
+alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
+
 **AgentVoice controller / Console** — The retained foreground process: terminal
 UI, exact workspace/thread identity, thread leases, durable control operations,
 and private control transports. It is not a resident service and ends when the
@@ -12,24 +18,41 @@ while the controller and terminal stay open. RTP and PCM never cross controller
 IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
-owned by the voice runtime. Native JSONL over stdin/stdout; no resident socket
-or service. Codex can create its own tool processes. Runtime replacement or
-quit closes the owned child/process group.
+owned by the voice runtime. Native RPC uses an authenticated loopback WebSocket;
+stdio carries process diagnostics only. No resident service.
+Codex can create its own tool processes. Runtime replacement or quit closes the
+owned child/process group.
 
-**Connection** — The native stdio RPC channel to that child.
+**Connection** — The runtime-private native WebSocket RPC channel to that child.
+
+**TUI attachment** — A stock Codex TUI subscribing to the current live
+orchestrator thread through a guarded local gateway. It follows native work and
+submits typed input without owning voice or the child. Always available through
+`agentvoice attach`; no launch opt-in or full-access requirement. Fresh, runtime
+replacement and quit revoke it; redial preserves it. Joining preserves the live
+thread's settings; explicit native setting changes and human answers flow through.
+
+**Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
+It validates exact thread/workspace before dispatch, filters unrelated/realtime
+notifications, and forwards native human questions and correlated TUI answers.
+Native Codex owns pending requests and replay; AgentVoice never races the TUI
+with a refusal. A private controller bootstrap issues a short-lived admission
+ticket; its native listener credential is never given to the TUI. See ADR 0022.
 
 **Workspace** — The canonical existing root chosen once for this launch. Defaults
 to launch cwd unless explicitly configured or overridden by --workspace. Used
 for native conversation lookup and all AgentVoice-created threads. Not a sandbox.
 
-**Full access** — Required execution posture: native danger-full-access / never,
-verified on every thread start/resume. --allow-full-access is mandatory launch
-consent, not a config setting. No approval UI; connector/tool interaction is
-refused visibly and remains distinct from execution permissions.
+**Full access** — Optional launch override: --allow-full-access explicitly selects
+native danger-full-access / never. Without the flag, unset permission fields defer
+to Codex; configured modes/profiles are accepted. Managed requirements still apply.
+Native human interaction uses the attached stock TUI; unsupported client requests
+are refused visibly.
 
 **Conversation / main thread** — A native Codex thread tagged
 agentvoice-orchestrator. Its saved history can continue across app launches.
-The latest eligible thread in the exact workspace is the default selection.
+Ordinary launch creates a new thread; explicit --continue selects the latest
+eligible thread in the exact workspace.
 
 **Orchestrator agent** — The working Codex agent on that main thread: tools,
 filesystem work and native voice handoffs. The term is retained in config keys;
@@ -63,15 +86,17 @@ share one validated handler. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
-This frontend default is separate from native fallback (v1 in Codex 0.153.3),
-the work model and --fast. Initial items require effective v3.
+It aligns with the inspected desktop's conditional client-owned-call path.
+The app-server's omitted-version fallback (v1 in Codex 0.153.3/0.153.4) is a
+different reference, separate from the work model and --fast. Initial items
+require effective v3.
 
 **Fresh** — Stop old media and begin a new main thread in the same workspace.
 Old history remains; native work in the old conversation stays there.
---no-continue/--fresh selects this policy at launch.
+Ordinary launch uses this policy; --no-continue/--fresh makes it explicit.
 
-**Continue / resume** — Resume native eligible working-thread history; default
-and --continue select the latest eligible thread, --resume chooses an exact ID.
+**Continue / resume** — Explicitly resume native eligible working-thread history:
+--continue selects the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. AgentVoice does not read or inject saved speech
 into new voice calls. Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
 is a separate native task submission after connection readiness.
@@ -83,7 +108,8 @@ Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
-defaults voice.include-startup-context to false; explicit true opts in. Separate
+omits voice.include-startup-context unless configured, allowing native inclusion.
+Explicit false skips it and true requests it. Separate
 from working-thread continuation and native global/workspace instructions.
 
 **Prompt files** — Optional convention-named files in the selected config's
@@ -134,7 +160,8 @@ paired device, discovery, custom Worker, Worker report, account profile, idle
 account rotation and Quiet resume (ADR 0010, retired by ADR 0012) refer to retired
 implementations in old ADRs, not current runtime components. The current
 controller/runtime split is a foreground parent/child topology, not a resident
-server or remote attachment feature. Native Codex subagents are separate from
+server or cross-machine attachment feature. Local stock TUI attachment is the
+mechanism described above. Native Codex subagents are separate from
 the removed AgentVoice worker system.
 
 **Lifecycle feed** — The retained controller's read-only Unix event endpoint for

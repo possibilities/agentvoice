@@ -29,7 +29,11 @@ test("history responses cannot cross runtime replacement and old content cannot 
     instanceId: "instance",
     stateDir: root,
     version: "test",
-    provenance: { parsed: parseArgs([]), options: { debug: false, fresh: false }, launchCwd: root },
+    provenance: {
+      parsed: parseArgs([]),
+      options: { debug: false, fresh: false, continue: true },
+      launchCwd: root,
+    },
     control: { name: "agentvoice_control", server: {}, tools: [], env: {} },
     lease: () => () => {},
     spawn: (_generation, event, lease) => {

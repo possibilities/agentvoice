@@ -1,4 +1,4 @@
-# Conversation observation for independent UIs
+# 0023: Conversation observation for independent UIs
 
 Extend the controller-owned read-only event socket to protocol 2 with typed native
 conversation events, bounded in-memory replay and live-item snapshots, and explicit
