@@ -12,11 +12,25 @@ while the controller and terminal stay open. RTP and PCM never cross controller
 IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
-owned by the voice runtime. Native JSONL over stdin/stdout; no resident socket
-or service. Codex can create its own tool processes. Runtime replacement or
-quit closes the owned child/process group.
+owned by the voice runtime. Native JSONL over stdin/stdout by default; opt-in
+TUI attachment uses an authenticated loopback WebSocket. No resident service.
+Codex can create its own tool processes. Runtime replacement or quit closes the
+owned child/process group.
 
-**Connection** — The native stdio RPC channel to that child.
+**Connection** — The native RPC channel to that child: stdio by default,
+a runtime-private WebSocket with local TUI attachment enabled.
+
+**TUI attachment** — An opt-in stock Codex TUI subscribing to the current live
+orchestrator thread through a guarded local gateway. It follows native work and
+submits typed input without owning voice or the child. Requires a launch with
+--allow-tui-attach, then `agentvoice attach --allow-full-access`. Fresh, runtime
+replacement and quit revoke it; redial preserves it.
+
+**Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
+It validates exact thread/workspace and compatible permissions before dispatch,
+filters unrelated/realtime notifications, and keeps server questions with the
+owner. A private controller bootstrap issues a short-lived admission ticket;
+its native listener credential is never given to the TUI. See ADR 0017.
 
 **Workspace** — The canonical existing root chosen once for this launch. Defaults
 to launch cwd unless explicitly configured or overridden by --workspace. Used
@@ -136,5 +150,6 @@ paired device, discovery, custom Worker, Worker report, account profile, idle
 account rotation and Quiet resume (ADR 0010, retired by ADR 0012) refer to retired
 implementations in old ADRs, not current runtime components. The current
 controller/runtime split is a foreground parent/child topology, not a resident
-server or remote attachment feature. Native Codex subagents are separate from
+server or cross-machine attachment feature. Local stock TUI attachment is the
+separate opt-in mechanism described above. Native Codex subagents are separate from
 the removed AgentVoice worker system.

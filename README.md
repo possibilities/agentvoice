@@ -49,6 +49,50 @@ the JSON private and generate it again after a new launch. Claude Code and MCP
 Inspector accept this JSON shape directly. Codex uses a different native MCP
 configuration shape, so this output is not a Codex configuration file.
 
+### Attach a stock Codex TUI
+
+Opt in when starting the voice app, then attach from a second terminal:
+
+```sh
+# First terminal, from this prepared checkout:
+bun run src/main.ts --allow-full-access --allow-tui-attach --workspace ~/code/myapp
+
+# Second terminal, from the same checkout:
+bun run src/main.ts attach --allow-full-access --workspace ~/code/myapp
+```
+
+Installed commands use the same flags with `agentvoice`. Attachment selects a
+live controller by canonical workspace; add `--thread <exact-id>` if more than
+one matches. It launches the same stock Codex executable as the voice runtime
+and resumes its exact live orchestrator thread. Type to start work or steer an
+active turn, and follow native messages and tool activity. Steering follows
+Codex's normal delivery timing; it may queue until a model/tool boundary.
+
+This experimental path was checked with stock Codex **0.153.4**. It requires a
+new launch with `--allow-tui-attach`; an existing stdio-only launch cannot gain
+attachment through runtime restart. Default launches keep native stdio.
+
+The attachment gateway permits selected-thread reads, typed turns, interruption,
+and compatible session settings. New/forked threads, history mutations,
+persistent configuration/account changes, plugin controls and realtime control
+are unsupported. The TUI does not show a live voice transcript or carry audio.
+It cannot answer tool questions: AgentVoice continues to refuse those visibly.
+The gateway checks requests before forwarding them, preserving full access / never
+and the selected workspace/thread.
+
+Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
+interrupt or running-task Exit action can interrupt native work. Redial preserves
+attachment; Fresh, runtime restart, native failure, or AgentVoice quit disconnects
+it. Run `attach` again for the current thread after a disconnect. No automatic
+reconnect or input replay occurs. Use `agentvoice attach` instead of the stock
+TUI's printed reconnect command, whose one-use ticket has ended.
+Native and gateway credentials remain private;
+there is no arbitrary endpoint flag or cross-machine mode.
+
+Tests establish native text follow-along and steering using local fake model
+responses, plus controller lifecycle behavior with fake media. Simultaneous live
+voice and TUI operation still needs a live trial. See [ADR 0017](docs/adr/0017-guarded-tui-attachment.md).
+
 ### Full access is required
 
 Every voice launch requires `--allow-full-access`, including `console`, continue
@@ -337,9 +381,10 @@ redial reuse the active runtime snapshot; a full runtime restart rereads the
 pinned launch inputs and replaces Codex. It cannot adopt later shell-environment
 changes. Incompatible permission selectors and
 disabled realtime support fail clearly; `cwd` must be selected with `--workspace`.
-The full-access opt-in, native permission verification and owned stdio transport
-remain mandatory. Other native keys remain passthrough, not a promise that your
-Codex version supports them or detects typos. No global config, prompt or skill
+The full-access opt-in, native permission verification and owned child
+remain mandatory. Native transport is stdio unless local TUI attachment is enabled.
+Other native keys remain passthrough, not a promise that your Codex version
+supports them or detects typos. No global config, prompt or skill
 policy is written. See [native override syntax](https://developers.openai.com/codex/config-advanced/#one-off-overrides-from-the-cli).
 
 ### Native voice protocol
@@ -646,7 +691,9 @@ configuration, services or other account tools are changed by this removal.
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
 `thread-locks/`, private live-controller discovery records under `control/`, and
-`runs/<time>-<pid>.log` with `--debug`. Lock files are inert after exit; the
+`runs/<time>-<pid>.log` with `--debug`. Opt-in TUI attachment also creates a
+private `tui-native-*` directory holding the owned listener token; normal runtime
+shutdown removes it. Lock files are inert after exit; the
 kernel owns their lifetime. Discovery records contain the loopback bearer
 capability, use private directory and file modes, and are removed on normal
 controller shutdown. `mcp-config` validates the live control socket and ignores

@@ -2,6 +2,8 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { attachmentTargetSchema } from "../attachment/bootstrap.ts";
+import type { AttachmentTicket } from "../attachment/gateway.ts";
 import { type AudioTarget, MuteGate } from "../console/audio-control.ts";
 import {
   createVoiceTui,
@@ -97,6 +99,27 @@ export class RuntimeController implements ControlBackend {
       currentOperation: this.operation && structuredClone(this.operation),
       recentOperations: this.journal.all().slice(-16).map(publicOperation),
     };
+  }
+  async attachmentTicket(value: unknown): Promise<AttachmentTicket> {
+    const target = attachmentTargetSchema.parse(value);
+    const current = () =>
+      !this.closed &&
+      !this.busy &&
+      this.phase === "ready" &&
+      target.instanceId === this.options.instanceId &&
+      target.generation === this.generation &&
+      target.threadId === this.threadId &&
+      target.workspace === this.workspace;
+    if (!this.options.provenance.parsed.allowTuiAttach || !current() || !this.active)
+      throw new Error(
+        "Attachment unavailable; launch with --allow-tui-attach and select the current live thread",
+      );
+    const active = this.active;
+    const ticket = await active.request<AttachmentTicket>("attachment-ticket", {
+      threadId: this.threadId,
+    });
+    if (!current() || active !== this.active) throw new Error("Attachment target changed");
+    return ticket;
   }
   state(): VoiceTuiState {
     const ready = this.phase === "ready";
@@ -211,6 +234,9 @@ export class RuntimeController implements ControlBackend {
         version: this.options.version,
         control: this.options.control,
         workspace: this.workspace || undefined,
+        tuiNativeStateDir: this.options.provenance.parsed.allowTuiAttach
+          ? this.options.stateDir
+          : undefined,
       };
       const info = await candidate.process.request<CandidateInfo>("preflight", launch);
       this.assertOpen();
@@ -522,7 +548,12 @@ export async function runController(provenance: LaunchProvenance, version: strin
     restart: (request) => current().restart(request),
   };
   try {
-    control = await startControlServer({ backend, stateDir, instanceId });
+    control = await startControlServer({
+      backend,
+      stateDir,
+      instanceId,
+      attachment: (value) => current().attachmentTicket(value),
+    });
     controller = new RuntimeController({
       instanceId,
       stateDir,

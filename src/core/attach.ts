@@ -1,6 +1,7 @@
 /** Native JSONL transport to the Codex child owned by this launch. */
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { validateCodexConfig } from "./codex-config.ts";
+import { type NativeEndpoint, NativeListener } from "./native-listener.ts";
 import { type OwnedProcessOutcome, OwnedProcessTree } from "./owned-processes.ts";
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -54,6 +55,7 @@ interface PendingRequest {
 
 export interface AttachOptions {
   argv: string[];
+  tuiNativeStateDir?: string;
   cwd: string;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
@@ -82,6 +84,10 @@ export function appServerArgv(codex: string, overrides: readonly string[] = []):
 
 export class AppServerConnection {
   private child: ChildProcessWithoutNullStreams | null = null;
+  private listener: NativeListener | undefined;
+  get nativeEndpoint(): NativeEndpoint | undefined {
+    return this.listener?.endpoint;
+  }
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
   private closed = false;
@@ -105,6 +111,17 @@ export class AppServerConnection {
       if (options.signal?.aborted) throw new AppServerError("Codex startup cancelled");
       connection.open();
       options.signal?.addEventListener("abort", abort, { once: true });
+      if (connection.listener)
+        await connection.listener.connect(
+          (text) => {
+            try {
+              connection.dispatchText(text);
+            } catch {
+              connection.fail("Invalid native WebSocket frame");
+            }
+          },
+          () => connection.fail("Native WebSocket closed"),
+        );
       await connection.request("initialize", {
         clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
         capabilities: { experimentalApi: true, requestAttestation: false },
@@ -127,7 +144,11 @@ export class AppServerConnection {
   }
 
   private open(): void {
-    const [bin, ...args] = this.options.argv;
+    if (this.options.tuiNativeStateDir)
+      this.listener = new NativeListener(this.options.tuiNativeStateDir);
+    const [bin, ...args] = this.listener
+      ? this.listener.argv(this.options.argv)
+      : this.options.argv;
     if (!bin) throw new AppServerError("no Codex executable configured");
     const child = spawn(bin, args, {
       cwd: this.options.cwd,
@@ -159,15 +180,18 @@ export class AppServerConnection {
     });
     child.stdin.on("error", (error) => this.fail(`Codex stdin: ${error.message}`));
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => this.handleData(chunk));
+    child.stdout.on("data", (chunk: string) =>
+      this.listener ? this.listener.observe(chunk) : this.handleData(chunk),
+    );
     child.stdout.on("end", () => {
       if (!this.closing && !this.closed) this.fail("Codex stdout closed");
     });
     child.stdout.on("error", (error) => this.fail(error.message));
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) =>
-      this.options.debug?.(`codex stderr: ${chunk.trimEnd()}`),
-    );
+    child.stderr.on("data", (chunk: string) => {
+      this.listener?.observe(chunk);
+      if (!this.listener) this.options.debug?.(`codex stderr: ${chunk.trimEnd()}`);
+    });
     child.stderr.on("error", (error) => this.options.debug?.(`Codex stderr: ${error.message}`));
   }
 
@@ -209,7 +233,9 @@ export class AppServerConnection {
       let cleanup: OwnedProcessOutcome | undefined;
       try {
         await this.ownedProcesses?.snapshotNow();
-        this.child?.stdin.end();
+        this.listener?.close();
+        if (this.listener && !this.reaped) this.child?.kill("SIGTERM");
+        else this.child?.stdin.end();
         await this.waitForExit(this.options.shutdownGraceMs ?? CLOSE_GRACE_MS);
         cleanup = await this.ownedProcesses?.waitForCapturedExit(0);
         this.shutdownForced = !this.reaped || cleanup?.complete === false;
@@ -248,6 +274,7 @@ export class AppServerConnection {
         this.ownedProcesses?.stopTracking();
         this.child?.stdout.destroy();
         this.child?.stderr.destroy();
+        this.listener?.cleanup();
       }
       if (failure) throw failure;
       if (!this.reaped || cleanup?.complete === false) {
@@ -277,7 +304,8 @@ export class AppServerConnection {
     const text = JSON.stringify(message);
     this.options.debug?.(`-> ${text}`);
     // Writable owns buffering/backpressure; a false return is not a partial write.
-    this.child.stdin.write(`${text}\n`);
+    if (this.listener) this.listener.send(text);
+    else this.child.stdin.write(`${text}\n`);
   }
 
   private handleData(chunk: string): void {

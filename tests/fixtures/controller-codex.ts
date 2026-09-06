@@ -11,15 +11,14 @@ const threads: Array<Record<string, unknown>> = existsSync(store)
   : [];
 let config: Record<string, unknown> = {};
 const full = { approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } };
-const input = createInterface({ input: process.stdin });
-for await (const line of input) {
+function handle(line: string, send: (text: string) => void) {
   const request = JSON.parse(line);
   const params = request.params ?? {};
   appendFileSync(
     join(root, "native-audit.jsonl"),
     `${JSON.stringify({ pid: process.pid, method: request.method, params })}\n`,
   );
-  if (request.id === undefined) continue;
+  if (request.id === undefined) return;
   let result: unknown = {};
   if (request.method === "thread/list") result = { data: threads, nextCursor: null };
   if (request.method === "thread/start") {
@@ -34,7 +33,7 @@ for await (const line of input) {
     result = { thread, ...full, model: params.model ?? "native-default" };
   }
   if (request.method === "thread/read" || request.method === "thread/resume") {
-    if (request.method === "thread/resume") config = params.config ?? {};
+    if (request.method === "thread/resume" && params.config) config = params.config;
     result = {
       thread: threads.find((t) => t["id"] === params.threadId),
       ...full,
@@ -59,13 +58,36 @@ for await (const line of input) {
       ? readFileSync(join(root, "handoff-mode"), "utf8")
       : "accepted";
     if (mode === "refused") {
-      process.stdout.write(
+      send(
         `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32600, message: JSON.stringify(params) } })}\n`,
       );
-      continue;
+      return;
     }
     result =
       mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
   }
-  process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
+  send(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
+}
+
+const listen = process.argv[process.argv.indexOf("--listen") + 1];
+if (listen === "ws://127.0.0.1:0") {
+  const token = readFileSync(process.argv[process.argv.indexOf("--ws-token-file") + 1]!, "utf8");
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request, server) {
+      if (request.headers.get("authorization") !== `Bearer ${token}`)
+        return new Response("unauthorized", { status: 401 });
+      if (!server.upgrade(request)) return new Response("upgrade required", { status: 400 });
+    },
+    websocket: {
+      message(peer, text) {
+        handle(String(text), (response) => peer.send(response.trim()));
+      },
+    },
+  });
+  console.log(`listening on: ws://127.0.0.1:${server.port}`);
+} else {
+  const input = createInterface({ input: process.stdin });
+  for await (const line of input) handle(line, (response) => process.stdout.write(response));
 }
