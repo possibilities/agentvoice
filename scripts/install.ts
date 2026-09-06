@@ -221,7 +221,7 @@ async function install(): Promise<void> {
       );
     }
     console.log(
-      "No services, prompts, credentials or Codex settings changed. Launch separately with --allow-full-access.",
+      "No services, prompts, credentials or Codex settings changed. Launch separately with agentvoice.",
     );
   } finally {
     for (const [stage, name] of [

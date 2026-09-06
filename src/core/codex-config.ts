@@ -1,5 +1,3 @@
-import { validateFullAccessParams } from "./full-access.ts";
-
 /** Check argv shape without interpreting or echoing potentially secret values. */
 export function codexConfigEntryIssue(entry: string): string | undefined {
   const equals = entry.indexOf("=");
@@ -18,18 +16,11 @@ function record(value: unknown): value is Record<string, unknown> {
  * Interpret only product-invariant keys for validation. Original strings, not
  * this tree, go to Codex. Mirrors utils/cli/config_override.rs (TOML then raw
  * string fallback) and config/overrides.rs (ordered dotted-path replacement).
- * Native Codex remains authoritative and effective permissions are checked
- * again on thread responses; this is not a general native config validator.
+ * Native Codex remains authoritative for permission configuration; this is
+ * not a general native config validator.
  */
 export function validateCodexConfig(entries: readonly string[] = []): void {
-  const guarded = new Set([
-    "sandbox_mode",
-    "approval_policy",
-    "default_permissions",
-    "profiles",
-    "features",
-    "cwd",
-  ]);
+  const guarded = new Set(["profiles", "features", "cwd"]);
   const tree: Record<string, unknown> = Object.create(null);
   for (const [index, entry] of entries.entries()) {
     const issue = codexConfigEntryIssue(entry);
@@ -64,7 +55,6 @@ export function validateCodexConfig(entries: readonly string[] = []): void {
       configurable: true,
     });
   }
-  validateFullAccessParams({ config: tree }, "codex-config");
   if (Object.hasOwn(tree, "cwd"))
     throw new Error("codex-config.cwd cannot select the workspace; use --workspace");
   const checkFeatures = (config: Record<string, unknown>, path: string) => {

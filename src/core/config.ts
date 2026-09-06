@@ -42,7 +42,6 @@ import {
   VOICE_KEYS,
   type VoiceValues,
 } from "./config-schema.ts";
-import { validateFullAccessParams } from "./full-access.ts";
 import { ROLE_PROMPT_FILES, resolveRolePath } from "./role.ts";
 
 export type {
@@ -77,8 +76,8 @@ export {
 /** Primes the orchestrator agent: the codex thread that does the actual work. */
 export interface OrchestratorConfig {
   workspace: string;
-  sandbox: SandboxMode;
-  approvalPolicy: ApprovalPolicy;
+  sandbox?: SandboxMode;
+  approvalPolicy?: ApprovalPolicy;
   model?: string;
   effort?: string;
   personality?: Personality;
@@ -113,6 +112,8 @@ export interface VoiceConfig {
 }
 
 export interface ServerConfig {
+  /** Launch-only permission opt-in; native managed requirements remain authoritative. */
+  allowFullAccess?: boolean;
   codex: string;
   /** Ordered native startup -c arguments; never shell-evaluated or hot-reloaded. */
   codexConfig?: string[];
@@ -567,6 +568,7 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
 // ---------------------------------------------------------------------------
 
 export interface ResolveOptions {
+  allowFullAccess?: boolean;
   launchCwd?: string;
   debug?: boolean;
   /** Directory scanned for convention prompt files; defaults to the default config directory. */
@@ -604,7 +606,7 @@ export function resolveConfig(
       : resolveRolePath(roleSpec, env, home, options.launchCwd ?? process.cwd());
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
-  if (permissions !== undefined && explicitSandbox !== undefined) {
+  if (!options.allowFullAccess && permissions !== undefined && explicitSandbox !== undefined) {
     throw new ConfigError(
       `orchestrator.permissions cannot be combined with orchestrator.sandbox; set only one`,
     );
@@ -639,8 +641,8 @@ export function resolveConfig(
 
   const orchestrator: OrchestratorConfig = {
     workspace,
-    sandbox: explicitSandbox ?? "danger-full-access",
-    approvalPolicy: pickOrchestrator("approval-policy") ?? "never",
+    sandbox: explicitSandbox,
+    approvalPolicy: pickOrchestrator("approval-policy"),
     model: pickOrchestrator("model"),
     effort: pickOrchestrator("effort"),
     personality: pickOrchestrator("personality"),
@@ -670,22 +672,8 @@ export function resolveConfig(
     extra: pickVoice("extra"),
   };
 
-  try {
-    validateFullAccessParams(
-      {
-        sandbox: orchestrator.sandbox,
-        permissions: orchestrator.permissions,
-        approvalPolicy: orchestrator.approvalPolicy,
-        config: orchestrator.config,
-      },
-      "orchestrator",
-    );
-    validateFullAccessParams(orchestrator.extra ?? {}, "orchestrator.extra");
-  } catch (error) {
-    throw new ConfigError(error instanceof Error ? error.message : String(error));
-  }
-
   return {
+    ...(options.allowFullAccess ? { allowFullAccess: true } : {}),
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     ...(codexConfig.length > 0 ? { codexConfig } : {}),
     debug: options.debug ?? false,

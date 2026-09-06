@@ -62,7 +62,7 @@ describe("generated schema invariants", () => {
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema["title"]).toBe("agentvoice configuration");
     expect(schema["description"]).toBe(
-      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: mandatory full access, WebRTC v3 compatibility, and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
+      "Configuration for agentvoice, read at boot from ~/.config/agentvoice/server.json ($XDG_CONFIG_HOME honored; --config relocates it). The foreground app reads it at launch. Precedence: CLI flag > this file > default. Unset settings stay omitted except documented application defaults: WebRTC v3 compatibility and startup snapshot off. Native app-server defaults are not a claim of desktop-client parity. Copying server.json.example verbatim is a no-op. Prompt overrides are convention-named files beside this file, one native Codex control each (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md); absent sends nothing, an empty file sends empty text, and an override plus an append for the same agent is an error. See README.md for the prompt-file contract.",
     );
   });
 
@@ -101,9 +101,9 @@ describe("generated schema invariants", () => {
     const orchestrator = sectionProperties("orchestrator");
     expect(spec(orchestrator, "personality")["enum"]).toEqual([...PERSONALITIES]);
     expect(spec(orchestrator, "sandbox")["enum"]).toEqual([...SANDBOX_MODES]);
-    expect(spec(orchestrator, "sandbox")["default"]).toBe("danger-full-access");
+    expect(spec(orchestrator, "sandbox")["default"]).toBeUndefined();
     expect(spec(orchestrator, "approval-policy")["enum"]).toEqual([...APPROVAL_POLICIES]);
-    expect(spec(orchestrator, "approval-policy")["default"]).toBe("never");
+    expect(spec(orchestrator, "approval-policy")["default"]).toBeUndefined();
     expect(spec(orchestrator, "approvals-reviewer")["enum"]).toEqual([...APPROVALS_REVIEWERS]);
     expect(spec(orchestrator, "history-mode")["enum"]).toEqual([...HISTORY_MODES]);
 

@@ -38,8 +38,6 @@ describe("threadParams", () => {
   test("sends nothing beyond the server's own defaults", () => {
     expect(thread()).toEqual({
       cwd: process.cwd(),
-      approvalPolicy: "never",
-      sandbox: "danger-full-access",
       threadSource: "agentvoice-orchestrator",
     });
   });
@@ -176,9 +174,9 @@ describe("threadParams", () => {
     });
   });
 
-  test("extra merges last but cannot change the full-access posture", () => {
-    expect(() => thread({ orchestrator: { extra: { sandbox: "read-only" } } })).toThrow(
-      "full-access-only",
+  test("extra merges last including native permission selectors", () => {
+    expect(thread({ orchestrator: { extra: { sandbox: "read-only" } } })["sandbox"]).toBe(
+      "read-only",
     );
     const params = thread({
       orchestrator: { extra: { sandbox: "danger-full-access", newField: 7 } },

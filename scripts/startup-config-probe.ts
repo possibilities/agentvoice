@@ -5,7 +5,6 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
-import { confirmFullAccess } from "../src/core/full-access.ts";
 
 if (process.platform !== "darwin")
   throw new Error("This opt-in probe requires macOS sandbox-exec to deny network access.");
@@ -63,7 +62,8 @@ try {
         ...extra,
       },
     );
-    confirmFullAccess(response);
+    assert.equal(response["approvalPolicy"], "never");
+    assert.deepEqual(response["sandbox"], { type: "dangerFullAccess" });
     assert.equal(
       response["model"],
       "model" in extra
