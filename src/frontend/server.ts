@@ -5,6 +5,7 @@ import { createCall } from "../runtime-control/controller.ts";
 import type { LaunchProvenance } from "../runtime-control/protocol.ts";
 import { currentWorkspace } from "../workspace.ts";
 import {
+  callParamsSchema,
   FRONTEND_VERSION,
   type FrontendCommand,
   type FrontendState,
@@ -20,7 +21,14 @@ export interface Call {
   command(command: FrontendCommand): void;
   close(): Promise<void>;
 }
-type Session = { peer: JsonPeer; call?: Call; closed: boolean; done: Promise<void>; end(): void };
+type Session = {
+  peer: JsonPeer;
+  clientId?: string;
+  call?: Call;
+  closed: boolean;
+  done: Promise<void>;
+  end(): void;
+};
 
 /** One socket owner per workspace; one frontend owns each complete call lifetime. */
 export class VoiceServer {
@@ -28,6 +36,7 @@ export class VoiceServer {
   private session?: Session;
   private closed = false;
   private poisoned = false;
+  private readonly observers = new Set<JsonPeer>();
   constructor(
     readonly path: string,
     private readonly create: (changed: () => void) => Promise<Call>,
@@ -58,7 +67,23 @@ export class VoiceServer {
           }
           return;
         }
-        if (request.method === "call" && request.params === undefined) {
+        if (request.method === "observe" && request.params === undefined) {
+          if (this.session?.peer === peer) {
+            reply(false, "Call owners cannot become observers");
+            return;
+          }
+          this.observers.add(peer);
+          reply(true, this.observation());
+          return;
+        }
+        if (
+          request.method === "call" &&
+          (request.params === undefined || callParamsSchema.safeParse(request.params).success)
+        ) {
+          if (this.observers.has(peer)) {
+            reply(false, "Observers cannot own calls");
+            return;
+          }
           if (this.closed || this.poisoned || this.session) {
             reply(false, "Server is busy or unavailable");
             return;
@@ -66,11 +91,16 @@ export class VoiceServer {
           const ended = Promise.withResolvers<void>();
           const session: Session = {
             peer,
+            clientId:
+              request.params === undefined
+                ? undefined
+                : callParamsSchema.parse(request.params).clientId,
             closed: false,
             done: Promise.resolve(),
             end: ended.resolve,
           };
           this.session = session;
+          this.publish();
           session.done = this.run(session, ended.promise);
           reply(true, null);
           return;
@@ -88,8 +118,10 @@ export class VoiceServer {
         reply(false, "Unknown method or frontend does not own this call");
       },
       closed: (peer) => {
+        this.observers.delete(peer);
         if (this.session?.peer !== peer) return;
         this.session.closed = true;
+        this.publish();
         this.session.end();
         // End a hold immediately, before asynchronous owned-process cleanup.
         this.session.call?.command({ action: "release" });
@@ -98,6 +130,22 @@ export class VoiceServer {
   }
   start() {
     return this.socket.start();
+  }
+  private observation() {
+    const session = this.session;
+    const identity = session?.call?.identity?.();
+    return {
+      busy: !!session,
+      clientId: session?.clientId ?? null,
+      workspace: identity?.workspace || null,
+      threadId: identity?.threadId || null,
+      state: session?.call && !session.closed ? frontendState(session.call.state()) : null,
+    };
+  }
+  private publish() {
+    const observation = this.observation();
+    for (const peer of this.observers)
+      peer.send({ v: FRONTEND_VERSION, type: "observation", observation });
   }
   private async run(session: Session, ended: Promise<void>) {
     let lastState = "";
@@ -108,6 +156,7 @@ export class VoiceServer {
       if (serialized === lastState) return;
       lastState = serialized;
       session.peer.send({ v: FRONTEND_VERSION, type: "state", state });
+      this.publish();
     };
     let boot: Promise<void> | undefined;
     try {
@@ -131,6 +180,7 @@ export class VoiceServer {
         this.report(`Call cleanup failed; restart the server: ${String(error)}`);
       }
       if (this.session === session) this.session = undefined;
+      this.publish();
     }
   }
   async close() {

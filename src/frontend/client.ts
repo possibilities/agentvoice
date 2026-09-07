@@ -12,7 +12,11 @@ import {
   frontendStateSchema,
 } from "./protocol.ts";
 
-export async function connectFrontend(path: string, changed: () => void = () => {}) {
+export async function connectFrontend(
+  path: string,
+  changed: () => void = () => {},
+  clientId?: string,
+) {
   let info: ReturnType<typeof lstatSync>;
   try {
     info = lstatSync(path);
@@ -52,7 +56,7 @@ export async function connectFrontend(path: string, changed: () => void = () => 
     () => fail(new Error("AgentVoice server did not accept the call")),
     5000,
   );
-  function send(method: string, params?: FrontendCommand) {
+  function send(method: string, params?: FrontendCommand | { clientId: string }) {
     if (closed || socket.destroyed) return;
     if (socket.writableLength > 64 * 1024) {
       fail(new Error("AgentVoice server is not reading input"));
@@ -63,7 +67,7 @@ export async function connectFrontend(path: string, changed: () => void = () => 
     );
   }
   socket.setEncoding("utf8");
-  socket.on("connect", () => send("call"));
+  socket.on("connect", () => send("call", clientId ? { clientId } : undefined));
   socket.on("data", (chunk) => {
     partial += chunk;
     if (Buffer.byteLength(partial) > 64 * 1024) {
@@ -126,6 +130,7 @@ export async function runFrontend(workspace?: string) {
   const client = await connectFrontend(
     frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
     () => tui?.refresh(),
+    process.env["AGENTVOICE_CLIENT_ID"],
   );
   const host: VoiceHost = {
     state: client.state,

@@ -14,7 +14,8 @@
   },
   "scripts": {
     "server": "bun run src/main.ts server",
-    "console": "bun run src/main.ts",
+    "console": "bun run src/main.ts client",
+    "start": "bun run src/main.ts",
     "setup": "bun run scripts/setup.ts",
     "native:build": "bun run scripts/build-native.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",

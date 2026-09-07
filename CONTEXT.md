@@ -10,7 +10,12 @@ alone does not establish parity. See `docs/adr/0019-client-server-default-baseli
 or run manually, waiting on a private local socket. Each frontend owns one call;
 frontend disconnect ends that call and returns the server to waiting.
 
-**Frontend / Console** — The separate `agentvoice` terminal process. Connecting
+**Composition** — Bare `agentvoice`: one foreground smolmux process presenting the
+pointer frontend, voice transcript and stock agent attachment side by side. All
+three Apps use local PTYs and end with the smolmux process; there are no
+Companion-held Sessions. Attachments start only after this launch's call is live.
+
+**Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns no audio, Codex process, configuration or thread leases.
 

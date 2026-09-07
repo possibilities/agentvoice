@@ -13,6 +13,17 @@ export const frontendStateSchema = z
   })
   .strict();
 export type FrontendState = z.infer<typeof frontendStateSchema>;
+export const callParamsSchema = z.object({ clientId: z.string().uuid() }).strict();
+export const observationSchema = z
+  .object({
+    busy: z.boolean(),
+    clientId: z.string().uuid().nullable(),
+    workspace: z.string().nullable(),
+    threadId: z.string().nullable(),
+    state: frontendStateSchema.nullable(),
+  })
+  .strict();
+export type FrontendObservation = z.infer<typeof observationSchema>;
 export const frontendCommandSchema = z.discriminatedUnion("action", [
   z
     .object({ action: z.literal("mute"), target: z.enum(["mic", "speaker"]), muted: z.boolean() })

@@ -1,10 +1,26 @@
 # AgentVoice
 
-A local Codex voice server with a separate terminal frontend. `agentvoice server`
-waits for a call; `agentvoice` connects and starts one. The server owns audio,
+A local Codex voice server with three terminal panes. `agentvoice server`
+waits for a call; bare `agentvoice` opens a foreground smolmux instance containing
+`agentvoice client`, `agentvoice attach voice`, and `agentvoice attach agent`
+side by side. The server owns audio,
 WebRTC, exact conversation identity, thread leases and its unmodified
 `codex app-server` child. The frontend contains only connection status and
 monochrome YOU/AGENT buttons, plus PUSH TO TALK when the microphone is muted.
+
+The two attachment panes show “Waiting for voice connection” until this launch's
+call reaches `live`, then attach to its exact workspace and thread. All three
+apps run in local PTYs owned by the foreground smolmux process. Closing that
+process ends the panes and call; nothing persists in smolmux's Companion.
+Divider drags survive placeholder replacement. Keyboard focus moves to the
+working agent when it opens. An attachment that exits shows a disconnected
+placeholder and is not automatically relaunched, including after runtime restart.
+
+Bare `agentvoice` requires smolmux 0.9.1 or newer with its local PTY helper,
+and `codex-viewer`, on PATH. Their existing installers own those dependencies;
+AgentVoice does not install them. Use `agentvoice client` for the pointer frontend
+alone. Scripts that previously used bare `agentvoice` for that frontend must now
+use `agentvoice client`.
 
 The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
@@ -33,12 +49,13 @@ To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, device, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
-The frontend accepts only `--workspace` and `--help`.
+The composition and `client` accept only `--workspace` and `--help`.
 
 One server and one active frontend are allowed per canonical workspace. Closing
 the frontend terminal or terminating its process ends the call, closes audio
 and the owned Codex child, and returns the server to waiting. There are no
-application keybindings, including quit; process signals still perform cleanup.
+pointer-frontend keybindings, including quit; process signals still perform cleanup.
+The attached stock Codex TUI retains its own keyboard controls.
 The default endpoint is independent of the current workspace generation. Without
 `--workspace`, both commands use that endpoint from any launch directory.
 Warnings and detailed failure reasons go to private service logs, or the terminal

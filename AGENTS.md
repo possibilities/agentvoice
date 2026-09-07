@@ -1,8 +1,10 @@
 # agentvoice — repository guidance
 
 A local Codex voice server and separate pointer-only TUI. `agentvoice server`
-waits on a private workspace socket without opening audio or Codex; `agentvoice`
-connects and starts a call. The server-owned call controller retains exact thread
+waits on a private workspace socket without opening audio or Codex; `agentvoice client`
+connects and starts a call. Bare `agentvoice` composes that client, voice transcript,
+and stock agent attachment in one foreground smolmux process with local PTYs only.
+The server-owned call controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
 owns audio, WebRTC, config/prompt/role loading and an owned stock Codex app-server.
 Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
@@ -76,6 +78,13 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/frontend/: strict private workspace socket, exclusive call ownership and
   minimal state/input protocol. Disconnect releases PTT and stops the call; never
   accept a successor until cleanup completes or automatically reconnect/replay.
+- src/composition/: bare-command foreground smolmux launcher and three-pane layout.
+  All apps use local PTYs, never Companion ownership; shutdown reaps the exact
+  foreground child. Read-only frontend observation gates attachments on this
+  client's correlation ID, live media and exact workspace/thread. Correlation is
+  not authorization. Observer disconnect cannot close a call or send input.
+  Preserve divider revisions, show disconnected attachments without automatic
+  relaunch, and never open audio/inference in composition tests.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.

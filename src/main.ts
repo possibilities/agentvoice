@@ -18,7 +18,9 @@ Usage:
   agentvoice server [options]       Wait for a frontend to start a call
   agentvoice service status|restart|remove
                                    Manage the default macOS LaunchAgent
-  agentvoice [--workspace <dir>]    Connect and start a call
+  agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
+  agentvoice client [--workspace <dir>]
+                                   Connect with the pointer frontend alone
   agentvoice attach agent [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
   agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
@@ -53,7 +55,7 @@ Server options:
 The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
 For manual use, run agentvoice server. It opens no audio or Codex child while waiting.
 Closing the frontend ends its call; the server returns to waiting.
-The frontend has pointer controls only: microphone, speaker and hold-to-talk.
+The client has pointer controls only: microphone, speaker and hold-to-talk.
 Terminate its process or close its terminal to end a call. There are no app keybindings.
 Server settings and prompt files load for each call. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
@@ -366,7 +368,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
       );
     }
-    const frontendFlags = parseArgs(argv, {
+    const clientArgs = command === "client" ? argv.slice(1) : argv;
+    const frontendFlags = parseArgs(clientArgs, {
       value: new Set(["--workspace"]),
       bool: new Set(["--help"]),
     });
@@ -375,10 +378,17 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     const selected =
-      frontendFlags.values["workspace"] === undefined ? undefined : parseMcpConfigCommand(argv);
+      frontendFlags.values["workspace"] === undefined
+        ? undefined
+        : parseMcpConfigCommand(clientArgs);
     if (selected?.help) return 0;
-    const { runFrontend } = await import("./frontend/client.ts");
-    await runFrontend(selected?.workspace);
+    if (command === "client") {
+      const { runFrontend } = await import("./frontend/client.ts");
+      await runFrontend(selected?.workspace);
+    } else {
+      const { runComposition } = await import("./composition/launch.ts");
+      await runComposition(selected?.workspace);
+    }
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
