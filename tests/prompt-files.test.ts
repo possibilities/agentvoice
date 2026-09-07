@@ -102,7 +102,7 @@ describe("convention prompt files", () => {
       await h.runtime.start();
       await h.runtime.offer("first");
       await h.runtime.offer("redial");
-      await h.runtime.fresh();
+
       await h.runtime.offer("fresh");
       expect(h.runtime.currentReady!.prompts).toEqual([]);
       expect(
@@ -232,7 +232,7 @@ describe("convention prompt files", () => {
           await h.runtime.offer("first");
           write(h.directory, OVERRIDES, () => "Changed after launch");
           await h.runtime.offer("redial");
-          await h.runtime.fresh();
+
           await h.runtime.offer("fresh");
           expect(h.runtime.currentReady!.prompts).toEqual(
             OVERRIDES.map((name) => join(h.directory, PROMPT_FILES[name])),
@@ -243,7 +243,7 @@ describe("convention prompt files", () => {
           const threads = h.native.calls.filter((call) =>
             ["thread/start", "thread/resume"].includes(call.method),
           );
-          expect(threads).toHaveLength(2);
+          expect(threads).toHaveLength(1);
           for (const call of threads) {
             expect(call.params["baseInstructions"]).toBe(
               raw ? null : "orchestratorBaseInstructions",
@@ -283,16 +283,14 @@ describe("convention prompt files", () => {
     try {
       await h.runtime.start();
       await h.runtime.offer("first");
-      await h.runtime.fresh();
+
       await h.runtime.offer("fresh");
       expect(h.runtime.currentReady!.prompts).toEqual(
         APPENDS.map((name) => join(h.directory, PROMPT_FILES[name])),
       );
       expect(warnings.some((line) => line.includes("entire base prompt"))).toBe(false);
-      const threads = h.native.calls.filter((call) =>
-        ["thread/resume", "thread/start"].includes(call.method),
-      );
-      expect(threads.map((call) => call.method)).toEqual(["thread/resume", "thread/start"]);
+      const threads = h.native.calls.filter((call) => ["thread/resume"].includes(call.method));
+      expect(threads.map((call) => call.method)).toEqual(["thread/resume"]);
       for (const call of threads) {
         expect(call.params["developerInstructions"]).toBe("orchestratorDeveloperInstructions");
         expect(call.params).not.toHaveProperty("baseInstructions");

@@ -82,6 +82,7 @@ describe("native authentication without an AgentVoice account wrapper", () => {
       const launch = await run(
         "../src/main.ts",
         [
+          "server",
           "--allow-full-access",
           "--config",
           configPath,
@@ -105,7 +106,7 @@ describe("native authentication without an AgentVoice account wrapper", () => {
     }
   });
 
-  test("launch and Fresh inherit CODEX_HOME unchanged, or leave it unset for Codex to resolve", async () => {
+  test("server calls inherit CODEX_HOME unchanged, or leave it unset for Codex to resolve", async () => {
     const root = mkdtempSync(join(tmpdir(), "agentvoice-native-home-"));
     try {
       for (const codexHome of [undefined, join(root, "explicit home")]) {

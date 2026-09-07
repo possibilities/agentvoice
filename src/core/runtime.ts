@@ -27,13 +27,6 @@ import {
 } from "./control-mcp.ts";
 import { ConversationReader } from "./conversation-reader.ts";
 import { fullAccessStartupConfig } from "./full-access.ts";
-import {
-  type HandoffRequest,
-  type HandoffResult,
-  handoffFailure,
-  handoffRequestSchema,
-  handoffUnknown,
-} from "./handoff.ts";
 import { resolveNativeExecutable } from "./native-listener.ts";
 import {
   ORCHESTRATOR_THREAD_SOURCE,
@@ -91,10 +84,8 @@ export interface RuntimeOptions extends SessionSelection {
   /** Dependency boundaries for protocol and lifecycle tests; never CLI options. */
   connect?: (options: AttachOptions) => Promise<RuntimeConnection>;
   locksDir?: string;
-  /** Controller-held lease; retained after this generation exits. */
+  /** Server-owned call lease, released only after complete runtime shutdown. */
   acquireLease?: (threadId: string) => Promise<void>;
-  /** Restart uses exact thread/read+resume, never history inventory selection. */
-  exactResume?: string;
   snapshot?: RuntimeSnapshot;
   controlMcp?: ControlMcpRegistration;
   controlReadinessTimeoutMs?: number;
@@ -155,14 +146,12 @@ export class VoiceRuntime {
   private role: RoleAssets | null = null;
   private effort: string | null = null;
   private conversationMode: "started" | "continued" = "started";
-  private freshInFlight = false;
   private shuttingDown = false;
   private tuiGateway: AttachmentGateway | undefined;
   private shutdownPromise: Promise<void> | null = null;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
   private readonly activeTurns = new Map<string, string>();
-  private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
   private readonly threadObserver: ThreadObserver | undefined;
   private conversationRevision = 0;
@@ -257,13 +246,11 @@ export class VoiceRuntime {
         }
         this.assertRunning();
       }
-      const id =
-        this.options.exactResume ??
-        (await selectThread(
-          (method, params) => connection.request(method, params),
-          workspace,
-          this.options,
-        ));
+      const id = await selectThread(
+        (method, params) => connection.request(method, params),
+        workspace,
+        this.options,
+      );
       this.assertRunning();
       this.threadId = id ? await this.resumeThread(id) : await this.startThread();
       this.options.onVerifiedThread?.({
@@ -283,90 +270,6 @@ export class VoiceRuntime {
   async offer(sdp: string): Promise<void> {
     if (!this.threadReady || this.shuttingDown) return;
     await this.sessions.handleOffer(sdp);
-  }
-
-  async fresh(): Promise<void> {
-    if (!this.threadReady || this.freshInFlight || this.shuttingDown) return;
-    this.tuiGateway?.revoke();
-    this.freshInFlight = true;
-    this.threadReady = false;
-    try {
-      // Cut media before changing identity; no old audio or SDP enters the new conversation.
-      this.events.onClosed("fresh-thread");
-      await this.sessions.shutdown();
-      this.assertRunning();
-      const threadId = await this.startThread();
-      this.threadId = threadId;
-      this.options.onVerifiedThread?.({
-        threadId: this.threadId,
-        workspace: this.config.orchestrator.workspace,
-      });
-      await this.confirmControlReady();
-      this.sessions.reset();
-      this.events.onStatus(`new conversation: ${this.threadId}`);
-    } catch (error) {
-      if (this.options.controlMcp) {
-        this.events.onFatal(error instanceof Error ? error.message : String(error));
-        await this.shutdown();
-      } else if (!this.shuttingDown)
-        this.events.onError(`fresh conversation failed: ${String(error)}`, false);
-    } finally {
-      this.freshInFlight = false;
-      this.threadReady =
-        !this.shuttingDown && this.threadId !== null && this.attachment?.alive === true;
-      this.emitReady();
-    }
-  }
-
-  async submitHandoff(input: HandoffRequest): Promise<HandoffResult> {
-    const checked = handoffRequestSchema.safeParse(input);
-    if (
-      !checked.success ||
-      this.shuttingDown ||
-      this.freshInFlight ||
-      !this.threadReady ||
-      !this.attachment?.alive ||
-      this.threadId !== input.threadId ||
-      this.config.orchestrator.workspace !== input.workspace
-    )
-      return handoffFailure("not_ready");
-    const connection = this.attachment;
-    if (this.events.debug)
-      this.privateHandoffPrompt = {
-        raw: input.prompt,
-        escaped: JSON.stringify(input.prompt).slice(1, -1),
-      };
-    try {
-      // This native method starts an idle thread or steers an active regular turn.
-      // clientUserMessageId is correlation, not native deduplication.
-      const result = await connection.request(
-        "turn/start",
-        {
-          threadId: input.threadId,
-          clientUserMessageId: input.clientUserMessageId,
-          input: [
-            {
-              type: "text",
-              text: `AgentVoice restart handoff (agent-provided task):\n\n${input.prompt}`,
-            },
-          ],
-        },
-        10_000,
-      );
-      const turn = (result as { turn?: { id?: unknown; status?: unknown } } | null)?.turn;
-      if (
-        typeof turn?.id !== "string" ||
-        !turn.id ||
-        turn.id.length > 256 ||
-        turn.status !== "inProgress"
-      )
-        return handoffUnknown();
-      return { status: "accepted", turnId: turn.id };
-    } catch (error) {
-      return error instanceof AppServerError && typeof error.code === "number" && !error.timedOut
-        ? handoffFailure("native_refused")
-        : handoffUnknown();
-    }
   }
 
   shutdown(): Promise<void> {
@@ -410,10 +313,7 @@ export class VoiceRuntime {
 
   private debug(line: string): void {
     if (!this.events.debug) return;
-    const prompt = this.privateHandoffPrompt;
-    if (prompt && (line.includes(prompt.raw) || line.includes(prompt.escaped)))
-      this.events.debug?.("[restart handoff content omitted]");
-    else this.events.debug?.(line);
+    this.events.debug(line);
   }
 
   private requireConnection(): RuntimeConnection {
@@ -600,7 +500,7 @@ export class VoiceRuntime {
       );
       this.options.onAttachmentReady?.(
         () => {
-          if (!this.threadReady || this.shuttingDown || this.freshInFlight || !this.threadId)
+          if (!this.threadReady || this.shuttingDown || !this.threadId)
             throw new Error("Voice thread is not ready for attachment");
           return this.tuiGateway!.issue({
             threadId: this.threadId,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { observeTier, ServiceTierSelection, tierLabel } from "../src/core/service-tier.ts";
-import { parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { observeTier, ServiceTierSelection } from "../src/core/service-tier.ts";
+import { parseArgs, parseServerCommand } from "../src/main.ts";
 import {
   deferred,
   NativeStub,
@@ -12,11 +12,11 @@ const tier = (native: NativeStub, fast?: boolean) =>
   new ServiceTierSelection((m, p) => native.request(m, p), "/work", fast);
 
 describe("native Fast launch policy", () => {
-  test("three-state flags, console alias parsing, and conflicts", () => {
+  test("three-state flags, server option parsing, and conflicts", () => {
     expect(parseArgs([])).not.toHaveProperty("fast");
     expect(parseArgs(["--fast"]).fast).toBe(true);
     expect(parseArgs(["--no-fast"]).fast).toBe(false);
-    expect(parseConsoleCommand(["--allow-full-access", "--resume=id", "--fast"])).toMatchObject({
+    expect(parseServerCommand(["--allow-full-access", "--resume=id", "--fast"])).toMatchObject({
       parsed: { fast: true },
     });
     for (const args of [
@@ -150,13 +150,11 @@ describe("native Fast launch policy", () => {
     const selection = tier(new NativeStub(), true);
     const params = await selection.prepare({});
     expect(
-      tierLabel(
-        await selection.confirm({ model: "native-model", serviceTier: "priority" }, params),
-      ),
-    ).toBe("Work: Fast");
-    expect(tierLabel(await selection.confirm({ model: "native-model" }, params))).toBe(
-      "Work: Fast requested",
-    );
+      await selection.confirm({ model: "native-model", serviceTier: "priority" }, params),
+    ).toMatchObject({ serviceTier: "priority", requestedServiceTier: "priority" });
+    expect(await selection.confirm({ model: "native-model" }, params)).toMatchObject({
+      requestedServiceTier: "priority",
+    });
     for (const response of [
       { model: "slow-model", serviceTier: "priority" },
       { model: "native-model", serviceTier: null },
@@ -170,24 +168,19 @@ describe("native Fast launch policy", () => {
         { serviceTier: "default" },
       ),
     ).rejects.toThrow("did not apply --no-fast");
-    expect(tierLabel(observeTier({ serviceTier: "default" }, {}))).toBe("Work: Standard");
+    expect(observeTier({ serviceTier: "default" }, {})).toMatchObject({ serviceTier: "default" });
     expect(
-      tierLabel(
-        await tier(new NativeStub(), false).confirm(
-          { serviceTier: null },
-          { serviceTier: "default" },
-        ),
+      await tier(new NativeStub(), false).confirm(
+        { serviceTier: null },
+        { serviceTier: "default" },
       ),
-    ).toBe("Work: Standard");
-    expect(tierLabel(observeTier({ serviceTier: "flex" }, {}))).toBe("Work: flex");
-    expect(tierLabel(observeTier({ serviceTier: null }, { serviceTier: "priority" }))).toBe(
-      "Work: Standard",
-    );
+    ).toMatchObject({ serviceTier: null, requestedServiceTier: "default" });
+    expect(observeTier({ serviceTier: "flex" }, {})).toMatchObject({ serviceTier: "flex" });
   });
 });
 
 describe("Fast runtime propagation", () => {
-  test("Fast and standard reach continue and Fresh without changing voice requests", async () => {
+  test("Fast and standard reach continued calls without changing voice requests", async () => {
     for (const fast of [true, false]) {
       const h = runtimeHarness(
         {
@@ -201,11 +194,11 @@ describe("Fast runtime propagation", () => {
         await h.runtime.start();
         const expected = fast ? "priority" : "default";
         expect(h.runtime.currentReady?.serviceTier).toBe(expected);
-        await h.runtime.fresh();
+
         const starts = h.native.calls.filter(
           (c) => c.method === "thread/start" || c.method === "thread/resume",
         );
-        expect(starts).toHaveLength(2);
+        expect(starts).toHaveLength(1);
         expect(starts.every((c) => c.params["serviceTier"] === expected)).toBe(true);
         await h.runtime.offer("sdp");
         await Bun.sleep(5);
@@ -257,7 +250,7 @@ describe("Fast runtime propagation", () => {
     await h.cleanup();
   });
 
-  test("native settings updates refresh the displayed tier", async () => {
+  test("native settings updates retain reported tier metadata", async () => {
     const h = runtimeHarness();
     try {
       await h.runtime.start();

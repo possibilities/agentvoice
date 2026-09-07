@@ -1,13 +1,13 @@
 # agentvoice — repository guidance
 
-A foreground Codex voice TUI: a retained controller owns UI, exact thread
-identity, leases, control transports, and operation records; its disposable
-runtime child owns audio, WebRTC, runtime code, config/prompt/role loading, and
-an owned stock Codex app-server child over private native WebSocket. Local stock
-TUI attachment is always available through a guarded gateway (ADR 0022).
-No background Server,
-resident, remote mode, or arbitrary control attachment. Read README.md for
-usage, CONTEXT.md for vocabulary, and ADRs 0015/0022 for the active topology.
+A local Codex voice server and separate pointer-only TUI. `agentvoice server`
+waits on a private workspace socket without opening audio or Codex; `agentvoice`
+connects and starts a call. The server-owned call controller retains exact thread
+identity, leases and read-only control/event transports; its disposable runtime
+owns audio, WebRTC, config/prompt/role loading and an owned stock Codex app-server.
+Frontend disconnect closes the call before another can begin. No installed service,
+remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
+0024/0022 for the active topology; ADRs 0015/0016 describe retired lifecycle controls.
 
 ## What vanilla Codex means
 
@@ -43,7 +43,8 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   Do not run bare `bun test`: it can discover dependency/vendor tests.
 - `bun run typecheck` — strict TypeScript, no emit.
 - `bun run lint` / `bun run format` — Biome checks / fixes.
-- `bun run console` — foreground TUI; needs Codex login and built native audio.
+- `bun run server` — waiting foreground server; calls need Codex login and built native audio.
+- `bun run console` — independent pointer frontend; connects to the workspace server.
 - `bun run native:build` / `bun run audio:probe` — build / exercise audio.
   The latter opens hardware; never substitute it for a no-microphone UI test.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
@@ -61,8 +62,11 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt. No launch,
   configuration, service, prompt/skill setup or legacy command cleanup.
-- src/main.ts: foreground CLI, console alias, workspace canonicalization;
-  former accounts/service/remote verbs error.
+- src/main.ts: server/frontend CLI and workspace canonicalization; former
+  accounts/resident/remote/console verbs error.
+- src/frontend/: strict private workspace socket, exclusive call ownership and
+  minimal state/input protocol. Disconnect releases PTT and stops the call; never
+  accept a successor until cleanup completes or automatically reconnect/replay.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
@@ -94,7 +98,7 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   selectors only; absent flag leaves native/configured modes intact. Never infer
   effective permissions from the request or bypass managed native requirements.
 - src/core/service-tier.ts: launch-only Fast/standard override, per-child native
-  catalog preflight, response checks and requested-versus-reported tier labels.
+  catalog preflight, response checks and requested-versus-reported tier metadata.
   No flag means no extra RPCs/overrides. --no-fast sends default, not omission;
   native off can report default or null (disabled Fast gate). Missing is unknown.
   The resume-model preflight mirrors upstream has_model_resume_override; reverify
@@ -118,22 +122,18 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   as playback confirmation.
   Validate before native dispatch; unknown null placeholders are stripped.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
-  Fresh/restart/quit revoke before teardown; redial preserves attachment. Ordinary
+  Call shutdown revokes before teardown; automatic renewal preserves attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
-- src/runtime-control/controller.ts: retained foreground controller, exact
-  thread leases, operation journal, controller/runtime generations and TUI.
-  Optional restart handoffs are journaled before teardown and submitted once
-  after exact resume and live media. Keep handoff outcome separate from runtime
-  readiness; never stop healthy media on a handoff refusal or ambiguous result.
+- src/runtime-control/controller.ts: one server-owned call, exact thread leases,
+  native identity, readiness and read-only observation. No runtime replacement,
+  manual redial, in-call Fresh, operation journal or handoff submission.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
 - src/runtime-control/sender.ts: bounded worker writes; drop transient voice events
   at the soft limit without replacing deltas or failing healthy media.
-- src/runtime-control/journal.ts: fsynced controller-lifetime operation records.
-  Never adopt an old journal across a full quit/relaunch.
 - src/events/: controller-owned read-only socket with prefix subscriptions,
   sequence-watermarked lifecycle snapshots, transient native voice items/deltas,
   and typed conversation observation. Conversation content has bounded in-memory
@@ -143,8 +143,8 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
-  No audio/bearer capabilities or mutation/MCP methods. Runtime replacements reset
-  inventory; stale incarnations never publish into a successor. See docs/events.md.
+  No audio/bearer capabilities or mutation/MCP methods. Call shutdown ends
+  inventory; stale incarnations never publish into another call. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
@@ -159,32 +159,30 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   loopback Streamable HTTP MCP projection, and private live-controller discovery
   for the explicit `mcp-config` export and local attachment bootstrap. Keep the
   MCP and Unix control operations semantically identical.
-- src/core/runtime.ts: a voice runtime's launch/resume/Fresh, voice session,
-  child lifecycle, and runtime-cached settings. No account selection/rotation,
-  reattachment/restart adoption, custom worker manager, tool callback or
-  submitted report/follow-up turns, except the explicit controller-owned restart
-  handoff through native turn/start (ADR 0016). Keep old main-thread locks until quit;
-  native work may still be active there.
+- src/core/runtime.ts: a call's launch/resume, voice session, owned child lifecycle
+  and cached settings. No account selection/rotation, custom worker manager,
+  restart handoff, custom turn submission or in-call identity change.
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.
 - src/console/host.ts: native readiness before audio opens, negotiation after audio
   readiness, visible media notices, worker-local media wiring and quit cleanup.
-- src/console/transport.ts: WebRTC offer/answer, two-peer redial and renewal.
+- src/console/transport.ts: WebRTC offer/answer, two-peer automatic renewal and bounded retry.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
-- src/console/tui.ts + signal-field*.ts + src/tui/palette.ts: one full-height
-  signal field, mute/PTT, palette; no peer mirroring.
+- src/console/tui.ts: static monochrome YOU/AGENT buttons, conditional pointer
+  PTT and connection phase only. No animation, meters, palette or keybindings.
+- src/console/state.ts: plain host/observer data; backend imports no TUI renderer.
 
 ## Ownership and state invariants
 
 Public voice launches support native/configured permissions without a flag.
 --allow-full-access explicitly requests danger-full-access/never; it wins over
 conflicting permission selectors, not unrelated settings. Do not reject launch,
-Fresh, resume or settings reports solely because permissions are restricted or
+resume or settings reports solely because permissions are restricted or
 unreported. Preserve native managed requirements. Command/file/permission approvals,
-tool questions and MCP elicitations flow through an attached stock TUI. The voice
-console shows an interaction notice; without a TUI, native Codex retains the request and
+tool questions and MCP elicitations flow through an attached stock TUI. The server
+terminal shows an interaction notice; without a TUI, native Codex retains the request and
 replays it on attachment. Never add automatic consent, refusals that race the TUI,
 invented answers or an AgentVoice approval queue. Unsupported client tools/auth/
 legacy/unknown requests are still refused visibly. See ADRs 0020/0022.
@@ -203,15 +201,14 @@ from list rows, so verify candidate ownership with thread/read before selecting
 agentvoice-orchestrator, no-parent, non-ephemeral history. Explicit resume must
 be found in that inventory. Do not hide lookup/resume failures as Fresh.
 
-Fresh cuts media before switching identity. Native work in an old main thread
-stays there, even once a new conversation is active. Quitting ends voice and app-owned
-work and closes the child. Old thread.json/workers.json and native history are
-never rewritten, imported or removed. The controller retains every acquired
-thread lease until quit, including old Fresh threads. Per-thread locks allow
-independent launches; an old background version or another client does not
-participate in that guard.
+Each frontend connection starts one call using the server's pinned canonical
+workspace and conversation selection flags. Close its frontend to end audio,
+app-owned work and the Codex child; native history remains untouched. The server
+waits for complete teardown before accepting another call. Leases last until call
+shutdown. A cleanup failure prevents subsequent calls until server termination.
+Other workspace servers may run independently; other clients do not honor this guard.
 
-App state: thread-locks/ and opt-in unique runs/ logs under
+App state: frontend/ sockets, thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
 remain ~/.config/agentvoice/server.json and convention prompt files beside it. Inherit
 CODEX_HOME unchanged (including omission); native Codex owns authentication,
@@ -307,15 +304,13 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - One root AGENTS.md; don't hide instructions in subtrees an agent won't load.
 - Comments state constraints the code cannot show, not narration.
 - Record<string, unknown> access uses bracket keys.
-- The TUI is chromeless: full-bleed signal field with translucent status/meter
-  overlays. Commands live in ctrl+k; direct keys work while it is closed and
-  ctrl+c always falls through. M/S toggle on press; Space and pointer PTT are
-  hold-only. OpenTUI 0.5.3 reports repeats as press + repeated; ignore them for
-  toggles and renew only live Space holds. Palette opening cancels holds.
-  No unrelated visual redesign during lifecycle cuts.
-- All AgentVoice settings and prompt contents load once per runtime generation. No voice-name
-  watcher or local voice catalog; Codex validates voice selection. TUI model,
-  effort and voice version are reported native values, never inferred from requests.
+- The TUI is pointer-only: two full-height monochrome channel buttons, with
+  a bottom push-to-talk button while the mic is muted. Keep existing text labels,
+  grey out muted channels, show only connection phase above them. No keybindings,
+  modal, animation, meters or additional status. Signals/terminal close end a call.
+- Settings and prompt contents load once per call. No voice-name watcher or
+  local catalog; Codex validates voice selection. Native identity and settings
+  remain available through server diagnostics and read-only observation.
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.
@@ -359,13 +354,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Native thread resume remains independent of new voice-call context.
   See ADR 0017 for the removal decision and ADRs 0010/0011 for historical probes.
   Fake protocol tests do not establish live silence or audio-heard fidelity.
-- No AgentVoice worker tools, registry, archival, reports, or custom turn
-  submission except a caller-supplied restart handoff (ADR 0016). Submit that
-  handoff once through native turn/start after the controller verifies exact
-  identity and live media. Do not change either agent's prompt defaults, retry
-  ambiguous acceptance, echo the private prompt in status/errors, or assume a
-  clientUserMessageId guarantees native deduplication. Native Codex tools,
-  subagents and voice handoffs stay native.
+- No AgentVoice worker tools, registry, archival, reports or custom turn
+  submission. Restart handoffs and their journals are removed (ADR 0024).
+  Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.
   Saved custom tool calls receive an immediate failed tool result and visible
   retirement notice; never resurrect a handler or rewrite native history.

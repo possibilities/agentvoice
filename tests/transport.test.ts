@@ -139,40 +139,29 @@ describe("voice transport retries", () => {
       }
       expect(h.starts).toHaveLength(3);
       expect(h.transport.currentPhase).toBe("failed");
-      expect(h.errors.at(-1)).toBe(`${reason} — retries paused; press r to redial`);
+      expect(h.errors.at(-1)).toBe(
+        `${reason} — retries paused; close the frontend and start a new call`,
+      );
       expect(h.peers.every((peer) => peer.closed)).toBe(true);
       const notices = h.errors.length;
       h.transport.handleReady(ready);
       await tick();
       expect(h.starts).toHaveLength(3);
       expect(h.errors).toHaveLength(notices);
-
-      h.transport.redial("manual");
-      await tick();
-      expect(h.starts).toHaveLength(4);
-      h.peers.at(-1)!.onState("connected");
-      expect(h.transport.currentPhase).toBe("live");
     } finally {
       await h.stop();
     }
   });
 
-  test("manual redial cancels a scheduled retry, and quit cancels the next one", async () => {
+  test("quit cancels a scheduled retry", async () => {
     const h = harness();
     try {
       h.transport.handleReady(ready);
       await tick();
       h.fail("temporary failure");
-      h.transport.redial("manual");
-      await tick();
-      expect(h.starts).toHaveLength(2);
-      h.peers.at(-1)!.onState("connected");
-      await afterRetry();
-      expect(h.starts).toHaveLength(2);
-      h.fail("another failure");
       await h.stop();
       await afterRetry();
-      expect(h.starts).toHaveLength(2);
+      expect(h.starts).toHaveLength(1);
       expect(h.transport.currentPhase).toBe("stopped");
       expect(h.peers.every((peer) => peer.closed)).toBe(true);
     } finally {
@@ -180,7 +169,7 @@ describe("voice transport retries", () => {
     }
   });
 
-  test("Fresh cancels the old retry and waits for the new conversation", async () => {
+  test("signal loss cancels retry until readiness returns", async () => {
     const h = harness();
     try {
       h.transport.handleReady(ready);
@@ -198,35 +187,4 @@ describe("voice transport retries", () => {
       await h.stop();
     }
   });
-});
-
-test("control redial completes only for its exact connected successor, fails on negotiation or stop", async () => {
-  const h = harness();
-  try {
-    h.transport.handleReady(ready);
-    await tick();
-    h.peers[0]!.onState("connected");
-    let result = "pending";
-    const connected = h.transport.redialAndWait("control").then(() => {
-      result = "ready";
-    });
-    await tick();
-    expect(result).toBe("pending");
-    h.peers[0]!.onState("connected");
-    await tick();
-    expect(result).toBe("pending");
-    h.peers[1]!.onState("connected");
-    await connected;
-    expect(result).toBe("ready");
-    const failed = h.transport.redialAndWait("control").catch((error) => error.message);
-    await tick();
-    h.peers[2]!.onState("failed");
-    expect(await failed).toContain("media path failed");
-    const stopped = h.transport.redialAndWait("control").catch((error) => error.message);
-    await tick();
-    await h.transport.stop();
-    expect(await stopped).toContain("stopped");
-  } finally {
-    await h.stop();
-  }
 });

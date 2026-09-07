@@ -9,7 +9,7 @@ import {
   parseJsonConfig,
   resolveConfig,
 } from "../src/core/config.ts";
-import { parseArgs, parseConsoleCommand, UsageError } from "../src/main.ts";
+import { parseArgs, parseServerCommand, UsageError } from "../src/main.ts";
 
 const HOME = "/home/tester";
 
@@ -633,16 +633,16 @@ describe("parseArgs characterization", () => {
   });
 });
 
-describe("parseConsoleCommand", () => {
+describe("parseServerCommand", () => {
   test("defaults to system devices, a fresh conversation, and no debug", () => {
-    expect(parseConsoleCommand(["--allow-full-access"])).toMatchObject({
+    expect(parseServerCommand(["--allow-full-access"])).toMatchObject({
       help: false,
       options: { debug: false, fresh: false, continue: false },
     });
   });
 
   test("parses device indices, fresh, and debug", () => {
-    const command = parseConsoleCommand([
+    const command = parseServerCommand([
       "--allow-full-access",
       "--device",
       "1",
@@ -662,19 +662,19 @@ describe("parseConsoleCommand", () => {
 
   test("rejects retired network flags", () => {
     for (const flag of ["--url", "--token", "--port", "--host"]) {
-      expect(() => parseConsoleCommand([`${flag}=x`])).toThrow(UsageError);
+      expect(() => parseServerCommand([`${flag}=x`])).toThrow(UsageError);
     }
   });
 
   test("rejects malformed and out-of-range device indices", () => {
     for (const value of ["1junk", "1.5", "-1", "+1", "", "2147483648"]) {
-      expect(() => parseConsoleCommand(["--allow-full-access", `--device=${value}`])).toThrow(
+      expect(() => parseServerCommand(["--allow-full-access", `--device=${value}`])).toThrow(
         /must be a non-negative 32-bit integer/,
       );
     }
   });
 
   test("lets --help bypass value validation after syntax is parsed", () => {
-    expect(parseConsoleCommand(["--device=bad", "--help"])).toEqual({ help: true });
+    expect(parseServerCommand(["--device=bad", "--help"])).toEqual({ help: true });
   });
 });

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
 import { validateCodexConfig } from "../src/core/codex-config.ts";
 import { parseJsonConfig, resolveConfig } from "../src/core/config.ts";
-import { loadLaunchConfig, parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs, parseServerCommand } from "../src/main.ts";
 import { nativeFullAccess, runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("native startup configuration", () => {
@@ -28,8 +28,8 @@ describe("native startup configuration", () => {
     for (const args of [["-c"], ["--codex-config"], ["-c", "--help"], ["-c", "-c"]])
       expect(() => parseArgs(args)).toThrow("requires a value");
     expect(() => parseArgs(["--model", "a", "--model", "b"])).toThrow("more than once");
-    expect(parseConsoleCommand(["-c", "approval_policy=never"])).toMatchObject({ help: false });
-    expect(parseConsoleCommand(["--help", "-c", "model=x"])).toEqual({ help: true });
+    expect(parseServerCommand(["-c", "approval_policy=never"])).toMatchObject({ help: false });
+    expect(parseServerCommand(["--help", "-c", "model=x"])).toEqual({ help: true });
   });
 
   test("strict optional string array, shape validation, omission and empty array baseline", () => {
@@ -153,7 +153,7 @@ describe("native startup configuration", () => {
         await h.runtime.start();
         await h.runtime.offer("first");
         await h.runtime.offer("redial");
-        await h.runtime.fresh();
+
         await h.runtime.offer("fresh");
         expect(h.native.options.argv).toEqual(appServerArgv("codex", entries));
         expect(h.native.options.cwd).toBe(h.directory);
@@ -161,7 +161,7 @@ describe("native startup configuration", () => {
         const threads = h.native.calls.filter((c) =>
           ["thread/start", "thread/resume"].includes(c.method),
         );
-        expect(threads).toHaveLength(2);
+        expect(threads).toHaveLength(1);
         for (const call of threads)
           expect(call.params).toMatchObject({
             cwd: h.directory,

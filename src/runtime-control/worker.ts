@@ -4,9 +4,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
-import type { VoiceTuiHost, VoiceTuiState } from "../console/tui.ts";
+import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
-import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import {
@@ -28,10 +27,9 @@ export function runRuntimeWorker(
   let snapshot: RuntimeSnapshot | undefined;
   let factory: ConsoleHostOptions["mediaFactory"];
   let runHost: typeof import("../console/host.ts").runConsoleHost;
-  let host: VoiceTuiHost | undefined;
+  let host: VoiceHost | undefined;
   let revokeAttachment: (() => void) | undefined;
   let issueAttachment: (() => AttachmentTicket) | undefined;
-  let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let readConversation:
     | Parameters<NonNullable<ConsoleHostOptions["onObservationReady"]>>[0]
     | undefined;
@@ -131,15 +129,20 @@ export function runRuntimeWorker(
       );
     return { workspace: config.orchestrator.workspace, pid: process.pid, buildId: after };
   }
+  let lastState = "";
   function publish() {
     if (!host || stopping || terminalFailure) return;
     if (threadInventory && sender.pending < 16) {
       event("threads", threadInventory);
       threadInventory = undefined;
     }
-    const state: VoiceTuiState = host.state();
+    const state: VoiceState = host.state();
     if (state.notice) state.notice = redact(state.notice);
-    event("state", state);
+    const serialized = JSON.stringify(state);
+    if (serialized !== lastState) {
+      lastState = serialized;
+      event("state", state);
+    }
     if (mediaStarted && state.phase === "live") bootReady?.();
     if (state.phase === "failed")
       bootFailed?.(new Error(state.notice ?? "Voice connection failed"));
@@ -162,9 +165,6 @@ export function runRuntimeWorker(
       bootReady = () => finish();
       bootFailed = finish;
       hostRun = runHost(config!, currentLaunch.version, {
-        onHandoffReady: (submit) => {
-          submitHandoff = submit;
-        },
         onObservationReady: (read) => {
           readConversation = read;
         },
@@ -173,10 +173,9 @@ export function runRuntimeWorker(
         debug: currentLaunch.provenance.options.debug,
         initialMute: { mic: true, speaker: true },
         runtime: {
-          fresh: params.threadId ? false : currentLaunch.provenance.options.fresh,
-          continue: params.threadId ? false : currentLaunch.provenance.options.continue,
-          resume: params.threadId ? undefined : currentLaunch.provenance.options.resume,
-          exactResume: params.threadId,
+          fresh: currentLaunch.provenance.options.fresh,
+          continue: currentLaunch.provenance.options.continue,
+          resume: currentLaunch.provenance.options.resume,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,
           nativeStateDir: currentLaunch.nativeStateDir,
@@ -211,7 +210,7 @@ export function runRuntimeWorker(
           );
           publish();
         },
-        createTui: async (bindings) => {
+        observe: async (bindings) => {
           host = bindings;
           const done = new Promise<void>((finish) => {
             endHost = finish;
@@ -289,9 +288,6 @@ export function runRuntimeWorker(
         }
         return null;
       }
-      case "redial":
-        await host?.redial();
-        return null;
       case "attachment-ticket": {
         if (terminalFailure || stopping || !mediaEnabled || !issueAttachment)
           throw new Error("Attachment is unavailable");
@@ -300,13 +296,6 @@ export function runRuntimeWorker(
           throw new Error("Attachment thread changed");
         return ticket;
       }
-      case "handoff":
-        if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
-          return handoffFailure("not_ready");
-        return submitHandoff(params as HandoffRequest);
-      case "fresh":
-        await host?.fresh();
-        return null;
       default:
         throw new Error("Unknown runtime command");
     }

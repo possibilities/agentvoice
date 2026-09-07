@@ -21,8 +21,6 @@ export interface VoiceAudioOptions {
   deviceIndex?: number;
   outputDeviceIndex?: number;
   sendFrame(frame: Buffer): void;
-  onMicLevel(db: number): void;
-  onAgentLevel(db: number): void;
   onWarning(line: string): void;
   debug?(line: string): void;
 }
@@ -234,7 +232,6 @@ export class DuplexVoiceAudio {
   }
 
   private handleMicFrame(frame: Buffer): void {
-    this.options.onMicLevel(rmsDbS16(frame));
     if (!this.encoder) return;
     try {
       sendCapturedFrame(this.encoder, frame, this.micMuted, this.options.sendFrame);
@@ -262,13 +259,12 @@ export class DuplexVoiceAudio {
       return;
     }
 
-    const agentDb = rmsDbS16(pcm);
+    const agentDb = this.options.debug ? rmsDbS16(pcm) : -Infinity;
     if (this.options.debug) {
       this.downlinkProgress.decodeSuccesses++;
       this.downlinkProgress.decodedPcmFrames += pcm.length / (DUPLEX_PLAYBACK_CHANNELS * 2);
       this.lastDecodedDb = agentDb;
     }
-    this.options.onAgentLevel(agentDb);
     const playbackFrames = pcm.length / (DUPLEX_PLAYBACK_CHANNELS * 2);
     let written = 0;
     let bufferedBefore: number | null = null;

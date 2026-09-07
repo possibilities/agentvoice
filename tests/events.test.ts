@@ -350,14 +350,7 @@ describe("lifecycle event socket", () => {
           threadId: "main",
           generation: 1,
           runtime: { phase: "failed" },
-          recentOperations: [],
         }),
-        redial: async () => {
-          throw new Error("must not mutate");
-        },
-        restart: async () => {
-          throw new Error("must not mutate");
-        },
       },
     });
     try {

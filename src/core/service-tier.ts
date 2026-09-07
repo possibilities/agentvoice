@@ -28,18 +28,6 @@ export function observeTier(result: unknown, params: ObjectValue): TierObservati
   };
 }
 
-export function tierLabel(
-  observation: Pick<TierObservation, "serviceTier" | "requestedServiceTier">,
-): string | undefined {
-  const label = (tier: string) =>
-    tier === "priority" || tier === "fast" ? "Fast" : tier === "default" ? "Standard" : tier;
-  if (observation.serviceTier !== undefined)
-    return `Work: ${observation.serviceTier === null ? "Standard" : label(observation.serviceTier)}`;
-  if (observation.requestedServiceTier)
-    return `Work: ${label(observation.requestedServiceTier)} requested`;
-  return undefined;
-}
-
 interface Catalog {
   config: ObjectValue;
   models: ObjectValue[];

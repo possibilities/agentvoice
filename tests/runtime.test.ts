@@ -38,16 +38,14 @@ describe("foreground runtime ownership", () => {
       }
     },
   );
-  test("new starts share the canonical workspace; Fresh changes identity and clears media", async () => {
+  test("new starts use the canonical workspace and retain a lease until shutdown", async () => {
     const h = runtimeHarness();
     try {
       await h.runtime.start();
       const first = h.runtime.currentReady!;
       expect(first.workspace).toBe(h.directory);
       expect(h.native.options.cwd).toBe(h.directory);
-      await h.runtime.fresh();
-      expect(h.runtime.currentReady!.threadId).not.toBe(first.threadId);
-      expect(h.closed).toContain("fresh-thread");
+
       expect(
         h.native.calls
           .filter((c) => c.method === "thread/start")
@@ -175,7 +173,7 @@ describe("foreground runtime ownership", () => {
     expect(h.native.closes).toBe(1);
     await h.cleanup();
   });
-  test("native completions never trigger report turns; Fresh preserves active conversation cleanup", async () => {
+  test("native completions never trigger report turns; shutdown interrupts active native work", async () => {
     const h = runtimeHarness();
     try {
       await h.runtime.start();
@@ -184,7 +182,7 @@ describe("foreground runtime ownership", () => {
         threadId: parent,
         turn: { id: "parent-turn" },
       });
-      await h.runtime.fresh();
+
       const fresh = h.runtime.currentReady!.threadId;
       h.native.options.onNotification("turn/completed", {
         threadId: "native-child",
@@ -199,7 +197,7 @@ describe("foreground runtime ownership", () => {
           ["turn/start", "turn/steer", "thread/archive", "thread/delete"].includes(c.method),
         ),
       ).toBe(false);
-      expect(h.native.threads).toHaveLength(2);
+      expect(h.native.threads).toHaveLength(1);
       for (const call of h.native.calls.filter((c) => c.method === "thread/start")) {
         expect(call.params).not.toHaveProperty("dynamicTools");
         expect(call.params).not.toHaveProperty("baseInstructions");
@@ -269,7 +267,7 @@ describe("foreground runtime ownership", () => {
         expect(h.native.calls).toEqual(before);
         expect(runtime.currentReady!.threadId).toBe(id);
       }
-      await runtime.fresh();
+
       expect(opens).toBe(1);
       expect(h.native.closes).toBe(0);
       expect(h.fatal).toEqual([]);
@@ -351,7 +349,7 @@ describe("launch configuration and reported identity", () => {
       writeFileSync(promptPath, "later prompt");
       await Bun.sleep(350);
       await offer();
-      await runtime.fresh();
+
       await offer();
       expect(h.native.options.argv).toContain("model=launch-model");
       expect(h.native.closes).toBe(0);
@@ -412,22 +410,6 @@ describe("launch configuration and reported identity", () => {
         },
       });
       expect(h.runtime.currentReady).toMatchObject({ model: "updated", effort: "medium" });
-      await h.runtime.fresh();
-      expect(h.runtime.currentReady).toMatchObject({
-        model: null,
-        effort: null,
-        conversationMode: "started",
-        voiceVersion: null,
-      });
-      h.native.options.onNotification("thread/settings/updated", {
-        threadId: "saved",
-        threadSettings: {
-          ...nativeFullAccess,
-          sandboxPolicy: nativeFullAccess.sandbox,
-          model: "old work",
-        },
-      });
-      expect(h.runtime.currentReady!.model).toBeNull();
     } finally {
       await h.cleanup();
     }

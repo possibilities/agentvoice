@@ -27,19 +27,12 @@ function status(instanceId: string, workspace: string, threadId: string): Contro
     threadId,
     generation: 1,
     runtime: { phase: "failed", voicePhase: "failed" },
-    recentOperations: [],
   };
 }
 
 function backend(current: () => ControlStatus): ControlBackend {
   return {
     status: current,
-    async redial() {
-      throw new Error("not used");
-    },
-    async restart() {
-      throw new Error("not used");
-    },
   };
 }
 

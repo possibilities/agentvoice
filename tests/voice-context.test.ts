@@ -79,8 +79,7 @@ describe("native voice continuity without application replay", () => {
         }
         await offer();
         await offer();
-        await h.runtime.fresh();
-        expect(h.runtime.currentReady!.threadId).not.toBe("existing");
+
         await offer();
         expect(h.native.calls.some((call) => call.method === "thread/timeline/list")).toBe(false);
         expect(h.native.calls.some((call) => call.method === "turn/start")).toBe(false);
@@ -199,7 +198,7 @@ for (const snapshot of ["", "Operator-provided startup context"]) {
 describe("native voice context across call and conversation boundaries", () => {
   for (const mode of ["fresh", "continue", "resume"] as const) {
     for (const scenario of cases) {
-      test(`${mode}: ${scenario.label} survives redial and Fresh`, async () => {
+      test(`${mode}: ${scenario.label} survives automatic renewal`, async () => {
         const values = parseJsonConfig(JSON.stringify(scenario.values), "test config");
         const options: RuntimeOptions =
           mode === "resume"
@@ -235,9 +234,9 @@ describe("native voice context across call and conversation boundaries", () => {
           };
           await offer("initial", originalThread);
           await offer("redial", originalThread);
-          await h.runtime.fresh();
+
           const freshThread = h.ready.at(-1)!.threadId;
-          expect(freshThread).not.toBe(originalThread);
+          expect(freshThread).toBe(originalThread);
           await offer("fresh", freshThread);
           await h.runtime.shutdown();
 
@@ -246,7 +245,6 @@ describe("native voice context across call and conversation boundaries", () => {
           );
           expect(threads.map((call) => call.method)).toEqual([
             mode === "fresh" ? "thread/start" : "thread/resume",
-            "thread/start",
           ]);
           for (const call of threads) {
             if (scenario.nativeConfig === undefined)
@@ -257,7 +255,7 @@ describe("native voice context across call and conversation boundaries", () => {
             h.native.calls
               .filter((call) => call.method === "thread/realtime/stop")
               .map((call) => call.params),
-          ).toEqual([{ threadId: originalThread }, { threadId: freshThread }]);
+          ).toEqual([{ threadId: originalThread }]);
           // Native Codex owns any flush-triggered turn; AgentVoice does not synthesize one.
           expect(h.native.calls.filter((call) => call.method === "turn/start")).toEqual([]);
           expect(h.native.closes).toBe(1);

@@ -1,30 +1,29 @@
 # Current AgentVoice field guide
 
-Updated for the retained foreground controller and local attachment (ADRs
-0015/0022). This replaces the resident/remote-era inventory; that history remains available in Git and the
-superseded ADRs.
+Updated for the waiting local server and pointer frontend (ADRs 0024/0022).
+Historical upstream probes below retain their inspected versions and evidence.
+References to Fresh/restart in those probes describe retired lifecycle controls.
 
 ## Architecture in a minute
 
 ```text
-Foreground controller (TUI, leases, control API)
-  → disposable runtime → private native WebSocket → owned stock Codex child
-    microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
-    optional stock TUI → guarded gateway → private native WebSocket
-                              Codex owns native voice/work handoffs
+agentvoice frontend → private workspace socket → agentvoice server
+  → call controller (leases, read-only control/events)
+    → disposable runtime → private native WebSocket → owned stock Codex child
+      microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
+      stock Codex TUI → guarded gateway → private native WebSocket
 ```
 
-The TUI does not run inference itself. The runtime selects a native Codex
-conversation and negotiates voice; it supplies no worker tools. Explicit restart
-handoffs and attached TUI input use native turns.
-The child does tools and maintains history. Audio is a native library inside
-the app, not another AgentVoice daemon.
+The server waits without starting a runtime or opening audio until the frontend
+connects. The frontend has static monochrome mute/PTT buttons and connection
+phase only. Closing it stops the call and owned work, then the server waits again.
+There are no keybindings, manual redial, in-call Fresh, runtime restart or restart
+handoffs. Guarded stock TUI input and native voice handoffs still use native turns.
 
-Default launch creates a new conversation. --continue selects this workspace's
-most recently updated eligible AgentVoice main conversation; --resume names one.
-Fresh changes thread identity; redial changes only the realtime session.
-Quit stops work. A workspace is a conversation-selection boundary, not a
-security boundary or a guarantee against native memory of other work.
+Server launch flags select a canonical workspace and conversation policy. Each
+call starts a new native conversation by default; `server --continue` or
+`server --resume` selects eligible saved history. Automatic WebRTC renewal keeps
+an ongoing call connected. Workspace is a selection boundary, not a sandbox.
 
 ## Stock TUI attachment boundary probe
 
@@ -64,8 +63,7 @@ work (`tui/src/app/event_dispatch.rs`). This protocol probe does not establish
 live audio behavior.
 
 The gateway checks target identity and permitted operations before forwarding,
-forwards native human questions and TUI answers, and revokes before Fresh or
-runtime replacement. Native credentials remain private. Every launch uses native
+forwards native human questions and TUI answers, and revokes before call teardown. Native credentials remain private. Every launch uses native
 WebSocket RPC. Voice and TUI attachment accept native/configured permissions;
 joining preserves live thread settings. Explicit settings changes remain native.
 AgentVoice leaves supported human requests pending, so it cannot race the TUI
@@ -103,8 +101,8 @@ can close TCP without a normal WebSocket close handshake, so the gateway tracks
 the latest successful unsubscribe for normal detach (verified launcher exit 0;
 revocation exits 1). Unknown `plugin/list` and
 `thread/name/set` calls are refused; core conversation interaction still works.
-Fake-media controller tests separately cover bootstrap, Fresh, redial, runtime
-restart, stale-generation rejection and shutdown. The new permission checks
+Fake-media controller tests cover bootstrap, call ownership, configuration reload
+on a later call, stale response rejection and shutdown. The new permission checks
 established native approval replay before first attachment, acceptance and tool
 output, and pending-request survival across TUI loss and reattachment. These
 isolated checks establish neither audible response delivery nor simultaneous
@@ -158,12 +156,11 @@ passthrough stays unchanged. The flags win over file/config/extra tier values;
 Fast enables only the thread-local native feature gate, not global settings.
 Support is checked against each child's catalog before work; unknown models,
 missing tier metadata or a different per-thread provider fail clearly. Start/resume
-responses confirm the applied setting when available; TUI labels missing data
-as requested. The indicator is configured tier, not billing telemetry.
+responses confirm the applied setting when available. Native reported settings
+remain distinct from requested settings; the frontend displays no tier label.
 
-All AgentVoice settings and prompt contents load once at launch and are reused
-on redial and Fresh. There is no config watcher; even voice-name edits need a
-restart. Prompts load from convention-named files in the selected config directory,
+All AgentVoice settings and prompt contents load once per call. There is no
+config watcher; voice-name edits take effect on the next call. Prompts load from convention-named files in the selected config directory,
 never the workspace; a present name that is unreadable, a directory or a broken
 link fails before native startup. Former names only produce visible migration
 warnings, with no content reads. Main prompt settings ride thread/start or resume;
@@ -245,7 +242,7 @@ implemented in ADR 0020; earlier ADR decisions remain historical evidence.
 | Area | Finding and consequence | Decision |
 | --- | --- | --- |
 | Protocol, speech model and voice name | Desktop's conditional client-owned-call path explicitly selects v3; stock app-server WebRTC omission selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Current v3 behavior aligns with that desktop path and service compatibility; leave model/name resolution and explicit overrides native. Do not classify it as non-vanilla solely from server omission. |
-| Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows status and meters, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
+| Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows connection phase and mute controls, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
 | Session prompts and handoffs | Native Codex has voice start/end instructions and automatic handoff forwarding. Desktop adds its own session instructions/tools and can create calls itself. AgentVoice keeps Codex in charge of both the call and handoffs. | Keep native instructions and forwarding. Copying desktop instructions/tool metadata requires corresponding frontend handlers; it is not a compatibility prerequisite. |
 | Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | Remove AgentVoice's false override and inherit native server startup context, as explicitly selected after explaining the desktop distinction. True/false/null controls remain; tail flush stays unset. This is not a claim of desktop context parity. |
 | Work model, effort, Fast and history | Resume can restore saved settings; history mode also depends on native thread-store capabilities. Desktop can supply product/rollout settings. An omitted field does not necessarily mean config.toml is consulted. | Keep native resolution and existing Fast checks. Correct schema claims that history simply inherits config and that ultra guarantees proactive subagents. |
@@ -306,16 +303,14 @@ never selects accounts or reacts to quota updates by replacing its child.
 An explicitly selected existing home supplies native configuration and history;
 there is no app-managed cross-home migration or shared-state reconciliation.
 
-TUI/media: signal field, status/elapsed timer, working-model tier, dB meters, command palette,
-conversation/workspace identity and native-reported model/effort/protocol,
-visible media warnings, mouse and keyboard mute/PTT, device selection, Opus/WebRTC, make-before-break
-redial, automatic renewal and debug metrics. There is no echo cancellation,
-text-chat transcript pane or interactive approval UI.
+TUI/media: static monochrome YOU/AGENT buttons and conditional pointer PTT,
+connection phase, server-side device selection, Opus/WebRTC, automatic renewal
+and optional debug metrics. Warnings appear in the server terminal. There is no
+echo cancellation, transcript pane, animation, palette or application keybinding.
 
 ## Removed
 
-Separate AgentVoice Server; resident/launchd management; control IPC and mirrored
-peers; phone/remote mode; pairing, identity/certificate management and network
+Resident/launchd management; mirrored peers; phone/remote mode; pairing, identity/certificate management and network
 discovery/listeners; Android packaging; global thread selection and worker
 restart/adoption registry; active Herdr integration; deliberate AgentStart
 skill enabling; custom worker dispatch/check/cancel, completion-report turns,
@@ -324,13 +319,13 @@ profile creation/reconciliation, account commands/probe and idle quota rotation.
 Native history and private legacy state are untouched. Retired dispatch config
 keys error even when false. Old
 tool definitions persisted by Codex may remain on resume: those calls fail with
-a retirement notice. Fresh starts without them; nothing silently rewrites or
+a server-terminal retirement notice. New conversations start without them; nothing silently rewrites or
 replaces a conversation. Native Codex tools/subagents/handoffs stay native.
 Explicit raw dynamicTools metadata passes through on start with a visible warning,
 without a client implementation; unknown dynamic calls receive protocol errors.
 Client-managed handoffs and alternate raw media paths also warn; supported
 baseline handoffs stay native. Voice-name hot reload and tap/hold classification
-are removed: M/S toggle, Space and pointer PTT only hold.
+are removed. Pointer PTT is hold-only; channel clicks toggle persistent mute.
 
 Retired accounts configuration errors even when empty or balance is false;
 remove the entire section. Existing account-profile directories, credentials

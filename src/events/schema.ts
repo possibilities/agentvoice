@@ -18,7 +18,7 @@ import { liveSnapshotSchema } from "./conversation-projection.ts";
 import { voiceNotificationSchema } from "./voice.ts";
 
 const context = {
-  instanceId: z.string().min(1).describe("Producer lifetime ID; changes on full restart."),
+  instanceId: z.string().min(1).describe("Producer lifetime ID; unique to each call."),
   generation: z.number().int().min(1).describe("Runtime generation within that lifetime."),
   sequence: z
     .number()

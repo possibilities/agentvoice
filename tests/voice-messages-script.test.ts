@@ -28,14 +28,7 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
             threadId: "main",
             generation: 1,
             runtime: { phase: "failed" },
-            recentOperations: [],
           }),
-          redial: async () => {
-            throw new Error("unexpected mutation");
-          },
-          restart: async () => {
-            throw new Error("unexpected mutation");
-          },
         },
       });
       const requests: Array<{ v: number; params: unknown }> = [];
@@ -119,7 +112,7 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
           expect(exit).toBe(1);
           expect(stdout).toBe("");
           expect(stderr).toContain(`Event protocol mismatch: controller uses ${version}`);
-          expect(stderr).toContain("fully quit and relaunch AgentVoice");
+          expect(stderr).toContain("close the frontend and start a new call");
         } else {
           expect(exit).toBe(0);
           expect(stdout).toBe("user: Hello café\nassistant: Hi 👋\n");

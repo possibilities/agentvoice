@@ -96,7 +96,7 @@ describe("WebRTC compatibility default", () => {
           await h.runtime.start();
           await h.runtime.offer("offer-1");
           await h.runtime.offer("redial");
-          await h.runtime.fresh();
+
           await h.runtime.offer("fresh-offer");
           const starts = h.native.calls.filter((c) => c.method === "thread/realtime/start");
           expect(starts).toHaveLength(3);
@@ -104,7 +104,7 @@ describe("WebRTC compatibility default", () => {
             expect(start.params["version"]).toBe("version" in extra ? extra.version : "v3");
           }
           expect(starts[0]!.params["threadId"]).toBe("existing");
-          expect(starts[2]!.params["threadId"]).not.toBe("existing");
+          expect(starts[2]!.params["threadId"]).toBe("existing");
         } finally {
           await h.cleanup();
         }

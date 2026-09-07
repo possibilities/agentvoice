@@ -16,8 +16,6 @@ export function hostHarness(values: ConfigValues = {}, runtimeOptions: RuntimeOp
     speakerMuted: false,
     async start() {
       calls.push("audio:start");
-      audioOptions.onMicLevel(-42.4);
-      audioOptions.onAgentLevel(-18.7);
     },
     async stop() {
       calls.push("audio:stop");
@@ -30,16 +28,9 @@ export function hostHarness(values: ConfigValues = {}, runtimeOptions: RuntimeOp
     },
   };
   const transport: HostTransport = {
-    liveForMs: 4_250,
     sendOpusFrame() {},
     async stop() {
       calls.push("transport:stop");
-    },
-    async redialAndWait() {
-      calls.push("redial");
-    },
-    redial() {
-      calls.push("redial");
     },
     handleReady(info) {
       calls.push("ready");

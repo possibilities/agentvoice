@@ -209,7 +209,9 @@ describe("owned native WebSocket", () => {
         const message = refusals.at(-1)!;
         expect(message).toContain(`Refused ${tool}`);
         expect(message).toContain("retired");
-        expect(message).toContain("Fresh or start AgentVoice without --continue/--resume");
+        expect(message).toContain(
+          "start a new call on an AgentVoice server launched without --continue/--resume",
+        );
         expect(responses.at(-1)!["result"]).toEqual({
           success: false,
           contentItems: [{ type: "inputText", text: message }],

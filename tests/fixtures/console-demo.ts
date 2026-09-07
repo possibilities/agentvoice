@@ -1,5 +1,7 @@
 /** Real-terminal harness for the actual host/TUI; fake media and no inference. */
+
 import { runConsoleHost } from "../../src/console/host.ts";
+import { createVoiceTui } from "../../src/console/tui.ts";
 import { parseArgs } from "../../src/main.ts";
 import { hostHarness } from "./host-harness.ts";
 
@@ -17,6 +19,7 @@ const refusalTimer =
     : undefined;
 try {
   await runConsoleHost(h.config, "terminal-probe", {
+    observe: createVoiceTui,
     mediaFactory: h.mediaFactory,
     runtime: { ...h.runtimeOptions, fast },
   });

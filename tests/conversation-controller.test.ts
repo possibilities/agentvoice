@@ -1,20 +1,20 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
-import type { VoiceTuiState } from "../src/console/tui.ts";
+import type { VoiceState } from "../src/console/state.ts";
 import { projectNotification } from "../src/events/conversation.ts";
 import { parseArgs } from "../src/main.ts";
 import { RuntimeController } from "../src/runtime-control/controller.ts";
 
-test("history responses cannot cross runtime replacement and old content cannot publish into its successor", async () => {
+test("history responses and late content cannot escape a closed call", async () => {
   const root = mkdtempSync("/tmp/av-observation-");
   const delayed = Promise.withResolvers<unknown>();
   const callbacks: Array<(method: string, params: unknown) => void> = [];
-  const ready: VoiceTuiState = {
+  const ready: VoiceState = {
     available: true,
     phase: "live",
-    liveForMs: 1,
-    mic: { muted: false, effectiveMuted: false, db: -8 },
-    speaker: { muted: false, effectiveMuted: false, db: -8 },
+
+    mic: { muted: false, effectiveMuted: false },
+    speaker: { muted: false, effectiveMuted: false },
     conversation: {
       workspace: root,
       threadId: "main",
@@ -72,16 +72,7 @@ test("history responses cannot cross runtime replacement and old content cannot 
     };
     const pending = controller.readConversation("conversation.thread.get", params);
     const settled = Promise.allSettled([pending]);
-    await controller.restart({
-      expectedInstanceId: "instance",
-      expectedGeneration: 1,
-      operationId: "replace",
-      scope: "runtime",
-    });
-    const deadline = Date.now() + 2000;
-    while (controller.status().currentOperation?.phase !== "ready" && Date.now() < deadline)
-      await Bun.sleep(5);
-    expect(controller.status().generation).toBe(2);
+    await controller.shutdown();
     delayed.resolve({
       ok: true,
       result: {
@@ -110,16 +101,6 @@ test("history responses cannot cross runtime replacement and old content cannot 
     )!;
     callbacks[0]!("conversation", notification);
     expect(controller.lifecycle.live("main").items).toEqual([]);
-    callbacks[1]!("conversation", {
-      ...notification,
-      data: {
-        ...notification.data,
-        item: { type: "agentMessage", id: "item", text: "new generation" },
-      },
-    });
-    expect(controller.lifecycle.live("main").items[0]?.item).toMatchObject({
-      text: "new generation",
-    });
   } finally {
     delayed.resolve(null);
     await controller.shutdown();

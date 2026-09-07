@@ -22,14 +22,7 @@ for (const shutdown of ["disconnect", "signal"] as const) {
           threadId: "main",
           generation: 1,
           runtime: { phase: "ready" },
-          recentOperations: [],
         }),
-        redial: async () => {
-          throw new Error("unexpected mutation");
-        },
-        restart: async () => {
-          throw new Error("unexpected mutation");
-        },
       },
     });
     const requests: string[] = [];

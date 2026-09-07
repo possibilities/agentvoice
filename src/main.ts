@@ -2,7 +2,7 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-/** Foreground voice application; console is a compatibility alias. */
+/** Local voice server and independent pointer frontend. */
 import packageJson from "../package.json";
 import { discoverController, discoverMcpConnection } from "./control/discovery.ts";
 import { loadLaunchConfig } from "./core/launch-config.ts";
@@ -12,65 +12,48 @@ import { expandTilde, stateDirectory } from "./paths.ts";
 export { loadLaunchConfig } from "./core/launch-config.ts";
 
 export const VERSION: string = packageJson.version;
-const USAGE = `agentvoice — a foreground Codex voice TUI
+const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
-  agentvoice [options]                            Start a new conversation in this workspace
-  agentvoice console [options]                    Compatibility alias
+  agentvoice server [options]       Wait for a frontend to start a call
+  agentvoice [--workspace <dir>]    Connect and start a call
   agentvoice attach [--workspace <dir>] [--thread <id>]
-                                                  Attach a stock Codex TUI to live work
+                                   Attach stock Codex to an active call
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
-                                                  Print a live MCP client configuration
+                                   Print live read-only MCP configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
-                                                  Print a live read-only event socket path
+                                   Print a live read-only event socket
 
-Options:
-  --allow-full-access      Opt in to unrestricted files/network and no approvals
+Server options:
   --workspace <dir>        Conversation root (default: launch directory)
-  --continue              Continue the most recent eligible conversation in this workspace
-  --fresh, --no-continue   Start a new conversation (default)
-  --resume <id>            Resume an unarchived AgentVoice conversation in this workspace
-  --role <name|path>       Role directory (name under ~/.config/agentroles or a path):
-                           its skills, mcp.json and prompt files apply to this launch only
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
-  -c, --codex-config <key=value>  Native Codex startup override (repeatable, TOML value)
-  --model <id>             Codex work model (default: native configuration)
-  --effort <level>         Codex reasoning effort (default: native configuration)
-  --fast                  Native Fast tier when supported (higher usage/cost)
-  --no-fast               Explicit standard processing, overriding inherited Fast
+  --continue              Continue the latest eligible conversation for each call
+  --resume <id>            Resume this exact conversation for each call
+  --fresh, --no-continue   Start a new conversation for each call (default)
+  --role <name|path>       Role directory for prompts, skills and MCP servers
+  -c, --codex-config <key=value>  Native startup override (repeatable, TOML)
+  --model <id>             Codex work model
+  --effort <level>         Reasoning effort
+  --fast, --no-fast        Explicit native Fast or standard processing
   --voice-model <id>       Realtime voice model
   --voice <name>           Voice timbre
-  --device <index>         Microphone device (default: system default)
-  --output-device <index>  Speaker device (default: system default)
-  --sandbox <mode>         Native sandbox mode (default: native configuration)
-  --approval-policy <p>    Native approval policy (default: native configuration)
-  --codex <path>           Stock Codex executable (default: $CODEX_PATH or codex)
-  --debug                 Per-launch protocol/media log under the state directory
+  --device <index>         Microphone device
+  --output-device <index>  Speaker device
+  --sandbox <mode>         Native sandbox mode
+  --approval-policy <p>    Native approval policy
+  --allow-full-access     Explicit unrestricted files/network and no approvals
+  --codex <path>           Stock Codex executable
+  --debug                 Private per-call protocol/media log
   --help                  Show help
 
-The foreground controller retains a disposable voice runtime and its stock Codex child.
-Quitting stops running work; native conversation history remains resumable.
-Permissions follow native configuration unless explicitly overridden.
---allow-full-access wins permission settings; native managed requirements still apply.
-Use agentvoice attach to answer native approvals and tool questions in the stock TUI.
-Local TUI attachment is always available; no background service or cross-machine attachment.
-
-Prompts are opt-in files beside the selected config (not the workspace), each one
-native Codex control: VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
-VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md,
-VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md. An override
-and an append for the same agent cannot both be present. Raw native fields remain
-available in orchestrator.extra / voice.extra.
-
-Settings and prompt files load per runtime generation; runtime restart rereads them.
-Raw extra fields can override named CLI settings except Fast/full-access flags; see README.
-
-MCP config export selects one live controller by canonical workspace (the launch
-directory by default). Use --thread when more than one controller is live there.
-It prints an authenticated mcpServers JSON object for Claude Code and Inspector.
-
-Keys: [m] toggle microphone · [s] toggle speaker · [r] redial · [f] fresh · [q] quit
-      [ctrl+k] commands · [space] hold to talk (muted mic, key-release capable terminal)
+Run the server and frontend in separate terminals, selecting the same workspace.
+The server stays in the foreground and opens no audio or Codex child while waiting.
+Closing the frontend ends its call; the server returns to waiting.
+The frontend has pointer controls only: microphone, speaker and hold-to-talk.
+Terminate its process or close its terminal to end a call. There are no app keybindings.
+Server settings and prompt files load for each call. Permissions follow native
+configuration unless explicitly overridden; native managed requirements still apply.
+Use agentvoice attach to answer native approvals and tool questions.
 `;
 
 export interface FlagSpec {
@@ -203,7 +186,7 @@ function parseDeviceIndex(flag: string, value: string): number {
   return index;
 }
 
-export interface ConsoleOptions {
+export interface ServerOptions {
   deviceIndex?: number;
   outputDeviceIndex?: number;
   debug: boolean;
@@ -211,11 +194,11 @@ export interface ConsoleOptions {
   continue: boolean;
   resume?: string;
 }
-export type ParsedConsoleCommand =
+export type ParsedServerCommand =
   | { help: true }
-  | { help: false; options: ConsoleOptions; parsed: ParsedArgs };
+  | { help: false; options: ServerOptions; parsed: ParsedArgs };
 
-export function parseConsoleCommand(argv: string[]): ParsedConsoleCommand {
+export function parseServerCommand(argv: string[]): ParsedServerCommand {
   const parsed = parseArgs(argv);
   if (parsed.help) return { help: true };
   const device = parsed.values["device"];
@@ -328,17 +311,18 @@ export async function runEventSocketCommand(
   return 0;
 }
 
-async function runConsoleCommand(argv: string[]): Promise<number> {
-  const command = parseConsoleCommand(argv);
+async function runServerCommand(argv: string[]): Promise<number> {
+  const command = parseServerCommand(argv);
   if (command.help) {
     console.log(USAGE);
     return 0;
   }
-  await loadLaunchConfig(command.parsed);
-  const { runController } = await import("./runtime-control/controller.ts");
-  await runController(
+  const config = await loadLaunchConfig(command.parsed);
+  const { runServer } = await import("./frontend/server.ts");
+  await runServer(
     { parsed: command.parsed, options: command.options, launchCwd: process.cwd() },
     VERSION,
+    config.orchestrator.workspace,
   );
   return 0;
 }
@@ -366,12 +350,25 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       throw new UsageError(
         "AgentVoice account management has been retired. Use codex login (optionally with CODEX_HOME set), then launch AgentVoice with the same environment. Existing profiles and credentials are untouched; see README migration notes.",
       );
-    if (command === "server" || command === "resident" || command === "remote") {
+    if (command === "server") return await runServerCommand(argv.slice(1));
+    if (command === "resident" || command === "remote" || command === "console") {
       throw new UsageError(
-        `${command} has been retired. Run agentvoice [--workspace <dir>] in the foreground. Existing installed services are not changed automatically; see README migration notes.`,
+        `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
       );
     }
-    return await runConsoleCommand(command === "console" ? argv.slice(1) : argv);
+    const frontendFlags = parseArgs(argv, {
+      value: new Set(["--workspace"]),
+      bool: new Set(["--help"]),
+    });
+    if (frontendFlags.help) {
+      console.log(USAGE);
+      return 0;
+    }
+    const selected = parseMcpConfigCommand(argv);
+    if (selected.help) return 0;
+    const { runFrontend } = await import("./frontend/client.ts");
+    await runFrontend(selected.workspace);
+    return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     if (error instanceof UsageError) {

@@ -6,16 +6,20 @@ value matching Codex's client can be part of vanilla behavior. Distinguish clien
 selection, app-server omission fallback and deliberate AgentVoice policy; omission
 alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
 
-**AgentVoice controller / Console** — The retained foreground process: terminal
-UI, exact workspace/thread identity, thread leases, durable control operations,
-and private control transports. It is not a resident service and ends when the
-foreground application quits.
+**Server** — The foreground `agentvoice server` process waiting on a private local
+socket for one frontend in its canonical workspace. Each frontend owns one call;
+frontend disconnect ends that call and returns the server to waiting.
 
-**Voice runtime** — The disposable foreground child of the controller:
-AgentVoice configuration/prompt/role loading, native audio/FFI, WebRTC,
-`VoiceRuntime`, and its owned Codex child. A full runtime restart replaces it
-while the controller and terminal stay open. RTP and PCM never cross controller
-IPC.
+**Frontend / Console** — The separate `agentvoice` terminal process. Connecting
+starts a call; its only controls are microphone mute, speaker mute and pointer
+push-to-talk. It owns no audio, Codex process, configuration or thread leases.
+
+**AgentVoice controller** — The server-owned authority for one call: exact
+workspace/thread identity, thread leases, private control and event transports.
+
+**Voice runtime** — The disposable child of a call controller, owning native
+audio, WebRTC, configuration/prompt/role loading and its stock Codex child.
+Audio never crosses the frontend socket or controller IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
 owned by the voice runtime. Native RPC uses an authenticated loopback WebSocket;
@@ -28,8 +32,7 @@ owned child/process group.
 **TUI attachment** — A stock Codex TUI subscribing to the current live
 orchestrator thread through a guarded local gateway. It follows native work and
 submits typed input without owning voice or the child. Always available through
-`agentvoice attach`; no launch opt-in or full-access requirement. Fresh, runtime
-replacement and quit revoke it; redial preserves it. Joining preserves the live
+`agentvoice attach`; no launch opt-in or full-access requirement. Call shutdown and native loss revoke it; automatic renewal preserves it. Joining preserves the live
 thread's settings; explicit native setting changes and human answers flow through.
 
 **Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
@@ -61,28 +64,14 @@ it does not imply an external orchestration daemon or custom continuation messag
 **Voice agent** — Codex's realtime speech model, connected by WebRTC. Native
 app-server handles delegation to the working agent.
 
-**Voice session** — One realtime connection layered on a conversation. Redial
-changes it without replacing the voice runtime, Codex child, or workspace.
-
-**Runtime restart** — A controller-owned, durable operation that validates a
-candidate runtime before it changes a live call, then replaces the current
-runtime and resumes the exact retained thread. It reloads the pinned launch
-inputs and loaded native artifact; it does not preserve live turns, delegated
-work, realtime state, or native tool connections.
-
-**Restart handoff** — Optional `handoffPrompt` attached to one runtime restart.
-The retained controller privately saves it with the operation and submits it
-once as labeled native task input after exact resume and media readiness.
-Its submission status is separate from restart success, execution, and speech.
-It does not edit prompts, replay automatically, or survive full controller quit.
-Native `turn/start` starts or steers the backing agent; it is not a new worker
-system. See `docs/adr/0016-restart-handoff.md`.
+**Voice session** — One realtime connection layered on a conversation. Automatic renewal
+replaces it while preserving the voice runtime, Codex child and workspace.
 
 **Control plane** — A versioned private Unix socket and an authenticated,
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
-child only by environment variable. `status`, `redial`, and full `restart`
-share one validated handler. See `docs/api.md`.
+child only by environment variable. Only `status` is exposed through MCP and the control socket. Lifecycle mutation
+methods were removed by ADR 0024. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -91,15 +80,14 @@ The app-server's omitted-version fallback (v1 in Codex 0.153.3/0.153.4) is a
 different reference, separate from the work model and --fast. Initial items
 require effective v3.
 
-**Fresh** — Stop old media and begin a new main thread in the same workspace.
-Old history remains; native work in the old conversation stays there.
-Ordinary launch uses this policy; --no-continue/--fresh makes it explicit.
+**Fresh launch** — The server's default conversation policy: each call starts a
+new main thread. `--fresh` / `--no-continue` make that policy explicit; there is
+no in-call Fresh action.
 
 **Continue / resume** — Explicitly resume native eligible working-thread history:
 --continue selects the latest eligible thread, --resume chooses an exact ID.
 No global thread.json pointer. AgentVoice does not read or inject saved speech
-into new voice calls. Ordinary reconnects add no AgentVoice instruction; an explicit restart handoff
-is a separate native task submission after connection readiness.
+into new voice calls. Ordinary reconnects add no AgentVoice instruction.
 
 **Native voice context** — Explicit voice.extra.initialItems are passed through
 unchanged, including empty and null values. Automatic spoken-history replay was
@@ -132,11 +120,9 @@ the file displaces).
 inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
-**Runtime settings** — AgentVoice configuration and prompt file contents are
-read by a preflighted runtime candidate and cached for that runtime's redial and
-Fresh actions. A full runtime restart rereads the controller-pinned launch
-provenance; it cannot adopt later shell-environment changes. Native Codex
-settings/history retain their own rules.
+**Runtime settings** — AgentVoice configuration and prompt contents read during
+call preflight and cached for that call. Later calls reload files using the server's
+pinned launch arguments and canonical workspace.
 
 **Startup config** — Explicit codex-config string array or repeatable -c /
 --codex-config key=value, forwarded as native Codex -c arguments. File entries
@@ -151,22 +137,18 @@ role key; its prompt files replace the config directory's, its skills register
 on the owned child only, and its MCP servers ride per-thread config. Not an
 identity, account, or workspace. _Avoid_: capability, overlay, profile.
 
-**Mute / hold** — M/S and channel clicks toggle the persistent mute assignment.
-Space (with key releases) and the pointer PTT band temporarily unmute the mic;
-each source releases only its own hold, and release never commits a toggle.
+**Mute / hold** — Channel clicks toggle the persistent mute assignment. The
+conditional pointer push-to-talk button temporarily opens a muted microphone;
+release, terminal blur or frontend disconnect closes that hold.
 
-**Historical terms** — Resident, Server, Remote console, control attachment,
-paired device, discovery, custom Worker, Worker report, account profile, idle
-account rotation and Quiet resume (ADR 0010, retired by ADR 0012) refer to retired
-implementations in old ADRs, not current runtime components. The current
-controller/runtime split is a foreground parent/child topology, not a resident
-server or cross-machine attachment feature. Local stock TUI attachment is the
-mechanism described above. Native Codex subagents are separate from
-the removed AgentVoice worker system.
+**Historical terms** — Resident, Remote console, pairing, custom Worker reports,
+account rotation, Quiet resume, in-call Fresh, Runtime restart and Restart handoff
+name retired implementations in older ADRs. The current Server is a local waiting
+foreground process; it does not restore remote access or service installation.
 
 **Lifecycle feed** — The retained controller's read-only Unix event endpoint for
 current native thread state, inventory completeness, and runtime availability.
-It survives runtime replacement, projects only bounded metadata, and provides
+It lasts for one call, projects only bounded metadata, and provides
 sequence-watermarked snapshots rather than a conversation log. _Avoid_: pipe,
 control socket.
 

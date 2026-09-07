@@ -5,23 +5,23 @@ import { join } from "node:path";
 import { type ConfigValues, resolveConfig } from "../src/core/config.ts";
 import { fullAccessStartupConfig } from "../src/core/full-access.ts";
 import { threadParams } from "../src/core/params.ts";
-import { loadLaunchConfig, parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs, parseServerCommand } from "../src/main.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("optional full access", () => {
   test("launch accepts omission and the exact valueless opt-in", () => {
-    expect(parseConsoleCommand([])).toMatchObject({ help: false });
+    expect(parseServerCommand([])).toMatchObject({ help: false });
     expect(parseArgs([])).not.toHaveProperty("allowFullAccess");
-    expect(parseConsoleCommand(["--allow-full-access"])).toMatchObject({
+    expect(parseServerCommand(["--allow-full-access"])).toMatchObject({
       parsed: { allowFullAccess: true },
     });
-    expect(parseConsoleCommand(["--help"])).toEqual({ help: true });
+    expect(parseServerCommand(["--help"])).toEqual({ help: true });
     for (const flag of [
       "--allow-full-access=true",
       "--allow-full-access=false",
       "--no-allow-full-access",
     ])
-      expect(() => parseConsoleCommand([flag])).toThrow();
+      expect(() => parseServerCommand([flag])).toThrow();
     expect(parseArgs(["--allow-full-access"]).values).toEqual({});
   });
 
@@ -195,12 +195,11 @@ describe("optional full access", () => {
     const h = runtimeHarness();
     h.config.allowFullAccess = true;
     try {
-      await h.runtime.start();
       h.native.override = (method) =>
         method === "thread/start"
           ? Promise.resolve({ thread: { id: "restricted" }, sandbox: { type: "readOnly" } })
           : undefined;
-      await h.runtime.fresh();
+      await h.runtime.start();
       h.native.options.onNotification("thread/settings/updated", {
         threadId: "restricted",
         threadSettings: {

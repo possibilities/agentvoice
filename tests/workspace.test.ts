@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseJsonConfig, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams, threadParams } from "../src/core/params.ts";
-import { loadLaunchConfig, parseArgs, parseConsoleCommand } from "../src/main.ts";
+import { loadLaunchConfig, parseArgs, parseServerCommand } from "../src/main.ts";
 
 describe("workspace launch", () => {
   test("defaults to launch cwd; CLI wins over file; relative paths and extra roots share that root", () => {
@@ -77,20 +77,20 @@ describe("workspace launch", () => {
     expect(realtimeParams(config, {}, "t", "rt", "sdp")["threadId"]).toBe("t");
   });
   test("preserves the console/fresh alias, explicit resume, and clear retirement errors", () => {
-    expect(parseConsoleCommand(["--allow-full-access", "--continue"])).toMatchObject({
+    expect(parseServerCommand(["--allow-full-access", "--continue"])).toMatchObject({
       options: { fresh: false, continue: true },
     });
     for (const args of [["--no-continue"], ["--fresh"], ["--resume", "id"]])
       expect(() => parseArgs(["--continue", ...args])).toThrow("cannot be combined");
     for (const flag of ["--fresh", "--no-continue"]) {
-      expect(parseConsoleCommand(["--allow-full-access", flag])).toMatchObject({
+      expect(parseServerCommand(["--allow-full-access", flag])).toMatchObject({
         help: false,
         options: { fresh: true, continue: false },
       });
-      expect(() => parseConsoleCommand([flag, "--resume", "id"])).toThrow("cannot be combined");
+      expect(() => parseServerCommand([flag, "--resume", "id"])).toThrow("cannot be combined");
     }
     expect(
-      parseConsoleCommand(["--allow-full-access", "--resume=id", "--workspace=/work"]),
+      parseServerCommand(["--allow-full-access", "--resume=id", "--workspace=/work"]),
     ).toMatchObject({
       options: { resume: "id", fresh: false, continue: false },
     });

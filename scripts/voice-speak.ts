@@ -84,7 +84,7 @@ export async function sendSpeech(ticket: AttachmentTicket, text: string): Promis
                 if (frame.error) {
                   reject(
                     new Error(
-                      `Speech request rejected: ${String(frame.error.message ?? "unknown error")}. If appendSpeech is unsupported, restart the voice runtime from the updated checkout.`,
+                      `Speech request rejected: ${String(frame.error.message ?? "unknown error")}. If appendSpeech is unsupported, close the frontend and start a new call from the updated checkout.`,
                     ),
                   );
                   return;

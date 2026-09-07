@@ -267,7 +267,7 @@ describe("role launch", () => {
         join(h.dir, ROLE_PROMPT_FILES.orchestratorDeveloperInstructions),
       ]);
       expect(warnings).toContain(`role: ${h.dir}`);
-      await h.runtime.fresh();
+
       expect(h.native.calls.filter((call) => call.method === "skills/extraRoots/set")).toHaveLength(
         1,
       );

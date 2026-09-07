@@ -1,13 +1,13 @@
 /** Private inherited IPC only; no audio, RTP, or capability appears in UI events. */
-import type { VoiceTuiState } from "../console/tui.ts";
+import type { VoiceState } from "../console/state.ts";
 import type { ControlMcpRegistration } from "../core/control-mcp.ts";
-import type { ConsoleOptions, ParsedArgs } from "../main.ts";
+import type { ParsedArgs, ServerOptions } from "../main.ts";
 
 export const IPC_VERSION = 1;
 export const MAX_IPC_BYTES = 1024 * 1024;
 export interface LaunchProvenance {
   parsed: ParsedArgs;
-  options: ConsoleOptions;
+  options: ServerOptions;
   launchCwd: string;
 }
 export interface CandidateInfo {
@@ -23,7 +23,6 @@ export interface RuntimeLaunch {
   nativeStateDir?: string;
 }
 export interface RuntimeActivation {
-  threadId?: string;
   mute: { mic: boolean; speaker: boolean };
 }
 export interface IpcMessage {
@@ -46,4 +45,4 @@ export function ipcMessage(value: unknown, generation: number): value is IpcMess
     Buffer.byteLength(JSON.stringify(value)) <= MAX_IPC_BYTES
   );
 }
-export type RuntimeState = VoiceTuiState;
+export type RuntimeState = VoiceState;

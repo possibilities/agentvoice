@@ -1,10 +1,10 @@
 # AgentVoice
 
-A foreground Codex voice app with a retained terminal controller. The controller
-owns the TUI, exact conversation identity, thread leases, and local control
-plane. Its disposable runtime child owns audio, WebRTC, AgentVoice runtime code,
-and an unmodified `codex app-server` child that owns agents, tools, and native
-conversation history.
+A local Codex voice server with a separate terminal frontend. `agentvoice server`
+waits for a call; `agentvoice` connects and starts one. The server owns audio,
+WebRTC, exact conversation identity, thread leases and its unmodified
+`codex app-server` child. The frontend contains only connection status and
+monochrome YOU/AGENT buttons, plus PUSH TO TALK when the microphone is muted.
 
 The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
@@ -16,19 +16,29 @@ that this frontend cannot implement; passthrough is not a claim of feature parit
 
 ## Start here
 
-From a prepared checkout (Bun dependencies and native audio already built):
+From a prepared checkout (Bun dependencies and native audio already built), run
+these in separate terminals from the same workspace:
 
 ```sh
-bun run ~/code/agentvoice/src/main.ts
-bun run ~/code/agentvoice/src/main.ts --workspace ~/code/myapp --continue
-bun run ~/code/agentvoice/src/main.ts --resume <thread-id>
-bun run ~/code/agentvoice/src/main.ts --allow-full-access
+# Terminal 1: waits without opening audio or starting Codex
+bun run /path/to/agentvoice/src/main.ts server
+
+# Terminal 2: connects and starts a call
+bun run /path/to/agentvoice/src/main.ts
 ```
 
-The absolute source command preserves your shell's working directory. In the
-examples, replace the checkout path if needed. Once installed, `agentvoice`
-is shorthand for the same entrypoint. `agentvoice console` is a compatibility
-alias; `--fresh` is an alias for `--no-continue`.
+Once installed, use `agentvoice server` and `agentvoice`. To choose a workspace,
+pass `--workspace /absolute/project` to both commands. Configuration, model,
+voice, device, permission, role and conversation-selection flags belong to
+`agentvoice server`, for example `agentvoice server --continue --fast`.
+The frontend accepts only `--workspace` and `--help`.
+
+One server and one active frontend are allowed per canonical workspace. Closing
+the frontend terminal or terminating its process ends the call, closes audio
+and the owned Codex child, and returns the server to waiting. There are no
+application keybindings, including quit; process signals still perform cleanup.
+The server remains a foreground process, with no automatic service installation.
+Warnings and detailed failure reasons appear in the server terminal.
 
 To connect Claude Code or MCP Inspector to one controller that is already
 running, export its authenticated MCP client configuration:
@@ -57,8 +67,8 @@ configuration shape, so this output is not a Codex configuration file.
 `agentvoice event-socket --workspace ~/code/myapp` prints the separate read-only
 Unix endpoint for a live controller. UIs subscribe with `event.subscribe`, then
 read `state.get` for the current inventory and a sequence watermark. The endpoint
-reports native thread state and runtime availability across Fresh and runtime
-restart, including native subagents. The same endpoint also carries typed
+reports native thread state and runtime availability during a call, including
+native subagents. The same endpoint also carries typed
 `voice.*` items and transcript deltas as a live-only stream, without history
 backfill or controller transcript storage. An explicit `bun run voice:record
 --workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for live
@@ -73,18 +83,21 @@ of conversation events, and page native thread/turn/item history without resumin
 threads or submitting work. Use `runtime.mainThreadId` and native parent links to
 select a conversation family. See the [conversation contract](docs/conversations.md)
 for the methods and reconnect algorithm. Voice events remain live-only.
-A full foreground relaunch and updated protocol-2 clients are required; runtime
-restart does not upgrade the retained controller's socket protocol.
+Event clients must match the event protocol. A new call creates new event and
+control endpoints; rediscover them after a call ends.
 
 ### Attach a stock Codex TUI
 
-Every voice launch supports attachment from a second terminal:
+Every active call supports stock Codex attachment from an additional terminal:
 
 ```sh
-# First terminal, from this prepared checkout:
+# Server terminal, from this prepared checkout:
+bun run src/main.ts server --workspace ~/code/myapp
+
+# Frontend terminal:
 bun run src/main.ts --workspace ~/code/myapp
 
-# Second terminal, from the same checkout:
+# Third terminal, for typed Codex interaction:
 bun run src/main.ts attach --workspace ~/code/myapp
 ```
 
@@ -121,7 +134,7 @@ forwarding them, preserving the selected workspace/thread.
 
 Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
 interrupt or running-task Exit action can interrupt native work. Redial preserves
-attachment; Fresh, runtime restart, native failure, or AgentVoice quit disconnects
+attachment; call teardown or native failure disconnects
 it. Run `attach` again for the current thread after a disconnect. No automatic
 reconnect or input replay occurs. Use `agentvoice attach` instead of the stock
 TUI's printed reconnect command, whose one-use ticket has ended.
@@ -179,16 +192,11 @@ v3 sends that required header; native WebRTC omission falls back to v1 and sends
 `quicksilver=v1`. The header's `v2` is not protocol v2, which WebRTC rejects.
 
 Explicit version overrides remain available; see [voice protocol](#native-voice-protocol).
-Automatic retries pause after three consecutive short-lived failures and keep
-the last cause visible. `r` retries the same launch settings. An orchestrator
-can request a full runtime restart to apply a changed runtime/configuration
-snapshot while the controller stays open; see [control API](docs/api.md).
-An optional `handoffPrompt` on that restart request gives the resumed working
-agent a task after the exact conversation and live media are ready. Submission
-status is tracked separately from restart success; work and audible speech still
-need to be observed. See [restart handoffs](USAGE.md#give-the-restarted-agent-a-task).
-The new request uses control protocol 2 and requires a full foreground relaunch
-to activate its controller; runtime restart alone does not upgrade the API.
+Automatic retries pause after three consecutive short-lived failures. The frontend
+shows FAILED and the server prints the cause. Close the frontend and start a new
+call to retry. Manual redial, in-call Fresh, runtime restart and restart handoffs
+have been removed from the TUI, IPC and MCP API. Control protocol 3 exposes only
+status; see [control API](docs/api.md) and [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md).
 
 ### Installation
 
@@ -244,7 +252,7 @@ an eligible conversation in the selected workspace.
 Explicit `--continue` or `--resume` resumes the selected working thread.
 Each voice connection starts without AgentVoice reading or injecting earlier
 speech or adding its own reconnect instruction. This applies to continue,
-explicit resume, redial and Fresh. Native saved conversation history remains intact.
+explicit resume and automatic renewal. Native saved conversation history remains intact.
 
 AgentVoice leaves the native startup snapshot (including Recent Work) unset,
 so Codex supplies its native context. Set `voice.include-startup-context` to
@@ -258,59 +266,38 @@ It errors at load with removal guidance, as does the older `voice.quiet-resume`
 key. AgentVoice does not migrate or delete your configuration or saved history.
 See [ADR 0017](docs/adr/0017-remove-spoken-history-replay.md) for the decision.
 
-Fresh changes the conversation, not the workspace. It cuts the old media path
-before opening the new one. Old native history is not deleted, and any native
-work still active in the old conversation stays there. A per-thread kernel lock prevents two AgentVoice
-launches from controlling the same conversation; other workspaces and explicit
-fresh conversations can run independently.
+Each frontend connection begins a new call using the server's selected workspace
+and conversation policy. The default starts a new native conversation;
+`server --continue` selects the latest eligible one for every call, and
+`server --resume <id>` selects that exact saved conversation. There is no
+in-call conversation switch. A per-thread kernel lock protects each active call.
 
-Quitting stops voice and app-owned work, shuts down the child and restores the
-terminal. **Work does not continue in the background.** The next launch can
-resume saved native history. A full runtime restart is separate from Fresh: the
-controller retains the exact current thread and starts a new runtime without
-using normal continue/history selection to choose a replacement thread.
-Ephemeral conversations and native threads with no saved rollout cannot be
-continued after exit. Workspace selection is not a memory or security sandbox.
+Closing a call stops voice and app-owned work and closes its Codex child.
+**Work does not continue after the call ends.** Native saved history remains
+available to a subsequent call; ephemeral/unpersisted threads cannot be resumed.
+Workspace selection is not a memory or security sandbox.
 
 ## Features and controls
 
-- Full-duplex microphone/speaker audio: in-process miniaudio device, Opus and
-  WebRTC; live signal meters and phase/timer display.
-- `ctrl+k`: command palette. `m` microphone, `s` speaker, `r` redial,
-  `f` fresh conversation, `q` or `ctrl+c` quit.
-- Click the YOU/AGENT zones to toggle microphone/speaker mute. With the mic
-  muted, the bottom band is hold-only push-to-talk. In release-capable
-  terminals, hold Space to temporarily unmute the mic; releasing always restores
-  mute, even after a quick tap. M/S toggle on press in all terminals. Terminals
-  without key-release reporting leave Space inert. Opening the palette cancels
-  active holds; a missing Space release times out safely.
-- Redial renews voice on the same conversation using overlapping WebRTC peers;
-  automatic renewal uses the same path. Fresh closes old media first.
-- Device selection, model/effort/voice overrides and config/prompt passthrough.
-  Redial and Fresh use the active runtime snapshot; a full runtime restart
-  rereads the pinned launch inputs.
-- Optional runtime-restart handoff: save a prompt before teardown and submit it
-  once to the resumed working agent after media readiness, with recoverable
-  submission status through the existing control tools.
-- Per-launch opt-in debug logs; no phone remote, pairing, Android packaging,
-  separate Server, resident service or Herdr integration.
+- Click YOU to toggle microphone mute and AGENT to toggle speaker mute.
+- While the microphone is muted, hold PUSH TO TALK to speak. Releasing restores
+  mute; terminal blur and frontend disconnect cancel the hold.
+- Buttons use white and grey only. Muted channels are greyed out. There are no
+  animations, meters, timers, extra status rows, modal or application keybindings.
+- The top line shows only the connection phase. LIVE confirms the media link,
+  not that native work completed or speech was heard.
+- Full-duplex audio uses native miniaudio, Opus and WebRTC. Automatic renewal
+  maintains the connection without changing its conversation or configuration.
+- Server settings and prompt files load once per call. A later call reloads
+  file contents; changing launch flags or the workspace requires a new server.
 
-The upper field shows workspace, whether the conversation was started or continued,
-and its native ID (truncated to fit). Model, effort and voice protocol reflect
-Codex reports, not requested values; missing model data shows `unknown`. Identity
-rows hide below 12 terminal rows. `LIVE` means the media link is connected, not
-that Codex work completed. The most recent audio/transport or interaction notice
-stays visible without `--debug`; detailed media tracing remains opt-in.
-Without `--debug`, AgentVoice asks Codex to omit unused text, reasoning, tool-output,
-plan/diff, usage, and legacy flat realtime transcript/audio streams. Native
-item transcript deltas remain enabled for the event socket. Lifecycle and settings
-notifications remain enabled. Debug launches retain those streams and decode
-WebRTC data-channel events for diagnostics; ordinary launches skip that work.
+Warnings appear in the server terminal. With `--debug`, private per-call logs
+also capture protocol/media details. Native item deltas remain available through
+the read-only event socket; the frontend does not display them.
 
-Launch validates prompts/protocol, selects the native conversation and confirms
-permissions/Fast before opening audio. The WebRTC offer follows device readiness.
-If opening audio fails, the owned child is closed; native conversation creation
-or resume may already have happened.
+Call startup validates prompts/protocol and native readiness before opening audio.
+The WebRTC offer follows device readiness. Audio failure closes the owned child;
+native conversation creation or resume may already have happened.
 
 ## Configuration and prompts
 
@@ -325,12 +312,12 @@ imply a background server. Use `--config <path>` for another file.
 Common launch options:
 
 ```sh
-agentvoice --workspace ~/code/myapp --model <model-id> --effort high
-agentvoice --fast
-agentvoice --resume <thread-id> --no-fast
-agentvoice --voice <voice-name> --device 1 --output-device 2
-agentvoice --config ./voice-settings.json --debug
-agentvoice --role researcher
+agentvoice server --workspace ~/code/myapp --model <model-id> --effort high
+agentvoice server --fast
+agentvoice server --resume <thread-id> --no-fast
+agentvoice server --voice <voice-name> --device 1 --output-device 2
+agentvoice server --config ./voice-settings.json --debug
+agentvoice server --role researcher
 ```
 
 Named CLI options beat the same named file settings. Raw native overrides merge
@@ -351,8 +338,8 @@ instead supplies **native Codex startup configuration**, just like Codex's own
 explicit native permission overrides follow the user entries so the flag wins.
 
 ```sh
-agentvoice -c model_reasoning_effort=high
-agentvoice --codex-config 'shell_environment_policy.include_only=["PATH","HOME"]'
+agentvoice server -c model_reasoning_effort=high
+agentvoice server --codex-config 'shell_environment_policy.include_only=["PATH","HOME"]'
 ```
 
 The equivalent opt-in JSON setting is an ordered array of native strings:
@@ -380,9 +367,9 @@ There are three distinct configuration points:
 
 | Setting | Applied when | Lifetime |
 | --- | --- | --- |
-| `codex-config` / `-c` | Owned Codex child starts | Entire launch, including Fresh/redial |
+| `codex-config` / `-c` | Owned Codex child starts | Entire launch, including automatic renewal |
 | `orchestrator.config` / `orchestrator.extra` | Conversation starts or resumes | Native thread configuration/history rules |
-| `voice.extra` | Realtime voice session starts | Each voice start/redial |
+| `voice.extra` | Realtime voice session starts | Each voice start/renewal |
 
 Startup entries override native config files, but they are not forced over later
 conversation settings. A stock 0.153.3 offline probe confirmed the new-thread
@@ -400,21 +387,15 @@ metadata already saved in native history. `--fast`/`--no-fast` retain their expl
 launch-tier precedence.
 
 All AgentVoice settings, including `voice.name`, and prompt-file contents are
-read by a preflighted runtime candidate and cached for that runtime. Fresh and
-redial reuse the active runtime snapshot; a full runtime restart rereads the
-pinned launch inputs and replaces Codex. It cannot adopt later shell-environment
-changes. Disabled realtime support fails clearly; `cwd` must be selected with
-`--workspace`. The owned native RPC transport is always WebSocket. Native keys
-remain passthrough, not a promise that your Codex version
-supports them or detects typos. No global config, prompt or skill
-policy is written. See [native override syntax](https://developers.openai.com/codex/config-advanced/#one-off-overrides-from-the-cli).
+read during call preflight and cached until the call ends. A later call reloads
+files using the server's launch arguments and pinned canonical workspace.
 
 ### Native voice protocol
 
 AgentVoice defaults the final WebRTC request to `version: "v3"` when the version
 is unset. This restores service compatibility, rather than inferring a default
 from another Codex UI. The choice applies on start, continue, explicit resume,
-redial and Fresh. No configuration file is created or edited.
+automatic renewal. No configuration file is created or edited.
 
 Named `voice.version` overrides it, and raw `voice.extra.version` wins last.
 Explicit v1 still passes through, although the service tested here rejects it.
@@ -458,7 +439,7 @@ change the realtime speech model, speech speed, prompts or voice context.
 `--no-fast` explicitly requests standard processing. The flags conflict with
 each other; omitting both preserves existing AgentVoice/native tier settings.
 
-These are launch overrides, including for continued conversations and Fresh.
+These are launch overrides, including for continued conversations.
 They beat `orchestrator.service-tier`, native config overrides
 and `orchestrator.extra.serviceTier`. Raw configuration remains unchanged when
 neither flag is supplied. Fast enables only the thread-local native feature
@@ -473,11 +454,9 @@ provider cannot be verified; configure that provider natively or omit `--fast`.
 If an older Codex lacks service-tier catalog metadata, update it or use the raw
 passthrough without the flag. Codex/account/provider restrictions still apply.
 
-The status line says `Work: Fast` or `Work: Standard` when Codex reports that
-setting, and appends `requested` if the response lacks tier information.
-This is the native configured tier, not per-request billing telemetry or a
-guaranteed speedup. A native null tier means no accelerated tier; a missing
-field means unknown. See the [official Fast documentation](https://learn.chatgpt.com/docs/agent-configuration/speed).
+Native settings metadata distinguishes requested and reported tiers. The minimal
+frontend displays only connection phase, with no tier indicator. See
+[Codex speed](https://learn.chatgpt.com/docs/agent-configuration/speed).
 
 ### Prompt override files
 
@@ -511,9 +490,9 @@ prompt is per model and partly remote; Codex's own append channel is used as is.
 
 A present name must load: an unreadable file, a directory or a broken link fails
 before Codex starts, even if a raw field would override the contents. Symlinks to
-regular files work. Contents are cached by the active runtime for redial and
-Fresh, then reread by a full runtime restart. Session-boundary instructions and voice prompts ride every realtime start,
-including redial. Explicit voice context items use raw `voice.extra.initialItems`,
+regular files work. Contents are cached by the active runtime for the call,
+then reread by the next call. Session-boundary instructions and voice prompts ride every realtime start,
+including automatic renewal. Explicit voice context items use raw `voice.extra.initialItems`,
 not prompt files; AgentVoice generates no history items of its own.
 
 The former names (`VOICE.md`, `ORCHESTRATOR.md`, `ORCHESTRATOR_BASE.md`,
@@ -525,7 +504,7 @@ option. Rename or remove them yourself; nothing is migrated or deleted. Removing
 an override does not erase earlier instructions/messages from a resumed native
 conversation; use `--no-continue` for a new conversation when testing the
 baseline. Native global and workspace instructions, skills, MCPs and hooks still
-apply, even to Fresh. AgentVoice does not automatically enable AgentStart skills
+apply, even to new conversations. AgentVoice does not automatically enable AgentStart skills
 or isolate native state; a [role](#roles) adds its own skills and MCP servers to
 this launch without changing what other Codex processes see.
 
@@ -559,8 +538,8 @@ arguments. AgentVoice reads it natively because only its own process can
 register skill roots with the Codex child it owns.
 
 ```sh
-agentvoice --role researcher      # ~/.config/agentroles/researcher
-agentvoice --role ./roles/researcher
+agentvoice server --role researcher      # ~/.config/agentroles/researcher
+agentvoice server --role ./roles/researcher
 ```
 
 `--role` takes a name under `$AGENTROLES_HOME` (default `~/.config/agentroles`)
@@ -568,7 +547,7 @@ or a directory path. The `role` key in `server.json` is the file-level default;
 `--role` overrides it. Names use letters, digits, `_` and `-` only.
 
 The repository includes a minimal role at `roles/default` with a no-op
-`role-smoke-test` skill. Select it with `agentvoice --role ./roles/default`
+`role-smoke-test` skill. Select it with `agentvoice server --role ./roles/default`
 from the repository directory, then ask to use `$role-smoke-test` to check
 discovery. It contains no prompt overrides or MCP configuration. It is not
 automatically selected when `--role` and the config's `role` key are absent.
@@ -599,13 +578,13 @@ turns. Verified on stock Codex 0.153.4 on September 5, 2026 with
 The controls below are configurable. AgentVoice leaves `include-startup-context`,
 tail flush and startup-text overrides unset, leaving native resolution in charge.
 The shipped `server.json.example` does not configure them. This applies to ordinary
-launch, continue, explicit resume, redial and Fresh. Codex currently includes its
+launch, continue, explicit resume and automatic renewal. Codex currently includes its
 startup snapshot when the field is omitted. This deliberately inherits server
 behavior; desktop disables this snapshot alongside its own context machinery,
 so omission does not establish identical desktop context. See [ADR 0020](docs/adr/0020-native-launch-defaults.md).
 
-A saved conversation is not the same as a voice call: redial starts another
-call on the same conversation; Fresh starts a new conversation. Codex can give
+A saved conversation is not the same as a voice call: subsequent calls may
+resume the same conversation, while the default starts a new conversation. Codex can give
 each call a startup snapshot and can deliver leftover speech to the working
 agent when a call ends. AgentVoice adds no automatic speech replay between calls.
 
@@ -662,9 +641,7 @@ the named voice controls, and `orchestrator.extra.config` replaces
 
 Codex owns the voice-to-working-agent handoff, tools, subagents and their native
 events. AgentVoice does not add worker tools, start extra worker threads, compose
-completion reports, or archive/delete completed work. The optional restart
-handoff submits one caller-provided task through native `turn/start` after resume;
-its submission status is separate from the native work's outcome.
+completion reports, submit restart handoffs, or archive/delete completed work.
 It generates no worker-specific instructions; optional operator prompt overrides
 still pass through.
 
@@ -672,7 +649,7 @@ still pass through.
 both keys from old configuration, even when set to `false`. Existing conversation
 history is untouched. Codex can retain old dynamic tool definitions on resume;
 calls to `dispatch_worker`, `check_workers` or `cancel_worker` now receive an
-immediate failed tool result and a visible retirement notice. Fresh or
+immediate failed tool result and a visible retirement notice in the server terminal. A server launched with
 `--no-continue` starts without the old definitions; there is no automatic switch,
 history rewrite or transcript copying.
 
@@ -694,7 +671,7 @@ both commands (examples only; nothing is configured automatically):
 
 ```sh
 CODEX_HOME=/absolute/path/to/codex-home codex login
-CODEX_HOME=/absolute/path/to/codex-home agentvoice --allow-full-access
+CODEX_HOME=/absolute/path/to/codex-home agentvoice server --allow-full-access
 ```
 
 Use the same stock Codex executable for login and AgentVoice's `--codex` option
@@ -721,7 +698,8 @@ configuration, services or other account tools are changed by this removal.
 
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
-`thread-locks/`, private live-controller discovery records under `control/`, and
+`frontend/` workspace sockets, `thread-locks/`, private per-call controller
+discovery records under `control/`, and
 `runs/<time>-<pid>.log` with `--debug`. Every runtime also creates a
 private `native-ws-*` directory holding the owned listener token; normal runtime
 shutdown removes it. Lock files are inert after exit; the
@@ -732,8 +710,9 @@ stale crash residue rather than choosing it or deleting it.
 Debug logs may contain prompts, transcripts and protocol details—keep them private.
 They also record the selected workspace and conversation ID.
 
-`server`, `resident` and `remote` commands, and the `remote` config section,
-now fail with a retirement message. Remove a retired `remote` section from
+`resident`, `remote` and `console` commands, and the `remote` config section,
+fail with a retirement message. `server` now names the waiting local server; it
+does not restore the retired remote/resident implementation. Remove a retired `remote` section from
 your chosen config before launching. Other unknown retired keys are rejected
 by strict config validation.
 
@@ -759,7 +738,7 @@ The native probe starts its own stock child, initializes, lists workspace
 history, and closes—no turns or audio. `audio:probe` uses hardware and requires
 an explicit live check.
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
-for the ownership decision.
+for historical ownership decisions; [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md) defines the current topology.
 
 ### Send text to the voice
 
@@ -782,6 +761,5 @@ thread. Acceptance does not confirm audible playback or verbatim delivery.
 There are no automatic retries. An ambiguous disconnect may occur after the
 request was delivered; rerunning can repeat speech.
 
-An already-running runtime must be restarted from the updated checkout to load
-the gateway's appendSpeech support. The script does not restart the app or voice
+Start a new call from the updated checkout to load changed runtime code. The script does not restart the app or voice
 session. Other realtime mutations remain unavailable through attachment.

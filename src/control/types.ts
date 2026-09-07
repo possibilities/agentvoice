@@ -1,64 +1,12 @@
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
- * deliberately has no runtime, thread, or operation-journal ownership.
+ * deliberately has no runtime or thread ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 2;
+export const CONTROL_PROTOCOL_VERSION = 3;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
-export const CONTROL_MCP_TOOLS = [
-  "agentvoice_status",
-  "agentvoice_redial",
-  "agentvoice_restart_runtime",
-] as const;
-
-export type ControlOperationPhase =
-  | "accepted"
-  | "quiescing"
-  | "interrupted"
-  | "forced"
-  | "starting"
-  | "ready"
-  | "failed";
-
-export type ControlMutationRequest = {
-  operationId: string;
-  expectedGeneration: number;
-  expectedInstanceId: string;
-};
-
-export type ControlRestartRequest = ControlMutationRequest & {
-  scope: "runtime";
-  handoffPrompt?: string;
-};
-
-export type ControlHandoff = {
-  status: "pending" | "submitting" | "accepted" | "failed" | "unknown";
-  clientUserMessageId: string;
-  turnId?: string;
-  error?: { code: string; message: string };
-};
-
-export type ControlOperation = {
-  operationId: string;
-  kind: "redial" | "restart";
-  scope: "voice" | "runtime";
-  expectedGeneration: number;
-  expectedInstanceId: string;
-  phase: ControlOperationPhase;
-  acceptedAt: string;
-  updatedAt: string;
-  forced?: boolean;
-  result?: {
-    generation: number;
-    threadId: string;
-    workspace: string;
-    pid?: number;
-    buildId?: string;
-  };
-  error?: { code: string; message: string };
-  handoff?: ControlHandoff;
-};
+export const CONTROL_MCP_TOOLS = ["agentvoice_status"] as const;
 
 export type ControlStatus = {
   protocolVersion: number;
@@ -67,8 +15,6 @@ export type ControlStatus = {
   threadId: string;
   generation: number;
   runtime: { pid?: number; buildId?: string; phase: string; voicePhase?: string };
-  currentOperation?: ControlOperation;
-  recentOperations: ControlOperation[];
 };
 
 type MaybePromise<T> = T | Promise<T>;
@@ -76,8 +22,6 @@ type MaybePromise<T> = T | Promise<T>;
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
   status(): MaybePromise<ControlStatus>;
-  redial(request: ControlMutationRequest): Promise<ControlOperation>;
-  restart(request: ControlRestartRequest): Promise<ControlOperation>;
 }
 
 /** A stable error suitable for both JSON socket and MCP error results. */
@@ -89,7 +33,6 @@ export class ControlError extends Error {
       | "unknown_method"
       | "instance_mismatch"
       | "stale_generation"
-      | "operation_conflict"
       | "unavailable"
       | "internal_error",
     message: string,

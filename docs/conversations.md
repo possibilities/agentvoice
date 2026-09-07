@@ -8,14 +8,13 @@ RPC forwarding. Codex remains the owner of execution and persisted history.
 Use `agentvoice event-socket --workspace <directory>` to discover the endpoint.
 Frames use the [event protocol](events.md); [events.schema.json](../events.schema.json)
 is the complete request/response/event schema. Protocol 1 clients must update;
-the controller must be fully relaunched to activate protocol 2.
+start a new call to obtain a controller using the current event protocol.
 
 ## Identity and thread selection
 
 Subscribe before reading `state.get`. Its `runtime.mainThreadId` is the exact
 current orchestrator, not the most recently active thread. Its loaded inventory
-contains native `parentThreadId` links, including old Fresh conversations still
-loaded by the same owned app-server. Build the current family by following parent
+contains native `parentThreadId` links from the same owned app-server. Build the current family by following parent
 links to the selected root; missing parents remain unresolved. Thread names do
 not establish ownership, and workspace equality alone does not establish ancestry.
 
@@ -28,9 +27,8 @@ reads. Children may use a different cwd; their native ancestry establishes scope
 Cycles, missing links, more than 32 ancestors, unowned roots, and late replies from
 replaced runtimes fail explicitly. Reads never acquire a lease or resume a thread.
 
-Fresh changes the current root while retaining old main-thread leases. A client
-may explicitly inspect such an old root until full quit. After relaunch, only
-roots acquired by the new controller are available. Loaded inventory is bounded
+Each call retains its root lease until shutdown. After a call ends, only roots
+acquired by the new call controller are available. Loaded inventory is bounded
 and is not a historical directory; use descendant listing to find stored children
 that have unloaded. Native descendant listing covers spawned descendants, not
 every review/Guardian/fork relationship. Preserve other native references as

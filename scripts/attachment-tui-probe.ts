@@ -232,19 +232,12 @@ try {
     workspace,
     threadId,
     runtime: { phase: "ready" },
-    recentOperations: [],
   };
   control = await startControlServer({
     stateDir,
     instanceId: status.instanceId,
     backend: {
       status: () => status,
-      redial: async () => {
-        throw new Error("No media in fixture");
-      },
-      restart: async () => {
-        throw new Error("No runtime restart in fixture");
-      },
     },
     attachment: async () => gateway!.issue({ workspace, threadId }),
   });

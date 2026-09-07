@@ -91,7 +91,7 @@ describe("transient native voice items", () => {
         item: { ...items[1], audio: "never forward" },
       });
       expect(observed).toHaveLength(count);
-      await h.runtime.fresh();
+
       notify("thread/realtime/item/completed", { threadId: first, item: items[3] });
       expect(observed.at(-1)).toMatchObject({
         data: { threadId: first, item: { realtimeSessionId: "older-session" } },

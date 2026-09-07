@@ -7,7 +7,6 @@ try {
   const env = h.native.options.env!;
   const codexHome = env["CODEX_HOME"] ?? null;
   const hasCodexHome = Object.hasOwn(env, "CODEX_HOME");
-  await h.runtime.fresh();
   console.log(JSON.stringify({ codexHome, hasCodexHome }));
 } finally {
   await h.cleanup();

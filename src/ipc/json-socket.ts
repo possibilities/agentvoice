@@ -75,6 +75,7 @@ function socketAnswers(path: string): Promise<boolean> {
     void Bun.connect({
       unix: path,
       socket: {
+        data: () => {},
         open: (socket) => {
           peer = socket;
           if (finished) socket.terminate();

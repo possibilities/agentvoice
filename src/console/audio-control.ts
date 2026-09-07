@@ -1,60 +1,8 @@
-import type { KittyKeyboardOptions } from "@opentui/core";
-
 export type AudioTarget = "mic" | "speaker";
 export type UnmuteHoldSource = object | symbol | string | number;
 
-export type AudioControlKeyAction = {
-  target: AudioTarget;
-  action: "toggle";
-};
-export type SpaceControlKeyAction = "begin" | "renew" | "end";
-
-// Printable keys need all-keys encoding for terminals to report both halves
-// of a press/release gesture, including the Space microphone control.
-export const AUDIO_CONTROL_KITTY_KEYBOARD = {
-  events: true,
-  allKeysAsEscapes: true,
-} satisfies KittyKeyboardOptions;
-
-// Long enough to span the terminal's initial key-repeat delay; repeats renew
-// it, while a lost release still fails closed.
-export const KEY_HOLD_LEASE_MS = 3_000;
-
-interface ControlKey {
-  name: string;
-  source: "raw" | "kitty";
-  eventType: "press" | "repeat" | "release";
-  /** OpenTUI 0.5.3 represents Kitty repeats as press + repeated. */
-  repeated?: boolean;
-  ctrl?: boolean;
-  meta?: boolean;
-}
-
-export function audioControlKeyAction(
-  key: ControlKey,
-  paletteOpen: boolean,
-): AudioControlKeyAction | null {
-  const target = key.name === "m" ? "mic" : key.name === "s" ? "speaker" : null;
-  if (!target || paletteOpen || key.ctrl || key.meta || key.eventType !== "press" || key.repeated)
-    return null;
-  return { target, action: "toggle" };
-}
-
-export function spaceControlKeyAction(
-  key: ControlKey,
-  paletteOpen: boolean,
-): SpaceControlKeyAction | null {
-  if (key.name !== "space" || key.source !== "kitty") return null;
-  // A release must close an existing hold even if the palette opened while
-  // Space was down; presses belong to the palette while it is modal.
-  if (key.eventType === "release") return "end";
-  if (paletteOpen || key.ctrl || key.meta) return null;
-  if (key.eventType === "repeat" || key.repeated) return "renew";
-  return key.eventType === "press" ? "begin" : null;
-}
-
 export interface MuteState {
-  /** The persistent mute assignment controlled by clicks and palette actions. */
+  /** The persistent mute assignment controlled by pointer clicks. */
   muted: boolean;
   /** At least one source is momentarily opening a persistently muted channel. */
   holding: boolean;

@@ -3603,7 +3603,7 @@
     "__schema71": {
       "type": "string",
       "minLength": 1,
-      "description": "Producer lifetime ID; changes on full restart."
+      "description": "Producer lifetime ID; unique to each call."
     },
     "__schema72": {
       "type": "integer",

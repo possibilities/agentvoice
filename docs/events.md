@@ -1,10 +1,10 @@
 # AgentVoice event socket
 
-The retained foreground controller owns a **separate read-only Unix socket** for
-thread-state consumers, transient native voice items and conversation observation.
-Control protocol 2 and its MCP tools are unchanged. The event endpoint uses protocol 2 and survives voice runtime replacement. Fully quit
-and relaunch AgentVoice to start a controller with this endpoint; runtime restart
-alone cannot upgrade an older controller. Protocol-1 clients must update.
+Each server-owned call controller exposes a **separate read-only Unix socket**
+for thread state, transient voice items and conversation observation. The event
+protocol remains 2; the separate control API is now read-only protocol 3. A new
+call creates a new controller and socket, so rediscover after frontend disconnect.
+Protocol-1 event clients must update.
 
 For typed orchestrator/subagent content, live snapshots, bounded conversation
 replay and native history reads, see [conversation observation](conversations.md).
@@ -52,8 +52,7 @@ may still wait for completion. Streaming reflects native text events, not audio
 playback timing.
 
 The script and controller must use the current event protocol. After a protocol
-change, fully quit and relaunch AgentVoice from the current checkout; restarting
-only the voice runtime leaves the old controller running. There is no version
+change, close the frontend and start a new call from the current checkout. There is no version
 negotiation or legacy compatibility path.
 
 The endpoint is `<controller-hash>.events.sock` beside the control socket under
@@ -87,8 +86,8 @@ threads. Scroll upward to pause tail-following; End returns to the latest text.
 Ctrl+C exits either observer without affecting AgentVoice.
 
 One file belongs to one canonical workspace and native main-thread identity.
-Fresh opens a different file; redials and runtime replacements for the same
-thread append to its file. Old-thread events keep their original identity.
+A call using a new conversation opens a different file; calls resuming the same
+thread append to its file. Events keep their original native identity.
 Rerunning the recorder against the same directory appends with a new recording
 boundary. Ordinary thread IDs are filenames; other IDs use a SHA-256 filename.
 The header always retains the original ID. New directories are mode 0700 and
@@ -246,7 +245,7 @@ reports `failed` without forwarding error text. Names are optional and truncated
 to 256 characters. `parentThreadId: null` means no parent was reported.
 
 The inventory covers threads loaded in the **owned app-server**, including
-native subagents and old Fresh conversations still loaded there. It does not scan
+native subagents. It does not scan
 other Codex processes or native on-disk history. The runtime performs one bounded,
 paginated `thread/loaded/list` scan after native readiness, plus `thread/read`
 without turns for metadata. It then follows native notifications, reading
@@ -274,10 +273,9 @@ Every event's `data` includes `{instanceId, generation, sequence}`.
 ```
 
 Quiescing, failed, and stopping runtimes clear the projection and report
-`unavailable`; they do not claim successful thread/turn completion. Fresh changes
-the current main thread but preserves other loaded rows. Old runtime incarnations
-cannot publish into a replacement generation. Subscriptions remain connected
-through replacement because the controller owns them.
+`unavailable`; they do not claim successful thread/turn completion. Call shutdown
+closes subscriptions. Old runtime events cannot publish into a subsequent call,
+which has a distinct controller identity and socket.
 
 The lifecycle projection is a current-state feed. Worker-to-controller lifecycle
 updates may coalesce under IPC pressure; intermediate transitions are not a
@@ -329,8 +327,8 @@ transcript events with this stream.
 Started/completed payloads include their native item text when present. A
 completed item can be useful even when a consumer missed its start or deltas;
 it describes native canonical completion, not proof the human heard every word.
-Observed voice items from old Fresh threads retain their original thread ID.
-Obsolete runtime generations cannot publish into the replacement generation.
+Observed voice items retain their original native thread ID. Closed-call
+runtimes cannot publish into a subsequent call.
 
 **Live voice delivery only.** The controller does not accumulate voice text, store
 voice transcript files or database rows, backfill speech, replay voice events,
@@ -346,7 +344,7 @@ writes, new voice events are dropped immediately; they are never coalesced by
 replacing earlier deltas and never enter the control queue's hard-overflow path.
 Later events may still arrive, including a completed item. Accepted events retain
 native arrival order. Socket backpressure can disconnect a slow subscriber;
-restart/shutdown can also lose trailing items. Sequence gaps alone cannot
+call shutdown can also lose trailing items. Sequence gaps alone cannot
 distinguish filtering from missing content, and drops before publication do not
 allocate a sequence.
 

@@ -15,7 +15,7 @@ const control = {
 const tools = Object.fromEntries(CONTROL_MCP_TOOLS.map((name) => [name, { name }]));
 
 describe("mandatory control registration", () => {
-  test("start/resume/Fresh inject independent of role, preserve other servers, and verify each exact thread", async () => {
+  test("start/resume inject independent of role, preserve other servers, and verify each exact thread", async () => {
     for (const resume of [false, true]) {
       const h = runtimeHarness({
         orchestrator: { config: { mcp_servers: { other: { command: "example" } } } },
@@ -38,21 +38,21 @@ describe("mandatory control registration", () => {
       const runtime = new VoiceRuntime(h.config, "test", h.events, {
         ...h.runtimeOptions,
         controlMcp: control,
-        exactResume: resume ? "saved" : undefined,
+        resume: resume ? "saved" : undefined,
       });
       try {
         await runtime.start();
-        await runtime.fresh();
+
         const starts = h.native.calls.filter(
           (call) => call.method === "thread/start" || call.method === "thread/resume",
         );
-        expect(starts).toHaveLength(2);
+        expect(starts).toHaveLength(1);
         for (const call of starts)
           expect(call.params["config"]).toMatchObject({
             mcp_servers: { [control.name]: control.server, other: { command: "example" } },
           });
         const checks = h.native.calls.filter((call) => call.method === "mcpServerStatus/list");
-        expect(checks).toHaveLength(2);
+        expect(checks).toHaveLength(1);
         expect(checks[0]!.params["threadId"]).toBe(resume ? "saved" : "thread-1");
         expect(h.native.options.env?.["PRIVATE_TEST_CAPABILITY"]).toBe("fixture-secret");
       } finally {
@@ -77,7 +77,7 @@ describe("mandatory control registration", () => {
       }
     }
   });
-  test("snapshot pins prompts through activation; exact resume never invokes inventory", async () => {
+  test("snapshot pins prompts through activation and explicit resume verifies inventory", async () => {
     const h = runtimeHarness();
     h.native.main("saved", h.directory);
     const path = join(h.directory, "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md");
@@ -87,11 +87,11 @@ describe("mandatory control registration", () => {
     const runtime = new VoiceRuntime(h.config, "test", h.events, {
       ...h.runtimeOptions,
       snapshot,
-      exactResume: "saved",
+      resume: "saved",
     });
     try {
       await runtime.start();
-      expect(h.native.calls.some((call) => call.method === "thread/list")).toBe(false);
+      expect(h.native.calls.some((call) => call.method === "thread/list")).toBe(true);
       expect(
         h.native.calls.find((call) => call.method === "thread/resume")!.params[
           "developerInstructions"

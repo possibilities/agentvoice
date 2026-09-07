@@ -47,14 +47,7 @@ for (const ending of ["revoked", "disconnected", "normal-close", "quit"] as cons
           threadId: "thread",
           generation: 1,
           runtime: { phase: "ready" },
-          recentOperations: [],
         }),
-        redial: async () => {
-          throw new Error("unexpected mutation");
-        },
-        restart: async () => {
-          throw new Error("unexpected mutation");
-        },
       },
       attachment: async () => ({
         workspace: root,
