@@ -428,9 +428,9 @@ lives in two siblings, and some changes here must cascade:
   by the scheduled updater). AgentLaunch loads them into every managed
   session: Claude Code exposes `/agent:<name>`, Codex uses
   `$agent:<name>`, and Pi uses `/<name>`. A SKILL.md edit is live within
-  six hours, or on demand by running that script. Whether a new skill earns a TOOLS.md
-  advertisement line is a deliberate decision —
-  `agentwiki get tool-advertisement-policy`.
+  six hours, or on demand by running that script.
+  Skill names and descriptions provide capability discovery; do not add a
+  second tool catalog to prompts. See `agentwiki get tool-advertisement-policy`.
 - Adding or removing a call to another fleet tool changes the fleet map:
   update `~/code/agentstart/skills/fleet/MAP.md` (served by the `fleet`
   skill, every edge with evidence) in the same change.
