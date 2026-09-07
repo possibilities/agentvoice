@@ -82,7 +82,7 @@ export async function createVoiceTui(
     box.add(text);
     return { box, text };
   }
-  const mic = button("voice-mic", "YOU ▷ INPUT", () => toggle("mic"));
+  const mic = button("voice-mic", "HUMAN ▷ INPUT", () => toggle("mic"));
   const speaker = button("voice-speaker", "AGENT ◁ OUTPUT", () => toggle("speaker"));
   channels.add(mic.box);
   channels.add(speaker.box);
@@ -134,9 +134,9 @@ export async function createVoiceTui(
         target === "mic"
           ? state.mic.muted
             ? state.mic.effectiveMuted
-              ? "YOU × PUSH"
-              : "YOU ● TALKING"
-            : "YOU ▷ INPUT"
+              ? "HUMAN × PUSH"
+              : "HUMAN ● TALKING"
+            : "HUMAN ▷ INPUT"
           : state.speaker.muted
             ? "AGENT × MUTED"
             : "AGENT ◁ OUTPUT";

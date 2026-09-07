@@ -41,7 +41,7 @@ test("static monochrome pointer buttons fill resized terminals; keys do nothing"
       await setup.renderOnce();
       const frame = setup.captureCharFrame();
       expect(frame).toContain("LIVE");
-      expect(frame).toContain("YOU");
+      expect(frame).toContain("HUMAN");
       expect(frame).toContain("AGENT");
       expect(frame).not.toContain("PUSH TO TALK");
       expect(frame).not.toMatch(/HIDDEN|hidden|42|18|1234/);
