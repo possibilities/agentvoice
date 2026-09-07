@@ -8,6 +8,14 @@
       "type": "string",
       "description": "Reserved for editor tooling; agentvoice ignores it."
     },
+    "allow-full-access": {
+      "type": "boolean",
+      "description": "Explicit unrestricted files/network and no approvals, equivalent to --allow-full-access. Overrides native permission selectors only; managed requirements remain authoritative. Default: false. The CLI flag wins over false here."
+    },
+    "debug": {
+      "type": "boolean",
+      "description": "Write private per-call protocol/media logs. Loaded once per runtime generation. Default: false. --debug wins over false here."
+    },
     "codex-config": {
       "type": "array",
       "items": {

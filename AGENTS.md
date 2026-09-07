@@ -195,6 +195,9 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 ## Ownership and state invariants
 
 Public voice launches support native/configured permissions without a flag.
+Top-level allow-full-access:true in server.json is equivalent to the full-access
+CLI flag; top-level debug:true enables runtime debug logs. Both default false,
+and CLI opt-ins win over false in the file. Resolve once per runtime generation.
 --allow-full-access explicitly requests danger-full-access/never; it wins over
 conflicting permission selectors, not unrelated settings. Do not reject launch,
 resume or settings reports solely because permissions are restricted or

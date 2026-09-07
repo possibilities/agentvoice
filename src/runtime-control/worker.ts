@@ -175,7 +175,7 @@ export function runRuntimeWorker(
         },
         mediaFactory: factory,
         media: currentLaunch.provenance.options,
-        debug: currentLaunch.provenance.options.debug,
+        debug: config!.debug,
         initialMute: { mic: true, speaker: true },
         runtime: {
           fresh: params.threadId ? false : currentLaunch.provenance.options.fresh,

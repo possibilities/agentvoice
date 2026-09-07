@@ -65,7 +65,8 @@ selection and active calls retain their selected directory.
 the waiting default server at login and restarts it on exit. It opens no audio
 or Codex child until a frontend calls.
 
-**Full access** — Optional launch override: --allow-full-access explicitly selects
+**Full access** — Optional launch override: --allow-full-access or file
+allow-full-access:true explicitly selects
 native danger-full-access / never. Without the flag, unset permission fields defer
 to Codex; configured modes/profiles are accepted. Managed requirements still apply.
 Native human interaction uses the attached stock TUI; unsupported client requests

@@ -220,3 +220,43 @@ describe("optional full access", () => {
     }
   });
 });
+
+test("file launch switches enable identical permissions, debug, and CLI precedence", async () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "agentvoice-file-switches-")));
+  const path = join(directory, "server.json");
+  try {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        "allow-full-access": true,
+        debug: true,
+        orchestrator: {
+          model: "gpt-6-astra",
+          effort: "low",
+          permissions: "restricted",
+          sandbox: "read-only",
+        },
+      }),
+    );
+    const args = ["--workspace", directory, "--config", path];
+    const config = await loadLaunchConfig(parseArgs(args), directory);
+    expect(config).toMatchObject({
+      allowFullAccess: true,
+      debug: true,
+      orchestrator: { model: "gpt-6-astra", effort: "low" },
+    });
+    expect(fullAccessStartupConfig(config)).toContain('sandbox_mode="danger-full-access"');
+    expect(threadParams(config, {}, "start")).toMatchObject({
+      sandbox: "danger-full-access",
+      approvalPolicy: "never",
+    });
+    writeFileSync(path, JSON.stringify({ "allow-full-access": false, debug: false }));
+    expect(await loadLaunchConfig(parseArgs(args), directory)).toMatchObject({ debug: false });
+    expect((await loadLaunchConfig(parseArgs(args), directory)).allowFullAccess).toBeUndefined();
+    expect(
+      await loadLaunchConfig(parseArgs([...args, "--allow-full-access", "--debug"]), directory),
+    ).toMatchObject({ allowFullAccess: true, debug: true });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

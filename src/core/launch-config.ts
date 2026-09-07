@@ -25,7 +25,7 @@ export async function loadLaunchConfig(parsed: ParsedArgs, launchCwd = process.c
     cliValues.orchestrator?.workspace === undefined &&
     fileValues.orchestrator?.workspace === undefined;
   const config = resolveConfig(cliValues, fileValues, process.env, home, {
-    debug: parsed.debug,
+    debug: parsed.debug ? true : undefined,
     allowFullAccess: parsed.allowFullAccess,
     configDir: dirname(configPath),
     launchCwd,

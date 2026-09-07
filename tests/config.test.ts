@@ -219,7 +219,7 @@ describe("parseJsonConfig", () => {
   // language and would not create the own property this exercises.
   test("a __proto__ key is an unknown option at every strict level", () => {
     expect(() => parseJsonConfig('{"__proto__": {"polluted": true}}', "server.json")).toThrow(
-      /unknown option "__proto__"; known keys: codex-config, codex, role, orchestrator, voice/,
+      /unknown option "__proto__"; known keys: allow-full-access, debug, codex-config, codex, role, orchestrator, voice/,
     );
     expect(() =>
       parseJsonConfig('{"codex": "codex", "__proto__": {"polluted": true}}', "server.json"),

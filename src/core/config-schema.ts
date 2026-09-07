@@ -207,6 +207,18 @@ export const voiceValuesSchema = z
   });
 
 const serverShape = {
+  "allow-full-access": z
+    .boolean()
+    .describe(
+      "Explicit unrestricted files/network and no approvals, equivalent to --allow-full-access. Overrides native permission selectors only; managed requirements remain authoritative. Default: false. The CLI flag wins over false here.",
+    )
+    .optional(),
+  debug: z
+    .boolean()
+    .describe(
+      "Write private per-call protocol/media logs. Loaded once per runtime generation. Default: false. --debug wins over false here.",
+    )
+    .optional(),
   "codex-config": z
     .array(
       z.string().superRefine((entry, ctx) => {

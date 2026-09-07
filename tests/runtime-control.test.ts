@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -33,6 +34,8 @@ async function until(predicate: () => boolean, timeout = 5_000) {
 function workerSource(version: string, library: string) {
   return `import { runRuntimeWorker } from ${JSON.stringify(new URL("../src/runtime-control/worker.ts", import.meta.url).pathname)};
 import { dlopen, FFIType } from "bun:ffi";
+import { dirname } from "node:path";
+process.env["XDG_STATE_HOME"] = dirname(${JSON.stringify(library)});
 const native = dlopen(${JSON.stringify(library)}, { fixture_version: { args: [], returns: FFIType.i32 } });
 const version = ${JSON.stringify(version)} + ":" + native.symbols.fixture_version();
 let events;
@@ -62,7 +65,10 @@ describe("persistent controller and disposable runtime", () => {
     const configPath = join(root, "server.json");
     const worker = join(root, "worker.ts");
     const prompt = join(root, "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md");
-    writeFileSync(configPath, JSON.stringify({ orchestrator: { model: "before" } }));
+    writeFileSync(
+      configPath,
+      JSON.stringify({ debug: true, "allow-full-access": true, orchestrator: { model: "before" } }),
+    );
     writeFileSync(prompt, "old prompt");
     const library = buildLibrary(root, 1);
     writeFileSync(worker, workerSource("code one", library));
@@ -72,7 +78,6 @@ describe("persistent controller and disposable runtime", () => {
       stateDir: root,
       provenance: {
         parsed: parseArgs([
-          "--allow-full-access",
           "--config",
           configPath,
           "--workspace",
@@ -104,6 +109,7 @@ describe("persistent controller and disposable runtime", () => {
     try {
       await controller.start();
       expect(controller.status().runtime.phase).toBe("ready");
+      expect(readdirSync(join(root, "agentvoice", "runs"))).toHaveLength(1);
       await until(() => controller.state().notice?.includes("code one:1") === true);
       expect(controller.state().notice).toContain("start-muted:true:true");
       const first = controller.status();

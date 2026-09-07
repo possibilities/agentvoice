@@ -608,7 +608,8 @@ export function resolveConfig(
       : resolveRolePath(roleSpec, env, home, options.launchCwd ?? process.cwd());
   const permissions = pickOrchestrator("permissions");
   const explicitSandbox = pickOrchestrator("sandbox");
-  if (!options.allowFullAccess && permissions !== undefined && explicitSandbox !== undefined) {
+  const allowFullAccess = options.allowFullAccess ?? pickTop("allow-full-access") ?? false;
+  if (!allowFullAccess && permissions !== undefined && explicitSandbox !== undefined) {
     throw new ConfigError(
       `orchestrator.permissions cannot be combined with orchestrator.sandbox; set only one`,
     );
@@ -675,10 +676,10 @@ export function resolveConfig(
   };
 
   return {
-    ...(options.allowFullAccess ? { allowFullAccess: true } : {}),
+    ...(allowFullAccess ? { allowFullAccess: true } : {}),
     codex: expandTilde(pickTop("codex") ?? env["CODEX_PATH"] ?? "codex", home),
     ...(codexConfig.length > 0 ? { codexConfig } : {}),
-    debug: options.debug ?? false,
+    debug: options.debug ?? pickTop("debug") ?? false,
     configDir,
     ...(role === undefined ? {} : { role }),
     orchestrator,

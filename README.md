@@ -846,3 +846,13 @@ request was delivered; rerunning can repeat speech.
 
 Use MCP/API runtime restart or start a new call to load changed runtime code. The script does not restart the app or voice
 session. Other realtime mutations remain unavailable through attachment.
+
+### Persistent launch switches
+
+`allow-full-access` and `debug` are optional top-level booleans in `server.json`.
+Both default to false. `allow-full-access: true` uses the same permission-selector
+override as `--allow-full-access`, including native startup and thread requests;
+managed native requirements still apply. `debug: true` enables private per-call
+protocol/media logs. CLI `--allow-full-access` and `--debug` win over false in the
+file. New calls and explicit runtime restarts reload these settings; redial keeps
+the current runtime's settings. Model, effort and role retain their existing config keys.
