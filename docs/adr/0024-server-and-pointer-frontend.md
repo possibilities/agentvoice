@@ -9,7 +9,8 @@ controller/runtime retain native identity, audio, Codex and cleanup authority.
 Frontend disconnect releases holds and closes that call before the server accepts
 another, while the static monochrome frontend exposes only connection status,
 YOU/AGENT mute buttons and conditional pointer push-to-talk.
-In-call Fresh, meters and all application keybindings are removed. The MCP/API
+In-call Fresh, meters and application keybindings are removed, except Ctrl+C
+which exits the frontend through normal call cleanup. The MCP/API
 status, redial and runtime restart operations remain reachable and retain their
 server support, including optional handoffs and operation journals. The initial
 implementation removed these too broadly; the operator clarified that only

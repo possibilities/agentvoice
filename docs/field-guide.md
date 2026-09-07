@@ -17,7 +17,8 @@ agentvoice frontend → private workspace socket → agentvoice server
 The server waits without starting a runtime or opening audio until the frontend
 connects. The frontend has static monochrome mute/PTT buttons and connection
 phase only. Closing it stops the call and owned work, then the server waits again.
-There are no keybindings or in-call Fresh. MCP/API redial and runtime restart
+Ctrl+C exits and closes the call; there are no other keybindings or in-call Fresh.
+MCP/API redial and runtime restart
 remain, including optional restart handoffs. Restart reloads the runtime under
 the connected frontend and resumes the same thread. Guarded stock TUI input and
 explicit handoffs use native turns.

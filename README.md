@@ -36,7 +36,7 @@ The frontend accepts only `--workspace` and `--help`.
 One server and one active frontend are allowed per canonical workspace. Closing
 the frontend terminal or terminating its process ends the call, closes audio
 and the owned Codex child, and returns the server to waiting. There are no
-application keybindings, including quit; process signals still perform cleanup.
+application keybindings except Ctrl+C, which exits the frontend and closes its call.
 The server remains a foreground process, with no automatic service installation.
 Warnings and detailed failure reasons appear in the server terminal.
 
@@ -285,7 +285,7 @@ Workspace selection is not a memory or security sandbox.
 - While the microphone is muted, hold PUSH TO TALK to speak. Releasing restores
   mute; terminal blur and frontend disconnect cancel the hold.
 - Buttons use white and grey only. Muted channels are greyed out. There are no
-  animations, meters, timers, extra status rows, modal or application keybindings.
+  animations, meters, timers, extra status rows, modal or application keybindings apart from Ctrl+C to exit.
 - The top line shows only the connection phase. LIVE confirms the media link,
   not that native work completed or speech was heard.
 - Full-duplex audio uses native miniaudio, Opus and WebRTC. Automatic renewal

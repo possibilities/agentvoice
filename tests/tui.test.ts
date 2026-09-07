@@ -4,7 +4,7 @@ import { MuteGate } from "../src/console/audio-control.ts";
 import type { VoiceState } from "../src/console/state.ts";
 import { createVoiceTui } from "../src/console/tui.ts";
 
-test("static monochrome pointer buttons fill resized terminals; keys do nothing", async () => {
+test("static monochrome pointer buttons fill resized terminals; Ctrl+C exits and other keys do nothing", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, exitOnCtrlC: false });
   const mic = new MuteGate();
   const speaker = new MuteGate();
@@ -50,7 +50,6 @@ test("static monochrome pointer buttons fill resized terminals; keys do nothing"
     }
     for (const key of ["m", "s", "r", "f", "q", "space"]) setup.mockInput.pressKey(key);
     setup.mockInput.pressKey("k", { ctrl: true });
-    setup.mockInput.pressKey("c", { ctrl: true });
     await setup.renderOnce();
     expect(mic.muted).toBe(false);
     expect(speaker.muted).toBe(false);
@@ -75,6 +74,12 @@ test("static monochrome pointer buttons fill resized terminals; keys do nothing"
     const output = setup.renderer.root.findDescendantById("voice-speaker")!;
     await setup.mockMouse.click(output.x + 2, output.y + 2);
     expect(speaker.muted).toBe(true);
+    await setup.mockMouse.pressDown(ptt.x + 2, ptt.y + 2);
+    expect(mic.effectiveMuted).toBe(false);
+    setup.mockInput.pressKey("c", { ctrl: true });
+    await tui.done;
+    expect(mic.effectiveMuted).toBe(true);
+    expect(stops).toBe(1);
   } finally {
     await tui.shutdown();
   }

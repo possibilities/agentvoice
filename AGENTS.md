@@ -179,7 +179,7 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
 - src/console/tui.ts: static monochrome YOU/AGENT buttons, conditional pointer
-  PTT and connection phase only. No animation, meters, palette or keybindings.
+  PTT and connection phase only. No animation, meters or palette; Ctrl+C exits through normal call cleanup.
 - src/console/state.ts: plain host/observer data; backend imports no TUI renderer.
 
 ## Ownership and state invariants
@@ -316,8 +316,8 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 - Record<string, unknown> access uses bracket keys.
 - The TUI is pointer-only: two full-height monochrome channel buttons, with
   a bottom push-to-talk button while the mic is muted. Keep existing text labels,
-  grey out muted channels, show only connection phase above them. No keybindings,
-  modal, animation, meters or additional status. Signals/terminal close end a call.
+  grey out muted channels, show only connection phase above them. Ctrl+C exits through normal cleanup; no other keybindings, modal, animation,
+  meters or additional status. Signals/terminal close also end a call.
 - Settings and prompt contents load once per runtime generation. No voice-name watcher or
   local catalog; Codex validates voice selection. Native identity and settings
   remain available through server diagnostics and read-only observation.

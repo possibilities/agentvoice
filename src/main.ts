@@ -50,7 +50,7 @@ Run the server and frontend in separate terminals, selecting the same workspace.
 The server stays in the foreground and opens no audio or Codex child while waiting.
 Closing the frontend ends its call; the server returns to waiting.
 The frontend has pointer controls only: microphone, speaker and hold-to-talk.
-Terminate its process or close its terminal to end a call. There are no app keybindings.
+Press Ctrl+C, terminate its process or close its terminal to end a call. No other keybindings.
 Server settings and prompt files load for each call. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
 Use agentvoice attach to answer native approvals and tool questions.

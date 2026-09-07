@@ -1,4 +1,10 @@
-import { BoxRenderable, type CliRenderer, createCliRenderer, TextRenderable } from "@opentui/core";
+import {
+  BoxRenderable,
+  type CliRenderer,
+  createCliRenderer,
+  type KeyEvent,
+  TextRenderable,
+} from "@opentui/core";
 import type { AudioTarget } from "./audio-control.ts";
 import type { VoiceHost, VoiceView } from "./state.ts";
 
@@ -154,6 +160,7 @@ export async function createVoiceTui(
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
       process.off("SIGHUP", onSignal);
+      renderer.keyInput.off("keypress", onKeypress);
       renderer.off("resize", refresh);
       renderer.off("blur", release);
       try {
@@ -168,6 +175,13 @@ export async function createVoiceTui(
   const onSignal = () => {
     void shutdown().catch(() => {});
   };
+  const onKeypress = (key: KeyEvent) => {
+    if (key.ctrl && key.name === "c") {
+      key.preventDefault();
+      onSignal();
+    }
+  };
+  renderer.keyInput.on("keypress", onKeypress);
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   process.once("SIGHUP", onSignal);
