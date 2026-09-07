@@ -23,6 +23,7 @@ export interface RuntimeLaunch {
   nativeStateDir?: string;
 }
 export interface RuntimeActivation {
+  threadId?: string;
   mute: { mic: boolean; speaker: boolean };
 }
 export interface IpcMessage {

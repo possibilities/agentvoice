@@ -61,7 +61,7 @@ test("native permission changes preserve TUI admission and voice", async () => {
     await h.cleanup();
   }
 });
-test("attachment bootstrap retains exact identity and call shutdown revokes sockets", async () => {
+test("attachment bootstrap and runtime replacement retain exact leases and revoke old sockets", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-attach-runtime-")));
   const stateDir = join(root, "state");
   mkdirSync(stateDir, { mode: 0o700 });
@@ -79,6 +79,8 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     instanceId: "attachment-integration",
     backend: {
       status: () => controller.status(),
+      redial: (r) => controller.redial(r),
+      restart: (r) => controller.restart(r),
     },
     attachment: (value) => controller.attachmentTicket(value),
   });
@@ -123,8 +125,29 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     expect(first.threadId).toBe("test-thread-1");
     expect(JSON.stringify(controller.status())).not.toContain(first.token);
     const old = await watch(first.url, first.token);
-    await controller.shutdown();
-    await until(() => old.readyState === WebSocket.CLOSED);
+    await controller.redial({
+      operationId: "redial",
+      expectedGeneration: 1,
+      expectedInstanceId: "attachment-integration",
+    });
+    await until(() => controller.status().currentOperation?.phase === "ready");
+    expect(old.readyState).toBe(WebSocket.OPEN);
+    const beforeRestart = old;
+    await controller.restart({
+      operationId: "restart",
+      expectedGeneration: 1,
+      expectedInstanceId: "attachment-integration",
+      scope: "runtime",
+    });
+    await until(
+      () =>
+        controller.status().generation === 2 &&
+        controller.status().currentOperation?.phase === "ready",
+    );
+    await until(() => beforeRestart.readyState === WebSocket.CLOSED);
+    const resumed = await acquireAttachment(stateDir, root);
+    expect(resumed.threadId).toBe(first.threadId);
+    expect(resumed.token).not.toBe(first.token);
     await expect(
       controller.attachmentTicket({
         instanceId: "attachment-integration",
@@ -133,6 +156,29 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
         threadId: first.threadId,
       }),
     ).rejects.toThrow();
+    const final = await watch(resumed.url, resumed.token);
+    // Restricted and unreported permissions also support attachment across runtime replacement.
+    for (const [index, permissions] of [
+      { approvalPolicy: "on-request", sandbox: { type: "readOnly" } },
+      {},
+    ].entries()) {
+      writeFileSync(join(root, "native-permissions.json"), JSON.stringify(permissions));
+      await controller.restart({
+        operationId: `permissions-${index}`,
+        expectedGeneration: 2 + index,
+        expectedInstanceId: "attachment-integration",
+        scope: "runtime",
+      });
+      await until(
+        () =>
+          controller.status().generation === 3 + index &&
+          controller.status().currentOperation?.phase === "ready",
+      );
+      expect(controller.status().runtime.phase).toBe("ready");
+      expect((await acquireAttachment(stateDir, root)).threadId).toBe(first.threadId);
+    }
+    await controller.shutdown();
+    await until(() => final.readyState === WebSocket.CLOSED);
   } finally {
     for (const socket of watches) socket.close();
     await controller.shutdown();

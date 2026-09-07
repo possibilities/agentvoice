@@ -3,11 +3,12 @@
 A local Codex voice server and separate pointer-only TUI. `agentvoice server`
 waits on a private workspace socket without opening audio or Codex; `agentvoice`
 connects and starts a call. The server-owned call controller retains exact thread
-identity, leases and read-only control/event transports; its disposable runtime
+identity, leases, operation journal and control/event transports; its disposable runtime
 owns audio, WebRTC, config/prompt/role loading and an owned stock Codex app-server.
 Frontend disconnect closes the call before another can begin. No installed service,
 remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
-0024/0022 for the active topology; ADRs 0015/0016 describe retired lifecycle controls.
+0024/0022 for the active topology; ADRs 0015/0016 describe retained MCP/API
+runtime replacement and restart handoff semantics.
 
 ## What vanilla Codex means
 
@@ -122,14 +123,20 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   as playback confirmation.
   Validate before native dispatch; unknown null placeholders are stripped.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
-  Call shutdown revokes before teardown; automatic renewal preserves attachment. Ordinary
+  Runtime restart and call shutdown revoke before teardown; redial and automatic
+  renewal preserve attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
 - src/core/thread-selection.ts: paginated native history lookup in exact workspace,
   AgentVoice main source only; no global pointer or separate session index.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/runtime-control/controller.ts: one server-owned call, exact thread leases,
-  native identity, readiness and read-only observation. No runtime replacement,
-  manual redial, in-call Fresh, operation journal or handoff submission.
+  native identity, readiness, MCP/API redial and full runtime replacement. Keep
+  the frontend connected across restart; cancel pointer holds after successful
+  preflight and before teardown. In-call Fresh remains removed.
+- src/runtime-control/journal.ts: fsynced call-controller-lifetime operations.
+  Journal restart handoffs before teardown and submit once after exact resume
+  and live media. Keep handoff outcome separate from readiness; never stop healthy
+  media on refusal or ambiguous acceptance. Never adopt old journals in a new call.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
 - src/runtime-control/sender.ts: bounded worker writes; drop transient voice events
@@ -143,8 +150,8 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
-  No audio/bearer capabilities or mutation/MCP methods. Call shutdown ends
-  inventory; stale incarnations never publish into another call. See docs/events.md.
+  No audio/bearer capabilities or mutation/MCP methods. Runtime replacement resets
+  inventory; stale incarnations never publish into a successor or another call. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
@@ -159,15 +166,16 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   loopback Streamable HTTP MCP projection, and private live-controller discovery
   for the explicit `mcp-config` export and local attachment bootstrap. Keep the
   MCP and Unix control operations semantically identical.
-- src/core/runtime.ts: a call's launch/resume, voice session, owned child lifecycle
-  and cached settings. No account selection/rotation, custom worker manager,
-  restart handoff, custom turn submission or in-call identity change.
+- src/core/runtime.ts: launch, exact restart resume, voice session, owned child
+  lifecycle and runtime-cached settings. No account selection/rotation, custom
+  worker manager, in-call Fresh or custom turn submission except an explicit
+  controller-owned restart handoff via native turn/start (ADR 0016).
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.
 - src/console/host.ts: native readiness before audio opens, negotiation after audio
   readiness, visible media notices, worker-local media wiring and quit cleanup.
-- src/console/transport.ts: WebRTC offer/answer, two-peer automatic renewal and bounded retry.
+- src/console/transport.ts: WebRTC offer/answer, two-peer redial, automatic renewal and bounded retry.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
 - src/console/tui.ts: static monochrome YOU/AGENT buttons, conditional pointer
@@ -204,8 +212,10 @@ be found in that inventory. Do not hide lookup/resume failures as Fresh.
 Each frontend connection starts one call using the server's pinned canonical
 workspace and conversation selection flags. Close its frontend to end audio,
 app-owned work and the Codex child; native history remains untouched. The server
-waits for complete teardown before accepting another call. Leases last until call
-shutdown. A cleanup failure prevents subsequent calls until server termination.
+waits for complete teardown before accepting another call. MCP/API runtime restart
+retains the frontend, exact thread leases and controller endpoints while replacing
+the runtime. Leases last until call shutdown. A cleanup failure prevents subsequent
+calls until server termination.
 Other workspace servers may run independently; other clients do not honor this guard.
 
 App state: frontend/ sockets, thread-locks/ and opt-in unique runs/ logs under
@@ -308,7 +318,7 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   a bottom push-to-talk button while the mic is muted. Keep existing text labels,
   grey out muted channels, show only connection phase above them. No keybindings,
   modal, animation, meters or additional status. Signals/terminal close end a call.
-- Settings and prompt contents load once per call. No voice-name watcher or
+- Settings and prompt contents load once per runtime generation. No voice-name watcher or
   local catalog; Codex validates voice selection. Native identity and settings
   remain available through server diagnostics and read-only observation.
 - server.schema.json is generated and drift-tested. server.json.example remains
@@ -355,7 +365,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   See ADR 0017 for the removal decision and ADRs 0010/0011 for historical probes.
   Fake protocol tests do not establish live silence or audio-heard fidelity.
 - No AgentVoice worker tools, registry, archival, reports or custom turn
-  submission. Restart handoffs and their journals are removed (ADR 0024).
+  submission except explicit MCP/API restart handoffs (ADR 0016). Submit once
+  after exact identity and live media checks; never retry ambiguous acceptance,
+  echo the private prompt in status/errors or change prompt defaults.
   Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.
   Saved custom tool calls receive an immediate failed tool result and visible

@@ -6,6 +6,7 @@ import type { AttachmentTicket } from "../attachment/gateway.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
+import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import {
@@ -27,7 +28,8 @@ export function runRuntimeWorker(
   let snapshot: RuntimeSnapshot | undefined;
   let factory: ConsoleHostOptions["mediaFactory"];
   let runHost: typeof import("../console/host.ts").runConsoleHost;
-  let host: VoiceHost | undefined;
+  let host: (VoiceHost & { redial(): Promise<void> }) | undefined;
+  let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let revokeAttachment: (() => void) | undefined;
   let issueAttachment: (() => AttachmentTicket) | undefined;
   let readConversation:
@@ -165,6 +167,9 @@ export function runRuntimeWorker(
       bootReady = () => finish();
       bootFailed = finish;
       hostRun = runHost(config!, currentLaunch.version, {
+        onHandoffReady: (submit) => {
+          submitHandoff = submit;
+        },
         onObservationReady: (read) => {
           readConversation = read;
         },
@@ -173,9 +178,10 @@ export function runRuntimeWorker(
         debug: currentLaunch.provenance.options.debug,
         initialMute: { mic: true, speaker: true },
         runtime: {
-          fresh: currentLaunch.provenance.options.fresh,
-          continue: currentLaunch.provenance.options.continue,
-          resume: currentLaunch.provenance.options.resume,
+          fresh: params.threadId ? false : currentLaunch.provenance.options.fresh,
+          continue: params.threadId ? false : currentLaunch.provenance.options.continue,
+          resume: params.threadId ? undefined : currentLaunch.provenance.options.resume,
+          exactResume: params.threadId,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,
           nativeStateDir: currentLaunch.nativeStateDir,
@@ -288,6 +294,15 @@ export function runRuntimeWorker(
         }
         return null;
       }
+      case "redial":
+        if (terminalFailure || stopping || !mediaEnabled || !host)
+          throw new Error("Voice redial is unavailable");
+        await host.redial();
+        return null;
+      case "handoff":
+        if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
+          return handoffFailure("not_ready");
+        return submitHandoff(params as HandoffRequest);
       case "attachment-ticket": {
         if (terminalFailure || stopping || !mediaEnabled || !issueAttachment)
           throw new Error("Attachment is unavailable");

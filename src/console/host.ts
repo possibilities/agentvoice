@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServerConfig } from "../core/config.ts";
+import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
 import type {
   ConversationReadMethod,
@@ -26,6 +27,7 @@ export type HostAudio = Pick<
 >;
 export type HostTransport = Pick<
   VoiceTransport,
+  | "redialAndWait"
   | "sendOpusFrame"
   | "stop"
   | "handleReady"
@@ -36,8 +38,9 @@ export type HostTransport = Pick<
 >;
 export interface ConsoleHostOptions {
   media?: MediaOptions;
-  observe: (host: VoiceHost) => Promise<VoiceView>;
+  observe: (host: VoiceHost & { redial(): Promise<void> }) => Promise<VoiceView>;
   onStarted?: () => void;
+  onHandoffReady?: (submit: (request: HandoffRequest) => Promise<HandoffResult>) => void;
   onObservationReady?: (
     read: (
       method: ConversationReadMethod,
@@ -161,6 +164,11 @@ export async function runConsoleHost(
     },
     options.runtime,
   );
+  options.onHandoffReady?.(async (request) => {
+    if (closed || fatal || !audioReady || phase !== "live" || !runtime)
+      return handoffFailure("not_ready");
+    return runtime.submitHandoff(request);
+  });
   options.onObservationReady?.((method, params) => runtime!.readConversation(method, params));
 
   function gate(target: AudioTarget): MuteGate {
@@ -196,6 +204,7 @@ export async function runConsoleHost(
 
   try {
     observer = await options.observe({
+      redial: () => transport.redialAndWait("control"),
       state,
       setMuted: (target, muted) => {
         gate(target).setMuted(muted);

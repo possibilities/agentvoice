@@ -15,7 +15,8 @@ starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns no audio, Codex process, configuration or thread leases.
 
 **AgentVoice controller** — The server-owned authority for one call: exact
-workspace/thread identity, thread leases, private control and event transports.
+workspace/thread identity, thread leases, operation journal, private control and
+event transports retained across runtime replacements.
 
 **Voice runtime** — The disposable child of a call controller, owning native
 audio, WebRTC, configuration/prompt/role loading and its stock Codex child.
@@ -32,7 +33,8 @@ owned child/process group.
 **TUI attachment** — A stock Codex TUI subscribing to the current live
 orchestrator thread through a guarded local gateway. It follows native work and
 submits typed input without owning voice or the child. Always available through
-`agentvoice attach`; no launch opt-in or full-access requirement. Call shutdown and native loss revoke it; automatic renewal preserves it. Joining preserves the live
+`agentvoice attach`; no launch opt-in or full-access requirement. Runtime restart, call shutdown and native loss revoke it; redial and automatic
+renewal preserve it. Joining preserves the live
 thread's settings; explicit native setting changes and human answers flow through.
 
 **Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
@@ -70,8 +72,8 @@ replaces it while preserving the voice runtime, Codex child and workspace.
 **Control plane** — A versioned private Unix socket and an authenticated,
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
-child only by environment variable. Only `status` is exposed through MCP and the control socket. Lifecycle mutation
-methods were removed by ADR 0024. See `docs/api.md`.
+child only by environment variable. MCP and the control socket expose status, voice redial and full runtime restart
+with an optional handoff prompt. UI removal does not retire API controls. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -121,7 +123,8 @@ inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
 **Runtime settings** — AgentVoice configuration and prompt contents read during
-call preflight and cached for that call. Later calls reload files using the server's
+runtime preflight and cached for that generation. Runtime restart and later calls
+reload files using the server's
 pinned launch arguments and canonical workspace.
 
 **Startup config** — Explicit codex-config string array or repeatable -c /
@@ -141,8 +144,19 @@ identity, account, or workspace. _Avoid_: capability, overlay, profile.
 conditional pointer push-to-talk button temporarily opens a muted microphone;
 release, terminal blur or frontend disconnect closes that hold.
 
+**Redial** — An MCP/API operation that replaces the voice connection while
+keeping the runtime, loaded settings, native thread and stock TUI attachment.
+
+**Runtime restart** — An MCP/API operation that preflights a replacement, stops
+the old runtime and resumes its exact leased thread with reloaded code/settings.
+The frontend and controller endpoints persist; active native work is interrupted.
+
+**Restart handoff** — Optional caller-provided work submitted once after restart
+resumes the exact thread and reaches live media. Its separately journaled outcome
+can be accepted, failed or unknown; native acceptance does not mean work completed.
+
 **Historical terms** — Resident, Remote console, pairing, custom Worker reports,
-account rotation, Quiet resume, in-call Fresh, Runtime restart and Restart handoff
+account rotation, Quiet resume, in-call Fresh
 name retired implementations in older ADRs. The current Server is a local waiting
 foreground process; it does not restore remote access or service installation.
 

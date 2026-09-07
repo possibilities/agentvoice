@@ -1,10 +1,10 @@
 /**
  * Voice transport: the werift WebRTC peer, driven by session signaling that
  * arrives directly from the in-process runtime. Owns session lifecycle — offer/answer,
- * renewal before the upstream ceiling, and automatic retry — and hands audio to
+ * renewal before the upstream ceiling, and manual redial — and hands audio to
  * the pipeline as opaque Opus frames.
  *
- * A renewal is seamless-ish: the new peer negotiates while the old one keeps
+ * A redial is seamless-ish: the new peer negotiates while the old one keeps
  * playing, and audio swaps when the new peer connects. (The supersede inside
  * app-server kills the old session's control plane as soon as the new start
  * is processed, so the old audio is a best-effort tail, not a guarantee.)
@@ -50,7 +50,7 @@ export interface VoiceTransportOptions extends TransportEvents {
 const RENEWAL_MS = 52 * 60_000;
 const NEGOTIATION_TIMEOUT_MS = 30_000;
 const RETRY_OFFER_MS = 1_000;
-/** Consecutive failed sessions before ending automatic retries. */
+/** Consecutive failed sessions before requiring a manual redial. */
 const MAX_RAPID_FAILURES = 3;
 /** A session live this long proves health and resets the failure budget. */
 const HEALTHY_SESSION_MS = 60_000;
@@ -90,6 +90,10 @@ export class VoiceTransport {
   private rapidFailures = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopping = false;
+  private readonly redialWaiters = new Map<
+    number,
+    { resolve(): void; reject(error: Error): void }
+  >();
 
   constructor(options: VoiceTransportOptions) {
     this.options = options;
@@ -101,16 +105,37 @@ export class VoiceTransport {
 
   /**
    * Negotiate a replacement session; the current one keeps playing until the
-   * replacement connects. Automatically before the service session ceiling.
+   * replacement connects. Explicit control API redial, or automatic for renewal and retry.
    */
-  private renew(): void {
+  redial(reason: string): void {
     if (this.stopping) return;
     this.rapidFailures = 0;
     this.wantLive = true;
-    this.options.onInfo("voice renewal");
+    this.options.onInfo(`redial (${reason})`);
     this.clearRetryTimer();
     if (this.ready) this.negotiate();
     // Not ready means the runtime is changing threads; handleReady re-offers.
+  }
+
+  /** Completes only when this exact successor connects; later retries are separate calls. */
+  async redialAndWait(reason: string): Promise<void> {
+    if (this.stopping || !this.ready) throw new Error("Voice transport is not ready for redial");
+    this.redial(reason);
+    const generation = this.generation;
+    if (this.live?.generation === generation && this.live.connected) return;
+    if (this.pending?.generation !== generation)
+      throw new Error("Voice redial could not negotiate a successor");
+    await new Promise<void>((resolve, reject) => {
+      this.redialWaiters.set(generation, { resolve, reject });
+    });
+  }
+
+  private settleRedial(session: PeerSession, reason?: string): void {
+    const waiter = this.redialWaiters.get(session.generation);
+    if (!waiter) return;
+    this.redialWaiters.delete(session.generation);
+    if (reason) waiter.reject(new Error(reason));
+    else waiter.resolve();
   }
 
   sendOpusFrame(frame: Buffer): void {
@@ -308,12 +333,12 @@ export class VoiceTransport {
     if (previous) this.closePeer(previous);
     if (session.remoteTrack) this.options.onRemoteTrack(session.remoteTrack);
     this.setPhase("live");
-
+    this.settleRedial(session);
     this.options.onInfo(previous ? "voice session renewed" : "voice connected");
     this.startMediaTrace(session);
     session.timers.push(
       setTimeout(() => {
-        if (this.live === session) this.renew();
+        if (this.live === session) this.redial("renewal");
       }, RENEWAL_MS),
     );
     session.timers.push(
@@ -325,7 +350,7 @@ export class VoiceTransport {
 
   private failPending(session: PeerSession, reason: string): void {
     if (this.pending !== session) return;
-
+    this.settleRedial(session, reason);
     this.pending = null;
     this.closePeer(session);
     this.rapidFailures++;
@@ -350,7 +375,7 @@ export class VoiceTransport {
   private afterFailure(reason: string): void {
     this.clearRetryTimer();
     if (this.rapidFailures >= MAX_RAPID_FAILURES) {
-      this.options.onError(`${reason} — retries paused; close the frontend and start a new call`);
+      this.options.onError(`${reason} — retries paused; use the control API to redial`);
       // Repeated supersede attempts have killed the old session's control
       // plane server-side; don't pretend it is still live.
       this.dropPeers();
@@ -380,6 +405,7 @@ export class VoiceTransport {
   }
 
   private closePeer(session: PeerSession): void {
+    this.settleRedial(session, "Voice redial was superseded or stopped");
     for (const timer of session.timers) clearTimeout(timer);
     session.timers = [];
     if (session.mediaTraceTimer) clearInterval(session.mediaTraceTimer);

@@ -77,7 +77,7 @@ describe("mandatory control registration", () => {
       }
     }
   });
-  test("snapshot pins prompts through activation and explicit resume verifies inventory", async () => {
+  test("snapshot pins prompts through activation; exact restart resume never invokes inventory", async () => {
     const h = runtimeHarness();
     h.native.main("saved", h.directory);
     const path = join(h.directory, "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md");
@@ -87,11 +87,11 @@ describe("mandatory control registration", () => {
     const runtime = new VoiceRuntime(h.config, "test", h.events, {
       ...h.runtimeOptions,
       snapshot,
-      resume: "saved",
+      exactResume: "saved",
     });
     try {
       await runtime.start();
-      expect(h.native.calls.some((call) => call.method === "thread/list")).toBe(true);
+      expect(h.native.calls.some((call) => call.method === "thread/list")).toBe(false);
       expect(
         h.native.calls.find((call) => call.method === "thread/resume")!.params[
           "developerInstructions"

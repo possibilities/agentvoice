@@ -2,13 +2,13 @@
 
 Updated for the waiting local server and pointer frontend (ADRs 0024/0022).
 Historical upstream probes below retain their inspected versions and evidence.
-References to Fresh/restart in those probes describe retired lifecycle controls.
+References to in-call Fresh describe a retired UI control; restart remains in MCP/API.
 
 ## Architecture in a minute
 
 ```text
 agentvoice frontend → private workspace socket → agentvoice server
-  → call controller (leases, read-only control/events)
+  → call controller (leases, lifecycle control, read-only events)
     → disposable runtime → private native WebSocket → owned stock Codex child
       microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
       stock Codex TUI → guarded gateway → private native WebSocket
@@ -17,8 +17,10 @@ agentvoice frontend → private workspace socket → agentvoice server
 The server waits without starting a runtime or opening audio until the frontend
 connects. The frontend has static monochrome mute/PTT buttons and connection
 phase only. Closing it stops the call and owned work, then the server waits again.
-There are no keybindings, manual redial, in-call Fresh, runtime restart or restart
-handoffs. Guarded stock TUI input and native voice handoffs still use native turns.
+There are no keybindings or in-call Fresh. MCP/API redial and runtime restart
+remain, including optional restart handoffs. Restart reloads the runtime under
+the connected frontend and resumes the same thread. Guarded stock TUI input and
+explicit handoffs use native turns.
 
 Server launch flags select a canonical workspace and conversation policy. Each
 call starts a new native conversation by default; `server --continue` or
@@ -159,7 +161,7 @@ missing tier metadata or a different per-thread provider fail clearly. Start/res
 responses confirm the applied setting when available. Native reported settings
 remain distinct from requested settings; the frontend displays no tier label.
 
-All AgentVoice settings and prompt contents load once per call. There is no
+All AgentVoice settings and prompt contents load once per runtime generation. There is no
 config watcher; voice-name edits take effect on the next call. Prompts load from convention-named files in the selected config directory,
 never the workspace; a present name that is unreadable, a directory or a broken
 link fails before native startup. Former names only produce visible migration

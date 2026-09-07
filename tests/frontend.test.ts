@@ -326,3 +326,128 @@ test("cleanup failure prevents a new call even after the frontend disconnects", 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("API restart retains the frontend and mute preference; disconnect cancels an in-flight replacement", async () => {
+  const { RuntimeController } = await import("../src/runtime-control/controller.ts");
+  const { parseArgs } = await import("../src/main.ts");
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-frontend-restart-")));
+  const replacement = Promise.withResolvers<void>();
+  const entering = Promise.withResolvers<void>();
+  const stopping = Promise.withResolvers<void>();
+  const cleanup = Promise.withResolvers<void>();
+  const commands: Array<{ incarnation: number; method: string; params: unknown }> = [];
+  let controller!: InstanceType<typeof RuntimeController>;
+  let closed = false;
+  const server = new VoiceServer(frontendSocketPath(root, root), async (changed) => {
+    controller = new RuntimeController({
+      instanceId: "frontend-restart",
+      stateDir: root,
+      provenance: {
+        parsed: parseArgs([]),
+        options: { debug: false, fresh: false, continue: false },
+        launchCwd: root,
+      },
+      version: "test",
+      control: { name: "agentvoice_control", tools: [], server: {}, env: {} },
+      lease: () => () => {},
+      changed,
+      spawn: (incarnation, event, lease) => ({
+        pid: incarnation,
+        nativePid: undefined,
+        exited: Promise.resolve(),
+        notify: (method, params) => commands.push({ incarnation, method, params }),
+        stop: async () => {
+          if (incarnation === 3) {
+            stopping.resolve();
+            await cleanup.promise;
+            replacement.resolve();
+          }
+          return false;
+        },
+        request: async <T>(method: string, params: unknown): Promise<T> => {
+          commands.push({ incarnation, method, params });
+          if (method === "preflight") return { workspace: root, buildId: "fake" } as T;
+          if (method === "activate") {
+            if (incarnation === 3) {
+              entering.resolve();
+              await replacement.promise;
+            }
+            await lease("same-thread");
+            event("identity", { workspace: root, threadId: "same-thread" });
+            event("state", {
+              available: true,
+              phase: "live",
+              mic: { muted: true, effectiveMuted: true },
+              speaker: { muted: false, effectiveMuted: false },
+            });
+          }
+          return null as T;
+        },
+      }),
+    });
+    return {
+      state: () => controller.state(),
+      start: () => controller.start(),
+      close: async () => {
+        await controller.shutdown();
+        closed = true;
+      },
+      command: (command) => {
+        if (command.action === "mute")
+          (command.target === "mic" ? controller.microphone : controller.speaker).setMuted(
+            command.muted,
+          );
+        else if (command.action === "hold") controller.microphone.beginUnmute("frontend");
+        else controller.microphone.releaseUnmute("frontend");
+        controller.syncMute();
+      },
+    };
+  });
+  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  try {
+    await server.start();
+    client = await connectFrontend(server.path);
+    await until(() => client!.state().phase === "live");
+    client.command({ action: "mute", target: "mic", muted: true });
+    await until(() => client!.state().mic.muted);
+    client.command({ action: "hold" });
+    await until(() => !client!.state().mic.effectiveMuted);
+    const restart = (operationId: string) =>
+      controller.restart({
+        operationId,
+        expectedInstanceId: controller.status().instanceId,
+        expectedGeneration: controller.status().generation,
+        scope: "runtime",
+      });
+    await restart("keep-frontend");
+    await until(() => controller.status().currentOperation?.phase === "ready");
+    await until(() => client!.state().phase === "live" && client!.state().mic.effectiveMuted);
+    expect(controller.status()).toMatchObject({ generation: 2, threadId: "same-thread" });
+    expect(controller.microphone.holding).toBe(false);
+    expect(
+      commands.find((command) => command.incarnation === 2 && command.method === "activate")
+        ?.params,
+    ).toEqual({ threadId: "same-thread", mute: { mic: true, speaker: false } });
+    expect(closed).toBe(false);
+    client.command({ action: "mute", target: "speaker", muted: true });
+    await until(() => controller.speaker.muted);
+    await restart("disconnect-during-restart");
+    await entering.promise;
+    await client.close();
+    await stopping.promise;
+    expect(closed).toBe(false);
+    await expect(connectFrontend(server.path)).rejects.toThrow("busy");
+    cleanup.resolve();
+    await until(() => closed);
+    expect(controller.status().currentOperation?.phase).toBe("failed");
+    expect(
+      commands.some((command) => command.incarnation === 3 && command.method === "enable-media"),
+    ).toBe(false);
+  } finally {
+    cleanup.resolve();
+    replacement.resolve();
+    await client?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

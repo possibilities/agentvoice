@@ -28,6 +28,9 @@ export function hostHarness(values: ConfigValues = {}, runtimeOptions: RuntimeOp
     },
   };
   const transport: HostTransport = {
+    async redialAndWait() {
+      calls.push("redial");
+    },
     sendOpusFrame() {},
     async stop() {
       calls.push("transport:stop");

@@ -5,20 +5,75 @@ import { dirname, join } from "node:path";
 import {
   CONTROL_PROTOCOL_VERSION,
   type ControlBackend,
+  ControlError,
+  type ControlMutationRequest,
+  type ControlOperation,
+  type ControlStatus,
   startControlServer,
 } from "../src/control/index.ts";
 import { ControlMcpHttpHost } from "../src/control/mcp.ts";
 
-function fakeBackend(): ControlBackend {
+function operation(
+  kind: ControlOperation["kind"],
+  scope: ControlOperation["scope"],
+  request: ControlMutationRequest,
+): ControlOperation {
   return {
-    status: () => ({
+    operationId: request.operationId,
+    kind,
+    scope,
+    expectedGeneration: request.expectedGeneration,
+    expectedInstanceId: request.expectedInstanceId,
+    phase: "accepted",
+    acceptedAt: "2026-09-05T00:00:00.000Z",
+    updatedAt: "2026-09-05T00:00:00.000Z",
+  };
+}
+
+function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
+  const recentOperations: ControlOperation[] = [];
+  const byId = new Map<string, ControlOperation>();
+  const accept = (
+    kind: ControlOperation["kind"],
+    scope: ControlOperation["scope"],
+    request: ControlMutationRequest,
+  ) => {
+    observe?.(request);
+    if (request.expectedGeneration !== 7)
+      throw new ControlError(
+        "stale_generation",
+        "read status before mutating the current runtime generation",
+      );
+    const prior = byId.get(request.operationId);
+    if (prior) {
+      if (
+        prior.kind !== kind ||
+        prior.expectedInstanceId !== request.expectedInstanceId ||
+        prior.expectedGeneration !== request.expectedGeneration
+      )
+        throw new ControlError(
+          "operation_conflict",
+          "operation ID already names a different immutable request",
+        );
+      return prior;
+    }
+    const next = operation(kind, scope, request);
+    byId.set(request.operationId, next);
+    recentOperations.push(next);
+    return next;
+  };
+  return {
+    status: (): ControlStatus => ({
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: "instance-a",
       workspace: "/work",
       threadId: "thread-a",
-      generation: 1,
-      runtime: { phase: "ready" },
+      generation: 7,
+      runtime: { pid: 42, buildId: "build-a", phase: "ready" },
+      recentOperations,
     }),
+    redial: async (request) => accept("redial", "voice", request),
+    restart: async (request) => accept("restart", "runtime", request),
   };
 }
 
@@ -71,34 +126,35 @@ async function mcpRequest(
 }
 
 describe("controller control transports", () => {
-  test("only status is exposed through socket and MCP", async () => {
+  test("socket and MCP use the same durable mutation dispatch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
+    const requests: unknown[] = [];
     const server = await startControlServer({
-      backend: fakeBackend(),
+      backend: fakeBackend((request) => requests.push(request)),
       stateDir,
       instanceId: "instance-a",
     });
     try {
       expect((await stat(server.socketPath)).mode & 0o777).toBe(0o600);
       expect((await stat(dirname(server.socketPath))).mode & 0o777).toBe(0o700);
+      expect(server.mcpServer).toMatchObject({
+        url: server.httpUrl,
+        bearer_token_env_var: server.bearerTokenEnvVar,
+        startup_timeout_sec: 5,
+        tool_timeout_sec: 5,
+        required: true,
+        enabled_tools: ["agentvoice_status", "agentvoice_redial", "agentvoice_restart_runtime"],
+      });
       const status = await socketRequest(server.socketPath, {
         v: CONTROL_PROTOCOL_VERSION,
         type: "request",
-        id: "status",
+        id: "status-1",
         method: "agentvoice.status",
+        params: {},
       });
-      expect(status).toMatchObject({ ok: true, result: { threadId: "thread-a" } });
-      expect(server.mcpServer.enabled_tools).toEqual(["agentvoice_status"]);
-      for (const method of ["agentvoice.redial", "agentvoice.restart", "agentvoice.fresh"])
-        expect(
-          await socketRequest(server.socketPath, {
-            v: CONTROL_PROTOCOL_VERSION,
-            type: "request",
-            id: method,
-            method,
-          }),
-        ).toMatchObject({ ok: false, error: { code: "unknown_method" } });
-      const response = await mcpRequest(server.httpUrl, server.bearerToken, {
+      expect(status).toMatchObject({ ok: true, id: "status-1", result: { generation: 7 } });
+
+      const initial = await mcpRequest(server.httpUrl, server.bearerToken, {
         jsonrpc: "2.0",
         id: 1,
         method: "initialize",
@@ -108,20 +164,155 @@ describe("controller control transports", () => {
           clientInfo: { name: "test", version: "1" },
         },
       });
-      const session = response.headers.get("mcp-session-id")!;
-      const catalog = await mcpRequest(
+      expect(initial.status).toBe(200);
+      const sessionId = initial.headers.get("mcp-session-id");
+      expect(sessionId).toBeString();
+      await mcpRequest(
         server.httpUrl,
         server.bearerToken,
-        { jsonrpc: "2.0", id: 2, method: "tools/list" },
-        session,
+        { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+        sessionId ?? undefined,
       );
+      const tools = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+        sessionId ?? undefined,
+      );
+      const toolText = await tools.text();
+      expect(toolText).toContain("agentvoice_restart_runtime");
+      expect(toolText).toContain("handoffPrompt");
+
+      const call = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "agentvoice_restart_runtime",
+            arguments: {
+              operationId: "restart-1",
+              expectedGeneration: 7,
+              expectedInstanceId: "instance-a",
+              scope: "runtime",
+              handoffPrompt: "After restart, check status.\n雪",
+            },
+          },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await call.text()).toContain('"operationId":"restart-1"');
+      const duplicate = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "duplicate-1",
+        method: "agentvoice.restart",
+        params: {
+          operationId: "restart-1",
+          expectedGeneration: 7,
+          expectedInstanceId: "instance-a",
+          scope: "runtime",
+          handoffPrompt: "After restart, check status.\n雪",
+        },
+      });
+      expect(duplicate).toMatchObject({
+        ok: true,
+        result: { operationId: "restart-1", phase: "accepted" },
+      });
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toEqual(requests[1]);
+      expect(requests[0]).toHaveProperty("handoffPrompt", "After restart, check status.\n雪");
+      let badRequestId = 4;
+      for (const handoffPrompt of ["", " \n\t", null, "a".repeat(8193), "雪".repeat(2731)]) {
+        const args = {
+          operationId: "bad-handoff",
+          expectedGeneration: 7,
+          expectedInstanceId: "instance-a",
+          scope: "runtime",
+          handoffPrompt,
+        };
+        const socket = await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "bad-handoff",
+          method: "agentvoice.restart",
+          params: args,
+        });
+        expect(socket).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+        const mcp = await mcpRequest(
+          server.httpUrl,
+          server.bearerToken,
+          {
+            jsonrpc: "2.0",
+            id: badRequestId++,
+            method: "tools/call",
+            params: { name: "agentvoice_restart_runtime", arguments: args },
+          },
+          sessionId ?? undefined,
+        );
+        expect(await mcp.text()).toContain('"isError":true');
+      }
+      expect(requests).toHaveLength(2);
+      const redialPrompt = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "bad-redial",
+        method: "agentvoice.redial",
+        params: {
+          operationId: "bad-redial",
+          expectedGeneration: 7,
+          expectedInstanceId: "instance-a",
+          handoffPrompt: "task",
+        },
+      });
+      expect(redialPrompt).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+      const redialArgs = {
+        operationId: "redial-1",
+        expectedGeneration: 7,
+        expectedInstanceId: "instance-a",
+      };
+      const redial = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "redial",
+        method: "agentvoice.redial",
+        params: redialArgs,
+      });
+      expect(redial).toMatchObject({ ok: true, result: { kind: "redial", scope: "voice" } });
+      const redialMcp = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: badRequestId++,
+          method: "tools/call",
+          params: { name: "agentvoice_redial", arguments: redialArgs },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await redialMcp.text()).toContain('"operationId":"redial-1"');
+      expect(requests.at(-1)).toEqual(requests.at(-2));
+      expect(toolText).not.toContain("agentvoice_fresh");
       expect(
-        (
-          JSON.parse((await catalog.text()).split("data: ")[1]!.split("\n")[0]!) as {
-            result: { tools: { name: string }[] };
-          }
-        ).result.tools.map((tool: { name: string }) => tool.name),
-      ).toEqual(["agentvoice_status"]);
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "fresh",
+          method: "agentvoice.fresh",
+          params: {},
+        }),
+      ).toMatchObject({ ok: false, error: { code: "unknown_method" } });
+      for (const version of [1, 2, 3]) {
+        const legacy = await socketRequest(server.socketPath, {
+          v: version,
+          type: "request",
+          id: "legacy",
+          method: "agentvoice.status",
+        });
+        expect(legacy).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+      }
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
@@ -147,7 +338,7 @@ describe("controller control transports", () => {
         method: "agentvoice.restart",
         params: { operationId: "one", expectedGeneration: 7, expectedInstanceId: "instance-a" },
       });
-      expect(invalid).toMatchObject({ ok: false, error: { code: "unknown_method" } });
+      expect(invalid).toMatchObject({ ok: false, error: { code: "invalid_params" } });
       const stale = await socketRequest(server.socketPath, {
         v: CONTROL_PROTOCOL_VERSION,
         type: "request",
@@ -159,7 +350,7 @@ describe("controller control transports", () => {
           expectedInstanceId: "instance-a",
         },
       });
-      expect(stale).toMatchObject({ ok: false, error: { code: "unknown_method" } });
+      expect(stale).toMatchObject({ ok: false, error: { code: "stale_generation" } });
       await expect(
         startControlServer({ backend: fakeBackend(), stateDir, instanceId: "instance-a" }),
       ).rejects.toThrow("another AgentVoice controller owns");

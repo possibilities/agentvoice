@@ -193,10 +193,12 @@ v3 sends that required header; native WebRTC omission falls back to v1 and sends
 
 Explicit version overrides remain available; see [voice protocol](#native-voice-protocol).
 Automatic retries pause after three consecutive short-lived failures. The frontend
-shows FAILED and the server prints the cause. Close the frontend and start a new
-call to retry. Manual redial, in-call Fresh, runtime restart and restart handoffs
-have been removed from the TUI, IPC and MCP API. Control protocol 3 exposes only
-status; see [control API](docs/api.md) and [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md).
+shows FAILED and the server prints the cause. Use MCP/API redial to reconnect
+voice, or runtime restart to reload code/configuration and resume the same thread.
+Restart supports an optional caller-provided handoff prompt. These controls have
+no TUI buttons or keybindings; in-call Fresh remains removed. Control protocol 4
+exposes status, redial and restart with matching MCP tools; see the
+[control API](docs/api.md) and [orchestrator guide](USAGE.md).
 
 ### Installation
 
@@ -288,8 +290,8 @@ Workspace selection is not a memory or security sandbox.
   not that native work completed or speech was heard.
 - Full-duplex audio uses native miniaudio, Opus and WebRTC. Automatic renewal
   maintains the connection without changing its conversation or configuration.
-- Server settings and prompt files load once per call. A later call reloads
-  file contents; changing launch flags or the workspace requires a new server.
+- Server settings and prompt files load once per runtime generation. Runtime
+  restart or a later call reloads file contents; changing launch flags or the workspace requires a new server.
 
 Warnings appear in the server terminal. With `--debug`, private per-call logs
 also capture protocol/media details. Native item deltas remain available through
@@ -641,7 +643,8 @@ the named voice controls, and `orchestrator.extra.config` replaces
 
 Codex owns the voice-to-working-agent handoff, tools, subagents and their native
 events. AgentVoice does not add worker tools, start extra worker threads, compose
-completion reports, submit restart handoffs, or archive/delete completed work.
+completion reports or archive/delete completed work. An explicit MCP/API restart
+handoff is submitted once through native `turn/start` after exact resume and live media.
 It generates no worker-specific instructions; optional operator prompt overrides
 still pass through.
 
@@ -761,5 +764,5 @@ thread. Acceptance does not confirm audible playback or verbatim delivery.
 There are no automatic retries. An ambiguous disconnect may occur after the
 request was delivered; rerunning can repeat speech.
 
-Start a new call from the updated checkout to load changed runtime code. The script does not restart the app or voice
+Use MCP/API runtime restart or start a new call to load changed runtime code. The script does not restart the app or voice
 session. Other realtime mutations remain unavailable through attachment.

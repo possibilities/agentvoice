@@ -28,7 +28,14 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
             threadId: "main",
             generation: 1,
             runtime: { phase: "failed" },
+            recentOperations: [],
           }),
+          redial: async () => {
+            throw new Error("unexpected mutation");
+          },
+          restart: async () => {
+            throw new Error("unexpected mutation");
+          },
         },
       });
       const requests: Array<{ v: number; params: unknown }> = [];

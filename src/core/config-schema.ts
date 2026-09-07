@@ -143,7 +143,7 @@ export const voiceValuesSchema = z
     name: z
       .string()
       .describe(
-        "Voice timbre, validated by Codex when voice starts. Loaded once per call; start another call to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through.",
+        "Voice timbre, validated by Codex when voice starts. Loaded once per runtime generation; use MCP/API runtime restart or start another call to change. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through.",
       )
       .optional(),
     version: z

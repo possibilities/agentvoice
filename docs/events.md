@@ -2,7 +2,7 @@
 
 Each server-owned call controller exposes a **separate read-only Unix socket**
 for thread state, transient voice items and conversation observation. The event
-protocol remains 2; the separate control API is now read-only protocol 3. A new
+protocol remains 2; the separate control API uses protocol 4 for status, redial and restart. A new
 call creates a new controller and socket, so rediscover after frontend disconnect.
 Protocol-1 event clients must update.
 

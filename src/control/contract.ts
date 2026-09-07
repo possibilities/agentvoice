@@ -1,5 +1,67 @@
 import { z } from "zod";
-import { CONTROL_PROTOCOL_VERSION, type ControlBackend, ControlError } from "./types.ts";
+import { handoffPromptSchema } from "../core/handoff.ts";
+import {
+  CONTROL_PROTOCOL_VERSION,
+  type ControlBackend,
+  ControlError,
+  type ControlMutationRequest,
+  type ControlRestartRequest,
+} from "./types.ts";
+
+const operationId = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
+const mutation = z
+  .object({
+    operationId,
+    expectedGeneration: z.number().int().nonnegative(),
+    expectedInstanceId: z.string().min(1).max(256),
+  })
+  .strict();
+
+export const controlOperationSchema = z
+  .object({
+    operationId,
+    kind: z.enum(["redial", "restart"]),
+    scope: z.enum(["voice", "runtime"]),
+    expectedGeneration: z.number().int().nonnegative(),
+    expectedInstanceId: z.string().min(1),
+    phase: z.enum([
+      "accepted",
+      "quiescing",
+      "interrupted",
+      "forced",
+      "starting",
+      "ready",
+      "failed",
+    ]),
+    acceptedAt: z.string(),
+    updatedAt: z.string(),
+    forced: z.boolean().optional(),
+    result: z
+      .object({
+        generation: z.number().int().nonnegative(),
+        threadId: z.string(),
+        workspace: z.string(),
+        pid: z.number().int().positive().optional(),
+        buildId: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    error: z.object({ code: z.string(), message: z.string() }).optional(),
+    handoff: z
+      .object({
+        status: z.enum(["pending", "submitting", "accepted", "failed", "unknown"]),
+        clientUserMessageId: z.string().min(1).max(128),
+        turnId: z.string().min(1).max(256).optional(),
+        error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 export const controlStatusSchema = z
   .object({
@@ -18,10 +80,16 @@ export const controlStatusSchema = z
         voicePhase: z.string().optional(),
       })
       .strict(),
+    currentOperation: controlOperationSchema.optional(),
+    recentOperations: z.array(controlOperationSchema).max(100),
   })
   .strict();
 
-export type ControlMethod = "agentvoice.status";
+const restart = mutation
+  .extend({ scope: z.literal("runtime"), handoffPrompt: handoffPromptSchema.optional() })
+  .strict();
+
+export type ControlMethod = "agentvoice.status" | "agentvoice.redial" | "agentvoice.restart";
 
 export type ControlMethodEntry = {
   tool: string;
@@ -35,11 +103,29 @@ export type ControlMethodEntry = {
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
   "agentvoice.status": {
     tool: "agentvoice_status",
-    description: "Read the current call state.",
+    description: "Read the controller-bound voice/runtime state and recent durable operations.",
     params: z.object({}).strict(),
     result: controlStatusSchema,
     readOnly: true,
     invoke: async (backend) => await backend.status(),
+  },
+  "agentvoice.redial": {
+    tool: "agentvoice_redial",
+    description:
+      "Accept an idempotent voice/WebRTC redial for this controller instance and generation. It does not reload runtime code or configuration.",
+    params: mutation,
+    result: controlOperationSchema,
+    readOnly: false,
+    invoke: async (backend, params) => await backend.redial(params as ControlMutationRequest),
+  },
+  "agentvoice.restart": {
+    tool: "agentvoice_restart_runtime",
+    description:
+      "Accept an idempotent full runtime restart for this controller instance and generation. Optional handoffPrompt is submitted once as native working-agent input after the same conversation and voice are ready. Recover restart and handoff status with agentvoice_status; acceptance does not confirm execution or speech.",
+    params: restart,
+    result: controlOperationSchema,
+    readOnly: false,
+    invoke: async (backend, params) => await backend.restart(params as ControlRestartRequest),
   },
 };
 

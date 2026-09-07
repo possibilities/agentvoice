@@ -166,7 +166,7 @@ function buildMcpServer(backend: ControlBackend): McpServer {
     { name: "agentvoice-control", version: String(CONTROL_PROTOCOL_VERSION) },
     {
       instructions:
-        "Inspect the AgentVoice call bound to this conversation with agentvoice_status. This API is read-only.",
+        "Control the AgentVoice controller bound to this exact conversation. Restart and redial return durable accepted operations; use agentvoice_status to recover completion after an interrupted tool call.",
     },
   );
   for (const [method, entry] of Object.entries(CONTROL_METHODS)) {
