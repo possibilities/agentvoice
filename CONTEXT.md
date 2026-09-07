@@ -18,7 +18,8 @@ frontend disconnect ends that call and returns the server to waiting.
 pointer frontend, voice transcript and stock agent attachment side by side. All
 three Apps use local PTYs and end with the smolmux process; there are no
 Companion-held Sessions. Any App exiting or failing ends the Composition and its
-call. Attachments start only after this launch's call is live.
+call. The controls and transcript share a placeholder until this launch's call is
+live; the working-agent attachment opens once the voice transcript has message text.
 
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer

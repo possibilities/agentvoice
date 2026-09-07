@@ -1,6 +1,14 @@
 import { z } from "zod";
 import type { FrontendObservation } from "../frontend/protocol.ts";
-import { initialLayout, layoutSchema, type MuxControl, names, replacePane } from "./layout.ts";
+import {
+  CompositionLayout,
+  initialLayout,
+  layoutSchema,
+  type MuxControl,
+  names,
+  stageSchema,
+} from "./layout.ts";
+import { type MessagePresence, openVoiceMessages } from "./messages.ts";
 
 const appSchema = z.object({
   name: z.string(),
@@ -10,7 +18,11 @@ const appSchema = z.object({
 
 export class Composition {
   private stopped = false;
-  private attached = false;
+  private attached?: { workspace: string; threadId: string };
+  private agentAttached = false;
+  private messages?: MessagePresence;
+  private poll?: ReturnType<typeof setTimeout>;
+  private layout = new CompositionLayout();
   private started = false;
   private state?: FrontendObservation;
   private tail = Promise.resolve();
@@ -22,6 +34,7 @@ export class Composition {
     private readonly clientId: string,
     private readonly command: string[],
     private readonly workspace?: string,
+    private readonly openMessages = openVoiceMessages,
   ) {}
 
   private enqueue(action: () => Promise<void>) {
@@ -34,7 +47,10 @@ export class Composition {
   async start() {
     await this.mux.request("instance.configure", { confirmExit: true });
     if (this.stopped) return;
-    await this.mux.request("layout.apply", initialLayout());
+    const { stage } = z.object({ stage: stageSchema }).parse(await this.mux.request("layout.get"));
+    if (this.stopped) return;
+    this.layout = new CompositionLayout(stage.cols);
+    await this.mux.request("layout.apply", initialLayout(stage.cols));
     await this.create(0, ["client", ...(this.workspace ? ["--workspace", this.workspace] : [])], {
       AGENTVOICE_CLIENT_ID: this.clientId,
     });
@@ -48,6 +64,11 @@ export class Composition {
   }
   event(frame: Record<string, unknown>) {
     if (frame["type"] !== "event") throw new Error("Unexpected smolmux frame");
+    if (frame["event"] === "layout.changed") {
+      const data = z.object({ cause: z.string() }).parse(frame["data"]);
+      if (data.cause === "resize" && this.started) this.enqueue(() => this.reconcile());
+      return;
+    }
     if (frame["event"] !== "app.state") return;
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (!["exited", "failed"].includes(app.state)) return;
@@ -60,7 +81,11 @@ export class Composition {
     if (this.stopped) return;
     const layout = layoutSchema.parse(await this.mux.request("layout.get"));
     if (this.stopped) return;
-    const pane = layout.panes[index];
+    const pane = layout.panes[index === 2 ? layout.panes.length - 1 : index];
+    const cols =
+      layout.root.row.length === 2 && index < 2
+        ? Math.floor(((layout.panes[0]?.cols ?? 80) - 1) / 2)
+        : (pane?.cols ?? 80);
     const app = appSchema.parse(
       await this.mux.request("app.create", {
         name: names[index],
@@ -69,7 +94,7 @@ export class Composition {
         env,
         pty: "local",
         whenHidden: "keep",
-        cols: Math.max(1, pane?.cols ?? 80),
+        cols: Math.max(1, cols),
         rows: Math.max(1, pane?.rows ?? 24),
       }),
     );
@@ -77,29 +102,62 @@ export class Composition {
   }
   private async reconcile() {
     const state = this.state;
+    const disconnected = {
+      connected: false,
+      agent: this.agentAttached,
+      placeholder:
+        state?.clientId === this.clientId && state.state?.phase === "failed"
+          ? "Voice connection failed"
+          : undefined,
+    };
     if (
-      this.attached ||
       !state ||
       state.clientId !== this.clientId ||
       !state.busy ||
-      !state.state?.available ||
-      state.state.phase !== "live" ||
       !state.workspace ||
       !state.threadId
-    )
+    ) {
+      await this.layout.update(this.mux, disconnected);
       return;
-    this.attached = true;
+    }
+    if (
+      this.attached &&
+      (this.attached.workspace !== state.workspace || this.attached.threadId !== state.threadId)
+    )
+      throw new Error("Voice call identity changed; reopen the composition");
+    if (!state.state?.available || state.state.phase !== "live") {
+      await this.layout.update(this.mux, disconnected);
+      return;
+    }
     const selection = ["--workspace", state.workspace, "--thread", state.threadId];
-    for (const index of [1, 2]) {
+    if (!this.attached) {
+      this.attached = { workspace: state.workspace, threadId: state.threadId };
       if (this.stopped) return;
-      await this.create(index, ["attach", names[index]!, ...selection]);
+      await this.create(1, ["attach", "voice", ...selection]);
       if (this.stopped) return;
-      await replacePane(this.mux, index, { app: names[index]! }, index === 2 ? "agent" : undefined);
+      this.messages = this.openMessages(state.workspace, state.threadId);
+    }
+    await this.layout.update(this.mux, { connected: true, agent: this.agentAttached });
+    if (this.stopped || this.agentAttached) return;
+    if (this.messages!.hasMessages()) {
+      await this.create(2, ["attach", "agent", ...selection]);
+      if (this.stopped) return;
+      this.agentAttached = true;
+      await this.layout.update(this.mux, { connected: true, agent: true });
+      this.messages!.close();
+      clearTimeout(this.poll);
+    } else {
+      this.poll ??= setTimeout(() => {
+        this.poll = undefined;
+        this.enqueue(() => this.reconcile());
+      }, 100);
     }
   }
   stop(error?: Error) {
     this.failure ??= error;
     this.stopped = true;
+    clearTimeout(this.poll);
+    this.messages?.close();
     this.ended.resolve();
   }
   error() {

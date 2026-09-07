@@ -85,7 +85,7 @@ export async function runComposition(
     if (status["name"] !== name || status["pid"] !== child.pid || status["host"] !== "foreground")
       throw new Error("smolmux did not identify the owned foreground process");
     composition = new Composition(mux, clientId, command, workspace);
-    await mux.request("event.subscribe", { events: ["app.state"] });
+    await mux.request("event.subscribe", { events: ["app.state", "layout.changed"] });
     work = composition.start();
     work.catch((error) => composition?.stop(error));
     await Promise.race([composition.done, child.exited, mux.done, observation.socket.done]);
