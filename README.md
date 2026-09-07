@@ -84,8 +84,9 @@ Unix endpoint for a live controller. UIs subscribe with `event.subscribe`, then
 read `state.get` for the current inventory and a sequence watermark. The endpoint
 reports native thread state and runtime availability during a call, including
 native subagents. The same endpoint also carries typed
-`voice.*` items and transcript deltas as a live-only stream, without history
-backfill or controller transcript storage. An explicit `bun run voice:record
+`voice.*` items and transcript deltas as a live-only socket stream, without history
+backfill. The controller automatically saves private workspace/thread JSONL; use
+`agentvoice attach voice` to view it live or after a call ends. An explicit `bun run voice:record
 --workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for live
 and saved `codex-viewer --voice-jsonl <file> [--follow]` viewing. `state.get` remains lifecycle-only. See the
 [event protocol](docs/events.md) for prefix matching, snapshots, and limits, and
@@ -167,7 +168,7 @@ Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
 interrupt or running-task Exit action can interrupt native work. Redial preserves
 attachment; call teardown or native failure disconnects
 it. Run `attach` again for the current thread after a disconnect. No automatic
-reconnect or input replay occurs. Use `agentvoice attach` instead of the stock
+reconnect or input replay occurs. Use `agentvoice attach agent` instead of the stock
 TUI's printed reconnect command, whose one-use ticket has ended.
 Native and gateway credentials remain private;
 there is no arbitrary endpoint flag or cross-machine mode.
@@ -190,7 +191,7 @@ policy `never`, overriding conflicting launch/request permission settings.
 Unrelated raw native settings retain their normal precedence. The flag does not
 bypass managed Codex requirements or grant connector consent.
 
-Use `agentvoice attach` for native approvals, tool questions and MCP elicitations.
+Use `agentvoice attach agent` for native approvals, tool questions and MCP elicitations.
 The voice console shows an interaction notice; Codex retains the pending request
 until an attached TUI answers or native work is cancelled. AgentVoice neither
 auto-approves nor auto-refuses these requests and maintains no approval queue.
@@ -247,7 +248,7 @@ are separate runtime prerequisites. It runs `bun install --frozen-lockfile`, bui
 native audio to a temporary file, then atomically links `~/.local/bin/agentvoice`
 directly to `src/main.ts` and records the commit in
 `~/.local/state/agentvoice/deployed-sha` (`XDG_STATE_HOME` honored). The link preserves
-caller cwd. On macOS, it then installs `~/Library/LaunchAgents/dev.agentvoice.default.plist`
+caller cwd. On macOS, it then installs `~/Library/LaunchAgents/io.arthack.agentvoice.server.plist`
 and bootstraps the waiting server in the logged-in user's GUI domain. Rerunning
 installation restarts that job and ends any active call. The job runs while
 logged in; sleep suspends it. A manual default server must be stopped before
@@ -792,7 +793,7 @@ does not restore the retired remote/resident implementation. Remove a retired `r
 your chosen config before launching. Other unknown retired keys are rejected
 by strict config validation.
 
-The explicit installer manages only its `dev.agentvoice.default` LaunchAgent.
+The explicit installer manages only its `io.arthack.agentvoice.server` LaunchAgent.
 Normal launches never install services, migrate history or clean private state.
 Previously installed legacy LaunchAgents, old logs, pairings,
 `thread.json` and `workers.json` are untouched and unused by this source.
@@ -847,7 +848,7 @@ bun run voice:speak --workspace ~/code/myapp "Hello, bananafish."
 ```
 
 The script discovers the live controller by exact canonical workspace, like
-`voice:messages` and `agentvoice attach`. Add `--thread <main-thread-id>` if
+`voice:messages` and `agentvoice attach agent`. Add `--thread <main-thread-id>` if
 several controllers share that workspace. Use `--` before text beginning with
 a dash. Empty text and text over 64 KiB are rejected.
 
@@ -869,3 +870,38 @@ managed native requirements still apply. `debug: true` enables private per-call
 protocol/media logs. CLI `--allow-full-access` and `--debug` win over false in the
 file. New calls and explicit runtime restarts reload these settings; redial keeps
 the current runtime's settings. Model, effort and role retain their existing config keys.
+
+
+### Attach to the working agent or voice transcript
+
+```sh
+agentvoice attach agent
+agentvoice attach voice
+agentvoice attach voice --list
+agentvoice attach voice --thread <thread-id>
+# Either target accepts an explicit workspace:
+agentvoice attach voice --workspace ~/code/myapp
+```
+
+Both commands use the default server's active workspace, even if a newer default
+workspace directory has been created. When idle they use its selected workspace;
+without a server they use the configured workspace or current default generation.
+Bare `agentvoice attach` now requires `agent` or `voice`.
+
+Every call automatically records native voice items from startup to private JSONL
+under `$XDG_STATE_HOME/agentvoice/voice/<workspace-hash>/<thread-id>.jsonl`
+(default `~/.local/state`). The header retains the canonical workspace and thread.
+Calls resuming a thread append; other threads and workspaces remain separate.
+Recordings persist after calls end. `attach voice` opens the active transcript,
+or the latest saved recording when no call is active, with `codex-viewer --follow`.
+Closing the viewer has no effect on recording or the call. Install `codex-viewer`
+on PATH to view them; `--list` requires no interactive terminal.
+
+Completed items and recording boundaries are fsynced. Runtime interruptions,
+unfinalized files and recovered partial writes are marked; disk failures appear
+in server diagnostics. Draft deltas remain best-effort and speech predating this
+feature cannot be recovered. Observed transcripts are never fed into native
+history or model context and do not establish what was audibly heard.
+
+The installer renames the previously managed `dev.agentvoice.default` service to
+`io.arthack.agentvoice.server`, removing only a verified installer-owned old job.

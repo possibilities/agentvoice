@@ -94,7 +94,7 @@ thread append to its file. Events keep their original native identity.
 Rerunning the recorder against the same directory appends with a new recording
 boundary. Ordinary thread IDs are filenames; other IDs use a SHA-256 filename.
 The header always retains the original ID. New directories are mode 0700 and
-files 0600. Only one recorder can hold an output directory at a time.
+files 0600. Only one writer can hold a conversation file at a time; different threads can record concurrently.
 
 The file contract is UTF-8 JSONL, one complete record per newline:
 
@@ -131,6 +131,25 @@ entries, and fails explicitly at these limits. Follow mode waits for incomplete
 final lines and polls every 100 ms. Saved mode labels an incomplete tail. Truncated
 or replaced files require reopening the viewer. JSONL is the source of truth;
 there is no transcript database or additional socket API.
+
+## Automatic call recording
+
+Every call installs the same JSONL writer before runtime startup and opens its file
+on verified native thread identity. Storage is
+`$XDG_STATE_HOME/agentvoice/voice/<canonical-workspace-sha256>/<thread-id>.jsonl`.
+Resumes append, runtime replacements retain the writer, and shutdown allows final
+voice notifications from the current runtime before closing it. A new conversation
+or workspace has a separate recording. No viewer is required to record.
+
+`agentvoice attach voice` resolves active/default workspace and opens codex-viewer;
+`--list`, `--thread` and `--workspace` select saved history after calls end. Without
+an active call the newest modified recording in that workspace is selected.
+The writer checks private ancestors/files, uses per-thread locks, fsyncs completions
+and boundaries, and fsyncs the containing directory when opening a file. Reopening
+an unclean run marks `previous_recording_interrupted`, including newline-complete
+crashes. Disk failures are reported without tearing down healthy media. No speech
+before recording existed can be reconstructed; native observation can still be
+partial. This changes persistence policy, not model context or socket replay.
 
 ## Published schema
 
@@ -333,9 +352,10 @@ it describes native canonical completion, not proof the human heard every word.
 Observed voice items retain their original native thread ID. Closed-call
 runtimes cannot publish into a subsequent call.
 
-**Live voice delivery only.** The controller does not accumulate voice text, store
-voice transcript files or database rows, backfill speech, replay voice events,
-or provide a transcript UI. The explicit observer recorder below can save received events to independent files. Conversation replay/history is a separate API. There is no delivery acknowledgment or recovery promise. `state.get` remains
+**Live socket delivery.** The controller automatically persists received voice items
+to private workspace/thread JSONL before socket subscribers can lose frames. It does
+not backfill speech, replay it or provide a transcript UI. The explicit observer
+recorder can additionally export received events to independent files. Conversation replay/history is a separate API. There is no delivery acknowledgment or recovery promise. `state.get` remains
 lifecycle-only, even though its sequence includes voice events already published.
 Never discard voice events using a lifecycle snapshot watermark. A new
 subscription gets future events; reconnect does not recover missed speech.
@@ -343,8 +363,9 @@ subscription gets future events; reconnect does not recover missed speech.
 Malformed/unknown native item shapes and events over 64 KiB serialized as
 `{event,data}` are dropped whole, without truncating text or inventing identity.
 IDs are nonempty strings of at most 256 characters. At 16 pending runtime IPC
-writes, new voice events are dropped immediately; they are never coalesced by
-replacing earlier deltas and never enter the control queue's hard-overflow path.
+writes, draft transcript deltas may be dropped. Starts and canonical completions
+retain the reliable lane; hard overflow fails the runtime visibly and marks the
+recording interruption.
 Later events may still arrive, including a completed item. Accepted events retain
 native arrival order. Socket backpressure can disconnect a slow subscriber;
 call shutdown can also lose trailing items. Sequence gaps alone cannot

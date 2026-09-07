@@ -483,3 +483,31 @@ test("default server CLI creates its generation and waits on the stable endpoint
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("read-only attachment discovery retains active workspace while default selection advances", async () => {
+  const { attachmentSelection } = await import("../src/attachment/command.ts");
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-pinned-")));
+  let newest = root;
+  const server = new VoiceServer(
+    frontendSocketPath(root),
+    async (changed) => ({
+      ...fakeCall(changed).call,
+      identity: () => ({ workspace: root, threadId: "pinned-thread" }),
+    }),
+    () => {},
+    () => newest,
+  );
+  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  try {
+    await server.start();
+    client = await connectFrontend(frontendSocketPath(root));
+    newest = "/a/newer/workspace";
+    const selected = await attachmentSelection(root);
+    expect(selected).toMatchObject({ workspace: root, threadId: "pinned-thread", active: true });
+    expect(client.state().available).toBe(true);
+  } finally {
+    await client?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

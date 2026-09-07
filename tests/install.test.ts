@@ -420,7 +420,7 @@ test("installer publishes command then registers default service with a fake lau
   expect(readlinkSync(f.target)).toBe(f.source);
   expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
   const plist = readFileSync(
-    join(f.base, "Library/LaunchAgents/dev.agentvoice.default.plist"),
+    join(f.base, "Library/LaunchAgents/io.arthack.agentvoice.server.plist"),
     "utf8",
   );
   expect(plist).toContain(f.source);
@@ -434,5 +434,7 @@ test("service failure is reported distinctly after successful command publicatio
   expect(result.code).toBe(1);
   expect(result.err).toContain("Command installed, but LaunchAgent installation failed");
   expect(readlinkSync(f.target)).toBe(f.source);
-  expect(existsSync(join(f.base, "Library/LaunchAgents/dev.agentvoice.default.plist"))).toBe(false);
+  expect(existsSync(join(f.base, "Library/LaunchAgents/io.arthack.agentvoice.server.plist"))).toBe(
+    false,
+  );
 });

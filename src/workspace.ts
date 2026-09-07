@@ -9,8 +9,10 @@ export function workspaceBase(stateDir: string): string {
 // Names, rather than mutable directory mtimes, define generation order.
 const generationName = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z-[0-9a-f-]{36}$/;
 
-export function currentWorkspace(stateDir: string): string {
+export function currentWorkspace(stateDir: string, create = true): string {
   const base = workspaceBase(stateDir);
+  if (!create && !lstatSync(base, { throwIfNoEntry: false }))
+    throw new Error("No default workspace exists yet; start a voice call or pass --workspace");
   ownedDirectory(stateDir);
   ownedDirectory(join(stateDir, "default"));
   ownedDirectory(base);
@@ -21,6 +23,8 @@ export function currentWorkspace(stateDir: string): string {
       .sort()
       .at(-1);
   let name = newest();
+  if (!name && !create)
+    throw new Error("No default workspace exists yet; start a voice call or pass --workspace");
   if (!name) {
     // All concurrent initializers publish the same initial directory atomically.
     // The fixed UUID is only for the initial generation; later names may use any UUID.

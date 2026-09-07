@@ -23,7 +23,7 @@ export async function runAttachment(
   stateDir: string,
 ): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
-    throw new Error("agentvoice attach requires an interactive terminal");
+    throw new Error("agentvoice attach agent requires an interactive terminal");
   const ticket = await acquireAttachment(stateDir, selected.workspace, selected.threadId);
   const terminalState = execFileSync("stty", ["-g"], { stdio: ["inherit", "pipe", "ignore"] })
     .toString()
@@ -138,7 +138,7 @@ export async function runAttachment(
           "\x1b[?1049l\x1b[?25h\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\r\n",
         );
         console.error(
-          "Attachment ended. Run agentvoice attach again for the current voice thread.",
+          "Attachment ended. Run agentvoice attach agent again for the current voice thread.",
         );
       }
     }

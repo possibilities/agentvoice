@@ -19,8 +19,10 @@ Usage:
   agentvoice service status|restart|remove
                                    Manage the default macOS LaunchAgent
   agentvoice [--workspace <dir>]    Connect and start a call
-  agentvoice attach [--workspace <dir>] [--thread <id>]
+  agentvoice attach agent [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
+  agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
+                                   View or list persistent voice transcripts
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                    Print live read-only MCP configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
@@ -55,7 +57,7 @@ The frontend has pointer controls only: microphone, speaker and hold-to-talk.
 Terminate its process or close its terminal to end a call. There are no app keybindings.
 Server settings and prompt files load for each call. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
-Use agentvoice attach to answer native approvals and tool questions.
+Use agentvoice attach agent to answer native approvals and tool questions.
 `;
 
 export interface FlagSpec {
@@ -340,13 +342,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
 
     if (command === "attach") {
-      const selected = parseMcpConfigCommand(argv.slice(1));
-      if (selected.help) {
-        console.log(USAGE);
-        return 0;
-      }
-      const { runAttachment } = await import("./attachment/launcher.ts");
-      return await runAttachment(selected, stateDirectory(process.env, homedir()));
+      const { runAttachCommand } = await import("./attachment/command.ts");
+      return await runAttachCommand(argv.slice(1), stateDirectory(process.env, homedir()));
     }
     if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")

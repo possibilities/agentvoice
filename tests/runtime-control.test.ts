@@ -440,6 +440,8 @@ describe("persistent controller and disposable runtime", () => {
       };
       callbacks[0]!("voice", voice);
       expect(voiceEvents).toHaveLength(0);
+      callbacks[2]!("voice", { ...voice, data: { ...voice.data, threadId: "foreign" } });
+      expect(voiceEvents).toHaveLength(0);
       callbacks[2]!("voice", voice);
       expect(voiceEvents).toHaveLength(1);
       callbacks[2]!("voice", { ...voice, data: { ...voice.data, audio: "must not leak" } });

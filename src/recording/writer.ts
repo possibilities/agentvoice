@@ -5,17 +5,16 @@ import {
   fstatSync,
   fsyncSync,
   ftruncateSync,
-  mkdirSync,
   openSync,
   readSync,
-  realpathSync,
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { lockThread } from "../src/core/thread-lock.ts";
-import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
-import { voiceNotificationSchema } from "../src/events/voice.ts";
+import { lockThread } from "../core/thread-lock.ts";
+import { EVENT_PROTOCOL_VERSION } from "../events/contract.ts";
+import { voiceNotificationSchema } from "../events/voice.ts";
+import { ownedDirectory } from "../private-files.ts";
 
 const context = {
   instanceId: z.string().min(1).max(256),
@@ -36,27 +35,23 @@ export const recordedVoiceFrame = z.union(
 );
 const MAX_RECORD_BYTES = 1 << 20;
 
-/** Explicit observer-owned files, independent of native history and runtime audio. */
+/** Append-only observation, independent of native history and runtime audio. */
 export class VoiceRecording {
   private readonly files = new Map<string, number>();
   private readonly recordingId = randomUUID();
-  private readonly release: () => void;
+  private readonly releases = new Map<string, () => void>();
   private readonly directory: string;
   private identity: string | undefined;
   private closed = false;
+  private readonly damaged = new Set<number>();
 
   constructor(
     private readonly workspace: string,
     directory: string,
     private readonly opened: (path: string) => void = () => {},
   ) {
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    this.directory = realpathSync(directory);
-    try {
-      this.release = lockThread(join(this.directory, ".locks"), "voice-recorder");
-    } catch {
-      throw new Error("Cannot lock recording directory; another recorder may be using it");
-    }
+    ownedDirectory(directory);
+    this.directory = directory;
   }
 
   private write(fd: number, value: object, durable = false): void {
@@ -64,9 +59,25 @@ export class VoiceRecording {
       `${JSON.stringify({ ...value, observedAt: new Date().toISOString() })}\n`,
     );
     if (bytes.length > MAX_RECORD_BYTES) throw new Error("Voice record exceeds 1 MiB");
+    if (this.damaged.has(fd)) throw new Error("Recording has an unrecoverable partial write");
+    const before = fstatSync(fd).size;
     let offset = 0;
-    while (offset < bytes.length) offset += writeSync(fd, bytes, offset);
-    if (durable) fsyncSync(fd);
+    try {
+      while (offset < bytes.length) {
+        const written = writeSync(fd, bytes, offset);
+        if (written <= 0) throw new Error("Voice recording write made no progress");
+        offset += written;
+      }
+      if (durable) fsyncSync(fd);
+    } catch (error) {
+      // A failed partial write must not corrupt the next gap/end JSONL record.
+      try {
+        ftruncateSync(fd, before);
+      } catch {
+        this.damaged.add(fd);
+      }
+      throw error;
+    }
   }
 
   openThread(threadId: string): number {
@@ -79,12 +90,18 @@ export class VoiceRecording {
       ? threadId
       : createHash("sha256").update(threadId).digest("hex");
     const path = join(this.directory, `${name}.jsonl`);
-    const fd = openSync(
-      path,
-      constants.O_CREAT | constants.O_RDWR | constants.O_APPEND | constants.O_NOFOLLOW,
-      0o600,
-    );
+    const release = lockThread(join(this.directory, ".locks"), name);
+    let fd: number | undefined;
     try {
+      fd = openSync(
+        path,
+        constants.O_CREAT |
+          constants.O_RDWR |
+          constants.O_APPEND |
+          constants.O_NOFOLLOW |
+          constants.O_NONBLOCK,
+        0o600,
+      );
       const stat = fstatSync(fd);
       if (
         !stat.isFile() ||
@@ -94,6 +111,7 @@ export class VoiceRecording {
       )
         throw new Error(`Unsafe recording file: ${path}`);
       let recovered = false;
+      let interrupted = false;
       if (stat.size) {
         const prefix = Buffer.alloc(Math.min(stat.size, 16_384));
         readSync(fd, prefix, 0, prefix.length, 0);
@@ -115,6 +133,12 @@ export class VoiceRecording {
           ftruncateSync(fd, stat.size - tail.length + last + 1);
           recovered = true;
         }
+        const complete = tail.subarray(0, tail.lastIndexOf(10)).toString("utf8").split("\n").at(-1);
+        try {
+          interrupted = JSON.parse(complete ?? "{}").type !== "recording.ended";
+        } catch {
+          interrupted = true;
+        }
       } else {
         this.write(fd, {
           type: "voice_transcript",
@@ -126,11 +150,22 @@ export class VoiceRecording {
       this.write(fd, { type: "recording.started", recordingId: this.recordingId }, true);
       if (recovered)
         this.write(fd, { type: "recording.gap", reason: "unfinished_record_recovered" }, true);
+      if (interrupted)
+        this.write(fd, { type: "recording.gap", reason: "previous_recording_interrupted" }, true);
+      const directoryFd = openSync(this.directory, constants.O_RDONLY);
+      try {
+        fsyncSync(directoryFd);
+      } finally {
+        closeSync(directoryFd);
+      }
       this.files.set(threadId, fd);
+      this.releases.set(threadId, release);
       this.opened(path);
       return fd;
     } catch (error) {
-      closeSync(fd);
+      if (fd !== undefined) closeSync(fd);
+      release();
+      this.releases.delete(threadId);
       this.files.delete(threadId);
       throw error;
     }
@@ -161,11 +196,16 @@ export class VoiceRecording {
       } catch (error) {
         errors.push(error);
       } finally {
-        closeSync(fd);
+        try {
+          closeSync(fd);
+        } catch (error) {
+          errors.push(error);
+        }
       }
     }
     this.files.clear();
-    this.release();
+    for (const release of this.releases.values()) release();
+    this.releases.clear();
     if (errors.length) throw new AggregateError(errors, "Could not finish voice recording");
   }
 }

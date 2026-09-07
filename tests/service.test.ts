@@ -51,6 +51,8 @@ function fixture() {
         failure = undefined;
         return { code: 5, out: "", err: "injected failure" };
       }
+      if (args[0] === "print" && args[1]?.endsWith("/dev.agentvoice.default"))
+        return { code: 113, out: "", err: "Could not find service" };
       if (args[0] === "print")
         return loaded || unregistering-- > 0
           ? {
@@ -232,3 +234,50 @@ test("restart waits for launchd to unregister the old job before bootstrap", asy
     "bootstrap",
   ]);
 });
+
+for (const failRegistration of [false, true])
+  test(`rename preserves service ownership, failed registration=${failRegistration}`, async () => {
+    const f = fixture();
+    const oldLabel = "dev.agentvoice.default";
+    const loaded = new Map<string, string>();
+    const calls: string[][] = [];
+    f.options.launchctl = async (args) => {
+      calls.push(args);
+      if (args[0] === "print") {
+        const path = loaded.get(args[1]!);
+        return path
+          ? { code: 0, out: `path = ${path}\nstate = running\n`, err: "" }
+          : { code: 113, out: "", err: "" };
+      }
+      if (args[0] === "bootout") loaded.delete(args[1]!);
+      if (args[0] === "bootstrap") {
+        if (failRegistration && args[2]?.endsWith(`${SERVICE_LABEL}.plist`))
+          return { code: 5, out: "", err: "rename failed" };
+        const label = args[2]!.endsWith(`${oldLabel}.plist`) ? oldLabel : SERVICE_LABEL;
+        loaded.set(`gui/${f.options.uid}/${label}`, args[2]!);
+      }
+      return { code: 0, out: "", err: "" };
+    };
+    const old = new VoiceService(f.options, oldLabel);
+    await old.change("install");
+    const oldPath = servicePaths(f.options, oldLabel).plist;
+    expect(existsSync(oldPath)).toBe(true);
+    if (failRegistration) {
+      await expect(f.service.change("install")).rejects.toThrow("rename failed");
+      expect(existsSync(oldPath)).toBe(true);
+      expect(loaded.has(`gui/${f.options.uid}/${oldLabel}`)).toBe(true);
+      expect(existsSync(f.paths.plist)).toBe(false);
+      return;
+    }
+    await f.service.change("install");
+    expect(existsSync(oldPath)).toBe(false);
+    expect(loaded.has(`gui/${f.options.uid}/${oldLabel}`)).toBe(false);
+    expect(loaded.has(`gui/${f.options.uid}/${SERVICE_LABEL}`)).toBe(true);
+    expect(
+      calls.findIndex((args) => args[0] === "bootout" && args[1]?.endsWith(oldLabel)),
+    ).toBeLessThan(
+      calls.findIndex(
+        (args) => args[0] === "bootstrap" && args[2]?.endsWith(`${SERVICE_LABEL}.plist`),
+      ),
+    );
+  });

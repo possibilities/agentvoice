@@ -96,7 +96,7 @@ export class LifecycleFeed {
       }
   }
   voice(notification: VoiceNotification): void {
-    if (!["starting", "ready"].includes(this.value.runtime.phase)) return;
+    if (!["starting", "ready", "stopping"].includes(this.value.runtime.phase)) return;
     this.publish(
       Object.assign({}, notification, {
         v: EVENT_PROTOCOL_VERSION as typeof EVENT_PROTOCOL_VERSION,

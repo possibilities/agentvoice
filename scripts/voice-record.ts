@@ -6,7 +6,7 @@ import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
 import { eventSnapshotSchema } from "../src/events/schema.ts";
 import { parseArgs, parseMcpConfigCommand, runEventSocketCommand } from "../src/main.ts";
 import { expandTilde } from "../src/paths.ts";
-import { VoiceRecording } from "./voice-recording.ts";
+import { VoiceRecording } from "../src/recording/writer.ts";
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2), {

@@ -340,7 +340,7 @@ export class AppServerConnection {
       if (nativeHumanRequest(method)) {
         try {
           this.options.onInteraction?.(
-            "Codex requested your input. Run agentvoice attach in this workspace to respond.",
+            "Codex requested your input. Run agentvoice attach agent in this workspace to respond.",
           );
         } catch {
           this.options.debug?.("interaction notice callback failed");

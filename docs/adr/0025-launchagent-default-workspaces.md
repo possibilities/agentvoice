@@ -1,7 +1,7 @@
 # 0025: LaunchAgent and default workspace generations
 
 Accepted 2026-09-06. The macOS editable installer now installs the owned
-`dev.agentvoice.default` user LaunchAgent, which starts the waiting server at
+`io.arthack.agentvoice.server` user LaunchAgent, which starts the waiting server at
 login and restarts it on exit; `--command-only` keeps disposable command installs
 and non-service use explicit. The server still opens audio and Codex only for a
 frontend-owned call, and disconnect still completes cleanup before another call.

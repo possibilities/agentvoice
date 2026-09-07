@@ -43,10 +43,16 @@ test("voice pressure drops whole events at 16 writes, reserves control capacity,
     },
   });
   for (let index = 0; index < 16; index++)
-    sender.send({ method: "voice", params: { delta: String(index) } });
+    sender.send({
+      method: "voice",
+      params: { event: "voice.item.transcript.delta", delta: String(index) },
+    });
   expect(sender.pending).toBe(16);
   for (let index = 16; index < 100; index++)
-    sender.send({ method: "voice", params: { delta: String(index) } });
+    sender.send({
+      method: "voice",
+      params: { event: "voice.item.transcript.delta", delta: String(index) },
+    });
   sender.send({ method: "state", params: {} });
   expect(writes).toHaveLength(16);
   expect(failures).toBe(0);
@@ -55,9 +61,13 @@ test("voice pressure drops whole events at 16 writes, reserves control capacity,
   expect(writes.at(-1)?.result).toBe("control still responds");
   for (const done of callbacks.splice(0)) done(null);
   expect(sender.pending).toBe(0);
-  sender.send({ method: "voice", params: { delta: "next" } });
+  sender.send({ method: "voice", params: { event: "voice.item.transcript.delta", delta: "next" } });
   expect(writes).toHaveLength(18);
-  expect(writes.at(-1)).toMatchObject({ version: 1, generation: 7, params: { delta: "next" } });
+  expect(writes.at(-1)).toMatchObject({
+    version: 1,
+    generation: 7,
+    params: { event: "voice.item.transcript.delta", delta: "next" },
+  });
   expect(writes.slice(0, 16).map((message) => (message.params as { delta: string }).delta)).toEqual(
     Array.from({ length: 16 }, (_, i) => String(i)),
   );
@@ -126,4 +136,48 @@ test("a trailing dropped conversation produces a gap when IPC drains, even witho
   while (callbacks.length) callbacks.shift()!(null);
   expect(sender.pending).toBe(0);
   expect(failed).toBe(false);
+});
+
+test("completed voice transcripts retain canonical text through soft backpressure", () => {
+  const writes: IpcMessage[] = [];
+  const sender = runtimeSender({
+    generation: 1,
+    connected: () => true,
+    write: (message) => {
+      writes.push(message);
+    },
+    failed: () => {
+      throw new Error("unexpected failure");
+    },
+  });
+  for (let i = 0; i < 16; i++) sender.send({ method: "state", params: {} });
+  sender.send({
+    method: "voice",
+    params: { event: "voice.item.transcript.delta", data: { delta: "draft" } },
+  });
+  sender.send({
+    method: "voice",
+    params: { event: "voice.item.completed", data: { text: "canonical speech" } },
+  });
+  expect(writes).toHaveLength(17);
+  expect(writes.at(-1)?.params).toEqual({
+    event: "voice.item.completed",
+    data: { text: "canonical speech" },
+  });
+});
+
+test("shutdown drains queued transcript writes and reports an incomplete drain", async () => {
+  let done: ((error: Error | null) => void) | undefined;
+  const sender = runtimeSender({
+    generation: 1,
+    connected: () => true,
+    write: (_, callback) => {
+      done = callback;
+    },
+    failed: () => {},
+  });
+  sender.send({ method: "voice", params: { event: "voice.item.completed" } });
+  await expect(sender.drain(1)).rejects.toThrow("did not drain");
+  done!(null);
+  await expect(sender.drain()).resolves.toBeUndefined();
 });

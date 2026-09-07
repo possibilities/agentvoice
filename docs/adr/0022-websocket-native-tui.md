@@ -11,7 +11,7 @@ native WebSocket connections. Stdin/stdout no longer carry RPC; stdout/stderr
 remain process diagnostics and listener startup discovery. There is one native
 transport implementation, with the existing owned-process shutdown contract.
 
-`agentvoice attach [--workspace <dir>] [--thread <id>]` is always available.
+`agentvoice attach agent [--workspace <dir>] [--thread <id>]` is always available.
 Neither `--allow-tui-attach` nor `--no-tui-attach` exists, and attach accepts no
 full-access flag. Ordinary voice launch still accepts optional
 `--allow-full-access` as an explicit native permission override. Restricted and

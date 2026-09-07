@@ -34,7 +34,7 @@ owned child/process group.
 orchestrator thread and its verified native descendants through a guarded local
 gateway. It follows native work and
 submits typed input without owning voice or the child. Always available through
-`agentvoice attach`; no launch opt-in or full-access requirement. Runtime restart, call shutdown and native loss revoke it; redial and automatic
+`agentvoice attach agent`; no launch opt-in or full-access requirement. Runtime restart, call shutdown and native loss revoke it; redial and automatic
 renewal preserve it. Joining preserves the live
 thread's settings; explicit native setting changes and human answers flow through.
 
@@ -61,7 +61,7 @@ timestamp-and-UUID directory name inside the workspace base. Created initially
 when absent, then selected afresh for each default call; file edits do not change
 selection and active calls retain their selected directory.
 
-**LaunchAgent** — The user-owned `dev.agentvoice.default` launchd job that starts
+**LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that starts
 the waiting default server at login and restarts it on exit. It opens no audio
 or Codex child until a frontend calls.
 
@@ -186,8 +186,8 @@ control socket.
 
 **Live voice item stream** — Typed native realtime item starts, transcript deltas,
 and completions on the same read-only event endpoint. Preserves native identity
-and content only in transit, with bounded best-effort delivery. No accumulation,
-backfill, persistence or replay; lifecycle snapshots never supersede voice events.
+and content on the event socket with bounded best-effort delivery; the call controller
+also saves received speech in its voice transcript. No backfill or replay; lifecycle snapshots never supersede voice events.
 _Avoid_: transcript database, speech-history replay, delivery guarantee.
 
 **Conversation observation** — Read-only native orchestrator and subagent content
@@ -211,3 +211,10 @@ clears a batch; each child terminal turn immediately sends a count-only wake-up
 with a current working-child tally. It is not native child-result delivery or a
 per-message read-receipt system.
 _Avoid_: worker registry, transcript store.
+
+
+**Voice transcript** — Automatic private JSONL observation of a call's native voice
+items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.
+Resumed conversations append to the same file; recordings survive call shutdown.
+`agentvoice attach voice` opens them with codex-viewer, independently of recording.
+This is observed text, not proof of what was heard, and never model context.

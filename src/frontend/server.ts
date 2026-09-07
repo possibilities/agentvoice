@@ -16,6 +16,7 @@ import {
 export interface Call {
   start(): Promise<void>;
   state(): FrontendState;
+  identity?(): { workspace: string; threadId: string };
   command(command: FrontendCommand): void;
   close(): Promise<void>;
 }
@@ -31,6 +32,7 @@ export class VoiceServer {
     readonly path: string,
     private readonly create: (changed: () => void) => Promise<Call>,
     private readonly report: (message: string) => void = console.error,
+    private readonly workspace?: () => string,
   ) {
     this.socket = new JsonSocketServer(path, {
       version: FRONTEND_VERSION,
@@ -43,6 +45,19 @@ export class VoiceServer {
             ok,
             ...(ok ? { result } : { error: { message: result } }),
           });
+        if (request.method === "discover" && request.params === undefined) {
+          try {
+            const identity = this.session?.call?.identity?.();
+            reply(true, {
+              busy: !!this.session,
+              workspace: this.session ? identity?.workspace || null : this.workspace?.() || null,
+              threadId: identity?.threadId || null,
+            });
+          } catch (error) {
+            reply(false, String(error));
+          }
+          return;
+        }
         if (request.method === "call" && request.params === undefined) {
           if (this.closed || this.poisoned || this.session) {
             reply(false, "Server is busy or unavailable");
@@ -168,6 +183,10 @@ export async function runServer(
       return {
         start: () => controller.start(),
         state: () => controller.state(),
+        identity: () => ({
+          workspace: controller.status().workspace || pinned.parsed.values["workspace"]!,
+          threadId: controller.status().threadId,
+        }),
         close: call.close,
         command: (command) => {
           if (command.action === "mute") {
@@ -181,6 +200,8 @@ export async function runServer(
         },
       };
     },
+    console.error,
+    () => workspace ?? currentWorkspace(stateDir, false),
   );
   const stopped = Promise.withResolvers<void>();
   const stop = () => stopped.resolve();

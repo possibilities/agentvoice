@@ -209,7 +209,7 @@ export function runRuntimeWorker(
             publish();
           },
           onVoice: (notification) => {
-            if (!stopping && !terminalFailure) event("voice", notification);
+            if (!terminalFailure) event("voice", notification);
           },
           onConversation: (notification) => {
             if (!stopping && !terminalFailure) event("conversation", notification);
@@ -267,6 +267,11 @@ export function runRuntimeWorker(
     await host?.shutdown();
     endHost?.();
     await hostRun?.catch(() => {});
+    try {
+      await sender.drain();
+    } catch {
+      forced = true;
+    }
     return { forced };
   }
   async function command(method: string, params: unknown): Promise<unknown> {
@@ -355,7 +360,11 @@ export function runRuntimeWorker(
     void command(value.method, value.params).then(
       (result) => {
         if (value.id) send({ id: value.id, result: result ?? null });
-        if (value.method === "shutdown") setTimeout(() => process.exit(0), 25);
+        if (value.method === "shutdown")
+          void sender.drain().then(
+            () => process.exit(0),
+            () => process.exit(1),
+          );
       },
       (error) => {
         if (value.id)

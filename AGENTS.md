@@ -149,14 +149,15 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   media on refusal or ambiguous acceptance. Never adopt old journals in a new call.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
   controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
-- src/runtime-control/sender.ts: bounded worker writes; drop transient voice events
-  at the soft limit without replacing deltas or failing healthy media.
+- src/runtime-control/sender.ts: bounded worker writes; drop transient voice deltas
+  at the soft limit; preserve starts/completions without replacing deltas or failing healthy media.
 - src/events/: controller-owned read-only socket with prefix subscriptions,
   sequence-watermarked lifecycle snapshots, transient native voice items/deltas,
   and typed conversation observation. Conversation content has bounded in-memory
   replay and live-item snapshots; native history pages come from the owned child.
-  No controller-owned on-disk transcript store, automatic speech replay, or UI.
-  The explicit scripts/voice-record.ts observer may save received voice events to
+  The controller automatically saves private workspace/thread-namespaced voice JSONL
+  from call startup; no automatic speech replay or transcript UI.
+  The explicit scripts/voice-record.ts observer may additionally export received voice events to
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
@@ -422,3 +423,21 @@ lives in two siblings, and some changes here must cascade:
   skill, every edge with evidence) in the same change.
 - General agent doctrine — collab, build, maintain, story, the resource
   skills — is `~/code/agentguidance`; tool-specific runbooks stay here.
+
+
+## Voice recording and attachment
+
+`agentvoice attach agent` joins native Codex; `agentvoice attach voice` launches
+`codex-viewer --voice-jsonl <saved-file> --follow`. `--list` lists workspace
+recordings and `--thread` selects one. Bare attach is an actionable error.
+Implicit selection probes the default frontend endpoint read-only, preserving an
+active call's pinned workspace; idle/offline selection uses the configured/current
+workspace without creating a generation. Explicit workspace always wins.
+`src/recording/` owns private per-thread writers and bounded header/tail discovery.
+Recording starts at verified native identity before voice events, survives runtime
+replacement, and closes after runtime teardown. Preserve canonical completions
+through IPC soft pressure and reject foreign/stale runtime events before storage.
+Disk errors must be visible without stopping healthy media; never report missing
+or interrupted speech as complete, replay it, or write it to native history.
+The LaunchAgent label is `io.arthack.agentvoice.server`; explicit installation
+retires only the ownership-verified former `dev.agentvoice.default` job.

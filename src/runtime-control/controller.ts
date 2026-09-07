@@ -54,6 +54,7 @@ import {
 } from "../mailbox/contract.ts";
 import { ThreadMailbox } from "../mailbox/state.ts";
 import { stateDirectory } from "../paths.ts";
+import { recordCall } from "../recording/call.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
 import type { CandidateInfo, LaunchProvenance, RuntimeLaunch } from "./protocol.ts";
@@ -199,7 +200,7 @@ export class RuntimeController implements ControlBackend {
     return { process, incarnation };
   }
   private event(incarnation: number, method: string, params: unknown) {
-    if (incarnation !== this.activeIncarnation || this.closed) return;
+    if (incarnation !== this.activeIncarnation || (this.closed && method !== "voice")) return;
     if (method === "mailbox") {
       const parsed = mailboxObservationSchema.safeParse(params);
       if (!parsed.success) {
@@ -251,7 +252,12 @@ export class RuntimeController implements ControlBackend {
     }
     if (method === "voice") {
       const checked = voiceNotification(params);
-      if (checked) this.lifecycle.voice(checked);
+      if (
+        checked &&
+        checked.data.threadId === this.threadId &&
+        this.leases.has(checked.data.threadId)
+      )
+        this.lifecycle.voice(checked);
       return;
     }
     if (method === "threads") {
@@ -715,8 +721,12 @@ export class RuntimeController implements ControlBackend {
     this.shutdownPromise = Promise.resolve().then(async () => {
       this.phase = "stopping";
       this.changed();
-      this.activeIncarnation = 0;
       const stopped = await Promise.allSettled([this.active?.stop(), this.candidate?.stop()]);
+      this.activeIncarnation = 0;
+      if (stopped.some((result) => result.status === "rejected" || result.value === true)) {
+        this.phase = "failed";
+        this.notice("Call required forced cleanup; final voice transcript may be incomplete");
+      }
       await this.background;
       for (const release of this.leases.values()) release();
       this.leases.clear();
@@ -739,6 +749,7 @@ export async function createCall(
   let controller: RuntimeController | undefined;
   let control: ControlServer | undefined;
   const lifecycle = new LifecycleFeed(instanceId);
+  const recording = recordCall(lifecycle, stateDir, console.error);
   const current = () => {
     if (!controller) throw new ControlError("unavailable", "Call is initializing");
     return controller;
@@ -749,9 +760,12 @@ export async function createCall(
     (method, params) => current().readConversation(method, params),
   );
   const close = async () => {
+    let failedShutdown = true;
     try {
       await controller?.shutdown();
+      failedShutdown = false;
     } finally {
+      recording.close(failedShutdown);
       events.close();
       await control?.close();
     }

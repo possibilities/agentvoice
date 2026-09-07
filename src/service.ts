@@ -13,7 +13,8 @@ import { dirname, isAbsolute, join } from "node:path";
 import { type Environ, stateDirectory } from "./paths.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "./private-files.ts";
 
-export const SERVICE_LABEL = "dev.agentvoice.default";
+export const SERVICE_LABEL = "io.arthack.agentvoice.server";
+const PREVIOUS_SERVICE_LABEL = "dev.agentvoice.default";
 type Result = { code: number; out: string; err: string };
 export type Launchctl = (args: string[]) => Promise<Result>;
 export interface ServiceOptions {
@@ -57,11 +58,11 @@ export function serviceOptions(entrypoint: string): ServiceOptions {
   };
 }
 
-export function servicePaths(options: ServiceOptions) {
+export function servicePaths(options: ServiceOptions, label = SERVICE_LABEL) {
   const directory = join(options.home, "Library", "LaunchAgents");
   return {
     directory,
-    plist: join(directory, `${SERVICE_LABEL}.plist`),
+    plist: join(directory, `${label}.plist`),
     logs: join(options.stateDir, "default", "service"),
   };
 }
@@ -80,8 +81,8 @@ function xml(text: string): string {
     .replaceAll("'", "&apos;");
 }
 
-export function servicePlist(options: ServiceOptions): string {
-  const { logs } = servicePaths(options);
+export function servicePlist(options: ServiceOptions, label = SERVICE_LABEL): string {
+  const { logs } = servicePaths(options, label);
   for (const path of [options.home, options.stateDir, options.bun, options.entrypoint])
     if (!isAbsolute(path)) throw new Error("LaunchAgent paths must be absolute");
   // launchd does not inherit the installing shell. Carry only launch inputs,
@@ -100,7 +101,7 @@ export function servicePlist(options: ServiceOptions): string {
   ])
     if (options.env[key] !== undefined) env[key] = options.env[key];
   const body = `<plist version="1.0"><dict>
-<key>Label</key><string>${SERVICE_LABEL}</string>
+<key>Label</key><string>${label}</string>
 <key>ProgramArguments</key><array>${[options.bun, options.entrypoint, "server"].map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>
 <key>WorkingDirectory</key><string>${xml(options.home)}</string>
 <key>EnvironmentVariables</key><dict>${Object.entries(env)
@@ -119,7 +120,7 @@ export function servicePlist(options: ServiceOptions): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- agentvoice-launchagent-v1 ${digest(body)} -->\n${body}`;
 }
 
-function readManaged(path: string): string | undefined {
+function readManaged(path: string, label = SERVICE_LABEL): string | undefined {
   if (!ownedFile(path)) return undefined;
   const text = readFileSync(path, "utf8");
   const match =
@@ -129,7 +130,7 @@ function readManaged(path: string): string | undefined {
   if (
     !match ||
     digest(match[2]!) !== match[1] ||
-    !match[2]!.includes(`<key>Label</key><string>${SERVICE_LABEL}</string>`)
+    !match[2]!.includes(`<key>Label</key><string>${label}</string>`)
   )
     throw new Error(`Refusing unrelated or edited LaunchAgent: ${path}`);
   return text;
@@ -166,19 +167,24 @@ function atomicWrite(path: string, text: string) {
 }
 
 export class VoiceService {
-  constructor(private readonly options: ServiceOptions) {}
+  constructor(
+    private readonly options: ServiceOptions,
+    private readonly label = SERVICE_LABEL,
+  ) {}
   async preflight(): Promise<void> {
-    const { directory, plist, logs } = servicePaths(this.options);
+    const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
     safeAncestors(logs);
-    const previous = readManaged(plist);
+    const previous = readManaged(plist, this.label);
     if ((await this.loaded()) && !previous)
       throw new Error("Refusing a loaded job without an owned installation");
-    servicePlist(this.options);
+    servicePlist(this.options, this.label);
+    if (this.label === SERVICE_LABEL)
+      await new VoiceService(this.options, PREVIOUS_SERVICE_LABEL).preflight();
     for (const name of ["stdout.log", "stderr.log"]) ownedFile(join(logs, name));
   }
   private get target() {
-    return `gui/${this.options.uid}/${SERVICE_LABEL}`;
+    return `gui/${this.options.uid}/${this.label}`;
   }
   private async run(args: string[]) {
     const result = await this.options.launchctl(args);
@@ -191,7 +197,7 @@ export class VoiceService {
     if (result.code === 113) return undefined;
     if (result.code !== 0)
       throw new Error(`Cannot inspect LaunchAgent (${result.code}): ${result.err.trim()}`);
-    const expected = servicePaths(this.options).plist;
+    const expected = servicePaths(this.options, this.label).plist;
     const path = /^\s*path = (.+)$/m.exec(result.out)?.[1];
     if (path !== expected)
       throw new Error(`Refusing a loaded job with an unrelated plist: ${this.target}`);
@@ -208,19 +214,19 @@ export class VoiceService {
     }
   }
   async status(): Promise<string> {
-    const { directory, plist, logs } = servicePaths(this.options);
+    const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
-    const installed = readManaged(plist);
+    const installed = readManaged(plist, this.label);
     const loaded = await this.loaded();
     if (loaded && !installed) throw new Error("Loaded LaunchAgent has no owned installation");
     const state = loaded ? (/^\s*state = (.+)$/m.exec(loaded.out)?.[1] ?? "loaded") : "not loaded";
-    return `${SERVICE_LABEL}: ${installed ? state : "not installed"}\nPlist: ${plist}\nLogs: ${installed ? installedLogs(installed).join(", ") : logs}\n`;
+    return `${this.label}: ${installed ? state : "not installed"}\nPlist: ${plist}\nLogs: ${installed ? installedLogs(installed).join(", ") : logs}\n`;
   }
   async change(action: "install" | "restart" | "remove"): Promise<void> {
-    const { directory, plist, logs } = servicePaths(this.options);
+    const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
     mkdirSync(directory, { recursive: true, mode: 0o755 });
-    const lock = join(directory, `.${SERVICE_LABEL}.lock`);
+    const lock = join(directory, `.${this.label}.lock`);
     try {
       mkdirSync(lock, { mode: 0o700 });
     } catch {
@@ -229,7 +235,7 @@ export class VoiceService {
       );
     }
     try {
-      const previous = readManaged(plist);
+      const previous = readManaged(plist, this.label);
       const loaded = await this.loaded();
       if (loaded && !previous)
         throw new Error("Refusing a loaded job without an owned installation");
@@ -238,15 +244,32 @@ export class VoiceService {
         throw new Error("LaunchAgent is not installed; run scripts/install.sh --install");
       }
       if (action === "install") {
-        const next = servicePlist(this.options);
+        const next = servicePlist(this.options, this.label);
         ownedDirectory(this.options.stateDir);
         ownedDirectory(join(this.options.stateDir, "default"));
         ownedDirectory(logs);
         prepareLogs(next);
-        if (loaded) await this.unload();
+        let retired:
+          | { service: VoiceService; path: string; text: string; loaded: boolean }
+          | undefined;
         let published = false;
         try {
-          if (readManaged(plist) !== previous)
+          if (this.label === SERVICE_LABEL) {
+            const previousService = new VoiceService(this.options, PREVIOUS_SERVICE_LABEL);
+            await previousService.preflight();
+            const path = servicePaths(this.options, PREVIOUS_SERVICE_LABEL).plist;
+            const text = readManaged(path, PREVIOUS_SERVICE_LABEL);
+            if (text)
+              retired = {
+                service: previousService,
+                path,
+                text,
+                loaded: !!(await previousService.loaded()),
+              };
+            await previousService.change("remove");
+          }
+          if (loaded) await this.unload();
+          if (readManaged(plist, this.label) !== previous)
             throw new Error("LaunchAgent changed during installation");
           atomicWrite(plist, next);
           published = true;
@@ -259,7 +282,15 @@ export class VoiceService {
               if (previous) atomicWrite(plist, previous);
               else unlinkSync(plist);
             }
-            if (loaded && readManaged(plist) === previous) {
+            if (retired) {
+              const stillInstalled = readManaged(retired.path, PREVIOUS_SERVICE_LABEL);
+              if (stillInstalled !== undefined && stillInstalled !== retired.text)
+                throw new Error("Former LaunchAgent changed during migration");
+              if (stillInstalled === undefined) atomicWrite(retired.path, retired.text);
+              if (retired.loaded && !(await retired.service.loaded()))
+                await retired.service.change("restart");
+            }
+            if (loaded && !(await this.loaded()) && readManaged(plist, this.label) === previous) {
               prepareLogs(previous!);
               await this.run(["bootstrap", `gui/${this.options.uid}`, plist]);
             }

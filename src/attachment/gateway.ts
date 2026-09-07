@@ -170,7 +170,7 @@ export class AttachmentGateway {
       peer.data.upstream?.close();
       peer.close(
         code,
-        code === 1000 ? "TUI disconnected" : "Attachment ended; run agentvoice attach again",
+        code === 1000 ? "TUI disconnected" : "Attachment ended; run agentvoice attach agent again",
       );
     }
     grant.peers.clear();

@@ -10,6 +10,7 @@ export function runtimeSender(options: {
   failed(): void;
 }) {
   let pending = 0;
+  let failed = false;
   let gap: Outbound | undefined;
   function send(message: Outbound): void {
     if (!options.connected()) return;
@@ -25,8 +26,16 @@ export function runtimeSender(options: {
       };
       return;
     }
-    if (pending >= 16 && (message.method === "state" || message.method === "voice")) return;
+    // Voice completions contain canonical text; never silently discard them as transient UI.
+    if (pending >= 16 && message.method === "state") return;
+    if (
+      pending >= 16 &&
+      message.method === "voice" &&
+      (message.params as { event?: string }).event === "voice.item.transcript.delta"
+    )
+      return;
     if (pending >= 64) {
+      failed = true;
       options.failed();
       return;
     }
@@ -36,8 +45,10 @@ export function runtimeSender(options: {
       if (finished) return;
       finished = true;
       pending--;
-      if (error) options.failed();
-      else if (gap && pending < 16 && options.connected()) {
+      if (error) {
+        failed = true;
+        options.failed();
+      } else if (gap && pending < 16 && options.connected()) {
         const queued = gap;
         gap = undefined;
         send(queued);
@@ -54,5 +65,12 @@ export function runtimeSender(options: {
       return pending;
     },
     send,
+    async drain(timeoutMs = 2000) {
+      const deadline = Date.now() + timeoutMs;
+      while (pending > 0 && !failed && options.connected() && Date.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      if (pending > 0 || failed || !options.connected())
+        throw new Error("Runtime IPC did not drain");
+    },
   };
 }

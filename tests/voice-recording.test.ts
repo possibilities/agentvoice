@@ -11,8 +11,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { VoiceRecording } from "../scripts/voice-recording.ts";
 import { EVENT_PROTOCOL_VERSION } from "../src/events/contract.ts";
+import { VoiceRecording } from "../src/recording/writer.ts";
 
 const roots: string[] = [];
 const recorders: VoiceRecording[] = [];
@@ -120,10 +120,14 @@ test("restart appends and crash recovery truncates only an unfinished suffix", (
   ]);
 });
 
-test("one writer per directory and safe identity/private file checks", () => {
+test("one writer per thread and safe identity/private file checks", () => {
   const { root, recorder, path } = setup();
-  expect(() => new VoiceRecording(root, join(root, "out"))).toThrow("Cannot lock");
   recorder.openThread("main");
+  const concurrent = new VoiceRecording(root, join(root, "out"));
+  recorders.push(concurrent);
+  expect(() => concurrent.openThread("main")).toThrow();
+  concurrent.openThread("other");
+  concurrent.close("stopped");
   recorder.close("stopped");
   const next = new VoiceRecording("different-workspace", join(root, "out"));
   recorders.push(next);

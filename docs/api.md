@@ -58,7 +58,7 @@ set before it reports the bridge ready.
 
 ## Private TUI launcher bootstrap
 
-`agentvoice attach [--workspace <dir>] [--thread <id>]`
+`agentvoice attach agent [--workspace <dir>] [--thread <id>]`
 reuses live Unix status discovery. It then sends an authenticated `POST /tui/attach`
 to the controller's loopback HTTP host with `{instanceId, generation, threadId,
 workspace}`. This is a launcher-only endpoint, not an MCP tool or Unix
