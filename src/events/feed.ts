@@ -1,4 +1,10 @@
 import {
+  type MailboxPublish,
+  type MailboxSnapshot,
+  mailboxEventSchemas,
+} from "../mailbox/contract.ts";
+import type { MailboxEvent } from "./contract.ts";
+import {
   type ControllerEvent,
   type ConversationEvent,
   EVENT_PROTOCOL_VERSION,
@@ -18,6 +24,10 @@ import type { VoiceNotification } from "./voice.ts";
 /** Retained lifecycle projection plus transient voice events; no conversation state. */
 export class LifecycleFeed {
   private value: ThreadSnapshot;
+  private mailboxState: MailboxSnapshot | undefined;
+  private readonly mailboxEvents: { frame: MailboxEvent; bytes: number }[] = [];
+  private mailboxBytes = 0;
+  private mailboxFloor = 0;
   private readonly replayEvents: { frame: ConversationEvent; bytes: number }[] = [];
   private replayBytes = 0;
   private replayFloor = 0;
@@ -165,6 +175,63 @@ export class LifecycleFeed {
       generation: this.value.generation,
       ...this.projection.snapshot(threadId, this.value.sequence, this.revision),
     };
+  }
+  mailbox: MailboxPublish = (event, data) => {
+    const parsed = mailboxEventSchemas[event].parse(data);
+    if (event === "mailbox.changed")
+      this.mailboxState = structuredClone((parsed as { state: MailboxSnapshot }).state);
+    const frame: MailboxEvent = {
+      v: EVENT_PROTOCOL_VERSION,
+      type: "event",
+      event,
+      data: {
+        ...parsed,
+        instanceId: this.value.instanceId,
+        generation: this.value.generation,
+        sequence: ++this.value.sequence,
+      },
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(frame));
+    this.mailboxEvents.push({ frame, bytes });
+    this.mailboxBytes += bytes;
+    while (this.mailboxEvents.length > 512 || this.mailboxBytes > 4 * 1024 * 1024) {
+      const old = this.mailboxEvents.shift()!;
+      this.mailboxBytes -= old.bytes;
+      this.mailboxFloor = old.frame.data.sequence;
+    }
+    this.publish(frame);
+  };
+  mailboxSnapshot() {
+    if (!this.mailboxState) throw new ObservationError("unavailable");
+    return structuredClone({
+      instanceId: this.value.instanceId,
+      generation: this.value.generation,
+      sequence: this.value.sequence,
+      state: this.mailboxState,
+    });
+  }
+  mailboxReplay(afterSequence: number, limit: number) {
+    if (afterSequence < this.mailboxFloor) throw new ObservationError("resync_required");
+    if (afterSequence > this.value.sequence) throw new ObservationError("invalid_params");
+    const events: MailboxEvent[] = [];
+    let bytes = 0,
+      hasMore = false;
+    for (const entry of this.mailboxEvents) {
+      if (entry.frame.data.sequence <= afterSequence) continue;
+      if (events.length >= limit || bytes + entry.bytes > 900 * 1024) {
+        hasMore = true;
+        break;
+      }
+      events.push(entry.frame);
+      bytes += entry.bytes;
+    }
+    return structuredClone({
+      instanceId: this.value.instanceId,
+      generation: this.value.generation,
+      events,
+      throughSequence: hasMore ? events.at(-1)!.data.sequence : this.value.sequence,
+      hasMore,
+    });
   }
   private emit(event: LifecycleEvent["event"], data: Record<string, unknown>): void {
     const frame: LifecycleEvent = {

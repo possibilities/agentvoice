@@ -1,3 +1,4 @@
+import type { MailboxCaller, MailboxOpenParams, MailboxOpenResult } from "../mailbox/contract.ts";
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
@@ -10,6 +11,7 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_status",
   "agentvoice_redial",
   "agentvoice_restart_runtime",
+  "agentvoice_thread_mailbox_open",
 ] as const;
 
 export type ControlOperationPhase =
@@ -76,6 +78,7 @@ type MaybePromise<T> = T | Promise<T>;
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
   status(): MaybePromise<ControlStatus>;
+  mailboxOpen(request: MailboxOpenParams, caller?: MailboxCaller): Promise<MailboxOpenResult>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;
   restart(request: ControlRestartRequest): Promise<ControlOperation>;
 }

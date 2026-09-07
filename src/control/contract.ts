@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { handoffPromptSchema } from "../core/handoff.ts";
 import {
+  type MailboxCaller,
+  type MailboxOpenParams,
+  mailboxOpenParams,
+  mailboxOpenResultSchema,
+} from "../mailbox/contract.ts";
+import {
   CONTROL_PROTOCOL_VERSION,
   type ControlBackend,
   ControlError,
@@ -89,7 +95,11 @@ const restart = mutation
   .extend({ scope: z.literal("runtime"), handoffPrompt: handoffPromptSchema.optional() })
   .strict();
 
-export type ControlMethod = "agentvoice.status" | "agentvoice.redial" | "agentvoice.restart";
+export type ControlMethod =
+  | "agentvoice.status"
+  | "agentvoice.redial"
+  | "agentvoice.restart"
+  | "agentvoice.thread_mailbox_open";
 
 export type ControlMethodEntry = {
   tool: string;
@@ -97,10 +107,19 @@ export type ControlMethodEntry = {
   params: z.ZodType;
   result: z.ZodType;
   readOnly: boolean;
-  invoke(backend: ControlBackend, params: unknown): Promise<unknown>;
+  invoke(backend: ControlBackend, params: unknown, caller?: MailboxCaller): Promise<unknown>;
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
+  "agentvoice.thread_mailbox_open": {
+    tool: "agentvoice_thread_mailbox_open",
+    description:
+      "Open this orchestrator's thread mailbox: return and clear completion metadata, with a fresh snapshot of children still working. Full child results arrive through native Codex. Use the notice's operationId and expectedInstanceId; reuse an operationId only to retry that same opening. If remainingCompleted is nonzero, open again with a new operationId. Old notices may yield an empty mailbox. No per-message read receipts.",
+    params: mailboxOpenParams,
+    result: mailboxOpenResultSchema,
+    readOnly: false,
+    invoke: (backend, params, caller) => backend.mailboxOpen(params as MailboxOpenParams, caller),
+  },
   "agentvoice.status": {
     tool: "agentvoice_status",
     description: "Read the controller-bound voice/runtime state and recent durable operations.",
@@ -133,6 +152,7 @@ export async function dispatchControl(
   backend: ControlBackend,
   method: string,
   params: unknown,
+  caller?: MailboxCaller,
 ): Promise<unknown> {
   const entry = CONTROL_METHODS[method as ControlMethod];
   if (!entry) throw new ControlError("unknown_method", `unknown method "${method}"`);
@@ -145,7 +165,7 @@ export async function dispatchControl(
       .join("; ");
     throw new ControlError("invalid_params", message);
   }
-  const result = await entry.invoke(backend, checked.data);
+  const result = await entry.invoke(backend, checked.data, caller);
   const output = entry.result.safeParse(result);
   if (!output.success)
     throw new ControlError("internal_error", "controller returned an invalid result");

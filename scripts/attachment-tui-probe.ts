@@ -254,6 +254,9 @@ try {
     instanceId: status.instanceId,
     backend: {
       status: () => status,
+      mailboxOpen: async () => {
+        throw new Error("not used");
+      },
       redial: async () => {
         throw new Error("No media in fixture");
       },

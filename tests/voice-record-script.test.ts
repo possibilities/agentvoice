@@ -24,6 +24,9 @@ for (const shutdown of ["disconnect", "signal"] as const) {
           runtime: { phase: "ready" },
           recentOperations: [],
         }),
+        mailboxOpen: async () => {
+          throw new Error("not used");
+        },
         redial: async () => {
           throw new Error("unexpected mutation");
         },

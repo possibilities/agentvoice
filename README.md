@@ -86,6 +86,18 @@ for the methods and reconnect algorithm. Voice events remain live-only.
 Event clients must match the event protocol. A new call creates new event and
 control endpoints; rediscover them after a call ends.
 
+### Child completion wake-ups
+
+Each finished turn of an orchestrator-created native child immediately sends a
+count-only wake-up: accumulated completion notices and the current number of
+children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
+and clears completion metadata; native Codex supplies the full results.
+Multiple pending notices and empty openings are expected. The mailbox survives
+runtime replacement, has no per-message read receipts, and adds no system prompt.
+Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
+for external clients. See [thread mailbox](docs/thread-mailbox.md) for scope,
+retry semantics and bounds.
+
 ### Attach a stock Codex TUI
 
 Every active call supports stock Codex attachment from an additional terminal:
@@ -201,7 +213,7 @@ shows FAILED and the server prints the cause. Use MCP/API redial to reconnect
 voice, or runtime restart to reload code/configuration and resume the same thread.
 Restart supports an optional caller-provided handoff prompt. These controls have
 no TUI buttons or keybindings; in-call Fresh remains removed. Control protocol 4
-exposes status, redial and restart with matching MCP tools; see the
+exposes status, redial, restart and thread-mailbox opening with matching MCP tools; see the
 [control API](docs/api.md) and [orchestrator guide](USAGE.md).
 
 ### Installation
@@ -644,8 +656,9 @@ the named voice controls, and `orchestrator.extra.config` replaces
 ## Native work, no custom worker layer
 
 Codex owns the voice-to-working-agent handoff, tools, subagents and their native
-events. AgentVoice does not add worker tools, start extra worker threads, compose
-completion reports or archive/delete completed work. An explicit MCP/API restart
+events. AgentVoice adds completion-tally wake-ups and a metadata-only thread
+mailbox; native Codex still starts the children and delivers their results.
+AgentVoice does not add worker execution tools or archive/delete completed work. An explicit MCP/API restart
 handoff is submitted once through native `turn/start` after exact resume and live media.
 It generates no worker-specific instructions; optional operator prompt overrides
 still pass through.

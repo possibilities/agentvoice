@@ -352,6 +352,9 @@ describe("lifecycle event socket", () => {
           runtime: { phase: "failed" },
           recentOperations: [],
         }),
+        mailboxOpen: async () => {
+          throw new Error("not used");
+        },
         redial: async () => {
           throw new Error("must not mutate");
         },

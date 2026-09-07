@@ -42,6 +42,17 @@ import {
 import { LifecycleFeed } from "../events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../events/socket.ts";
 import { voiceNotification } from "../events/voice.ts";
+import {
+  inFlightSchema,
+  type MailboxCaller,
+  type MailboxOpenParams,
+  type MailboxOpenResult,
+  mailboxObservationSchema,
+  mailboxOpenParams,
+  type WakeOutcome,
+  wakeOutcomeSchema,
+} from "../mailbox/contract.ts";
+import { ThreadMailbox } from "../mailbox/state.ts";
 import { stateDirectory } from "../paths.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
@@ -62,6 +73,7 @@ export interface ControllerOptions {
 export class RuntimeController implements ControlBackend {
   readonly lifecycle: LifecycleFeed;
   private readonly journal: OperationJournal;
+  private readonly mailbox: ThreadMailbox;
   private readonly leases = new Map<string, () => void>();
   private active: RuntimeProcess | undefined;
   private candidate: RuntimeProcess | undefined;
@@ -90,6 +102,10 @@ export class RuntimeController implements ControlBackend {
 
   constructor(private readonly options: ControllerOptions) {
     this.lifecycle = options.lifecycle ?? new LifecycleFeed(options.instanceId);
+    this.mailbox = new ThreadMailbox(options.instanceId, (event, data) =>
+      this.lifecycle.mailbox(event, data),
+    );
+    this.lifecycle.mailbox("mailbox.changed", { state: this.mailbox.snapshot() });
     this.journal = new OperationJournal(
       join(options.stateDir, "operations", `${options.instanceId}.jsonl`),
     );
@@ -184,6 +200,50 @@ export class RuntimeController implements ControlBackend {
   }
   private event(incarnation: number, method: string, params: unknown) {
     if (incarnation !== this.activeIncarnation || this.closed) return;
+    if (method === "mailbox") {
+      const parsed = mailboxObservationSchema.safeParse(params);
+      if (!parsed.success) {
+        this.mailbox.gap("inventory");
+        return;
+      }
+      if (!["starting", "ready"].includes(this.phase)) return;
+      const observation = parsed.data;
+      switch (observation.kind) {
+        case "inventory":
+          this.mailbox.update(observation.inventory);
+          break;
+        case "started":
+          this.lifecycle.mailbox("mailbox.child.started", {
+            child: observation.child,
+            observedAt: observation.observedAt,
+          });
+          break;
+        case "completed": {
+          const eventId = this.mailbox.complete(observation.completion, this.generation);
+          if (eventId) void this.submitMailboxWake(eventId);
+          break;
+        }
+        case "submitting":
+          if (
+            observation.notice.instanceId === this.options.instanceId &&
+            observation.notice.rootThreadId === this.threadId
+          )
+            this.mailbox.submitting(observation.notice, this.generation);
+          break;
+        case "recorded":
+          this.mailbox.recorded(
+            observation.eventId,
+            this.generation,
+            observation.turnId,
+            observation.itemId,
+          );
+          break;
+        case "gap":
+          this.mailbox.gap(observation.reason);
+          break;
+      }
+      return;
+    }
     if (method === "conversation") {
       const checked = conversationNotification(params);
       if (checked) this.lifecycle.conversation(checked);
@@ -234,6 +294,7 @@ export class RuntimeController implements ControlBackend {
           ? (params as { message: string }).message
           : "Runtime exited; restart runtime to retry";
       this.cancelHolds();
+      this.mailbox.unavailableRuntime();
     }
     this.changed();
   }
@@ -277,6 +338,7 @@ export class RuntimeController implements ControlBackend {
       this.cancelHolds();
       this.active?.notify("mute", { mic: true, speaker: true });
       this.activeIncarnation = 0;
+      this.mailbox.unavailableRuntime();
       this.phase = "quiescing";
       this.voice = { ...this.voice, phase: "waiting-ready" };
       committed = true;
@@ -512,6 +574,70 @@ export class RuntimeController implements ControlBackend {
     }
     this.finishHandoff(operation, outcome);
   }
+  private async submitMailboxWake(eventId: string) {
+    const runtime = this.active;
+    const generation = this.generation;
+    const incarnation = this.activeIncarnation;
+    if (this.closed || !runtime || !this.threadId || !["ready", "starting"].includes(this.phase)) {
+      this.mailbox.outcome(eventId, generation, { status: "unavailable" });
+      return;
+    }
+    const request = {
+      eventId,
+      instanceId: this.options.instanceId,
+      rootThreadId: this.threadId,
+      completed: this.mailbox.snapshot().completed,
+    };
+    let outcome: WakeOutcome;
+    try {
+      outcome = wakeOutcomeSchema.parse(await runtime.request("mailbox-wake", request, 12000));
+    } catch {
+      outcome = { status: "unknown" as const };
+    }
+    if (this.closed || this.activeIncarnation !== incarnation || this.active !== runtime) return;
+    this.mailbox.outcome(eventId, generation, outcome);
+  }
+  async mailboxOpen(
+    request: MailboxOpenParams,
+    caller?: MailboxCaller,
+  ): Promise<MailboxOpenResult> {
+    const params = mailboxOpenParams.parse(request);
+    if (params.expectedInstanceId !== this.options.instanceId)
+      throw new ControlError("instance_mismatch", "Mailbox belongs to another call");
+    if (this.closed || !this.threadId)
+      throw new ControlError("unavailable", "Mailbox is unavailable");
+    const runtime = this.active,
+      incarnation = this.activeIncarnation;
+    if (caller) {
+      if (
+        caller.threadId !== this.threadId ||
+        !runtime ||
+        this.phase !== "ready" ||
+        !(await runtime.request<boolean>("mailbox-authorize", caller, 2000))
+      )
+        throw new ControlError(
+          "invalid_request",
+          "Only the orchestrator may open its mailbox through a native tool call",
+        );
+    }
+    const current = () =>
+      !this.closed && runtime === this.active && incarnation === this.activeIncarnation;
+    if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
+    const cached = this.mailbox.cached(params.operationId);
+    if (cached) return cached;
+    if (runtime && ["ready", "starting"].includes(this.phase)) {
+      try {
+        const inventory = inFlightSchema.parse(await runtime.request("mailbox-snapshot", {}, 2000));
+        if (!current()) throw new Error("changed");
+        this.mailbox.update(inventory);
+      } catch {
+        if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
+        this.mailbox.gap("inventory");
+      }
+    }
+    if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
+    return this.mailbox.open(params.operationId);
+  }
   private finishHandoff(operation: JournalOperation, outcome: HandoffResult) {
     operation.handoff = { clientUserMessageId: operation.handoff!.clientUserMessageId, ...outcome };
     operation.updatedAt = new Date().toISOString();
@@ -594,6 +720,7 @@ export class RuntimeController implements ControlBackend {
       await this.background;
       for (const release of this.leases.values()) release();
       this.leases.clear();
+      this.mailbox.clear();
       this.journal.close();
       const failed = stopped.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
@@ -634,6 +761,7 @@ export async function createCall(
     control = await startControlServer({
       backend: {
         status: () => current().status(),
+        mailboxOpen: (params, caller) => current().mailboxOpen(params, caller),
         redial: (request) => current().redial(request),
         restart: (request) => current().restart(request),
       },

@@ -2,6 +2,31 @@ import { expect, test } from "bun:test";
 import type { IpcMessage } from "../src/runtime-control/protocol.ts";
 import { runtimeSender } from "../src/runtime-control/sender.ts";
 
+test("mailbox facts retain the reserved reliable lane while conversation observations are dropped", () => {
+  const writes: IpcMessage[] = [];
+  const callbacks: Array<(error: Error | null) => void> = [];
+  const sender = runtimeSender({
+    generation: 1,
+    connected: () => true,
+    write: (message, done) => {
+      writes.push(message);
+      callbacks.push(done);
+    },
+    failed: () => {
+      throw new Error("unexpected transport failure");
+    },
+  });
+  for (let revision = 1; revision <= 20; revision++)
+    sender.send({ method: "conversation", params: { revision } });
+  sender.send({
+    method: "mailbox",
+    params: { kind: "completed", completion: { turnId: "child-turn" } },
+  });
+  expect(writes).toHaveLength(17);
+  expect(writes.at(-1)?.method).toBe("mailbox");
+  while (callbacks.length) callbacks.shift()!(null);
+});
+
 test("voice pressure drops whole events at 16 writes, reserves control capacity, and never replays", () => {
   const writes: IpcMessage[] = [];
   const callbacks: Array<(error: Error | null) => void> = [];
