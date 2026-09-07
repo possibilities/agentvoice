@@ -30,6 +30,9 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
             runtime: { phase: "failed" },
             recentOperations: [],
           }),
+          mailboxOpen: async () => {
+            throw new Error("not used");
+          },
           redial: async () => {
             throw new Error("unexpected mutation");
           },

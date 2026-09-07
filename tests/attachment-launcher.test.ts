@@ -49,6 +49,9 @@ for (const ending of ["revoked", "disconnected", "normal-close", "quit"] as cons
           runtime: { phase: "ready" },
           recentOperations: [],
         }),
+        mailboxOpen: async () => {
+          throw new Error("not used");
+        },
         redial: async () => {
           throw new Error("unexpected mutation");
         },

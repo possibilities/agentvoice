@@ -79,6 +79,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     instanceId: "attachment-integration",
     backend: {
       status: () => controller.status(),
+      mailboxOpen: (params, caller) => controller.mailboxOpen(params, caller),
       redial: (r) => controller.redial(r),
       restart: (r) => controller.restart(r),
     },

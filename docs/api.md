@@ -1,7 +1,7 @@
 # AgentVoice control API
 
 Control protocol **4** restores status, voice redial and runtime restart with an
-optional handoff prompt. MCP and Unix control use the same schemas and dispatcher.
+optional handoff prompt, plus thread-mailbox opening. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
 and control/event endpoints across runtime replacements. The separate pointer
 frontend remains connected. Closing it ends the call and all its endpoints.
@@ -50,7 +50,7 @@ controller lifetime; Codex's native MCP configuration uses a different shape.
 
 AgentVoice registers this MCP server for each orchestration thread as
 `agentvoice_control`. Its native configuration has `required: true`,
-`enabled_tools` set to the three tool names below, `startup_timeout_sec: 5`,
+`enabled_tools` set to the four tool names below, `startup_timeout_sec: 5`,
 `tool_timeout_sec: 5`, and a
 `bearer_token_env_var`. Registration is not readiness: the controller/runtime
 also checks the native MCP catalog for a connected server and the exact tool
@@ -61,7 +61,7 @@ set before it reports the bridge ready.
 `agentvoice attach [--workspace <dir>] [--thread <id>]`
 reuses live Unix status discovery. It then sends an authenticated `POST /tui/attach`
 to the controller's loopback HTTP host with `{instanceId, generation, threadId,
-workspace}`. This is a launcher-only endpoint, not a fourth MCP tool or Unix
+workspace}`. This is a launcher-only endpoint, not an MCP tool or Unix
 operation. It accepts no Origin and requires the same exact Host and bearer.
 
 The controller must be ready and idle
@@ -131,6 +131,7 @@ caller connection, event subscription, or pending request.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `agentvoice.status` | `{}` | `ControlStatus` |
+| `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` | Completion batch, remaining tally, in-flight snapshot |
 | `agentvoice.redial` | `MutationRequest` | accepted/current `ControlOperation` |
 | `agentvoice.restart` | `MutationRequest` plus `scope: "runtime"` and optional `handoffPrompt` | accepted/current `ControlOperation` |
 
@@ -277,6 +278,7 @@ Zod validation and dispatch implementation:
 | MCP tool | Socket method | Input |
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
+| `agentvoice_thread_mailbox_open` | `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` |
 | `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
 | `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` and optional `handoffPrompt` |
 
@@ -332,3 +334,11 @@ thread content, diagnostics or credentials cross this socket. Disconnect release
 push-to-talk, stops the entire call and returns the server to waiting only after
 cleanup finishes. If cleanup cannot be established, the server refuses new calls
 until its process is restarted. There is no frontend reconnect or replay loop.
+
+## Thread mailbox opening
+
+See [thread mailbox](thread-mailbox.md) for the consuming operation and its
+read-only event API. Unlike runtime mutations, mailbox openings are scoped to
+the controller instance and survive runtime generation changes. Reusing an
+operation ID returns the same batch; use a new ID for a new opening. The native
+MCP caller is correlated to an orchestrator tool item before consumption.
