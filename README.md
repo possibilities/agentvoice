@@ -905,3 +905,21 @@ history or model context and do not establish what was audibly heard.
 
 The installer renames the previously managed `dev.agentvoice.default` service to
 `io.arthack.agentvoice.server`, removing only a verified installer-owned old job.
+
+
+### macOS microphone permission for the service
+
+The installer packages its own copy of Bun as a signed `AgentVoice.app` below
+`~/.local/state/agentvoice/default/service/runtime/` (honoring XDG state).
+It preserves Bun's runtime entitlements and adds microphone access plus an
+AgentVoice usage description. The LaunchAgent and its runtime children use this
+executable; the Homebrew Bun installation is never modified. A stable app signing
+identity is retained across installer updates, and modified bundles are refused.
+Failed service updates restore the previous runtime before restarting its job.
+
+On the first voice call, allow AgentVoice microphone access in the macOS prompt.
+If previously denied, enable AgentVoice under System Settings → Privacy & Security
+→ Microphone, then close and reopen the voice frontend. The installer does not
+change privacy grants or open audio while the server is waiting. A live connection
+alone does not establish microphone permission: macOS can supply silent capture
+when access is denied.

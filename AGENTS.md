@@ -441,3 +441,12 @@ Disk errors must be visible without stopping healthy media; never report missing
 or interrupted speech as complete, replay it, or write it to native history.
 The LaunchAgent label is `io.arthack.agentvoice.server`; explicit installation
 retires only the ownership-verified former `dev.agentvoice.default` job.
+
+
+The macOS service uses the installer-owned signed Bun copy in
+`default/service/runtime/AgentVoice.app`, preserving Bun entitlements and adding
+`com.apple.security.device.audio-input` plus NSMicrophoneUsageDescription. Never
+re-sign Homebrew Bun or write TCC grants. Keep the bundle's stable signing identity,
+receipt checks and transactional rollback. Restart validates the persisted bundle
+path even if the invoking XDG state differs. Packaging tests use temporary copies,
+signing inspection and --version only; actual microphone consent remains macOS-owned.

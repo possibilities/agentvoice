@@ -62,7 +62,8 @@ when absent, then selected afresh for each default call; file edits do not chang
 selection and active calls retain their selected directory.
 
 **LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that starts
-the waiting default server at login and restarts it on exit. It opens no audio
+the waiting default server at login and restarts it on exit. Its installer-owned
+signed AgentVoice.app executable supplies the service's macOS microphone identity. It opens no audio
 or Codex child until a frontend calls.
 
 **Full access** — Optional launch override: --allow-full-access or file

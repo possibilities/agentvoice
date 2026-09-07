@@ -12,6 +12,11 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { type Environ, stateDirectory } from "./paths.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "./private-files.ts";
+import {
+  checkServiceRuntime,
+  serviceRuntimeExecutable,
+  stageServiceRuntime,
+} from "./service-runtime.ts";
 
 export const SERVICE_LABEL = "io.arthack.agentvoice.server";
 const PREVIOUS_SERVICE_LABEL = "dev.agentvoice.default";
@@ -25,6 +30,7 @@ export interface ServiceOptions {
   entrypoint: string;
   env: Environ;
   launchctl: Launchctl;
+  packageRuntime?: boolean;
 }
 
 async function launchctl(args: string[]): Promise<Result> {
@@ -55,6 +61,7 @@ export function serviceOptions(entrypoint: string): ServiceOptions {
     entrypoint,
     env: process.env,
     launchctl,
+    packageRuntime: true,
   };
 }
 
@@ -102,7 +109,7 @@ export function servicePlist(options: ServiceOptions, label = SERVICE_LABEL): st
     if (options.env[key] !== undefined) env[key] = options.env[key];
   const body = `<plist version="1.0"><dict>
 <key>Label</key><string>${label}</string>
-<key>ProgramArguments</key><array>${[options.bun, options.entrypoint, "server"].map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>
+<key>ProgramArguments</key><array>${[options.packageRuntime ? serviceRuntimeExecutable(options.stateDir) : options.bun, options.entrypoint, "server"].map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>
 <key>WorkingDirectory</key><string>${xml(options.home)}</string>
 <key>EnvironmentVariables</key><dict>${Object.entries(env)
     .map(([key, value]) => `<key>${key}</key><string>${xml(value!)}</string>`)
@@ -149,6 +156,25 @@ function installedLogs(plist: string): string[] {
   });
 }
 
+function checkInstalledRuntime(plist: string): void {
+  const encoded = /<key>ProgramArguments<\/key><array><string>([^<]*)<\/string>/.exec(plist)?.[1];
+  if (!encoded) throw new Error("Installed LaunchAgent has no executable");
+  const executable = encoded
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+  if (!executable.endsWith("/runtime/AgentVoice.app/Contents/MacOS/agentvoice")) return;
+  let stateDir = executable;
+  for (let level = 0; level < 7; level++) stateDir = dirname(stateDir);
+  if (serviceRuntimeExecutable(stateDir) !== executable)
+    throw new Error("Unexpected service runtime path");
+  checkServiceRuntime(stateDir);
+  if (!lstatSync(executable, { throwIfNoEntry: false }))
+    throw new Error("Packaged AgentVoice runtime is missing; reinstall AgentVoice");
+}
+
 function prepareLogs(plist: string): void {
   for (const path of installedLogs(plist)) {
     ownedDirectory(dirname(path));
@@ -175,6 +201,7 @@ export class VoiceService {
     const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
     safeAncestors(logs);
+    if (this.options.packageRuntime) checkServiceRuntime(this.options.stateDir);
     const previous = readManaged(plist, this.label);
     if ((await this.loaded()) && !previous)
       throw new Error("Refusing a loaded job without an owned installation");
@@ -249,6 +276,9 @@ export class VoiceService {
         ownedDirectory(join(this.options.stateDir, "default"));
         ownedDirectory(logs);
         prepareLogs(next);
+        const runtime = this.options.packageRuntime
+          ? stageServiceRuntime(this.options.stateDir, this.options.bun)
+          : undefined;
         let retired:
           | { service: VoiceService; path: string; text: string; loaded: boolean }
           | undefined;
@@ -271,6 +301,7 @@ export class VoiceService {
           if (loaded) await this.unload();
           if (readManaged(plist, this.label) !== previous)
             throw new Error("LaunchAgent changed during installation");
+          runtime?.publish();
           atomicWrite(plist, next);
           published = true;
           await this.run(["enable", this.target]);
@@ -278,6 +309,7 @@ export class VoiceService {
         } catch (error) {
           // Preserve the prior registration if publication could not be loaded.
           try {
+            runtime?.rollback();
             if (published) {
               if (previous) atomicWrite(plist, previous);
               else unlinkSync(plist);
@@ -302,10 +334,12 @@ export class VoiceService {
           }
           throw error;
         }
+        runtime?.commit();
       } else if (action === "remove") {
         if (loaded) await this.unload();
         unlinkSync(plist);
       } else {
+        checkInstalledRuntime(previous!);
         prepareLogs(previous!);
         if (loaded) await this.unload();
         await this.run(["enable", this.target]);

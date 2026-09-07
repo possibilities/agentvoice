@@ -281,3 +281,30 @@ for (const failRegistration of [false, true])
       ),
     );
   });
+
+test("packaged LaunchAgent starts its microphone-entitled executable rather than shared Bun", () => {
+  const f = fixture();
+  f.options.packageRuntime = true;
+  const plist = servicePlist(f.options);
+  expect(plist).toContain("/runtime/AgentVoice.app/Contents/MacOS/agentvoice</string>");
+  expect(plist).not.toContain(`<string>${f.options.bun}</string>`);
+  expect(plist).toContain("<string>server</string>");
+});
+
+test.skipIf(process.platform !== "darwin")(
+  "restart verifies the persisted packaged runtime even from a different XDG state root",
+  async () => {
+    const f = fixture();
+    f.options.packageRuntime = true;
+    await f.service.change("install");
+    const info = join(f.paths.logs, "runtime/AgentVoice.app/Contents/Info.plist");
+    writeFileSync(info, "modified bundle");
+    f.options.stateDir = join(f.options.home, "different-state");
+    const before = f.calls.length;
+    await expect(f.service.change("restart")).rejects.toThrow(
+      "modified AgentVoice service runtime",
+    );
+    expect(f.calls.slice(before).every((args) => args[0] === "print")).toBe(true);
+  },
+  30_000,
+);

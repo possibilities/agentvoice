@@ -53,7 +53,7 @@ function fixture() {
   ]) {
     copyFileSync(join(repository, "scripts", name), join(root, "scripts", name));
   }
-  for (const name of ["service.ts", "paths.ts", "private-files.ts"]) {
+  for (const name of ["service.ts", "service-runtime.ts", "paths.ts", "private-files.ts"]) {
     copyFileSync(join(repository, "src", name), join(root, "src", name));
   }
   for (const name of ["bun", "git", "dirname", "bash"]) {
