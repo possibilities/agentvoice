@@ -829,6 +829,30 @@ not control those old processes.
 
 ## Development
 
+### Waveform gallery
+
+`bun run waveforms` opens a standalone OpenTUI gallery of twelve animated,
+synthetic waveform studies. It uses fxnk's fixed monochrome dark/light palettes,
+fine Braille traces and half-block fields. Signals are generated locally; the
+gallery opens no microphone, speaker, voice call, or Codex child.
+
+Click a study or select it with arrows / `h` `j` `k` `l`, then press Enter to
+expand it. Space pauses, `[` / `]` adjust speed, `-` / `+` adjust amplitude,
+`,` / `.` adjust frequency, and `0` resets parameters and time. Escape returns
+to the gallery; `q` or Ctrl+C quits. Click **Commands**, press Ctrl+K or `?` to
+search all actions and studies. All controls accept clicks; the wheel adjusts
+a parameter under the pointer, or moves between studies elsewhere. Smaller
+terminals show fewer previews; selection moves through all twelve.
+In shallow expanded views, parameter controls move into **Commands** to leave
+room for the waveform; their keyboard shortcuts remain available.
+
+Theme selection follows `FX_THEME=dark|light`, a bounded terminal background
+query, `COLORFGBG`, then dark. Live terminal theme changes swap the complete
+fixed palette. Waveform trails use the five grayscale steps; they never sample
+the host palette. Animation stops while paused, unfocused, or using commands.
+
+### Checks
+
 ```sh
 bun run test
 bun run typecheck
