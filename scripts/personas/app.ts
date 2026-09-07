@@ -36,6 +36,7 @@ interface Command {
 export interface LabOptions {
   theme?: ThemeMode;
   animate?: boolean;
+  initiallyFocused?: boolean;
   state?: PersonaState;
   variant?: PersonaVariant;
   view?: View;
@@ -68,6 +69,7 @@ export class PersonaLab extends Renderable {
   ) {
     super(renderer, { id: "persona-lab", width: "100%", height: "100%" });
     this.colors = palette(options.theme ?? "dark");
+    this.blurred = options.initiallyFocused === false;
     this.selected = Math.max(
       0,
       variants.findIndex((variant) => variant.id === options.variant),
@@ -207,10 +209,10 @@ export class PersonaLab extends Renderable {
       if (action === "pause") this.paused = !this.paused;
       else if (action === "auto" && this.source.cue) this.automatic = true;
       else if (action === "replay") {
-        this.source.seek(0);
+        this.seekSource(0);
         this.clearAudio();
       } else if (action.startsWith("seek:")) {
-        this.source.seek(this.source.position + Number(action.slice(5)));
+        this.seekSource(this.source.position + Number(action.slice(5)));
         this.clearAudio();
       } else if (action.startsWith("state:")) {
         this.automatic = false;
@@ -229,9 +231,14 @@ export class PersonaLab extends Renderable {
   }
 
   private clearAudio(): void {
-    this.motion.history = [];
-    this.motion.rings = [];
-    this.motion.level = this.motion.pulse = 0;
+    this.motion.resetAudio();
+  }
+  private seekSource(seconds: number): void {
+    try {
+      this.source.seek(seconds);
+    } catch (error) {
+      this.fail(error);
+    }
   }
   private syncAudio(): void {
     if (this.automatic && this.source.cue) this.motion.state = this.source.cue.state;

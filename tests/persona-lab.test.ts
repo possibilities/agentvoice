@@ -12,6 +12,7 @@ import {
   MicrophoneSource,
   SpeechReplay,
 } from "../scripts/personas/source.ts";
+import { SpokenReplay } from "../scripts/personas/spoken.ts";
 import {
   PersonaMotion,
   personaStates,
@@ -138,6 +139,64 @@ test("state transitions keep phase continuous after a long session", () => {
   expect(motion.phase).toBe(phase);
 });
 
+test("voice motion ignores raw carrier phase while retaining speech loudness and timbre", () => {
+  const analyzer = new AudioAnalyzer(24000);
+  const frame = analyzer.push(tone(310));
+  const first = new PersonaMotion();
+  const shifted = new PersonaMotion();
+  first.state = shifted.state = "listening";
+  first.audio = { input: frame };
+  shifted.audio = { input: { ...frame, waveform: frame.waveform.map((sample) => -sample) } };
+  first.settle();
+  shifted.settle();
+  for (const variant of variants)
+    expect(renderPersona(first, variant.id, 36, 10).pixels).toEqual(
+      renderPersona(shifted, variant.id, 36, 10).pixels,
+    );
+  const high = new AudioAnalyzer(24000);
+  shifted.audio = { input: high.push(tone(3200)) };
+  shifted.settle();
+  expect(shifted.wave).not.toEqual(first.wave);
+  expect(shifted.centroid).toBeGreaterThan(first.centroid);
+});
+
+test("speech envelope responds promptly, bridges short gaps, and settles into quiet", () => {
+  const analyzer = new AudioAnalyzer(24000);
+  const frame = analyzer.push(tone(310, 0.04));
+  const motion = new PersonaMotion();
+  motion.state = "speaking";
+  for (let i = 0; i < 6; i++) {
+    motion.audio = { output: { ...frame, revision: i + 1 } };
+    motion.advance(0.02);
+  }
+  expect(motion.level).toBeGreaterThan(frame.level * 0.75);
+  const level = motion.level;
+  const quiet = { ...frame, level: 0, rms: 0, bands: new Float32Array(16), onset: 0 };
+  for (let i = 0; i < 2; i++) {
+    motion.audio = { output: { ...quiet, revision: i + 7 } };
+    motion.advance(0.02);
+  }
+  expect(motion.level).toBeGreaterThan(level * 0.8);
+  for (let i = 0; i < 100; i++) motion.advance(0.02);
+  expect(motion.level).toBeLessThan(0.001);
+  motion.resetAudio();
+  expect(motion.pulse).toBe(0);
+  expect(motion.rings.length).toBe(0);
+});
+
+test("frequent acoustic attacks cannot create a strobing burst of rings", () => {
+  const analyzer = new AudioAnalyzer(24000);
+  const frame = analyzer.push(tone(310, 0.02));
+  const motion = new PersonaMotion();
+  motion.state = "listening";
+  for (let i = 0; i < 50; i++) {
+    motion.audio = { input: { ...frame, onset: 1, revision: i + 1, onsetRevision: i + 1 } };
+    motion.advance(0.02);
+  }
+  expect(motion.rings.length).toBeGreaterThan(1);
+  expect(motion.rings.length).toBeLessThanOrEqual(5);
+});
+
 test("switching persona states never revives stale channel frames or consumes attacks twice", () => {
   const analyzer = new AudioAnalyzer(24000);
   const frame = analyzer.push(tone(400, 0.02));
@@ -253,6 +312,81 @@ test("actual speech fixtures cover five demo states and replay obeys pause, seek
   source.setRunning(true);
   source.advance(0.1);
   expect(source.position).toBe(0);
+});
+
+test("spoken replay follows elapsed playback across stalls, pause, seek, and late exits", async () => {
+  let clock = 0;
+  let cleanups = 0;
+  const players: Array<{
+    offset: number;
+    stops: number;
+    completion: ReturnType<typeof Promise.withResolvers<void>>;
+  }> = [];
+  const replay = new SpeechReplay({ samples: tone(400, 3), sampleRate: 24000 }, "test");
+  const source = new SpokenReplay(
+    replay,
+    (_clip, offset) => {
+      const item = { offset, stops: 0, completion: Promise.withResolvers<void>() };
+      players.push(item);
+      return {
+        done: item.completion.promise,
+        stop() {
+          item.stops++;
+          item.completion.resolve();
+        },
+      };
+    },
+    () => clock,
+    async () => {
+      cleanups++;
+    },
+  );
+  source.setRunning(true);
+  clock = 0.1;
+  source.advance();
+  expect(source.position).toBeCloseTo(0.1, 4);
+  clock = 1.4;
+  source.advance();
+  expect(source.position).toBeCloseTo(1.4, 4);
+  source.setRunning(false);
+  expect(players[0]!.stops).toBe(1);
+  clock = 20;
+  source.setRunning(true);
+  await Promise.resolve();
+  source.advance();
+  expect(players.length).toBe(2);
+  expect(players[1]!.offset).toBeCloseTo(1.4, 4);
+  source.seek(2);
+  expect(players[1]!.stops).toBe(1);
+  expect(players[2]!.offset).toBe(2);
+  clock = 21.1;
+  players[2]!.completion.resolve();
+  await Promise.resolve();
+  source.advance();
+  expect(players[3]!.offset).toBe(0);
+  await source.dispose();
+  expect(players[3]!.stops).toBe(1);
+  expect(cleanups).toBe(1);
+  source.setRunning(true);
+  expect(players.length).toBe(4);
+});
+
+test("spoken playback failures surface without starting another player", async () => {
+  const completion = Promise.withResolvers<void>();
+  let plays = 0;
+  const source = new SpokenReplay(
+    new SpeechReplay({ samples: tone(400), sampleRate: 24000 }, "test"),
+    () => {
+      plays++;
+      return { done: completion.promise, stop() {} };
+    },
+  );
+  source.setRunning(true);
+  completion.reject(new Error("output device unavailable"));
+  await Promise.resolve();
+  expect(() => source.advance()).toThrow("output device unavailable");
+  await source.dispose();
+  expect(plays).toBe(1);
 });
 
 class FakeCapture implements CaptureDevice {
@@ -397,6 +531,39 @@ test("lab state controls, scrubbing and modal pointer ownership share one state"
   }
 });
 
+test("lab initialized unfocused starts no speech until focus returns", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24 });
+  let starts = 0;
+  let stops = 0;
+  const source = new SpokenReplay(await demoSpeech(), () => {
+    starts++;
+    const completion = Promise.withResolvers<void>();
+    return {
+      done: completion.promise,
+      stop() {
+        stops++;
+        completion.resolve();
+      },
+    };
+  });
+  const lab = new PersonaLab(setup.renderer, source, { initiallyFocused: false });
+  try {
+    await setup.renderOnce();
+    expect(starts).toBe(0);
+    expect(lab.live).toBe(false);
+    setup.renderer.emit("focus");
+    setup.renderer.emit("focus");
+    expect(starts).toBe(1);
+    expect(lab.live).toBe(true);
+    setup.renderer.emit("blur");
+    expect(stops).toBe(1);
+    expect(lab.live).toBe(false);
+  } finally {
+    lab.close();
+    await source.dispose();
+  }
+});
+
 test("lab releases capture on blur, commands, pause, source failure and destruction", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, kittyKeyboard: true });
   const device = new FakeCapture();
@@ -481,4 +648,7 @@ test("CLI validates its explicit source choice without loading a native device",
   expect(() => parseArgs(["--state", "busy"])).toThrow("Unknown persona state");
   expect(() => parseArgs(["--wav"])).toThrow("Missing");
   expect(() => parseArgs(["--mic", "--mic"])).toThrow("Duplicate");
+  expect(parseArgs(["--say"]).say).toBe(true);
+  expect(() => parseArgs(["--say", "--mic"])).toThrow("one audio source");
+  expect(() => parseArgs(["--say", "--wav", "x.wav"])).toThrow("one audio source");
 });

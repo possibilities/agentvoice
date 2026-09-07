@@ -245,6 +245,10 @@ export async function demoSpeech(): Promise<SpeechReplay> {
     loadWav(`${import.meta.dir}/fixtures/you.wav`),
     loadWav(`${import.meta.dir}/fixtures/agent.wav`),
   ]);
+  return composeDemo(you, agent);
+}
+
+export function composeDemo(you: SpeechClip, agent: SpeechClip): SpeechReplay {
   if (you.sampleRate !== agent.sampleRate) throw new Error("Demo sample rates must match");
   const rate = you.sampleRate;
   const parts = [

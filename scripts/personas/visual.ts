@@ -9,7 +9,11 @@ export const variants = [
     name: "Waveform waterfall",
     detail: "Speech leaves a landscape of fading ridges.",
   },
-  { id: "phosphor", name: "Phosphor scope", detail: "The voice itself, suspended in phosphor." },
+  {
+    id: "phosphor",
+    name: "Phosphor scope",
+    detail: "Speech rises through a soft, persistent trace.",
+  },
   {
     id: "braid",
     name: "Braided harmonics",
@@ -73,7 +77,7 @@ export class PersonaMotion {
   time = 0;
   phase = 0;
   level = 0;
-  centroid = 0;
+  centroid = 0.35;
   pulse = 0;
   wave = new Float32Array(128);
   bands = new Float32Array(16);
@@ -83,6 +87,12 @@ export class PersonaMotion {
   private input = new Channel();
   private output = new Channel();
   private targetLevel = 0;
+  private targetBands = new Float32Array(16);
+  private targetCentroid = 0.35;
+  private heldLevel = 0;
+  private holdUntil = 0;
+  private lastPulse = -1;
+  private pulseTarget = 0;
   private historyTime = 0;
   private quiet = silence();
 
@@ -91,6 +101,10 @@ export class PersonaMotion {
     this.weights = personaStates.map((state) => (state === this.state ? 1 : 0));
     this.advance(0);
     this.level = this.targetLevel;
+    this.heldLevel = this.targetLevel;
+    this.bands.set(this.targetBands);
+    this.centroid = this.targetCentroid;
+    this.shapeWave();
   }
 
   advance(seconds: number): void {
@@ -116,28 +130,41 @@ export class PersonaMotion {
         : this.state === "speaking"
           ? this.audio.output
           : undefined) ?? this.quiet;
-    if (frame !== this.quiet && channel.attack && clamp(frame.onset) > 0.12) {
-      this.rings.push({ age: 0, strength: clamp(frame.onset) });
-      if (this.rings.length > 12) this.rings.shift();
-      this.pulse = Math.max(this.pulse, clamp(frame.onset));
-    }
     const freshness = Math.exp(-Math.max(0, channel.age - 0.12) * 12);
-    const target = clamp(frame.level) * freshness;
+    const speech = clamp((frame.rms - 0.002) / 0.006);
+    const target = clamp(frame.level) * speech * freshness;
+    if (
+      frame !== this.quiet &&
+      channel.attack &&
+      clamp(frame.onset) > 0.22 &&
+      target > 0.2 &&
+      this.time - this.lastPulse >= 0.24
+    ) {
+      const strength = clamp(frame.onset) * 0.6;
+      this.rings.push({ age: 0, strength });
+      if (this.rings.length > 12) this.rings.shift();
+      this.pulseTarget = Math.max(this.pulseTarget, strength);
+      this.lastPulse = this.time;
+    }
     this.targetLevel = target;
+    // Bridge consonants and brief syllable gaps without holding a whole phrase open.
+    if (target >= this.heldLevel) {
+      this.heldLevel = target;
+      this.holdUntil = this.time + 0.06;
+    } else if (this.time >= this.holdUntil) this.heldLevel = target;
     this.level +=
-      (target - this.level) * (1 - Math.exp(-dt / (target > this.level ? 0.025 : 0.12)));
-    this.centroid += (clamp(frame.centroid) - this.centroid) * blend;
-    for (let i = 0; i < this.wave.length; i++)
-      this.wave[i] =
-        clamp(
-          (frame.waveform[i % Math.max(1, frame.waveform.length)] ?? 0) /
-            Math.max(0.025, clamp(frame.peak)),
-          -1,
-          1,
-        ) * freshness;
-    for (let i = 0; i < this.bands.length; i++)
-      this.bands[i] = clamp(frame.bands[i] ?? 0) * freshness;
-    this.pulse *= Math.exp(-dt * 6);
+      (this.heldLevel - this.level) *
+      (1 - Math.exp(-dt / (this.heldLevel > this.level ? 0.075 : 0.22)));
+    this.targetCentroid = target > 0.05 ? clamp(frame.centroid) : 0.35;
+    this.centroid += (this.targetCentroid - this.centroid) * (1 - Math.exp(-dt / 0.35));
+    for (let i = 0; i < this.bands.length; i++) {
+      this.targetBands[i] = clamp(frame.bands[i] ?? 0) * speech * freshness;
+      this.bands[i] =
+        this.bands[i]! + (this.targetBands[i]! - this.bands[i]!) * (1 - Math.exp(-dt / 0.18));
+    }
+    this.shapeWave();
+    this.pulse += (this.pulseTarget - this.pulse) * (1 - Math.exp(-dt / 0.065));
+    this.pulseTarget *= Math.exp(-dt * 6);
     for (const ring of this.rings) ring.age += dt;
     this.rings = this.rings.filter((ring) => ring.age < 1.5);
     this.historyTime += dt;
@@ -149,6 +176,33 @@ export class PersonaMotion {
         level: this.level,
       });
       if (this.history.length > 48) this.history.pop();
+    }
+  }
+
+  resetAudio(): void {
+    this.input = new Channel();
+    this.output = new Channel();
+    this.targetLevel = this.heldLevel = this.level = this.pulse = this.pulseTarget = 0;
+    this.holdUntil = 0;
+    this.lastPulse = -1;
+    this.targetBands.fill(0);
+    this.bands.fill(0);
+    this.history = [];
+    this.rings = [];
+    this.shapeWave();
+  }
+
+  private shapeWave(): void {
+    const body = (this.bands[3]! + this.bands[5]! + this.bands[7]!) / 3;
+    const air = (this.bands[10]! + this.bands[12]! + this.bands[14]!) / 3;
+    // A continuous carrier preserves identity; voice timbre bends its harmonics.
+    // Unaligned 8 ms PCM windows would redraw an unrelated phase on every paint.
+    for (let i = 0; i < this.wave.length; i++) {
+      const phase = (i / (this.wave.length - 1)) * Math.PI * 4.4 - this.phase;
+      this.wave[i] =
+        Math.sin(phase) * 0.76 +
+        Math.sin(phase * 2 + 0.3) * (0.06 + body * 0.1) +
+        Math.sin(phase * 3 + 1.1) * (0.02 + air * 0.04);
     }
   }
 }
@@ -261,8 +315,8 @@ export function renderPersona(
         trace(
           (u) =>
             Math.sin(
-              u * tau * (2 + m.centroid * 5) +
-                (1 + energy * 3) * Math.sin(u * tau - motion) +
+              u * tau * (2.8 + m.centroid * 0.8) +
+                (1 + energy * 1.4) * Math.sin(u * tau - motion) +
                 layer * (0.04 + m.level * 0.12),
             ) *
             energy *
@@ -280,7 +334,10 @@ export function renderPersona(
               (0.48 + energy * 0.4) *
               (0.64 + 0.34 * Math.cos(a * petals + motion + layer * 0.12)) *
               (0.25 + awake * 0.75);
-            const flutter = band(Math.floor((a / tau) * 16)) * 0.07;
+            const position = (a / tau) * 16;
+            const index = Math.floor(position);
+            const flutter =
+              (band(index) * (1 - (position % 1)) + band(index + 1) * (position % 1)) * 0.045;
             return [
               Math.cos(a + motion * 0.12) * (radius + flutter),
               Math.sin(a + motion * 0.12) * (radius + flutter),
@@ -308,7 +365,7 @@ export function renderPersona(
         const radius = 0.12 + (ring.age / 1.5) * 0.86;
         orbit(
           (a) => [Math.cos(a) * radius, Math.sin(a) * radius],
-          shade((1 - ring.age / 1.5) * ring.strength),
+          shade(Math.min(1, ring.age / 0.09) * (1 - ring.age / 1.5) * ring.strength),
         );
       }
       break;
@@ -332,8 +389,8 @@ export function renderPersona(
             const phase = motion * 0.35 - layer * 0.045;
             const radius = 0.15 + energy * 0.78;
             return [
-              Math.sin(a * 3 + phase + wave(a / tau) * 0.3) * radius,
-              Math.sin(a * 2 + phase * 0.4 + m.centroid * 0.8) * radius,
+              Math.sin(a * 3 + phase + wave(a / tau) * 0.12) * radius,
+              Math.sin(a * 2 + phase * 0.4 + m.centroid * 0.3) * radius,
             ];
           },
           shade(1 - layer * 0.24),

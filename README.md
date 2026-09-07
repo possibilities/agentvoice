@@ -859,12 +859,16 @@ OpenTUI renderer, with explicit `idle`, `listening`, `thinking`, `speaking`, and
 `asleep` states inspired by [AI Elements Persona](https://github.com/vercel/ai-elements/blob/main/packages/elements/src/persona.tsx).
 Waveform waterfall, phosphor scope, braided harmonics, FM ribbon, phase rose,
 radial pulses, standing waves, and Lissajous loops each respond to speech in a
-different way. RMS, peaks, sixteen frequency bands, and attack detection drive
-their geometry; conversation state is always supplied explicitly.
+different way. Speech loudness, sixteen frequency bands, and attack detection drive
+their geometry; conversation state is always supplied explicitly. Continuous
+curves follow a smoothed speech envelope: syllables rise promptly, short gaps
+hold briefly, and phrases ease back to quiet. Frequency bands shape timbre
+gradually, and radial pulses are spaced to avoid flickering on every consonant.
 
 ```sh
 bun run personas
 bun run personas --variant rose --view sizes
+bun run personas --say
 bun run personas --wav speech.wav --state speaking
 bun run personas --mic
 ```
@@ -874,6 +878,14 @@ an authored conversation timeline. Demo and WAV replay are **silent**: the PCM
 drives the visuals without opening a speaker. WAV input supports mono/stereo
 PCM16 and float32 at 8–96 kHz, bounded to 24 MiB and 20 ms–120 seconds. The lab
 does not start a voice call, connect to the server, or run Codex.
+
+`--say` generates the demo utterances with macOS `say`, then plays their PCM
+with `afplay` while analyzing the same samples. Playback follows the conversation
+cycle and supports pause, seek, and replay. It stops on terminal blur, opening
+commands, and exit; returning to an active view resumes it. Q also cancels speech
+preparation. Generated files are private and removed on exit, and owned speech
+processes are stopped and reaped. The visual clock follows elapsed playback time;
+player and audio-device startup can add a small audible offset.
 
 `--mic` explicitly opens the existing native duplex device for microphone
 input (requires `bun run native:build` and OS microphone permission). Its

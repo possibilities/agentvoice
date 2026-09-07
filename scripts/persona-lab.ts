@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { basename } from "node:path";
-import { createCliRenderer, RGBA } from "@opentui/core";
+import { createCliRenderer, type KeyEvent, RGBA, TextRenderable } from "@opentui/core";
 import { type LabOptions, PersonaLab } from "./personas/app.ts";
 import {
   type AudioSource,
@@ -9,13 +9,15 @@ import {
   MicrophoneSource,
   SpeechReplay,
 } from "./personas/source.ts";
+import { type SpokenReplay, spokenDemo } from "./personas/spoken.ts";
 import { personaStates, variants } from "./personas/visual.ts";
-import { FxTheme } from "./waveforms/theme.ts";
+import { FxTheme, palette } from "./waveforms/theme.ts";
 
 const usage = `Persona lab — eight audio-reactive OpenTUI voice visuals.
 
   bun run personas
   bun run personas --variant rose --view sizes
+  bun run personas --say
   bun run personas --wav speech.wav --state speaking
   bun run personas --mic
 
@@ -24,6 +26,7 @@ const usage = `Persona lab — eight audio-reactive OpenTUI voice visuals.
 --view gallery|card|sizes
 --wav PATH  Mono/stereo PCM16 or float32 WAV, 8–96 kHz, 20 ms–120 s, ≤24 MiB.
 --mic       Explicit live microphone input; requires bun run native:build.
+--say       Generate speech with macOS say and play it aloud alongside the visuals.
 
 Arrows / h/j/k/l select. Enter opens a voice card; V compares sizes.
 1–5 choose a state; A restores the demo conversation cycle.
@@ -31,18 +34,19 @@ Space pauses; [ / ] seek by two seconds; R replays. Esc returns to gallery.
 Ctrl+K or ? opens commands. Click controls or waveforms. Q or Ctrl+C quits.
 Small panes automatically show a compact visual; click it to change variants.
 
-Demo and WAV replay are silent: their PCM drives the visual only.
+Default demo and WAV replay are silent. --say plays the generated PCM with afplay.
 --mic opens the native duplex device but never submits speaker audio.
-Capture stops while paused, unfocused, in commands, and on exit.
+Capture and spoken playback stop while paused, unfocused, in commands, and on exit.
 This standalone lab starts no voice call or Codex process.
 FX_THEME=dark|light overrides terminal theme detection.
 `;
 
 export function parseArgs(
   args: string[],
-): LabOptions & { wav?: string; mic: boolean; help: boolean } {
-  const result: LabOptions & { wav?: string; mic: boolean; help: boolean } = {
+): LabOptions & { wav?: string; mic: boolean; say: boolean; help: boolean } {
+  const result: LabOptions & { wav?: string; mic: boolean; say: boolean; help: boolean } = {
     mic: false,
+    say: false,
     help: false,
   };
   const seen = new Set<string>();
@@ -56,6 +60,10 @@ export function parseArgs(
     seen.add(arg);
     if (arg === "--mic") {
       result.mic = true;
+      continue;
+    }
+    if (arg === "--say") {
+      result.say = true;
       continue;
     }
     if (!["--wav", "--state", "--variant", "--view"].includes(arg))
@@ -78,6 +86,8 @@ export function parseArgs(
     }
   }
   if (result.wav && result.mic) throw new Error("Choose --wav or --mic, not both");
+  if (result.say && (result.wav || result.mic))
+    throw new Error("Choose --say, --wav, or --mic as one audio source");
   return result;
 }
 
@@ -91,12 +101,15 @@ async function main(): Promise<void> {
     throw new Error(
       "The Persona lab needs an interactive terminal. Run bun run personas in a terminal.",
     );
-  let source: AudioSource | undefined = options.mic
-    ? undefined
-    : options.wav
-      ? new SpeechReplay(await loadWav(options.wav), `${basename(options.wav)} · silent replay`)
-      : await demoSpeech();
+  let source: AudioSource | undefined =
+    options.mic || options.say
+      ? undefined
+      : options.wav
+        ? new SpeechReplay(await loadWav(options.wav), `${basename(options.wav)} · silent replay`)
+        : await demoSpeech();
   const theme = new FxTheme();
+  const abort = new AbortController();
+  let spoken: SpokenReplay | undefined;
   const terminalWrite = process.stdout.write.bind(process.stdout);
   const renderer = await createCliRenderer({
     screenMode: "alternate-screen",
@@ -109,22 +122,65 @@ async function main(): Promise<void> {
     openConsoleOnError: false,
     prependInputHandlers: [theme.handle],
   });
-  renderer.once("destroy", () => theme.dispose());
+  let initiallyFocused = true;
+  const onBlur = () => {
+    initiallyFocused = false;
+  };
+  const onFocus = () => {
+    initiallyFocused = true;
+  };
+  const onQuit = (key: KeyEvent) => {
+    if (key.name === "q" || (key.ctrl && key.name === "c")) renderer.destroy();
+  };
+  const stopPreparing = () => {
+    renderer.off("blur", onBlur);
+    renderer.off("focus", onFocus);
+    renderer.keyInput.off("keypress", onQuit);
+  };
+  renderer.on("blur", onBlur);
+  renderer.on("focus", onFocus);
+  renderer.keyInput.on("keypress", onQuit);
+  renderer.once("destroy", () => {
+    abort.abort();
+    theme.dispose();
+  });
   try {
     await theme.start((sequence) => terminalWrite(sequence));
     if (renderer.isDestroyed) return;
+    if (options.say) {
+      const preparing = new TextRenderable(renderer, {
+        content: "Preparing speech with say…  [q] Quit",
+        fg: palette(theme.mode).secondary,
+        position: "absolute",
+        left: 2,
+        top: 1,
+      });
+      renderer.root.add(preparing);
+      spoken = await spokenDemo(abort.signal);
+      preparing.destroy();
+      source = spoken;
+    }
     if (options.mic) {
       const { NativeDuplexDevice } = await import("../src/console/duplex-device.ts");
       if (renderer.isDestroyed) return;
       source = new MicrophoneSource(new NativeDuplexDevice());
     }
     if (!source || renderer.isDestroyed) return;
-    const lab = new PersonaLab(renderer, source, { ...options, theme: theme.mode });
+    const lab = new PersonaLab(renderer, source, {
+      ...options,
+      theme: theme.mode,
+      initiallyFocused,
+    });
+    stopPreparing();
     theme.onChange = (mode) => lab.setTheme(mode);
     await lab.done;
+  } catch (error) {
+    if (!abort.signal.aborted) throw error;
   } finally {
+    stopPreparing();
     try {
       source?.close();
+      await spoken?.dispose();
     } finally {
       theme.dispose();
       renderer.destroy();
