@@ -243,7 +243,7 @@ describe("guarded TUI attachment", () => {
         peer.send(
           JSON.stringify({
             method: "item/agentMessage/delta",
-            params: { threadId: "unrelated", delta: "private" },
+            params: { threadId: "unrelated", delta: "unrelated-thread-private-message" },
           }),
         );
       }
@@ -259,7 +259,7 @@ describe("guarded TUI attachment", () => {
       expect(client.frames.some((frame) => frame["method"] === "thread/realtime/started")).toBe(
         false,
       );
-      expect(JSON.stringify(client.frames)).not.toContain("private");
+      expect(JSON.stringify(client.frames)).not.toContain("unrelated-thread-private-message");
     } finally {
       f.close();
     }
