@@ -126,22 +126,81 @@ test("failed startup and client exit never launch attachments", async () => {
   expect(mux.created()).toHaveLength(1);
 });
 
-test("attachment exit replaces only its pane and never relaunches after runtime restart", async () => {
+test.each([
+  ["client", "exited"],
+  ["voice", "exited"],
+  ["agent", "exited"],
+  ["client", "failed"],
+  ["voice", "failed"],
+  ["agent", "failed"],
+])("%s %s ends the composition without relaunching attachments", async (name, state) => {
   const mux = new FakeMux();
   const id = randomUUID();
   const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   composition.observe(live(id));
   await composition.drained();
+  const callCount = mux.calls.length;
   composition.event({
     type: "event",
     event: "app.state",
-    data: { app: { name: "agent", state: "exited" } },
+    data: { app: { name, state, error: state === "failed" ? "Fixture failure" : null } },
   });
-  await composition.drained();
-  expect(mux.layout.root.row[2]).toMatchObject({ text: "Agent disconnected" });
+  await composition.done;
+  expect(composition.error()?.message).toBe(state === "failed" ? "Fixture failure" : undefined);
+  composition.observe({ ...live(id), state: { ...live(id).state!, phase: "negotiating" } });
   composition.observe(live(id));
   await composition.drained();
+  expect(mux.calls).toHaveLength(callCount);
+  expect(mux.created()).toHaveLength(3);
+});
+
+test("attachment exit during startup stops the composition before creating the next app", async () => {
+  const mux = new FakeMux();
+  const request = mux.request.bind(mux);
+  const id = randomUUID();
+  const composition = new Composition(mux, id, ["agentvoice"]);
+  mux.request = async (method, raw) => {
+    const result = await request(method, raw);
+    if (method === "app.create" && (raw as Record<string, unknown>)["name"] === "voice") {
+      composition.event({
+        type: "event",
+        event: "app.state",
+        data: { app: { name: "voice", state: "exited" } },
+      });
+    }
+    return result;
+  };
+  await composition.start();
+  composition.observe(live(id));
+  await composition.drained();
+  await composition.done;
+  expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice"]);
+  expect(mux.layout.root).toEqual(initialLayout().root);
+});
+
+test("nonterminal app states and unrelated app exits leave the composition running", async () => {
+  const mux = new FakeMux();
+  const id = randomUUID();
+  const composition = new Composition(mux, id, ["agentvoice"]);
+  await composition.start();
+  let ended = false;
+  void composition.done.then(() => {
+    ended = true;
+  });
+  for (const name of ["client", "voice", "agent"]) {
+    for (const state of ["stopped", "starting", "running"]) {
+      composition.event({ type: "event", event: "app.state", data: { app: { name, state } } });
+    }
+  }
+  composition.event({
+    type: "event",
+    event: "app.state",
+    data: { app: { name: "unrelated", state: "exited" } },
+  });
+  composition.observe(live(id));
+  await composition.drained();
+  expect(ended).toBe(false);
   expect(mux.created()).toHaveLength(3);
   composition.stop();
 });
