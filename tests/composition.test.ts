@@ -43,6 +43,7 @@ class FakeMux {
 function live(clientId: string): FrontendObservation {
   return {
     busy: true,
+    availability: "connected",
     clientId,
     workspace: "/exact/workspace",
     threadId: "exact-thread",

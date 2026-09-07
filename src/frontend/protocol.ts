@@ -17,6 +17,7 @@ export const callParamsSchema = z.object({ clientId: z.string().uuid() }).strict
 export const observationSchema = z
   .object({
     busy: z.boolean(),
+    availability: z.enum(["idle", "connected", "closing", "unavailable"]),
     clientId: z.string().uuid().nullable(),
     workspace: z.string().nullable(),
     threadId: z.string().nullable(),

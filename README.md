@@ -54,7 +54,13 @@ voice, device, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
 The composition and `client` accept only `--workspace` and `--help`.
 
-One server and one active frontend are allowed per canonical workspace. Closing
+One server and one active frontend are allowed per canonical workspace.
+Both bare `agentvoice` and `agentvoice client` wait up to 30 seconds when the
+previous frontend has disconnected but its call is still cleaning up, displaying
+“Closing previous call…”. An active frontend still blocks a second call. Waiting
+does not reserve a call, reconnect a disconnected client, or retry a refused call.
+This requires a server running the same frontend observation contract; update
+and restart an older server explicitly before using the updated client. Closing
 the frontend terminal or terminating its process ends the call, closes audio
 and the owned Codex child, and returns the server to waiting. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.

@@ -43,18 +43,20 @@ export async function runComposition(
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let mux: ControlSocket | undefined;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const abort = new AbortController();
   const stop = () => {
+    abort.abort();
     composition?.stop();
     child?.kill("SIGTERM");
   };
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
   let work: Promise<void> | undefined;
   try {
-    if (observation.initial.busy)
-      throw new Error(
-        "AgentVoice server is busy; close its current client before starting another call",
-      );
     for (const signal of signals) process.once(signal, stop);
+    await observation.waitUntilAvailable({
+      signal: abort.signal,
+      waiting: () => console.error("Closing previous call…"),
+    });
     child = Bun.spawn([smolmux, "start", "--foreground", "--name", name], {
       env: process.env,
       stdin: "inherit",

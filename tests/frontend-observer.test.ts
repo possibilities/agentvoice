@@ -76,3 +76,48 @@ test("read-only observer gets current and future call identity without owning or
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("cleanup observation wait ends on server shutdown or observer disconnect", async () => {
+  for (const end of ["server", "observer"] as const) {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "av-observe-close-")));
+    const stopping = Promise.withResolvers<void>();
+    const cleanup = Promise.withResolvers<void>();
+    const server = new VoiceServer(frontendSocketPath(root), async () => ({
+      state: () => ({
+        available: true,
+        phase: "live",
+        mic: { muted: false, effectiveMuted: false },
+        speaker: { muted: false, effectiveMuted: false },
+      }),
+      start: async () => {},
+      command: () => {},
+      close: async () => {
+        stopping.resolve();
+        await cleanup.promise;
+      },
+    }));
+    let observer: Awaited<ReturnType<typeof observeFrontend>> | undefined;
+    let shutdown: Promise<void> | undefined;
+    try {
+      await server.start();
+      const first = await connectFrontend(server.path);
+      await first.close();
+      await stopping.promise;
+      observer = await observeFrontend(server.path, () => {});
+      expect(observer.initial.availability).toBe("closing");
+      const result = observer.waitUntilAvailable().catch((error: Error) => error);
+      if (end === "server") shutdown = server.close();
+      else observer.socket.close();
+      expect(await result).toBeInstanceOf(Error);
+      expect(((await result) as Error).message).toContain(
+        end === "server" ? "unavailable" : "disconnected",
+      );
+    } finally {
+      cleanup.resolve();
+      observer?.socket.close();
+      await shutdown;
+      await server.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});

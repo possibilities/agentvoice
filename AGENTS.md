@@ -78,6 +78,9 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/frontend/: strict private workspace socket, exclusive call ownership and
   minimal state/input protocol. Disconnect releases PTT and stops the call; never
   accept a successor until cleanup completes or automatically reconnect/replay.
+  Fresh clients observe explicit closing state and wait at most 30 seconds before
+  requesting a call; observation never reserves admission. Connected and unavailable
+  states fail immediately. The composition shares this client readiness handling.
 - src/composition/: bare-command foreground smolmux launcher and three-pane layout.
   All apps use local PTYs, never Companion ownership; shutdown reaps the exact
   foreground child. Read-only frontend observation gates attachments on this

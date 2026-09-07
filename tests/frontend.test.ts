@@ -105,7 +105,9 @@ test("disconnect during asynchronous call creation prevents startup and reserves
     await called.promise;
     await client.close();
     await Bun.sleep(10);
-    await expect(connectFrontend(server.path)).rejects.toThrow("busy");
+    await expect(
+      connectFrontend(server.path, () => {}, undefined, { timeoutMs: 20 }),
+    ).rejects.toThrow("cleanup");
     created.resolve(call.call);
     await until(() => call.closes() === 1);
     expect(call.starts()).toBe(0);
@@ -134,7 +136,9 @@ test("disconnect interrupts activation and server waits for complete teardown", 
     const client = await connectFrontend(server.path);
     await client.close();
     await stopping.promise;
-    await expect(connectFrontend(server.path)).rejects.toThrow("busy");
+    await expect(
+      connectFrontend(server.path, () => {}, undefined, { timeoutMs: 20 }),
+    ).rejects.toThrow("cleanup");
     let closed = false;
     const closing = server.close().then(() => {
       closed = true;
@@ -436,7 +440,9 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
     await client.close();
     await stopping.promise;
     expect(closed).toBe(false);
-    await expect(connectFrontend(server.path)).rejects.toThrow("busy");
+    await expect(
+      connectFrontend(server.path, () => {}, undefined, { timeoutMs: 20 }),
+    ).rejects.toThrow("cleanup");
     cleanup.resolve();
     await until(() => closed);
     expect(controller.status().currentOperation?.phase).toBe("failed");
@@ -507,6 +513,100 @@ test("read-only attachment discovery retains active workspace while default sele
     expect(client.state().available).toBe(true);
   } finally {
     await client?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("clients wait for cleanup, compete for one slot, and can cancel without starting a call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-cleanup-"));
+  const stopping = Promise.withResolvers<void>();
+  const cleanup = Promise.withResolvers<void>();
+  let calls = 0;
+  const server = new VoiceServer(frontendSocketPath(root), async (changed) => {
+    const fake = fakeCall(changed);
+    if (++calls === 1)
+      fake.call.close = async () => {
+        stopping.resolve();
+        await cleanup.promise;
+      };
+    return fake.call;
+  });
+  const clients: Awaited<ReturnType<typeof connectFrontend>>[] = [];
+  try {
+    await server.start();
+    const first = await connectFrontend(server.path);
+    await first.close();
+    await stopping.promise;
+    const abort = new AbortController();
+    const waiting = Promise.withResolvers<void>();
+    const cancelled = connectFrontend(server.path, () => {}, undefined, {
+      signal: abort.signal,
+      waiting: waiting.resolve,
+    });
+    const rejected = cancelled.catch((error: Error) => error);
+    await waiting.promise;
+    abort.abort();
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(((await rejected) as Error).message).toContain("cancelled");
+    expect(calls).toBe(1);
+
+    const waitingA = Promise.withResolvers<void>();
+    const waitingB = Promise.withResolvers<void>();
+    const results = Promise.allSettled([
+      connectFrontend(server.path, () => {}, undefined, { waiting: waitingA.resolve }),
+      connectFrontend(server.path, () => {}, undefined, { waiting: waitingB.resolve }),
+    ]);
+    await Promise.all([waitingA.promise, waitingB.promise]);
+    expect(calls).toBe(1);
+    cleanup.resolve();
+    const settled = await results;
+    for (const result of settled) if (result.status === "fulfilled") clients.push(result.value);
+    expect(clients).toHaveLength(1);
+    expect(settled.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(calls).toBe(2);
+  } finally {
+    cleanup.resolve();
+    for (const client of clients) await client.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("cleanup failure makes waiting clients fail without starting another call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-cleanup-failure-"));
+  const stopping = Promise.withResolvers<void>();
+  const cleanup = Promise.withResolvers<void>();
+  let calls = 0;
+  const server = new VoiceServer(
+    frontendSocketPath(root),
+    async (changed) => {
+      calls++;
+      const fake = fakeCall(changed);
+      fake.call.close = async () => {
+        stopping.resolve();
+        await cleanup.promise;
+        throw new Error("cleanup failed");
+      };
+      return fake.call;
+    },
+    () => {},
+  );
+  try {
+    await server.start();
+    const first = await connectFrontend(server.path);
+    await first.close();
+    await stopping.promise;
+    const waiting = Promise.withResolvers<void>();
+    const next = connectFrontend(server.path, () => {}, undefined, { waiting: waiting.resolve });
+    const rejected = next.catch((error: Error) => error);
+    await waiting.promise;
+    cleanup.resolve();
+    expect(await rejected).toBeInstanceOf(Error);
+    expect(((await rejected) as Error).message).toContain("unavailable");
+    expect(calls).toBe(1);
+  } finally {
+    cleanup.resolve();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }

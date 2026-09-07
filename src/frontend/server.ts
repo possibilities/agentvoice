@@ -136,6 +136,14 @@ export class VoiceServer {
     const identity = session?.call?.identity?.();
     return {
       busy: !!session,
+      availability:
+        this.closed || this.poisoned
+          ? "unavailable"
+          : session
+            ? session.closed
+              ? "closing"
+              : "connected"
+            : "idle",
       clientId: session?.clientId ?? null,
       workspace: identity?.workspace || null,
       threadId: identity?.threadId || null,
@@ -172,6 +180,7 @@ export class VoiceServer {
       session.peer.close();
     } finally {
       session.closed = true;
+      this.publish();
       try {
         await session.call?.close();
         await boot?.catch(() => {});
@@ -185,6 +194,7 @@ export class VoiceServer {
   }
   async close() {
     this.closed = true;
+    this.publish();
     const session = this.session;
     try {
       if (session) {

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import type { VoiceHost, VoiceView } from "../console/state.ts";
 import { createVoiceTui } from "../console/tui.ts";
 import { stateDirectory } from "../paths.ts";
+import { observeFrontend } from "./observer.ts";
 import {
   FRONTEND_VERSION,
   type FrontendCommand,
@@ -16,6 +17,7 @@ export async function connectFrontend(
   path: string,
   changed: () => void = () => {},
   clientId?: string,
+  options: { signal?: AbortSignal; timeoutMs?: number; waiting?: () => void } = {},
 ) {
   let info: ReturnType<typeof lstatSync>;
   try {
@@ -34,6 +36,13 @@ export async function connectFrontend(
     (info.mode & 0o077) !== 0
   )
     throw new Error("Unsafe AgentVoice server socket");
+  const observation = await observeFrontend(path, () => {});
+  try {
+    await observation.waitUntilAvailable(options);
+  } finally {
+    observation.socket.close();
+  }
+  options.signal?.throwIfAborted();
   const ready = Promise.withResolvers<void>();
   const ended = Promise.withResolvers<void>();
   let accepted = false;
@@ -52,6 +61,9 @@ export async function connectFrontend(
     error ??= cause;
     socket.destroy();
   };
+  const cancel = () => fail(new Error("Frontend connection cancelled"));
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  if (options.signal?.aborted) cancel();
   const timer = setTimeout(
     () => fail(new Error("AgentVoice server did not accept the call")),
     5000,
@@ -105,6 +117,7 @@ export async function connectFrontend(
   socket.on("error", fail);
   socket.on("close", () => {
     closed = true;
+    options.signal?.removeEventListener("abort", cancel);
     clearTimeout(timer);
     if (!accepted)
       ready.reject(error ?? new Error("AgentVoice server disconnected before accepting the call"));
@@ -127,11 +140,21 @@ export async function connectFrontend(
 
 export async function runFrontend(workspace?: string) {
   let tui: VoiceView | undefined;
-  const client = await connectFrontend(
-    frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
-    () => tui?.refresh(),
-    process.env["AGENTVOICE_CLIENT_ID"],
-  );
+  const abort = new AbortController();
+  const stop = () => abort.abort();
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  for (const signal of signals) process.once(signal, stop);
+  let client: Awaited<ReturnType<typeof connectFrontend>>;
+  try {
+    client = await connectFrontend(
+      frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
+      () => tui?.refresh(),
+      process.env["AGENTVOICE_CLIENT_ID"],
+      { signal: abort.signal, waiting: () => console.error("Closing previous call…") },
+    );
+  } finally {
+    for (const signal of signals) process.off(signal, stop);
+  }
   const host: VoiceHost = {
     state: client.state,
     setMuted: (target, muted) => client.command({ action: "mute", target, muted }),
