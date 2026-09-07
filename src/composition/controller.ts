@@ -32,6 +32,8 @@ export class Composition {
       .catch((error) => this.stop(error instanceof Error ? error : new Error(String(error))));
   }
   async start() {
+    await this.mux.request("instance.configure", { confirmExit: true });
+    if (this.stopped) return;
     await this.mux.request("layout.apply", initialLayout());
     await this.create(0, ["client", ...(this.workspace ? ["--workspace", this.workspace] : [])], {
       AGENTVOICE_CLIENT_ID: this.clientId,

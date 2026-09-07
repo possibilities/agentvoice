@@ -5,7 +5,15 @@ Bare `agentvoice [--workspace <dir>]` launches an installed `smolmux start
 socket. It checks that `instance.status` identifies the exact child PID, name
 and foreground host before creating apps. The wrapper and smolmux use separate
 processes and renderer dependencies. There is no headless Runtime or Companion
-session. The installed smolmux local PTY helper is required.
+session. Smolmux 0.9.2 or newer and its installed local PTY helper are required.
+
+Before creating any apps, Composition enables
+`instance.configure({confirmExit:true})`. Smolmux consumes physical Ctrl+C:
+first press displays its centered single-row bottom overlay, and a second within
+three seconds stops every Session and the Runtime. The overlay never changes
+pane sizes; individual apps cannot receive physical Ctrl+C. The voice client
+disconnecting closes its call through the existing frontend ownership path.
+An older smolmux that refuses configuration fails before starting the client.
 
 The three equal-width initial panes contain `agentvoice client` and two text
 placeholders. All three app declarations explicitly use `pty: "local"` and

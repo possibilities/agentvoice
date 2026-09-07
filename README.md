@@ -12,11 +12,14 @@ The two attachment panes show “Waiting for voice connection” until this laun
 call reaches `live`, then attach to its exact workspace and thread. All three
 apps run in local PTYs owned by the foreground smolmux process. Closing that
 process ends the panes and call; nothing persists in smolmux's Companion.
+Press Ctrl+C twice within three seconds to exit the entire composition. The
+first press shows a centered one-row overlay without resizing panes. Ctrl+C
+is reserved for this exit action and never reaches the individual apps.
 Divider drags survive placeholder replacement. Keyboard focus moves to the
 working agent when it opens. An attachment that exits shows a disconnected
 placeholder and is not automatically relaunched, including after runtime restart.
 
-Bare `agentvoice` requires smolmux 0.9.1 or newer with its local PTY helper,
+Bare `agentvoice` requires smolmux 0.9.2 or newer with its local PTY helper,
 and `codex-viewer`, on PATH. Their existing installers own those dependencies;
 AgentVoice does not install them. Use `agentvoice client` for the pointer frontend
 alone. Scripts that previously used bare `agentvoice` for that frontend must now

@@ -21,6 +21,7 @@ class FakeMux {
   async request(method: string, raw?: unknown): Promise<unknown> {
     const params = (raw ?? {}) as Record<string, unknown>;
     this.calls.push({ method, params });
+    if (method === "instance.configure") return {};
     if (method === "layout.get") return structuredClone(this.layout);
     if (method === "layout.apply") {
       if (this.conflict) {
@@ -59,6 +60,10 @@ test("only this client's live identity starts local attachments, once, with exac
   const id = randomUUID();
   const composition = new Composition(mux, id, ["bun", "/checkout/main.ts"]);
   await composition.start();
+  expect(mux.calls[0]).toEqual({
+    method: "instance.configure",
+    params: { confirmExit: true },
+  });
   expect(mux.created()).toHaveLength(1);
   composition.observe(live(randomUUID()));
   composition.observe({ ...live(id), state: { ...live(id).state!, phase: "negotiating" } });
@@ -153,4 +158,21 @@ test("composition CLI names the pointer-only client explicitly and rejects serve
   expect(await main(["client", "--help"])).toBe(0);
   expect(await main(["client", "--model", "must-not-launch"])).toBe(2);
   expect(await main(["--model", "must-not-launch"])).toBe(2);
+});
+
+test("exit configuration failure prevents the voice client from starting", async () => {
+  const calls: string[] = [];
+  const composition = new Composition(
+    {
+      async request(method: string) {
+        calls.push(method);
+        throw new Error("smolmux needs updating");
+      },
+    },
+    randomUUID(),
+    ["agentvoice"],
+  );
+  await expect(composition.start()).rejects.toThrow("smolmux needs updating");
+  expect(calls).toEqual(["instance.configure"]);
+  composition.stop();
 });
