@@ -110,15 +110,17 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   auto-answer or retain a second approval queue. Unsupported client requests
   receive native denial payloads or JSON-RPC errors; retired tools stay retired.
 - src/core/native-listener.ts + src/attachment/: always-on private authenticated
-  native loopback listener, exact-thread policy gateway, controller bootstrap and
+  native loopback listener, root-and-verified-descendant policy gateway, controller bootstrap and
   stock TUI launcher. No stdio RPC or attachment enable/disable flags. Never expose
-  the native credential or allow other-thread/config/account mutations. Forward
-  selected-thread native human requests and their correlated answers. Native owns
+  the native credential or allow unrelated-thread/config/account mutations. Verify native
+  parentThreadId ancestry and exact workspace before descendant dispatch; never infer
+  authorization from a tool message, forkedFromId or a client-supplied parent. Forward
+  root/descendant native human requests and their correlated answers. Native owns
   first-answer resolution and pending-request replay on resume. Joining strips
   local TUI resume overrides to preserve live settings; subsequent native settings
   changes, including permissions, are allowed. Do not gate attachment on full access.
-  scripts/voice-speak.ts uses the same exact-thread gateway for explicit
-  thread/realtime/appendSpeech (nonempty text, 64 KiB maximum); other realtime
+  scripts/voice-speak.ts uses the same gateway with exact-root admission for explicit
+  root-only thread/realtime/appendSpeech (nonempty text, 64 KiB maximum); other realtime
   mutations remain denied. Never retry speech automatically or report acceptance
   as playback confirmation.
   Validate before native dispatch; unknown null placeholders are stripped.

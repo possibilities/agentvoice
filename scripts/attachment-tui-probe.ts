@@ -28,6 +28,7 @@ const stop = () => done.resolve();
 let holdNext = false;
 let streamNext = false;
 let approvalNext = false;
+let spawnNext = false;
 let held: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 let count = 0;
 const turnEnded = Promise.withResolvers<void>();
@@ -44,18 +45,28 @@ try {
       const body = (await request.json()) as { input?: unknown };
       const sequence = ++count;
       console.log(`MOCK TURN ${sequence}: ${JSON.stringify(body.input).slice(-300)}`);
-      if (approvalNext) {
+      if (approvalNext || spawnNext) {
+        const spawn = spawnNext;
         approvalNext = false;
+        spawnNext = false;
         const item = {
           type: "function_call",
           id: `tool-${sequence}`,
           call_id: `call-${sequence}`,
-          name: "exec_command",
-          arguments: JSON.stringify({
-            cmd: "printf native-approval-confirmed",
-            sandbox_permissions: "require_escalated",
-            justification: "Run the harmless local attachment approval test?",
-          }),
+          name: spawn ? "spawn_agent" : "exec_command",
+          ...(spawn ? { namespace: "collaboration" } : {}),
+          arguments: JSON.stringify(
+            spawn
+              ? {
+                  message: "Return a short fixture reply.",
+                  task_name: `probe_child_${sequence}`,
+                }
+              : {
+                  cmd: "printf native-approval-confirmed",
+                  sandbox_permissions: "require_escalated",
+                  justification: "Run the harmless local attachment approval test?",
+                },
+          ),
         };
         const frames = [
           {
@@ -178,7 +189,7 @@ try {
   });
   writeFileSync(
     join(nativeHome, "config.toml"),
-    `model = "gpt-6-astra"\nmodel_provider = "attachment-probe"\n[model_providers.attachment-probe]\nname = "Local mock"\nbase_url = "http://127.0.0.1:${model.port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
+    `model = "gpt-6-astra"\nmodel_provider = "attachment-probe"\n[features]\nmulti_agent_v2 = true\n[multi_agent_v2]\ntool_namespace = "collaboration"\n[model_providers.attachment-probe]\nname = "Local mock"\nbase_url = "http://127.0.0.1:${model.port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
   );
   deadline = setTimeout(stop, 10 * 60_000);
   process.on("SIGTERM", stop);
@@ -222,8 +233,12 @@ try {
       throw new Error("Mock seed turn timed out");
     }),
   ]);
-  gateway = new AttachmentGateway(connection.nativeEndpoint!, codex, (method, result) =>
-    console.log(`TUI ${method}: ${result}`),
+  gateway = new AttachmentGateway(
+    connection.nativeEndpoint!,
+    codex,
+    (threadId, timeoutMs) =>
+      connection!.request("thread/read", { threadId, includeTurns: false }, timeoutMs),
+    (method, result) => console.log(`TUI ${method}: ${result}`),
   );
   const status: ControlStatus = {
     protocolVersion: 2,
@@ -251,7 +266,7 @@ try {
   console.log(
     `READY ${JSON.stringify({ root, workspace, state: join(root, "state"), nativeHome, threadId })}`,
   );
-  // Local fixture controls: hold/stream/release a fake response, submit owner input, revoke, quit.
+  // Local controls arm fake responses/tool calls; "owner" submits them through the native thread.
   input = createInterface({ input: process.stdin });
   input.on("line", (line) => {
     if (line === "hold") {
@@ -269,6 +284,10 @@ try {
     if (line === "approval") {
       approvalNext = true;
       console.log("APPROVAL ARMED");
+    }
+    if (line === "subagent") {
+      spawnNext = true;
+      console.log("SUBAGENT ARMED");
     }
     if (line === "owner") {
       void connection!

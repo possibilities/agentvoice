@@ -9,10 +9,12 @@ import {
   object,
   validateAttachmentRequest,
 } from "./policy.ts";
+import { AttachmentScope, type ReadAttachmentThread } from "./scope.ts";
 
 export type AttachmentTicket = AttachmentIdentity & { url: string; token: string; codex: string };
 type Grant = {
   identity: AttachmentIdentity;
+  scope: AttachmentScope;
   token: string;
   expires: number;
   peers: Set<ServerWebSocket<Peer>>;
@@ -26,13 +28,22 @@ type Peer = {
   queued: string[];
   pending: Map<
     string | number,
-    { method: string; sequence: number; timer: ReturnType<typeof setTimeout> }
+    {
+      method: string;
+      identity: AttachmentIdentity;
+      sequence: number;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >;
   initialized: boolean;
   serverRequests: Set<string | number>;
   initializing: boolean;
   unsubscribed: boolean;
   sequence: number;
+  incoming: Promise<void>;
+  outgoing: Promise<void>;
+  queuedFrames: number;
+  queuedBytes: number;
 };
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -46,6 +57,7 @@ export class AttachmentGateway {
   constructor(
     private readonly native: NativeEndpoint,
     private readonly codex: string,
+    private readonly readThread: ReadAttachmentThread,
     private readonly trace?: (method: string, outcome: string) => void,
   ) {
     this.server = Bun.serve<Peer>({
@@ -84,6 +96,10 @@ export class AttachmentGateway {
           initializing: false,
           unsubscribed: false,
           sequence: 0,
+          incoming: Promise.resolve(),
+          outgoing: Promise.resolve(),
+          queuedFrames: 0,
+          queuedBytes: 0,
         };
         if (!server.upgrade(request, { data }))
           return new Response("WebSocket required", { status: 400 });
@@ -95,7 +111,13 @@ export class AttachmentGateway {
         backpressureLimit: MAX_BYTES,
         closeOnBackpressureLimit: true,
         open: (peer) => this.open(peer),
-        message: (peer, data) => this.message(peer, data),
+        message: (peer, data) => {
+          // Arrival invalidates a prior unsubscribe even while ancestry is being checked.
+          peer.data.sequence++;
+          peer.data.unsubscribed = false;
+          const sequence = peer.data.sequence;
+          this.enqueue(peer, "incoming", data, () => this.message(peer, data, sequence));
+        },
         close: (peer, code) =>
           this.drop(
             peer.data.grant,
@@ -116,6 +138,7 @@ export class AttachmentGateway {
     const token = randomBytes(32).toString("base64url");
     this.grants.set(token, {
       identity: { ...identity },
+      scope: new AttachmentScope({ ...identity }, this.readThread),
       token,
       expires: Date.now() + 30_000,
       peers: new Set(),
@@ -139,6 +162,7 @@ export class AttachmentGateway {
   }
   private drop(grant: Grant, code = 4001): void {
     if (!this.grants.delete(grant.token)) return;
+    grant.scope.close();
     for (const peer of grant.peers) {
       for (const request of peer.data.pending.values()) clearTimeout(request.timer);
       peer.data.pending.clear();
@@ -185,56 +209,93 @@ export class AttachmentGateway {
       this.drop(state.grant);
     });
     upstream.addEventListener("message", ({ data }) => {
-      if (!this.active(state.grant)) return;
-      try {
-        if (typeof data !== "string" || Buffer.byteLength(data) > MAX_BYTES)
-          throw new Error("Invalid native frame");
-        const frame = object(JSON.parse(data));
-        const id = frame["id"];
-        const method = frame["method"];
-        if (id !== undefined && typeof method === "string") {
-          if (
-            (typeof id !== "string" && typeof id !== "number") ||
-            !attachmentServerRequest(method, object(frame["params"] ?? {}), state.grant.identity)
-          )
-            return;
-          if (state.serverRequests.size >= 64 && !state.serverRequests.has(id))
-            throw new Error("Too many native questions");
-          state.serverRequests.add(id);
-        } else if (id !== undefined) {
-          const request = state.pending.get(id as string | number);
-          if (!request) throw new Error("Uncorrelated native response");
-          state.pending.delete(id as string | number);
-          clearTimeout(request.timer);
-          if (!frame["error"]) {
-            frame["result"] = attachmentResult(
-              request.method,
-              frame["result"],
-              state.grant.identity,
-            );
-            if (request.method === "initialize") state.initialized = true;
-            // Stock TUI /quit can close TCP without a WebSocket close handshake.
-            if (request.method === "thread/unsubscribe")
-              state.unsubscribed = request.sequence === state.sequence && state.pending.size === 0;
-          }
-        } else if (
-          typeof method !== "string" ||
-          !attachmentNotification(method, object(frame["params"] ?? {}), state.grant.identity)
-        )
-          return;
-        if (method === "serverRequest/resolved")
-          state.serverRequests.delete(object(frame["params"])["requestId"] as string | number);
-        peer.send(JSON.stringify(frame).replaceAll(this.native.token, "[redacted]"));
-      } catch {
-        this.drop(state.grant);
-      }
+      this.enqueue(peer, "outgoing", data, () => this.nativeMessage(peer, data));
     });
   }
-  private message(peer: ServerWebSocket<Peer>, data: string | Buffer): void {
+  private async nativeMessage(peer: ServerWebSocket<Peer>, data: unknown): Promise<void> {
     const state = peer.data;
     if (!this.active(state.grant)) return;
-    state.sequence++;
-    state.unsubscribed = false;
+    try {
+      if (typeof data !== "string" || Buffer.byteLength(data) > MAX_BYTES)
+        throw new Error("Invalid native frame");
+      const frame = object(JSON.parse(data));
+      const id = frame["id"];
+      const method = frame["method"];
+      const params = typeof method === "string" ? object(frame["params"] ?? {}) : {};
+      const threadId =
+        method === "thread/started" ? object(params["thread"])["id"] : params["threadId"];
+      let eventIdentity = state.grant.identity;
+      if (threadId !== undefined) {
+        if (
+          typeof method === "string" &&
+          (method.startsWith("thread/realtime/") || method.startsWith("rawResponse"))
+        )
+          return;
+        if (!(await state.grant.scope.allows(threadId))) return;
+        eventIdentity = { ...eventIdentity, threadId: threadId as string };
+      }
+      if (id !== undefined && typeof method === "string") {
+        if (
+          (typeof id !== "string" && typeof id !== "number") ||
+          !attachmentServerRequest(method, params, eventIdentity)
+        )
+          return;
+        if (state.serverRequests.size >= 64 && !state.serverRequests.has(id))
+          throw new Error("Too many native questions");
+        state.serverRequests.add(id);
+      } else if (id !== undefined) {
+        const request = state.pending.get(id as string | number);
+        if (!request) throw new Error("Uncorrelated native response");
+        state.pending.delete(id as string | number);
+        clearTimeout(request.timer);
+        if (!frame["error"]) {
+          if (request.method === "thread/list" || request.method === "thread/loaded/list") {
+            const rows = object(frame["result"])["data"];
+            if (!Array.isArray(rows) || rows.length > 512)
+              throw new Error("Invalid thread inventory");
+            const deadline = Date.now() + 6_000;
+            for (const row of rows) {
+              await state.grant.scope.allows(
+                request.method === "thread/loaded/list" ? row : object(row)["id"],
+                deadline,
+              );
+            }
+          }
+          frame["result"] = attachmentResult(
+            request.method,
+            frame["result"],
+            request.identity,
+            state.grant.scope.threads,
+          );
+          if (request.method === "initialize") state.initialized = true;
+          // Stock TUI /quit unsubscribes only the displayed thread before closing TCP.
+          if (request.method === "thread/unsubscribe") {
+            state.unsubscribed = request.sequence === state.sequence && state.pending.size === 0;
+          }
+        }
+      } else if (
+        typeof method !== "string" ||
+        !attachmentNotification(method, params, eventIdentity)
+      )
+        return;
+      if (
+        method === "serverRequest/resolved" &&
+        !state.serverRequests.delete(params["requestId"] as string | number)
+      )
+        return;
+      if (!this.active(state.grant)) return;
+      peer.send(JSON.stringify(frame).replaceAll(this.native.token, "[redacted]"));
+    } catch {
+      this.drop(state.grant);
+    }
+  }
+  private async message(
+    peer: ServerWebSocket<Peer>,
+    data: string | Buffer,
+    sequence: number,
+  ): Promise<void> {
+    const state = peer.data;
+    if (!this.active(state.grant)) return;
     let id: string | number | undefined;
     let registered = false;
     let method = "invalid frame";
@@ -269,13 +330,27 @@ export class AttachmentGateway {
         if (method === "initialize" ? state.initializing : !state.initialized)
           throw new Error("Invalid initialization sequence");
         const params = object(frame["params"] ?? {});
-        validateAttachmentRequest(method, params, state.grant.identity);
+        let identity = state.grant.identity;
+        const target = method === "thread/list" ? params["ancestorThreadId"] : params["threadId"];
+        // Validate the method and payload before making even a metadata read for admission.
+        const candidate =
+          typeof target === "string" && !method.startsWith("thread/realtime/")
+            ? { ...identity, threadId: target }
+            : identity;
+        validateAttachmentRequest(method, params, candidate);
+        if (candidate.threadId !== identity.threadId) {
+          if (!(await state.grant.scope.allows(candidate.threadId)))
+            throw new Error("Attachment requires a verified descendant in the selected workspace");
+          identity = candidate;
+        }
+        if (!this.active(state.grant)) return;
         frame["params"] = params;
         if (method === "initialize") state.initializing = true;
         if (state.pending.size >= 64) throw new Error("Too many attachment requests");
         state.pending.set(id, {
           method,
-          sequence: state.sequence,
+          identity,
+          sequence,
           timer: setTimeout(() => this.drop(state.grant), 30_000),
         });
         registered = true;
@@ -298,6 +373,32 @@ export class AttachmentGateway {
           }),
         );
     }
+  }
+  private enqueue(
+    peer: ServerWebSocket<Peer>,
+    direction: "incoming" | "outgoing",
+    data: unknown,
+    run: () => Promise<void>,
+  ): void {
+    const state = peer.data;
+    if (!this.active(state.grant)) return;
+    const bytes = typeof data === "string" ? Buffer.byteLength(data) : MAX_BYTES;
+    state.queuedFrames++;
+    state.queuedBytes += bytes;
+    if (state.queuedFrames > 64 || state.queuedBytes > MAX_BYTES) {
+      this.drop(state.grant);
+      return;
+    }
+    state[direction] = state[direction].then(async () => {
+      try {
+        if (this.active(state.grant)) await run();
+      } catch {
+        this.drop(state.grant);
+      } finally {
+        state.queuedFrames--;
+        state.queuedBytes -= bytes;
+      }
+    });
   }
   private forward(peer: ServerWebSocket<Peer>, forwarded: string): void {
     const state = peer.data;

@@ -562,6 +562,8 @@ export class VoiceRuntime {
       this.tuiGateway = new AttachmentGateway(
         connection.nativeEndpoint,
         resolveNativeExecutable(codex, this.config.orchestrator.workspace),
+        (threadId, timeoutMs) =>
+          connection.request("thread/read", { threadId, includeTurns: false }, timeoutMs),
       );
       this.options.onAttachmentReady?.(
         () => {
