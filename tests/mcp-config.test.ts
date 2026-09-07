@@ -34,6 +34,9 @@ function status(instanceId: string, workspace: string, threadId: string): Contro
 function backend(current: () => ControlStatus): ControlBackend {
   return {
     status: current,
+    async mailboxOpen() {
+      throw new Error("not used");
+    },
     async redial() {
       throw new Error("not used");
     },

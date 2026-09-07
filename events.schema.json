@@ -18,16 +18,16 @@
           "$ref": "#/$defs/__schema0"
         },
         {
-          "$ref": "#/$defs/__schema6"
+          "$ref": "#/$defs/__schema5"
         },
         {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema7"
+        },
+        {
+          "$ref": "#/$defs/__schema10"
         },
         {
           "$ref": "#/$defs/__schema12"
-        },
-        {
-          "$ref": "#/$defs/__schema13"
         },
         {
           "$ref": "#/$defs/__schema16"
@@ -36,14 +36,113 @@
           "$ref": "#/$defs/__schema17"
         },
         {
-          "$ref": "#/$defs/__schema18"
+          "$ref": "#/$defs/__schema20"
         },
         {
-          "$ref": "#/$defs/__schema19"
+          "$ref": "#/$defs/__schema21"
+        },
+        {
+          "$ref": "#/$defs/__schema22"
+        },
+        {
+          "$ref": "#/$defs/__schema23"
         }
       ]
     },
     "__schema0": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "mailbox.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": ["expectedInstanceId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema2": {
+      "type": "string",
+      "const": "request"
+    },
+    "__schema3": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema4": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "__schema5": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "mailbox.replay"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "afterSequence": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "limit": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "required": ["expectedInstanceId", "afterSequence"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema6": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "__schema7": {
       "type": "object",
       "properties": {
         "v": {
@@ -66,7 +165,7 @@
               "properties": {
                 "events": {
                   "default": ["*"],
-                  "$ref": "#/$defs/__schema4"
+                  "$ref": "#/$defs/__schema8"
                 }
               },
               "additionalProperties": false
@@ -80,33 +179,20 @@
       "required": ["v", "type", "id", "method"],
       "additionalProperties": false
     },
-    "__schema1": {
-      "type": "number",
-      "const": 2
-    },
-    "__schema2": {
-      "type": "string",
-      "const": "request"
-    },
-    "__schema3": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "__schema4": {
+    "__schema8": {
       "minItems": 1,
       "maxItems": 32,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema5"
+        "$ref": "#/$defs/__schema9"
       }
     },
-    "__schema5": {
+    "__schema9": {
       "type": "string",
       "maxLength": 128,
       "pattern": "^(?:\\*|[a-z][a-z0-9._:/-]*\\*?)$"
     },
-    "__schema6": {
+    "__schema10": {
       "type": "object",
       "properties": {
         "v": {
@@ -125,7 +211,7 @@
         "params": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema7"
+              "$ref": "#/$defs/__schema11"
             },
             {
               "type": "null"
@@ -136,12 +222,12 @@
       "required": ["v", "type", "id", "method"],
       "additionalProperties": false
     },
-    "__schema7": {
+    "__schema11": {
       "type": "object",
       "properties": {},
       "additionalProperties": false
     },
-    "__schema8": {
+    "__schema12": {
       "type": "object",
       "properties": {
         "v": {
@@ -161,16 +247,16 @@
           "type": "object",
           "properties": {
             "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema13"
             },
             "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema14"
             },
             "rootThreadId": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             "threadId": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             }
           },
           "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
@@ -180,23 +266,23 @@
       "required": ["v", "type", "id", "method", "params"],
       "additionalProperties": false
     },
-    "__schema9": {
+    "__schema13": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
     },
-    "__schema10": {
+    "__schema14": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema11": {
+    "__schema15": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[A-Za-z0-9._:-]+$"
     },
-    "__schema12": {
+    "__schema16": {
       "type": "object",
       "properties": {
         "v": {
@@ -216,123 +302,16 @@
           "type": "object",
           "properties": {
             "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema13"
             },
             "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
-            },
-            "rootThreadId": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "threadId": {
-              "$ref": "#/$defs/__schema11"
-            }
-          },
-          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
-          "additionalProperties": false
-        }
-      },
-      "required": ["v", "type", "id", "method", "params"],
-      "additionalProperties": false
-    },
-    "__schema13": {
-      "type": "object",
-      "properties": {
-        "v": {
-          "$ref": "#/$defs/__schema1"
-        },
-        "type": {
-          "$ref": "#/$defs/__schema2"
-        },
-        "id": {
-          "$ref": "#/$defs/__schema3"
-        },
-        "method": {
-          "type": "string",
-          "const": "conversation.threads.list"
-        },
-        "params": {
-          "type": "object",
-          "properties": {
-            "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
-            },
-            "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
-            },
-            "rootThreadId": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "cursor": {
               "$ref": "#/$defs/__schema14"
             },
-            "limit": {
-              "$ref": "#/$defs/__schema15"
-            },
-            "archived": {
-              "default": false,
-              "type": "boolean"
-            }
-          },
-          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId"],
-          "additionalProperties": false
-        }
-      },
-      "required": ["v", "type", "id", "method", "params"],
-      "additionalProperties": false
-    },
-    "__schema14": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 256
-    },
-    "__schema15": {
-      "default": 20,
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 50
-    },
-    "__schema16": {
-      "type": "object",
-      "properties": {
-        "v": {
-          "$ref": "#/$defs/__schema1"
-        },
-        "type": {
-          "$ref": "#/$defs/__schema2"
-        },
-        "id": {
-          "$ref": "#/$defs/__schema3"
-        },
-        "method": {
-          "type": "string",
-          "const": "conversation.turns.list"
-        },
-        "params": {
-          "type": "object",
-          "properties": {
-            "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
-            },
-            "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
-            },
             "rootThreadId": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             "threadId": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "cursor": {
-              "$ref": "#/$defs/__schema14"
-            },
-            "limit": {
               "$ref": "#/$defs/__schema15"
-            },
-            "sortDirection": {
-              "default": "desc",
-              "type": "string",
-              "enum": ["asc", "desc"]
             }
           },
           "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
@@ -356,31 +335,138 @@
         },
         "method": {
           "type": "string",
+          "const": "conversation.threads.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema13"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema18"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema19"
+            },
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "__schema19": {
+      "default": 20,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "__schema20": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
+          "const": "conversation.turns.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedInstanceId": {
+              "$ref": "#/$defs/__schema13"
+            },
+            "expectedGeneration": {
+              "$ref": "#/$defs/__schema14"
+            },
+            "rootThreadId": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "threadId": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema18"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema19"
+            },
+            "sortDirection": {
+              "default": "desc",
+              "type": "string",
+              "enum": ["asc", "desc"]
+            }
+          },
+          "required": ["expectedInstanceId", "expectedGeneration", "rootThreadId", "threadId"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "method", "params"],
+      "additionalProperties": false
+    },
+    "__schema21": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "method": {
+          "type": "string",
           "const": "conversation.items.list"
         },
         "params": {
           "type": "object",
           "properties": {
             "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema13"
             },
             "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
-            },
-            "rootThreadId": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "threadId": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "cursor": {
               "$ref": "#/$defs/__schema14"
             },
-            "limit": {
+            "rootThreadId": {
               "$ref": "#/$defs/__schema15"
             },
+            "threadId": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "cursor": {
+              "$ref": "#/$defs/__schema18"
+            },
+            "limit": {
+              "$ref": "#/$defs/__schema19"
+            },
             "turnId": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             "sortDirection": {
               "default": "asc",
@@ -395,7 +481,7 @@
       "required": ["v", "type", "id", "method", "params"],
       "additionalProperties": false
     },
-    "__schema18": {
+    "__schema22": {
       "type": "object",
       "properties": {
         "v": {
@@ -415,10 +501,10 @@
           "type": "object",
           "properties": {
             "expectedInstanceId": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema13"
             },
             "expectedGeneration": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema14"
             },
             "afterSequence": {
               "type": "integer",
@@ -439,7 +525,7 @@
       "required": ["v", "type", "id", "method", "params"],
       "additionalProperties": false
     },
-    "__schema19": {
+    "__schema23": {
       "type": "object",
       "properties": {
         "v": {
@@ -458,7 +544,7 @@
         "params": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema7"
+              "$ref": "#/$defs/__schema11"
             },
             {
               "type": "null"
@@ -472,39 +558,777 @@
     "responses": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema20"
+          "$ref": "#/$defs/__schema24"
         },
         {
-          "$ref": "#/$defs/__schema73"
+          "$ref": "#/$defs/__schema39"
         },
         {
-          "$ref": "#/$defs/__schema74"
+          "$ref": "#/$defs/__schema55"
         },
         {
-          "$ref": "#/$defs/__schema82"
+          "$ref": "#/$defs/__schema103"
         },
         {
-          "$ref": "#/$defs/__schema83"
+          "$ref": "#/$defs/__schema104"
         },
         {
-          "$ref": "#/$defs/__schema90"
+          "$ref": "#/$defs/__schema111"
         },
         {
-          "$ref": "#/$defs/__schema140"
+          "$ref": "#/$defs/__schema112"
+        },
+        {
+          "$ref": "#/$defs/__schema119"
+        },
+        {
+          "$ref": "#/$defs/__schema167"
         }
       ]
     },
-    "__schema20": {
+    "__schema24": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "$ref": "#/$defs/__schema28"
+            },
+            "generation": {
+              "$ref": "#/$defs/__schema29"
+            },
+            "sequence": {
+              "$ref": "#/$defs/__schema30"
+            },
+            "state": {
+              "$ref": "#/$defs/__schema31"
+            }
+          },
+          "required": ["instanceId", "generation", "sequence", "state"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema25": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema26": {
+      "type": "string",
+      "const": "response"
+    },
+    "__schema27": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema28": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producer lifetime ID; unique to each call."
+    },
+    "__schema29": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Runtime generation within that lifetime."
+    },
+    "__schema30": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Monotonic publication sequence, not a replay cursor."
+    },
+    "__schema31": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "completed": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "unavailableCompletions": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "entries": {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema32"
+          }
+        },
+        "inFlight": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "threads": {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema37"
+              }
+            },
+            "complete": {
+              "type": "boolean"
+            },
+            "observedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            }
+          },
+          "required": ["revision", "threads", "complete", "observedAt"],
+          "additionalProperties": false
+        },
+        "recentWakes": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema38"
+          }
+        }
+      },
+      "required": [
+        "revision",
+        "completed",
+        "unavailableCompletions",
+        "entries",
+        "inFlight",
+        "recentWakes"
+      ],
+      "additionalProperties": false
+    },
+    "__schema32": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "turnId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "name": {
+          "$ref": "#/$defs/__schema33"
+        },
+        "agentPath": {
+          "$ref": "#/$defs/__schema34"
+        },
+        "waitingOn": {
+          "$ref": "#/$defs/__schema35"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["completed", "failed", "interrupted"]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "eventId": {
+          "$ref": "#/$defs/__schema4"
+        }
+      },
+      "required": [
+        "threadId",
+        "turnId",
+        "name",
+        "agentPath",
+        "waitingOn",
+        "status",
+        "observedAt",
+        "eventId"
+      ],
+      "additionalProperties": false
+    },
+    "__schema33": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 64
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema34": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema35": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema36"
+      }
+    },
+    "__schema36": {
+      "type": "string",
+      "enum": ["waitingOnApproval", "waitingOnUserInput"]
+    },
+    "__schema37": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema4"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/__schema33"
+        },
+        "agentPath": {
+          "$ref": "#/$defs/__schema34"
+        },
+        "waitingOn": {
+          "$ref": "#/$defs/__schema35"
+        }
+      },
+      "required": ["threadId", "turnId", "name", "agentPath", "waitingOn"],
+      "additionalProperties": false
+    },
+    "__schema38": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "submitting", "accepted", "refused", "unknown", "unavailable"]
+        },
+        "notice": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "eventId": {
+                  "$ref": "#/$defs/__schema4"
+                },
+                "instanceId": {
+                  "$ref": "#/$defs/__schema4"
+                },
+                "rootThreadId": {
+                  "$ref": "#/$defs/__schema4"
+                },
+                "completed": {
+                  "$ref": "#/$defs/__schema6"
+                },
+                "v": {
+                  "type": "number",
+                  "const": 1
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thread_mailbox.pending"
+                },
+                "inFlight": {
+                  "$ref": "#/$defs/__schema6"
+                },
+                "inventoryComplete": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "message": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "open": {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "type": "string",
+                      "const": "agentvoice_thread_mailbox_open"
+                    },
+                    "arguments": {
+                      "type": "object",
+                      "properties": {
+                        "operationId": {
+                          "$ref": "#/$defs/__schema4"
+                        },
+                        "expectedInstanceId": {
+                          "$ref": "#/$defs/__schema4"
+                        }
+                      },
+                      "required": ["operationId", "expectedInstanceId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["tool", "arguments"],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "eventId",
+                "instanceId",
+                "rootThreadId",
+                "completed",
+                "v",
+                "type",
+                "inFlight",
+                "inventoryComplete",
+                "observedAt",
+                "message",
+                "open"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema4"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorded": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "turnId": {
+                  "$ref": "#/$defs/__schema4"
+                },
+                "itemId": {
+                  "$ref": "#/$defs/__schema4"
+                }
+              },
+              "required": ["turnId", "itemId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["eventId", "generation", "status", "notice", "turnId", "recorded"],
+      "additionalProperties": false
+    },
+    "__schema39": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema25"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema26"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema27"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "$ref": "#/$defs/__schema28"
+            },
+            "generation": {
+              "$ref": "#/$defs/__schema29"
+            },
+            "events": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema40"
+              }
+            },
+            "throughSequence": {
+              "$ref": "#/$defs/__schema30"
+            },
+            "hasMore": {
+              "type": "boolean"
+            }
+          },
+          "required": ["instanceId", "generation", "events", "throughSequence", "hasMore"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["v", "type", "id", "ok", "result"],
+      "additionalProperties": false
+    },
+    "__schema40": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/mailbox.changed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.child.started"
+        },
+        {
+          "$ref": "#/$defs/mailbox.child.completed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.opened"
+        },
+        {
+          "$ref": "#/$defs/mailbox.wake.changed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.gap"
+        }
+      ]
+    },
+    "mailbox.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema43"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema44"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema41": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema42": {
+      "type": "string",
+      "const": "event"
+    },
+    "__schema43": {
+      "type": "string",
+      "const": "mailbox.changed"
+    },
+    "__schema44": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "state": {
+          "$ref": "#/$defs/__schema31"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "state"],
+      "additionalProperties": false
+    },
+    "mailbox.child.started": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema45"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema46"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema45": {
+      "type": "string",
+      "const": "mailbox.child.started"
+    },
+    "__schema46": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "child": {
+          "$ref": "#/$defs/__schema37"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "child", "observedAt"],
+      "additionalProperties": false
+    },
+    "mailbox.child.completed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema47"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema48"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema47": {
+      "type": "string",
+      "const": "mailbox.child.completed"
+    },
+    "__schema48": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "entry": {
+          "$ref": "#/$defs/__schema32"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "entry"],
+      "additionalProperties": false
+    },
+    "mailbox.opened": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema49"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema50"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema49": {
+      "type": "string",
+      "const": "mailbox.opened"
+    },
+    "__schema50": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "operationId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "eventIds": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "remainingCompleted": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "unavailableCompletions": {
+          "$ref": "#/$defs/__schema6"
+        }
+      },
+      "required": [
+        "instanceId",
+        "generation",
+        "sequence",
+        "operationId",
+        "eventIds",
+        "remainingCompleted",
+        "unavailableCompletions"
+      ],
+      "additionalProperties": false
+    },
+    "mailbox.wake.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema51"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema52"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema51": {
+      "type": "string",
+      "const": "mailbox.wake.changed"
+    },
+    "__schema52": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "wake": {
+          "$ref": "#/$defs/__schema38"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "wake"],
+      "additionalProperties": false
+    },
+    "mailbox.gap": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema41"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema42"
+        },
+        "event": {
+          "$ref": "#/$defs/__schema53"
+        },
+        "data": {
+          "$ref": "#/$defs/__schema54"
+        }
+      },
+      "required": ["v", "type", "event", "data"],
+      "additionalProperties": false,
+      "description": "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement."
+    },
+    "__schema53": {
+      "type": "string",
+      "const": "mailbox.gap"
+    },
+    "__schema54": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/__schema28"
+        },
+        "generation": {
+          "$ref": "#/$defs/__schema29"
+        },
+        "sequence": {
+          "$ref": "#/$defs/__schema30"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["capacity", "metadata", "inventory"]
+        },
+        "unavailableCompletions": {
+          "$ref": "#/$defs/__schema6"
+        }
+      },
+      "required": ["instanceId", "generation", "sequence", "reason", "unavailableCompletions"],
+      "additionalProperties": false
+    },
+    "__schema55": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/__schema25"
+        },
+        "type": {
+          "$ref": "#/$defs/__schema26"
+        },
+        "id": {
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -514,27 +1338,27 @@
           "type": "object",
           "properties": {
             "threadId": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             "items": {
               "maxItems": 128,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema24"
+                "$ref": "#/$defs/__schema56"
               }
             },
             "turns": {
               "maxItems": 128,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema51"
+                "$ref": "#/$defs/__schema83"
               }
             },
             "updates": {
               "maxItems": 5,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema53"
+                "$ref": "#/$defs/__schema85"
               }
             },
             "coverage": {
@@ -553,10 +1377,10 @@
               "maximum": 9007199254740991
             },
             "instanceId": {
-              "$ref": "#/$defs/__schema71"
+              "$ref": "#/$defs/__schema28"
             },
             "generation": {
-              "$ref": "#/$defs/__schema72"
+              "$ref": "#/$defs/__schema29"
             }
           },
           "required": [
@@ -576,27 +1400,14 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema21": {
-      "type": "number",
-      "const": 2
-    },
-    "__schema22": {
-      "type": "string",
-      "const": "response"
-    },
-    "__schema23": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "__schema24": {
+    "__schema56": {
       "type": "object",
       "properties": {
         "turnId": {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema15"
         },
         "item": {
-          "$ref": "#/$defs/__schema25"
+          "$ref": "#/$defs/__schema57"
         },
         "complete": {
           "type": "boolean",
@@ -617,7 +1428,7 @@
       "required": ["turnId", "item", "complete", "completed"],
       "additionalProperties": false
     },
-    "__schema25": {
+    "__schema57": {
       "anyOf": [
         {
           "anyOf": [
@@ -639,7 +1450,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema26"
+                    "$ref": "#/$defs/__schema58"
                   }
                 },
                 "id": {
@@ -660,7 +1471,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema29"
+                    "$ref": "#/$defs/__schema61"
                   }
                 },
                 "id": {
@@ -701,14 +1512,14 @@
                           "maxItems": 1024,
                           "type": "array",
                           "items": {
-                            "$ref": "#/$defs/__schema30"
+                            "$ref": "#/$defs/__schema62"
                           }
                         },
                         "threadIds": {
                           "maxItems": 1024,
                           "type": "array",
                           "items": {
-                            "$ref": "#/$defs/__schema31"
+                            "$ref": "#/$defs/__schema63"
                           }
                         }
                       },
@@ -744,7 +1555,7 @@
                       "maxItems": 1024,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema32"
+                        "$ref": "#/$defs/__schema64"
                       }
                     },
                     {
@@ -795,7 +1606,7 @@
                       "maxItems": 1024,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema34"
+                        "$ref": "#/$defs/__schema66"
                       }
                     }
                   ]
@@ -832,7 +1643,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema35"
+                    "$ref": "#/$defs/__schema67"
                   }
                 },
                 "id": {
@@ -843,7 +1654,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema36"
+                    "$ref": "#/$defs/__schema68"
                   }
                 },
                 "type": {
@@ -875,11 +1686,11 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema37"
+                    "$ref": "#/$defs/__schema69"
                   }
                 },
                 "cwd": {
-                  "$ref": "#/$defs/__schema38"
+                  "$ref": "#/$defs/__schema70"
                 },
                 "durationMs": {
                   "anyOf": [
@@ -996,7 +1807,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema39"
+                    "$ref": "#/$defs/__schema71"
                   }
                 },
                 "id": {
@@ -1095,7 +1906,7 @@
                   ]
                 },
                 "arguments": {
-                  "$ref": "#/$defs/__schema40"
+                  "$ref": "#/$defs/__schema72"
                 },
                 "durationMs": {
                   "anyOf": [
@@ -1168,17 +1979,17 @@
                       "type": "object",
                       "properties": {
                         "_meta": {
-                          "$ref": "#/$defs/__schema41"
+                          "$ref": "#/$defs/__schema73"
                         },
                         "content": {
                           "maxItems": 1024,
                           "type": "array",
                           "items": {
-                            "$ref": "#/$defs/__schema42"
+                            "$ref": "#/$defs/__schema74"
                           }
                         },
                         "structuredContent": {
-                          "$ref": "#/$defs/__schema43"
+                          "$ref": "#/$defs/__schema75"
                         }
                       },
                       "required": ["content"]
@@ -1223,7 +2034,7 @@
               "type": "object",
               "properties": {
                 "arguments": {
-                  "$ref": "#/$defs/__schema44"
+                  "$ref": "#/$defs/__schema76"
                 },
                 "contentItems": {
                   "anyOf": [
@@ -1231,7 +2042,7 @@
                       "maxItems": 1024,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema45"
+                        "$ref": "#/$defs/__schema77"
                       }
                     },
                     {
@@ -1390,7 +2201,7 @@
                 "reasoningEffort": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/__schema46"
+                      "$ref": "#/$defs/__schema78"
                     },
                     {
                       "type": "null"
@@ -1401,7 +2212,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema47"
+                    "$ref": "#/$defs/__schema79"
                   }
                 },
                 "senderThreadId": {
@@ -1541,7 +2352,7 @@
                                   "maxItems": 1024,
                                   "type": "array",
                                   "items": {
-                                    "$ref": "#/$defs/__schema48"
+                                    "$ref": "#/$defs/__schema80"
                                   }
                                 },
                                 {
@@ -1651,7 +2462,7 @@
                       "maxItems": 1024,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema49"
+                        "$ref": "#/$defs/__schema81"
                       }
                     },
                     {
@@ -1674,7 +2485,7 @@
                   "maxLength": 262144
                 },
                 "path": {
-                  "$ref": "#/$defs/__schema38"
+                  "$ref": "#/$defs/__schema70"
                 },
                 "type": {
                   "type": "string",
@@ -1760,7 +2571,7 @@
                 "savedPath": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/__schema50"
+                      "$ref": "#/$defs/__schema82"
                     },
                     {
                       "type": "null"
@@ -1848,7 +2659,7 @@
               "const": "unavailable"
             },
             "id": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             "nativeType": {
               "type": "string",
@@ -1864,7 +2675,7 @@
         }
       ]
     },
-    "__schema26": {
+    "__schema58": {
       "anyOf": [
         {
           "type": "object",
@@ -1877,7 +2688,7 @@
               "maxItems": 1024,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema27"
+                "$ref": "#/$defs/__schema59"
               }
             },
             "type": {
@@ -1893,7 +2704,7 @@
             "detail": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/__schema28"
+                  "$ref": "#/$defs/__schema60"
                 },
                 {
                   "type": "null"
@@ -1917,7 +2728,7 @@
             "detail": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/__schema28"
+                  "$ref": "#/$defs/__schema60"
                 },
                 {
                   "type": "null"
@@ -2001,7 +2812,7 @@
         }
       ]
     },
-    "__schema27": {
+    "__schema59": {
       "type": "object",
       "properties": {
         "byteRange": {
@@ -2034,7 +2845,7 @@
       },
       "required": ["byteRange"]
     },
-    "__schema28": {
+    "__schema60": {
       "anyOf": [
         {
           "type": "string",
@@ -2054,7 +2865,7 @@
         }
       ]
     },
-    "__schema29": {
+    "__schema61": {
       "type": "object",
       "properties": {
         "hookRunId": {
@@ -2068,7 +2879,7 @@
       },
       "required": ["hookRunId", "text"]
     },
-    "__schema30": {
+    "__schema62": {
       "type": "object",
       "properties": {
         "lineEnd": {
@@ -2092,11 +2903,11 @@
       },
       "required": ["lineEnd", "lineStart", "note", "path"]
     },
-    "__schema31": {
+    "__schema63": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema32": {
+    "__schema64": {
       "type": "object",
       "properties": {
         "options": {
@@ -2105,7 +2916,7 @@
               "maxItems": 1024,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema33"
+                "$ref": "#/$defs/__schema65"
               }
             },
             {
@@ -2120,11 +2931,11 @@
       },
       "required": ["title"]
     },
-    "__schema33": {
+    "__schema65": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema34": {
+    "__schema66": {
       "anyOf": [
         {
           "type": "object",
@@ -2146,7 +2957,7 @@
             "detail": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/__schema28"
+                  "$ref": "#/$defs/__schema60"
                 },
                 {
                   "type": "null"
@@ -2194,15 +3005,15 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema67": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema36": {
+    "__schema68": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema37": {
+    "__schema69": {
       "anyOf": [
         {
           "type": "object",
@@ -2216,7 +3027,7 @@
               "maxLength": 262144
             },
             "path": {
-              "$ref": "#/$defs/__schema38"
+              "$ref": "#/$defs/__schema70"
             },
             "type": {
               "type": "string",
@@ -2302,11 +3113,11 @@
         }
       ]
     },
-    "__schema38": {
+    "__schema70": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema39": {
+    "__schema71": {
       "type": "object",
       "properties": {
         "diff": {
@@ -2365,7 +3176,7 @@
       },
       "required": ["diff", "kind", "path"]
     },
-    "__schema40": {
+    "__schema72": {
       "anyOf": [
         {
           "type": "string"
@@ -2382,7 +3193,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema40"
+            "$ref": "#/$defs/__schema72"
           }
         },
         {
@@ -2391,12 +3202,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema40"
+            "$ref": "#/$defs/__schema72"
           }
         }
       ]
     },
-    "__schema41": {
+    "__schema73": {
       "anyOf": [
         {
           "type": "string"
@@ -2413,7 +3224,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema41"
+            "$ref": "#/$defs/__schema73"
           }
         },
         {
@@ -2422,12 +3233,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema41"
+            "$ref": "#/$defs/__schema73"
           }
         }
       ]
     },
-    "__schema42": {
+    "__schema74": {
       "anyOf": [
         {
           "type": "string"
@@ -2444,7 +3255,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema42"
+            "$ref": "#/$defs/__schema74"
           }
         },
         {
@@ -2453,12 +3264,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema42"
+            "$ref": "#/$defs/__schema74"
           }
         }
       ]
     },
-    "__schema43": {
+    "__schema75": {
       "anyOf": [
         {
           "type": "string"
@@ -2475,7 +3286,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema43"
+            "$ref": "#/$defs/__schema75"
           }
         },
         {
@@ -2484,12 +3295,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema43"
+            "$ref": "#/$defs/__schema75"
           }
         }
       ]
     },
-    "__schema44": {
+    "__schema76": {
       "anyOf": [
         {
           "type": "string"
@@ -2506,7 +3317,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema44"
+            "$ref": "#/$defs/__schema76"
           }
         },
         {
@@ -2515,12 +3326,12 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema44"
+            "$ref": "#/$defs/__schema76"
           }
         }
       ]
     },
-    "__schema45": {
+    "__schema77": {
       "anyOf": [
         {
           "type": "object",
@@ -2566,19 +3377,19 @@
         }
       ]
     },
-    "__schema46": {
+    "__schema78": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema47": {
+    "__schema79": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema48": {
+    "__schema80": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema49": {
+    "__schema81": {
       "anyOf": [
         {
           "type": "string"
@@ -2595,7 +3406,7 @@
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema49"
+            "$ref": "#/$defs/__schema81"
           }
         },
         {
@@ -2604,16 +3415,16 @@
             "type": "string"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/__schema49"
+            "$ref": "#/$defs/__schema81"
           }
         }
       ]
     },
-    "__schema50": {
+    "__schema82": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema51": {
+    "__schema83": {
       "type": "object",
       "properties": {
         "completedAt": {
@@ -2643,7 +3454,7 @@
         "error": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema52"
+              "$ref": "#/$defs/__schema84"
             },
             {
               "type": "null"
@@ -2689,7 +3500,7 @@
       },
       "required": ["id", "status"]
     },
-    "__schema52": {
+    "__schema84": {
       "type": "object",
       "properties": {
         "additionalDetails": {
@@ -2944,7 +3755,7 @@
       },
       "required": ["message"]
     },
-    "__schema53": {
+    "__schema85": {
       "anyOf": [
         {
           "type": "object",
@@ -2957,13 +3768,13 @@
               "type": "object",
               "properties": {
                 "diff": {
-                  "$ref": "#/$defs/__schema54"
+                  "$ref": "#/$defs/__schema86"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema55"
+                  "$ref": "#/$defs/__schema87"
                 },
                 "turnId": {
-                  "$ref": "#/$defs/__schema56"
+                  "$ref": "#/$defs/__schema88"
                 }
               },
               "required": ["diff", "threadId", "turnId"]
@@ -2988,16 +3799,16 @@
               "type": "object",
               "properties": {
                 "explanation": {
-                  "$ref": "#/$defs/__schema57"
+                  "$ref": "#/$defs/__schema89"
                 },
                 "plan": {
-                  "$ref": "#/$defs/__schema58"
+                  "$ref": "#/$defs/__schema90"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema60"
+                  "$ref": "#/$defs/__schema92"
                 },
                 "turnId": {
-                  "$ref": "#/$defs/__schema61"
+                  "$ref": "#/$defs/__schema93"
                 }
               },
               "required": ["plan", "threadId", "turnId"]
@@ -3022,13 +3833,13 @@
               "type": "object",
               "properties": {
                 "threadId": {
-                  "$ref": "#/$defs/__schema62"
+                  "$ref": "#/$defs/__schema94"
                 },
                 "tokenUsage": {
-                  "$ref": "#/$defs/__schema63"
+                  "$ref": "#/$defs/__schema95"
                 },
                 "turnId": {
-                  "$ref": "#/$defs/__schema65"
+                  "$ref": "#/$defs/__schema97"
                 }
               },
               "required": ["threadId", "tokenUsage", "turnId"]
@@ -3053,10 +3864,10 @@
               "type": "object",
               "properties": {
                 "threadId": {
-                  "$ref": "#/$defs/__schema66"
+                  "$ref": "#/$defs/__schema98"
                 },
                 "threadSettings": {
-                  "$ref": "#/$defs/__schema67"
+                  "$ref": "#/$defs/__schema99"
                 }
               },
               "required": ["threadId", "threadSettings"]
@@ -3081,16 +3892,16 @@
               "type": "object",
               "properties": {
                 "error": {
-                  "$ref": "#/$defs/__schema52"
+                  "$ref": "#/$defs/__schema84"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema68"
+                  "$ref": "#/$defs/__schema100"
                 },
                 "turnId": {
-                  "$ref": "#/$defs/__schema69"
+                  "$ref": "#/$defs/__schema101"
                 },
                 "willRetry": {
-                  "$ref": "#/$defs/__schema70"
+                  "$ref": "#/$defs/__schema102"
                 }
               },
               "required": ["error", "threadId", "turnId", "willRetry"]
@@ -3106,19 +3917,19 @@
         }
       ]
     },
-    "__schema54": {
+    "__schema86": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema55": {
+    "__schema87": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema56": {
+    "__schema88": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema57": {
+    "__schema89": {
       "anyOf": [
         {
           "type": "string",
@@ -3129,14 +3940,14 @@
         }
       ]
     },
-    "__schema58": {
+    "__schema90": {
       "maxItems": 1024,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema59"
+        "$ref": "#/$defs/__schema91"
       }
     },
-    "__schema59": {
+    "__schema91": {
       "type": "object",
       "properties": {
         "status": {
@@ -3162,23 +3973,23 @@
       },
       "required": ["status", "step"]
     },
-    "__schema60": {
+    "__schema92": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema61": {
+    "__schema93": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema62": {
+    "__schema94": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema63": {
+    "__schema95": {
       "type": "object",
       "properties": {
         "last": {
-          "$ref": "#/$defs/__schema64"
+          "$ref": "#/$defs/__schema96"
         },
         "modelContextWindow": {
           "anyOf": [
@@ -3193,12 +4004,12 @@
           ]
         },
         "total": {
-          "$ref": "#/$defs/__schema64"
+          "$ref": "#/$defs/__schema96"
         }
       },
       "required": ["last", "total"]
     },
-    "__schema64": {
+    "__schema96": {
       "type": "object",
       "properties": {
         "cacheWriteInputTokens": {
@@ -3240,15 +4051,15 @@
         "totalTokens"
       ]
     },
-    "__schema65": {
+    "__schema97": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema66": {
+    "__schema98": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema67": {
+    "__schema99": {
       "type": "object",
       "properties": {
         "activePermissionProfile": {
@@ -3378,7 +4189,7 @@
                 "reasoning_effort": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/__schema46"
+                      "$ref": "#/$defs/__schema78"
                     },
                     {
                       "type": "null"
@@ -3392,12 +4203,12 @@
           "required": ["mode", "settings"]
         },
         "cwd": {
-          "$ref": "#/$defs/__schema50"
+          "$ref": "#/$defs/__schema82"
         },
         "effort": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema46"
+              "$ref": "#/$defs/__schema78"
             },
             {
               "type": "null"
@@ -3528,7 +4339,7 @@
                   "maxItems": 1024,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema50"
+                    "$ref": "#/$defs/__schema82"
                   }
                 }
               },
@@ -3589,39 +4400,28 @@
         "sandboxPolicy"
       ]
     },
-    "__schema68": {
+    "__schema100": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema69": {
+    "__schema101": {
       "type": "string",
       "maxLength": 262144
     },
-    "__schema70": {
+    "__schema102": {
       "type": "boolean"
     },
-    "__schema71": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Producer lifetime ID; unique to each call."
-    },
-    "__schema72": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991,
-      "description": "Runtime generation within that lifetime."
-    },
-    "__schema73": {
+    "__schema103": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -3635,7 +4435,7 @@
               "const": true
             },
             "events": {
-              "$ref": "#/$defs/__schema4"
+              "$ref": "#/$defs/__schema8"
             }
           },
           "required": ["subscribed", "events"],
@@ -3645,17 +4445,17 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema74": {
+    "__schema104": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -3665,22 +4465,22 @@
           "type": "object",
           "properties": {
             "instanceId": {
-              "$ref": "#/$defs/__schema71"
+              "$ref": "#/$defs/__schema28"
             },
             "generation": {
-              "$ref": "#/$defs/__schema72"
+              "$ref": "#/$defs/__schema29"
             },
             "sequence": {
-              "$ref": "#/$defs/__schema75"
+              "$ref": "#/$defs/__schema30"
             },
             "runtime": {
-              "$ref": "#/$defs/__schema76"
+              "$ref": "#/$defs/__schema105"
             },
             "inventory": {
-              "$ref": "#/$defs/__schema77"
+              "$ref": "#/$defs/__schema106"
             },
             "threads": {
-              "$ref": "#/$defs/__schema78"
+              "$ref": "#/$defs/__schema107"
             }
           },
           "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
@@ -3691,13 +4491,7 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema75": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 9007199254740991,
-      "description": "Monotonic publication sequence, not a replay cursor."
-    },
-    "__schema76": {
+    "__schema105": {
       "type": "object",
       "properties": {
         "phase": {
@@ -3713,27 +4507,27 @@
       "required": ["phase", "workspace", "mainThreadId"],
       "additionalProperties": false
     },
-    "__schema77": {
+    "__schema106": {
       "type": "string",
       "enum": ["pending", "ready", "incomplete", "unavailable"]
     },
-    "__schema78": {
+    "__schema107": {
       "maxItems": 256,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema79"
+        "$ref": "#/$defs/__schema108"
       }
     },
-    "__schema79": {
+    "__schema108": {
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/__schema80"
+          "$ref": "#/$defs/__schema109"
         },
         "parentThreadId": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema80"
+              "$ref": "#/$defs/__schema109"
             },
             {
               "type": "null"
@@ -3759,7 +4553,7 @@
           "maxItems": 2,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema81"
+            "$ref": "#/$defs/__schema110"
           }
         },
         "turn": {
@@ -3768,7 +4562,7 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "$ref": "#/$defs/__schema80"
+                  "$ref": "#/$defs/__schema109"
                 },
                 "status": {
                   "type": "string",
@@ -3787,27 +4581,27 @@
       "required": ["id", "parentThreadId", "name", "status", "activeFlags", "turn"],
       "additionalProperties": false
     },
-    "__schema80": {
+    "__schema109": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[A-Za-z0-9._:-]+$"
     },
-    "__schema81": {
+    "__schema110": {
       "type": "string",
       "enum": ["waitingOnApproval", "waitingOnUserInput"]
     },
-    "__schema82": {
+    "__schema111": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -3895,17 +4689,17 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema83": {
+    "__schema112": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -3917,16 +4711,16 @@
               "type": "object",
               "properties": {
                 "rootThreadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "revisionBefore": {
-                  "$ref": "#/$defs/__schema84"
+                  "$ref": "#/$defs/__schema113"
                 },
                 "revisionAfter": {
-                  "$ref": "#/$defs/__schema85"
+                  "$ref": "#/$defs/__schema114"
                 },
                 "changedDuringRead": {
-                  "$ref": "#/$defs/__schema86"
+                  "$ref": "#/$defs/__schema115"
                 },
                 "nextCursor": {
                   "type": "null"
@@ -3936,16 +4730,16 @@
                   "const": "conversation.thread.get"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "data": {
-                  "$ref": "#/$defs/__schema87"
+                  "$ref": "#/$defs/__schema116"
                 },
                 "instanceId": {
-                  "$ref": "#/$defs/__schema71"
+                  "$ref": "#/$defs/__schema28"
                 },
                 "generation": {
-                  "$ref": "#/$defs/__schema72"
+                  "$ref": "#/$defs/__schema29"
                 }
               },
               "required": [
@@ -3966,16 +4760,16 @@
               "type": "object",
               "properties": {
                 "rootThreadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "revisionBefore": {
-                  "$ref": "#/$defs/__schema84"
+                  "$ref": "#/$defs/__schema113"
                 },
                 "revisionAfter": {
-                  "$ref": "#/$defs/__schema85"
+                  "$ref": "#/$defs/__schema114"
                 },
                 "changedDuringRead": {
-                  "$ref": "#/$defs/__schema86"
+                  "$ref": "#/$defs/__schema115"
                 },
                 "nextCursor": {
                   "type": "null"
@@ -3985,16 +4779,16 @@
                   "const": "conversation.live.get"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "data": {
-                  "$ref": "#/$defs/__schema87"
+                  "$ref": "#/$defs/__schema116"
                 },
                 "instanceId": {
-                  "$ref": "#/$defs/__schema71"
+                  "$ref": "#/$defs/__schema28"
                 },
                 "generation": {
-                  "$ref": "#/$defs/__schema72"
+                  "$ref": "#/$defs/__schema29"
                 }
               },
               "required": [
@@ -4015,19 +4809,19 @@
               "type": "object",
               "properties": {
                 "rootThreadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "revisionBefore": {
-                  "$ref": "#/$defs/__schema84"
+                  "$ref": "#/$defs/__schema113"
                 },
                 "revisionAfter": {
-                  "$ref": "#/$defs/__schema85"
+                  "$ref": "#/$defs/__schema114"
                 },
                 "changedDuringRead": {
-                  "$ref": "#/$defs/__schema86"
+                  "$ref": "#/$defs/__schema115"
                 },
                 "nextCursor": {
-                  "$ref": "#/$defs/__schema88"
+                  "$ref": "#/$defs/__schema117"
                 },
                 "method": {
                   "type": "string",
@@ -4037,14 +4831,14 @@
                   "maxItems": 50,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema87"
+                    "$ref": "#/$defs/__schema116"
                   }
                 },
                 "instanceId": {
-                  "$ref": "#/$defs/__schema71"
+                  "$ref": "#/$defs/__schema28"
                 },
                 "generation": {
-                  "$ref": "#/$defs/__schema72"
+                  "$ref": "#/$defs/__schema29"
                 }
               },
               "required": [
@@ -4064,39 +4858,39 @@
               "type": "object",
               "properties": {
                 "rootThreadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "revisionBefore": {
-                  "$ref": "#/$defs/__schema84"
+                  "$ref": "#/$defs/__schema113"
                 },
                 "revisionAfter": {
-                  "$ref": "#/$defs/__schema85"
+                  "$ref": "#/$defs/__schema114"
                 },
                 "changedDuringRead": {
-                  "$ref": "#/$defs/__schema86"
+                  "$ref": "#/$defs/__schema115"
                 },
                 "nextCursor": {
-                  "$ref": "#/$defs/__schema88"
+                  "$ref": "#/$defs/__schema117"
                 },
                 "method": {
                   "type": "string",
                   "const": "conversation.turns.list"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "data": {
                   "maxItems": 50,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema51"
+                    "$ref": "#/$defs/__schema83"
                   }
                 },
                 "instanceId": {
-                  "$ref": "#/$defs/__schema71"
+                  "$ref": "#/$defs/__schema28"
                 },
                 "generation": {
-                  "$ref": "#/$defs/__schema72"
+                  "$ref": "#/$defs/__schema29"
                 }
               },
               "required": [
@@ -4117,39 +4911,39 @@
               "type": "object",
               "properties": {
                 "rootThreadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "revisionBefore": {
-                  "$ref": "#/$defs/__schema84"
+                  "$ref": "#/$defs/__schema113"
                 },
                 "revisionAfter": {
-                  "$ref": "#/$defs/__schema85"
+                  "$ref": "#/$defs/__schema114"
                 },
                 "changedDuringRead": {
-                  "$ref": "#/$defs/__schema86"
+                  "$ref": "#/$defs/__schema115"
                 },
                 "nextCursor": {
-                  "$ref": "#/$defs/__schema88"
+                  "$ref": "#/$defs/__schema117"
                 },
                 "method": {
                   "type": "string",
                   "const": "conversation.items.list"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema11"
+                  "$ref": "#/$defs/__schema15"
                 },
                 "data": {
                   "maxItems": 50,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema89"
+                    "$ref": "#/$defs/__schema118"
                   }
                 },
                 "instanceId": {
-                  "$ref": "#/$defs/__schema71"
+                  "$ref": "#/$defs/__schema28"
                 },
                 "generation": {
-                  "$ref": "#/$defs/__schema72"
+                  "$ref": "#/$defs/__schema29"
                 }
               },
               "required": [
@@ -4172,29 +4966,29 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema84": {
+    "__schema113": {
       "type": "integer",
       "minimum": -9007199254740991,
       "maximum": 9007199254740991
     },
-    "__schema85": {
+    "__schema114": {
       "type": "integer",
       "minimum": -9007199254740991,
       "maximum": 9007199254740991
     },
-    "__schema86": {
+    "__schema115": {
       "type": "boolean"
     },
-    "__schema87": {
+    "__schema116": {
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema15"
         },
         "parentThreadId": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             {
               "type": "null"
@@ -4307,7 +5101,7 @@
       },
       "required": ["id", "cwd", "status"]
     },
-    "__schema88": {
+    "__schema117": {
       "anyOf": [
         {
           "type": "string",
@@ -4318,30 +5112,30 @@
         }
       ]
     },
-    "__schema89": {
+    "__schema118": {
       "type": "object",
       "properties": {
         "turnId": {
-          "$ref": "#/$defs/__schema11"
+          "$ref": "#/$defs/__schema15"
         },
         "item": {
-          "$ref": "#/$defs/__schema25"
+          "$ref": "#/$defs/__schema57"
         }
       },
       "required": ["turnId", "item"],
       "additionalProperties": false
     },
-    "__schema90": {
+    "__schema119": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
-          "$ref": "#/$defs/__schema23"
+          "$ref": "#/$defs/__schema27"
         },
         "ok": {
           "type": "boolean",
@@ -4351,20 +5145,20 @@
           "type": "object",
           "properties": {
             "instanceId": {
-              "$ref": "#/$defs/__schema71"
+              "$ref": "#/$defs/__schema28"
             },
             "generation": {
-              "$ref": "#/$defs/__schema72"
+              "$ref": "#/$defs/__schema29"
             },
             "events": {
               "maxItems": 100,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema91"
+                "$ref": "#/$defs/__schema120"
               }
             },
             "throughSequence": {
-              "$ref": "#/$defs/__schema75"
+              "$ref": "#/$defs/__schema30"
             },
             "hasMore": {
               "type": "boolean"
@@ -4377,7 +5171,7 @@
       "required": ["v", "type", "id", "ok", "result"],
       "additionalProperties": false
     },
-    "__schema91": {
+    "__schema120": {
       "anyOf": [
         {
           "$ref": "#/$defs/conversation.item.started"
@@ -4451,48 +5245,40 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema94"
+          "$ref": "#/$defs/__schema121"
         },
         "data": {
-          "$ref": "#/$defs/__schema95"
+          "$ref": "#/$defs/__schema122"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema92": {
-      "type": "number",
-      "const": 2
-    },
-    "__schema93": {
-      "type": "string",
-      "const": "event"
-    },
-    "__schema94": {
+    "__schema121": {
       "type": "string",
       "const": "conversation.item.started"
     },
-    "__schema95": {
+    "__schema122": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "item": {
-          "$ref": "#/$defs/__schema25"
+          "$ref": "#/$defs/__schema57"
         },
         "startedAtMs": {
           "type": "integer",
@@ -4529,37 +5315,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema96"
+          "$ref": "#/$defs/__schema123"
         },
         "data": {
-          "$ref": "#/$defs/__schema97"
+          "$ref": "#/$defs/__schema124"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema96": {
+    "__schema123": {
       "type": "string",
       "const": "conversation.item.completed"
     },
-    "__schema97": {
+    "__schema124": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "completedAtMs": {
           "type": "integer",
@@ -4567,7 +5353,7 @@
           "maximum": 9007199254740991
         },
         "item": {
-          "$ref": "#/$defs/__schema25"
+          "$ref": "#/$defs/__schema57"
         },
         "threadId": {
           "type": "string",
@@ -4599,37 +5385,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema98"
+          "$ref": "#/$defs/__schema125"
         },
         "data": {
-          "$ref": "#/$defs/__schema99"
+          "$ref": "#/$defs/__schema126"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema98": {
+    "__schema125": {
       "type": "string",
       "const": "conversation.item.agent_message.delta"
     },
-    "__schema99": {
+    "__schema126": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "delta": {
           "type": "string",
@@ -4669,37 +5455,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema100"
+          "$ref": "#/$defs/__schema127"
         },
         "data": {
-          "$ref": "#/$defs/__schema101"
+          "$ref": "#/$defs/__schema128"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema100": {
+    "__schema127": {
       "type": "string",
       "const": "conversation.item.plan.delta"
     },
-    "__schema101": {
+    "__schema128": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "delta": {
           "type": "string",
@@ -4739,37 +5525,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema102"
+          "$ref": "#/$defs/__schema129"
         },
         "data": {
-          "$ref": "#/$defs/__schema103"
+          "$ref": "#/$defs/__schema130"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema102": {
+    "__schema129": {
       "type": "string",
       "const": "conversation.item.command_execution.output_delta"
     },
-    "__schema103": {
+    "__schema130": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "delta": {
           "type": "string",
@@ -4809,37 +5595,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema104"
+          "$ref": "#/$defs/__schema131"
         },
         "data": {
-          "$ref": "#/$defs/__schema105"
+          "$ref": "#/$defs/__schema132"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema104": {
+    "__schema131": {
       "type": "string",
       "const": "conversation.item.file_change.output_delta"
     },
-    "__schema105": {
+    "__schema132": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "delta": {
           "type": "string",
@@ -4879,37 +5665,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema106"
+          "$ref": "#/$defs/__schema133"
         },
         "data": {
-          "$ref": "#/$defs/__schema107"
+          "$ref": "#/$defs/__schema134"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema106": {
+    "__schema133": {
       "type": "string",
       "const": "conversation.item.reasoning.text_delta"
     },
-    "__schema107": {
+    "__schema134": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "contentIndex": {
           "type": "integer",
@@ -4955,37 +5741,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema108"
+          "$ref": "#/$defs/__schema135"
         },
         "data": {
-          "$ref": "#/$defs/__schema109"
+          "$ref": "#/$defs/__schema136"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema108": {
+    "__schema135": {
       "type": "string",
       "const": "conversation.item.reasoning.summary_text_delta"
     },
-    "__schema109": {
+    "__schema136": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "delta": {
           "type": "string",
@@ -5031,37 +5817,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema110"
+          "$ref": "#/$defs/__schema137"
         },
         "data": {
-          "$ref": "#/$defs/__schema111"
+          "$ref": "#/$defs/__schema138"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema110": {
+    "__schema137": {
       "type": "string",
       "const": "conversation.item.reasoning.summary_part_added"
     },
-    "__schema111": {
+    "__schema138": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "itemId": {
           "type": "string",
@@ -5102,37 +5888,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema112"
+          "$ref": "#/$defs/__schema139"
         },
         "data": {
-          "$ref": "#/$defs/__schema113"
+          "$ref": "#/$defs/__schema140"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema112": {
+    "__schema139": {
       "type": "string",
       "const": "conversation.item.command_execution.terminal_interaction"
     },
-    "__schema113": {
+    "__schema140": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "itemId": {
           "type": "string",
@@ -5177,37 +5963,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema114"
+          "$ref": "#/$defs/__schema141"
         },
         "data": {
-          "$ref": "#/$defs/__schema115"
+          "$ref": "#/$defs/__schema142"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema114": {
+    "__schema141": {
       "type": "string",
       "const": "conversation.item.mcp_tool_call.progress"
     },
-    "__schema115": {
+    "__schema142": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "itemId": {
           "type": "string",
@@ -5247,44 +6033,44 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema116"
+          "$ref": "#/$defs/__schema143"
         },
         "data": {
-          "$ref": "#/$defs/__schema117"
+          "$ref": "#/$defs/__schema144"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema116": {
+    "__schema143": {
       "type": "string",
       "const": "conversation.turn.started"
     },
-    "__schema117": {
+    "__schema144": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
           "type": "string",
           "maxLength": 262144
         },
         "turn": {
-          "$ref": "#/$defs/__schema51"
+          "$ref": "#/$defs/__schema83"
         },
         "revision": {
           "type": "integer",
@@ -5299,44 +6085,44 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema118"
+          "$ref": "#/$defs/__schema145"
         },
         "data": {
-          "$ref": "#/$defs/__schema119"
+          "$ref": "#/$defs/__schema146"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema118": {
+    "__schema145": {
       "type": "string",
       "const": "conversation.turn.completed"
     },
-    "__schema119": {
+    "__schema146": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
           "type": "string",
           "maxLength": 262144
         },
         "turn": {
-          "$ref": "#/$defs/__schema51"
+          "$ref": "#/$defs/__schema83"
         },
         "revision": {
           "type": "integer",
@@ -5351,46 +6137,46 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema120"
+          "$ref": "#/$defs/__schema147"
         },
         "data": {
-          "$ref": "#/$defs/__schema121"
+          "$ref": "#/$defs/__schema148"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema120": {
+    "__schema147": {
       "type": "string",
       "const": "conversation.turn.diff.updated"
     },
-    "__schema121": {
+    "__schema148": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "diff": {
-          "$ref": "#/$defs/__schema54"
+          "$ref": "#/$defs/__schema86"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema55"
+          "$ref": "#/$defs/__schema87"
         },
         "turnId": {
-          "$ref": "#/$defs/__schema56"
+          "$ref": "#/$defs/__schema88"
         },
         "revision": {
           "type": "integer",
@@ -5413,49 +6199,49 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema122"
+          "$ref": "#/$defs/__schema149"
         },
         "data": {
-          "$ref": "#/$defs/__schema123"
+          "$ref": "#/$defs/__schema150"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema122": {
+    "__schema149": {
       "type": "string",
       "const": "conversation.turn.plan.updated"
     },
-    "__schema123": {
+    "__schema150": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "explanation": {
-          "$ref": "#/$defs/__schema57"
+          "$ref": "#/$defs/__schema89"
         },
         "plan": {
-          "$ref": "#/$defs/__schema58"
+          "$ref": "#/$defs/__schema90"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema60"
+          "$ref": "#/$defs/__schema92"
         },
         "turnId": {
-          "$ref": "#/$defs/__schema61"
+          "$ref": "#/$defs/__schema93"
         },
         "revision": {
           "type": "integer",
@@ -5478,46 +6264,46 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema124"
+          "$ref": "#/$defs/__schema151"
         },
         "data": {
-          "$ref": "#/$defs/__schema125"
+          "$ref": "#/$defs/__schema152"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema124": {
+    "__schema151": {
       "type": "string",
       "const": "conversation.thread.token_usage.updated"
     },
-    "__schema125": {
+    "__schema152": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema62"
+          "$ref": "#/$defs/__schema94"
         },
         "tokenUsage": {
-          "$ref": "#/$defs/__schema63"
+          "$ref": "#/$defs/__schema95"
         },
         "turnId": {
-          "$ref": "#/$defs/__schema65"
+          "$ref": "#/$defs/__schema97"
         },
         "revision": {
           "type": "integer",
@@ -5540,43 +6326,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema126"
+          "$ref": "#/$defs/__schema153"
         },
         "data": {
-          "$ref": "#/$defs/__schema127"
+          "$ref": "#/$defs/__schema154"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema126": {
+    "__schema153": {
       "type": "string",
       "const": "conversation.thread.settings.updated"
     },
-    "__schema127": {
+    "__schema154": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema66"
+          "$ref": "#/$defs/__schema98"
         },
         "threadSettings": {
-          "$ref": "#/$defs/__schema67"
+          "$ref": "#/$defs/__schema99"
         },
         "revision": {
           "type": "integer",
@@ -5598,37 +6384,37 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema128"
+          "$ref": "#/$defs/__schema155"
         },
         "data": {
-          "$ref": "#/$defs/__schema129"
+          "$ref": "#/$defs/__schema156"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema128": {
+    "__schema155": {
       "type": "string",
       "const": "conversation.thread.reverted"
     },
-    "__schema129": {
+    "__schema156": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
           "type": "string",
@@ -5647,49 +6433,49 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema130"
+          "$ref": "#/$defs/__schema157"
         },
         "data": {
-          "$ref": "#/$defs/__schema131"
+          "$ref": "#/$defs/__schema158"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema130": {
+    "__schema157": {
       "type": "string",
       "const": "conversation.error"
     },
-    "__schema131": {
+    "__schema158": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "error": {
-          "$ref": "#/$defs/__schema52"
+          "$ref": "#/$defs/__schema84"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema68"
+          "$ref": "#/$defs/__schema100"
         },
         "turnId": {
-          "$ref": "#/$defs/__schema69"
+          "$ref": "#/$defs/__schema101"
         },
         "willRetry": {
-          "$ref": "#/$defs/__schema70"
+          "$ref": "#/$defs/__schema102"
         },
         "revision": {
           "type": "integer",
@@ -5713,40 +6499,40 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema132"
+          "$ref": "#/$defs/__schema159"
         },
         "data": {
-          "$ref": "#/$defs/__schema133"
+          "$ref": "#/$defs/__schema160"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema132": {
+    "__schema159": {
       "type": "string",
       "const": "conversation.hook.started"
     },
-    "__schema133": {
+    "__schema160": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "run": {
-          "$ref": "#/$defs/__schema134"
+          "$ref": "#/$defs/__schema161"
         },
         "threadId": {
           "type": "string",
@@ -5772,7 +6558,7 @@
       "required": ["instanceId", "generation", "sequence", "run", "threadId", "revision"],
       "additionalProperties": false
     },
-    "__schema134": {
+    "__schema161": {
       "type": "object",
       "properties": {
         "completedAt": {
@@ -5808,7 +6594,7 @@
           "maxItems": 1024,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema135"
+            "$ref": "#/$defs/__schema162"
           }
         },
         "eventName": {
@@ -5960,7 +6746,7 @@
           ]
         },
         "sourcePath": {
-          "$ref": "#/$defs/__schema50"
+          "$ref": "#/$defs/__schema82"
         },
         "startedAt": {
           "type": "integer",
@@ -6016,7 +6802,7 @@
         "status"
       ]
     },
-    "__schema135": {
+    "__schema162": {
       "type": "object",
       "properties": {
         "kind": {
@@ -6054,40 +6840,40 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema136"
+          "$ref": "#/$defs/__schema163"
         },
         "data": {
-          "$ref": "#/$defs/__schema137"
+          "$ref": "#/$defs/__schema164"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema136": {
+    "__schema163": {
       "type": "string",
       "const": "conversation.hook.completed"
     },
-    "__schema137": {
+    "__schema164": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "run": {
-          "$ref": "#/$defs/__schema134"
+          "$ref": "#/$defs/__schema161"
         },
         "threadId": {
           "type": "string",
@@ -6117,42 +6903,42 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema138"
+          "$ref": "#/$defs/__schema165"
         },
         "data": {
-          "$ref": "#/$defs/__schema139"
+          "$ref": "#/$defs/__schema166"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark."
     },
-    "__schema138": {
+    "__schema165": {
       "type": "string",
       "const": "conversation.gap"
     },
-    "__schema139": {
+    "__schema166": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema15"
             },
             {
               "type": "null"
@@ -6176,14 +6962,14 @@
       "required": ["instanceId", "generation", "sequence", "threadId", "reason", "revision"],
       "additionalProperties": false
     },
-    "__schema140": {
+    "__schema167": {
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema21"
+          "$ref": "#/$defs/__schema25"
         },
         "type": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema26"
         },
         "id": {
           "anyOf": [
@@ -6324,6 +7110,24 @@
         },
         {
           "$ref": "#/$defs/conversation.gap"
+        },
+        {
+          "$ref": "#/$defs/mailbox.changed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.child.started"
+        },
+        {
+          "$ref": "#/$defs/mailbox.child.completed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.opened"
+        },
+        {
+          "$ref": "#/$defs/mailbox.wake.changed"
+        },
+        {
+          "$ref": "#/$defs/mailbox.gap"
         }
       ]
     },
@@ -6331,43 +7135,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema141"
+          "$ref": "#/$defs/__schema168"
         },
         "data": {
-          "$ref": "#/$defs/__schema142"
+          "$ref": "#/$defs/__schema169"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace thread inventory."
     },
-    "__schema141": {
+    "__schema168": {
       "type": "string",
       "const": "threads.changed"
     },
-    "__schema142": {
+    "__schema169": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "inventory": {
-          "$ref": "#/$defs/__schema77"
+          "$ref": "#/$defs/__schema106"
         },
         "threads": {
-          "$ref": "#/$defs/__schema78"
+          "$ref": "#/$defs/__schema107"
         }
       },
       "required": ["instanceId", "generation", "sequence", "inventory", "threads"],
@@ -6377,40 +7181,40 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema143"
+          "$ref": "#/$defs/__schema170"
         },
         "data": {
-          "$ref": "#/$defs/__schema144"
+          "$ref": "#/$defs/__schema171"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace one thread row."
     },
-    "__schema143": {
+    "__schema170": {
       "type": "string",
       "const": "thread.state.changed"
     },
-    "__schema144": {
+    "__schema171": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "thread": {
-          "$ref": "#/$defs/__schema79"
+          "$ref": "#/$defs/__schema108"
         }
       },
       "required": ["instanceId", "generation", "sequence", "thread"],
@@ -6420,46 +7224,46 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema145"
+          "$ref": "#/$defs/__schema172"
         },
         "data": {
-          "$ref": "#/$defs/__schema146"
+          "$ref": "#/$defs/__schema173"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Current state: replace runtime and inventory; generation reset boundary."
     },
-    "__schema145": {
+    "__schema172": {
       "type": "string",
       "const": "runtime.state.changed"
     },
-    "__schema146": {
+    "__schema173": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "runtime": {
-          "$ref": "#/$defs/__schema76"
+          "$ref": "#/$defs/__schema105"
         },
         "inventory": {
-          "$ref": "#/$defs/__schema77"
+          "$ref": "#/$defs/__schema106"
         },
         "threads": {
-          "$ref": "#/$defs/__schema78"
+          "$ref": "#/$defs/__schema107"
         }
       },
       "required": ["instanceId", "generation", "sequence", "runtime", "inventory", "threads"],
@@ -6469,63 +7273,63 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema147"
+          "$ref": "#/$defs/__schema174"
         },
         "data": {
-          "$ref": "#/$defs/__schema148"
+          "$ref": "#/$defs/__schema175"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema147": {
+    "__schema174": {
       "type": "string",
       "const": "voice.item.started"
     },
-    "__schema148": {
+    "__schema175": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema149"
+          "$ref": "#/$defs/__schema176"
         },
         "item": {
-          "$ref": "#/$defs/__schema150"
+          "$ref": "#/$defs/__schema177"
         }
       },
       "required": ["instanceId", "generation", "sequence", "threadId", "item"],
       "additionalProperties": false
     },
-    "__schema149": {
+    "__schema176": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
     },
-    "__schema150": {
+    "__schema177": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "type": {
               "type": "string",
@@ -6539,10 +7343,10 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "type": {
               "type": "string",
@@ -6564,20 +7368,20 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "type": {
               "type": "string",
               "const": "bemItemPromoted"
             },
             "turnId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "itemId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "presentation": {
               "oneOf": [
@@ -6629,10 +7433,10 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "realtimeSessionId": {
-              "$ref": "#/$defs/__schema149"
+              "$ref": "#/$defs/__schema176"
             },
             "type": {
               "type": "string",
@@ -6652,43 +7456,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema151"
+          "$ref": "#/$defs/__schema178"
         },
         "data": {
-          "$ref": "#/$defs/__schema152"
+          "$ref": "#/$defs/__schema179"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema151": {
+    "__schema178": {
       "type": "string",
       "const": "voice.item.transcript.delta"
     },
-    "__schema152": {
+    "__schema179": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema149"
+          "$ref": "#/$defs/__schema176"
         },
         "itemId": {
-          "$ref": "#/$defs/__schema149"
+          "$ref": "#/$defs/__schema176"
         },
         "delta": {
           "type": "string",
@@ -6702,43 +7506,43 @@
       "type": "object",
       "properties": {
         "v": {
-          "$ref": "#/$defs/__schema92"
+          "$ref": "#/$defs/__schema41"
         },
         "type": {
-          "$ref": "#/$defs/__schema93"
+          "$ref": "#/$defs/__schema42"
         },
         "event": {
-          "$ref": "#/$defs/__schema153"
+          "$ref": "#/$defs/__schema180"
         },
         "data": {
-          "$ref": "#/$defs/__schema154"
+          "$ref": "#/$defs/__schema181"
         }
       },
       "required": ["v", "type", "event", "data"],
       "additionalProperties": false,
       "description": "Transient: live native voice item data. No persistence, replay, or snapshot recovery. Do not discard using a lifecycle snapshot watermark."
     },
-    "__schema153": {
+    "__schema180": {
       "type": "string",
       "const": "voice.item.completed"
     },
-    "__schema154": {
+    "__schema181": {
       "type": "object",
       "properties": {
         "instanceId": {
-          "$ref": "#/$defs/__schema71"
+          "$ref": "#/$defs/__schema28"
         },
         "generation": {
-          "$ref": "#/$defs/__schema72"
+          "$ref": "#/$defs/__schema29"
         },
         "sequence": {
-          "$ref": "#/$defs/__schema75"
+          "$ref": "#/$defs/__schema30"
         },
         "threadId": {
-          "$ref": "#/$defs/__schema149"
+          "$ref": "#/$defs/__schema176"
         },
         "item": {
-          "$ref": "#/$defs/__schema150"
+          "$ref": "#/$defs/__schema177"
         }
       },
       "required": ["instanceId", "generation", "sequence", "threadId", "item"],
@@ -6746,5 +7550,5 @@
     }
   },
   "title": "AgentVoice event socket",
-  "description": "Protocol 2 fleet NDJSON event contract: lifecycle/voice events and typed conversation observation, live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md."
+  "description": "Protocol 2 fleet NDJSON event contract: lifecycle/voice events, typed conversation observation, and the call-owned thread mailbox, with live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md."
 }

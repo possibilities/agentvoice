@@ -1,5 +1,6 @@
 import { controlSocketPath } from "../control/socket.ts";
 import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
+import { mailboxGetParams, mailboxReplayParams } from "../mailbox/contract.ts";
 import { EVENT_PROTOCOL_VERSION, emptyEventParams, eventSubscriptionSchema } from "./contract.ts";
 import {
   type ConversationReadMethod,
@@ -29,7 +30,23 @@ export class EventSocketServer extends JsonSocketServer {
       async handle(request, peer) {
         const respond = (body: object) =>
           peer.send({ v: EVENT_PROTOCOL_VERSION, type: "response", id: request.id, ...body });
-        if (request.method.startsWith("conversation.")) {
+        if (request.method === "mailbox.get" || request.method === "mailbox.replay") {
+          try {
+            const params = (
+              request.method === "mailbox.get" ? mailboxGetParams : mailboxReplayParams
+            ).safeParse(request.params);
+            if (!params.success) throw new ObservationError("invalid_params");
+            if (params.data.expectedInstanceId !== feed.snapshot().instanceId)
+              throw new ObservationError("instance_mismatch");
+            if (request.method === "mailbox.replay") {
+              const replay = mailboxReplayParams.parse(params.data);
+              respond({ ok: true, result: feed.mailboxReplay(replay.afterSequence, replay.limit) });
+            } else respond({ ok: true, result: feed.mailboxSnapshot() });
+          } catch (error) {
+            const code = error instanceof ObservationError ? error.code : "unavailable";
+            respond({ ok: false, error: { code, message: code } });
+          }
+        } else if (request.method.startsWith("conversation.")) {
           try {
             if (request.method === "conversation.capabilities") {
               if (!emptyEventParams.safeParse(request.params ?? {}).success)

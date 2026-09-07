@@ -91,7 +91,7 @@ replaces it while preserving the voice runtime, Codex child and workspace.
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
 child only by environment variable. MCP and the control socket expose status, voice redial and full runtime restart
-with an optional handoff prompt. UI removal does not retire API controls. See `docs/api.md`.
+with an optional handoff prompt, plus thread-mailbox opening. UI removal does not retire API controls. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -204,3 +204,10 @@ cut. Its coverage is always partial; it is independent of native persisted histo
 or items through the owned Codex child, scoped to an owned root and verified
 descendants. Native reads are not atomic cuts of the event stream; revision fences
 report observed overlap without inventing native snapshot guarantees.
+
+**Thread mailbox** — The call-controller-owned collection of pending completion
+metadata for the orchestrator's direct native children. Opening returns and
+clears a batch; each child terminal turn immediately sends a count-only wake-up
+with a current working-child tally. It is not native child-result delivery or a
+per-message read-receipt system.
+_Avoid_: worker registry, transcript store.

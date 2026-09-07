@@ -12,6 +12,15 @@ import {
 } from "../events/conversation.ts";
 import { nativeConversationSchemas } from "../events/conversation-native.ts";
 import { nativeVoiceNotification, type VoiceNotification } from "../events/voice.ts";
+import {
+  MAILBOX_NAMESPACE,
+  MAILBOX_OUTPUT,
+  type MailboxObservation,
+  type MailboxRuntime,
+  wakeNotice,
+  wakeRequestSchema,
+} from "../mailbox/contract.ts";
+import { SubagentObserver } from "../mailbox/observer.ts";
 import { stateDirectory } from "../paths.ts";
 import {
   AppServerConnection,
@@ -102,6 +111,8 @@ export interface RuntimeOptions extends SessionSelection {
   onChildPid?: (pid: number) => void;
   onChildReaped?: () => void;
   onThreads?: (inventory: ThreadInventory) => void;
+  onMailbox?: (observation: MailboxObservation) => void;
+  onMailboxReady?: (runtime: MailboxRuntime) => void;
   onVoice?: (notification: VoiceNotification) => void;
   onConversation?: (notification: ConversationNotification) => void;
   onShutdownOutcome?: (forced: boolean) => void;
@@ -164,6 +175,7 @@ export class VoiceRuntime {
   private privateHandoffPrompt: { raw: string; escaped: string } | undefined;
   private readonly sessions: VoiceSessionManager;
   private readonly threadObserver: ThreadObserver | undefined;
+  private mailboxObserver: SubagentObserver | undefined;
   private conversationRevision = 0;
   private readonly conversationReader: ConversationReader;
   private tierSelection: ServiceTierSelection | null = null;
@@ -269,6 +281,74 @@ export class VoiceRuntime {
         threadId: this.threadId,
         workspace: this.config.orchestrator.workspace,
       });
+      if (this.options.onMailbox) {
+        const publish = this.options.onMailbox;
+        const observer = new SubagentObserver(
+          this.threadId,
+          workspace,
+          (method, params, timeout) => this.requireConnection().request(method, params, timeout),
+          publish,
+          Object.values(this.options.controlMcp?.env ?? {}),
+        );
+        this.mailboxObserver = observer;
+        this.options.onMailboxReady?.({
+          snapshot: () => {
+            this.assertRunning();
+            return observer.snapshot();
+          },
+          authorize: (caller) => observer.authorize(caller),
+          wake: async (input) => {
+            const checked = wakeRequestSchema.safeParse(input);
+            if (
+              !checked.success ||
+              this.shuttingDown ||
+              !this.threadReady ||
+              !this.attachment?.alive ||
+              input.rootThreadId !== this.threadId
+            )
+              return { status: "unavailable" };
+            const notice = wakeNotice(checked.data, observer.snapshot());
+            publish({ kind: "submitting", notice });
+            try {
+              const result = await this.attachment.request<{
+                turn?: { id?: string; status?: string };
+              }>(
+                "turn/start",
+                {
+                  threadId: this.threadId,
+                  input: [],
+                  turnTrigger: "subagentCompletion",
+                  toolOutput: {
+                    name: MAILBOX_OUTPUT,
+                    namespace: MAILBOX_NAMESPACE,
+                    output: JSON.stringify(notice),
+                  },
+                },
+                10000,
+              );
+              const turnId = result?.turn?.id;
+              if (
+                typeof turnId !== "string" ||
+                !turnId ||
+                turnId.length > 128 ||
+                result.turn?.status !== "inProgress"
+              )
+                return { status: "unknown" };
+              return { status: "accepted", turnId };
+            } catch (error) {
+              return {
+                status:
+                  error instanceof AppServerError &&
+                  typeof error.code === "number" &&
+                  !error.timedOut
+                    ? "refused"
+                    : "unknown",
+              };
+            }
+          },
+        });
+        void observer.start();
+      }
       await this.confirmControlReady();
       this.threadReady = true;
       void this.threadObserver?.start();
@@ -339,6 +419,7 @@ export class VoiceRuntime {
     this.tuiGateway?.close();
     this.shuttingDown = true;
     this.threadObserver?.stop();
+    this.mailboxObserver?.stop();
     this.threadReady = false;
     this.shutdownPromise = (async () => {
       try {
@@ -483,6 +564,7 @@ export class VoiceRuntime {
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
     if (this.shuttingDown) return;
+    this.mailboxObserver?.notification(method, params);
     if (Object.hasOwn(nativeConversationSchemas, method)) {
       const revision = ++this.conversationRevision;
       if (this.options.onConversation) {

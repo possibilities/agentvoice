@@ -10,7 +10,7 @@ export function buildEventsSchema() {
     }),
     title: "AgentVoice event socket",
     description:
-      "Protocol 2 fleet NDJSON event contract: lifecycle/voice events and typed conversation observation, live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md.",
+      "Protocol 2 fleet NDJSON event contract: lifecycle/voice events, typed conversation observation, and the call-owned thread mailbox, with live snapshots, bounded replay and scoped native history pages. Lifecycle and conversation snapshots have separate watermarks; voice events are never replayed. See docs/events.md and docs/conversations.md.",
   };
 }
 if (import.meta.main) {

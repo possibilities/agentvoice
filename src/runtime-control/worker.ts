@@ -14,6 +14,11 @@ import {
   conversationRequestSchemas,
   ObservationError,
 } from "../events/conversation.ts";
+import {
+  type MailboxRuntime,
+  mailboxCallerSchema,
+  wakeRequestSchema,
+} from "../mailbox/contract.ts";
 import { ipcMessage, type RuntimeActivation, type RuntimeLaunch } from "./protocol.ts";
 import { runtimeSender } from "./sender.ts";
 
@@ -29,6 +34,7 @@ export function runRuntimeWorker(
   let factory: ConsoleHostOptions["mediaFactory"];
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: (VoiceHost & { redial(): Promise<void> }) | undefined;
+  let mailboxRuntime: MailboxRuntime | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let revokeAttachment: (() => void) | undefined;
   let issueAttachment: (() => AttachmentTicket) | undefined;
@@ -192,6 +198,12 @@ export function runRuntimeWorker(
           controlMcp: currentLaunch.control,
           acquireLease,
           onVerifiedThread: (identity) => event("identity", identity),
+          onMailboxReady: (runtime) => {
+            mailboxRuntime = runtime;
+          },
+          onMailbox: (observation) => {
+            if (!stopping && !terminalFailure) event("mailbox", observation);
+          },
           onThreads: (inventory) => {
             threadInventory = inventory;
             publish();
@@ -299,6 +311,16 @@ export function runRuntimeWorker(
           throw new Error("Voice redial is unavailable");
         await host.redial();
         return null;
+      case "mailbox-wake":
+        if (terminalFailure || stopping || !mailboxRuntime) return { status: "unavailable" };
+        return mailboxRuntime.wake(wakeRequestSchema.parse(params));
+      case "mailbox-snapshot":
+        if (terminalFailure || stopping || !mailboxRuntime)
+          throw new Error("Mailbox observation unavailable");
+        return mailboxRuntime.snapshot();
+      case "mailbox-authorize":
+        if (terminalFailure || stopping || !mailboxRuntime) return false;
+        return mailboxRuntime.authorize(mailboxCallerSchema.parse(params));
       case "handoff":
         if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
           return handoffFailure("not_ready");

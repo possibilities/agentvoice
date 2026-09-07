@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { MAILBOX_TOOL, mailboxCallerSchema } from "../mailbox/contract.ts";
 import { CONTROL_METHODS, dispatchControl } from "./contract.ts";
 import {
   CONTROL_MCP_PATH,
@@ -179,13 +180,24 @@ function buildMcpServer(backend: ControlBackend): McpServer {
         outputSchema: entry.result,
         annotations: {
           readOnlyHint: entry.readOnly,
-          idempotentHint: entry.readOnly,
+          idempotentHint: entry.readOnly || entry.tool === MAILBOX_TOOL,
           openWorldHint: false,
         },
       },
-      async (params: unknown) => {
+      async (params: unknown, extra) => {
         try {
-          const result = await dispatchControl(backend, method, params);
+          const metadata = extra._meta;
+          const hasCaller =
+            entry.tool === MAILBOX_TOOL &&
+            metadata &&
+            ("threadId" in metadata || "callId" in metadata);
+          const caller = hasCaller
+            ? mailboxCallerSchema.parse({
+                threadId: metadata["threadId"],
+                callId: metadata["callId"],
+              })
+            : undefined;
+          const result = await dispatchControl(backend, method, params, caller);
           return {
             content: [{ type: "text", text: JSON.stringify(result) }],
             structuredContent: result as Record<string, unknown>,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MailboxEventName } from "../mailbox/contract.ts";
 import type { ConversationNotification } from "./conversation.ts";
 import type { VoiceNotification } from "./voice.ts";
 
@@ -58,7 +59,13 @@ export type ConversationEvent = {
   event: string;
   data: ConversationNotification["data"] & EventContext & { revision: number };
 };
-export type ControllerEvent = LifecycleEvent | VoiceEvent | ConversationEvent;
+export type MailboxEvent = {
+  v: typeof EVENT_PROTOCOL_VERSION;
+  type: "event";
+  event: MailboxEventName;
+  data: EventContext & Record<string, unknown>;
+};
+export type ControllerEvent = LifecycleEvent | VoiceEvent | ConversationEvent | MailboxEvent;
 
 export const emptyEventParams = z.object({}).strict();
 export const eventSubscriptionSchema = z

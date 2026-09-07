@@ -160,8 +160,9 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
-  No audio/bearer capabilities or mutation/MCP methods. Runtime replacement resets
-  inventory; stale incarnations never publish into a successor or another call. See docs/events.md.
+  No audio/bearer capabilities or mutation/MCP methods. The separate mailbox
+  snapshot/replay is controller-owned and survives runtime replacement. Replacement resets
+  native inventory; stale incarnations never publish into a successor or another call. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
@@ -176,10 +177,20 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   loopback Streamable HTTP MCP projection, and private live-controller discovery
   for the explicit `mcp-config` export and local attachment bootstrap. Keep the
   MCP and Unix control operations semantically identical.
+- src/mailbox/: verified direct-child lifecycle observation, call-owned completion
+  metadata and count-only wake-ups. Each child terminal turn immediately submits
+  a named standalone tool output through native turn/start; multiple pending
+  notices are expected. The control/MCP mailbox opening atomically consumes only
+  returned entries, caches opening results by operation ID, and never creates
+  per-message receipts. Working counts are fresh native snapshots, not cleared
+  counters. Mailbox state/replay survives runtime replacement; stale generations
+  cannot publish or consume. Native owns full child results. See ADR 0026 and
+  docs/thread-mailbox.md for capacity, ancestry, caller and retry boundaries.
 - src/core/runtime.ts: launch, exact restart resume, voice session, owned child
   lifecycle and runtime-cached settings. No account selection/rotation, custom
-  worker manager, in-call Fresh or custom turn submission except an explicit
-  controller-owned restart handoff via native turn/start (ADR 0016).
+  worker manager or in-call Fresh. Custom native turn submissions are limited to
+  explicit controller-owned restart handoffs (ADR 0016) and immediate child
+  completion-tally wake-ups (ADR 0026).
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.
@@ -381,8 +392,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   Native thread resume remains independent of new voice-call context.
   See ADR 0017 for the removal decision and ADRs 0010/0011 for historical probes.
   Fake protocol tests do not establish live silence or audio-heard fidelity.
-- No AgentVoice worker tools, registry, archival, reports or custom turn
-  submission except explicit MCP/API restart handoffs (ADR 0016). Submit once
+- No AgentVoice worker execution tools, registry, archival or result reports.
+  Custom turn submission is limited to explicit MCP/API restart handoffs (ADR
+  0016) and immediate metadata-mailbox tally wake-ups (ADR 0026). For handoffs, submit once
   after exact identity and live media checks; never retry ambiguous acceptance,
   echo the private prompt in status/errors or change prompt defaults.
   Native Codex tools, subagents and voice handoffs stay native.

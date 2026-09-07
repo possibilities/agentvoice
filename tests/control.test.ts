@@ -72,6 +72,9 @@ function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
       runtime: { pid: 42, buildId: "build-a", phase: "ready" },
       recentOperations,
     }),
+    mailboxOpen: async () => {
+      throw new Error("not used");
+    },
     redial: async (request) => accept("redial", "voice", request),
     restart: async (request) => accept("restart", "runtime", request),
   };
@@ -143,7 +146,12 @@ describe("controller control transports", () => {
         startup_timeout_sec: 5,
         tool_timeout_sec: 5,
         required: true,
-        enabled_tools: ["agentvoice_status", "agentvoice_redial", "agentvoice_restart_runtime"],
+        enabled_tools: [
+          "agentvoice_status",
+          "agentvoice_redial",
+          "agentvoice_restart_runtime",
+          "agentvoice_thread_mailbox_open",
+        ],
       });
       const status = await socketRequest(server.socketPath, {
         v: CONTROL_PROTOCOL_VERSION,
