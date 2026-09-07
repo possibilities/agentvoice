@@ -146,15 +146,20 @@ export function validateAttachmentRequest(
         "limit",
         "cwd",
         "sortKey",
+        "sortDirection",
+        "useStateDbOnly",
+        "ancestorThreadId",
         "modelProviders",
         "sourceKinds",
         "archived",
         "searchTerm",
       ]);
       cwd(params["cwd"], identity.workspace);
+      if (params["ancestorThreadId"] != null && params["ancestorThreadId"] !== identity.threadId)
+        throw new Error("Attachment requires an admitted ancestor thread");
       break;
     case "thread/loaded/list":
-      keys(params, []);
+      keys(params, ["cursor", "limit"]);
       break;
     default:
       throw new Error(`Attachment does not support ${method}`);
@@ -165,6 +170,7 @@ export function attachmentResult(
   method: string,
   result: unknown,
   identity: AttachmentIdentity,
+  threads: ReadonlySet<string> = new Set([identity.threadId]),
 ): unknown {
   const data = object(result);
   if (method === "thread/resume") {
@@ -180,11 +186,10 @@ export function attachmentResult(
   if (method === "thread/list" || method === "thread/loaded/list") {
     return {
       ...data,
-      nextCursor: null,
       data: (data["data"] as unknown[]).filter((row) =>
         method === "thread/loaded/list"
-          ? row === identity.threadId
-          : object(row)["id"] === identity.threadId,
+          ? typeof row === "string" && threads.has(row)
+          : typeof object(row)["id"] === "string" && threads.has(object(row)["id"] as string),
       ),
     };
   }

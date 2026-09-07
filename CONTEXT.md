@@ -26,18 +26,21 @@ owned child/process group.
 **Connection** — The runtime-private native WebSocket RPC channel to that child.
 
 **TUI attachment** — A stock Codex TUI subscribing to the current live
-orchestrator thread through a guarded local gateway. It follows native work and
+orchestrator thread and its verified native descendants through a guarded local
+gateway. It follows native work and
 submits typed input without owning voice or the child. Always available through
 `agentvoice attach`; no launch opt-in or full-access requirement. Fresh, runtime
 replacement and quit revoke it; redial preserves it. Joining preserves the live
 thread's settings; explicit native setting changes and human answers flow through.
 
 **Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
-It validates exact thread/workspace before dispatch, filters unrelated/realtime
+It validates the root or native descendant ancestry in the exact workspace before
+dispatch, filters unrelated/realtime
 notifications, and forwards native human questions and correlated TUI answers.
 Native Codex owns pending requests and replay; AgentVoice never races the TUI
 with a refusal. A private controller bootstrap issues a short-lived admission
-ticket; its native listener credential is never given to the TUI. See ADR 0022.
+ticket; its native listener credential is never given to the TUI. The grant stays
+bound to the root while the TUI navigates subagents. See ADRs 0022/0024.
 
 **Workspace** — The canonical existing root chosen once for this launch. Defaults
 to launch cwd unless explicitly configured or overridden by --workspace. Used

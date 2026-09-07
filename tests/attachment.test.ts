@@ -6,6 +6,7 @@ import { parseSpeechArgs, sendSpeech } from "../scripts/voice-speak.ts";
 import { AttachmentGateway, type AttachmentTicket } from "../src/attachment/gateway.ts";
 import { attachmentArgv } from "../src/attachment/launcher.ts";
 import { attachmentNotification, validateAttachmentRequest } from "../src/attachment/policy.ts";
+import type { ReadAttachmentThread } from "../src/attachment/scope.ts";
 import { AppServerConnection } from "../src/core/attach.ts";
 import { resolveNativeExecutable } from "../src/core/native-listener.ts";
 import { parseArgs } from "../src/main.ts";
@@ -26,7 +27,11 @@ async function until(predicate: () => boolean) {
   for (let i = 0; i < 200 && !predicate(); i++) await Bun.sleep(5);
   expect(predicate()).toBe(true);
 }
-function fixture(holdUnsubscribe = false, rejectSpeech = false) {
+function fixture(holdUnsubscribe = false, rejectSpeech = false, readThread?: ReadAttachmentThread) {
+  const threads = new Map<string, Record<string, unknown>>([
+    [identity.threadId, { id: identity.threadId, cwd: identity.workspace }],
+  ]);
+  const reads: string[] = [];
   const calls: Record<string, unknown>[] = [];
   const held: Array<() => void> = [];
   const peers = new Set<import("bun").ServerWebSocket<undefined>>();
@@ -66,11 +71,15 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false) {
                 result:
                   frame.method === "thread/read" || frame.method === "thread/resume"
                     ? {
-                        thread: { id: identity.threadId, cwd: identity.workspace },
+                        thread: threads.get(frame.params.threadId),
                         approvalPolicy: "never",
                         sandbox: { type: "dangerFullAccess" },
                       }
-                    : {},
+                    : frame.method === "thread/loaded/list"
+                      ? { data: [...threads.keys()], nextCursor: null }
+                      : frame.method === "thread/list"
+                        ? { data: [...threads.values()], nextCursor: "next-native-page" }
+                        : {},
               }),
             );
           if (holdUnsubscribe && frame.method === "thread/unsubscribe") held.push(respond);
@@ -82,6 +91,11 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false) {
   const gateway = new AttachmentGateway(
     { url: `ws://127.0.0.1:${native.port}`, token: "native-private" },
     "/stock/codex",
+    async (threadId) => {
+      reads.push(threadId);
+      if (readThread) return readThread(threadId, 2_000);
+      return { thread: threads.get(threadId) };
+    },
   );
   async function client(ticket: AttachmentTicket) {
     const headers = { Authorization: `Bearer ${ticket.token}` };
@@ -100,6 +114,8 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false) {
   }
   return {
     gateway,
+    threads,
+    reads,
     calls,
     peers,
     client,
@@ -114,6 +130,199 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false) {
 }
 
 describe("guarded TUI attachment", () => {
+  test("subagent navigation lists verified descendants, resumes without overrides, and returns to root", async () => {
+    const f = fixture();
+    f.threads.set("child", {
+      id: "child",
+      cwd: identity.workspace,
+      parentThreadId: identity.threadId,
+      status: { type: "idle" },
+    });
+    f.threads.set("grandchild", {
+      id: "grandchild",
+      cwd: identity.workspace,
+      parentThreadId: "child",
+    });
+    f.threads.set("unrelated", { id: "unrelated", cwd: identity.workspace });
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      let id = 1;
+      const call = async (method: string, params: Record<string, unknown>) => {
+        const requestId = ++id;
+        client.socket.send(JSON.stringify({ id: requestId, method, params }));
+        await until(() => client.frames.some((frame) => frame["id"] === requestId));
+        const frame = client.frames.find((frame) => frame["id"] === requestId)!;
+        expect(frame["error"]).toBeUndefined();
+        return frame["result"] as Record<string, unknown>;
+      };
+      expect((await call("thread/loaded/list", {}))["data"]).toEqual([
+        identity.threadId,
+        "child",
+        "grandchild",
+      ]);
+      const list = await call("thread/list", {
+        cwd: identity.workspace,
+        ancestorThreadId: identity.threadId,
+        sortDirection: "desc",
+        useStateDbOnly: true,
+        sourceKinds: ["subAgentThreadSpawn"],
+        limit: 100,
+      });
+      expect(list["nextCursor"]).toBe("next-native-page");
+      expect((list["data"] as { id: string }[]).map((row) => row.id)).toEqual([
+        identity.threadId,
+        "child",
+        "grandchild",
+      ]);
+      for (const threadId of [identity.threadId, "child", "grandchild", identity.threadId]) {
+        await call("thread/read", { threadId, includeTurns: false });
+        await call("thread/resume", {
+          threadId,
+          model: "local-default",
+          approvalPolicy: "never",
+          excludeTurns: true,
+        });
+        expect(
+          f.calls.filter((frame) => frame["method"] === "thread/resume").at(-1)?.["params"],
+        ).toEqual({ threadId, excludeTurns: true });
+        await call("thread/turns/list", { threadId, limit: 1 });
+      }
+      await call("turn/start", { threadId: "child", input: [{ type: "text", text: "Follow up" }] });
+      await call("thread/settings/update", { threadId: "child", approvalPolicy: "on-request" });
+      for (const threadId of ["grandchild", "child", identity.threadId])
+        await call("thread/unsubscribe", { threadId });
+      const closed = new Promise<number>((resolve) =>
+        client.watch.addEventListener("close", (event) => resolve(event.code), { once: true }),
+      );
+      client.socket.terminate();
+      expect(await closed).toBe(1000);
+    } finally {
+      f.close();
+    }
+  });
+  test("discovers descendant notifications and questions before lookup, preserving resolution order", async () => {
+    const f = fixture();
+    f.threads.set("child", {
+      id: "child",
+      cwd: identity.workspace,
+      parentThreadId: identity.threadId,
+    });
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      const frames = [
+        { method: "thread/started", params: { thread: f.threads.get("child") } },
+        { method: "item/agentMessage/delta", params: { threadId: "child", delta: "hello" } },
+        {
+          id: "child-question",
+          method: "item/tool/requestUserInput",
+          params: { threadId: "child" },
+        },
+      ];
+      for (const frame of frames) for (const peer of f.peers) peer.send(JSON.stringify(frame));
+      await until(() => client.frames.length === 4);
+      expect(client.frames.slice(1)).toEqual(frames);
+      client.socket.send(JSON.stringify({ id: "child-question", result: { answers: {} } }));
+      await until(() => f.calls.some((frame) => frame["id"] === "child-question"));
+      for (const peer of f.peers) {
+        peer.send(
+          JSON.stringify({
+            id: "resolved-child",
+            method: "item/permissions/requestApproval",
+            params: { threadId: "child" },
+          }),
+        );
+        peer.send(
+          JSON.stringify({
+            method: "serverRequest/resolved",
+            params: { threadId: "child", requestId: "resolved-child" },
+          }),
+        );
+        peer.send(
+          JSON.stringify({ method: "thread/realtime/started", params: { threadId: "child" } }),
+        );
+        peer.send(
+          JSON.stringify({
+            method: "item/agentMessage/delta",
+            params: { threadId: "unrelated", delta: "private" },
+          }),
+        );
+      }
+      await until(() =>
+        client.frames.some((frame) => frame["method"] === "serverRequest/resolved"),
+      );
+      client.socket.send(JSON.stringify({ id: "resolved-child", result: { decision: "accept" } }));
+      client.socket.send(
+        JSON.stringify({ id: 8, method: "thread/read", params: { threadId: identity.threadId } }),
+      );
+      await until(() => client.frames.some((frame) => frame["id"] === 8));
+      expect(f.calls.some((frame) => frame["id"] === "resolved-child")).toBe(false);
+      expect(client.frames.some((frame) => frame["method"] === "thread/realtime/started")).toBe(
+        false,
+      );
+      expect(JSON.stringify(client.frames)).not.toContain("private");
+    } finally {
+      f.close();
+    }
+  });
+  test("rejects unrelated mutations and descendant realtime before native dispatch", async () => {
+    const f = fixture();
+    f.threads.set("child", {
+      id: "child",
+      cwd: identity.workspace,
+      parentThreadId: identity.threadId,
+    });
+    f.threads.set("unrelated", { id: "unrelated", cwd: identity.workspace });
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      for (const [index, [method, params]] of [
+        ["thread/read", { threadId: "unrelated", includeTurns: true }],
+        ["thread/resume", { threadId: "unrelated" }],
+        ["thread/list", { ancestorThreadId: "unrelated" }],
+        ["turn/start", { threadId: "unrelated", input: [{ type: "text", text: "no" }] }],
+        ["thread/realtime/appendSpeech", { threadId: "child", text: "no" }],
+        ["thread/archive", { threadId: "child" }],
+      ].entries()) {
+        const id = index + 2;
+        client.socket.send(JSON.stringify({ id, method, params }));
+        await until(() => client.frames.some((frame) => frame["id"] === id));
+        expect(client.frames.find((frame) => frame["id"] === id)?.["error"]).toBeDefined();
+      }
+      expect(
+        f.calls.every((frame) => ["initialize", "initialized"].includes(frame["method"] as string)),
+      ).toBe(true);
+      expect(f.reads).not.toContain("child");
+    } finally {
+      f.close();
+    }
+  });
+  test("revocation fences queued requests and notifications awaiting descendant admission", async () => {
+    const read = Promise.withResolvers<unknown>();
+    const f = fixture(false, false, () => read.promise);
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      client.socket.send(
+        JSON.stringify({ id: 2, method: "thread/resume", params: { threadId: "child" } }),
+      );
+      for (const peer of f.peers)
+        peer.send(
+          JSON.stringify({
+            method: "item/agentMessage/delta",
+            params: { threadId: "child", delta: "stale" },
+          }),
+        );
+      await until(() => f.reads.length > 0);
+      f.gateway.revoke();
+      read.resolve({
+        thread: { id: "child", cwd: identity.workspace, parentThreadId: identity.threadId },
+      });
+      await until(() => client.socket.readyState === WebSocket.CLOSED);
+      expect(f.calls.some((frame) => frame["method"] === "thread/resume")).toBe(false);
+      expect(JSON.stringify(client.frames)).not.toContain("stale");
+    } finally {
+      read.resolve({});
+      f.close();
+    }
+  });
   test("resolves a relative executable against the voice workspace", () => {
     const root = mkdtempSync(join(tmpdir(), "av-executable-"));
     try {
@@ -356,6 +565,32 @@ describe("guarded TUI attachment", () => {
         expect(await closed).toBe(revoke ? 4001 : 1000);
         await until(() => f.peers.size === 0);
       }
+    } finally {
+      f.close();
+    }
+  });
+  test("stock TUI quit unsubscribes only the displayed agent even with other subscriptions", async () => {
+    const f = fixture();
+    f.threads.set("child", {
+      id: "child",
+      cwd: identity.workspace,
+      parentThreadId: identity.threadId,
+    });
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      for (const [index, [method, threadId]] of [
+        ["thread/resume", identity.threadId],
+        ["thread/resume", "child"],
+        ["thread/unsubscribe", "child"],
+      ].entries()) {
+        client.socket.send(JSON.stringify({ id: index + 2, method, params: { threadId } }));
+        await until(() => client.frames.length === index + 2);
+      }
+      const closed = new Promise<number>((resolve) =>
+        client.watch.addEventListener("close", (event) => resolve(event.code), { once: true }),
+      );
+      client.socket.terminate();
+      expect(await closed).toBe(1000);
     } finally {
       f.close();
     }

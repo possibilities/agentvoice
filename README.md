@@ -109,15 +109,19 @@ after upgrading an older controller to use this behavior. Attaching preserves
 the live thread's settings, including restricted permissions; the TUI's local
 startup defaults do not replace them.
 
-The attachment gateway permits selected-thread reads, typed turns, interruption,
-and native session settings, including permission changes. New/forked threads, history mutations,
+The attachment gateway permits reads, typed turns, interruption, and native
+session settings for the selected orchestrator and its verified native descendants
+in the same workspace. `/subagents` can discover and view those agents, including
+completed agents with native history; Codex controls whether they accept direct input.
+New/forked threads, history mutations,
 persistent configuration/account changes, plugin controls and realtime control
 are unsupported. The TUI does not show a live voice transcript or carry audio.
 It shows native command/file/permission approvals, tool questions and MCP
-elicitations for the selected thread, and forwards your answers to Codex.
+elicitations for those threads, and forwards your answers to Codex.
 AgentVoice leaves those questions pending in native Codex when no TUI is
 attached; attaching later replays them. The gateway checks requests before
-forwarding them, preserving the selected workspace/thread.
+forwarding them. Navigation never changes the attachment's root grant, and unrelated
+threads remain inaccessible. Explicit speech submission remains root-only.
 
 Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
 interrupt or running-task Exit action can interrupt native work. Redial preserves
@@ -758,6 +762,25 @@ Unit tests use fake protocol/media boundaries and no microphone or inference.
 The native probe starts its own stock child, initializes, lists workspace
 history, and closes—no turns or audio. `audio:probe` uses hardware and requires
 an explicit live check.
+
+`CODEX_PATH=/absolute/path/to/codex bun scripts/attachment-tui-probe.ts` starts an
+opt-in macOS fixture with disposable state, a localhost fake Responses API,
+external network denied for the native child, and no audio. Its `subagent` then
+`owner` commands create a native subagent using a scripted tool call; the fixture
+explicitly enables multi-agent v2. Use the printed workspace, `nativeHome` and
+state directory to attach an isolated stock TUI. In the September 6, 2026 check
+with Codex 0.153.4, `/subagents` listed a completed child, opened its saved reply,
+retained native direct-input restrictions, and returned to Main. The TUI was also
+restricted to loopback/Unix sockets. “No sub-agents running” remains normal once
+all children have completed.
+
+The navigation request audit used upstream tag `rust-v0.153.4`
+(`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`), specifically
+`codex-rs/tui/src/app/agent_picker.rs`, `app/session_lifecycle.rs`,
+`app/loaded_threads.rs` and `app_server_session.rs`. The gateway admits the
+picker's ancestry-filtered list fields and verifies each result independently;
+see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
+
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for the ownership decision.
 
