@@ -86,8 +86,9 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   foreground child. Read-only frontend observation gates attachments on this
   client's correlation ID, live media and exact workspace/thread. Correlation is
   not authorization. Observer disconnect cannot close a call or send input.
-  Preserve divider revisions, show disconnected attachments without automatic
-  relaunch, and never open audio/inference in composition tests.
+  Preserve divider revisions. Any pane app exiting or failing ends the entire
+  composition and call, including attachment revocation during runtime restart;
+  never automatically relaunch attachments or open audio/inference in composition tests.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.

@@ -11,13 +11,14 @@ monochrome YOU/AGENT buttons, plus PUSH TO TALK when the microphone is muted.
 The two attachment panes show “Waiting for voice connection” until this launch's
 call reaches `live`, then attach to its exact workspace and thread. All three
 apps run in local PTYs owned by the foreground smolmux process. Closing that
-process ends the panes and call; nothing persists in smolmux's Companion.
+process or exiting any pane app ends all panes and the call; nothing persists
+in smolmux's Companion. App failures also end the composition.
 Press Ctrl+C twice within three seconds to exit the entire composition. The
 first press shows a centered one-row overlay without resizing panes. Ctrl+C
 is reserved for this exit action and never reaches the individual apps.
 Divider drags survive placeholder replacement. Keyboard focus moves to the
-working agent when it opens. An attachment that exits shows a disconnected
-placeholder and is not automatically relaunched, including after runtime restart.
+working agent when it opens. Attachments are not automatically relaunched;
+an attachment exit after runtime restart also ends the composition.
 
 Bare `agentvoice` requires smolmux 0.9.2 or newer with its local PTY helper,
 and `codex-viewer`, on PATH. Their existing installers own those dependencies;

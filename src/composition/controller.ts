@@ -51,17 +51,10 @@ export class Composition {
     if (frame["event"] !== "app.state") return;
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (!["exited", "failed"].includes(app.state)) return;
-    if (app.name === "client") {
-      this.stop(app.state === "failed" ? new Error(app.error ?? "Voice client failed") : undefined);
-      return;
-    }
-    const index = names.indexOf(app.name as (typeof names)[number]);
-    if (index > 0)
-      this.enqueue(async () => {
-        await replacePane(this.mux, index, {
-          text: `${app.name === "voice" ? "Voice transcript" : "Agent"} disconnected`,
-        });
-      });
+    if (!names.includes(app.name as (typeof names)[number])) return;
+    this.stop(
+      app.state === "failed" ? new Error(app.error ?? `${app.name} app failed`) : undefined,
+    );
   }
   private async create(index: number, args: string[], env: Record<string, string> = {}) {
     if (this.stopped) return;
