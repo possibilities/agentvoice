@@ -851,6 +851,85 @@ query, `COLORFGBG`, then dark. Live terminal theme changes swap the complete
 fixed palette. Waveform trails use the five grayscale steps; they never sample
 the host palette. Animation stops while paused, unfocused, or using commands.
 
+### Persona lab
+
+`bun run personas` opens eight audio-reactive variations alongside the original
+`bun run waveforms` experiments. The standalone lab uses the same fxnk style and
+OpenTUI renderer, with explicit `idle`, `listening`, `thinking`, `speaking`, and
+`asleep` states inspired by [AI Elements Persona](https://github.com/vercel/ai-elements/blob/main/packages/elements/src/persona.tsx).
+Waveform waterfall, phosphor scope, braided harmonics, FM ribbon, phase rose,
+radial pulses, standing waves, and Lissajous loops each respond to speech in a
+different way. RMS, peaks, sixteen frequency bands, and attack detection drive
+their geometry; conversation state is always supplied explicitly.
+
+```sh
+bun run personas
+bun run personas --variant rose --view sizes
+bun run personas --wav speech.wav --state speaking
+bun run personas --mic
+```
+
+The default demo analyzes two bundled, locally synthesized speech clips with
+an authored conversation timeline. Demo and WAV replay are **silent**: the PCM
+drives the visuals without opening a speaker. WAV input supports mono/stereo
+PCM16 and float32 at 8–96 kHz, bounded to 24 MiB and 20 ms–120 seconds. The lab
+does not start a voice call, connect to the server, or run Codex.
+
+`--mic` explicitly opens the existing native duplex device for microphone
+input (requires `bun run native:build` and OS microphone permission). Its
+playback side receives no samples. Capture stops on pause, terminal blur,
+opening commands, and exit; returning to an active view resumes it. Nothing
+is recorded. An unavailable source is reported visibly and is not retried.
+
+Arrows or `h/j/k/l` select a variation; Enter opens its voice card. `v` compares
+the same persona at **12 × 4**, **24 × 1**, and pane size. `1`–`5` select states;
+`a` restores the demo conversation cycle. Space pauses, `[` / `]` seek by two
+seconds, and `r` replays. Escape returns to the gallery; `q` or Ctrl+C quits.
+Every full-view control accepts clicks. Ctrl+K or `?` opens searchable commands
+when controls are folded away. Tiny panes keep a compact visual on screen;
+click the visual or use arrows to cycle variations.
+
+The visual itself is reusable independently of the lab:
+
+```ts
+import { AudioAnalyzer, Persona } from "./scripts/personas/persona.ts";
+
+const input = new AudioAnalyzer(48_000);
+const output = new AudioAnalyzer(48_000);
+const persona = new Persona(renderer, {
+  state: "listening",
+  variant: "rose",
+  width: 12,
+  height: 4,
+  theme: "dark",
+});
+renderer.root.add(persona);
+
+// From an explicitly owned audio source; Float32Array mono samples in [-1, 1].
+persona.audio = { input: input.push(samples) };
+persona.state = "thinking";
+// While speaking, supply output frames from a separate analyzer.
+persona.audio = { output: output.push(outputSamples) };
+persona.state = "speaking";
+```
+
+`Persona` exposes mutable `state`, `variant`, `audio`, and `paused` properties,
+standard OpenTUI layout options, and `setTheme("light" | "dark")`. It owns no
+controls or audio source. The host supplies both the theme and conversation
+state. `AudioAnalyzer` emits fresh feature frames on fixed 20 ms hops; frames
+and their arrays are read-only after publication. Listening uses input frames,
+speaking uses output, and other states use their own motion. Missing frames
+decay to quiet after 120 ms. Samples and visual histories stay bounded; each
+stream should have its own analyzer, replaced when the source changes.
+Feature frames carry a stream identity, hop revision, and the last attack's
+revision and strength, so a render can consume an attack once even when several
+audio hops arrive between paints. Old attacks expire after five analysis hops.
+
+This establishes an experimental component API, not a live AgentVoice frontend
+integration. The production pointer frontend and its audio-free protocol remain
+unchanged. Tests use speech fixtures and fake capture devices, never hardware;
+they do not establish live microphone fidelity or audible playback timing.
+
 ### Checks
 
 ```sh
