@@ -548,12 +548,10 @@ agentvoice server --role ./roles/researcher
 or a directory path. The `role` key in `server.json` is the file-level default;
 `--role` overrides it. Names use letters, digits, `_` and `-` only.
 
-The repository includes a minimal role at `roles/default` with a no-op
-`role-smoke-test` skill. Select it with `agentvoice server --role ./roles/default`
-from the repository directory, then ask to use `$role-smoke-test` to check
-discovery. It contains no prompt overrides or MCP configuration. It is not
-automatically selected when `--role` and the config's `role` key are absent.
-The manager-priming skill will be developed separately.
+Select the repository's `roles/default` role with
+`agentvoice server --role ./roles/default` from the repository directory.
+It is not automatically selected when `--role` and the config's `role` key
+are absent.
 
 | Role file | Effect in AgentVoice |
 | --- | --- |
