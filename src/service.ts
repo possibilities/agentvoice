@@ -197,6 +197,16 @@ export class VoiceService {
       throw new Error(`Refusing a loaded job with an unrelated plist: ${this.target}`);
     return result;
   }
+  private async unload(): Promise<void> {
+    await this.run(["bootout", this.target]);
+    // bootout can acknowledge while launchd is still unregistering the job.
+    // Do not bootstrap its successor until that namespace entry is gone.
+    const deadline = Date.now() + 65_000;
+    while (await this.loaded()) {
+      if (Date.now() >= deadline) throw new Error("LaunchAgent did not finish unloading");
+      await Bun.sleep(100);
+    }
+  }
   async status(): Promise<string> {
     const { directory, plist, logs } = servicePaths(this.options);
     safeAncestors(directory);
@@ -233,7 +243,7 @@ export class VoiceService {
         ownedDirectory(join(this.options.stateDir, "default"));
         ownedDirectory(logs);
         prepareLogs(next);
-        if (loaded) await this.run(["bootout", this.target]);
+        if (loaded) await this.unload();
         let published = false;
         try {
           if (readManaged(plist) !== previous)
@@ -262,11 +272,11 @@ export class VoiceService {
           throw error;
         }
       } else if (action === "remove") {
-        if (loaded) await this.run(["bootout", this.target]);
+        if (loaded) await this.unload();
         unlinkSync(plist);
       } else {
         prepareLogs(previous!);
-        if (loaded) await this.run(["bootout", this.target]);
+        if (loaded) await this.unload();
         await this.run(["enable", this.target]);
         await this.run(["bootstrap", `gui/${this.options.uid}`, plist]);
       }

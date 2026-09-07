@@ -30,6 +30,8 @@ function fixture() {
   let loadedPath: string | undefined;
   let failure: string | undefined;
   let failPublication = false;
+  let delayUnload = false;
+  let unregistering = 0;
   const calls: string[][] = [];
   const options: ServiceOptions = {
     home,
@@ -50,7 +52,7 @@ function fixture() {
         return { code: 5, out: "", err: "injected failure" };
       }
       if (args[0] === "print")
-        return loaded
+        return loaded || unregistering-- > 0
           ? {
               code: 0,
               out: `path = ${loadedPath ?? servicePaths(options).plist}\nstate = running\npid = 123\n`,
@@ -58,11 +60,13 @@ function fixture() {
             }
           : { code: 113, out: "", err: "Could not find service" };
       if (args[0] === "bootstrap") {
+        if (unregistering > 0) return { code: 5, out: "", err: "job still unregistering" };
         chmodSync(servicePaths(options).directory, 0o755);
         loaded = true;
       }
       if (args[0] === "bootout") {
         loaded = false;
+        if (delayUnload) unregistering = 2;
         if (failPublication) {
           failPublication = false;
           chmodSync(servicePaths(options).directory, 0o500);
@@ -77,6 +81,9 @@ function fixture() {
     service: new VoiceService(options),
     paths: servicePaths(options),
     loaded: () => loaded,
+    delayUnload: () => {
+      delayUnload = true;
+    },
     failPublication: () => {
       failPublication = true;
     },
@@ -206,4 +213,22 @@ test("restart checks persisted log destinations even when the invoking state dir
   const calls = f.calls.length;
   await expect(f.service.change("restart")).rejects.toThrow("Unsafe private file");
   expect(f.calls.slice(calls).every((args) => args[0] === "print")).toBe(true);
+});
+
+test("restart waits for launchd to unregister the old job before bootstrap", async () => {
+  const f = fixture();
+  await f.service.change("install");
+  f.delayUnload();
+  const start = f.calls.length;
+  await f.service.change("restart");
+  expect(f.loaded()).toBe(true);
+  expect(f.calls.slice(start).map((args) => args[0])).toEqual([
+    "print",
+    "bootout",
+    "print",
+    "print",
+    "print",
+    "enable",
+    "bootstrap",
+  ]);
 });
