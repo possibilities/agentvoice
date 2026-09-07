@@ -16,6 +16,8 @@ const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
   agentvoice server [options]       Wait for a frontend to start a call
+  agentvoice service status|restart|remove
+                                   Manage the default macOS LaunchAgent
   agentvoice [--workspace <dir>]    Connect and start a call
   agentvoice attach [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
@@ -25,7 +27,7 @@ Usage:
                                    Print a live read-only event socket
 
 Server options:
-  --workspace <dir>        Conversation root (default: launch directory)
+  --workspace <dir>        Explicit conversation root (default: managed workspace)
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
   --continue              Continue the latest eligible conversation for each call
   --resume <id>            Resume this exact conversation for each call
@@ -46,8 +48,8 @@ Server options:
   --debug                 Private per-call protocol/media log
   --help                  Show help
 
-Run the server and frontend in separate terminals, selecting the same workspace.
-The server stays in the foreground and opens no audio or Codex child while waiting.
+The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
+For manual use, run agentvoice server. It opens no audio or Codex child while waiting.
 Closing the frontend ends its call; the server returns to waiting.
 The frontend has pointer controls only: microphone, speaker and hold-to-talk.
 Terminate its process or close its terminal to end a call. There are no app keybindings.
@@ -322,7 +324,8 @@ async function runServerCommand(argv: string[]): Promise<number> {
   await runServer(
     { parsed: command.parsed, options: command.options, launchCwd: process.cwd() },
     VERSION,
-    config.orchestrator.workspace,
+    config.managedWorkspace ? undefined : config.orchestrator.workspace,
+    command.parsed.values["workspace"] === undefined ? undefined : config.orchestrator.workspace,
   );
   return 0;
 }
@@ -351,6 +354,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         "AgentVoice account management has been retired. Use codex login (optionally with CODEX_HOME set), then launch AgentVoice with the same environment. Existing profiles and credentials are untouched; see README migration notes.",
       );
     if (command === "server") return await runServerCommand(argv.slice(1));
+    if (command === "service") {
+      const action = argv[1];
+      if (argv.length !== 2 || !["status", "restart", "remove"].includes(action ?? ""))
+        throw new UsageError("Usage: agentvoice service status|restart|remove");
+      const { VoiceService, serviceOptions } = await import("./service.ts");
+      const service = new VoiceService(serviceOptions(import.meta.path));
+      if (action === "restart" || action === "remove") await service.change(action);
+      console.log(await service.status());
+      return 0;
+    }
     if (command === "resident" || command === "remote" || command === "console") {
       throw new UsageError(
         `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
@@ -364,10 +377,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(USAGE);
       return 0;
     }
-    const selected = parseMcpConfigCommand(argv);
-    if (selected.help) return 0;
+    const selected =
+      frontendFlags.values["workspace"] === undefined ? undefined : parseMcpConfigCommand(argv);
+    if (selected?.help) return 0;
     const { runFrontend } = await import("./frontend/client.ts");
-    await runFrontend(selected.workspace);
+    await runFrontend(selected?.workspace);
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

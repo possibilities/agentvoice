@@ -48,7 +48,7 @@ export const orchestratorValuesSchema = z
     workspace: z
       .string()
       .describe(
-        "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: launch cwd. --workspace overrides this value.",
+        "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: current directory under the XDG state agentvoice/default/workspaces base, selected per call. --workspace overrides this value.",
       )
       .optional(),
     model: z

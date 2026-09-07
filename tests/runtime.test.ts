@@ -321,7 +321,10 @@ describe("launch configuration and reported identity", () => {
       }),
     );
     writeFileSync(promptPath, "launch prompt");
-    const config = await loadLaunchConfig(parseArgs(["--config", configPath]), h.directory);
+    const config = await loadLaunchConfig(
+      parseArgs(["--workspace", h.directory, "--config", configPath]),
+      h.directory,
+    );
     const runtime = new VoiceRuntime(config, "test", h.events, h.runtimeOptions);
     const offer = async () => {
       await runtime.offer("sdp");

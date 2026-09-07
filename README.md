@@ -17,7 +17,7 @@ that this frontend cannot implement; passthrough is not a claim of feature parit
 ## Start here
 
 From a prepared checkout (Bun dependencies and native audio already built), run
-these in separate terminals from the same workspace:
+these in separate terminals:
 
 ```sh
 # Terminal 1: waits without opening audio or starting Codex
@@ -27,7 +27,9 @@ bun run /path/to/agentvoice/src/main.ts server
 bun run /path/to/agentvoice/src/main.ts
 ```
 
-Once installed, use `agentvoice server` and `agentvoice`. To choose a workspace,
+On macOS, installation starts the default server as a user LaunchAgent. Run
+`agentvoice` whenever you want a call. For manual use, run `agentvoice server`.
+To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, device, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
@@ -37,8 +39,21 @@ One server and one active frontend are allowed per canonical workspace. Closing
 the frontend terminal or terminating its process ends the call, closes audio
 and the owned Codex child, and returns the server to waiting. There are no
 application keybindings, including quit; process signals still perform cleanup.
-The server remains a foreground process, with no automatic service installation.
-Warnings and detailed failure reasons appear in the server terminal.
+The default endpoint is independent of the current workspace generation. Without
+`--workspace`, both commands use that endpoint from any launch directory.
+Warnings and detailed failure reasons go to private service logs, or the terminal
+when running the server manually.
+
+```sh
+agentvoice service status
+agentvoice service restart
+agentvoice service remove
+```
+
+Restart ends an active call and returns the server to waiting. Removal unloads
+only the owned LaunchAgent and removes its plist; workspace directories, logs,
+configuration, command installation and native history remain. The TUI does not
+automatically reconnect after server loss.
 
 To connect Claude Code or MCP Inspector to one controller that is already
 running, export its authenticated MCP client configuration:
@@ -220,7 +235,22 @@ are separate runtime prerequisites. It runs `bun install --frozen-lockfile`, bui
 native audio to a temporary file, then atomically links `~/.local/bin/agentvoice`
 directly to `src/main.ts` and records the commit in
 `~/.local/state/agentvoice/deployed-sha` (`XDG_STATE_HOME` honored). The link preserves
-caller cwd. TypeScript edits are live; native source changes need a rebuild.
+caller cwd. On macOS, it then installs `~/Library/LaunchAgents/dev.agentvoice.default.plist`
+and bootstraps the waiting server in the logged-in user's GUI domain. Rerunning
+installation restarts that job and ends any active call. The job runs while
+logged in; sleep suspends it. A manual default server must be stopped before
+installing, since it owns the same socket.
+
+The plist pins absolute Bun and source entrypoint paths, uses the user's home
+as launch cwd, and captures PATH plus configured XDG, CODEX_HOME, CODEX_PATH and
+AGENTROLES_HOME environment entries. Unset CODEX_HOME stays unset. It copies no
+credentials or arbitrary shell environment; settings come from the normal config
+file. Relative file settings resolve from the service's launch cwd. Diagnostics
+are private `default/service/stdout.log` and `stderr.log` files under AgentVoice
+state. `service status` reports launchd state, not audio readiness. Background
+microphone permission must be established for this launch context on first use.
+
+TypeScript edits are live; native source changes need a rebuild.
 This is an editable checkout, not an immutable deployment or rollback of dependencies.
 
 Rerunning is safe: unrelated files/links, unsafe paths/receipts and dirty source
@@ -233,16 +263,43 @@ any stale `.install-lock`; check for a running installer before manual removal.
 If another command shadows the link on PATH, installation warns without deleting it.
 
 For disposable tests or alternate destinations, set absolute
-`AGENTVOICE_INSTALL_BIN_DIR` and `AGENTVOICE_INSTALL_STATE_DIR` paths. The installer
-changes no services, prompts, skills, credentials, Codex configuration or shell
-profiles, and does not launch the TUI.
+`AGENTVOICE_INSTALL_BIN_DIR` and `AGENTVOICE_INSTALL_STATE_DIR` paths, and pass
+`--command-only` to avoid touching the user's LaunchAgent. These two overrides
+move only command publication and its receipt; service state follows XDG_STATE_HOME.
+Non-macOS installations publish the command only. No prompts, skills, credentials,
+Codex configuration or shell profiles are changed, and installation never starts
+the TUI or a voice call. An unrelated or edited plist is refused. A service failure
+is reported separately if command publication already succeeded.
 
 ## Conversations and workspaces
 
-One canonical workspace per launch: `--workspace` > an explicit
-`orchestrator.workspace` in the config > launch cwd. Relative workspace paths
-resolve from launch cwd; relative additional runtime roots resolve from that
-workspace. Symlink paths canonicalize to the same directory.
+One canonical workspace per call: `--workspace` > an explicit
+`orchestrator.workspace` in the config > the current default workspace directory.
+Relative explicit paths resolve from launch cwd; relative additional runtime
+roots resolve from the selected workspace. Explicit symlink paths canonicalize
+to the same directory.
+
+The workspace base is `$XDG_STATE_HOME/agentvoice/default/workspaces/`, falling
+back to `~/.local/state/agentvoice/default/workspaces/`. The newest generation
+name selects the current directory: `YYYY-MM-DDTHH-mm-ss.sssZ-<lowercase-UUID>`.
+Ordering uses names, never directory modification times. Only names matching that
+format participate; the selected directory must be user-owned, not writable by
+other users, and not a symlink. The workspace base is private (mode 0700).
+The initial empty generation is created atomically using the base's creation time
+and a zero UUID, so concurrent initializers agree. Other namespaces are reserved
+for future named voice agents; there is no named-agent selector yet.
+
+The default server selects the current generation at each call start and pins it
+through runtime restarts. A later generation takes effect on the next call; old
+directories and native history remain. There is no reset, deletion or transcript
+cleanup operation. Native context policy is unchanged.
+
+An explicit CLI workspace selects a separate workspace socket; pass the same
+`--workspace` to its server and frontend. A file-configured workspace pins the
+default server's calls while retaining the default endpoint. Workspace settings
+are selected at server startup; restart the service to change that selection.
+Read-only discovery commands and `attach` still accept `--workspace <directory>`;
+their omitted workspace remains the invoking directory.
 
 Ordinary launch starts a new conversation without looking up a previous one.
 Explicit `--continue` lists native unarchived app-server history, newest-updated
@@ -703,7 +760,8 @@ configuration, services or other account tools are changed by this removal.
 
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
-`frontend/` workspace sockets, `thread-locks/`, private per-call controller
+`default/workspaces/` generations, `default/service/` logs,
+`frontend/` default and explicit-workspace sockets, `thread-locks/`, private per-call controller
 discovery records under `control/`, and
 `runs/<time>-<pid>.log` with `--debug`. Every runtime also creates a
 private `native-ws-*` directory holding the owned listener token; normal runtime
@@ -721,8 +779,9 @@ does not restore the retired remote/resident implementation. Remove a retired `r
 your chosen config before launching. Other unknown retired keys are rejected
 by strict config validation.
 
-No installer, uninstall, service stop, history migration or private-state cleanup
-runs automatically. Previously installed LaunchAgents, old logs, pairings,
+The explicit installer manages only its `dev.agentvoice.default` LaunchAgent.
+Normal launches never install services, migrate history or clean private state.
+Previously installed legacy LaunchAgents, old logs, pairings,
 `thread.json` and `workers.json` are untouched and unused by this source.
 An old running service will not honor the new per-thread lock: stop/migrate it
 explicitly before sharing its conversation with this version. This change does

@@ -451,3 +451,35 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("default server CLI creates its generation and waits on the stable endpoint from any cwd", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-default-waiting-")));
+  writeFileSync(join(root, "config.json"), "{}");
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      new URL("../src/main.ts", import.meta.url).pathname,
+      "server",
+      "--config",
+      join(root, "config.json"),
+      "--codex",
+      "/must-not-launch-codex",
+    ],
+    { cwd: root, env: { ...process.env, XDG_STATE_HOME: root }, stdout: "pipe", stderr: "pipe" },
+  );
+  const path = frontendSocketPath(join(root, "agentvoice"));
+  try {
+    await until(() => existsSync(path));
+    expect(child.exitCode).toBeNull();
+    const { currentWorkspace } = await import("../src/workspace.ts");
+    expect(currentWorkspace(join(root, "agentvoice"))).toContain("/default/workspaces/");
+    child.kill("SIGTERM");
+    expect(await child.exited).toBe(0);
+    expect(await new Response(child.stderr).text()).toBe("");
+    expect(existsSync(path)).toBe(false);
+  } finally {
+    child.kill();
+    await child.exited;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

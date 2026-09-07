@@ -19,7 +19,7 @@ export async function connectFrontend(path: string, changed: () => void = () => 
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
       throw new Error(
-        "No AgentVoice server is waiting for this workspace. Run agentvoice server first.",
+        "No AgentVoice server is waiting. Check agentvoice service status, or run agentvoice server with matching --workspace selection.",
       );
     throw error;
   }
@@ -121,7 +121,7 @@ export async function connectFrontend(path: string, changed: () => void = () => 
   };
 }
 
-export async function runFrontend(workspace: string) {
+export async function runFrontend(workspace?: string) {
   let tui: VoiceView | undefined;
   const client = await connectFrontend(
     frontendSocketPath(stateDirectory(process.env, homedir()), workspace),

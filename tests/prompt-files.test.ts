@@ -72,7 +72,7 @@ describe("convention prompt files", () => {
       // The launch directory is the workspace; files there must not load.
       writeFileSync(join(root, PROMPT_FILES.orchestratorSessionStart), "wrong directory");
       const config = await loadLaunchConfig(
-        parseArgs(["--config", "settings/settings.json"]),
+        parseArgs(["--workspace", root, "--config", "settings/settings.json"]),
         root,
       );
       const loaded = await readPrompts(config);

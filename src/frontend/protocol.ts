@@ -20,11 +20,13 @@ export const frontendCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["hold", "release"]) }).strict(),
 ]);
 export type FrontendCommand = z.infer<typeof frontendCommandSchema>;
-export function frontendSocketPath(stateDir: string, workspace: string): string {
+export function frontendSocketPath(stateDir: string, workspace?: string): string {
   return join(
     stateDir,
     "frontend",
-    `${createHash("sha256").update(workspace).digest("hex").slice(0, 24)}.sock`,
+    workspace === undefined
+      ? "default.sock"
+      : `${createHash("sha256").update(workspace).digest("hex").slice(0, 24)}.sock`,
   );
 }
 export function frontendState(state: FrontendState): FrontendState {

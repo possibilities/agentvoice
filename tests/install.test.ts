@@ -53,6 +53,9 @@ function fixture() {
   ]) {
     copyFileSync(join(repository, "scripts", name), join(root, "scripts", name));
   }
+  for (const name of ["service.ts", "paths.ts", "private-files.ts"]) {
+    copyFileSync(join(repository, "src", name), join(root, "src", name));
+  }
   for (const name of ["bun", "git", "dirname", "bash"]) {
     symlinkSync(name === "bun" ? process.execPath : Bun.which(name)!, join(commands, name));
   }
@@ -124,7 +127,10 @@ exit "$FIXTURE_COMPILER_EXIT"
     return command(["git", "rev-parse", "HEAD"]);
   }
   const sha = commit();
-  async function run(args = ["--install"], overrides: Record<string, string | undefined> = {}) {
+  async function run(
+    args = ["--install", "--command-only"],
+    overrides: Record<string, string | undefined> = {},
+  ) {
     const child = Bun.spawn(["/bin/bash", join(root, "scripts/install.sh"), ...args], {
       cwd: base,
       env: { ...env, ...overrides },
@@ -140,8 +146,47 @@ exit "$FIXTURE_COMPILER_EXIT"
     expect(existsSync(join(base, "codex-called"))).toBe(false);
     return { code, out, err };
   }
+  async function runService(failure?: string) {
+    const script = `
+      const { install } = await import(process.env["FIXTURE_ROOT"] + "/scripts/install.ts");
+      const { VoiceService, servicePaths } = await import(process.env["FIXTURE_ROOT"] + "/src/service.ts");
+      const { appendFileSync } = await import("node:fs");
+      let loaded = false;
+      const base = process.env["FIXTURE_BASE"];
+      const options = {
+        home: base, stateDir: base + "/service-state", uid: process.getuid(),
+        bun: process.execPath, entrypoint: process.env["FIXTURE_ROOT"] + "/src/main.ts", env: process.env,
+        launchctl: async (args) => {
+          appendFileSync(base + "/launchctl-calls", JSON.stringify(args) + "\\n");
+          if (args[0] === process.env["FIXTURE_SERVICE_FAILURE"]) return { code: 5, out: "", err: "fixture service failure" };
+          if (args[0] === "print") return loaded
+            ? { code: 0, out: "path = " + servicePaths(options).plist + "\\nstate = running\\n", err: "" }
+            : { code: 113, out: "", err: "missing" };
+          if (args[0] === "bootstrap") loaded = true;
+          if (args[0] === "bootout") loaded = false;
+          return { code: 0, out: "", err: "" };
+        },
+      };
+      await install(new VoiceService(options));
+    `;
+    const child = Bun.spawn([process.execPath, "-e", script], {
+      cwd: base,
+      env: { ...env, FIXTURE_SERVICE_FAILURE: failure },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(existsSync(join(base, "codex-called"))).toBe(false);
+    return { code, out, err };
+  }
   return {
     base,
+    runService,
     root,
     bin,
     state,
@@ -160,7 +205,7 @@ exit "$FIXTURE_COMPILER_EXIT"
 describe("command-only editable installer (isolated checkouts, no microphone or inference)", () => {
   test("the package alias invokes the same installer", () => {
     const f = fixture();
-    f.command([process.execPath, "run", "cli:install"]);
+    f.command([process.execPath, "run", "cli:install", "--command-only"]);
     expect(readlinkSync(f.target)).toBe(f.source);
     expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
     expect(existsSync(join(f.base, "codex-called"))).toBe(false);
@@ -366,4 +411,28 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(result.err).toContain("PATH does not select this command");
     expect(readFileSync(join(f.commands, "agentvoice"), "utf8")).toContain("exit 99");
   });
+});
+
+test("installer publishes command then registers default service with a fake launchctl runner", async () => {
+  const f = fixture();
+  const result = await f.runService();
+  expect(result.code, result.err).toBe(0);
+  expect(readlinkSync(f.target)).toBe(f.source);
+  expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
+  const plist = readFileSync(
+    join(f.base, "Library/LaunchAgents/dev.agentvoice.default.plist"),
+    "utf8",
+  );
+  expect(plist).toContain(f.source);
+  expect(plist).toContain("<string>server</string>");
+  expect(readFileSync(join(f.base, "launchctl-calls"), "utf8")).toContain("bootstrap");
+});
+
+test("service failure is reported distinctly after successful command publication", async () => {
+  const f = fixture();
+  const result = await f.runService("bootstrap");
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("Command installed, but LaunchAgent installation failed");
+  expect(readlinkSync(f.target)).toBe(f.source);
+  expect(existsSync(join(f.base, "Library/LaunchAgents/dev.agentvoice.default.plist"))).toBe(false);
 });

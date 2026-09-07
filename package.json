@@ -8,7 +8,7 @@
   },
   "private": true,
   "type": "module",
-  "description": "Foreground Codex voice TUI with workspace-local native conversations.",
+  "description": "Local Codex voice server and pointer TUI with managed default workspaces.",
   "bin": {
     "agentvoice": "./src/main.ts"
   },

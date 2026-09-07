@@ -570,6 +570,8 @@ export function cliToConfigValues(values: Record<string, string>): ConfigValues 
 export interface ResolveOptions {
   allowFullAccess?: boolean;
   launchCwd?: string;
+  /** Filesystem-selected generation supplied by launch preflight; resolution stays pure. */
+  defaultWorkspace?: string;
   debug?: boolean;
   /** Directory scanned for convention prompt files; defaults to the default config directory. */
   configDir?: string;
@@ -613,7 +615,7 @@ export function resolveConfig(
   }
 
   const launchCwd = options.launchCwd ?? process.cwd();
-  const workspaceValue = pickOrchestrator("workspace") ?? launchCwd;
+  const workspaceValue = pickOrchestrator("workspace") ?? options.defaultWorkspace ?? launchCwd;
   if (!workspaceValue.trim()) throw new ConfigError("workspace must be a non-empty directory");
   const workspace = resolve(launchCwd, expandTilde(workspaceValue, home));
   const extra = pickOrchestrator("extra");

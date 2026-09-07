@@ -29,7 +29,7 @@
       "properties": {
         "workspace": {
           "type": "string",
-          "description": "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: launch cwd. --workspace overrides this value."
+          "description": "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: current directory under the XDG state agentvoice/default/workspaces base, selected per call. --workspace overrides this value."
         },
         "model": {
           "type": "string",

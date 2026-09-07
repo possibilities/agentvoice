@@ -6,8 +6,8 @@ value matching Codex's client can be part of vanilla behavior. Distinguish clien
 selection, app-server omission fallback and deliberate AgentVoice policy; omission
 alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
 
-**Server** — The foreground `agentvoice server` process waiting on a private local
-socket for one frontend in its canonical workspace. Each frontend owns one call;
+**Server** — The `agentvoice server` process, supervised by a macOS user LaunchAgent
+or run manually, waiting on a private local socket. Each frontend owns one call;
 frontend disconnect ends that call and returns the server to waiting.
 
 **Frontend / Console** — The separate `agentvoice` terminal process. Connecting
@@ -47,9 +47,23 @@ with a refusal. A private controller bootstrap issues a short-lived admission
 ticket; its native listener credential is never given to the TUI. The grant stays
 bound to the root while the TUI navigates subagents. See ADRs 0022/0024.
 
-**Workspace** — The canonical existing root chosen once for this launch. Defaults
-to launch cwd unless explicitly configured or overridden by --workspace. Used
-for native conversation lookup and all AgentVoice-created threads. Not a sandbox.
+**Workspace** — The canonical existing root pinned for one call. Explicit
+--workspace wins over configuration; otherwise the default server selects its
+current workspace directory at call start. Used for native conversation lookup
+and all AgentVoice-created threads. Not a sandbox or necessarily a Git worktree.
+
+**Workspace base** — `$XDG_STATE_HOME/agentvoice/default/workspaces/` (falling back
+to `~/.local/state/agentvoice/default/workspaces/`), containing default voice-agent
+workspace generations. The `default` namespace reserves room for named voice agents.
+
+**Current workspace directory** — The generation with the newest sortable UTC
+timestamp-and-UUID directory name inside the workspace base. Created initially
+when absent, then selected afresh for each default call; file edits do not change
+selection and active calls retain their selected directory.
+
+**LaunchAgent** — The user-owned `dev.agentvoice.default` launchd job that starts
+the waiting default server at login and restarts it on exit. It opens no audio
+or Codex child until a frontend calls.
 
 **Full access** — Optional launch override: --allow-full-access explicitly selects
 native danger-full-access / never. Without the flag, unset permission fields defer
@@ -128,7 +142,7 @@ unset. AgentVoice does not manage login, profile homes or account switching.
 **Runtime settings** — AgentVoice configuration and prompt contents read during
 runtime preflight and cached for that generation. Runtime restart and later calls
 reload files using the server's
-pinned launch arguments and canonical workspace.
+pinned launch arguments; each call pins its own canonical workspace.
 
 **Startup config** — Explicit codex-config string array or repeatable -c /
 --codex-config key=value, forwarded as native Codex -c arguments. File entries
@@ -160,8 +174,8 @@ can be accepted, failed or unknown; native acceptance does not mean work complet
 
 **Historical terms** — Resident, Remote console, pairing, custom Worker reports,
 account rotation, Quiet resume, in-call Fresh
-name retired implementations in older ADRs. The current Server is a local waiting
-foreground process; it does not restore remote access or service installation.
+name retired implementations in older ADRs. The current Server waits locally, normally as a LaunchAgent;
+these retired implementations do not define its lifecycle.
 
 **Lifecycle feed** — The retained controller's read-only Unix event endpoint for
 current native thread state, inventory completeness, and runtime availability.

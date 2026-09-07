@@ -66,7 +66,16 @@ describe("native startup configuration", () => {
     try {
       writeFileSync(join(root, "settings.json"), JSON.stringify({ "codex-config": file }));
       const config = await loadLaunchConfig(
-        parseArgs(["--config", "settings.json", "-c", cli[0]!, "--codex-config", cli[1]!]),
+        parseArgs([
+          "--workspace",
+          root,
+          "--config",
+          "settings.json",
+          "-c",
+          cli[0]!,
+          "--codex-config",
+          cli[1]!,
+        ]),
         root,
       );
       expect(config.codexConfig).toEqual([...file, ...cli]);

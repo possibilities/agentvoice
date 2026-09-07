@@ -97,6 +97,8 @@ describe("optional full access", () => {
       writeFileSync(join(directory, "settings.json"), JSON.stringify(file));
       const config = await loadLaunchConfig(
         parseArgs([
+          "--workspace",
+          directory,
           "--config",
           "settings.json",
           "--allow-full-access",

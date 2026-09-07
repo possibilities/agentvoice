@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** Editable, command-only install. Never launches AgentVoice or changes Codex configuration. */
+/** Editable command and macOS waiting-server LaunchAgent installation. */
 import {
   accessSync,
   constants,
@@ -17,14 +17,17 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { serviceOptions, VoiceService } from "../src/service.ts";
 import { checkPrerequisites } from "./prerequisites.ts";
 
 const root = realpathSync(dirname(import.meta.dir));
 const uid = process.getuid?.();
-const usage = `Usage: scripts/install.sh --install | --help
+const usage = `Usage: scripts/install.sh --install [--command-only] | --help
 
 Install frozen dependencies, build native audio, and atomically link the editable
-agentvoice command to this checkout. No services, configuration, login or audio use.
+agentvoice command to this checkout. On macOS also install and start the default
+waiting-server LaunchAgent (replacing this installer's existing job). No audio or
+Codex child opens until a frontend calls. --command-only skips service management.
 Requires a clean Git checkout, Bun 1.3+, stock Codex and a C11 compiler.
 
 Destinations (absolute paths; no application-controlled symlink components):
@@ -135,7 +138,7 @@ async function run(argv: string[]): Promise<void> {
   if (code !== 0) refuse(`build/dependency step failed (exit ${code}); command link not changed`);
 }
 
-async function install(): Promise<void> {
+export async function install(serviceOverride?: VoiceService | false): Promise<void> {
   if (uid === undefined || uid === 0) refuse("run as the target user, not root (POSIX required)");
   checkPrerequisites();
   const sha = cleanHead();
@@ -149,6 +152,12 @@ async function install(): Promise<void> {
   directory(stateDir);
   const target = join(binDir, "agentvoice");
   const source = join(root, "src/main.ts");
+  const service =
+    serviceOverride === false
+      ? undefined
+      : (serviceOverride ??
+        (process.platform === "darwin" ? new VoiceService(serviceOptions(source)) : undefined));
+  await service?.preflight();
   const receipt = join(stateDir, "deployed-sha");
 
   function validateDestination(): void {
@@ -220,9 +229,15 @@ async function install(): Promise<void> {
         `PATH does not select this command${onPath ? ` (currently ${onPath})` : ""}; put ${binDir} first. No other command was changed.`,
       );
     }
-    console.log(
-      "No services, prompts, credentials or Codex settings changed. Launch separately with agentvoice.",
-    );
+    if (service) {
+      try {
+        await service.change("install");
+      } catch (error) {
+        throw new Error(`Command installed, but LaunchAgent installation failed: ${String(error)}`);
+      }
+      console.log(await service.status());
+    }
+    console.log("No prompts, credentials or Codex settings changed. Connect with agentvoice.");
   } finally {
     for (const [stage, name] of [
       [linkStage, "command"],
@@ -236,17 +251,25 @@ async function install(): Promise<void> {
   }
 }
 
-const args = process.argv.slice(2);
-if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
-  console.log(usage);
-} else if (args.length !== 1 || args[0] !== "--install") {
-  console.error(usage);
-  process.exitCode = 2;
-} else {
-  try {
-    await install();
-  } catch (error) {
-    console.error(`agentvoice install: ${error instanceof Error ? error.message : String(error)}`);
-    process.exitCode = 1;
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    console.log(usage);
+  } else if (
+    args[0] !== "--install" ||
+    args.length > 2 ||
+    (args.length === 2 && args[1] !== "--command-only")
+  ) {
+    console.error(usage);
+    process.exitCode = 2;
+  } else {
+    try {
+      await install(args.includes("--command-only") ? false : undefined);
+    } catch (error) {
+      console.error(
+        `agentvoice install: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      process.exitCode = 1;
+    }
   }
 }

@@ -3,6 +3,7 @@ import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
 import { stateDirectory } from "../paths.ts";
 import { createCall } from "../runtime-control/controller.ts";
 import type { LaunchProvenance } from "../runtime-control/protocol.ts";
+import { currentWorkspace } from "../workspace.ts";
 import {
   FRONTEND_VERSION,
   type FrontendCommand,
@@ -133,15 +134,28 @@ export class VoiceServer {
   }
 }
 
-export async function runServer(provenance: LaunchProvenance, version: string, workspace: string) {
+export function pinCallWorkspace(
+  provenance: LaunchProvenance,
+  workspace: string,
+): LaunchProvenance {
+  return {
+    ...provenance,
+    parsed: { ...provenance.parsed, values: { ...provenance.parsed.values, workspace } },
+  };
+}
+
+export async function runServer(
+  provenance: LaunchProvenance,
+  version: string,
+  workspace?: string,
+  endpointWorkspace?: string,
+) {
+  const stateDir = stateDirectory(process.env, homedir());
   const server = new VoiceServer(
-    frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
+    frontendSocketPath(stateDir, endpointWorkspace),
     async (changed) => {
       let notice: string | undefined;
-      const pinned = {
-        ...provenance,
-        parsed: { ...provenance.parsed, values: { ...provenance.parsed.values, workspace } },
-      };
+      const pinned = pinCallWorkspace(provenance, workspace ?? currentWorkspace(stateDir));
       const call = await createCall(pinned, version, () => {
         const next = call.controller.state().notice;
         if (next && next !== notice) {
@@ -175,7 +189,7 @@ export async function runServer(provenance: LaunchProvenance, version: string, w
   process.once("SIGHUP", stop);
   try {
     await server.start();
-    console.log(`AgentVoice server waiting in ${workspace}`);
+    console.log(`AgentVoice server waiting in ${workspace ?? "the current default workspace"}`);
     await stopped.promise;
   } finally {
     await server.close();

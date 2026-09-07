@@ -5,8 +5,8 @@ waits on a private workspace socket without opening audio or Codex; `agentvoice`
 connects and starts a call. The server-owned call controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
 owns audio, WebRTC, config/prompt/role loading and an owned stock Codex app-server.
-Frontend disconnect closes the call before another can begin. No installed service,
-remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
+Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
+No remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
 0024/0022 for the active topology; ADRs 0015/0016 describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
@@ -53,16 +53,24 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
 - `bun run generate:events-schema` — regenerate the repo-local events.schema.json
   contract and named event catalog; keep its drift and socket-frame tests passing.
-- `scripts/install.sh --install` / `bun run cli:install` — same command-only
-  editable installer, called by AgentStart. Requires explicit installation scope;
+- `scripts/install.sh --install` / `bun run cli:install` — same editable command and macOS LaunchAgent
+  installer, called by AgentStart. Requires explicit installation scope;
   never use the live destination to test. Installer tests use disposable checkouts,
-  local-only dependencies, a fake compiler and a Codex invocation sentinel.
+  local-only dependencies, a fake compiler, a fake launchctl runner and a Codex invocation sentinel.
+  Use --command-only for command publication fixtures; never run live launchctl in tests.
 
 ## Source map
 
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
-  ownership-safe editable command publication and deployed-sha receipt. No launch,
-  configuration, service, prompt/skill setup or legacy command cleanup.
+  ownership-safe editable command publication and deployed-sha receipt, followed by
+  default LaunchAgent installation on macOS. --command-only skips service management.
+  No configuration, prompt/skill setup or legacy command cleanup.
+- src/service.ts: owned user LaunchAgent install/status/restart/remove, explicit argv
+  and selected environment, private logs, bounded launchctl and failed-install rollback.
+  Never adopt an unrelated loaded job or edited/unsafe plist, or open audio as a check.
+- src/workspace.ts: default/workspaces generations under XDG state; newest sortable
+  timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
+  reject unsafe selected directories. No reset/deletion or context-policy changes.
 - src/main.ts: server/frontend CLI and workspace canonicalization; former
   accounts/resident/remote/console verbs error.
 - src/frontend/: strict private workspace socket, exclusive call ownership and
@@ -198,7 +206,7 @@ invented answers or an AgentVoice approval queue. Unsupported client tools/auth/
 legacy/unknown requests are still refused visibly. See ADRs 0020/0022.
 
 Resolve one existing absolute real workspace before spawning the child:
-CLI workspace > explicit file workspace > launch cwd. Use it for lookup,
+CLI workspace > explicit file workspace > current managed default generation. Use it for lookup,
 thread start/resume; relative runtime roots use it too. Reject
 conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
@@ -211,8 +219,11 @@ from list rows, so verify candidate ownership with thread/read before selecting
 agentvoice-orchestrator, no-parent, non-ephemeral history. Explicit resume must
 be found in that inventory. Do not hide lookup/resume failures as Fresh.
 
-Each frontend connection starts one call using the server's pinned canonical
-workspace and conversation selection flags. Close its frontend to end audio,
+Each frontend connection starts one call using the server's conversation selection
+flags. Explicit workspaces are pinned at server launch; otherwise the default
+server resolves the current generation at call start. Every call pins its canonical
+workspace through runtime replacements. The default frontend socket stays stable
+across generations; explicit CLI workspaces use their own hashed sockets. Close its frontend to end audio,
 app-owned work and the Codex child; native history remains untouched. The server
 waits for complete teardown before accepting another call. MCP/API runtime restart
 retains the frontend, exact thread leases and controller endpoints while replacing
@@ -220,7 +231,8 @@ the runtime. Leases last until call shutdown. A cleanup failure prevents subsequ
 calls until server termination.
 Other workspace servers may run independently; other clients do not honor this guard.
 
-App state: frontend/ sockets, thread-locks/ and opt-in unique runs/ logs under
+App state: default/workspaces/ generations, default/service/ logs, frontend/ sockets,
+thread-locks/ and opt-in unique runs/ logs under
 ~/.local/state/agentvoice ($XDG_STATE_HOME honored). Configuration/prompt paths
 remain ~/.config/agentvoice/server.json and convention prompt files beside it. Inherit
 CODEX_HOME unchanged (including omission); native Codex owns authentication,
