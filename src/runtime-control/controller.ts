@@ -95,10 +95,10 @@ export class RuntimeController implements ControlBackend {
   private voice: VoiceState = {
     available: true,
     phase: "waiting-ready",
-    mic: { muted: false, effectiveMuted: false },
+    mic: { muted: true, effectiveMuted: true },
     speaker: { muted: false, effectiveMuted: false },
   };
-  readonly microphone = new MuteGate();
+  readonly microphone = new MuteGate(true);
   readonly speaker = new MuteGate();
 
   constructor(private readonly options: ControllerOptions) {

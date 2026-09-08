@@ -425,8 +425,8 @@ describe("persistent controller and disposable runtime", () => {
       await controller.restart(retryRequest);
       await until(() => controller.status().currentOperation?.phase === "ready");
       expect(activations.slice(1)).toEqual([
-        { threadId: "saved", mute: { mic: false, speaker: false } },
-        { threadId: "saved", mute: { mic: false, speaker: false } },
+        { threadId: "saved", mute: { mic: true, speaker: false } },
+        { threadId: "saved", mute: { mic: true, speaker: false } },
       ]);
       expect((await controller.restart(first)).phase).toBe("failed");
       const completedRetry = await controller.restart(retryRequest);
