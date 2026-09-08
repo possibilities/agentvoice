@@ -73,6 +73,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/workspace.ts: default/workspaces generations under XDG state; newest sortable
   timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
   reject unsafe selected directories. No reset/deletion or context-policy changes.
+- src/threads/: one-shot read-only loaded-thread table for `agentvoice threads` and
+  `watch`. Reuse frontend/controller discovery and the event socket; at most four
+  metadata reads in flight. Never start a call, resume, read history, or guess
+  model/effort. Keep idle threads and unresolved parent links visible.
 - src/main.ts: server/frontend CLI and workspace canonicalization; former
   accounts/resident/remote/console verbs error.
 - src/frontend/: strict private workspace socket, exclusive call ownership and

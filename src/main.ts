@@ -29,6 +29,8 @@ Usage:
                                    Print live read-only MCP configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
                                    Print a live read-only event socket
+  agentvoice threads [--workspace <dir>] [--thread <root-id>]
+                                   Show loaded threads and activity for watch
 
 Server options:
   --workspace <dir>        Explicit conversation root (default: managed workspace)
@@ -342,6 +344,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
+    if (command === "threads") {
+      const { runThreadsCommand } = await import("./threads/command.ts");
+      return await runThreadsCommand(argv.slice(1), stateDirectory(process.env, homedir()));
+    }
 
     if (command === "attach") {
       const { runAttachCommand } = await import("./attachment/command.ts");

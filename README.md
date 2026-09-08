@@ -107,6 +107,28 @@ configuration shape, so this output is not a Codex configuration file.
 
 ### Observe thread state
 
+Print a current table of loaded threads, with children indented beneath their
+parents, using `agentvoice threads`. It shows each thread's name (or native
+agent nickname when unnamed), model, reasoning effort, turn activity and ID.
+Idle threads remain visible alongside working threads; this is the owned
+app-server's loaded inventory, not saved conversation history.
+
+```sh
+watch -n 1 agentvoice threads
+agentvoice threads --workspace ~/code/myapp
+```
+
+Omitting `--workspace` selects the default server's active call from any directory.
+An explicit workspace can select another server; `--thread <root-id>` resolves
+multiple controllers for that workspace. No active call prints a short status
+and exits successfully. Each invocation makes bounded read-only observations,
+never opens audio or resumes a thread, and works with an already-running server.
+`?` means a setting is unset or unavailable. Model/effort describe current thread
+configuration, not per-turn execution telemetry. Settings and activity are read
+separately; the command rejects runtime replacement during a read and marks
+partial inventory instead of claiming an atomic snapshot. Missing parents and
+unresolved ancestry remain visible. Output is plain text for use under `watch`.
+
 `agentvoice event-socket --workspace ~/code/myapp` prints the separate read-only
 Unix endpoint for a live controller. UIs subscribe with `event.subscribe`, then
 read `state.get` for the current inventory and a sequence watermark. The endpoint
