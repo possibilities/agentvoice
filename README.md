@@ -8,23 +8,17 @@ WebRTC, exact conversation identity, thread leases and its unmodified
 `codex app-server` child. The frontend contains only connection status and
 monochrome YOU/AGENT buttons, plus PUSH TO TALK when the microphone is muted.
 
-Before this launch's call reaches `live`, the two left panes share one
-“Waiting for voice connection” placeholder. They then split into voice controls
-and the transcript, which shows “Waiting for voice messages…” until text arrives.
-The rightmost working-agent TUI opens at the same time, independently of the
-transcript. Attachments use this call's exact workspace and thread. All three
-apps run in local PTYs owned by the
-foreground smolmux process. Closing that process or exiting any pane app ends
-all panes and the call; nothing persists in smolmux's Companion. App failures
-also end the composition.
+The two attachment panes show “Waiting for voice connection” until this launch's
+call reaches `live`, then attach to its exact workspace and thread. All three
+apps run in local PTYs owned by the foreground smolmux process. Closing that
+process or exiting any pane app ends all panes and the call; nothing persists
+in smolmux's Companion. App failures also end the composition.
 Press Ctrl+C twice within three seconds to exit the entire composition. The
 first press shows a centered one-row overlay without resizing panes. Ctrl+C
 is reserved for this exit action and never reaches the individual apps.
-Divider drags survive placeholder replacement and voice redials. While voice
-reconnects, the two left panes share the connection placeholder again.
-Keyboard focus moves to the working agent when the panes open. Attachments are not
-automatically relaunched; an attachment exit after runtime restart also ends
-the composition.
+Divider drags survive placeholder replacement. Keyboard focus moves to the
+working agent when it opens. Attachments are not automatically relaunched;
+an attachment exit after runtime restart also ends the composition.
 
 Bare `agentvoice` requires smolmux 0.9.2 or newer with its local PTY helper,
 and `codex-viewer`, on PATH. Their existing installers own those dependencies;

@@ -1,13 +1,6 @@
 import { z } from "zod";
 import type { FrontendObservation } from "../frontend/protocol.ts";
-import {
-  CompositionLayout,
-  initialLayout,
-  layoutSchema,
-  type MuxControl,
-  names,
-  stageSchema,
-} from "./layout.ts";
+import { initialLayout, layoutSchema, type MuxControl, names, replacePane } from "./layout.ts";
 
 const appSchema = z.object({
   name: z.string(),
@@ -17,8 +10,7 @@ const appSchema = z.object({
 
 export class Composition {
   private stopped = false;
-  private attached?: { workspace: string; threadId: string };
-  private layout = new CompositionLayout();
+  private attached = false;
   private started = false;
   private state?: FrontendObservation;
   private tail = Promise.resolve();
@@ -42,10 +34,7 @@ export class Composition {
   async start() {
     await this.mux.request("instance.configure", { confirmExit: true });
     if (this.stopped) return;
-    const { stage } = z.object({ stage: stageSchema }).parse(await this.mux.request("layout.get"));
-    if (this.stopped) return;
-    this.layout = new CompositionLayout(stage.cols);
-    await this.mux.request("layout.apply", initialLayout(stage.cols));
+    await this.mux.request("layout.apply", initialLayout());
     await this.create(0, ["client", ...(this.workspace ? ["--workspace", this.workspace] : [])], {
       AGENTVOICE_CLIENT_ID: this.clientId,
     });
@@ -59,11 +48,6 @@ export class Composition {
   }
   event(frame: Record<string, unknown>) {
     if (frame["type"] !== "event") throw new Error("Unexpected smolmux frame");
-    if (frame["event"] === "layout.changed") {
-      const data = z.object({ cause: z.string() }).parse(frame["data"]);
-      if (data.cause === "resize" && this.started) this.enqueue(() => this.reconcile());
-      return;
-    }
     if (frame["event"] !== "app.state") return;
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (!["exited", "failed"].includes(app.state)) return;
@@ -76,11 +60,7 @@ export class Composition {
     if (this.stopped) return;
     const layout = layoutSchema.parse(await this.mux.request("layout.get"));
     if (this.stopped) return;
-    const pane = layout.panes[index === 2 ? layout.panes.length - 1 : index];
-    const cols =
-      layout.root.row.length === 2 && index < 2
-        ? Math.floor(((layout.panes[0]?.cols ?? 80) - 1) / 2)
-        : (pane?.cols ?? 80);
+    const pane = layout.panes[index];
     const app = appSchema.parse(
       await this.mux.request("app.create", {
         name: names[index],
@@ -89,7 +69,7 @@ export class Composition {
         env,
         pty: "local",
         whenHidden: "keep",
-        cols: Math.max(1, cols),
+        cols: Math.max(1, pane?.cols ?? 80),
         rows: Math.max(1, pane?.rows ?? 24),
       }),
     );
@@ -97,43 +77,25 @@ export class Composition {
   }
   private async reconcile() {
     const state = this.state;
-    const disconnected = {
-      connected: false,
-      agent: Boolean(this.attached),
-      placeholder:
-        state?.clientId === this.clientId && state.state?.phase === "failed"
-          ? "Voice connection failed"
-          : undefined,
-    };
     if (
+      this.attached ||
       !state ||
       state.clientId !== this.clientId ||
       !state.busy ||
+      !state.state?.available ||
+      state.state.phase !== "live" ||
       !state.workspace ||
       !state.threadId
-    ) {
-      await this.layout.update(this.mux, disconnected);
-      return;
-    }
-    if (
-      this.attached &&
-      (this.attached.workspace !== state.workspace || this.attached.threadId !== state.threadId)
     )
-      throw new Error("Voice call identity changed; reopen the composition");
-    if (!state.state?.available || state.state.phase !== "live") {
-      await this.layout.update(this.mux, disconnected);
       return;
-    }
+    this.attached = true;
     const selection = ["--workspace", state.workspace, "--thread", state.threadId];
-    if (!this.attached) {
-      this.attached = { workspace: state.workspace, threadId: state.threadId };
+    for (const index of [1, 2]) {
       if (this.stopped) return;
-      await this.create(1, ["attach", "voice", ...selection]);
+      await this.create(index, ["attach", names[index]!, ...selection]);
       if (this.stopped) return;
-      await this.create(2, ["attach", "agent", ...selection]);
-      if (this.stopped) return;
+      await replacePane(this.mux, index, { app: names[index]! }, index === 2 ? "agent" : undefined);
     }
-    await this.layout.update(this.mux, { connected: true, agent: true });
   }
   stop(error?: Error) {
     this.failure ??= error;
