@@ -16,15 +16,29 @@ export function spawnRuntimeProcess(
   generation: number,
   onEvent: (method: string, params: unknown) => void,
   onLease: (id: string) => Promise<void>,
-  worker = new URL("./worker.ts", import.meta.url).pathname,
+  worker?: string,
 ): RuntimeProcess {
-  const child = spawn(process.execPath, [worker, String(generation)], {
+  const child = spawn(...runtimeWorkerCommand(generation, worker), {
     cwd: process.cwd(),
     env: { ...process.env },
     stdio: ["ignore", "ignore", "pipe", "ipc"],
     serialization: "json",
   });
   return new WorkerProcess(child, generation, onEvent, onLease);
+}
+
+export function runtimeWorkerCommand(
+  generation: number,
+  worker?: string,
+  executable = process.execPath,
+  moduleUrl = import.meta.url,
+): [string, string[]] {
+  if (worker) return [executable, [worker, String(generation)]];
+  const main = new URL("../main.ts", moduleUrl).pathname;
+  // A compiled Bun executable embeds module paths under /$bunfs; dispatch the
+  // worker through the executable instead of trying to execute that virtual path.
+  if (main.includes("$bunfs")) return [executable, ["__runtime-worker", String(generation)]];
+  return [executable, [main, "__runtime-worker", String(generation)]];
 }
 
 class WorkerProcess implements RuntimeProcess {

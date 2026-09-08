@@ -4,8 +4,30 @@ import { closeSync, constants, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 
 let library: ReturnType<typeof openLibrary> | undefined;
+
+export function libcLibraryForRuntime(
+  platform: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  executablePath: string,
+): string {
+  if (platform === "darwin") return "libc.dylib";
+  // Bun's Android build can report Linux; Bionic cannot open glibc's libc.so.6.
+  if (
+    platform === "android" ||
+    environment["ANDROID_ROOT"] === "/system" ||
+    environment["ANDROID_DATA"] === "/data" ||
+    environment["TERMUX_VERSION"] !== undefined ||
+    environment["PREFIX"]?.startsWith("/data/data/com.termux/") ||
+    environment["PREFIX"]?.startsWith("/data/user/0/com.termux/") ||
+    executablePath.startsWith("/data/data/com.termux/") ||
+    executablePath.startsWith("/data/user/0/com.termux/")
+  )
+    return "libc.so";
+  return "libc.so.6";
+}
+
 function openLibrary() {
-  return dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+  return dlopen(libcLibraryForRuntime(process.platform, process.env, process.execPath), {
     flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
   });
 }

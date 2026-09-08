@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "../browser/protocol.ts";
 import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
 import { stateDirectory } from "../paths.ts";
 import { createCall } from "../runtime-control/controller.ts";
@@ -9,6 +10,7 @@ import {
   FRONTEND_VERSION,
   type FrontendCommand,
   type FrontendState,
+  frontendBrowserInputSchema,
   frontendCommandSchema,
   frontendSocketPath,
   frontendState,
@@ -19,11 +21,13 @@ export interface Call {
   state(): FrontendState;
   identity?(): { workspace: string; threadId: string };
   command(command: FrontendCommand): void;
+  browserMedia?(message: BrowserMediaClientMessage): void;
   close(): Promise<void>;
 }
 type Session = {
   peer: JsonPeer;
   clientId?: string;
+  media?: "browser";
   call?: Call;
   closed: boolean;
   done: Promise<void>;
@@ -39,7 +43,11 @@ export class VoiceServer {
   private readonly observers = new Set<JsonPeer>();
   constructor(
     readonly path: string,
-    private readonly create: (changed: () => void) => Promise<Call>,
+    private readonly create: (
+      changed: () => void,
+      params: { clientId: string; media?: "browser" } | undefined,
+      sendBrowserMedia: (message: BrowserMediaServerMessage) => void,
+    ) => Promise<Call>,
     private readonly report: (message: string) => void = console.error,
     private readonly workspace?: () => string,
   ) {
@@ -95,6 +103,10 @@ export class VoiceServer {
               request.params === undefined
                 ? undefined
                 : callParamsSchema.parse(request.params).clientId,
+            media:
+              request.params === undefined
+                ? undefined
+                : callParamsSchema.parse(request.params).media,
             closed: false,
             done: Promise.resolve(),
             end: ended.resolve,
@@ -112,6 +124,20 @@ export class VoiceServer {
             return;
           }
           this.session.call.command(command.data);
+          reply(true, null);
+          return;
+        }
+        if (
+          request.method === "browser-media" &&
+          this.session?.peer === peer &&
+          !this.session.closed
+        ) {
+          const message = frontendBrowserInputSchema.safeParse(request.params);
+          if (!message.success || !this.session.call?.browserMedia) {
+            reply(false, "Browser media is not available for this call");
+            return;
+          }
+          this.session.call.browserMedia(message.data);
           reply(true, null);
           return;
         }
@@ -168,7 +194,16 @@ export class VoiceServer {
     };
     let boot: Promise<void> | undefined;
     try {
-      session.call = await this.create(changed);
+      const params = session.clientId
+        ? {
+            clientId: session.clientId,
+            ...(session.media === undefined ? {} : { media: session.media }),
+          }
+        : undefined;
+      session.call = await this.create(changed, params, (message) => {
+        if (!session.closed)
+          session.peer.send({ v: FRONTEND_VERSION, type: "browser-media", message });
+      });
       if (session.closed) return;
       changed();
       boot = session.call.start();
@@ -228,17 +263,25 @@ export async function runServer(
   const stateDir = stateDirectory(process.env, homedir());
   const server = new VoiceServer(
     frontendSocketPath(stateDir, endpointWorkspace),
-    async (changed) => {
+    async (changed, params, sendBrowserMedia) => {
       let notice: string | undefined;
       const pinned = pinCallWorkspace(provenance, workspace ?? currentWorkspace(stateDir));
-      const call = await createCall(pinned, version, () => {
-        const next = call.controller.state().notice;
-        if (next && next !== notice) {
-          notice = next;
-          console.error(next);
-        }
-        changed();
-      });
+      const call = await createCall(
+        pinned,
+        version,
+        () => {
+          const next = call.controller.state().notice;
+          if (next && next !== notice) {
+            notice = next;
+            console.error(next);
+          }
+          changed();
+        },
+        {
+          media: params?.media,
+          onBrowserMedia: sendBrowserMedia,
+        },
+      );
       const controller = call.controller;
       return {
         start: () => controller.start(),
@@ -248,6 +291,10 @@ export async function runServer(
           threadId: controller.status().threadId,
         }),
         close: call.close,
+        browserMedia:
+          params?.media === "browser"
+            ? (message) => call.controller.browserMedia(message)
+            : undefined,
         command: (command) => {
           if (command.action === "mute") {
             (command.target === "mic" ? controller.microphone : controller.speaker).setMuted(

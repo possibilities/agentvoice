@@ -1,15 +1,19 @@
 # agentvoice — repository guidance
 
-A local Codex voice server and separate pointer-only TUI. `agentvoice server`
+A local Codex voice server with a pointer-only TUI and same-device phone browser.
+`agentvoice server`
 waits on a private workspace socket without opening audio or Codex; `agentvoice client`
 connects and starts a call. Bare `agentvoice` composes that client, voice transcript,
 and stock agent attachment in one foreground smolmux process with local PTYs only.
+`agentvoice phone` serves one capability-bearing loopback page; its browser owns
+audio and WebRTC while Termux retains the controller and Codex child.
 The server-owned call controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
-owns audio, WebRTC, config/prompt/role loading and an owned stock Codex app-server.
+owns config/prompt/role loading and an owned stock Codex app-server. It owns audio
+and WebRTC for terminal calls; the browser owns them for phone calls.
 Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
 No remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
-0024/0022 for the active topology; ADRs 0015/0016 describe retained MCP/API
+0032/0024/0022 for the active topologies; ADRs 0015/0016 describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
 ## What vanilla Codex means
@@ -46,10 +50,17 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   Do not run bare `bun test`: it can discover dependency/vendor tests.
 - `bun run typecheck` — strict TypeScript, no emit.
 - `bun run lint` / `bun run format` — Biome checks / fixes.
-- `bun run server` — waiting foreground server; calls need Codex login and built native audio.
+- `bun run server` — waiting foreground server. Calls need Codex login; terminal
+  calls also need built native audio, while phone calls do not load it.
 - `bun run console` — independent pointer frontend; connects to the workspace server.
 - `bun run native:build` / `bun run audio:probe` — build / exercise audio.
   The latter opens hardware; never substitute it for a no-microphone UI test.
+- `bun run android:build` — cross-compile the ARM64 Android/Termux standalone
+  executable at `dist/agentvoice-android-arm64`. It neither installs to a device
+  nor opens media/inference; phone calls do not require the native audio build.
+- `scripts/install-android --install --host <ssh-target>` — explicitly build and
+  atomically converge that standalone on an already prepared Termux phone. It is
+  never part of the desktop installer or an unattended update and starts no call.
 - `bun run app-server:probe` — initialize and workspace-filtered list against
   an owned stock child, no turns/audio. Verify before Codex runtime upgrades.
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
@@ -67,6 +78,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   ownership-safe editable command publication and deployed-sha receipt, followed by
   default LaunchAgent installation on macOS. --command-only skips service management.
   No configuration, prompt/skill setup or legacy command cleanup.
+- scripts/install-android*: clean-checkout ARM64 standalone build plus an explicit
+  SSH deployment to prepared Termux. Keep the target and receipt ownership-correlated,
+  stage and verify before atomic publication, and never install phone packages,
+  configuration, credentials or services or start a call during convergence.
 - src/service.ts: owned user LaunchAgent install/status/restart/remove, explicit argv
   and selected environment, private logs, bounded launchctl and failed-install rollback.
   Never adopt an unrelated loaded job or edited/unsafe plist, or open audio as a check.
@@ -80,7 +95,9 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/main.ts: server/frontend CLI and workspace canonicalization; former
   accounts/resident/remote/console verbs error.
 - src/frontend/: strict private workspace socket, exclusive call ownership and
-  minimal state/input protocol. Disconnect releases PTT and stops the call; never
+  minimal state/input protocol. It also carries validated browser SDP/control
+  messages for an explicitly browser-media call, never RTP/Opus/PCM. Disconnect
+  releases PTT and stops the call; never
   accept a successor until cleanup completes or automatically reconnect/replay.
   Fresh clients observe explicit closing state and wait at most 30 seconds before
   requesting a call; observation never reserves admission. Connected and unavailable
@@ -93,6 +110,12 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   Preserve divider revisions. Any pane app exiting or failing ends the entire
   composition and call, including attachment revocation during runtime restart;
   never automatically relaunch attachments or open audio/inference in composition tests.
+- src/browser/: same-device phone page, loopback HTTP/WebSocket gateway and
+  bounded browser-media protocol. Bind only `127.0.0.1`; retain the random token
+  path, exact Host/Origin checks, one-owner reservation, browser security headers,
+  explicit Start gesture and session IDs. Page/socket loss owns call teardown.
+  Never persist or expose its URL through discovery, accept arbitrary content,
+  rebind for LAN/tailnet/ADB access, or call this remote support. See ADR 0032.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.
@@ -171,7 +194,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   and live media. Keep handoff outcome separate from readiness; never stop healthy
   media on refusal or ambiguous acceptance. Never adopt old journals in a new call.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
-  controller/worker IPC. No audio/RTP/PCM or bearer capabilities in UI events.
+  controller/worker IPC. Browser calls select the no-device browser media adapter
+  and relay validated SDP/control; no audio/RTP/PCM or bearer capabilities enter
+  UI events. Compiled Android workers must dispatch through the executable, not
+  virtual `/$bunfs` paths.
 - src/runtime-control/sender.ts: bounded worker writes; drop transient voice deltas
   at the soft limit; preserve starts/completions without replacing deltas or failing healthy media.
 - src/events/: controller-owned read-only socket with prefix subscriptions,
@@ -218,11 +244,16 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.
-- src/console/host.ts: native readiness before audio opens, negotiation after audio
-  readiness, visible media notices, worker-local media wiring and quit cleanup.
+- src/console/host.ts: media-adapter readiness before media starts, negotiation
+  after readiness, visible media notices, worker-local media wiring and quit cleanup.
 - src/console/transport.ts: WebRTC offer/answer, two-peer redial, automatic renewal and bounded retry.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
+- src/console/browser-*.ts: no-device host adapters and browser-owned WebRTC
+  signaling. Preserve current-session checks, retry/renewal bounds and the rule
+  that media stays in the browser. This intentional asymmetry with native
+  server-owned media may be removed only by a separately designed symmetric
+  client-media protocol.
 - src/console/tui.ts: static monochrome YOU/AGENT buttons, conditional pointer
   PTT and connection phase only. No animation, meters, palette or keybindings.
 - src/console/state.ts: plain host/observer data; backend imports no TUI renderer.

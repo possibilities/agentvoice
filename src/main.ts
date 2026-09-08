@@ -21,6 +21,8 @@ Usage:
   agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
   agentvoice client [--workspace <dir>]
                                    Connect with the pointer frontend alone
+  agentvoice phone [--workspace <dir>]
+                                   Open the loopback browser voice frontend
   agentvoice attach agent [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
   agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
@@ -339,6 +341,11 @@ async function runServerCommand(argv: string[]): Promise<number> {
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0];
   try {
+    if (command === "__runtime-worker") {
+      const { runRuntimeWorker } = await import("./runtime-control/worker.ts");
+      runRuntimeWorker();
+      await new Promise<void>(() => {});
+    }
     if (command === "help") {
       console.log(USAGE);
       return 0;
@@ -373,6 +380,23 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       throw new UsageError(
         `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
       );
+    }
+    if (command === "phone") {
+      const phoneArgs = argv.slice(1);
+      const parsed = parseArgs(phoneArgs, {
+        value: new Set(["--workspace"]),
+        bool: new Set(["--help"]),
+      });
+      if (parsed.help) {
+        console.log(USAGE);
+        return 0;
+      }
+      const selected =
+        parsed.values["workspace"] === undefined ? undefined : parseMcpConfigCommand(phoneArgs);
+      if (selected?.help) return 0;
+      const { runBrowserFrontend } = await import("./browser/frontend.ts");
+      await runBrowserFrontend(selected?.workspace);
+      return 0;
     }
     const clientArgs = command === "client" ? argv.slice(1) : argv;
     const frontendFlags = parseArgs(clientArgs, {

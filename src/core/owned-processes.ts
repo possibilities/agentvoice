@@ -219,10 +219,16 @@ function pidExists(pid: number): boolean {
   }
 }
 
+export function processTableBackendForPlatform(platform: string): "proc" | "libproc" {
+  if (platform === "linux" || platform === "android") return "proc";
+  if (platform === "darwin") return "libproc";
+  throw new Error(`Owned process tracking is unsupported on ${platform}`);
+}
+
 async function processTable(): Promise<Map<number, ProcessRecord>> {
-  if (process.platform === "linux") return linuxProcessTable();
-  if (process.platform === "darwin") return darwinProcessTable();
-  throw new Error(`Owned process tracking is unsupported on ${process.platform}`);
+  return processTableBackendForPlatform(process.platform) === "proc"
+    ? linuxProcessTable()
+    : darwinProcessTable();
 }
 
 async function linuxProcessTable(): Promise<Map<number, ProcessRecord>> {

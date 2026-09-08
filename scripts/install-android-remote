@@ -1,0 +1,151 @@
+#!/bin/bash
+# Device-side half of install-android. It receives only a private extracted bundle.
+set -euo pipefail
+
+die() {
+    printf 'agentvoice Android install: %s\n' "$*" >&2
+    exit 1
+}
+
+[ "$#" -eq 1 ] || die "invalid device-side invocation"
+bundle=$1
+[ "$(id -u)" -ne 0 ] || die "refusing to install as root"
+[ "$(uname -m)" = aarch64 ] || die "the target is not ARM64 Android"
+[ "${ANDROID_ROOT:-}" = /system ] \
+    && [[ "${PREFIX:-}" == /data/data/*/files/usr || "${PREFIX:-}" == /data/user/0/*/files/usr ]] \
+    || die "the target is not a native Android/Termux environment"
+for command_name in codex termux-open-url sha256sum; do
+    command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required on the phone"
+done
+[[ "${HOME:-}" = /* && "$HOME" != / ]] || die "unsafe target home"
+
+uid=$(id -u)
+safe_directory() {
+    local path=$1 mode owner
+    [ -d "$path" ] && [ ! -L "$path" ] || die "unsafe directory: $path"
+    owner=$(stat -c %u "$path")
+    mode=$(stat -c %a "$path")
+    [ "$owner" = "$uid" ] || die "foreign directory: $path"
+    (( (8#$mode & 8#022) == 0 )) || die "unsafe writable directory: $path"
+}
+ensure_directory() {
+    local path=$1 mode=$2
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        safe_directory "$path"
+    else
+        mkdir -- "$path"
+        chmod "$mode" "$path"
+        safe_directory "$path"
+    fi
+}
+safe_regular() {
+    local path=$1 mode owner links
+    [ -f "$path" ] && [ ! -L "$path" ] || die "unsafe file: $path"
+    owner=$(stat -c %u "$path")
+    mode=$(stat -c %a "$path")
+    links=$(stat -c %h "$path")
+    [ "$owner" = "$uid" ] && [ "$links" = 1 ] \
+        || die "foreign or multiply-linked file: $path"
+    (( (8#$mode & 8#022) == 0 )) || die "unsafe writable file: $path"
+}
+
+safe_directory "$HOME"
+ensure_directory "$HOME/.local" 700
+ensure_directory "$HOME/.local/bin" 700
+ensure_directory "$HOME/.local/state" 700
+ensure_directory "$HOME/.local/state/agentvoice" 700
+bin_dir=$HOME/.local/bin
+state_dir=$HOME/.local/state/agentvoice
+target=$bin_dir/agentvoice
+receipt=$state_dir/android-deployed
+candidate=$bundle/agentvoice
+manifest=$bundle/manifest
+
+safe_regular "$candidate"
+safe_regular "$manifest"
+[ "$(wc -l <"$manifest" | tr -d ' ')" = 3 ] \
+    && [ "$(sed -n '1p' "$manifest")" = agentvoice-android-v1 ] \
+    || die "invalid deployment manifest"
+manifest_source=$(sed -n '2p' "$manifest")
+manifest_artifact=$(sed -n '3p' "$manifest")
+source_sha=${manifest_source#source-sha=}
+artifact_sha=${manifest_artifact#artifact-sha256=}
+[ "$manifest_source" = "source-sha=$source_sha" ] \
+    && [ "$manifest_artifact" = "artifact-sha256=$artifact_sha" ] \
+    && [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] \
+    && [[ "$artifact_sha" =~ ^[0-9a-f]{64}$ ]] \
+    || die "invalid deployment manifest"
+candidate_sha=$(sha256sum "$candidate" | awk '{print $1}')
+[ "$candidate_sha" = "$artifact_sha" ] || die "transferred artifact hash mismatch"
+
+prior_sha=
+if [ -e "$receipt" ] || [ -L "$receipt" ]; then
+    safe_regular "$receipt"
+    [ "$(stat -c %a "$receipt")" = 600 ] || die "unsafe receipt mode: $receipt"
+    [ "$(wc -l <"$receipt" | tr -d ' ')" = 3 ] \
+        && [ "$(sed -n '1p' "$receipt")" = agentvoice-android-v1 ] \
+        || die "malformed deployment receipt: $receipt"
+    receipt_source=$(sed -n '2p' "$receipt")
+    receipt_artifact=$(sed -n '3p' "$receipt")
+    prior_source=${receipt_source#source-sha=}
+    prior_sha=${receipt_artifact#artifact-sha256=}
+    [ "$receipt_source" = "source-sha=$prior_source" ] \
+        && [ "$receipt_artifact" = "artifact-sha256=$prior_sha" ] \
+        && [[ "$prior_source" =~ ^[0-9a-f]{40}$ ]] \
+        && [[ "$prior_sha" =~ ^[0-9a-f]{64}$ ]] \
+        || die "malformed deployment receipt: $receipt"
+fi
+
+current_sha=
+if [ -e "$target" ] || [ -L "$target" ]; then
+    safe_regular "$target"
+    current_sha=$(sha256sum "$target" | awk '{print $1}')
+    if [ -n "$prior_sha" ]; then
+        # The candidate match is the recoverable state after binary publication
+        # but before its receipt rename.
+        [ "$current_sha" = "$prior_sha" ] || [ "$current_sha" = "$artifact_sha" ] \
+            || die "installed command does not match its receipt: $target"
+    else
+        [ "$current_sha" = "$artifact_sha" ] \
+            || die "refusing unrelated unreceipted command: $target"
+    fi
+elif [ -n "$prior_sha" ]; then
+    die "deployment receipt exists without its command: $receipt"
+fi
+
+stage=$(mktemp "$bin_dir/.agentvoice-android.XXXXXX")
+receipt_stage=
+cleanup() {
+    rm -f -- "$stage"
+    [ -z "$receipt_stage" ] || rm -f -- "$receipt_stage"
+}
+trap cleanup EXIT HUP INT TERM
+cp -- "$candidate" "$stage"
+chmod 700 "$stage"
+[ "$(sha256sum "$stage" | awk '{print $1}')" = "$artifact_sha" ] \
+    || die "staged artifact hash mismatch"
+"$stage" --help >/dev/null
+
+if [ -n "$current_sha" ]; then
+    safe_regular "$target"
+    rechecked_sha=$(sha256sum "$target" | awk '{print $1}')
+    [ "$rechecked_sha" = "$current_sha" ] || [ "$rechecked_sha" = "$artifact_sha" ] \
+        || die "installed command changed during deployment"
+fi
+if [ "$current_sha" = "$artifact_sha" ]; then
+    chmod 700 "$target"
+    rm -f -- "$stage"
+else
+    mv -f -- "$stage" "$target"
+fi
+stage=
+
+receipt_stage=$(mktemp "$state_dir/.android-deployed.XXXXXX")
+printf 'agentvoice-android-v1\nsource-sha=%s\nartifact-sha256=%s\n' \
+    "$source_sha" "$artifact_sha" >"$receipt_stage"
+chmod 600 "$receipt_stage"
+mv -f -- "$receipt_stage" "$receipt"
+receipt_stage=
+[ "$(stat -c %a "$target")" = 700 ] || die "published command has the wrong mode"
+[ "$(stat -c %a "$receipt")" = 600 ] || die "published receipt has the wrong mode"
+printf 'Installed %s from AgentVoice %s (sha256 %s).\n' "$target" "$source_sha" "$artifact_sha"

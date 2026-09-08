@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
+import {
+  browserMediaClientMessageSchema,
+  browserMediaServerMessageSchema,
+} from "../browser/protocol.ts";
 
 export const FRONTEND_VERSION = 1;
 const channel = z.object({ muted: z.boolean(), effectiveMuted: z.boolean() }).strict();
@@ -13,7 +17,9 @@ export const frontendStateSchema = z
   })
   .strict();
 export type FrontendState = z.infer<typeof frontendStateSchema>;
-export const callParamsSchema = z.object({ clientId: z.string().uuid() }).strict();
+export const callParamsSchema = z
+  .object({ clientId: z.string().uuid(), media: z.literal("browser").optional() })
+  .strict();
 export const observationSchema = z
   .object({
     busy: z.boolean(),
@@ -32,6 +38,8 @@ export const frontendCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["hold", "release"]) }).strict(),
 ]);
 export type FrontendCommand = z.infer<typeof frontendCommandSchema>;
+export const frontendBrowserInputSchema = browserMediaClientMessageSchema;
+export const frontendBrowserOutputSchema = browserMediaServerMessageSchema;
 export function frontendSocketPath(stateDir: string, workspace?: string): string {
   return join(
     stateDir,

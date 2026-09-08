@@ -1,12 +1,14 @@
 # AgentVoice
 
-A local Codex voice server with three terminal panes. `agentvoice server`
+A local Codex voice server with terminal and same-device browser frontends. `agentvoice server`
 waits for a call; bare `agentvoice` opens a foreground smolmux instance containing
 `agentvoice client`, `agentvoice attach voice`, and `agentvoice attach agent`
-side by side. The server owns audio,
-WebRTC, exact conversation identity, thread leases and its unmodified
-`codex app-server` child. The frontend contains only connection status and
-monochrome YOU/AGENT buttons, plus PUSH TO TALK when the microphone is muted.
+side by side. In that terminal topology the server owns native audio and WebRTC,
+while the frontend contains only connection status and monochrome YOU/AGENT
+buttons, plus PUSH TO TALK when the microphone is muted. `agentvoice phone`
+instead opens a capability-bearing loopback page whose browser owns audio and
+WebRTC. In both topologies the server owns exact conversation identity, thread
+leases and its unmodified `codex app-server` child.
 
 The two attachment panes show “Waiting for voice connection” until this launch's
 call reaches `live`, then attach to its exact workspace and thread. All three
@@ -54,17 +56,45 @@ To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, device, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
-The composition and `client` accept only `--workspace` and `--help`.
+The composition, `client` and `phone` accept only `--workspace` and `--help`.
+
+On an Android phone, run the server and browser frontend in separate Termux
+terminals:
+
+```sh
+# Terminal 1
+agentvoice server
+
+# Terminal 2: opens the phone browser; tap Start voice there
+agentvoice phone
+```
+
+`phone` serves one ephemeral page on `127.0.0.1` and normally opens it with
+`termux-open-url` or Android's activity manager. If neither launcher is present,
+open the printed URL in a browser on the same phone. The browser asks for
+microphone permission only after **Start voice** is tapped, then owns microphone
+capture, response playback, codecs and the WebRTC peer. It provides microphone
+and speaker mute plus hold-to-talk while persistently muted. The Termux process
+continues to own the call controller, configuration, exact thread, transcripts,
+attachments and stock Codex child; use separate `attach agent` or `attach voice`
+commands when those views are wanted.
+
+The printed URL contains a per-process bearer capability. Do not share or
+bookmark it. The listener accepts only exact-origin loopback requests and one
+browser owner, and disappears when `phone` exits. It cannot bind to another
+interface, accept an arbitrary endpoint, or connect across a LAN or tailnet.
+This is a same-phone bridge, not remote mode.
 
 One server and one active frontend are allowed per canonical workspace.
-Both bare `agentvoice` and `agentvoice client` wait up to 30 seconds when the
+Bare `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
 previous frontend has disconnected but its call is still cleaning up, displaying
 “Closing previous call…”. An active frontend still blocks a second call. Waiting
 does not reserve a call, reconnect a disconnected client, or retry a refused call.
 This requires a server running the same frontend observation contract; update
 and restart an older server explicitly before using the updated client. Closing
-the frontend terminal or terminating its process ends the call, closes audio
-and the owned Codex child, and returns the server to waiting. There are no
+the terminal frontend, closing or navigating away from the phone page, or
+terminating its owning process ends the call, closes media and the owned Codex
+child, and returns the server to waiting. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.
 The attached stock Codex TUI retains its own keyboard controls.
 The default endpoint is independent of the current workspace generation. Without
@@ -252,11 +282,15 @@ prevent attachment.
 
 Native protocol reference: [Codex approvals and connector interaction](https://learn.chatgpt.com/docs/app-server#approvals).
 
-Requirements: Bun, stock Codex with the experimental realtime app-server
-surface, an authenticated Codex account, built native duplex audio, and a
-terminal with microphone permission. Headphones are recommended: there is no
-echo cancellation. The original voice semantics were verified on Codex 0.147;
-run the native protocol probe before changing the supported runtime.
+Requirements: Bun and stock Codex with the experimental realtime app-server
+surface plus an authenticated Codex account. The terminal frontend additionally
+requires built native duplex audio and a terminal with microphone permission;
+headphones are recommended because that path has no echo cancellation. The phone
+frontend requires a same-device browser with microphone and WebRTC support and
+does not load native audio. It requests browser echo cancellation, noise
+suppression and automatic gain control, whose effective behavior remains
+browser/device policy. The original voice semantics were verified on Codex
+0.147; run the native protocol probe before changing the supported runtime.
 
 ### WebRTC compatibility default
 
@@ -334,6 +368,35 @@ Codex configuration or shell profiles are changed, and installation never starts
 the TUI or a voice call. An unrelated or edited plist is refused. A service failure
 is reported separately if command publication already succeeded.
 
+For an ARM64 Android/Termux standalone executable, cross-compile from a prepared
+checkout with a Bun release that supports the Android target:
+
+```sh
+bun run android:build
+# output: dist/agentvoice-android-arm64
+```
+
+To converge that binary on an already prepared Termux phone through an existing
+SSH target:
+
+```sh
+scripts/install-android --install --host smolbird
+```
+
+This explicit installer requires a clean checkout, verifies Android ARM64 plus
+the existing `codex` and `termux-open-url` commands, and publishes the executable
+as private `~/.local/bin/agentvoice` with an ownership-correlated receipt. It can
+adopt an unreceipted binary only when its SHA-256 exactly matches the new build
+or the one explicitly pinned pre-installer phone build. It is not part of
+desktop or unattended installation.
+
+The standalone binary embeds AgentVoice and Bun, not Codex credentials,
+configuration or history. Install it as an executable inside Termux and keep the
+Termux `codex` command on PATH (or set `CODEX_PATH`). The `phone` media path does
+not require `bun run native:build`; native `client` calls still do. The build-only
+command does not copy to a device; neither command alters Android permissions,
+logs in to Codex, starts a service or call, or opens media.
+
 ## Conversations and workspaces
 
 One canonical workspace per call: `--workspace` > an explicit
@@ -407,15 +470,18 @@ Workspace selection is not a memory or security sandbox.
 
 ## Features and controls
 
-- Click YOU to toggle microphone mute and AGENT to toggle speaker mute.
+- In the pointer TUI, click YOU to toggle microphone mute and AGENT to toggle
+  speaker mute. The phone page exposes equivalent labeled buttons.
 - While the microphone is muted, hold PUSH TO TALK to speak. Releasing restores
-  mute; terminal blur and frontend disconnect cancel the hold.
+  mute; terminal blur, page loss and frontend disconnect cancel the hold.
 - Buttons use white and grey only. Muted channels are greyed out. There are no
   animations, meters, timers, extra status rows, modal or application keybindings.
 - The top line shows only the connection phase. LIVE confirms the media link,
   not that native work completed or speech was heard.
-- Full-duplex audio uses native miniaudio, Opus and WebRTC. Automatic renewal
-  maintains the connection without changing its conversation or configuration.
+- Terminal full-duplex audio uses native miniaudio, Opus and server-owned WebRTC.
+  Phone audio and WebRTC stay in the browser; only bounded control and SDP
+  signaling cross the private frontend path. Automatic renewal maintains either
+  connection without changing its conversation or configuration.
 - Server settings and prompt files load once per runtime generation. Runtime
   restart or a later call reloads file contents; changing launch flags or the workspace requires a new server.
 
@@ -423,9 +489,11 @@ Warnings appear in the server terminal. With `--debug`, private per-call logs
 also capture protocol/media details. Native item deltas remain available through
 the read-only event socket; the frontend does not display them.
 
-Call startup validates prompts/protocol and native readiness before opening audio.
-The WebRTC offer follows device readiness. Audio failure closes the owned child;
-native conversation creation or resume may already have happened.
+Call startup validates prompts and protocol before opening media. A terminal call
+also validates native device readiness before its WebRTC offer; a phone call asks
+the browser to prepare its peer and never loads the native duplex library. Media
+failure closes the owned child; native conversation creation or resume may already
+have happened.
 
 ## Configuration and prompts
 
@@ -1024,7 +1092,9 @@ picker's ancestry-filtered list fields and verifies each result independently;
 see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
 
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
-for historical ownership decisions; [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md) defines the current topology.
+for historical ownership decisions. [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md)
+defines the terminal topology; [ADR 0032](docs/adr/0032-loopback-browser-media-frontend.md)
+adds the same-device browser-media topology.
 
 ### Send text to the voice
 

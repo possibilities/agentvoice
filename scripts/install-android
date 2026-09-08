@@ -1,0 +1,93 @@
+#!/bin/bash
+# Build and deploy the repository-owned Android standalone through one SSH target.
+set -euo pipefail
+
+usage='Usage: scripts/install-android --install --host <ssh-target>
+
+Build the ARM64 Android standalone from a clean AgentVoice checkout and install
+it atomically as ~/.local/bin/agentvoice in Termux. The target must already have
+stock Codex and termux-open-url. This does not install packages or configuration,
+log in, start the server/browser, or open media.'
+
+die() {
+    printf 'agentvoice Android install: %s\n' "$*" >&2
+    exit 1
+}
+
+if [ "$#" -eq 1 ] && { [ "$1" = --help ] || [ "$1" = -h ]; }; then
+    printf '%s\n' "$usage"
+    exit 0
+fi
+[ "$#" -eq 3 ] && [ "$1" = --install ] && [ "$2" = --host ] || {
+    printf '%s\n' "$usage" >&2
+    exit 64
+}
+ssh_target=$3
+case "$ssh_target" in
+    ''|-*|*[!A-Za-z0-9._@-]*) die "unsafe SSH target: $ssh_target" ;;
+esac
+
+[ "$(id -u)" -ne 0 ] || die "run as the source checkout user, not root"
+for command_name in bun git od ssh tar; do
+    command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
+done
+
+script_dir=$(cd -P -- "$(dirname -- "$0")" && pwd)
+root=$(cd -P -- "$script_dir/.." && pwd)
+[ "$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)" = "$root" ] \
+    || die "source must be an exact Git checkout: $root"
+origin=$(git -C "$root" remote get-url origin 2>/dev/null) \
+    || die "AgentVoice checkout has no origin"
+case "$origin" in
+    https://github.com/possibilities/agentvoice|https://github.com/possibilities/agentvoice.git|git@github.com:possibilities/agentvoice|git@github.com:possibilities/agentvoice.git|ssh://git@github.com/possibilities/agentvoice|ssh://git@github.com/possibilities/agentvoice.git) ;;
+    *) die "foreign AgentVoice checkout origin: $root" ;;
+esac
+
+source_sha=$(git -C "$root" rev-parse --verify HEAD 2>/dev/null)
+[[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid checkout commit: $root"
+[ -z "$(git -C "$root" status --porcelain --untracked-files=all)" ] \
+    || die "checkout is dirty; commit or set aside source changes before installing"
+
+bun_version=$(bun --version 2>/dev/null) || die "Bun 1.3+ is required"
+IFS=. read -r bun_major bun_minor _ <<<"$bun_version"
+[[ "$bun_major" =~ ^[0-9]+$ && "$bun_minor" =~ ^[0-9]+$ ]] \
+    || die "could not parse Bun version: $bun_version"
+(( bun_major > 1 || (bun_major == 1 && bun_minor >= 3) )) \
+    || die "Bun 1.3+ is required"
+
+(
+    cd "$root"
+    bun install --frozen-lockfile
+    bun run android:build
+)
+[ -z "$(git -C "$root" status --porcelain --untracked-files=all)" ] \
+    || die "checkout changed during the build; nothing was deployed"
+
+artifact="$root/dist/agentvoice-android-arm64"
+[ -f "$artifact" ] && [ ! -L "$artifact" ] && [ -O "$artifact" ] && [ -x "$artifact" ] \
+    || die "Android build did not produce a safe executable: $artifact"
+header=$(LC_ALL=C od -An -tx1 -N20 "$artifact" | tr -d ' \n')
+[[ "$header" == 7f454c46020101* ]] && [ "${header:36:4}" = b700 ] \
+    || die "Android artifact is not a 64-bit little-endian ARM64 ELF executable"
+
+if command -v sha256sum >/dev/null 2>&1; then
+    artifact_sha=$(sha256sum "$artifact" | awk '{print $1}')
+else
+    artifact_sha=$(shasum -a 256 "$artifact" | awk '{print $1}')
+fi
+[[ "$artifact_sha" =~ ^[0-9a-f]{64}$ ]] || die "could not hash Android artifact"
+
+bundle=$(mktemp -d "${TMPDIR:-/tmp}/agentvoice-android-install.XXXXXX") \
+    || die "could not create staging directory"
+cleanup() { rm -rf -- "$bundle"; }
+trap cleanup EXIT HUP INT TERM
+cp -- "$artifact" "$bundle/agentvoice"
+cp -- "$script_dir/install-android-remote" "$bundle/install-remote"
+printf 'agentvoice-android-v1\nsource-sha=%s\nartifact-sha256=%s\n' \
+    "$source_sha" "$artifact_sha" >"$bundle/manifest"
+
+remote_command='set -eu; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT HUP INT TERM; tar -xf - -C "$d"; bash "$d/install-remote" "$d"'
+tar -C "$bundle" -cf - agentvoice install-remote manifest \
+    | ssh -- "$ssh_target" "$remote_command"
+printf 'AgentVoice Android %s is converged on %s. No call, media, login, or service was started.\n' \
+    "$source_sha" "$ssh_target"

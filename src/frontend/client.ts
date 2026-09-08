@@ -1,6 +1,7 @@
 import { lstatSync } from "node:fs";
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
+import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "../browser/protocol.ts";
 import type { VoiceHost, VoiceView } from "../console/state.ts";
 import { createVoiceTui } from "../console/tui.ts";
 import { stateDirectory } from "../paths.ts";
@@ -9,6 +10,7 @@ import {
   FRONTEND_VERSION,
   type FrontendCommand,
   type FrontendState,
+  frontendBrowserOutputSchema,
   frontendSocketPath,
   frontendStateSchema,
 } from "./protocol.ts";
@@ -17,7 +19,13 @@ export async function connectFrontend(
   path: string,
   changed: () => void = () => {},
   clientId?: string,
-  options: { signal?: AbortSignal; timeoutMs?: number; waiting?: () => void } = {},
+  options: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    waiting?: () => void;
+    media?: "browser";
+    onBrowserMedia?: (message: BrowserMediaServerMessage) => void;
+  } = {},
 ) {
   let info: ReturnType<typeof lstatSync>;
   try {
@@ -68,7 +76,10 @@ export async function connectFrontend(
     () => fail(new Error("AgentVoice server did not accept the call")),
     5000,
   );
-  function send(method: string, params?: FrontendCommand | { clientId: string }) {
+  function send(
+    method: string,
+    params?: FrontendCommand | BrowserMediaClientMessage | { clientId: string; media?: "browser" },
+  ) {
     if (closed || socket.destroyed) return;
     if (socket.writableLength > 64 * 1024) {
       fail(new Error("AgentVoice server is not reading input"));
@@ -79,7 +90,14 @@ export async function connectFrontend(
     );
   }
   socket.setEncoding("utf8");
-  socket.on("connect", () => send("call", clientId ? { clientId } : undefined));
+  socket.on("connect", () =>
+    send(
+      "call",
+      clientId
+        ? { clientId, ...(options.media === undefined ? {} : { media: options.media }) }
+        : undefined,
+    ),
+  );
   socket.on("data", (chunk) => {
     partial += chunk;
     if (Buffer.byteLength(partial) > 64 * 1024) {
@@ -107,6 +125,8 @@ export async function connectFrontend(
         } else if (frame.type === "state") {
           state = frontendStateSchema.parse(frame.state);
           changed();
+        } else if (frame.type === "browser-media" && options.media === "browser") {
+          options.onBrowserMedia?.(frontendBrowserOutputSchema.parse(frame.message));
         } else throw new Error("Invalid AgentVoice server frame");
       } catch (cause) {
         fail(cause instanceof Error ? cause : new Error(String(cause)));
@@ -129,6 +149,7 @@ export async function connectFrontend(
   return {
     state: () => state,
     command: (command: FrontendCommand) => send("input", command),
+    browserMedia: (message: BrowserMediaClientMessage) => send("browser-media", message),
     close: () => {
       socket.destroy();
       return ended.promise;

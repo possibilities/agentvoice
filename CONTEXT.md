@@ -24,13 +24,21 @@ call. Attachments start only after this launch's call is live.
 starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns no audio, Codex process, configuration or thread leases.
 
+**Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
+same Android/Termux device. The command serves a capability-bearing loopback URL;
+the page requests microphone access only after an explicit tap and owns capture,
+playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. It is not a
+remote console, arbitrary endpoint or cross-machine client. See ADR 0032.
+
 **AgentVoice controller** — The server-owned authority for one call: exact
 workspace/thread identity, thread leases, operation journal, private control and
 event transports retained across runtime replacements.
 
-**Voice runtime** — The disposable child of a call controller, owning native
-audio, WebRTC, configuration/prompt/role loading and its stock Codex child.
-Audio never crosses the frontend socket or controller IPC.
+**Voice runtime** — The disposable child of a call controller, owning
+configuration/prompt/role loading and its stock Codex child. For terminal calls
+it also owns native audio and WebRTC. For phone calls the browser owns media and
+the runtime relays bounded SDP signaling only. Audio never crosses the frontend
+socket or controller IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
 owned by the voice runtime. Native RPC uses an authenticated loopback WebSocket;
@@ -173,8 +181,15 @@ on the owned child only, and its MCP servers ride per-thread config. Not an
 identity, account, or workspace. _Avoid_: capability, overlay, profile.
 
 **Mute / hold** — Channel clicks toggle the persistent mute assignment. The
-conditional pointer push-to-talk button temporarily opens a muted microphone;
-release, terminal blur or frontend disconnect closes that hold.
+conditional pointer/browser push-to-talk button temporarily opens a muted
+microphone; release, terminal blur/page loss or frontend disconnect closes that
+hold.
+
+**Browser media capability** — A 256-bit random token in the ephemeral
+`http://127.0.0.1:<port>/<token>/` URL printed by `agentvoice phone`. Exact Host
+and Origin checks plus one-owner admission keep it same-device. It is never a
+native Codex/controller credential and must not be persisted, shared or widened
+into remote access.
 
 **Redial** — An MCP/API operation that replaces the voice connection while
 keeping the runtime, loaded settings, native thread and stock TUI attachment.

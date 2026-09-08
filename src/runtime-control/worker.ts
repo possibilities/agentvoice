@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
+import {
+  type BrowserMediaClientMessage,
+  browserMediaClientMessageSchema,
+} from "../browser/protocol.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
@@ -25,13 +29,14 @@ import { runtimeSender } from "./sender.ts";
 export function runRuntimeWorker(
   dependencies: { mediaFactory?: ConsoleHostOptions["mediaFactory"] } = {},
 ): void {
-  const generation = Number(process.argv[2]);
+  const generation = Number(process.argv.at(-1));
   if (!process.send || !Number.isSafeInteger(generation))
     throw new Error("Runtime requires its controller IPC");
   let launch: RuntimeLaunch | undefined;
   let config: ServerConfig | undefined;
   let snapshot: RuntimeSnapshot | undefined;
   let factory: ConsoleHostOptions["mediaFactory"];
+  let receiveBrowserMedia: ((message: BrowserMediaClientMessage) => void) | undefined;
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: (VoiceHost & { redial(): Promise<void> }) | undefined;
   let mailboxRuntime: MailboxRuntime | undefined;
@@ -93,8 +98,14 @@ export function runRuntimeWorker(
   }
   function fingerprint(): string {
     const hash = createHash("sha256");
-    if (process.argv[1]) hash.update(readFileSync(process.argv[1]));
     const root = new URL("../../", import.meta.url).pathname;
+    if (root.includes("$bunfs")) {
+      // The compiled executable is immutable for this process lifetime; embedded
+      // source paths are virtual and cannot be walked like an editable checkout.
+      hash.update(`agentvoice-standalone\0${Bun.version}\0${Bun.revision}\0${root}`);
+      return hash.digest("hex");
+    }
+    if (process.argv[1] && existsSync(process.argv[1])) hash.update(readFileSync(process.argv[1]));
     function walk(directory: string): void {
       if (!existsSync(directory)) return;
       for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
@@ -127,7 +138,13 @@ export function runRuntimeWorker(
         "Reload would change the pinned workspace; use a separate launch to change context",
       );
     snapshot = await runtime.prepareRuntime(config, params.control);
-    factory = dependencies.mediaFactory ?? (await media.nativeMediaFactory());
+    if (dependencies.mediaFactory) factory = dependencies.mediaFactory;
+    else if (params.media === "browser") {
+      const { browserMediaAdapter } = await import("../console/browser-media.ts");
+      const adapter = browserMediaAdapter((message) => event("browser-media", message));
+      factory = adapter.factory;
+      receiveBrowserMedia = adapter.receive;
+    } else factory = await media.nativeMediaFactory();
     factory.check(); // Loads and pins the native library without opening hardware.
     runHost = media.runConsoleHost;
     const after = fingerprint();
@@ -311,6 +328,10 @@ export function runRuntimeWorker(
         }
         return null;
       }
+      case "browser-media":
+        if (!receiveBrowserMedia) throw new Error("Browser media is unavailable");
+        receiveBrowserMedia(browserMediaClientMessageSchema.parse(params));
+        return null;
       case "redial":
         if (terminalFailure || stopping || !mediaEnabled || !host)
           throw new Error("Voice redial is unavailable");
