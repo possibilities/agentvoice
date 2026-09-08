@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { connectFrontend } from "../frontend/client.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import { type FrontendState, frontendSocketPath } from "../frontend/protocol.ts";
+import type { ConnectionProfile } from "../network/credentials.ts";
 import { stateDirectory } from "../paths.ts";
 import { BrowserMediaServer } from "./server.ts";
 
@@ -12,6 +13,7 @@ export interface BrowserFrontendOptions {
   open?: (url: string) => void | Promise<void>;
   write?: (line: string) => void;
   signal?: AbortSignal;
+  connection?: ConnectionProfile;
 }
 
 export async function runBrowserFrontend(
@@ -58,7 +60,8 @@ export async function runBrowserFrontend(
       if (ownerOpen) throw new Error("browser voice owner is already open");
       ownerOpen = true;
       client = await connectFrontend(
-        frontendSocketPath(options.stateDir ?? stateDirectory(process.env, homedir()), workspace),
+        options.connection ??
+          frontendSocketPath(options.stateDir ?? stateDirectory(process.env, homedir()), workspace),
         () => {
           queueMicrotask(() => {
             if (!client) return;

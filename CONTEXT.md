@@ -28,8 +28,9 @@ server configuration or thread leases. Both clients use frontend API v2 (ADR 003
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
 the page requests microphone access only after an explicit tap and owns capture,
-playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. It is not a
-remote console, arbitrary endpoint or cross-machine client. See ADR 0032.
+playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. With a private
+`--connect` profile, the bridge connects to the desktop WSS API instead of local
+Termux; browser content and credentials remain separated. See ADRs 0032/0034.
 
 **AgentVoice controller** — The server-owned authority for one call: exact
 workspace/thread identity, thread leases, operation journal, private control and

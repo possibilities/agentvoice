@@ -12,7 +12,10 @@ identity, leases, operation journal and control/event transports; its disposable
 owns config/prompt/role loading and an owned stock Codex app-server. All clients
 own audio and WebRTC; no production server path loads native media (ADR 0033).
 Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
-No remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
+Authenticated WSS client API v2 is opt-in behind a dedicated tailnet-only TLS
+proxy (ADR 0034). `client` and `phone --connect` load a private device grant;
+browser content stays loopback-only and never receives that grant. Never expose
+native Codex, MCP, attachment or event sockets through this gateway. Read README.md, CONTEXT.md and ADRs
 0033/0032/0024/0022 for the active topologies; ADRs 0015/0016 describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
@@ -115,7 +118,13 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   path, exact Host/Origin checks, one-owner reservation, browser security headers,
   explicit Start gesture and session IDs. Page/socket loss owns call teardown.
   Never persist or expose its URL through discovery, accept arbitrary content,
-  rebind for LAN/tailnet/ADB access, or call this remote support. See ADR 0032.
+  rebind for LAN/tailnet/ADB access. The bridge may connect to authenticated WSS
+  while the page remains same-device. See ADRs 0032/0034.
+- src/network/: WSS device grants, loopback TLS-proxy backend, bounded heartbeat
+  framing and client adapter. Network and local owners share the same VoiceServer.
+  Fail closed on invalid credentials, Origin, protocol, frames and liveness;
+  close local ownership immediately without waiting for a network close handshake.
+  No automatic reconnect, secret logging, TLS bypass or public Funnel deployment.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
   strict outer objects, open config/extra passthroughs, optional means unset.

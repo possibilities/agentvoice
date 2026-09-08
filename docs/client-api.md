@@ -9,7 +9,7 @@ regenerate with `bun scripts/generate-client-schema.ts`. A drift test pins it.
 
 ## Transport and authority
 
-Current transport: UTF-8 newline-delimited JSON on an owned mode-0600 Unix socket
+Local transport: UTF-8 newline-delimited JSON on an owned mode-0600 Unix socket
 under the private AgentVoice state directory. Each request has
 `{v:2,type:"request",id,method,params?}`. Responses correlate `id` and return
 `{v:2,type:"response",id,ok:true,result}` or `ok:false,error:{message}`.
@@ -19,10 +19,13 @@ State updates are `{v:2,type:"state",state}`; media events are
 at 256 characters. No SDP is included in diagnostics, events or transcripts.
 
 The socket's OS ownership is authentication. `clientId` and `sessionId` are
-correlation, not authentication. There is no arbitrary-network endpoint flag.
-The future desktop-to-Android transport needs authenticated encrypted access
-and bounded disconnect detection; it must not expose this private socket or
-reuse the prototype URL as remote authentication.
+correlation, not authentication. Network transport is one JSON text frame per WSS
+message at `/v2/client`, subprotocol `agentvoice.v2`, with a device Bearer credential
+in the upgrade Authorization header. It preserves these exact API envelopes;
+there is no NDJSON batching over WSS. Network-only ping/pong envelopes are included
+in `client.schema.json`. See [Android handoff](android-client-handoff.md) for TLS,
+heartbeat, limits, revocation and the complete deployment/import lifecycle.
+The prototype loopback URL is never remote authentication.
 
 ## Methods
 

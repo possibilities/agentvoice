@@ -298,15 +298,29 @@ export async function runServer(
     () => workspace ?? currentWorkspace(stateDir, false),
   );
   const stopped = Promise.withResolvers<void>();
+  let network: import("../network/gateway.ts").NetworkGateway | undefined;
   const stop = () => stopped.resolve();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   process.once("SIGHUP", stop);
   try {
     await server.start();
+    if (endpointWorkspace === undefined) {
+      const { loadNetworkSettings } = await import("../network/credentials.ts");
+      const settings = loadNetworkSettings(stateDir);
+      if (settings) {
+        const { NetworkGateway } = await import("../network/gateway.ts");
+        network = new NetworkGateway(stateDir, frontendSocketPath(stateDir), settings);
+        network.start();
+        console.log(
+          `Authenticated client API available behind TLS proxy on loopback port ${network.port}`,
+        );
+      }
+    }
     console.log(`AgentVoice server waiting in ${workspace ?? "the current default workspace"}`);
     await stopped.promise;
   } finally {
+    await network?.close();
     await server.close();
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);

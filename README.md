@@ -57,7 +57,8 @@ pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
 The composition and `client` also accept `--device` and `--output-device` for
-client-local audio. `phone` accepts only `--workspace` and `--help`.
+client-local audio. `client` and `phone` also accept `--connect <private-profile.json>`
+instead of `--workspace` for authenticated WSS access to the desktop server.
 Both clients use [client API v2](docs/client-api.md); the server never opens audio.
 
 On an Android phone, run the server and browser frontend in separate Termux
@@ -84,14 +85,19 @@ commands when those views are wanted.
 The printed URL contains a per-process bearer capability. Do not share or
 bookmark it. The listener accepts only exact-origin loopback requests and one
 browser owner, and disappears when `phone` exits. It cannot bind to another
-interface, accept an arbitrary endpoint, or connect across a LAN or tailnet.
-This is a same-phone bridge, not remote mode.
+interface. By default the bridge calls the local Termux server. For the desktop
+path, run `agentvoice phone --connect /absolute/private/desktop.json`: the Termux
+bridge holds the device grant and connects over verified WSS/Tailscale; the page
+and its media stay on the phone. No local Termux server is needed in that mode.
+Codex, workspace, configuration and transcripts belong to the desktop server.
+See [network setup and Android handoff](docs/android-client-handoff.md).
 
 One server and one active frontend are allowed per canonical workspace.
-Bare `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
+Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
 previous frontend has disconnected but its call is still cleaning up, displaying
 “Closing previous call…”. An active frontend still blocks a second call. Waiting
 does not reserve a call, reconnect a disconnected client, or retry a refused call.
+Network clients request admission once; busy/closing refusals require an explicit retry.
 This requires a server running the same frontend observation contract; update
 and restart an older server explicitly before using the updated client. Closing
 the terminal frontend, closing or navigating away from the phone page, or

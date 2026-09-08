@@ -6,6 +6,8 @@ import type { MediaOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceView } from "../console/state.ts";
 import { createVoiceTui } from "../console/tui.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
+import { NetworkClientSocket } from "../network/client.ts";
+import type { ConnectionProfile } from "../network/credentials.ts";
 import { stateDirectory } from "../paths.ts";
 import { observeFrontend } from "./observer.ts";
 import {
@@ -19,7 +21,7 @@ import {
 } from "./protocol.ts";
 
 export async function connectFrontend(
-  path: string,
+  path: string | ConnectionProfile,
   changed: () => void = () => {},
   clientId?: string,
   options: {
@@ -29,28 +31,30 @@ export async function connectFrontend(
     onMedia?: (message: ServerMediaMessage) => void;
   } = {},
 ) {
-  let info: ReturnType<typeof lstatSync>;
-  try {
-    info = lstatSync(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      throw new Error(
-        "No AgentVoice server is waiting. Check agentvoice service status, or run agentvoice server with matching --workspace selection.",
-      );
-    throw error;
-  }
-  if (
-    !info.isSocket() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
-    (info.mode & 0o077) !== 0
-  )
-    throw new Error("Unsafe AgentVoice server socket");
-  const observation = await observeFrontend(path, () => {});
-  try {
-    await observation.waitUntilAvailable(options);
-  } finally {
-    observation.socket.close();
+  if (typeof path === "string") {
+    let info: ReturnType<typeof lstatSync>;
+    try {
+      info = lstatSync(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new Error(
+          "No AgentVoice server is waiting. Check agentvoice service status, or run agentvoice server with matching --workspace selection.",
+        );
+      throw error;
+    }
+    if (
+      !info.isSocket() ||
+      info.isSymbolicLink() ||
+      info.uid !== process.getuid?.() ||
+      (info.mode & 0o077) !== 0
+    )
+      throw new Error("Unsafe AgentVoice server socket");
+    const observation = await observeFrontend(path, () => {});
+    try {
+      await observation.waitUntilAvailable(options);
+    } finally {
+      observation.socket.close();
+    }
   }
   options.signal?.throwIfAborted();
   const ready = Promise.withResolvers<void>();
@@ -67,7 +71,16 @@ export async function connectFrontend(
     mic: { muted: false, effectiveMuted: true },
     speaker: { muted: false, effectiveMuted: true },
   };
-  const socket = createConnection({ path });
+  const socket: {
+    destroyed: boolean;
+    writableLength: number;
+    destroy(): void;
+    write(data: string): unknown;
+    setEncoding(encoding: BufferEncoding): unknown;
+    on(event: "connect" | "close", listener: () => void): unknown;
+    on(event: "data", listener: (chunk: string) => void): unknown;
+    on(event: "error", listener: (error: Error) => void): unknown;
+  } = typeof path === "string" ? createConnection({ path }) : new NetworkClientSocket(path);
   const fail = (cause: Error) => {
     error ??= cause;
     socket.destroy();
@@ -171,7 +184,11 @@ export async function connectFrontend(
   };
 }
 
-export async function runFrontend(workspace?: string, options: MediaOptions = {}) {
+export async function runFrontend(
+  workspace?: string,
+  options: MediaOptions = {},
+  connection?: ConnectionProfile,
+) {
   let tui: VoiceView | undefined;
   const abort = new AbortController();
   const stop = () => abort.abort();
@@ -186,7 +203,7 @@ export async function runFrontend(workspace?: string, options: MediaOptions = {}
   }, options);
   try {
     client = await connectFrontend(
-      frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
+      connection ?? frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
       () => {
         if (client) media.state(client.state());
         tui?.refresh();

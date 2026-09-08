@@ -449,6 +449,25 @@
           "additionalProperties": false
         }
       ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 2
+        },
+        "type": {
+          "type": "string",
+          "enum": ["ping", "pong"]
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "required": ["v", "type", "nonce"],
+      "additionalProperties": false
     }
   ],
   "$defs": {

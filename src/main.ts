@@ -23,6 +23,9 @@ Usage:
                                    Connect with the pointer frontend alone
   agentvoice phone [--workspace <dir>]
                                    Open the loopback browser voice frontend
+  agentvoice client|phone --connect <private-profile.json>
+                                   Connect to an authenticated WSS server
+  agentvoice network --help        Configure network access and device grants
   agentvoice attach agent [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
   agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
@@ -376,6 +379,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(await service.status());
       return 0;
     }
+    if (command === "network") {
+      const { networkCommand } = await import("./network/command.ts");
+      networkCommand(argv.slice(1), stateDirectory(process.env, homedir()));
+      return 0;
+    }
     if (command === "resident" || command === "remote" || command === "console") {
       throw new UsageError(
         `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
@@ -384,7 +392,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "phone") {
       const phoneArgs = argv.slice(1);
       const parsed = parseArgs(phoneArgs, {
-        value: new Set(["--workspace"]),
+        value: new Set(["--workspace", "--connect"]),
         bool: new Set(["--help"]),
       });
       if (parsed.help) {
@@ -392,15 +400,24 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return 0;
       }
       const selected =
-        parsed.values["workspace"] === undefined ? undefined : parseMcpConfigCommand(phoneArgs);
+        parsed.values["workspace"] === undefined
+          ? undefined
+          : parseMcpConfigCommand(["--workspace", parsed.values["workspace"]]);
       if (selected?.help) return 0;
+      if (parsed.values["connect"] && selected)
+        throw new UsageError("--connect and --workspace are mutually exclusive");
+      const { loadConnectionProfile } = await import("./network/credentials.ts");
       const { runBrowserFrontend } = await import("./browser/frontend.ts");
-      await runBrowserFrontend(selected?.workspace);
+      await runBrowserFrontend(selected?.workspace, {
+        connection: parsed.values["connect"]
+          ? loadConnectionProfile(resolve(parsed.values["connect"]))
+          : undefined,
+      });
       return 0;
     }
     const clientArgs = command === "client" ? argv.slice(1) : argv;
     const frontendFlags = parseArgs(clientArgs, {
-      value: new Set(["--workspace", "--device", "--output-device"]),
+      value: new Set(["--workspace", "--device", "--output-device", "--connect"]),
       bool: new Set(["--help"]),
     });
     if (frontendFlags.help) {
@@ -412,21 +429,32 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         ? undefined
         : parseMcpConfigCommand(["--workspace", frontendFlags.values["workspace"]]);
     if (selected?.help) return 0;
+    if (frontendFlags.values["connect"] && (selected || command !== "client"))
+      throw new UsageError(
+        "--connect requires agentvoice client and cannot select a local workspace",
+      );
     if (command === "client") {
       const { launchClientRuntime } = await import("./frontend/client-runtime.ts");
       const exitCode = await launchClientRuntime(clientArgs, import.meta.path);
       if (exitCode !== undefined) return exitCode;
       const { runFrontend } = await import("./frontend/client.ts");
-      await runFrontend(selected?.workspace, {
-        deviceIndex:
-          frontendFlags.values["device"] === undefined
-            ? undefined
-            : parseDeviceIndex("--device", frontendFlags.values["device"]),
-        outputDeviceIndex:
-          frontendFlags.values["output-device"] === undefined
-            ? undefined
-            : parseDeviceIndex("--output-device", frontendFlags.values["output-device"]),
-      });
+      const { loadConnectionProfile } = await import("./network/credentials.ts");
+      await runFrontend(
+        selected?.workspace,
+        {
+          deviceIndex:
+            frontendFlags.values["device"] === undefined
+              ? undefined
+              : parseDeviceIndex("--device", frontendFlags.values["device"]),
+          outputDeviceIndex:
+            frontendFlags.values["output-device"] === undefined
+              ? undefined
+              : parseDeviceIndex("--output-device", frontendFlags.values["output-device"]),
+        },
+        frontendFlags.values["connect"]
+          ? loadConnectionProfile(resolve(frontendFlags.values["connect"]))
+          : undefined,
+      );
     } else {
       const { runComposition } = await import("./composition/launch.ts");
       const deviceArgs: string[] = [];

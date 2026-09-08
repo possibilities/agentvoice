@@ -1,13 +1,17 @@
 import { z } from "zod";
 import { frontendRequestSchema, frontendServerFrameSchema } from "../src/frontend/protocol.ts";
+import { heartbeatSchema } from "../src/network/protocol.ts";
 
 export function buildClientSchema() {
   return {
-    ...z.toJSONSchema(z.union([frontendRequestSchema, frontendServerFrameSchema]), {
-      target: "draft-2020-12",
-      io: "input",
-      reused: "ref",
-    }),
+    ...z.toJSONSchema(
+      z.union([frontendRequestSchema, frontendServerFrameSchema, heartbeatSchema]),
+      {
+        target: "draft-2020-12",
+        io: "input",
+        reused: "ref",
+      },
+    ),
     title: "AgentVoice client API v2",
     description:
       "Exclusive call ownership and client-owned media signaling. See docs/client-api.md. No credentials or audio bytes.",
