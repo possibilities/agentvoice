@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "type": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "method": {
+              "type": "string",
+              "enum": ["discover", "observe"]
+            }
+          },
+          "required": ["v", "type", "id", "method"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "type": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "method": {
+              "type": "string",
+              "const": "call"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "clientId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              },
+              "required": ["clientId"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["v", "type", "id", "method", "params"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "type": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "method": {
+              "type": "string",
+              "const": "input"
+            },
+            "params": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "mute"
+                    },
+                    "target": {
+                      "type": "string",
+                      "enum": ["mic", "speaker"]
+                    },
+                    "muted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["action", "target", "muted"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["hold", "release"]
+                    }
+                  },
+                  "required": ["action"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["v", "type", "id", "method", "params"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "type": {
+              "$ref": "#/$defs/__schema1"
+            },
+            "id": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "method": {
+              "type": "string",
+              "const": "client-media"
+            },
+            "params": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "offer"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "sdp": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 196608
+                    }
+                  },
+                  "required": ["type", "sessionId", "sdp"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "connected"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": ["type", "sessionId"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "required": ["type", "sessionId", "detail"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "mute"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "target": {
+                      "type": "string",
+                      "enum": ["mic", "speaker"]
+                    },
+                    "muted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["type", "sessionId", "target", "muted"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["hold", "release"]
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": ["type", "sessionId"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["v", "type", "id", "method", "params"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "state"
+            },
+            "state": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": ["v", "type", "state"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "observation"
+            },
+            "observation": {
+              "$ref": "#/$defs/__schema6"
+            }
+          },
+          "required": ["v", "type", "observation"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "client-media"
+            },
+            "message": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "prepare"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": ["type", "sessionId"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "answer"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "sdp": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 196608
+                    }
+                  },
+                  "required": ["type", "sessionId", "sdp"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "close"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "required": ["type", "sessionId"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "state"
+                    },
+                    "sessionId": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "mic": {
+                      "$ref": "#/$defs/__schema7"
+                    },
+                    "speaker": {
+                      "$ref": "#/$defs/__schema7"
+                    }
+                  },
+                  "required": ["type", "sessionId", "mic", "speaker"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["v", "type", "message"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "response"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "ok": {
+              "type": "boolean",
+              "const": true
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/__schema6"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "busy": {
+                      "type": "boolean"
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "threadId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["busy", "workspace", "threadId"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["v", "type", "id", "ok", "result"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "response"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "ok": {
+              "type": "boolean",
+              "const": false
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": ["message"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["v", "type", "id", "ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "__schema0": {
+      "type": "number",
+      "const": 2
+    },
+    "__schema1": {
+      "type": "string",
+      "const": "request"
+    },
+    "__schema2": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "__schema3": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "__schema4": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["waiting-ready", "negotiating", "live", "failed", "stopped"]
+        },
+        "mic": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "speaker": {
+          "$ref": "#/$defs/__schema5"
+        }
+      },
+      "required": ["available", "phase", "mic", "speaker"],
+      "additionalProperties": false
+    },
+    "__schema5": {
+      "type": "object",
+      "properties": {
+        "muted": {
+          "type": "boolean"
+        },
+        "effectiveMuted": {
+          "type": "boolean"
+        }
+      },
+      "required": ["muted", "effectiveMuted"],
+      "additionalProperties": false
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "busy": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "string",
+          "enum": ["idle", "connected", "closing", "unavailable"]
+        },
+        "clientId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "threadId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema4"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["busy", "availability", "clientId", "workspace", "threadId", "state"],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "muted": {
+          "type": "boolean"
+        },
+        "effectiveMuted": {
+          "type": "boolean"
+        }
+      },
+      "required": ["muted", "effectiveMuted"],
+      "additionalProperties": false
+    }
+  },
+  "title": "AgentVoice client API v2",
+  "description": "Exclusive call ownership and client-owned media signaling. See docs/client-api.md. No credentials or audio bytes."
+}

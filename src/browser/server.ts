@@ -1,12 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { browserMediaPage, browserMediaScript } from "./page.ts";
 import {
   BROWSER_MEDIA_MAX_FRAME_BYTES,
-  type BrowserMediaClientMessage,
-  type BrowserMediaServerMessage,
-  browserMediaClientMessageSchema,
-  browserMediaServerMessageSchema,
-} from "./protocol.ts";
+  type ClientMediaMessage,
+  clientMediaMessageSchema,
+  type ServerMediaMessage,
+  serverMediaMessageSchema,
+} from "../frontend/media-protocol.ts";
+import { browserMediaPage, browserMediaScript } from "./page.ts";
 
 type SocketData = { ownerId: string };
 
@@ -15,10 +15,7 @@ export type BrowserMediaOwner = { readonly id: string };
 export type BrowserMediaServerOptions = {
   token?: string;
   onOwnerOpen: (owner: BrowserMediaOwner) => Promise<void> | void;
-  onClientMessage: (
-    message: BrowserMediaClientMessage,
-    owner: BrowserMediaOwner,
-  ) => Promise<void> | void;
+  onClientMessage: (message: ClientMediaMessage, owner: BrowserMediaOwner) => Promise<void> | void;
   onOwnerClosed: (owner: BrowserMediaOwner) => Promise<void> | void;
 };
 
@@ -77,8 +74,8 @@ export class BrowserMediaServer {
     });
   }
 
-  send(message: BrowserMediaServerMessage): boolean {
-    const parsed = browserMediaServerMessageSchema.safeParse(message);
+  send(message: ServerMediaMessage): boolean {
+    const parsed = serverMediaMessageSchema.safeParse(message);
     if (!parsed.success || !this.#ownerSocket) return false;
     return this.#ownerSocket.send(JSON.stringify(parsed.data)) > 0;
   }
@@ -174,7 +171,7 @@ export class BrowserMediaServer {
     } catch {
       return socket.close(1007, "invalid json");
     }
-    const parsed = browserMediaClientMessageSchema.safeParse(decoded);
+    const parsed = clientMediaMessageSchema.safeParse(decoded);
     if (!parsed.success) return socket.close(1008, "invalid message");
     try {
       await this.#options.onClientMessage(parsed.data, { id: socket.data.ownerId });

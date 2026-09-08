@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import {
-  browserMediaClientMessageSchema,
-  browserMediaServerMessageSchema,
-} from "../src/browser/protocol.ts";
 import { BrowserMediaServer } from "../src/browser/server.ts";
+import {
+  clientMediaMessageSchema,
+  serverMediaMessageSchema,
+} from "../src/frontend/media-protocol.ts";
 
 function openSocket(url: string, origin: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
@@ -66,13 +66,13 @@ test("browser media serves only its capability path with restrictive browser pol
 });
 
 test("browser media validates session-bound offer, answer, state and mute messages", () => {
-  expect(browserMediaClientMessageSchema.parse({ type: "offer", sessionId, sdp: "v=0" })).toEqual({
+  expect(clientMediaMessageSchema.parse({ type: "offer", sessionId, sdp: "v=0" })).toEqual({
     type: "offer",
     sessionId,
     sdp: "v=0",
   });
   expect(
-    browserMediaClientMessageSchema.parse({
+    clientMediaMessageSchema.parse({
       type: "mute",
       sessionId,
       target: "mic",
@@ -84,21 +84,21 @@ test("browser media validates session-bound offer, answer, state and mute messag
     target: "mic",
     muted: true,
   });
-  expect(browserMediaClientMessageSchema.parse({ type: "connected", sessionId })).toEqual({
+  expect(clientMediaMessageSchema.parse({ type: "connected", sessionId })).toEqual({
     type: "connected",
     sessionId,
   });
-  expect(browserMediaClientMessageSchema.parse({ type: "hold", sessionId })).toEqual({
+  expect(clientMediaMessageSchema.parse({ type: "hold", sessionId })).toEqual({
     type: "hold",
     sessionId,
   });
-  expect(browserMediaServerMessageSchema.parse({ type: "answer", sessionId, sdp: "v=0" })).toEqual({
+  expect(serverMediaMessageSchema.parse({ type: "answer", sessionId, sdp: "v=0" })).toEqual({
     type: "answer",
     sessionId,
     sdp: "v=0",
   });
   expect(() =>
-    browserMediaClientMessageSchema.parse({
+    clientMediaMessageSchema.parse({
       type: "mute",
       sessionId,
       target: "mic",
@@ -107,10 +107,10 @@ test("browser media validates session-bound offer, answer, state and mute messag
     }),
   ).toThrow();
   expect(() =>
-    browserMediaClientMessageSchema.parse({ type: "offer", sessionId, sdp: "x".repeat(200_000) }),
+    clientMediaMessageSchema.parse({ type: "offer", sessionId, sdp: "x".repeat(200_000) }),
   ).toThrow();
   expect(() =>
-    browserMediaServerMessageSchema.parse({
+    serverMediaMessageSchema.parse({
       type: "state",
       sessionId: "not-a-session",
       mic: { muted: false, effectiveMuted: false },

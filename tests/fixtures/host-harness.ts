@@ -1,6 +1,10 @@
 import type { VoiceAudioOptions } from "../../src/console/duplex-audio.ts";
-import type { ConsoleHostOptions, HostAudio, HostTransport } from "../../src/console/host.ts";
-import type { VoiceTransportOptions } from "../../src/console/transport.ts";
+import type {
+  ConsoleHostOptions,
+  HostAudio,
+  HostTransport,
+  VoiceTransportOptions,
+} from "../../src/console/host.ts";
 import type { ConfigValues } from "../../src/core/config.ts";
 import type { RuntimeOptions } from "../../src/core/runtime.ts";
 import { runtimeHarness } from "./runtime-harness.ts";

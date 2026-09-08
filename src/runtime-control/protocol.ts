@@ -1,7 +1,8 @@
 /** Private inherited IPC only; no audio, RTP, or bearer capability crosses it. */
-import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "../browser/protocol.ts";
+
 import type { VoiceState } from "../console/state.ts";
 import type { ControlMcpRegistration } from "../core/control-mcp.ts";
+import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import type { ParsedArgs, ServerOptions } from "../main.ts";
 
 export const IPC_VERSION = 1;
@@ -22,7 +23,6 @@ export interface RuntimeLaunch {
   control: ControlMcpRegistration;
   workspace?: string;
   nativeStateDir?: string;
-  media?: "browser";
 }
 export interface RuntimeActivation {
   threadId?: string;
@@ -49,5 +49,5 @@ export function ipcMessage(value: unknown, generation: number): value is IpcMess
   );
 }
 export type RuntimeState = VoiceState;
-export type RuntimeBrowserInput = BrowserMediaClientMessage;
-export type RuntimeBrowserOutput = BrowserMediaServerMessage;
+export type RuntimeBrowserInput = ClientMediaMessage;
+export type RuntimeBrowserOutput = ServerMediaMessage;

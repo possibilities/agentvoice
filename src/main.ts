@@ -47,14 +47,16 @@ Server options:
   --fast, --no-fast        Explicit native Fast or standard processing
   --voice-model <id>       Realtime voice model
   --voice <name>           Voice timbre
-  --device <index>         Microphone device
-  --output-device <index>  Speaker device
   --sandbox <mode>         Native sandbox mode
   --approval-policy <p>    Native approval policy
   --allow-full-access     Explicit unrestricted files/network and no approvals
   --codex <path>           Stock Codex executable
   --debug                 Private per-call protocol/media log
   --help                  Show help
+
+Client options (agentvoice or agentvoice client):
+  --device <index>         This client's microphone device
+  --output-device <index>  This client's speaker device
 
 The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
 For manual use, run agentvoice server. It opens no audio or Codex child while waiting.
@@ -188,7 +190,7 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
   };
 }
 
-function parseDeviceIndex(flag: string, value: string): number {
+export function parseDeviceIndex(flag: string, value: string): number {
   const index = Number(value);
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(index) || index > 0x7fffffff) {
     throw new UsageError(`${flag} must be a non-negative 32-bit integer; got "${value}"`);
@@ -197,8 +199,6 @@ function parseDeviceIndex(flag: string, value: string): number {
 }
 
 export interface ServerOptions {
-  deviceIndex?: number;
-  outputDeviceIndex?: number;
   debug: boolean;
   fresh: boolean;
   continue: boolean;
@@ -213,15 +213,15 @@ export function parseServerCommand(argv: string[]): ParsedServerCommand {
   if (parsed.help) return { help: true };
   const device = parsed.values["device"];
   const outputDevice = parsed.values["output-device"];
+  if (device !== undefined || outputDevice !== undefined)
+    throw new UsageError(
+      "Audio devices belong to the client; use agentvoice client --device/--output-device",
+    );
   const resume = parsed.values["resume"];
   return {
     help: false,
     parsed,
     options: {
-      ...(device === undefined ? {} : { deviceIndex: parseDeviceIndex("--device", device) }),
-      ...(outputDevice === undefined
-        ? {}
-        : { outputDeviceIndex: parseDeviceIndex("--output-device", outputDevice) }),
       debug: parsed.debug,
       fresh: parsed.fresh,
       continue: parsed.continue,
@@ -400,7 +400,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     const clientArgs = command === "client" ? argv.slice(1) : argv;
     const frontendFlags = parseArgs(clientArgs, {
-      value: new Set(["--workspace"]),
+      value: new Set(["--workspace", "--device", "--output-device"]),
       bool: new Set(["--help"]),
     });
     if (frontendFlags.help) {
@@ -410,14 +410,34 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const selected =
       frontendFlags.values["workspace"] === undefined
         ? undefined
-        : parseMcpConfigCommand(clientArgs);
+        : parseMcpConfigCommand(["--workspace", frontendFlags.values["workspace"]]);
     if (selected?.help) return 0;
     if (command === "client") {
+      const { launchClientRuntime } = await import("./frontend/client-runtime.ts");
+      const exitCode = await launchClientRuntime(clientArgs, import.meta.path);
+      if (exitCode !== undefined) return exitCode;
       const { runFrontend } = await import("./frontend/client.ts");
-      await runFrontend(selected?.workspace);
+      await runFrontend(selected?.workspace, {
+        deviceIndex:
+          frontendFlags.values["device"] === undefined
+            ? undefined
+            : parseDeviceIndex("--device", frontendFlags.values["device"]),
+        outputDeviceIndex:
+          frontendFlags.values["output-device"] === undefined
+            ? undefined
+            : parseDeviceIndex("--output-device", frontendFlags.values["output-device"]),
+      });
     } else {
       const { runComposition } = await import("./composition/launch.ts");
-      await runComposition(selected?.workspace);
+      const deviceArgs: string[] = [];
+      for (const flag of ["device", "output-device"]) {
+        const value = frontendFlags.values[flag];
+        if (value !== undefined) {
+          parseDeviceIndex(`--${flag}`, value);
+          deviceArgs.push(`--${flag}`, value);
+        }
+      }
+      await runComposition(selected?.workspace, undefined, deviceArgs);
     }
     return 0;
   } catch (error) {

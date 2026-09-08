@@ -1,3 +1,4 @@
+/** Client-owned media signaling. No credentials or audio bytes belong on this wire. */
 import { z } from "zod";
 
 export const BROWSER_MEDIA_MAX_FRAME_BYTES = 256 * 1024;
@@ -6,7 +7,7 @@ export const BROWSER_MEDIA_MAX_SDP_CHARS = 192 * 1024;
 const sessionId = z.string().uuid();
 const muteState = z.object({ muted: z.boolean(), effectiveMuted: z.boolean() }).strict();
 
-export const browserMediaClientMessageSchema = z.discriminatedUnion("type", [
+export const clientMediaMessageSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("offer"),
@@ -26,9 +27,9 @@ export const browserMediaClientMessageSchema = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.enum(["hold", "release"]), sessionId }).strict(),
 ]);
-export type BrowserMediaClientMessage = z.infer<typeof browserMediaClientMessageSchema>;
+export type ClientMediaMessage = z.infer<typeof clientMediaMessageSchema>;
 
-export const browserMediaServerMessageSchema = z.discriminatedUnion("type", [
+export const serverMediaMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("prepare"), sessionId }).strict(),
   z
     .object({
@@ -49,4 +50,4 @@ export const browserMediaServerMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type BrowserMediaServerMessage = z.infer<typeof browserMediaServerMessageSchema>;
+export type ServerMediaMessage = z.infer<typeof serverMediaMessageSchema>;

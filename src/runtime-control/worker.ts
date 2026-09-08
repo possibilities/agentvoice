@@ -3,10 +3,6 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
-import {
-  type BrowserMediaClientMessage,
-  browserMediaClientMessageSchema,
-} from "../browser/protocol.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
@@ -18,6 +14,7 @@ import {
   conversationRequestSchemas,
   ObservationError,
 } from "../events/conversation.ts";
+import { type ClientMediaMessage, clientMediaMessageSchema } from "../frontend/media-protocol.ts";
 import {
   type MailboxRuntime,
   mailboxCallerSchema,
@@ -36,7 +33,7 @@ export function runRuntimeWorker(
   let config: ServerConfig | undefined;
   let snapshot: RuntimeSnapshot | undefined;
   let factory: ConsoleHostOptions["mediaFactory"];
-  let receiveBrowserMedia: ((message: BrowserMediaClientMessage) => void) | undefined;
+  let receiveMedia: ((message: ClientMediaMessage) => void) | undefined;
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: (VoiceHost & { redial(): Promise<void> }) | undefined;
   let mailboxRuntime: MailboxRuntime | undefined;
@@ -139,13 +136,13 @@ export function runRuntimeWorker(
       );
     snapshot = await runtime.prepareRuntime(config, params.control);
     if (dependencies.mediaFactory) factory = dependencies.mediaFactory;
-    else if (params.media === "browser") {
-      const { browserMediaAdapter } = await import("../console/browser-media.ts");
-      const adapter = browserMediaAdapter((message) => event("browser-media", message));
+    else {
+      const { clientMediaAdapter } = await import("../console/client-media.ts");
+      const adapter = clientMediaAdapter((message) => event("client-media", message));
       factory = adapter.factory;
-      receiveBrowserMedia = adapter.receive;
-    } else factory = await media.nativeMediaFactory();
-    factory.check(); // Loads and pins the native library without opening hardware.
+      receiveMedia = adapter.receive;
+    }
+    factory.check(); // Server preflight never loads a device or WebRTC implementation.
     runHost = media.runConsoleHost;
     const after = fingerprint();
     if (before !== after)
@@ -197,7 +194,6 @@ export function runRuntimeWorker(
           readConversation = read;
         },
         mediaFactory: factory,
-        media: currentLaunch.provenance.options,
         debug: config!.debug,
         initialMute: { mic: true, speaker: true },
         runtime: {
@@ -328,9 +324,9 @@ export function runRuntimeWorker(
         }
         return null;
       }
-      case "browser-media":
-        if (!receiveBrowserMedia) throw new Error("Browser media is unavailable");
-        receiveBrowserMedia(browserMediaClientMessageSchema.parse(params));
+      case "client-media":
+        if (!receiveMedia) throw new Error("Browser media is unavailable");
+        receiveMedia(clientMediaMessageSchema.parse(params));
         return null;
       case "redial":
         if (terminalFailure || stopping || !mediaEnabled || !host)

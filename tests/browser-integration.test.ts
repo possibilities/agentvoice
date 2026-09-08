@@ -3,10 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runBrowserFrontend } from "../src/browser/frontend.ts";
-import type {
-  BrowserMediaClientMessage,
-  BrowserMediaServerMessage,
-} from "../src/browser/protocol.ts";
+import type { ClientMediaMessage, ServerMediaMessage } from "../src/frontend/media-protocol.ts";
 import type { FrontendState } from "../src/frontend/protocol.ts";
 import { frontendSocketPath } from "../src/frontend/protocol.ts";
 import { type Call, VoiceServer } from "../src/frontend/server.ts";
@@ -42,8 +39,8 @@ function nextMessage(socket: WebSocket): Promise<unknown> {
 
 test("browser WebSocket relays media through the call owner and disconnect closes the call", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-browser-integration-"));
-  const received: BrowserMediaClientMessage[] = [];
-  let sendRuntime: ((message: BrowserMediaServerMessage) => void) | undefined;
+  const received: ClientMediaMessage[] = [];
+  let sendRuntime: ((message: ServerMediaMessage) => void) | undefined;
   let starts = 0;
   let closes = 0;
   const state: FrontendState = {
@@ -52,24 +49,21 @@ test("browser WebSocket relays media through the call owner and disconnect close
     mic: { muted: true, effectiveMuted: true },
     speaker: { muted: false, effectiveMuted: false },
   };
-  const server = new VoiceServer(
-    frontendSocketPath(root),
-    async (_changed, params, sendBrowserMedia) => {
-      expect(params?.media).toBe("browser");
-      sendRuntime = sendBrowserMedia;
-      return {
-        state: () => state,
-        start: async () => {
-          starts++;
-        },
-        command() {},
-        browserMedia: (message) => received.push(message),
-        close: async () => {
-          closes++;
-        },
-      } satisfies Call;
-    },
-  );
+  const server = new VoiceServer(frontendSocketPath(root), async (_changed, params, sendMedia) => {
+    expect(params?.clientId).toBeString();
+    sendRuntime = sendMedia;
+    return {
+      state: () => state,
+      start: async () => {
+        starts++;
+      },
+      command() {},
+      clientMedia: (message) => received.push(message),
+      close: async () => {
+        closes++;
+      },
+    } satisfies Call;
+  });
   let socket: WebSocket | undefined;
   let browser: Promise<void> | undefined;
   try {
@@ -106,7 +100,7 @@ test("controller relays browser media only for the active runtime incarnation", 
   const root = mkdtempSync(join(tmpdir(), "av-browser-controller-"));
   const callbacks: Array<(method: string, params: unknown) => void> = [];
   const notifications: Array<{ incarnation: number; method: string; params: unknown }> = [];
-  const outgoing: BrowserMediaServerMessage[] = [];
+  const outgoing: ServerMediaMessage[] = [];
   const controller = new RuntimeController({
     instanceId: "browser-controller",
     stateDir: root,
@@ -117,8 +111,7 @@ test("controller relays browser media only for the active runtime incarnation", 
     },
     version: "test",
     control: { name: "agentvoice_control", tools: [], server: {}, env: {} },
-    media: "browser",
-    onBrowserMedia: (message) => outgoing.push(message),
+    onMedia: (message) => outgoing.push(message),
     lease: () => () => {},
     spawn: (incarnation, event, lease) => {
       callbacks.push(event);
@@ -149,7 +142,7 @@ test("controller relays browser media only for the active runtime incarnation", 
   try {
     await controller.start();
     const firstSession = "11111111-1111-4111-8111-111111111111";
-    callbacks[0]!("browser-media", { type: "prepare", sessionId: firstSession });
+    callbacks[0]!("client-media", { type: "prepare", sessionId: firstSession });
     expect(outgoing).toEqual([{ type: "prepare", sessionId: firstSession }]);
 
     await controller.restart({
@@ -161,21 +154,21 @@ test("controller relays browser media only for the active runtime incarnation", 
     await until(() => controller.status().currentOperation?.phase === "ready");
     expect(controller.status().generation).toBe(2);
 
-    callbacks[0]!("browser-media", { type: "answer", sessionId: firstSession, sdp: "stale" });
+    callbacks[0]!("client-media", { type: "answer", sessionId: firstSession, sdp: "stale" });
     expect(outgoing).toHaveLength(1);
     const secondSession = "22222222-2222-4222-8222-222222222222";
-    callbacks[1]!("browser-media", { type: "prepare", sessionId: secondSession });
+    callbacks[1]!("client-media", { type: "prepare", sessionId: secondSession });
     expect(outgoing.at(-1)).toEqual({ type: "prepare", sessionId: secondSession });
 
-    controller.browserMedia({ type: "connected", sessionId: firstSession });
+    controller.clientMedia({ type: "connected", sessionId: firstSession });
     expect(notifications.at(-1)).toEqual({
       incarnation: 2,
-      method: "browser-media",
+      method: "client-media",
       params: { type: "connected", sessionId: firstSession },
     });
     expect(
       notifications.some(
-        (message) => message.incarnation === 1 && message.method === "browser-media",
+        (message) => message.incarnation === 1 && message.method === "client-media",
       ),
     ).toBe(false);
   } finally {

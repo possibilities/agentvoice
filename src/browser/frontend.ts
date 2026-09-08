@@ -2,9 +2,9 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { connectFrontend } from "../frontend/client.ts";
+import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import { type FrontendState, frontendSocketPath } from "../frontend/protocol.ts";
 import { stateDirectory } from "../paths.ts";
-import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "./protocol.ts";
 import { BrowserMediaServer } from "./server.ts";
 
 export interface BrowserFrontendOptions {
@@ -33,7 +33,7 @@ export async function runBrowserFrontend(
       speaker: latestState.speaker,
     });
   };
-  const fromRuntime = (message: BrowserMediaServerMessage) => {
+  const fromRuntime = (message: ServerMediaMessage) => {
     if (message.type === "prepare") {
       currentSessionId = message.sessionId;
       gateway.send(message);
@@ -44,13 +44,13 @@ export async function runBrowserFrontend(
     if (message.type === "close" && currentSessionId === message.sessionId)
       currentSessionId = undefined;
   };
-  const fromBrowser = (message: BrowserMediaClientMessage) => {
+  const fromBrowser = (message: ClientMediaMessage) => {
     if (!client || message.sessionId !== currentSessionId) return;
     if (message.type === "mute")
       client.command({ action: "mute", target: message.target, muted: message.muted });
     else if (message.type === "hold" || message.type === "release")
       client.command({ action: message.type });
-    else client.browserMedia(message);
+    else client.clientMedia(message);
   };
 
   const gateway = new BrowserMediaServer({
@@ -67,7 +67,7 @@ export async function runBrowserFrontend(
           });
         },
         randomUUID(),
-        { media: "browser", onBrowserMedia: fromRuntime },
+        { onMedia: fromRuntime },
       );
       latestState = client.state();
       publishState();

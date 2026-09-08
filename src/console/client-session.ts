@@ -1,47 +1,47 @@
 /**
- * Browser-owned WebRTC session lifecycle.
+ * Server-owned session policy for client-owned WebRTC.
  *
- * Unlike VoiceTransport, this class never sees a peer connection or media.
+ * This class never sees a peer connection or media.
  * It tells a browser bridge to prepare a peer, relays that exact peer's offer
  * to the runtime, and returns the runtime answer to the same session id.
  */
 import { randomUUID } from "node:crypto";
 import type { ReadyInfo as SessionReadyInfo, VoicePhase } from "../core/voice-types.ts";
 
-export type BrowserReadyInfo = SessionReadyInfo;
-export type BrowserTransportPhase = VoicePhase;
+export type ClientReadyInfo = SessionReadyInfo;
+export type ClientSessionPhase = VoicePhase;
 
-export type BrowserTransportCommand =
+export type ClientSessionCommand =
   | { type: "prepare"; sessionId: string }
   | { type: "answer"; sessionId: string; sdp: string }
   | { type: "close"; sessionId: string };
 
-export interface BrowserTransportSignal {
+export interface ClientSessionSignal {
   offer(sdp: string): void;
 }
 
-export interface BrowserTransportOptions {
-  signal: BrowserTransportSignal;
-  send(command: BrowserTransportCommand): void;
-  onPhase(phase: BrowserTransportPhase): void;
-  onReady(info: BrowserReadyInfo): void;
+export interface ClientSessionOptions {
+  signal: ClientSessionSignal;
+  send(command: ClientSessionCommand): void;
+  onPhase(phase: ClientSessionPhase): void;
+  onReady(info: ClientReadyInfo): void;
   onInfo(line: string): void;
   onError(line: string): void;
   debug?(line: string): void;
   /** Test boundary; production ids remain unguessable UUIDs. */
   createSessionId?(): string;
   /** Test boundary; omitted values use the production lifecycle timings. */
-  timings?: Partial<BrowserTransportTimings>;
+  timings?: Partial<ClientSessionTimings>;
 }
 
-export interface BrowserTransportTimings {
+export interface ClientSessionTimings {
   negotiationTimeoutMs: number;
   retryMs: number;
   renewalMs: number;
   healthySessionMs: number;
 }
 
-const DEFAULT_TIMINGS: BrowserTransportTimings = {
+const DEFAULT_TIMINGS: ClientSessionTimings = {
   negotiationTimeoutMs: 30_000,
   retryMs: 1_000,
   renewalMs: 52 * 60_000,
@@ -62,24 +62,24 @@ interface RedialWaiter {
   reject(error: Error): void;
 }
 
-export class BrowserVoiceTransport {
-  readonly #options: BrowserTransportOptions;
-  readonly #timings: BrowserTransportTimings;
+export class ClientMediaSession {
+  readonly #options: ClientSessionOptions;
+  readonly #timings: ClientSessionTimings;
   #live: BrowserSession | null = null;
   #pending: BrowserSession | null = null;
-  #ready: BrowserReadyInfo | null = null;
-  #phase: BrowserTransportPhase = "waiting-ready";
+  #ready: ClientReadyInfo | null = null;
+  #phase: ClientSessionPhase = "waiting-ready";
   #rapidFailures = 0;
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #stopping = false;
   readonly #redialWaiters = new Map<string, RedialWaiter>();
 
-  constructor(options: BrowserTransportOptions) {
+  constructor(options: ClientSessionOptions) {
     this.#options = options;
     this.#timings = { ...DEFAULT_TIMINGS, ...options.timings };
   }
 
-  get currentPhase(): BrowserTransportPhase {
+  get currentPhase(): ClientSessionPhase {
     return this.#phase;
   }
 
@@ -116,7 +116,7 @@ export class BrowserVoiceTransport {
 
   // Runtime-facing signaling.
 
-  handleReady(info: BrowserReadyInfo): void {
+  handleReady(info: ClientReadyInfo): void {
     if (this.#stopping) return;
     this.#ready = info;
     this.#options.onReady(info);
@@ -170,7 +170,7 @@ export class BrowserVoiceTransport {
   // Browser-facing signaling. Every event is scoped to an exact session id;
   // stale or guessed ids have no effect on the current session.
 
-  handleBrowserOffer(sessionId: string, sdp: string): boolean {
+  handleClientOffer(sessionId: string, sdp: string): boolean {
     const session = this.#pending;
     if (!session || session.id !== sessionId || session.offered || !sdp) {
       this.#debug(`dropping browser offer for non-current session ${sessionId}`);
@@ -182,7 +182,7 @@ export class BrowserVoiceTransport {
     return true;
   }
 
-  handleBrowserConnected(sessionId: string): boolean {
+  handleClientConnected(sessionId: string): boolean {
     const session = this.#pending;
     if (!session || session.id !== sessionId || !session.offered) {
       this.#debug(`dropping browser connected for non-current session ${sessionId}`);
@@ -192,7 +192,7 @@ export class BrowserVoiceTransport {
     return true;
   }
 
-  handleBrowserFailed(sessionId: string, reason = "browser media path failed"): boolean {
+  handleClientFailed(sessionId: string, reason = "browser media path failed"): boolean {
     if (this.#pending?.id === sessionId) {
       this.#failPending(this.#pending, reason);
       return true;
@@ -323,7 +323,7 @@ export class BrowserVoiceTransport {
     this.#retryTimer = null;
   }
 
-  #setPhase(phase: BrowserTransportPhase): void {
+  #setPhase(phase: ClientSessionPhase): void {
     if (this.#phase === phase) return;
     this.#phase = phase;
     this.#options.onPhase(phase);

@@ -3,6 +3,9 @@
 Accepted September 8, 2026. Extends ADR 0024 without replacing its terminal
 topology or restoring the remote console retired by ADRs 0002–0005.
 
+The terminal-media asymmetry below is superseded by ADR 0033: both clients now
+own media. This ADR still governs the same-device browser proof's security boundary.
+
 ## Decision
 
 `agentvoice phone` is a second call-owning frontend for a browser on the same

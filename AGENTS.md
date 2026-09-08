@@ -9,11 +9,11 @@ and stock agent attachment in one foreground smolmux process with local PTYs onl
 audio and WebRTC while Termux retains the controller and Codex child.
 The server-owned call controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
-owns config/prompt/role loading and an owned stock Codex app-server. It owns audio
-and WebRTC for terminal calls; the browser owns them for phone calls.
+owns config/prompt/role loading and an owned stock Codex app-server. All clients
+own audio and WebRTC; no production server path loads native media (ADR 0033).
 Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
 No remote mode or arbitrary endpoint attachment. Read README.md, CONTEXT.md and ADRs
-0032/0024/0022 for the active topologies; ADRs 0015/0016 describe retained MCP/API
+0033/0032/0024/0022 for the active topologies; ADRs 0015/0016 describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
 ## What vanilla Codex means
@@ -96,7 +96,7 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   accounts/resident/remote/console verbs error.
 - src/frontend/: strict private workspace socket, exclusive call ownership and
   minimal state/input protocol. It also carries validated browser SDP/control
-  messages for an explicitly browser-media call, never RTP/Opus/PCM. Disconnect
+  messages for every call over version 2, never RTP/Opus/PCM. Disconnect
   releases PTT and stops the call; never
   accept a successor until cleanup completes or automatically reconnect/replay.
   Fresh clients observe explicit closing state and wait at most 30 seconds before
@@ -194,7 +194,7 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   and live media. Keep handoff outcome separate from readiness; never stop healthy
   media on refusal or ambiguous acceptance. Never adopt old journals in a new call.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
-  controller/worker IPC. Browser calls select the no-device browser media adapter
+  controller/worker IPC. All calls select the no-device client media adapter
   and relay validated SDP/control; no audio/RTP/PCM or bearer capabilities enter
   UI events. Compiled Android workers must dispatch through the executable, not
   virtual `/$bunfs` paths.
@@ -246,14 +246,15 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   until notification or reset; a late refusal must remove only its own stop.
 - src/console/host.ts: media-adapter readiness before media starts, negotiation
   after readiness, visible media notices, worker-local media wiring and quit cleanup.
-- src/console/transport.ts: WebRTC offer/answer, two-peer redial, automatic renewal and bounded retry.
+- src/frontend/native-media.ts + native-peer.ts: client-owned device and WebRTC,
+  bounded peer lifecycle and stale completion fences. client-runtime.ts uses the
+  installer-owned signed macOS runtime for microphone permission identity.
 - src/console/duplex-audio.ts + duplex-device.ts + native/: in-process miniaudio
   capture/playback, Opus, bounded PCM rings. Detach clears stale playback.
-- src/console/browser-*.ts: no-device host adapters and browser-owned WebRTC
-  signaling. Preserve current-session checks, retry/renewal bounds and the rule
-  that media stays in the browser. This intentional asymmetry with native
-  server-owned media may be removed only by a separately designed symmetric
-  client-media protocol.
+- src/console/client-session.ts + client-media.ts + media-state.ts: shared server
+  signaling and session policy for native and browser media. Preserve session
+  checks, retry/renewal bounds and client-only devices. Never restore native
+  server media or platform selection. See docs/client-api.md and ADR 0033.
 - src/console/tui.ts: static monochrome YOU/AGENT buttons, conditional pointer
   PTT and connection phase only. No animation, meters, palette or keybindings.
 - src/console/state.ts: plain host/observer data; backend imports no TUI renderer.

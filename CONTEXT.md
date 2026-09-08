@@ -22,7 +22,8 @@ call. Attachments start only after this launch's call is live.
 
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer
-push-to-talk. It owns no audio, Codex process, configuration or thread leases.
+push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,
+server configuration or thread leases. Both clients use frontend API v2 (ADR 0033).
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
@@ -35,9 +36,8 @@ workspace/thread identity, thread leases, operation journal, private control and
 event transports retained across runtime replacements.
 
 **Voice runtime** — The disposable child of a call controller, owning
-configuration/prompt/role loading and its stock Codex child. For terminal calls
-it also owns native audio and WebRTC. For phone calls the browser owns media and
-the runtime relays bounded SDP signaling only. Audio never crosses the frontend
+configuration/prompt/role loading and its stock Codex child. For every call the
+client owns media and the runtime relays bounded SDP signaling only. Audio never crosses the frontend
 socket or controller IPC.
 
 **Codex child / app-server** — Unmodified `codex app-server`, launched and
@@ -81,7 +81,7 @@ selection and active calls retain their selected directory.
 
 **LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that starts
 the waiting default server at login and restarts it on exit. Its installer-owned
-signed AgentVoice.app executable supplies the service's macOS microphone identity. It opens no audio
+signed AgentVoice.app executable supplies the client's macOS microphone identity. The server opens no audio
 or Codex child until a frontend calls.
 
 **Full access** — Optional launch override: --allow-full-access or file

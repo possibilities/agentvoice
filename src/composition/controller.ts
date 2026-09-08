@@ -22,6 +22,7 @@ export class Composition {
     private readonly clientId: string,
     private readonly command: string[],
     private readonly workspace?: string,
+    private readonly clientArgs: string[] = [],
   ) {}
 
   private enqueue(action: () => Promise<void>) {
@@ -35,9 +36,13 @@ export class Composition {
     await this.mux.request("instance.configure", { confirmExit: true });
     if (this.stopped) return;
     await this.mux.request("layout.apply", initialLayout());
-    await this.create(0, ["client", ...(this.workspace ? ["--workspace", this.workspace] : [])], {
-      AGENTVOICE_CLIENT_ID: this.clientId,
-    });
+    await this.create(
+      0,
+      ["client", ...this.clientArgs, ...(this.workspace ? ["--workspace", this.workspace] : [])],
+      {
+        AGENTVOICE_CLIENT_ID: this.clientId,
+      },
+    );
     this.started = true;
     this.enqueue(() => this.reconcile());
   }

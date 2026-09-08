@@ -641,19 +641,10 @@ describe("parseServerCommand", () => {
     });
   });
 
-  test("parses device indices, fresh, and debug", () => {
-    const command = parseServerCommand([
-      "--allow-full-access",
-      "--device",
-      "1",
-      "--output-device=2",
-      "--fresh",
-      "--debug",
-    ]);
+  test("parses fresh and debug without server-owned device selection", () => {
+    const command = parseServerCommand(["--allow-full-access", "--fresh", "--debug"]);
     if (command.help) throw new Error("expected a non-help parse");
     expect(command.options).toEqual({
-      deviceIndex: 1,
-      outputDeviceIndex: 2,
       debug: true,
       fresh: true,
       continue: false,
@@ -666,10 +657,10 @@ describe("parseServerCommand", () => {
     }
   });
 
-  test("rejects malformed and out-of-range device indices", () => {
+  test("rejects server-owned device selection with migration guidance", () => {
     for (const value of ["1junk", "1.5", "-1", "+1", "", "2147483648"]) {
       expect(() => parseServerCommand(["--allow-full-access", `--device=${value}`])).toThrow(
-        /must be a non-negative 32-bit integer/,
+        /Audio devices belong to the client/,
       );
     }
   });

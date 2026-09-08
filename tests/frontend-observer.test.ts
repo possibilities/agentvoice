@@ -43,7 +43,9 @@ test("read-only observer gets current and future call identity without owning or
     await server.start();
     observer = await observeFrontend(path, (state) => states.push(state));
     expect(observer.initial.busy).toBe(false);
-    await expect(observer.socket.request("call")).rejects.toThrow("Observers cannot own");
+    await expect(
+      observer.socket.request("call", { clientId: crypto.randomUUID() }),
+    ).rejects.toThrow("Observers cannot own");
     await expect(observer.socket.request("input", { action: "release" })).rejects.toThrow(
       "does not own",
     );

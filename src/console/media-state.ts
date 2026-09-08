@@ -1,22 +1,22 @@
 /**
- * Host-audio adapter for browser media. The browser owns capture, playback,
+ * Server mute-state adapter. The client owns capture, playback,
  * codecs, and its RTCPeerConnection, so the controller has no local device to
  * open and no remote track to attach. Mute setters are retained to satisfy the
  * host boundary and can be observed by the browser bridge.
  */
 
-export type BrowserAudioTarget = "mic" | "speaker";
+export type MediaStateTarget = "mic" | "speaker";
 
-export interface BrowserAudioOptions {
-  onMute?(target: BrowserAudioTarget, muted: boolean): void;
+export interface MediaStateOptions {
+  onMute?(target: MediaStateTarget, muted: boolean): void;
 }
 
-export class BrowserVoiceAudio {
-  readonly #options: BrowserAudioOptions;
+export class MediaMuteState {
+  readonly #options: MediaStateOptions;
   #micMuted = false;
   #speakerMuted = false;
 
-  constructor(options: BrowserAudioOptions = {}) {
+  constructor(options: MediaStateOptions = {}) {
     this.#options = options;
   }
 

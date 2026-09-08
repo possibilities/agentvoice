@@ -3,8 +3,8 @@
 A local Codex voice server with terminal and same-device browser frontends. `agentvoice server`
 waits for a call; bare `agentvoice` opens a foreground smolmux instance containing
 `agentvoice client`, `agentvoice attach voice`, and `agentvoice attach agent`
-side by side. In that terminal topology the server owns native audio and WebRTC,
-while the frontend contains only connection status and monochrome YOU/AGENT
+side by side. The terminal client owns native audio and WebRTC,
+and displays connection status and monochrome YOU/AGENT
 buttons, plus PUSH TO TALK when the microphone is muted. `agentvoice phone`
 instead opens a capability-bearing loopback page whose browser owns audio and
 WebRTC. In both topologies the server owns exact conversation identity, thread
@@ -54,9 +54,11 @@ On macOS, installation starts the default server as a user LaunchAgent. Run
 `agentvoice` whenever you want a call. For manual use, run `agentvoice server`.
 To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
-voice, device, permission, role and conversation-selection flags belong to
+voice, permission, role and conversation-selection flags belong to
 `agentvoice server`, for example `agentvoice server --continue --fast`.
-The composition, `client` and `phone` accept only `--workspace` and `--help`.
+The composition and `client` also accept `--device` and `--output-device` for
+client-local audio. `phone` accepts only `--workspace` and `--help`.
+Both clients use [client API v2](docs/client-api.md); the server never opens audio.
 
 On an Android phone, run the server and browser frontend in separate Termux
 terminals:
@@ -478,7 +480,7 @@ Workspace selection is not a memory or security sandbox.
   animations, meters, timers, extra status rows, modal or application keybindings.
 - The top line shows only the connection phase. LIVE confirms the media link,
   not that native work completed or speech was heard.
-- Terminal full-duplex audio uses native miniaudio, Opus and server-owned WebRTC.
+- Terminal full-duplex audio uses client-owned miniaudio, Opus and WebRTC.
   Phone audio and WebRTC stay in the browser; only bounded control and SDP
   signaling cross the private frontend path. Automatic renewal maintains either
   connection without changing its conversation or configuration.
@@ -511,7 +513,8 @@ Common launch options:
 agentvoice server --workspace ~/code/myapp --model <model-id> --effort high
 agentvoice server --fast
 agentvoice server --resume <thread-id> --no-fast
-agentvoice server --voice <voice-name> --device 1 --output-device 2
+agentvoice server --voice <voice-name>
+agentvoice client --device 1 --output-device 2
 agentvoice server --config ./voice-settings.json --debug
 agentvoice server --role researcher
 ```
@@ -1093,8 +1096,9 @@ see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
 
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for historical ownership decisions. [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md)
-defines the terminal topology; [ADR 0032](docs/adr/0032-loopback-browser-media-frontend.md)
-adds the same-device browser-media topology.
+records the original terminal topology; [ADR 0032](docs/adr/0032-loopback-browser-media-frontend.md)
+adds the browser proof, and [ADR 0033](docs/adr/0033-client-owned-native-media.md)
+migrates both clients to the same client-owned-media boundary.
 
 ### Send text to the voice
 

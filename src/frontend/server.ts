@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "../browser/protocol.ts";
+import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
 import { stateDirectory } from "../paths.ts";
 import { createCall } from "../runtime-control/controller.ts";
@@ -10,8 +10,8 @@ import {
   FRONTEND_VERSION,
   type FrontendCommand,
   type FrontendState,
-  frontendBrowserInputSchema,
   frontendCommandSchema,
+  frontendMediaInputSchema,
   frontendSocketPath,
   frontendState,
 } from "./protocol.ts";
@@ -21,13 +21,12 @@ export interface Call {
   state(): FrontendState;
   identity?(): { workspace: string; threadId: string };
   command(command: FrontendCommand): void;
-  browserMedia?(message: BrowserMediaClientMessage): void;
+  clientMedia?(message: ClientMediaMessage): void;
   close(): Promise<void>;
 }
 type Session = {
   peer: JsonPeer;
   clientId?: string;
-  media?: "browser";
   call?: Call;
   closed: boolean;
   done: Promise<void>;
@@ -45,8 +44,8 @@ export class VoiceServer {
     readonly path: string,
     private readonly create: (
       changed: () => void,
-      params: { clientId: string; media?: "browser" } | undefined,
-      sendBrowserMedia: (message: BrowserMediaServerMessage) => void,
+      params: { clientId: string } | undefined,
+      sendMedia: (message: ServerMediaMessage) => void,
     ) => Promise<Call>,
     private readonly report: (message: string) => void = console.error,
     private readonly workspace?: () => string,
@@ -84,10 +83,7 @@ export class VoiceServer {
           reply(true, this.observation());
           return;
         }
-        if (
-          request.method === "call" &&
-          (request.params === undefined || callParamsSchema.safeParse(request.params).success)
-        ) {
+        if (request.method === "call" && callParamsSchema.safeParse(request.params).success) {
           if (this.observers.has(peer)) {
             reply(false, "Observers cannot own calls");
             return;
@@ -103,10 +99,6 @@ export class VoiceServer {
               request.params === undefined
                 ? undefined
                 : callParamsSchema.parse(request.params).clientId,
-            media:
-              request.params === undefined
-                ? undefined
-                : callParamsSchema.parse(request.params).media,
             closed: false,
             done: Promise.resolve(),
             end: ended.resolve,
@@ -128,16 +120,16 @@ export class VoiceServer {
           return;
         }
         if (
-          request.method === "browser-media" &&
+          request.method === "client-media" &&
           this.session?.peer === peer &&
           !this.session.closed
         ) {
-          const message = frontendBrowserInputSchema.safeParse(request.params);
-          if (!message.success || !this.session.call?.browserMedia) {
+          const message = frontendMediaInputSchema.safeParse(request.params);
+          if (!message.success || !this.session.call?.clientMedia) {
             reply(false, "Browser media is not available for this call");
             return;
           }
-          this.session.call.browserMedia(message.data);
+          this.session.call.clientMedia(message.data);
           reply(true, null);
           return;
         }
@@ -197,12 +189,11 @@ export class VoiceServer {
       const params = session.clientId
         ? {
             clientId: session.clientId,
-            ...(session.media === undefined ? {} : { media: session.media }),
           }
         : undefined;
       session.call = await this.create(changed, params, (message) => {
         if (!session.closed)
-          session.peer.send({ v: FRONTEND_VERSION, type: "browser-media", message });
+          session.peer.send({ v: FRONTEND_VERSION, type: "client-media", message });
       });
       if (session.closed) return;
       changed();
@@ -263,7 +254,7 @@ export async function runServer(
   const stateDir = stateDirectory(process.env, homedir());
   const server = new VoiceServer(
     frontendSocketPath(stateDir, endpointWorkspace),
-    async (changed, params, sendBrowserMedia) => {
+    async (changed, _params, sendMedia) => {
       let notice: string | undefined;
       const pinned = pinCallWorkspace(provenance, workspace ?? currentWorkspace(stateDir));
       const call = await createCall(
@@ -278,8 +269,7 @@ export async function runServer(
           changed();
         },
         {
-          media: params?.media,
-          onBrowserMedia: sendBrowserMedia,
+          onMedia: sendMedia,
         },
       );
       const controller = call.controller;
@@ -291,10 +281,7 @@ export async function runServer(
           threadId: controller.status().threadId,
         }),
         close: call.close,
-        browserMedia:
-          params?.media === "browser"
-            ? (message) => call.controller.browserMedia(message)
-            : undefined,
+        clientMedia: (message) => call.controller.clientMedia(message),
         command: (command) => {
           if (command.action === "mute") {
             (command.target === "mic" ? controller.microphone : controller.speaker).setMuted(

@@ -4,12 +4,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { attachmentTargetSchema } from "../attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
-import {
-  type BrowserMediaClientMessage,
-  type BrowserMediaServerMessage,
-  browserMediaClientMessageSchema,
-  browserMediaServerMessageSchema,
-} from "../browser/protocol.ts";
 import { MuteGate } from "../console/audio-control.ts";
 import type { VoiceState } from "../console/state.ts";
 import { startControlServer } from "../control/index.ts";
@@ -49,6 +43,12 @@ import { LifecycleFeed } from "../events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../events/socket.ts";
 import { voiceNotification } from "../events/voice.ts";
 import {
+  type ClientMediaMessage,
+  clientMediaMessageSchema,
+  type ServerMediaMessage,
+  serverMediaMessageSchema,
+} from "../frontend/media-protocol.ts";
+import {
   inFlightSchema,
   type MailboxCaller,
   type MailboxOpenParams,
@@ -75,8 +75,7 @@ export interface ControllerOptions {
   changed?(): void;
   spawn?: typeof spawnRuntimeProcess;
   lease?: (threadId: string) => () => void;
-  media?: "browser";
-  onBrowserMedia?(message: BrowserMediaServerMessage): void;
+  onMedia?(message: ServerMediaMessage): void;
 }
 
 export class RuntimeController implements ControlBackend {
@@ -209,10 +208,9 @@ export class RuntimeController implements ControlBackend {
   }
   private event(incarnation: number, method: string, params: unknown) {
     if (incarnation !== this.activeIncarnation || (this.closed && method !== "voice")) return;
-    if (method === "browser-media") {
-      const parsed = browserMediaServerMessageSchema.safeParse(params);
-      if (parsed.success && this.options.media === "browser")
-        this.options.onBrowserMedia?.(parsed.data);
+    if (method === "client-media") {
+      const parsed = serverMediaMessageSchema.safeParse(params);
+      if (parsed.success) this.options.onMedia?.(parsed.data);
       return;
     }
     if (method === "mailbox") {
@@ -347,7 +345,6 @@ export class RuntimeController implements ControlBackend {
         control: this.options.control,
         workspace: this.workspace || undefined,
         nativeStateDir: this.options.stateDir,
-        ...(this.options.media === undefined ? {} : { media: this.options.media }),
       };
       const info = await candidate.process.request<CandidateInfo>("preflight", launch);
       this.assertOpen();
@@ -682,11 +679,11 @@ export class RuntimeController implements ControlBackend {
       });
     this.changed();
   }
-  browserMedia(message: BrowserMediaClientMessage): void {
-    if (this.closed || this.options.media !== "browser" || !this.active) return;
-    const parsed = browserMediaClientMessageSchema.safeParse(message);
+  clientMedia(message: ClientMediaMessage): void {
+    if (this.closed || !this.active) return;
+    const parsed = clientMediaMessageSchema.safeParse(message);
     if (!parsed.success) return;
-    this.active.notify("browser-media", parsed.data);
+    this.active.notify("client-media", parsed.data);
   }
   async readConversation(method: ConversationReadMethod, params: ConversationReadParams) {
     const parsed = conversationRequestSchemas[method].safeParse(params);
@@ -765,8 +762,7 @@ export async function createCall(
   version: string,
   changed: () => void,
   options: {
-    media?: "browser";
-    onBrowserMedia?(message: BrowserMediaServerMessage): void;
+    onMedia?(message: ServerMediaMessage): void;
   } = {},
 ): Promise<{ controller: RuntimeController; close(): Promise<void> }> {
   const instanceId = randomUUID();

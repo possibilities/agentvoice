@@ -1,16 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
-import type { BrowserMediaClientMessage, BrowserMediaServerMessage } from "../browser/protocol.ts";
+import type { MediaOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceView } from "../console/state.ts";
 import { createVoiceTui } from "../console/tui.ts";
+import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import { stateDirectory } from "../paths.ts";
 import { observeFrontend } from "./observer.ts";
 import {
   FRONTEND_VERSION,
   type FrontendCommand,
   type FrontendState,
-  frontendBrowserOutputSchema,
+  frontendMediaOutputSchema,
+  frontendServerFrameSchema,
   frontendSocketPath,
   frontendStateSchema,
 } from "./protocol.ts";
@@ -23,8 +26,7 @@ export async function connectFrontend(
     signal?: AbortSignal;
     timeoutMs?: number;
     waiting?: () => void;
-    media?: "browser";
-    onBrowserMedia?: (message: BrowserMediaServerMessage) => void;
+    onMedia?: (message: ServerMediaMessage) => void;
   } = {},
 ) {
   let info: ReturnType<typeof lstatSync>;
@@ -57,6 +59,7 @@ export async function connectFrontend(
   let closed = false;
   let error: Error | undefined;
   let next = 0;
+  const pendingResponses = new Map<string, ReturnType<typeof setTimeout>>();
   let partial = "";
   let state: FrontendState = {
     available: false,
@@ -78,29 +81,31 @@ export async function connectFrontend(
   );
   function send(
     method: string,
-    params?: FrontendCommand | BrowserMediaClientMessage | { clientId: string; media?: "browser" },
+    params?: FrontendCommand | ClientMediaMessage | { clientId: string },
   ) {
     if (closed || socket.destroyed) return;
+    if (pendingResponses.size >= 128) {
+      fail(new Error("Too many unacknowledged client requests"));
+      return;
+    }
     if (socket.writableLength > 64 * 1024) {
       fail(new Error("AgentVoice server is not reading input"));
       return;
     }
+    const id = String(++next);
+    pendingResponses.set(
+      id,
+      setTimeout(() => fail(new Error("AgentVoice server did not acknowledge client input")), 5000),
+    );
     socket.write(
-      `${JSON.stringify({ v: FRONTEND_VERSION, type: "request", id: String(++next), method, ...(params ? { params } : {}) })}\n`,
+      `${JSON.stringify({ v: FRONTEND_VERSION, type: "request", id, method, ...(params ? { params } : {}) })}\n`,
     );
   }
   socket.setEncoding("utf8");
-  socket.on("connect", () =>
-    send(
-      "call",
-      clientId
-        ? { clientId, ...(options.media === undefined ? {} : { media: options.media }) }
-        : undefined,
-    ),
-  );
+  socket.on("connect", () => send("call", { clientId: clientId ?? randomUUID() }));
   socket.on("data", (chunk) => {
     partial += chunk;
-    if (Buffer.byteLength(partial) > 64 * 1024) {
+    if (Buffer.byteLength(partial) > 1024 * 1024) {
       fail(new Error("Invalid AgentVoice server frame"));
       return;
     }
@@ -110,13 +115,18 @@ export async function connectFrontend(
       const line = partial.slice(0, newline);
       partial = partial.slice(newline + 1);
       try {
-        const frame = JSON.parse(line);
+        const frame = frontendServerFrameSchema.parse(JSON.parse(line));
         if (frame.v !== FRONTEND_VERSION) throw new Error("Incompatible AgentVoice server");
         if (frame.type === "response") {
-          if (!frame.ok)
-            throw new Error(
-              typeof frame.error?.message === "string" ? frame.error.message : "Call refused",
-            );
+          if (
+            typeof frame.id !== "string" ||
+            !pendingResponses.has(frame.id) ||
+            typeof frame.ok !== "boolean"
+          )
+            throw new Error("Uncorrelated AgentVoice server response");
+          clearTimeout(pendingResponses.get(frame.id));
+          pendingResponses.delete(frame.id);
+          if (!frame.ok) throw new Error(frame.error.message);
           if (frame.id === "1") {
             accepted = true;
             clearTimeout(timer);
@@ -125,8 +135,8 @@ export async function connectFrontend(
         } else if (frame.type === "state") {
           state = frontendStateSchema.parse(frame.state);
           changed();
-        } else if (frame.type === "browser-media" && options.media === "browser") {
-          options.onBrowserMedia?.(frontendBrowserOutputSchema.parse(frame.message));
+        } else if (frame.type === "client-media") {
+          options.onMedia?.(frontendMediaOutputSchema.parse(frame.message));
         } else throw new Error("Invalid AgentVoice server frame");
       } catch (cause) {
         fail(cause instanceof Error ? cause : new Error(String(cause)));
@@ -139,6 +149,8 @@ export async function connectFrontend(
     closed = true;
     options.signal?.removeEventListener("abort", cancel);
     clearTimeout(timer);
+    for (const pending of pendingResponses.values()) clearTimeout(pending);
+    pendingResponses.clear();
     if (!accepted)
       ready.reject(error ?? new Error("AgentVoice server disconnected before accepting the call"));
     state = { ...state, available: false, phase: "stopped" };
@@ -149,7 +161,7 @@ export async function connectFrontend(
   return {
     state: () => state,
     command: (command: FrontendCommand) => send("input", command),
-    browserMedia: (message: BrowserMediaClientMessage) => send("browser-media", message),
+    clientMedia: (message: ClientMediaMessage) => send("client-media", message),
     close: () => {
       socket.destroy();
       return ended.promise;
@@ -159,36 +171,60 @@ export async function connectFrontend(
   };
 }
 
-export async function runFrontend(workspace?: string) {
+export async function runFrontend(workspace?: string, options: MediaOptions = {}) {
   let tui: VoiceView | undefined;
   const abort = new AbortController();
   const stop = () => abort.abort();
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
   for (const signal of signals) process.once(signal, stop);
-  let client: Awaited<ReturnType<typeof connectFrontend>>;
+  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  const { nativeClientMedia } = await import("./native-media.ts");
+  const pending: ClientMediaMessage[] = [];
+  const media = await nativeClientMedia((message) => {
+    if (client) client.clientMedia(message);
+    else pending.push(message);
+  }, options);
   try {
     client = await connectFrontend(
       frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
-      () => tui?.refresh(),
+      () => {
+        if (client) media.state(client.state());
+        tui?.refresh();
+      },
       process.env["AGENTVOICE_CLIENT_ID"],
-      { signal: abort.signal, waiting: () => console.error("Closing previous call…") },
+      {
+        signal: abort.signal,
+        waiting: () => console.error("Closing previous call…"),
+        onMedia: (message) => {
+          void media.receive(message);
+        },
+      },
     );
+    for (const message of pending.splice(0)) client.clientMedia(message);
+    media.state(client.state());
+  } catch (error) {
+    await media.stop();
+    throw error;
   } finally {
     for (const signal of signals) process.off(signal, stop);
   }
   const host: VoiceHost = {
     state: client.state,
-    setMuted: (target, muted) => client.command({ action: "mute", target, muted }),
-    beginUnmute: () => client.command({ action: "hold" }),
-    releaseUnmute: () => client.command({ action: "release" }),
+    setMuted: (target, muted) => client!.command({ action: "mute", target, muted }),
+    beginUnmute: () => client!.command({ action: "hold" }),
+    releaseUnmute: () => client!.command({ action: "release" }),
     shutdown: client.close,
   };
   try {
     tui = await createVoiceTui(host);
-    void client.done.then(() => tui?.shutdown());
+    void client.done.then(async () => {
+      await media.stop();
+      await tui?.shutdown();
+    });
     await tui.done;
     if (client.error()) throw client.error();
   } finally {
+    await media.stop();
     await client.close();
     await tui?.shutdown();
   }

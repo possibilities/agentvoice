@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type BrowserReadyInfo,
-  type BrowserTransportCommand,
-  BrowserVoiceTransport,
-} from "../src/console/browser-transport.ts";
+  ClientMediaSession,
+  type ClientReadyInfo,
+  type ClientSessionCommand,
+} from "../src/console/client-session.ts";
 
-const ready: BrowserReadyInfo = {
+const ready: ClientReadyInfo = {
   threadId: "browser-thread",
   workspace: "/test",
   model: null,
@@ -19,13 +19,13 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function harness() {
   let nextId = 0;
-  const commands: BrowserTransportCommand[] = [];
+  const commands: ClientSessionCommand[] = [];
   const offers: string[] = [];
   const phases: string[] = [];
-  const seenReady: BrowserReadyInfo[] = [];
+  const seenReady: ClientReadyInfo[] = [];
   const errors: string[] = [];
   const debug: string[] = [];
-  const transport = new BrowserVoiceTransport({
+  const transport = new ClientMediaSession({
     signal: { offer: (sdp) => offers.push(sdp) },
     send: (command) => commands.push(command),
     onPhase: (phase) => phases.push(phase),
@@ -43,7 +43,7 @@ function harness() {
   });
   const prepares = () =>
     commands.filter(
-      (command): command is Extract<BrowserTransportCommand, { type: "prepare" }> =>
+      (command): command is Extract<ClientSessionCommand, { type: "prepare" }> =>
         command.type === "prepare",
     );
   return {
@@ -67,11 +67,11 @@ describe("browser-owned voice transport", () => {
       expect(h.phases).toEqual(["negotiating"]);
       expect(h.prepares()).toEqual([{ type: "prepare", sessionId: "session-1" }]);
 
-      expect(h.transport.handleBrowserOffer("stale", "secret-stale-sdp")).toBe(false);
-      expect(h.transport.handleBrowserConnected("stale")).toBe(false);
-      expect(h.transport.handleBrowserFailed("stale", "ignored")).toBe(false);
-      expect(h.transport.handleBrowserOffer("session-1", "secret-offer-sdp")).toBe(true);
-      expect(h.transport.handleBrowserOffer("session-1", "duplicate-sdp")).toBe(false);
+      expect(h.transport.handleClientOffer("stale", "secret-stale-sdp")).toBe(false);
+      expect(h.transport.handleClientConnected("stale")).toBe(false);
+      expect(h.transport.handleClientFailed("stale", "ignored")).toBe(false);
+      expect(h.transport.handleClientOffer("session-1", "secret-offer-sdp")).toBe(true);
+      expect(h.transport.handleClientOffer("session-1", "duplicate-sdp")).toBe(false);
       expect(h.offers).toEqual(["secret-offer-sdp"]);
 
       await h.transport.handleAnswer("secret-answer-sdp");
@@ -81,7 +81,7 @@ describe("browser-owned voice transport", () => {
         sdp: "secret-answer-sdp",
       });
       expect(h.debug.join("\n")).not.toContain("secret-");
-      expect(h.transport.handleBrowserConnected("session-1")).toBe(true);
+      expect(h.transport.handleClientConnected("session-1")).toBe(true);
       expect(h.transport.currentPhase).toBe("live");
     } finally {
       await h.transport.stop();
@@ -95,8 +95,8 @@ describe("browser-owned voice transport", () => {
       for (let attempt = 1; attempt <= 3; attempt++) {
         const id = `session-${attempt}`;
         expect(h.prepares()).toHaveLength(attempt);
-        expect(h.transport.handleBrowserOffer(id, `offer-${attempt}`)).toBe(true);
-        expect(h.transport.handleBrowserFailed(id, `failure-${attempt}`)).toBe(true);
+        expect(h.transport.handleClientOffer(id, `offer-${attempt}`)).toBe(true);
+        expect(h.transport.handleClientFailed(id, `failure-${attempt}`)).toBe(true);
         await delay(15);
       }
       expect(h.prepares()).toHaveLength(3);
@@ -114,16 +114,16 @@ describe("browser-owned voice transport", () => {
     const h = harness();
     try {
       h.transport.handleReady(ready);
-      h.transport.handleBrowserOffer("session-1", "offer-1");
-      h.transport.handleBrowserConnected("session-1");
+      h.transport.handleClientOffer("session-1", "offer-1");
+      h.transport.handleClientConnected("session-1");
       await delay(45);
       expect(h.prepares().at(-1)?.sessionId).toBe("session-2");
       expect(h.commands).not.toContainEqual({
         type: "close",
         sessionId: "session-1",
       });
-      h.transport.handleBrowserOffer("session-2", "offer-2");
-      h.transport.handleBrowserConnected("session-2");
+      h.transport.handleClientOffer("session-2", "offer-2");
+      h.transport.handleClientConnected("session-2");
       expect(h.commands).toContainEqual({
         type: "close",
         sessionId: "session-1",
@@ -137,8 +137,8 @@ describe("browser-owned voice transport", () => {
     const h = harness();
     try {
       h.transport.handleReady(ready);
-      h.transport.handleBrowserOffer("session-1", "offer-1");
-      h.transport.handleBrowserConnected("session-1");
+      h.transport.handleClientOffer("session-1", "offer-1");
+      h.transport.handleClientConnected("session-1");
 
       let result = "pending";
       const connected = h.transport.redialAndWait("control").then(() => {
@@ -146,15 +146,15 @@ describe("browser-owned voice transport", () => {
       });
       await tick();
       expect(result).toBe("pending");
-      expect(h.transport.handleBrowserConnected("session-1")).toBe(false);
+      expect(h.transport.handleClientConnected("session-1")).toBe(false);
       expect(result).toBe("pending");
-      h.transport.handleBrowserOffer("session-2", "offer-2");
-      h.transport.handleBrowserConnected("session-2");
+      h.transport.handleClientOffer("session-2", "offer-2");
+      h.transport.handleClientConnected("session-2");
       await connected;
       expect(result).toBe("connected");
 
       const failed = h.transport.redialAndWait("control").catch((error) => error.message);
-      h.transport.handleBrowserFailed("session-3", "browser broke");
+      h.transport.handleClientFailed("session-3", "browser broke");
       expect(await failed).toContain("browser broke");
 
       const superseded = h.transport.redialAndWait("control").catch((error) => error.message);

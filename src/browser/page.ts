@@ -59,6 +59,7 @@ export const browserMediaScript = `(() => {
     pc.addEventListener("icegatheringstatechange", changed);
   });
   const stopPeer = () => {
+    if (stream) for (const track of stream.getAudioTracks()) track.enabled = false;
     if (peer) peer.close();
     if (remote.srcObject) {
       for (const track of remote.srcObject.getTracks()) track.stop();

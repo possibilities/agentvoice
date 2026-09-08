@@ -21,6 +21,7 @@ export function muxSocketPath(name: string, env = process.env, home = homedir())
 export async function runComposition(
   workspace?: string,
   command = [process.execPath, fileURLToPath(new URL("../main.ts", import.meta.url))],
+  clientArgs: string[] = [],
 ) {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw new Error("agentvoice requires a terminal (TTY)");
@@ -84,7 +85,7 @@ export async function runComposition(
     const status = (await mux.request("instance.status")) as Record<string, unknown>;
     if (status["name"] !== name || status["pid"] !== child.pid || status["host"] !== "foreground")
       throw new Error("smolmux did not identify the owned foreground process");
-    composition = new Composition(mux, clientId, command, workspace);
+    composition = new Composition(mux, clientId, command, workspace, clientArgs);
     await mux.request("event.subscribe", { events: ["app.state"] });
     work = composition.start();
     work.catch((error) => composition?.stop(error));

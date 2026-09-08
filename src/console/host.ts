@@ -2,6 +2,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { MediaStreamTrack } from "werift";
 import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
@@ -12,9 +13,18 @@ import type {
 } from "../events/conversation.ts";
 import { stateDirectory } from "../paths.ts";
 import { type AudioTarget, MuteGate } from "./audio-control.ts";
+import type {
+  ClientMediaSession,
+  ClientSessionOptions,
+  ClientSessionPhase,
+} from "./client-session.ts";
 import type { DuplexVoiceAudio, VoiceAudioOptions } from "./duplex-audio.ts";
 import type { VoiceHost, VoiceInput, VoiceState, VoiceView } from "./state.ts";
-import type { TransportPhase, VoiceTransport, VoiceTransportOptions } from "./transport.ts";
+
+export type VoiceTransportOptions = Omit<ClientSessionOptions, "send"> & {
+  onRemoteTrack(track: MediaStreamTrack): void;
+  onOaiEvent?(event: Record<string, unknown>): void;
+};
 
 export class ConsoleError extends Error {}
 export interface MediaOptions {
@@ -26,7 +36,7 @@ export type HostAudio = Pick<
   "start" | "stop" | "attachRemote" | "detachRemote" | "micMuted" | "speakerMuted"
 >;
 export type HostTransport = Pick<
-  VoiceTransport,
+  ClientMediaSession,
   | "redialAndWait"
   | "sendOpusFrame"
   | "stop"
@@ -63,7 +73,8 @@ export async function runConsoleHost(
   version: string,
   options: ConsoleHostOptions,
 ): Promise<void> {
-  const factory = options.mediaFactory ?? (await nativeMediaFactory());
+  const factory = options.mediaFactory;
+  if (!factory) throw new ConsoleError("Server requires client-owned media signaling");
   factory.check();
   let debugLog: ((line: string) => void) | undefined;
   if (options.debug) {
@@ -90,7 +101,7 @@ export async function runConsoleHost(
   let shutdownPromise: Promise<void> | null = null;
   const microphone = new MuteGate(options.initialMute?.mic);
   const speaker = new MuteGate(options.initialMute?.speaker);
-  let phase: TransportPhase = "waiting-ready";
+  let phase: ClientSessionPhase = "waiting-ready";
   let transport: HostTransport | null = null;
   let audioReady = false;
   const showNotice = (message: string) => {
@@ -250,22 +261,4 @@ export async function runConsoleHost(
     await observer?.shutdown();
   }
   if (fatal) throw new ConsoleError(fatal);
-}
-
-export async function nativeMediaFactory(): Promise<
-  NonNullable<ConsoleHostOptions["mediaFactory"]>
-> {
-  const [device, audio, transport] = await Promise.all([
-    import("./duplex-device.ts"),
-    import("./duplex-audio.ts"),
-    import("./transport.ts"),
-  ]);
-  return {
-    check() {
-      const error = device.duplexAudioAvailabilityError();
-      if (error) throw new ConsoleError(error);
-    },
-    audio: (options) => new audio.DuplexVoiceAudio(options),
-    transport: (options) => new transport.VoiceTransport(options),
-  };
 }
