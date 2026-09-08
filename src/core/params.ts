@@ -25,6 +25,42 @@ function appendSlotConflict(setting: string): ConfigError {
   );
 }
 
+const MULTI_AGENT_FEATURE = "features.multi_agent_v2";
+const MULTI_AGENT_MODE = "multi_agent_mode_hint_text";
+
+function modeSlotConflict(): ConfigError {
+  return new ConfigError(
+    `${PROMPT_FILES.orchestratorMultiAgentMode} owns the native multi-agent mode: remove duplicate mode settings or conflicting feature settings from orchestrator.config/extra.config`,
+  );
+}
+
+/** Native request config accepts dotted keys or tables; preserve the caller's shape. */
+function multiAgentFeature(config: Record<string, unknown>) {
+  const features = config["features"];
+  if (features !== undefined && !record(features)) throw modeSlotConflict();
+  const nested = record(features) && Object.hasOwn(features, "multi_agent_v2");
+  if (nested && Object.hasOwn(config, MULTI_AGENT_FEATURE)) throw modeSlotConflict();
+  if (Object.hasOwn(config, `${MULTI_AGENT_FEATURE}.${MULTI_AGENT_MODE}`)) throw modeSlotConflict();
+  if (
+    Object.hasOwn(config, `${MULTI_AGENT_FEATURE}.enabled`) &&
+    config[`${MULTI_AGENT_FEATURE}.enabled`] !== true
+  )
+    throw modeSlotConflict();
+  const feature = nested ? features["multi_agent_v2"] : config[MULTI_AGENT_FEATURE];
+  if (feature !== undefined && feature !== true && !record(feature)) throw modeSlotConflict();
+  if (record(feature) && Object.hasOwn(feature, "enabled") && feature["enabled"] !== true)
+    throw modeSlotConflict();
+  return { features, nested, feature: record(feature) ? feature : {} };
+}
+
+function applyMultiAgentMode(config: Record<string, unknown>, mode: string): void {
+  const { features, nested, feature } = multiAgentFeature(config);
+  if (Object.hasOwn(feature, MULTI_AGENT_MODE)) throw modeSlotConflict();
+  const selected = { ...feature, enabled: true, [MULTI_AGENT_MODE]: mode };
+  if (nested) config["features"] = { ...features, multi_agent_v2: selected };
+  else config[MULTI_AGENT_FEATURE] = selected;
+}
+
 // Codex 0.153.3 ThreadStartParams fields absent from ThreadResumeParams.
 // Filter after raw extra merges; unknown future fields remain passthrough.
 const START_ONLY_FIELDS = [
@@ -82,6 +118,8 @@ export function threadParams(
     ...(orchestrator.effort ? { model_reasoning_effort: orchestrator.effort } : {}),
     ...orchestrator.config,
   };
+  if (prompts.orchestratorMultiAgentMode !== undefined)
+    applyMultiAgentMode(codexConfig, prompts.orchestratorMultiAgentMode);
   if (prompts.voiceAppend !== undefined) {
     if (Object.hasOwn(codexConfig, STARTUP_CONTEXT_KEY))
       throw appendSlotConflict(`orchestrator.config.${STARTUP_CONTEXT_KEY}`);
@@ -117,6 +155,16 @@ export function threadParams(
   if (config.allowFullAccess) applyFullAccessOptIn(merged);
   // Codex rejects both selectors; an explicit profile replaces the sandbox.
   if (merged["permissions"] !== undefined) delete merged["sandbox"];
+  if (prompts.orchestratorMultiAgentMode !== undefined) {
+    const config = merged["config"];
+    if (!record(config)) throw modeSlotConflict();
+    const { feature } = multiAgentFeature(config);
+    if (
+      feature[MULTI_AGENT_MODE] !== prompts.orchestratorMultiAgentMode ||
+      feature["enabled"] !== true
+    )
+      throw modeSlotConflict();
+  }
   if (prompts.voiceAppend !== undefined) {
     const config = merged["config"];
     if (!record(config) || config[STARTUP_CONTEXT_KEY] !== prompts.voiceAppend)

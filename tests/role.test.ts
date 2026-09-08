@@ -38,6 +38,31 @@ function roleHarness(
 }
 
 describe("role resolution", () => {
+  test("selected role owns its mode; another role does not inherit config-directory prompts", async () => {
+    const h = roleHarness({
+      [PROMPT_FILES.orchestratorMultiAgentMode]: "role mode\n",
+      [ROLE_PROMPT_FILES.orchestratorDeveloperInstructions]: "role append",
+    });
+    try {
+      writeFileSync(join(h.directory, PROMPT_FILES.orchestratorMultiAgentMode), "global mode");
+      const config = resolveConfig({ role: h.dir }, {}, {}, HOME, { configDir: h.directory });
+      const loaded = await readPrompts(config);
+      for (const kind of ["start", "resume"] as const) {
+        expect(threadParams(config, loaded.prompts, kind)["config"]).toEqual({
+          "features.multi_agent_v2": { enabled: true, multi_agent_mode_hint_text: "role mode\n" },
+        });
+      }
+      const other = join(h.directory, "other-role");
+      mkdirSync(other);
+      const otherConfig = resolveConfig({ role: other }, {}, {}, HOME, { configDir: h.directory });
+      const otherPrompts = await readPrompts(otherConfig);
+      expect(otherPrompts.prompts.orchestratorMultiAgentMode).toBeUndefined();
+      expect(threadParams(otherConfig, otherPrompts.prompts, "start")).not.toHaveProperty("config");
+    } finally {
+      await h.cleanup();
+    }
+  });
+
   test("names resolve under the roles home; paths resolve from the launch directory", () => {
     expect(resolveRolePath("researcher", {}, HOME, "/launch")).toBe(
       `${HOME}/.config/agentroles/researcher`,
@@ -250,6 +275,7 @@ describe("role launch", () => {
       "mcp.json": JSON.stringify({ mcpServers: { srv: { command: "srv" } } }),
       "skills/one/SKILL.md": "---\nname: one\ndescription: d\n---\n",
       [ROLE_PROMPT_FILES.orchestratorDeveloperInstructions]: "role append",
+      [PROMPT_FILES.orchestratorMultiAgentMode]: "role mode",
     });
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);
@@ -262,9 +288,13 @@ describe("role launch", () => {
       expect(methods).not.toContain("thread/list");
       const start = h.native.calls.find((call) => call.method === "thread/start")!;
       expect(start.params["developerInstructions"]).toBe("role append");
-      expect(start.params["config"]).toEqual({ mcp_servers: { srv: { command: "srv" } } });
+      expect(start.params["config"]).toEqual({
+        mcp_servers: { srv: { command: "srv" } },
+        "features.multi_agent_v2": { enabled: true, multi_agent_mode_hint_text: "role mode" },
+      });
       expect(h.runtime.currentReady!.prompts).toEqual([
         join(h.dir, ROLE_PROMPT_FILES.orchestratorDeveloperInstructions),
+        join(h.dir, PROMPT_FILES.orchestratorMultiAgentMode),
       ]);
       expect(warnings).toContain(`role: ${h.dir}`);
 

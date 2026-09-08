@@ -570,7 +570,8 @@ Prompt overrides are files with fixed names in the directory of the selected
 config file (`~/.config/agentvoice/` by default, or beside `--config`), **not**
 the workspace. Each name is exactly one native Codex control; there is no
 AgentVoice-shaped overlay. A present file loads, an absent file sends nothing,
-and an empty file sends empty text. No custom prompt files ship with the app.
+and an empty file sends empty text. Without selected files or a role, AgentVoice
+supplies no custom prompt text.
 
 | File | Agent | Native control |
 | --- | --- | --- |
@@ -578,6 +579,7 @@ and an empty file sends empty text. No custom prompt files ship with the app.
 | `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` | voice | Text Codex renders after its built-in voice prompt, through the startup-context slot (below) |
 | `VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md` | orchestrator | Thread `baseInstructions`: replaces the entire base prompt (visible warning; `personality` no longer applies) |
 | `VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md` | orchestrator | Thread `developerInstructions`: Codex's developer message after the base prompt |
+| `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` | orchestrator | Native `features.multi_agent_v2.multi_agent_mode_hint_text`: replaces delegation-mode guidance and enables V2 |
 | `VOICE_ORCHESTRATOR_SESSION_START.md` | orchestrator | `realtimeStartInstructions`: replaces the built-in developer message sent when a voice session starts |
 | `VOICE_ORCHESTRATOR_SESSION_END.md` | orchestrator | `realtimeEndInstructions`: same, when a voice session ends |
 
@@ -593,6 +595,15 @@ an `orchestrator.config` or `orchestrator.extra.config` entry for that key, or a
 `codex-config` entry for it conflicts with the file and fails at launch. The
 orchestrator append is a developer message, not a suffix, because its default
 prompt is per model and partly remote; Codex's own append channel is used as is.
+
+The multi-agent mode file owns its native request-config slot. Duplicate mode
+settings, disabled V2, or raw `extra.config` that drops or changes the file's
+mode fail before child startup. Unrelated V2 settings are preserved, with either
+native dotted-key or nested-table configuration. The request overrides native
+startup/config defaults; managed native requirements still apply. An empty file
+sends empty text, which suppresses the native mode message; absence sends no
+mode or feature override. Codex 0.153.4 limits custom mode text to 400 estimated
+tokens. Contents load once per runtime generation.
 
 A present name must load: an unreadable file, a directory or a broken link fails
 before Codex starts, even if a raw field would override the contents. Symlinks to
@@ -657,18 +668,20 @@ Select the repository's `roles/default` role with
 It is not automatically selected when `--role` and the config's `role` key
 are absent.
 
-The default role uses conversation-first delegation when the operator explicitly
-configures the native mode in [the configuration example](docs/delegation-policy.example.json).
-The role append alone cannot override Codex's later delegation policy. See the
-[delegation policy audit](docs/delegation-policy-audit.md) and
-[ADR 0030](docs/adr/0030-conversation-first-delegation.md) for the decision and
-the no-inference start/resume probe. The stock base prompt and binary stay intact.
+The default role carries its conversation-first policy in
+`roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`. Selecting that role is
+sufficient; no server-config policy is needed. Another role without that file
+keeps native delegation policy. The role append alone cannot replace Codex's
+later mode message. See the [audit](docs/delegation-policy-audit.md) and
+[ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
+binary stay intact.
 
 | Role file | Effect in AgentVoice |
 | --- | --- |
 | `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
 | `VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md` / `VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md` | Voice-specific stand-ins for the general file of the same kind, used by AgentVoice only |
 | `VOICE_AGENT_SYSTEM_PROMPT.md` / `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` | Voice agent prompt, as in the prompt override files above |
+| `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` | Native multi-agent mode text and V2 enablement on thread start/resume |
 | `VOICE_ORCHESTRATOR_SESSION_START.md` / `_END.md` | Realtime start/end instructions, as above |
 | `skills/<name>/SKILL.md` | Registered with the owned child through `skills/extraRoots/set` right after `initialize`; no other Codex process sees them, and nothing is written under CODEX_HOME |
 | `mcp.json` | Claude Code's `.mcp.json` shape (`{"mcpServers": {...}}`), translated to Codex fields (`headers` becomes `http_headers`, `type` is dropped, `sse` is rejected) and sent as per-thread `mcp_servers` config on start and resume |

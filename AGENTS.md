@@ -104,6 +104,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - src/core/codex-config.ts: ordered native startup overrides; validate only argv
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
+  VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md owns native multi-agent mode plus V2
+  enablement on start/resume. The default role carries it; other roles inherit
+  native policy. Preserve unrelated V2 settings; duplicate mode owners, disabled
+  V2 and raw config replacement that drops the file are launch errors.
   Codex normally ignores unknown fields; do not promise errors on passthrough typos.
   Default effective WebRTC requests to v3 for compatibility after raw merging.
   Explicit versions/null and alternate transports win. Distinguish Codex client

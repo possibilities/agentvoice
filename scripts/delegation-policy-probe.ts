@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
-import { parseJsonConfig, readPrompts, resolveConfig } from "../src/core/config.ts";
+import { readPrompts, resolveConfig } from "../src/core/config.ts";
 import { threadParams } from "../src/core/params.ts";
 
 if (process.platform !== "darwin") throw new Error("This probe requires macOS sandbox-exec.");
@@ -14,16 +14,10 @@ const catalogPath = process.env["CODEX_MODEL_CATALOG"];
 if (!codex?.startsWith("/") || !catalogPath?.startsWith("/"))
   throw new Error("Set absolute CODEX_PATH and CODEX_MODEL_CATALOG paths.");
 const repo = realpathSync(join(import.meta.dir, ".."));
-const fragment = parseJsonConfig(
-  readFileSync(join(repo, "docs/delegation-policy.example.json"), "utf8"),
-  "delegation policy example",
+const policy = readFileSync(
+  join(repo, "roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md"),
+  "utf8",
 );
-const feature = fragment.orchestrator?.config?.["features.multi_agent_v2"] as Record<
-  string,
-  unknown
->;
-const policy = feature["multi_agent_mode_hint_text"];
-assert.equal(typeof policy, "string");
 const catalog = readFileSync(catalogPath, "utf8");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "av-delegation-probe-")));
 const workspace = join(root, "workspace");
@@ -133,7 +127,7 @@ try {
       role: join(repo, "roles/default"),
       orchestrator: { workspace, sandbox: "read-only", "approval-policy": "never" },
     },
-    fragment,
+    {},
     {},
     root,
     { configDir: nativeHome },

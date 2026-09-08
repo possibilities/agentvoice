@@ -142,6 +142,8 @@ export { ConfigError } from "./config-error.ts";
  * - VOICE_ORCHESTRATOR_SYSTEM_PROMPT replaces thread `baseInstructions`.
  * - VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT is thread `developerInstructions`,
  *   Codex's own developer message after the base prompt.
+ * - VOICE_ORCHESTRATOR_MULTI_AGENT_MODE owns the native delegation mode;
+ *   params.ts also enables its required V2 feature.
  * - The SESSION files replace the realtime start/end instructions the
  *   orchestrator receives when a voice session opens or closes.
  * In a role, SYSTEM_PROMPT.md / APPEND_SYSTEM_PROMPT.md (role.ts) are the
@@ -153,6 +155,7 @@ export const PROMPT_FILES = {
   voiceAppend: "VOICE_AGENT_APPEND_SYSTEM_PROMPT.md",
   orchestratorBaseInstructions: "VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md",
   orchestratorDeveloperInstructions: "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md",
+  orchestratorMultiAgentMode: "VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md",
   orchestratorSessionStart: "VOICE_ORCHESTRATOR_SESSION_START.md",
   orchestratorSessionEnd: "VOICE_ORCHESTRATOR_SESSION_END.md",
 } as const;
@@ -227,7 +230,7 @@ async function readPromptFile(path: string, filename: string): Promise<string | 
 }
 
 /**
- * Reads the six convention files from `dir` plus, when `general` is set, the
+ * Reads the convention files from `dir` plus, when `general` is set, the
  * role's SYSTEM_PROMPT / APPEND_SYSTEM_PROMPT. Returns the effective prompts,
  * the files they came from, and every prompt file seen (for conflict messages).
  */

@@ -107,6 +107,67 @@ describe("threadParams", () => {
     expect(params).not.toHaveProperty("baseInstructions");
   });
 
+  test("a multi-agent mode file enables its native feature on start and resume", () => {
+    for (const kind of ["start", "resume"] as const) {
+      for (const mode of ["", "Role policy\n"]) {
+        expect(thread({}, { orchestratorMultiAgentMode: mode }, kind)["config"]).toEqual({
+          "features.multi_agent_v2": { enabled: true, multi_agent_mode_hint_text: mode },
+        });
+      }
+      expect(thread({}, {}, kind)).not.toHaveProperty("config");
+    }
+  });
+
+  test("mode files preserve unrelated native config in either table shape", () => {
+    for (const nested of [false, true]) {
+      const feature = { max_concurrent_threads_per_session: 3 };
+      const config = {
+        model_reasoning_effort: "low",
+        ...(nested
+          ? { features: { other: true, multi_agent_v2: feature } }
+          : { "features.multi_agent_v2": feature }),
+      };
+      const before = structuredClone(config);
+      const actual = thread(
+        { orchestrator: { config } },
+        { orchestratorMultiAgentMode: "Role mode" },
+      )["config"] as Record<string, unknown>;
+      const expected = { ...feature, enabled: true, multi_agent_mode_hint_text: "Role mode" };
+      expect(actual).toEqual({
+        model_reasoning_effort: "low",
+        ...(nested
+          ? { features: { other: true, multi_agent_v2: expected } }
+          : { "features.multi_agent_v2": expected }),
+      });
+      expect(config).toEqual(before);
+    }
+  });
+
+  test("a mode file rejects duplicate owners and disabled or malformed native features", () => {
+    const conflicts = [
+      { "features.multi_agent_v2": false },
+      { "features.multi_agent_v2": null },
+      { "features.multi_agent_v2": { enabled: false } },
+      { "features.multi_agent_v2": { multi_agent_mode_hint_text: "Other" } },
+      { "features.multi_agent_v2.multi_agent_mode_hint_text": "Other" },
+      { "features.multi_agent_v2.enabled": false },
+      { features: { multi_agent_v2: { multi_agent_mode_hint_text: "Other" } } },
+      { features: { multi_agent_v2: true }, "features.multi_agent_v2": true },
+      { features: false },
+    ];
+    for (const config of conflicts)
+      expect(() =>
+        thread({ orchestrator: { config } }, { orchestratorMultiAgentMode: "Role mode" }),
+      ).toThrow("VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md owns");
+    for (const config of [{}, { "features.multi_agent_v2": false }])
+      expect(() =>
+        thread(
+          { orchestrator: { extra: { config } } },
+          { orchestratorMultiAgentMode: "Role mode" },
+        ),
+      ).toThrow("VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md owns");
+  });
+
   test("the voice append occupies the startup-context config slot on start and resume", () => {
     for (const kind of ["start", "resume"] as const) {
       const params = thread(

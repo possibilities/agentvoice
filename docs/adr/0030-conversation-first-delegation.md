@@ -1,6 +1,7 @@
 # 0030: Conversation-first delegation through native operator configuration
 
-Accepted September 8, 2026. The operator approved a native custom multi-agent
+Accepted September 8, 2026. Configuration ownership is superseded by
+[ADR 0031](0031-role-owned-delegation.md); the delegation behavior remains. The operator approved a native custom multi-agent
 mode for the default voice role: the root delegates substantial work, including
 a single blocking assignment, while owning conversation, decisions, integration
 and verification; workers execute their assignments rather than recursively

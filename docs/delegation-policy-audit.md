@@ -4,7 +4,9 @@ Investigated September 8, 2026 against stock Codex CLI/app-server 0.153.4,
 tag `rust-v0.153.4` (`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`).
 The operator approved the conversation-first configuration and role alignment
 on September 8; [ADR 0030](adr/0030-conversation-first-delegation.md) records that
-choice. This remains explicit operator configuration, not an unconditional
+choice. The subsequent role-ownership decision in
+[ADR 0031](adr/0031-role-owned-delegation.md) moves the policy into the selected
+default role rather than the server configuration. It is not an unconditional
 AgentVoice runtime default.
 
 ## Finding
@@ -67,28 +69,23 @@ configuration to make that an explicit exception to the generic delegation
 policy. Keep the stock base prompt, the current work model and effort, and
 the existing permission controls.
 
-The adjacent [configuration fragment](delegation-policy.example.json) contains
-the approved policy. It uses the existing AgentVoice `orchestrator.config`
-passthrough; no new AgentVoice prompt mechanism is needed:
+The policy's single authored source is
+[`roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`](../roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md).
+AgentVoice discovers it through the normal role/config-directory prompt loader
+and sends its exact contents as native
+`features.multi_agent_v2.multi_agent_mode_hint_text`, with V2 enabled. Selecting
+the default role therefore selects its policy. Another role without the file
+sends neither a mode nor feature override. No special role-name test or full
+base-prompt replacement is involved.
 
-```json
-{
-  "orchestrator": {
-    "config": {
-      "features.multi_agent_v2": {
-        "enabled": true,
-        "multi_agent_mode_hint_text": "The explicit conversation-first policy in delegation-policy.example.json"
-      }
-    }
-  }
-}
-```
-
-Use the actual text in the linked file, not this abbreviated illustration.
-Merge the feature-table members with existing configuration; do not replace
-the whole server configuration. The native key is under
-`features.multi_agent_v2`, not a top-level `multi_agent_v2` table. Native
-passthrough can silently ignore incorrectly located keys.
+The file owns this request-config slot. Duplicate mode settings, explicit V2
+disabling, ambiguous table shapes and raw config overrides that drop/change the
+mode fail before child startup. Unrelated native settings remain intact in
+both dotted-key and nested-table forms. As with native request configuration,
+the file's explicit request outranks native startup/config defaults; managed
+requirements remain native. The file can also be used beside an explicitly
+selected config when no role is active. Empty text is preserved and suppresses
+the native mode message, whereas absence leaves native mode selection intact.
 
 The configured mode explicitly supersedes the earlier per-task authorization,
 parallel-local-execution and model-selection restrictions. It permits one
@@ -133,7 +130,7 @@ Captured outbound request evidence:
 | Custom mode through `features.multi_agent_v2` | Exact configured policy | Proposed text received without truncation after native role guidance; spawn description remains |
 
 The repeatable [probe](../scripts/delegation-policy-probe.ts) additionally loads
-the actual default role and example through AgentVoice's config/parameter
+the actual default role through AgentVoice's config/parameter
 builders, verifies the baseline conflict, and checks the exact policy after
 both a fresh thread and an exact resume in a replacement owned child:
 
@@ -147,13 +144,12 @@ It only reads the explicitly selected model catalog and copies it into
 disposable state; it does not read credentials. Its baseline assertion is
 deliberately version/catalog-sensitive so upgrades trigger a new audit.
 
-The approved operator config is authored in AgentStart's
-`config/agentvoice/server.json`, which the existing live configuration symlink
-already selects. The role append is authored in AgentVoice's `roles/default`
-and selected through the existing managed role symlink. Preserve those source
-links; no second installation path is needed. The mode applies to calls using
-that server configuration, even if another role is selected; operators wanting
-different policies should use separate explicit configuration files.
+AgentStart's `config/agentvoice/server.json` now selects the role and keeps the
+operator's model/effort, logging and permissions choices. It contains no
+embedded delegation policy. Its managed role renderer links the mode file
+alongside the append from AgentVoice's authored default role, preserving a
+single source. AgentRoles recognizes and validates the new AgentVoice-only
+file while passing the role directory to AgentVoice unchanged.
 
 This verifies request assembly, not delegation quality, responsiveness,
 child-model choices, or whether speech is heard. A subsequent live trial should

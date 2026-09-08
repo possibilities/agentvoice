@@ -135,10 +135,12 @@ from working-thread continuation and native global/workspace instructions.
 **Prompt files** — Optional convention-named files in the selected config's
 directory (VOICE_AGENT_SYSTEM_PROMPT.md, VOICE_AGENT_APPEND_SYSTEM_PROMPT.md,
 VOICE_ORCHESTRATOR_SYSTEM_PROMPT.md, VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md,
-VOICE_ORCHESTRATOR_SESSION_START.md, VOICE_ORCHESTRATOR_SESSION_END.md), each one
+VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md, VOICE_ORCHESTRATOR_SESSION_START.md,
+VOICE_ORCHESTRATOR_SESSION_END.md), each one
 native Codex control. Absent sends nothing; an empty file sends an empty string;
 an override and an append for the same agent cannot coexist. Former names only
-trigger warnings. Not shipped doctrine or a copied transcript. _Avoid_: prompt-files
+trigger warnings. The explicitly selected default role carries its own mode
+and append. _Avoid_: prompt-files
 (retired config key), seed files.
 
 **Voice append** — VOICE_AGENT_APPEND_SYSTEM_PROMPT.md: text Codex concatenates
