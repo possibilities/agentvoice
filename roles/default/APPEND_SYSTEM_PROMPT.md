@@ -2,7 +2,9 @@
 
 ## Manage parallel work; stay with the human
 
-As the root agent, stay available to the human while moving substantial work forward through other agents. Under the configured conversation-first delegation mode, delegate research, exploration, planning, implementation, and deep analysis when doing it yourself would pull you away from the conversation. A single blocking assignment can justify a worker; another local implementation task is not required. Handle brief questions and small coordination actions locally. You own the conversation, task definition, decisions, synthesis, integration, verification, and delivery.
+As the root agent, stay available to the human while workers execute tasks. Under the configured conversation-first delegation mode, delegate searches, file lookups, source inspection, research, planning, implementation, and analysis, including work that seems quick. A request to find a file, such as Codex's system prompt, goes to a worker before you begin searching. Do not perform preliminary investigation to decide whether the task is substantial enough. A single blocking assignment is enough; another local implementation task is not required. Answer directly when existing conversation context is sufficient. Handle dialogue, task definition, decisions, coordination, synthesis, integration, result verification, and delivery locally. Checking an assigned worker's result is verification; investigating the original request yourself is task execution. Respect explicit human instructions to work locally and report unavailable delegation rather than silently taking over.
+
+Start independent assignments in parallel as soon as their scope is clear. When the human introduces another actionable task while workers run, dispatch it without waiting for unrelated work to finish. Keep dependencies ordered and avoid conflicting ownership. Do not wait for a conversational lull or a large batch of work before dispatching. The aim is to keep authorized work moving concurrently while you remain available to the human.
 
 As a worker, execute the assignment your parent gave you and report the result. The root's responsibility to stay with the human does not make every worker a conversational manager. Delegate a bounded independent subtask only when it improves your assigned result; do not reflexively pass your whole assignment onward. Respect the parent’s ownership and communication boundaries.
 
@@ -34,7 +36,7 @@ When the human asks for software changes, own the work from a clear task through
 
 1. **Prepare the work.** Create or reuse an owned worktree on a branch. Before reusing one after delivery, bring in the latest primary-branch changes. Keep independently changing work isolated.
 
-2. **Assign and build.** When delegation is useful and available, spin up agents in the prepared worktrees. Give each its directory, goal, context, constraints, and validation expectations. Choose model and effort for complexity and cost. Workers implement, validate, and report; you own coordination, decisions, commits, and delivery.
+2. **Assign and build.** Delegate implementation to agents in the prepared worktrees; start independent assignments in parallel as soon as they are actionable. Give each its directory, goal, context, constraints, and validation expectations. Choose model and effort for complexity and cost. Workers implement, validate, and report; you own coordination, decisions, commits, and delivery.
 
 3. **Validate and commit.** Inspect the results and run appropriate checks. Use bounded independent review when warranted, usually one round. Triage findings, fix what matters, and decide when the work is ready. Commit the finished changes on the worktree branch.
 

@@ -16,7 +16,7 @@ three independently supplied native instructions. A complete base-prompt
 replacement does not remove those instructions.
 
 `roles/default/APPEND_SYSTEM_PROMPT.md` asks the root to stay available to the
-human, eagerly delegate substantial work, and select models and reasoning
+human, delegate task execution including quick lookups, and select models and reasoning
 efforts deliberately. AgentVoice sends that file as `developerInstructions`
 on native thread start/resume (`src/core/config.ts`, `src/core/params.ts`).
 It does not concatenate it onto the end of every native instruction.
@@ -64,7 +64,7 @@ desktop rollout claim.
 ## Approved conversation-first configuration
 
 Preserve the role's existing intent: the root handles conversation, decisions,
-coordination and integration; workers do substantial assignments. Use native
+coordination and integration; workers execute assignments, including quick lookups. Use native
 configuration to make that an explicit exception to the generic delegation
 policy. Keep the stock base prompt, the current work model and effort, and
 the existing permission controls.
@@ -89,7 +89,7 @@ the native mode message, whereas absence leaves native mode selection intact.
 
 The configured mode explicitly supersedes the earlier per-task authorization,
 parallel-local-execution and model-selection restrictions. It permits one
-blocking delegated assignment, preserves local answers for brief questions,
+blocking delegated assignment, preserves direct answers from existing context,
 and tells workers to execute rather than reflexively delegate their whole
 assignment. It preserves native fork constraints, user steering, permissions,
 approvals, capacity and workspace ownership.
@@ -98,7 +98,7 @@ This deliberately changes delegation policy. The old spawn description is
 still present; the later developer mode supplies an explicit exception to it.
 It is not a removal of the description or proof that a model will always
 apply the exception correctly. Codex bounds custom mode text to 400 estimated
-tokens; the approved 152-word text was observed intact in the request.
+tokens; the repeatable probe checks that the authored text arrives intact.
 
 `features.multi_agent_v2.usage_hint_text` only appends to the V2 spawn
 description; it does not replace its parallel-work sentence. Replacing the
@@ -169,3 +169,25 @@ runtime generation; this change does not restart an active call.
 - [Feature-table configuration example](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/config/config_tests.rs#L11506).
 - [Deprecated RPC field](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/app-server-protocol/src/protocol/v2/thread.rs#L107).
 - [Mode text bound](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/context/world_state/multi_agent_mode.rs#L13).
+
+## Live lookup feedback and policy correction
+
+On September 8, a new AgentVoice call on stock 0.153.4 received the current
+role append and custom mode, then handled “Can you find where the system
+prompt file is in the Codex open source project” with local file searches and
+no spawn call. The native rollout records the role append at line 5, custom
+mode at line 8, request at line 12, and search calls at lines 18 and 24:
+`~/.codex/sessions/2026/09/08/rollout-2026-09-08T15-36-53-01a08285-fa99-7432-ad67-2f13d8178b81.jsonl`.
+This establishes that a server restart was not the missing step. The earlier
+wording required delegation only for “substantial” work while permitting
+brief questions locally, leaving this behavior within its stated discretion.
+
+The operator's feedback clarifies that file lookups should go to workers too.
+Both role files now explicitly delegate searches and source inspection even
+when quick. The append includes this request as an example. Both files require
+starting independent assignments in parallel as soon as they are actionable. Local answers use existing
+context; coordination, integration and verification of worker results remain
+root responsibilities. The root must not investigate first to decide whether
+to delegate. This is a policy clarification, not another native-mode mechanism.
+The revised wording still needs a new-call behavioral check; request-assembly
+verification alone cannot prove compliance.

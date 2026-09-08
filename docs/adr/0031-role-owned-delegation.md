@@ -17,3 +17,10 @@ AgentStart publishes a link to the role's file and removes the earlier policy
 copy from server.json. Model/effort, logging and permission choices remain
 operator settings. AgentRoles validates the new AgentVoice-only file; no
 Codex binary fork or generic role configuration overlay is introduced.
+
+The operator subsequently clarified that delegation covers task execution even
+for quick lookups. The root answers from existing context and owns dialogue,
+coordination, decisions, integration and result verification. It dispatches
+independent actionable assignments in parallel, including new requests while
+workers run; neither a substantial-work threshold nor another local task is
+required. See the audit's live lookup evidence and policy correction.
