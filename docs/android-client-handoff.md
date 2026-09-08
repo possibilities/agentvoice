@@ -18,6 +18,20 @@ to WSS and needs neither Termux nor this browser bridge. Audio flows between the
 client WebRTC peer and the upstream voice service, not through AgentVoice or its
 Tailscale proxy. Both devices need upstream Internet access.
 
+Launching with `--connect` enables both **Phone (Termux)** and **Desktop (Tailscale)**
+in the web screen's Server selector, initially selecting desktop. Without a private
+profile, desktop is disabled. Switching stops the current media/call; tap Start
+voice to begin on the selected server. Start or retry is always explicit. The
+loopback bridge now stays available between calls until its process is stopped,
+including after page loss or a revoked/failed remote connection; call teardown
+still occurs on every owner disconnect. A local server must be running for Phone.
+The page receives only the IDs `local`/`remote`, never an endpoint or credential.
+
+Hold to talk always occupies the same space and is disabled unless the microphone
+is persistently muted and the peer is connected. Press and hold to speak; release,
+pointer cancellation, lost capture or focus/background mutes locally immediately.
+Delayed server acknowledgements cannot reopen the microphone after release.
+
 ## Desktop setup and device provisioning
 
 Install normally through AgentStart. The macOS installer supervises the waiting
@@ -164,6 +178,15 @@ input, shared local/network exclusivity, observer restrictions, relay and teardo
 and verified TLS through a real TLS proxy for both the native client adapter and
 loopback browser bridge. The TLS fixture also proves an untrusted certificate
 cannot start a call. These use fake calls and do not prove audible playback.
+
+Desktop/phone proof on 2026-09-08: the installed ARM64 Termux client reached
+WebRTC connected against both its local server and the desktop over Tailscale.
+For the latter, desktop observation reported `live` with a desktop-owned Codex
+0.153.4 child while the phone's local server had no runtime. Revoking the test
+grant ended the browser connection, returned the desktop to idle and reaped its
+owned runtime/Codex child. The revoked grant could not reconnect. The desktop
+saved the matching recording with start and end markers. No human audio-heard
+claim is made from this transport-only run.
 
 Native developers should run on-device tests for permission denial/revocation,
 audio focus/route changes, Bluetooth, lock/background, Wi-Fi↔cellular/Tailscale

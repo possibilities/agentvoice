@@ -65,7 +65,7 @@ test("media reset retains capture and signaling for a successor; disconnect stop
     async setLocalDescription() {}
   }
   runInNewContext(browserMediaScript, {
-    document: { querySelector: element },
+    document: { querySelector: element, addEventListener() {} },
     navigator: { mediaDevices: { getUserMedia: async () => stream } },
     location: { protocol: "http:", host: "127.0.0.1:1234", pathname: "/token/" },
     WebSocket: FakeSocket,
@@ -84,6 +84,6 @@ test("media reset retains capture and signaling for a successor; disconnect stop
   expect(socket.messages.map((message) => message.sessionId)).toEqual(["first", "second"]);
   socket.close();
   expect(stopped).toBe(true);
-  expect(element("#start").disabled).toBe(true);
-  expect(element("#status").textContent).toContain("Run agentvoice phone again");
+  expect(element("#start").disabled).toBe(false);
+  expect(element("#status").textContent).toContain("tap Start voice");
 });

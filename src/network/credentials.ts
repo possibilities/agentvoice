@@ -18,6 +18,7 @@ export const endpointSchema = z
   .string()
   .url()
   .refine((value) => {
+    if (!URL.canParse(value)) return false;
     const url = new URL(value);
     return (
       url.protocol === "wss:" &&

@@ -33,6 +33,13 @@ own WSS, microphone and WebRTC implementation. The same desktop server and schem
 serve the terminal client and native Android. Attachments, history access and
 native human approvals retain their existing server-local interfaces.
 
+The operator additionally requested in-page server switching and stable PTT
+layout. A bridge launched with a private profile offers only `local` and `remote`
+server IDs, never arbitrary browser-selected URLs. It remains idle between calls;
+page loss, selection change and socket loss still close the owned call and media.
+Every successor requires an explicit Start. This supersedes the proof's previous
+exit-on-first-owner-disconnect behavior, not its one-owner security boundary.
+
 Tradeoffs: one authenticated device grant allows controlling a call with the
 server's configured Codex permissions; this is not a sandbox or multi-user tenant
 boundary. The TLS proxy is trusted. Remote call admission is single-attempt;

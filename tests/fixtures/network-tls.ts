@@ -15,9 +15,11 @@ import { NetworkGateway } from "../../src/network/gateway.ts";
 
 const root = mkdtempSync(join(tmpdir(), "av-tls-child-"));
 let gateway: NetworkGateway;
+let tlsConnections = 0;
 const tls = createServer(
   { key: readFileSync(process.argv[2]!), cert: readFileSync(process.argv[3]!) },
   (socket) => {
+    tlsConnections++;
     const upstream = connect(gateway.port, "127.0.0.1");
     socket.pipe(upstream).pipe(socket);
     socket.on("error", () => upstream.destroy());
@@ -69,6 +71,7 @@ const until = async (predicate: () => boolean) => {
 const abort = new AbortController();
 let browser: Promise<void> | undefined;
 let ws: WebSocket | undefined;
+let browserUrl = "";
 try {
   if (process.argv[4] === "untrusted") {
     await assert.rejects(connectFrontend(profile), /Secure connection failed/);
@@ -81,9 +84,11 @@ try {
     const frames: ServerMediaMessage[] = [];
     browser = runBrowserFrontend(undefined, {
       connection: profile,
+      stateDir: root,
       signal: abort.signal,
       write() {},
       open: async (url) => {
+        browserUrl = url;
         assert.equal(new URL(url).hostname, "127.0.0.1");
         assert(!url.includes(profile.token));
         ws = new WebSocket(`${url.replace("http:", "ws:")}ws`, {
@@ -101,8 +106,21 @@ try {
     ws!.send(JSON.stringify({ type: "connected", sessionId }));
     await until(() => received === 1);
     ws!.close();
-    await browser;
     await until(() => closes === 2);
+    const connectionsBeforeLocal = tlsConnections;
+    ws = new WebSocket(`${browserUrl.replace("http:", "ws:")}ws?server=local`, {
+      headers: { Origin: new URL(browserUrl).origin },
+    });
+    await until(() => starts === 3);
+    assert.equal(
+      tlsConnections,
+      connectionsBeforeLocal,
+      "Local selection must not connect over TLS",
+    );
+    ws.close();
+    await until(() => closes === 3);
+    abort.abort();
+    await browser;
   }
   console.log("TLS verification and client lifecycle passed");
 } finally {

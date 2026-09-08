@@ -90,6 +90,12 @@ path, run `agentvoice phone --connect /absolute/private/desktop.json`: the Termu
 bridge holds the device grant and connects over verified WSS/Tailscale; the page
 and its media stay on the phone. No local Termux server is needed in that mode.
 Codex, workspace, configuration and transcripts belong to the desktop server.
+With `--connect`, the web Server selector can switch between Phone (Termux) and
+Desktop (Tailscale). Switching ends the call; Start voice begins a new one.
+The bridge remains running between calls so switching/retrying needs no new
+terminal command. Without `--connect`, the desktop option is disabled.
+Hold to talk stays visible but disabled until the microphone is muted and voice
+is connected; press and hold to talk, release to mute.
 See [network setup and Android handoff](docs/android-client-handoff.md).
 
 One server and one active frontend are allowed per canonical workspace.

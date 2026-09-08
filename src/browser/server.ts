@@ -8,12 +8,13 @@ import {
 } from "../frontend/media-protocol.ts";
 import { browserMediaPage, browserMediaScript } from "./page.ts";
 
-type SocketData = { ownerId: string };
+type SocketData = { ownerId: string; server: "local" | "remote" };
 
-export type BrowserMediaOwner = { readonly id: string };
+export type BrowserMediaOwner = { readonly id: string; readonly server: "local" | "remote" };
 
 export type BrowserMediaServerOptions = {
   token?: string;
+  remoteAvailable?: boolean;
   onOwnerOpen: (owner: BrowserMediaOwner) => Promise<void> | void;
   onClientMessage: (message: ClientMediaMessage, owner: BrowserMediaOwner) => Promise<void> | void;
   onOwnerClosed: (owner: BrowserMediaOwner) => Promise<void> | void;
@@ -80,6 +81,10 @@ export class BrowserMediaServer {
     return this.#ownerSocket.send(JSON.stringify(parsed.data)) > 0;
   }
 
+  disconnectOwner(): void {
+    this.#ownerSocket?.close(1000, "call ended");
+  }
+
   close(): Promise<void> {
     if (this.#closePromise) return this.#closePromise;
     const server = this.#server;
@@ -94,7 +99,7 @@ export class BrowserMediaServer {
           this.#reservedOwnerId = null;
           socket.close(1001, "server closing");
           await opening?.catch(() => {});
-          await this.#options.onOwnerClosed({ id: ownerId });
+          await this.#options.onOwnerClosed({ id: ownerId, server: socket.data.server });
         } else {
           await this.#ownerCleanup;
         }
@@ -123,19 +128,35 @@ export class BrowserMediaServer {
     if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
     const root = `/${this.token}/`;
     if (url.pathname === `${root}ws`) {
+      const selected =
+        url.searchParams.get("server") ?? (this.#options.remoteAvailable ? "remote" : "local");
+      if (
+        [...url.searchParams.keys()].some((key) => key !== "server") ||
+        url.searchParams.getAll("server").length > 1 ||
+        (selected !== "local" && selected !== "remote") ||
+        (selected === "remote" && !this.#options.remoteAvailable)
+      )
+        return new Response("invalid server selection", { status: 400 });
       if (request.headers.get("origin") !== `http://${authority}`)
         return new Response("invalid origin", { status: 403 });
       if (this.#reservedOwnerId !== null) return new Response("voice owner busy", { status: 409 });
       const ownerId = randomUUID();
       this.#reservedOwnerId = ownerId;
-      if (server.upgrade(request, { data: { ownerId } })) return;
+      if (server.upgrade(request, { data: { ownerId, server: selected } })) return;
       this.#reservedOwnerId = null;
       return new Response("upgrade required", { status: 426 });
     }
     if (url.pathname === root)
-      return new Response(browserMediaPage, {
-        headers: { ...headers, "Content-Type": "text/html; charset=utf-8" },
-      });
+      return new Response(
+        this.#options.remoteAvailable
+          ? browserMediaPage
+              .replace('value="local" selected', 'value="local"')
+              .replace('value="remote" disabled', 'value="remote" selected')
+          : browserMediaPage,
+        {
+          headers: { ...headers, "Content-Type": "text/html; charset=utf-8" },
+        },
+      );
     if (url.pathname === `${root}app.js`)
       return new Response(browserMediaScript, {
         headers: { ...headers, "Content-Type": "text/javascript; charset=utf-8" },
@@ -148,7 +169,7 @@ export class BrowserMediaServer {
       return socket.close(1008, "owner unavailable");
     this.#ownerSocket = socket;
     const opening = Promise.resolve().then(() =>
-      this.#options.onOwnerOpen({ id: socket.data.ownerId }),
+      this.#options.onOwnerOpen({ id: socket.data.ownerId, server: socket.data.server }),
     );
     this.#ownerOpening = opening;
     try {
@@ -174,7 +195,10 @@ export class BrowserMediaServer {
     const parsed = clientMediaMessageSchema.safeParse(decoded);
     if (!parsed.success) return socket.close(1008, "invalid message");
     try {
-      await this.#options.onClientMessage(parsed.data, { id: socket.data.ownerId });
+      await this.#options.onClientMessage(parsed.data, {
+        id: socket.data.ownerId,
+        server: socket.data.server,
+      });
     } catch {
       if (socket === this.#ownerSocket) socket.close(1011, "message handling failed");
     }
@@ -189,7 +213,9 @@ export class BrowserMediaServer {
     const cleanup = Promise.resolve()
       .then(() => opening)
       .catch(() => {})
-      .then(() => this.#options.onOwnerClosed({ id: socket.data.ownerId }));
+      .then(() =>
+        this.#options.onOwnerClosed({ id: socket.data.ownerId, server: socket.data.server }),
+      );
     this.#ownerCleanup = cleanup;
     try {
       await cleanup;

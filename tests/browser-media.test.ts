@@ -45,6 +45,9 @@ test("browser media serves only its capability path with restrictive browser pol
     const page = await response.text();
     expect(page).toContain("Start voice");
     expect(page).toContain('src="app.js"');
+    expect(page).toContain('value="remote" disabled');
+    expect(page).toContain('id="hold" type="button" disabled>');
+    expect(page).not.toContain("disabled hidden");
 
     const script = await fetch(`${server.url}app.js`).then((result) => result.text());
     expect(script).toContain("getUserMedia");
@@ -250,6 +253,15 @@ test("browser media rejects wrong origins and closes schema-invalid owners", asy
   server.start();
   const wsUrl = `${server.url.replace("http:", "ws:")}ws`;
   try {
+    for (const query of [
+      "?server=remote",
+      "?server=evil",
+      "?endpoint=wss://evil.example",
+      "?server=local&server=local",
+    ])
+      await expect(openSocket(`${wsUrl}${query}`, new URL(server.url).origin)).rejects.toThrow(
+        "rejected",
+      );
     await expect(openSocket(wsUrl, "http://example.test")).rejects.toThrow("rejected");
     const socket = await openSocket(wsUrl, new URL(server.url).origin);
     const closing = closed(socket);

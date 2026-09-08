@@ -22,6 +22,7 @@ export class NetworkClientSocket extends EventEmitter {
       this.ws = new WebSocket(profile.endpoint, {
         protocols: [NETWORK_SUBPROTOCOL],
         headers: { Authorization: `Bearer ${profile.token}` },
+        tls: { rejectUnauthorized: true },
       });
     } catch {
       throw new Error("Secure connection could not be created");

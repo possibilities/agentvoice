@@ -56,12 +56,17 @@ export async function runBrowserFrontend(
   };
 
   const gateway = new BrowserMediaServer({
-    onOwnerOpen: async () => {
+    remoteAvailable: options.connection !== undefined,
+    onOwnerOpen: async (owner) => {
       if (ownerOpen) throw new Error("browser voice owner is already open");
       ownerOpen = true;
       client = await connectFrontend(
-        options.connection ??
-          frontendSocketPath(options.stateDir ?? stateDirectory(process.env, homedir()), workspace),
+        owner.server === "remote"
+          ? options.connection!
+          : frontendSocketPath(
+              options.stateDir ?? stateDirectory(process.env, homedir()),
+              workspace,
+            ),
         () => {
           queueMicrotask(() => {
             if (!client) return;
@@ -74,16 +79,19 @@ export async function runBrowserFrontend(
       );
       latestState = client.state();
       publishState();
-      void client.done.then(() => finished.resolve());
+      const opened = client;
+      void opened.done.then(() => {
+        if (client === opened) gateway.disconnectOwner();
+      });
     },
     onClientMessage: fromBrowser,
     onOwnerClosed: async () => {
       ownerOpen = false;
-      try {
-        await client?.close();
-      } finally {
-        finished.resolve();
-      }
+      const closing = client;
+      client = undefined;
+      currentSessionId = undefined;
+      latestState = undefined;
+      await closing?.close();
     },
   });
   gateway.start();

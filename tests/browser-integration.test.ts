@@ -66,10 +66,12 @@ test("browser WebSocket relays media through the call owner and disconnect close
   });
   let socket: WebSocket | undefined;
   let browser: Promise<void> | undefined;
+  const abort = new AbortController();
   try {
     await server.start();
     browser = runBrowserFrontend(undefined, {
       stateDir: root,
+      signal: abort.signal,
       write() {},
       open: async (url) => {
         socket = await openSocket(url);
@@ -86,9 +88,11 @@ test("browser WebSocket relays media through the call owner and disconnect close
     expect(received).toEqual([{ type: "connected", sessionId }]);
 
     socket!.close();
-    await browser;
     await until(() => closes === 1);
+    abort.abort();
+    await browser;
   } finally {
+    abort.abort();
     socket?.close();
     await browser?.catch(() => {});
     await server.close();
