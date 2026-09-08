@@ -15,7 +15,6 @@ import { main } from "../src/main.ts";
 
 class FakeMux {
   calls: { method: string; params: Record<string, unknown> }[] = [];
-  messages = { hasMessages: () => true, close() {} };
   layout: z.infer<typeof layoutSchema> = {
     ...initialLayout(120),
     stage: { cols: 120, rows: 30 },
@@ -82,13 +81,7 @@ function live(clientId: string): FrontendObservation {
 test("only this client's live identity starts local attachments, once, with exact selection", async () => {
   const mux = new FakeMux();
   const id = randomUUID();
-  const composition = new Composition(
-    mux,
-    id,
-    ["bun", "/checkout/main.ts"],
-    undefined,
-    () => mux.messages,
-  );
+  const composition = new Composition(mux, id, ["bun", "/checkout/main.ts"]);
   await composition.start();
   expect(mux.calls[0]).toEqual({
     method: "instance.configure",
@@ -139,7 +132,7 @@ test("only this client's live identity starts local attachments, once, with exac
 test("failed startup and client exit never launch attachments", async () => {
   const mux = new FakeMux();
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   composition.observe({
     ...live(id),
@@ -177,7 +170,7 @@ test.each([
 ])("%s %s ends the composition without relaunching attachments", async (name, state) => {
   const mux = new FakeMux();
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   composition.observe(live(id));
   await composition.drained();
@@ -200,7 +193,7 @@ test("attachment exit during startup stops the composition before creating the n
   const mux = new FakeMux();
   const request = mux.request.bind(mux);
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   mux.request = async (method, raw) => {
     const result = await request(method, raw);
     if (method === "app.create" && (raw as Record<string, unknown>)["name"] === "voice") {
@@ -223,7 +216,7 @@ test("attachment exit during startup stops the composition before creating the n
 test("nonterminal app states and unrelated app exits leave the composition running", async () => {
   const mux = new FakeMux();
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   let ended = false;
   void composition.done.then(() => {
@@ -249,11 +242,11 @@ test("nonterminal app states and unrelated app exits leave the composition runni
 test("placeholder replacement rebases a rejected revision onto the human's divider drag", async () => {
   const mux = new FakeMux();
   mux.conflict = true;
-  await new CompositionLayout().update(mux, { connected: true, agent: false });
+  await new CompositionLayout().update(mux, { connected: true, agent: true });
   expect(mux.layout.root.row).toEqual([
     { app: "client", size: 26 },
     { app: "voice", size: 26 },
-    { text: waitingMessages },
+    { app: "agent" },
   ]);
   expect(mux.calls.filter((call) => call.method === "layout.apply")).toHaveLength(2);
 });
@@ -281,18 +274,10 @@ test("exit configuration failure prevents the voice client from starting", async
   composition.stop();
 });
 
-test("one combined startup placeholder splits at connection; the agent waits for voice text", async () => {
+test("one combined startup placeholder splits into three independent apps at connection", async () => {
   const mux = new FakeMux();
-  let hasMessages = false;
-  let closed = false;
-  mux.messages = {
-    hasMessages: () => hasMessages,
-    close() {
-      closed = true;
-    },
-  };
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   expect(mux.layout.root).toEqual({
     row: [{ text: waiting, size: 80 }, { text: waitingMessages }],
@@ -300,27 +285,20 @@ test("one combined startup placeholder splits at connection; the agent waits for
   expect(mux.layout.focus).toBeNull();
   composition.observe(live(id));
   await composition.drained();
-  expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice"]);
+  expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice", "agent"]);
   expect(mux.layout.root.row.map((pane) => pane.app ?? pane.text)).toEqual([
     "client",
     "voice",
-    waitingMessages,
+    "agent",
   ]);
-  expect(mux.layout.focus).toBe("client");
-  hasMessages = true;
-  // The first-message poll works without another frontend state event.
-  await Bun.sleep(150);
-  await composition.drained();
-  expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice", "agent"]);
   expect(mux.layout.focus).toBe("agent");
-  expect(closed).toBe(true);
   composition.stop();
 });
 
 test("redial combines the left panes and restores their dragged division without relaunching", async () => {
   const mux = new FakeMux();
   const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+  const composition = new Composition(mux, id, ["agentvoice"]);
   await composition.start();
   composition.observe(live(id));
   await composition.drained();
@@ -338,53 +316,20 @@ test("redial combines the left panes and restores their dragged division without
   composition.stop();
 });
 
-test("shutdown while waiting for messages cancels observation and cannot start the agent", async () => {
-  const mux = new FakeMux();
-  let closed = false;
-  mux.messages = {
-    hasMessages: () => false,
-    close() {
-      closed = true;
-    },
-  };
-  const id = randomUUID();
-  const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
-  await composition.start();
-  composition.observe(live(id));
-  await composition.drained();
-  composition.stop();
-  const calls = mux.calls.length;
-  mux.messages.hasMessages = () => true;
-  composition.observe(live(id));
-  await Bun.sleep(150);
-  await composition.drained();
-  expect(mux.calls).toHaveLength(calls);
-  expect(closed).toBe(true);
-});
-
 test.each(["workspace", "threadId"])(
-  "a changed %s while waiting cannot attach the agent to a different conversation",
+  "a changed %s cannot retarget existing attachments",
   async (field) => {
     const mux = new FakeMux();
-    let closed = false;
-    mux.messages = {
-      hasMessages: () => false,
-      close() {
-        closed = true;
-      },
-    };
     const id = randomUUID();
-    const composition = new Composition(mux, id, ["agentvoice"], undefined, () => mux.messages);
+    const composition = new Composition(mux, id, ["agentvoice"]);
     await composition.start();
     composition.observe(live(id));
     await composition.drained();
-    mux.messages.hasMessages = () => true;
     composition.observe({ ...live(id), [field]: "different" });
     await composition.drained();
     await composition.done;
     expect(composition.error()?.message).toContain("identity changed");
-    expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice"]);
-    expect(closed).toBe(true);
+    expect(mux.created().map((app) => app["name"])).toEqual(["client", "voice", "agent"]);
   },
 );
 
@@ -394,9 +339,9 @@ test("terminal resizing preserves combined and split pane proportions", async ()
   mux.layout.stage.cols = 48;
   await layout.update(mux, { connected: false, agent: false });
   expect(mux.layout.panes.map((pane) => pane.cols)).toEqual([32, 15]);
-  await layout.update(mux, { connected: true, agent: false });
+  await layout.update(mux, { connected: true, agent: true });
   expect(mux.layout.panes.map((pane) => pane.cols)).toEqual([16, 15, 15]);
   mux.layout.stage.cols = 120;
-  await layout.update(mux, { connected: true, agent: false });
+  await layout.update(mux, { connected: true, agent: true });
   expect(mux.layout.panes.map((pane) => pane.cols)).toEqual([41, 38, 39]);
 });

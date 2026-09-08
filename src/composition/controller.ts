@@ -8,7 +8,6 @@ import {
   names,
   stageSchema,
 } from "./layout.ts";
-import { type MessagePresence, openVoiceMessages } from "./messages.ts";
 
 const appSchema = z.object({
   name: z.string(),
@@ -19,9 +18,6 @@ const appSchema = z.object({
 export class Composition {
   private stopped = false;
   private attached?: { workspace: string; threadId: string };
-  private agentAttached = false;
-  private messages?: MessagePresence;
-  private poll?: ReturnType<typeof setTimeout>;
   private layout = new CompositionLayout();
   private started = false;
   private state?: FrontendObservation;
@@ -34,7 +30,6 @@ export class Composition {
     private readonly clientId: string,
     private readonly command: string[],
     private readonly workspace?: string,
-    private readonly openMessages = openVoiceMessages,
   ) {}
 
   private enqueue(action: () => Promise<void>) {
@@ -104,7 +99,7 @@ export class Composition {
     const state = this.state;
     const disconnected = {
       connected: false,
-      agent: this.agentAttached,
+      agent: Boolean(this.attached),
       placeholder:
         state?.clientId === this.clientId && state.state?.phase === "failed"
           ? "Voice connection failed"
@@ -135,29 +130,14 @@ export class Composition {
       if (this.stopped) return;
       await this.create(1, ["attach", "voice", ...selection]);
       if (this.stopped) return;
-      this.messages = this.openMessages(state.workspace, state.threadId);
-    }
-    await this.layout.update(this.mux, { connected: true, agent: this.agentAttached });
-    if (this.stopped || this.agentAttached) return;
-    if (this.messages!.hasMessages()) {
       await this.create(2, ["attach", "agent", ...selection]);
       if (this.stopped) return;
-      this.agentAttached = true;
-      await this.layout.update(this.mux, { connected: true, agent: true });
-      this.messages!.close();
-      clearTimeout(this.poll);
-    } else {
-      this.poll ??= setTimeout(() => {
-        this.poll = undefined;
-        this.enqueue(() => this.reconcile());
-      }, 100);
     }
+    await this.layout.update(this.mux, { connected: true, agent: true });
   }
   stop(error?: Error) {
     this.failure ??= error;
     this.stopped = true;
-    clearTimeout(this.poll);
-    this.messages?.close();
     this.ended.resolve();
   }
   error() {
