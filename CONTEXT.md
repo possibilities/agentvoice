@@ -127,8 +127,9 @@ Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
-omits voice.include-startup-context unless configured, allowing native inclusion.
-Explicit false skips it and true requests it. Separate
+defaults includeStartupContext to false on every voice call, including renewal,
+matching the inspected desktop client (ADR 0029). App-server omission means true.
+Explicit true requests it; raw null restores server resolution. Separate
 from working-thread continuation and native global/workspace instructions.
 
 **Prompt files** — Optional convention-named files in the selected config's

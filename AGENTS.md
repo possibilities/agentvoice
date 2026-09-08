@@ -110,8 +110,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   selection from app-server omission; v3 aligns with the desktop path noted above.
   No automatic speech-history reads, initial items or reconnect instructions.
   quiet-resume and replay-spoken-history are retired; their config keys error.
-  AgentVoice leaves native startup context unset; explicit true/false/null
-  passthrough and raw initialItems ([]/null included) still win.
+  AgentVoice defaults includeStartupContext to false at the request boundary on
+  every call, matching the desktop client; app-server omission instead means true.
+  See ADR 0029 before changing this default. Explicit true/false/null passthrough
+  and raw initialItems ([]/null included) still win.
   VOICE_AGENT_APPEND_SYSTEM_PROMPT.md owns the startup-context slot: it sends
   includeStartupContext true plus experimental_realtime_ws_startup_context in
   thread config; any other owner of that slot is a launch error, never a merge.
@@ -392,9 +394,10 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   the prompt source for its launch; config-directory files then warn, never merge.
 - Do not manufacture skill policy, conversation summaries or speech-history
   replay. ADR 0017 removes the automatic replay layer and its configuration.
-  includeStartupContext stays omitted on every call unless explicitly configured;
-  native server resolution currently includes its snapshot. Explicit false skips
-  it, true requests it, and raw null restores native resolution (ADR 0020).
+  includeStartupContext defaults to false on every call, including renewal (ADR
+  0029 supersedes ADR 0020 for this setting). This matches inspected desktop-client
+  JavaScript; the native server omission default is true. Explicit true requests
+  the snapshot, false skips it, and raw null restores native resolution.
   Tail flush and experimental_realtime_ws_startup_context remain unset by default
   unless VOICE_AGENT_APPEND_SYSTEM_PROMPT.md claims the latter (ADR 0013).
   Preserve explicit overrides; no user-config writes, forced tail-flush work,

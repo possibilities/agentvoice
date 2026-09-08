@@ -8,7 +8,7 @@ const params = (values: ConfigValues = {}, prompts: Prompts = {}) =>
   realtimeParams(config(values), prompts, "thread", "session", "sdp");
 
 describe("WebRTC compatibility default", () => {
-  test("selects v3 at the request boundary without injecting other native settings", () => {
+  test("selects v3 and desktop startup-context defaults at the request boundary", () => {
     const values = { orchestrator: { config: { realtime: { version: "v1" } } } };
     expect(config().voice.version).toBeUndefined();
     expect(params()).toEqual({
@@ -17,6 +17,7 @@ describe("WebRTC compatibility default", () => {
       transport: { type: "webrtc", sdp: "sdp" },
       outputModality: "audio",
       version: "v3",
+      includeStartupContext: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);

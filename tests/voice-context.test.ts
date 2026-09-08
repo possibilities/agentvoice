@@ -19,7 +19,7 @@ describe("voice context passthrough", () => {
       "realtimeEndInstructions",
     ])
       expect(request).not.toHaveProperty(key);
-    expect(request).not.toHaveProperty("includeStartupContext");
+    expect(request["includeStartupContext"]).toBe(false);
     expect(request).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
   });
 
@@ -68,7 +68,7 @@ describe("native voice continuity without application replay", () => {
         expect(request["threadId"]).toBe(h.runtime.currentReady!.threadId);
         expect(request).not.toHaveProperty("initialItems");
         expect(request).not.toHaveProperty("prompt");
-        expect(request).not.toHaveProperty("includeStartupContext");
+        expect(request["includeStartupContext"]).toBe(false);
         h.native.options.onNotification("thread/realtime/started", request);
       };
       try {
@@ -225,6 +225,7 @@ describe("native voice context across call and conversation boundaries", () => {
               realtimeSessionId: expect.any(String),
               outputModality: "audio",
               transport: { type: "webrtc", sdp },
+              includeStartupContext: false,
               ...scenario.realtime,
             });
             h.native.options.onNotification("thread/realtime/started", {

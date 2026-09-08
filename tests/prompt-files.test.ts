@@ -263,7 +263,7 @@ describe("convention prompt files", () => {
               raw ? null : "orchestratorSessionEnd",
             );
             if (raw) expect(call.params["initialItems"]).toEqual([]);
-            expect(call.params).not.toHaveProperty("includeStartupContext");
+            expect(call.params["includeStartupContext"]).toBe(false);
             expect(call.params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
             expect(JSON.stringify(call.params)).not.toContain("Changed after launch");
           }

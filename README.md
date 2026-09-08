@@ -30,8 +30,9 @@ The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
 implements its own frontend, matching Codex can require the same explicit values
 that Codex's client sends; simply omitting fields does not establish parity.
-Ordinary launches start a new conversation and inherit native permissions and
-startup context. Raw native settings remain available, with visible warnings for modes
+Ordinary launches start a new conversation, inherit native permissions, and
+disable the generic voice startup snapshot to match the desktop client baseline.
+Raw native settings remain available, with visible warnings for modes
 that this frontend cannot implement; passthrough is not a claim of feature parity.
 
 ## Start here
@@ -357,9 +358,11 @@ Each voice connection starts without AgentVoice reading or injecting earlier
 speech or adding its own reconnect instruction. This applies to continue,
 explicit resume and automatic renewal. Native saved conversation history remains intact.
 
-AgentVoice leaves the native startup snapshot (including Recent Work) unset,
-so Codex supplies its native context. Set `voice.include-startup-context` to
-`false` to skip it, or `true` to request it explicitly in your selected `server.json`. Explicit raw `voice.extra.initialItems` also remain supported,
+AgentVoice defaults the native startup snapshot (including Recent Work) to off
+on every call, including renewal, matching the inspected desktop client. The
+app-server instead defaults omission to on; see [ADR 0029](docs/adr/0029-desktop-startup-context.md).
+Set `voice.include-startup-context` to `true` to request the snapshot explicitly
+in your selected `server.json`. Explicit raw `voice.extra.initialItems` also remain supported,
 including `[]` and `null`; populated initial items require effective realtime v3.
 Prompt files and other native config overrides keep their existing behavior.
 
@@ -676,13 +679,14 @@ turns. Verified on stock Codex 0.153.4 on September 5, 2026 with
 
 ### Native voice context: baseline first
 
-The controls below are configurable. AgentVoice leaves `include-startup-context`,
-tail flush and startup-text overrides unset, leaving native resolution in charge.
-The shipped `server.json.example` does not configure them. This applies to ordinary
-launch, continue, explicit resume and automatic renewal. Codex currently includes its
-startup snapshot when the field is omitted. This deliberately inherits server
-behavior; desktop disables this snapshot alongside its own context machinery,
-so omission does not establish identical desktop context. See [ADR 0020](docs/adr/0020-native-launch-defaults.md).
+AgentVoice sends `includeStartupContext: false` by default on ordinary launch,
+continue, explicit resume and automatic renewal. This matches the inspected desktop
+client's startup baseline; omitting the field would select the app-server default
+of true. The desktop also has optional continuity machinery that this choice does
+not copy. See [ADR 0029](docs/adr/0029-desktop-startup-context.md) for exact bundled
+JavaScript evidence and the scope of this decision. Tail flush and startup-text
+overrides remain unset; no silence instruction or speech replay is added.
+The shipped `server.json.example` remains an unconfigured example.
 
 A saved conversation is not the same as a voice call: subsequent calls may
 resume the same conversation, while the default starts a new conversation. Codex can give
@@ -731,8 +735,9 @@ Tail flush is independent of startup context: enabling it can start work at
 hangup. Quitting AgentVoice still stops its child and does not wait for that work
 to finish. Disabling tail flush does not suppress normal in-call delegations.
 
-Removing `include-startup-context` restores native resolution; raw
-`voice.extra.includeStartupContext: null` also requests native resolution. Other
+Removing `include-startup-context` restores AgentVoice's false default; raw
+`voice.extra.includeStartupContext: null` requests native server resolution
+(currently true). Other
 unset native controls still defer to Codex; `false` and `""` are explicit values.
 `voice.extra` wins over
 the named voice controls, and `orchestrator.extra.config` replaces

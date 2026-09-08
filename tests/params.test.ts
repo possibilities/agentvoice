@@ -200,6 +200,7 @@ describe("realtimeParams", () => {
       outputModality: "audio",
       transport: { type: "webrtc", sdp: "v=0" },
       version: "v3",
+      includeStartupContext: false,
     });
   });
 
@@ -288,12 +289,12 @@ describe("realtimeParams", () => {
 });
 
 describe("native voice context controls", () => {
-  test("startup snapshot and tail flush stay omitted for native resolution", () => {
+  test("startup snapshot defaults off while tail flush retains native resolution", () => {
     const config = configure();
     expect(config.voice.includeStartupContext).toBeUndefined();
     expect(config.voice.flushTranscriptTailOnSessionEnd).toBeUndefined();
     const params = realtime();
-    expect(params).not.toHaveProperty("includeStartupContext");
+    expect(params["includeStartupContext"]).toBe(false);
     expect(params).not.toHaveProperty("flushTranscriptTailOnSessionEnd");
     expect(params).not.toHaveProperty("initialItems");
     for (const kind of ["start", "resume"] as const) {

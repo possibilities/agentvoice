@@ -189,7 +189,12 @@ export function realtimeParams(
     if (voice.includeStartupContext !== undefined)
       throw appendSlotConflict("voice.include-startup-context");
     params["includeStartupContext"] = true;
-  } else setIfDefined(params, "includeStartupContext", voice.includeStartupContext);
+  } else {
+    // Match the desktop client, not the app-server omission default (true).
+    // Applies to first calls and renewals; see ADR 0029 for bundled-JS evidence.
+    // Keep this at the request boundary so voiceAppend can still own the slot.
+    params["includeStartupContext"] = voice.includeStartupContext ?? false;
+  }
   setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);
