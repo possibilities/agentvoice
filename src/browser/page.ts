@@ -5,10 +5,10 @@ export const browserMediaPage = `<!doctype html>
 <title>AgentVoice</title>
 <style>
   :root { color-scheme: dark; font: 18px system-ui, sans-serif; }
-  body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: Canvas; color: CanvasText; }
-  main { width: min(28rem, calc(100% - 2rem)); display: grid; gap: 0.75rem; padding: 1rem 0; }
+  body { min-height: 100dvh; margin: 0; display: grid; place-items: center; background: Canvas; color: CanvasText; }
+  main { width: min(28rem, calc(100% - 2rem)); display: grid; gap: 0.75rem; padding: 0.75rem 0; }
   h1 { margin: 0; font-size: 1.5rem; }
-  button, select { min-height: 3.5rem; font: inherit; }
+  button, select { min-height: 3rem; font: inherit; }
   label { display: grid; gap: 0.4rem; }
   #status { min-height: 3.6em; margin: 0; }
   #hold { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

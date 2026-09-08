@@ -48,6 +48,7 @@ test("browser media serves only its capability path with restrictive browser pol
     expect(page).toContain('value="remote" disabled');
     expect(page).toContain('id="hold" type="button" disabled>');
     expect(page).not.toContain("disabled hidden");
+    expect(page).toContain("min-height: 100dvh");
 
     const script = await fetch(`${server.url}app.js`).then((result) => result.text());
     expect(script).toContain("getUserMedia");
