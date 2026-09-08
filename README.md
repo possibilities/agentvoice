@@ -657,6 +657,13 @@ Select the repository's `roles/default` role with
 It is not automatically selected when `--role` and the config's `role` key
 are absent.
 
+The default role uses conversation-first delegation when the operator explicitly
+configures the native mode in [the configuration example](docs/delegation-policy.example.json).
+The role append alone cannot override Codex's later delegation policy. See the
+[delegation policy audit](docs/delegation-policy-audit.md) and
+[ADR 0030](docs/adr/0030-conversation-first-delegation.md) for the decision and
+the no-inference start/resume probe. The stock base prompt and binary stay intact.
+
 | Role file | Effect in AgentVoice |
 | --- | --- |
 | `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
