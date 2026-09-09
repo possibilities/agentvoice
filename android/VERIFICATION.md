@@ -879,3 +879,33 @@ Evidence: `/tmp/agentvoice-muted-tuning-{build,tests,typecheck,lint,native}.log`
 `/tmp/agentvoice-studio13-browser.2kvOs3/evidence.json`,
 `/tmp/agentvoice-muted-tuning-visuals/` (raw captures, state JSON and comparison),
 and `/tmp/agentvoice-muted-tuning-scrcpy.log`.
+
+
+### S22 delivery of adjustable muted presence
+
+On September 9 the operator reconnected and unlocked the S22. The owned
+`agentvoice_round12_checks` emulator, its scrcpy window and port 4318 studio
+were stopped at the operator's request; only the physical phone remained in ADB.
+Fresh protocol 12 revision 502 captured both live layouts and exact saved files
+before installing the protocol 13 debug APK, SHA-256
+`8f94d5ffab5327db77b71dfbc9b830dc0f25969b68c24a71fb399c95f2f0d9e0`.
+
+Ten focused physical-phone tests passed in **10.539 seconds**: muted typography
+and motion rendering, profile 12/session restoration, Tide/theme lifecycle and
+native-instance/manual-placement preservation. This is separate from the earlier
+53-test emulator run. Native baseline and larger/brighter Ripple screenshots show
+complete readable glyphs within the ring at the operator's geometry. A pre-existing
+picture-in-picture window covers part of PTT in these captures; these images do
+not establish unobstructed full-deck appearance. The unrelated overlay was left alone.
+
+Restoration checks passed for both layouts, Splayed routing and its unsaved trace
+values, theme, Tide, manual placement, motion/colors, and both muted channel gates.
+Only the new muted-appearance defaults were added. Native and host saved files
+remained byte-identical; no Save or voice call occurred. System rotation settings
+were unchanged. The updated physical-phone studio was opened in Chrome.
+
+Evidence: `/tmp/agentvoice-muted-tuning-phone-native.log`,
+`/tmp/agentvoice-muted-tuning-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-muted-tuning-phone-restore.log`,
+`/tmp/agentvoice-muted-tuning-phone/` (native captures and state JSON), and
+`/tmp/agentvoice-muted-tuning-phone-studio.log`.
