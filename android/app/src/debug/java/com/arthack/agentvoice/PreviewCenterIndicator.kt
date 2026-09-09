@@ -76,17 +76,19 @@ internal fun PreviewCenterIndicator(
     val density = LocalDensity.current
     val theme = LocalPreviewTheme.current
     val measurer = rememberTextMeasurer()
-    val textStyle = remember(tuning.textSizeSp) {
-        TextStyle(fontFamily = VoiceInk.type, fontSize = tuning.textSizeSp.sp, fontWeight = FontWeight.Normal,
-            letterSpacing = .02f.em, lineHeight = (tuning.textSizeSp * 1.18f).sp)
-    }
-    val drawing = remember(model, density, measurer, textStyle) {
-        centerDrawing(model, measurer, textStyle, density)
-    }
-    val fit = remember(drawing.widthPx, drawing.heightPx, innerRadius, density, tuning) {
-        previewMutedPresenceFit(drawing.widthPx, drawing.heightPx, with(density) { innerRadius.toPx() },
-            density.density, tuning)
+    val presentation = remember(model, density, measurer, innerRadius, tuning) {
+        val radiusPx = with(density) { innerRadius.toPx() }
+        // Reserve the longest two-line status so opening a channel cannot enlarge the type.
+        val envelope = if (model.style == "words") model.copy(words = listOf("human", "muted")) else model
+        (tuning.textSizeSp downTo 12).firstNotNullOfOrNull { size ->
+            val textStyle = TextStyle(fontFamily = VoiceInk.type, fontSize = size.sp, fontWeight = FontWeight.Normal,
+                letterSpacing = .02f.em, lineHeight = (size * 1.18f).sp)
+            val reserved = centerDrawing(envelope, measurer, textStyle, density)
+            val fit = previewMutedPresenceFit(reserved.widthPx, reserved.heightPx, radiusPx, density.density, tuning)
+            if (fit == null) null else centerDrawing(model, measurer, textStyle, density) to fit
+        }
     } ?: return
+    val (drawing, fit) = presentation
     val inks = remember(theme, tuning.brightnessPercent) {
         val ground = theme.palette.ground
         val light = theme.foreground(VoiceInk.text, ground, opacity = .82f)

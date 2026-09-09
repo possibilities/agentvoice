@@ -72,6 +72,46 @@ class PreviewCenterIndicatorTest {
         }
     }
 
+    @Test fun largeWordsFitDownWithoutDisappearingAtTheOperatorsTightAperture() {
+        compose.mainClock.autoAdvance = false
+        var radius by mutableStateOf(100.dp)
+        var fontScale by mutableFloatStateOf(1f)
+        var humanOpen by mutableStateOf(false)
+        val phase = mutableFloatStateOf(0f)
+        val tuning = PreviewMutedTuning(32, -19, 196, 65, 13, "float")
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+                Box(Modifier.size(260.dp).background(VoiceInk.ground).testTag("center-test-stage")) {
+                    PreviewCenterIndicator(CallUi(connected = true, micOpen = humanOpen, speakerOpen = true),
+                        "words", "always", true, true, phase, 260.dp, 0.dp, radius, tuning)
+                }
+            }
+        }
+        for (systemScale in listOf(1f, 1.5f)) {
+            compose.runOnIdle { fontScale = systemScale; radius = 100.dp; humanOpen = false }
+            compose.mainClock.advanceTimeBy(32)
+            val preferred = inkCoordinates(pixels())
+            assertTrue(preferred.size > 100)
+            compose.runOnIdle { radius = 50.dp }
+            compose.mainClock.advanceTimeBy(32)
+            indicator().assertExists()
+            val fitted = inkCoordinates(pixels())
+            assertTrue("Human muted must remain visible when selected 32 sp cannot fit", fitted.size > 100)
+            assertTrue("Type should fit down instead of crossing the ring", fitted.size < preferred.size)
+            for (next in listOf(0f, .25f, .5f, .75f)) {
+                compose.runOnIdle { phase.floatValue = next }
+                compose.mainClock.advanceTimeBy(16)
+                assertInkInside(pixels(), 50f, 0f)
+            }
+            compose.runOnIdle { humanOpen = true }
+            compose.mainClock.advanceTimeBy(16)
+            indicator().assertExists()
+            assertTrue(inkCoordinates(pixels()).size > 40)
+            assertInkInside(pixels(), 50f, 0f)
+            assertEquals("Fitting must not rewrite the requested size", 32, tuning.textSizeSp)
+        }
+    }
+
     @Test fun channelAndContactInkFollowsAcknowledgedGatesAndClearsImmediately() {
         compose.mainClock.autoAdvance = false
         var style by mutableStateOf("channels")

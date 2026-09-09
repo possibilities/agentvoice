@@ -276,8 +276,10 @@ Tide shows lowercase
 closed and no pending controls. Its Float motion follows a 14-second cycle by default, stays
 still under reduced motion and disappears immediately for PTT or an open channel.
 Measured text keeps an 8 dp clearance within a conservative inner aperture;
-if it cannot fit at a small size or large font scale, it is omitted rather than
-shrunk. **Indicator appearance** adds 12–32 sp text, brightness (−100–100%),
+Tide is omitted if its selected text cannot fit. Status indicators (Words,
+Channel icons, Icons + words, Contacts) fit down from the preferred size to a
+minimum of 12 sp before hiding at impossible sizes. Words reserves its longest
+two-line status so a gate change does not enlarge the type. **Indicator appearance** adds 12–32 sp text, brightness (−100–100%),
 drift (0–300%), breathing (0–100%) and a 6–30 second cycle, plus Float/Ripple.
 Ripple sends a quiet wave through the letters; breathing gently lifts brightness
 and scale. Each value and the whole appearance group have independent resets.

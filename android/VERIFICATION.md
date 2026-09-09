@@ -1,12 +1,12 @@
 # Android development build verification
 
-Latest synthetic UI work: **Trace reach and fade controls**, September 9, 2026, on
+Latest synthetic UI work: **Center status text fitting**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
 No emulator is active. No check starts a voice call, microphone, speaker or inference.
 The latest installed debug APK SHA-256 is
-`b60ee4fe3fca55bbd08b65a735f6f05448219cc1272732522928391d8fd7e6b4`.
+`37ab95d493ef7c473cd3eb0902274e732424e79afefe859c9dc9cc63f649e12d`.
 
-Current evidence is under [Trace reach and fade controls](#trace-reach-and-fade-controls).
+Current evidence is under [Center status text fitting](#center-status-text-fitting).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1076,7 +1076,7 @@ validate the original shapes before adding only these defaults in memory.
   687 tests, 0 failures, plus TypeScript and Biome. Included host tests report
   58 tests / 2,589 assertions. No production/main/release source changed.
 - The complete corrected S22 instrumentation suite passes **65 tests / 108.152 s**
-  against the APK hash at the top of this document. Initial run had one test
+  against APK `b60ee4fe3fca55bbd08b65a735f6f05448219cc1272732522928391d8fd7e6b4`. Initial run had one test
   expectation at a duplicate gradient stop; the corrected test samples one pixel
   outside it. Renderer unchanged. New native tests verify byte-exact default
   brush pixels, partial/full tip opacity, hard edges and untouched underlying
@@ -1110,3 +1110,26 @@ mode, mute gates and phone rotation lock were restored. Fresh operator choices
 Splayed/101 stance/250 weight/89 contact/200 feet) were retained. Phone and host
 saved profile bytes compare exactly with the pre-install snapshot; no Save.
 Final restoration receipt: `/tmp/agentvoice-trace-controls-phone-check.log`.
+
+
+## Center status text fitting
+
+Words was eligible under the operator's any-muted scope, but its selected 32 sp
+block did not fit the conservative aperture at Contained 79 / spread 80 / pulse 68 /
+speaking 68 / idle 69. Status indicators now fit down to a 12 sp minimum, preserving
+the selected preferred size and 8 dp clearance. Words reserves the longest
+two-line label to avoid enlargement when switching to “live”. Tide unchanged.
+
+The installed APK at the top passes debug/test builds, Android lint and 105 JVM
+tests. Targeted S22 instrumentation reports **7 tests / 27.036 s**: all center
+indicator tests plus held-control/native-instance composition coverage. The new
+pixel regression uses the operator’s 32 sp / −19 brightness / 196 drift / 65 breathing
+values, tests tight aperture rendering at Android font scales 1 and 1.5, checks
+all sampled motion phases stay inside the aperture, and retains the preferred
+size. This round did not rerun the full phone suite. Root Biome passes.
+
+Actual restored-phone capture shows “human muted” inside the ring, where the
+previous build showed no text. Both layouts, latest live choices and gates are
+restored; host/phone saved files compare byte-identical, no Save. Evidence:
+`/tmp/agentvoice-words-fit-{build,native,phone-check}.log` and
+`/tmp/agentvoice-words-fit-phone/restored.png`.

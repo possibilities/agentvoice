@@ -429,3 +429,17 @@ bounds are canvas bounds and this asset exposes only a color binding. Following
 the moving ellipse requires a separately scoped native runtime bridge. This round
 changes neither the asset nor its renderer, and claims no universal clear-center
 protection when the operator explicitly extends traces into that region.
+
+
+## Fit status text before omitting it
+
+The operator's Words/32 sp selection with strong Contained motion produced a
+small conservative inner aperture. The indicator was eligible for “human muted”
+but the measured two-line block failed the fit check and disappeared. Status
+indicators now try the preferred size down to 12 sp, reducing motion within each
+candidate before choosing smaller type. Words reserves the longest two-line
+status when choosing size, so changing gates cannot enlarge a short “live” label.
+The existing aperture and 8 dp clearance stay unchanged; impossibly small spaces
+still omit the optional indicator. Tide keeps its previous behavior. Stored size,
+brightness, motion, scope and geometry are untouched, and this needs no protocol
+or profile migration.
