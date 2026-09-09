@@ -1,6 +1,7 @@
 import {
   type Design,
   defaultDesign,
+  equalDesign,
   type LegacyDesign,
   type PreviousDesign,
   parseDesign,
@@ -15,9 +16,9 @@ import {
   type VersionSevenDesign,
   type VersionSixDesign,
 } from "./design.ts";
-import { defaultHalo, type HaloSelection, parseHalo } from "./halo.ts";
+import { defaultHalo, equalHalo, type HaloSelection, parseHalo } from "./halo.ts";
 
-import { defaultSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
+import { defaultSpirit, equalSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
 import { defaultTraces } from "./traces.ts";
 
 export const activities = ["steady", "voice"] as const;
@@ -27,18 +28,30 @@ export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
 export const connections = ["connected", "connecting", "disconnected"] as const;
 export type Connection = (typeof connections)[number];
-export type Preview = {
-  connection: Connection;
-  activity: Activity;
-  mode: Mode;
+export const orientations = ["portrait", "landscape"] as const;
+export type Orientation = (typeof orientations)[number];
+export type PersonaSide = "left" | "right";
+export type OrientationFence = { orientation: Orientation; orientationEpoch: number };
+export type Layout = {
   scales: Scales;
   verticalOffsetDp: number;
   design: Design;
   halo: HaloSelection;
   spirit: SpiritSelection;
+  personaSide: PersonaSide;
 };
+export type Preview = Layout &
+  OrientationFence & {
+    connection: Connection;
+    activity: Activity;
+    mode: Mode;
+  };
 export type PhoneState = Preview & {
-  protocol: 10;
+  protocol: 11;
+  otherLayout: Layout;
+  savedOtherLayout: Layout;
+  savedPersonaSide: PersonaSide;
+  defaultPersonaSide: PersonaSide;
   revision: number;
   holding: boolean;
   savedScales: Scales;
@@ -70,6 +83,14 @@ export type Profile = {
   | { version: 8; design: VersionEightDesign; halo: HaloSelection; spirit: SpiritSelection }
   | { version: 9; design: VersionNineDesign; halo: HaloSelection; spirit: SpiritSelection }
   | { version: 10; design: Design; halo: HaloSelection; spirit: SpiritSelection }
+  | {
+      version: 11;
+      design: Design;
+      halo: HaloSelection;
+      spirit: SpiritSelection;
+      personaSide: PersonaSide;
+      landscape: Layout;
+    }
 );
 
 export function record(value: unknown): Record<string, unknown> {
@@ -109,6 +130,9 @@ function mode(value: unknown): Mode {
 export function parsePreview(value: unknown): Preview {
   const data = record(value);
   exact(data, [
+    "orientation",
+    "orientationEpoch",
+    "personaSide",
     "connection",
     "activity",
     "mode",
@@ -122,6 +146,8 @@ export function parsePreview(value: unknown): Preview {
     throw Error("Invalid connection preview");
   if (!activities.includes(data["activity"] as Activity)) throw Error("Invalid preview activity");
   return {
+    ...parseOrientationFence(data),
+    personaSide: parsePersonaSide(data["personaSide"]),
     connection: data["connection"] as Connection,
     activity: data["activity"] as Activity,
     mode: mode(data["mode"]),
@@ -137,6 +163,13 @@ export function parseState(value: unknown): PhoneState {
   const data = record(value);
   exact(data, [
     "protocol",
+    "otherLayout",
+    "savedOtherLayout",
+    "savedPersonaSide",
+    "defaultPersonaSide",
+    "orientation",
+    "orientationEpoch",
+    "personaSide",
     "connection",
     "activity",
     "revision",
@@ -161,7 +194,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 10 ||
+    data["protocol"] !== 11 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -170,7 +203,13 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 10,
+    protocol: 11,
+    otherLayout: parseLayout(data["otherLayout"]),
+    savedOtherLayout: parseLayout(data["savedOtherLayout"]),
+    savedPersonaSide: parsePersonaSide(data["savedPersonaSide"]),
+    defaultPersonaSide: parsePersonaSide(data["defaultPersonaSide"]),
+    ...parseOrientationFence(data),
+    personaSide: parsePersonaSide(data["personaSide"]),
     connection: data["connection"] as Connection,
     activity: data["activity"] as Activity,
     revision: integer(data["revision"]),
@@ -206,12 +245,13 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...([3, 4, 5, 6, 7, 8, 9, 10].includes(data["version"] as number) ? ["design"] : []),
-    ...([5, 6, 7, 8, 9, 10].includes(data["version"] as number) ? ["halo"] : []),
-    ...([7, 8, 9, 10].includes(data["version"] as number) ? ["spirit"] : []),
+    ...(data["version"] === 11 ? ["personaSide", "landscape"] : []),
+    ...([3, 4, 5, 6, 7, 8, 9, 10, 11].includes(data["version"] as number) ? ["design"] : []),
+    ...([5, 6, 7, 8, 9, 10, 11].includes(data["version"] as number) ? ["halo"] : []),
+    ...([7, 8, 9, 10, 11].includes(data["version"] as number) ? ["spirit"] : []),
   ]);
   if (
-    ![2, 3, 4, 5, 6, 7, 8, 9, 10].includes(data["version"] as number) ||
+    ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(data["version"] as number) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -235,17 +275,21 @@ export function parseProfile(text: string): Profile {
   if (data["version"] === 7) parseVersionSevenDesign(data["design"]);
   if (data["version"] === 8) parseVersionEightDesign(data["design"]);
   if (data["version"] === 9) parseVersionNineDesign(data["design"]);
-  if (data["version"] === 10) parseDesign(data["design"]);
-  if ([7, 8, 9, 10].includes(data["version"] as number)) {
+  if (data["version"] === 10 || data["version"] === 11) parseDesign(data["design"]);
+  if (data["version"] === 11) {
+    parsePersonaSide(data["personaSide"]);
+    data["landscape"] = parseLayout(data["landscape"]);
+  }
+  if ([7, 8, 9, 10, 11].includes(data["version"] as number)) {
     parseSpirit(data["spirit"]);
   }
-  if ([5, 6, 7, 8, 9, 10].includes(data["version"] as number))
+  if ([5, 6, 7, 8, 9, 10, 11].includes(data["version"] as number))
     data["halo"] = parseHalo(data["halo"]);
   return data as Profile;
 }
 
 export function profileDesign(profile: Profile): Design {
-  if (profile.version === 10) return structuredClone(profile.design);
+  if (profile.version === 10 || profile.version === 11) return structuredClone(profile.design);
   if (profile.version === 9)
     return { ...profile.design, traces: { ...defaultTraces(), ...profile.design.traces } };
   if (profile.version !== 2 && profile.version !== 3)
@@ -265,7 +309,8 @@ export function profileHalo(profile: Profile): HaloSelection {
     profile.version === 7 ||
     profile.version === 8 ||
     profile.version === 9 ||
-    profile.version === 10
+    profile.version === 10 ||
+    profile.version === 11
     ? profile.halo
     : defaultHalo();
 }
@@ -274,13 +319,17 @@ export function profileSpirit(profile: Profile): SpiritSelection {
   return profile.version === 7 ||
     profile.version === 8 ||
     profile.version === 9 ||
-    profile.version === 10
+    profile.version === 10 ||
+    profile.version === 11
     ? profile.spirit
     : defaultSpirit();
 }
 
 export function previewOf(state: Preview): Preview {
   return {
+    orientation: state.orientation,
+    orientationEpoch: state.orientationEpoch,
+    personaSide: state.personaSide,
     connection: state.connection,
     activity: state.activity,
     mode: state.mode,
@@ -303,4 +352,85 @@ export interface Phone {
   reconnecting?: boolean;
   generation?: number;
   request(command: Record<string, unknown>): Promise<{ state: PhoneState; profile?: string }>;
+}
+
+export function parseOrientationFence(data: Record<string, unknown>): OrientationFence {
+  if (!orientations.includes(data["orientation"] as Orientation))
+    throw Error("Invalid orientation");
+  return {
+    orientation: data["orientation"] as Orientation,
+    orientationEpoch: integer(data["orientationEpoch"]),
+  };
+}
+
+export function sameOrientation(a: OrientationFence, b: OrientationFence): boolean {
+  return a.orientation === b.orientation && a.orientationEpoch === b.orientationEpoch;
+}
+
+export function parsePersonaSide(value: unknown): PersonaSide {
+  if (value !== "left" && value !== "right") throw Error("Invalid Persona side");
+  return value;
+}
+
+export function parseLayout(value: unknown): Layout {
+  const data = record(value);
+  exact(data, ["scales", "verticalOffsetDp", "design", "halo", "spirit", "personaSide"]);
+  return {
+    scales: parseScales(data["scales"]),
+    verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
+    design: parseDesign(data["design"]),
+    halo: parseHalo(data["halo"]),
+    spirit: parseSpirit(data["spirit"]),
+    personaSide: parsePersonaSide(data["personaSide"]),
+  };
+}
+
+export function layoutOf(value: Layout): Layout {
+  return structuredClone({
+    scales: value.scales,
+    verticalOffsetDp: value.verticalOffsetDp,
+    design: value.design,
+    halo: value.halo,
+    spirit: value.spirit,
+    personaSide: value.personaSide,
+  });
+}
+
+export function defaultLandscapeLayout(): Layout {
+  return {
+    scales: { speaking: 78, listening: 58, idle: 78 },
+    verticalOffsetDp: 0,
+    design: structuredClone(defaultDesign),
+    halo: defaultHalo(),
+    spirit: defaultSpirit(),
+    personaSide: "left",
+  };
+}
+
+export function profileLayout(profile: Profile, orientation: Orientation): Layout {
+  if (orientation === "landscape")
+    return profile.version === 11 ? layoutOf(profile.landscape) : defaultLandscapeLayout();
+  return {
+    scales: {
+      speaking: Math.round(profile.scaleMultipliers.speaking * 100),
+      listening: Math.round(profile.scaleMultipliers.listening * 100),
+      idle: Math.round(profile.scaleMultipliers.idle * 100),
+    },
+    verticalOffsetDp: profile.verticalOffsetDp,
+    design: profileDesign(profile),
+    halo: structuredClone(profileHalo(profile)),
+    spirit: { ...profileSpirit(profile) },
+    personaSide: profile.version === 11 ? profile.personaSide : "left",
+  };
+}
+
+export function equalLayout(a: Layout, b: Layout): boolean {
+  return (
+    equalScales(a.scales, b.scales) &&
+    a.verticalOffsetDp === b.verticalOffsetDp &&
+    equalDesign(a.design, b.design) &&
+    equalHalo(a.halo, b.halo) &&
+    equalSpirit(a.spirit, b.spirit) &&
+    a.personaSide === b.personaSide
+  );
 }

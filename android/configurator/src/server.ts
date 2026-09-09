@@ -1,19 +1,20 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { equalDesign } from "./design.ts";
-import { equalHalo } from "./halo.ts";
 import { saveProfile } from "./profile.ts";
 import {
-  equalScales,
+  equalLayout,
   exact,
   integer,
+  layoutOf,
   type Phone,
   type Profile,
+  parseOrientationFence,
   parsePreview,
   parseProfile,
+  profileLayout,
   record,
+  sameOrientation,
 } from "./protocol.ts";
-import { equalSpirit } from "./spirit.ts";
 
 export async function serveConfigurator(
   phone: Phone,
@@ -97,9 +98,13 @@ export async function serveConfigurator(
       try {
         input = record(await request.json());
         integer(input["generation"], 1);
+        parseOrientationFence(input);
         if (path === "preview") {
           exact(input, [
             "generation",
+            "orientation",
+            "orientationEpoch",
+            "personaSide",
             "connection",
             "activity",
             "mode",
@@ -110,6 +115,9 @@ export async function serveConfigurator(
             "spirit",
           ]);
           parsePreview({
+            orientation: input["orientation"],
+            orientationEpoch: input["orientationEpoch"],
+            personaSide: input["personaSide"],
             connection: input["connection"],
             activity: input["activity"],
             mode: input["mode"],
@@ -120,7 +128,7 @@ export async function serveConfigurator(
             spirit: input["spirit"],
           });
         } else {
-          exact(input, ["generation", "revision"]);
+          exact(input, ["generation", "revision", "orientation", "orientationEpoch"]);
           integer(input["revision"]);
         }
       } catch {
@@ -134,12 +142,20 @@ export async function serveConfigurator(
           409,
         );
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
+      if (!sameOrientation(parseOrientationFence(input), phone.state))
+        return json(
+          { error: "Phone rotated. Review its current layout before making another change." },
+          409,
+        );
       mutating = true;
       try {
         if (path === "preview")
           await phone.request({
             method: "preview",
             ...parsePreview({
+              orientation: input["orientation"],
+              orientationEpoch: input["orientationEpoch"],
+              personaSide: input["personaSide"],
               connection: input["connection"],
               activity: input["activity"],
               mode: input["mode"],
@@ -153,13 +169,16 @@ export async function serveConfigurator(
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
-          const expected = { ...phone.state.scales };
-          const expectedOffset = phone.state.verticalOffsetDp;
-          const expectedDesign = structuredClone(phone.state.design);
-          const expectedHalo = structuredClone(phone.state.halo);
-          const expectedSpirit = { ...phone.state.spirit };
+          const expected = layoutOf(phone.state);
+          const expectedOther = layoutOf(phone.state.otherLayout);
+          const expectedOrientation = phone.state.orientation;
+          const otherOrientation = expectedOrientation === "portrait" ? "landscape" : "portrait";
           const reply = await phone
-            .request({ method: "save", revision: input["revision"] })
+            .request({
+              method: "save",
+              revision: input["revision"],
+              ...parseOrientationFence(input),
+            })
             .catch(() => {
               throw Error(
                 "Save was not confirmed. It may have reached the phone. Review the preview before saving again.",
@@ -168,17 +187,9 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 10 ||
-            !profile.design ||
-            !equalDesign(profile.design, expectedDesign) ||
-            !equalHalo(profile.halo, expectedHalo) ||
-            !equalSpirit(profile.spirit, expectedSpirit) ||
-            profile.verticalOffsetDp !== expectedOffset ||
-            !equalScales(expected, {
-              speaking: Math.round(profile.scaleMultipliers.speaking * 100),
-              listening: Math.round(profile.scaleMultipliers.listening * 100),
-              idle: Math.round(profile.scaleMultipliers.idle * 100),
-            })
+            profile.version !== 11 ||
+            !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
+            !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
           )
             throw Error("Phone saved different settings. Review the preview.");
           try {

@@ -226,16 +226,21 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 10 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 11 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 10 carries those
-choices plus transient connection and synthetic activity selections. Existing
-version 1–9 phone profiles load without rewriting; retired button styles map to
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 11 carries those
+choices plus transient connection and synthetic activity selections. Portrait
+reserves a screen-width square; landscape places Persona beside the Rocker deck.
+Their tuning is independent. The browser edits only the orientation reported
+by the connected phone, with epoch checks rejecting delayed rotation requests.
+Version 11 stores portrait in the root fields and a separate `landscape` layout.
+Side swapping is supported in the model; its selector stays hidden for now. Existing
+version 1–10 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
-existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–9 keep
+existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
-4–9 keep their dimensions. Versions 7–9 retain their spirit settings. Older profiles
-become version 10 only on Save. The real client and release
+4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
+become version 11 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher

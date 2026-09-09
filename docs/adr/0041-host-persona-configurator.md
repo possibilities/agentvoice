@@ -71,7 +71,7 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 10 on the phone, then
+checks the observed revision, atomically stores version 11 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
@@ -80,7 +80,7 @@ Rockers and old compositions map to baseline Traces in memory. Version 1 seeds a
 retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
-Older profiles become version 10 only on explicit Save. Production still
+Older profiles become version 11 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -221,3 +221,26 @@ default spacing in memory. Older readers keep their prior migrations. Version 10
 Save receipts include both fields; Reset traces includes both and still excludes
 glow. All other scoped resets preserve the spacing choices. No saved file is
 rewritten until explicit Save.
+
+## Independent orientation experiments
+
+Protocol/profile 11 separates portrait and landscape choices. Portrait retains
+the screen-width square; landscape places the square beside the existing Rocker
+deck, scrolling only the deck when it is taller than its available lane. The
+hidden `personaSide` choice swaps lanes without mirroring artwork or HUMAN/AGENT
+ordering. Each orientation owns placement, control dimensions, traces, Halo
+variant/motion/colors and spirit. Transient synthetic call state remains shared.
+
+The debug activity observes configuration changes and switches layouts itself.
+Host edits cannot choose orientation. Each preview/Save request must carry the
+observed orientation and monotonically advancing rotation epoch, in addition to
+the host connection generation. Host and device both check the fence; a return
+to the same orientation does not make an old request valid. Browser drafts are
+discarded on a changed epoch. PTT is released when orientation changes.
+
+Version 11 keeps portrait in the existing root profile fields and adds its side
+plus an independent landscape layout. Older profiles preserve portrait settings
+and seed baseline landscape with zero offset. Save validates both captured
+layouts even if the phone rotates before the response arrives. Loading and
+rotation never rewrite either saved file. This remains a synthetic debug studio;
+Live/Design integration and production preferences are separate work.

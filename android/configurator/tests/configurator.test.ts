@@ -8,6 +8,9 @@ import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
 import { parseArgs } from "../src/main.ts";
 import {
+  defaultLandscapeLayout,
+  equalLayout,
+  layoutOf,
   type Phone,
   type PhoneState,
   type Profile,
@@ -18,7 +21,9 @@ import {
   previewOf,
   profileDesign,
   profileHalo,
+  profileLayout,
   profileSpirit,
+  sameOrientation,
 } from "../src/protocol.ts";
 import { resetPreview } from "../src/resets.ts";
 import { serveConfigurator } from "../src/server.ts";
@@ -34,7 +39,14 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 10,
+  protocol: 11,
+  orientation: "portrait",
+  orientationEpoch: 0,
+  personaSide: "left",
+  savedPersonaSide: "left",
+  defaultPersonaSide: "left",
+  otherLayout: defaultLandscapeLayout(),
+  savedOtherLayout: defaultLandscapeLayout(),
   activity: "steady",
   connection: "connected",
   revision: 0,
@@ -73,6 +85,15 @@ const profile = (state: PhoneState): Extract<Profile, { version: 10 }> => ({
   disconnectedArtboardScale: 1.5,
   savedAtEpochMs: 1788917295182,
 });
+const currentProfile = (state: PhoneState): Extract<Profile, { version: 11 }> => {
+  const portrait = state.orientation === "portrait" ? layoutOf(state) : state.otherLayout;
+  return {
+    ...profile({ ...state, ...portrait }),
+    version: 11,
+    personaSide: portrait.personaSide,
+    landscape: layoutOf(state.orientation === "landscape" ? state : state.otherLayout),
+  };
+};
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -89,6 +110,9 @@ class FakePhone implements Phone {
   oldReceipt = false;
   wrongTraceReceipt: keyof TraceSelection | undefined;
   changeDuringSave = false;
+  rotateDuringSave = false;
+  wrongOtherReceipt = false;
+  wrongSideReceipt = false;
   wrongHaloReceipt:
     | "variant"
     | "color"
@@ -96,11 +120,44 @@ class FakePhone implements Phone {
     | (typeof haloMotionFields)[number]
     | undefined;
   wrongDesignReceipt: "height" | "share" | "mute" | "hold" | "composition" | undefined;
+  rotate() {
+    const previous = layoutOf(this.state);
+    const previousSaved = {
+      scales: this.state.savedScales,
+      verticalOffsetDp: this.state.savedVerticalOffsetDp,
+      design: this.state.savedDesign,
+      halo: this.state.savedHalo,
+      spirit: this.state.savedSpirit,
+      personaSide: this.state.savedPersonaSide,
+    };
+    const saved = this.state.savedOtherLayout;
+    this.state = {
+      ...this.state,
+      ...this.state.otherLayout,
+      otherLayout: previous,
+      orientation: this.state.orientation === "portrait" ? "landscape" : "portrait",
+      orientationEpoch: this.state.orientationEpoch + 1,
+      revision: this.state.revision + 1,
+      savedScales: saved.scales,
+      savedVerticalOffsetDp: saved.verticalOffsetDp,
+      savedDesign: saved.design,
+      savedHalo: saved.halo,
+      savedSpirit: saved.spirit,
+      savedPersonaSide: saved.personaSide,
+      savedOtherLayout: previousSaved,
+      defaultVerticalOffsetDp: this.state.orientation === "portrait" ? 0 : 35,
+    };
+  }
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
     if (command["method"] === "preview") {
+      if (!sameOrientation(command as unknown as PhoneState, this.state))
+        throw Error("Stale orientation");
       const preview = parsePreview({
         ...previewOf(initial()),
+        orientation: command["orientation"],
+        orientationEpoch: command["orientationEpoch"],
+        personaSide: command["personaSide"],
         connection: command["connection"],
         activity: command["activity"],
         spirit: command["spirit"],
@@ -113,17 +170,24 @@ class FakePhone implements Phone {
       this.state = { ...this.state, ...preview, revision: this.state.revision + 1 };
     }
     if (command["method"] === "save") {
+      if (!sameOrientation(command as unknown as PhoneState, this.state))
+        throw Error("Stale orientation");
       if (this.refuseSave) throw Error("Save failed on phone");
       if (command["revision"] !== this.state.revision) throw Error("Stale revision");
       this.state = {
         ...this.state,
+        savedPersonaSide: this.state.personaSide,
+        savedOtherLayout: layoutOf(this.state.otherLayout),
         savedScales: { ...this.state.scales },
         savedVerticalOffsetDp: this.state.verticalOffsetDp,
         savedDesign: structuredClone(this.state.design),
         savedHalo: structuredClone(this.state.halo),
         savedSpirit: { ...this.state.spirit },
       };
-      const receipt = profile(this.state);
+      const receipt = currentProfile(this.state);
+      if (this.wrongOtherReceipt) receipt.landscape.verticalOffsetDp++;
+      if (this.wrongSideReceipt) receipt.personaSide = "right";
+      if (this.rotateDuringSave) this.rotate();
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
       if (this.wrongDesignReceipt === "height") receipt.design.controlsHeightDp++;
       if (this.wrongDesignReceipt === "share") receipt.design.holdSharePercent++;
@@ -176,8 +240,11 @@ async function fixture(options: { saveTo?: string } = {}) {
       headers: { "Content-Type": "application/json", Origin: origin, ...headers },
       body: JSON.stringify({
         generation: phone.generation,
+        orientation: phone.state.orientation,
+        orientationEpoch: phone.state.orientationEpoch,
         ...(path === "preview"
           ? {
+              personaSide: phone.state.personaSide,
               connection: phone.state.connection,
               activity: phone.state.activity,
               spirit: phone.state.spirit,
@@ -562,7 +629,7 @@ test("every nested trace receipt must match before an existing host profile can 
   }
 });
 
-test("trace edits remain unsaved and exact version 10 Save snapshots the reviewed nested settings", async () => {
+test("trace edits remain unsaved and exact version 11 Save snapshots the reviewed nested settings", async () => {
   const { phone, post, saveTo } = await fixture();
   const traces: TraceSelection = {
     pattern: "circuit",
@@ -588,7 +655,7 @@ test("trace edits remain unsaved and exact version 10 Save snapshots the reviewe
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(10);
+  expect(saved.version).toBe(11);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
@@ -721,7 +788,7 @@ test("browser updates one state and saves the exact phone receipt privately on h
   const saved = await response.json();
   expect(saved.hostSaved.scaleMultipliers.listening).toBe(0.52);
   expect(saved.hostSaved.verticalOffsetDp).toBe(-24);
-  expect(await readFile(saveTo, "utf8")).toBe(JSON.stringify(profile(phone.state), null, 2));
+  expect(await readFile(saveTo, "utf8")).toBe(JSON.stringify(currentProfile(phone.state), null, 2));
   expect((await stat(saveTo)).mode & 0o777).toBe(0o600);
   expect(phone.state.savedScales).toEqual(phone.state.scales);
   expect(phone.state.savedVerticalOffsetDp).toBe(-24);
@@ -900,7 +967,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(10);
+  expect(saved.version).toBe(11);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -1060,7 +1127,7 @@ test("old profile contracts keep exact fields and old compositions while spirit 
   expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
 });
 
-test("spirit is unsaved until exact version 10 Save and activity never enters the profile", async () => {
+test("spirit is unsaved until exact version 11 Save and activity never enters the profile", async () => {
   const { phone, post, saveTo } = await fixture();
   const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
   const design = { ...defaultDesign, composition: "traces" as const };
@@ -1081,7 +1148,7 @@ test("spirit is unsaved until exact version 10 Save and activity never enters th
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(10);
+  expect(saved.version).toBe(11);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
@@ -1111,4 +1178,145 @@ test("invalid activity or spirit never reaches the phone", async () => {
   ])
     expect((await post("preview", { mode: "idle", scales: defaults, ...change })).status).toBe(400);
   expect(phone.calls).toHaveLength(0);
+});
+
+test("orientation fences reject missing, invalid and stale preview or save before dispatch", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const observed = {
+    orientation: phone.state.orientation,
+    orientationEpoch: phone.state.orientationEpoch,
+  };
+  for (const invalid of [
+    { orientation: undefined },
+    { orientationEpoch: undefined },
+    { orientation: "square" },
+    { orientationEpoch: -1 },
+    { orientationEpoch: 0.5 },
+    { orientationEpoch: "0" },
+  ]) {
+    expect((await post("preview", { ...previewOf(phone.state), ...invalid })).status).toBe(400);
+    expect((await post("save", { revision: 0, ...invalid })).status).toBe(400);
+  }
+  phone.rotate();
+  expect((await post("preview", { ...previewOf(phone.state), ...observed })).status).toBe(409);
+  expect((await post("save", { revision: phone.state.revision, ...observed })).status).toBe(409);
+  phone.rotate();
+  expect(phone.state.orientation).toBe(observed.orientation);
+  expect((await post("preview", { ...previewOf(phone.state), ...observed })).status).toBe(409);
+  expect((await post("save", { revision: phone.state.revision, ...observed })).status).toBe(409);
+  expect(phone.calls).toHaveLength(0);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+});
+
+test("independent layouts retain portrait choices and save both layouts from landscape", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const portrait = {
+    ...previewOf(phone.state),
+    verticalOffsetDp: -93,
+    design: { ...phone.state.design, controlsHeightDp: 391 },
+    halo: { ...phone.state.halo, variant: "contained" as const, containedSizePercent: 95 },
+  };
+  expect((await post("preview", portrait)).status).toBe(200);
+  phone.rotate();
+  expect(layoutOf(phone.state)).toEqual(defaultLandscapeLayout());
+  const landscape = {
+    ...previewOf(phone.state),
+    verticalOffsetDp: -17,
+    personaSide: "right" as const,
+    design: { ...phone.state.design, controlsHeightDp: 247 },
+  };
+  expect((await post("preview", landscape)).status).toBe(200);
+  expect(phone.state.otherLayout).toEqual(layoutOf(portrait));
+  const reset = resetPreview(previewOf(phone.state), phone.state, "position");
+  expect(reset.verticalOffsetDp).toBe(0);
+  expect(reset.orientation).toBe("landscape");
+  expect(reset.personaSide).toBe("right");
+  expect(phone.state.otherLayout).toEqual(layoutOf(portrait));
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(saved.version).toBe(11);
+  expect(profileLayout(saved, "portrait")).toEqual(layoutOf(portrait));
+  expect(profileLayout(saved, "landscape")).toEqual(layoutOf(landscape));
+  phone.rotate();
+  expect(layoutOf(phone.state)).toEqual(layoutOf(portrait));
+  expect(phone.state.otherLayout).toEqual(layoutOf(landscape));
+});
+
+test("version 10 preserves portrait bytes and seeds independent landscape defaults in memory", () => {
+  const old = profile({
+    ...initial(),
+    verticalOffsetDp: -187,
+    scales: { speaking: 119, listening: 36, idle: 82 },
+    personaSide: "right",
+    halo: { ...defaultHalo(), variant: "contained", containedSizePercent: 113 },
+    design: { ...defaultDesign, controlsHeightDp: 472 },
+  });
+  const encoded = JSON.stringify(old);
+  const parsed = parseProfile(encoded);
+  const portrait = profileLayout(parsed, "portrait");
+  const landscape = profileLayout(parsed, "landscape");
+  expect(portrait.verticalOffsetDp).toBe(-187);
+  expect(portrait.design.controlsHeightDp).toBe(472);
+  expect(portrait.halo.variant).toBe("contained");
+  expect(portrait.personaSide).toBe("left");
+  expect(landscape).toEqual(defaultLandscapeLayout());
+  landscape.design.traces.weightPercent = 209;
+  landscape.halo.colors.idle = "#ffffff";
+  portrait.design.traces.weightPercent = 217;
+  expect(profileLayout(parsed, "landscape")).toEqual(defaultLandscapeLayout());
+  expect(JSON.stringify(parsed)).toBe(encoded);
+});
+
+test("a Save receipt is checked against both requested layouts even after the phone rotates", async () => {
+  const { phone, post, saveTo } = await fixture();
+  phone.state.verticalOffsetDp = -71;
+  phone.state.otherLayout.verticalOffsetDp = 28;
+  phone.rotateDuringSave = true;
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  expect(phone.state.orientation).toBe("landscape");
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(profileLayout(saved, "portrait").verticalOffsetDp).toBe(-71);
+  expect(profileLayout(saved, "landscape").verticalOffsetDp).toBe(28);
+  expect(equalLayout(profileLayout(saved, "portrait"), phone.state.otherLayout)).toBe(true);
+});
+
+test("wrong inactive layout or hidden side receipts cannot create a host copy", async () => {
+  for (const field of ["wrongOtherReceipt", "wrongSideReceipt"] as const) {
+    const { phone, post, saveTo } = await fixture();
+    phone[field] = true;
+    phone.rotateDuringSave = true;
+    expect((await post("save", { revision: 0 })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
+});
+
+test("protocol 11 validates independent layouts and fits bounded profile and receipt frames", async () => {
+  const state = initial();
+  const profile = currentProfile(state);
+  for (const invalid of [
+    undefined,
+    { ...profile.landscape, personaSide: "middle" },
+    { ...profile.landscape, scales: { ...defaults, idle: 121 } },
+    { ...profile.landscape, extra: 1 },
+  ]) {
+    expect(() => parseProfile(JSON.stringify({ ...profile, landscape: invalid }))).toThrow();
+    for (const field of ["otherLayout", "savedOtherLayout"])
+      expect(() => parseState({ ...state, [field]: invalid })).toThrow();
+  }
+  for (const field of ["personaSide", "savedPersonaSide", "defaultPersonaSide"])
+    expect(() => parseState({ ...state, [field]: "middle" })).toThrow();
+  const encoded = JSON.stringify(profile, null, 2);
+  expect(encoded.length).toBeLessThanOrEqual(4096);
+  const frame = JSON.stringify({ id: 1, state, profile: encoded });
+  expect(Buffer.byteLength(frame)).toBeLessThan(8192);
+  const { peer, phone } = await wire();
+  const reply = phone.request({
+    method: "save",
+    revision: 0,
+    orientation: "portrait",
+    orientationEpoch: 0,
+  });
+  peer.write(`${frame}\n`);
+  expect((await reply).profile).toBe(encoded);
 });

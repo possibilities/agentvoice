@@ -66,7 +66,7 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
             val migrated = JSONObject(design.toString()).put("traces", migrateVersionNineTraces(design.getJSONObject("traces")))
             decodePreviewDesign(migrated)
         }
-        10 -> decodePreviewDesign(data.getJSONObject("design"))
+        10, 11 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

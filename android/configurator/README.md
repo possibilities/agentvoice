@@ -57,7 +57,20 @@ height. Extra vertical room sits between the stage and the bottom-aligned deck.
 If the square and controls exceed the available height, the scene scrolls so
 Push to talk remains reachable. Traces use the square's center and the actual
 deck position. Changing control size preserves that center, Halo diameter and
-saved tuning values. Landscape composition is deferred to a separate design pass.
+saved tuning values.
+
+Landscape places a square Persona beside the existing Rocker deck. The deck
+scrolls independently if its requested height exceeds the viewport. Portrait
+and landscape have independent sizes, offsets, traces, colors, motion and light.
+Rotate the connected phone to edit that orientation: the browser follows its
+reported orientation and offers no orientation selector. Every edit and Save
+carries the observed orientation and rotation epoch as well as the host's peer
+generation; the host and phone refuse stale requests, including a round trip
+back to the same orientation. Queued browser drafts are dropped on rotation.
+Both layouts are stored on Save. Existing profiles remain portrait choices;
+landscape starts with independent baseline settings and zero vertical offset.
+The model supports swapping Persona and deck sides without mirroring icons or
+reordering HUMAN/AGENT. Its `personaSide` control is deliberately hidden for now.
 
 The phone has no header while connected. **Preview connection** selects a
 synthetic Connected, Connecting or Disconnected state. A notice with a static glyph
@@ -140,7 +153,10 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 10 profile atomically on the phone. Its `design`
+Explicit Save writes a version 11 profile atomically on the phone. Root geometry,
+`design`, `halo`, `spirit` and `personaSide` hold portrait; `landscape` holds the
+independent landscape layout (integer-percent `scales`, offset, design, Halo,
+spirit and side). Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
@@ -153,15 +169,15 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–9 phone profiles remain readable without rewriting.
+until Save. Version 1–10 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
 Halo sizes; versions 1–3 use the control geometry baseline. Stored position
-remains intact, with +35 dp when absent. Versions 4–9 retain saved control
-dimensions. Versions 1–4 select Original, while versions 5–9 retain their Halo variant,
+remains intact, with +35 dp when absent. Versions 4–10 retain saved control
+dimensions. Versions 1–4 select Original, while versions 5–10 retain their Halo variant,
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
-versions 7–9 keep their spirit settings. Older profiles become version 10 only on
+versions 7–10 keep their spirit settings. Older profiles become version 11 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -199,7 +215,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 10 carries live/saved/default designs, sizes, vertical
+Preview protocol 11 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected` and `activity: steady|voice`.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -213,7 +229,11 @@ Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 (each 50–200), `weightPercent` (50–250), `offshootPercent` (0–100) and
 `glowPercent` (0–100). Defaults are Parallel, 100% stance/spacing/weight, and zero offshoot/glow. Current and saved
 design snapshots copy these nested choices independently.
-Version 10 profile receipts must include the exact confirmed design, geometry,
+Protocol 11's active fields describe the phone's visible orientation; it also
+reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
+`defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
+changes orientation; the host cannot select it. Version 11 profile receipts must
+include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
 before the host copy is written. Connection and activity preview state are
 excluded from the profile. Use matching current host code and debug APK.

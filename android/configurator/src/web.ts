@@ -1,21 +1,19 @@
-import { equalDesign } from "./design.ts";
-import { equalHalo, haloColorStates, haloMotionFields } from "./halo.ts";
+import { haloColorStates, haloMotionFields } from "./halo.ts";
 import {
   type Activity,
   type Connection,
-  equalScales,
+  equalLayout,
   type Mode,
   modes,
   type PhoneState,
   type Preview,
   type Profile,
   previewOf,
-  profileDesign,
-  profileHalo,
-  profileSpirit,
+  profileLayout,
+  sameOrientation,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
-import { equalSpirit, type SpiritSelection } from "./spirit.ts";
+import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
 type Status = {
@@ -89,7 +87,8 @@ function render() {
   save.disabled = !connected || inFlight || changed || saving;
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
-  element("device").textContent = `Previewing on ${status.device}`;
+  element("device").textContent =
+    `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
   element<HTMLSelectElement>("trace-pattern").value = draft.design.traces.pattern;
   for (const field of traceAmountFields) {
     const amount = draft.design.traces[field];
@@ -162,20 +161,20 @@ function render() {
     document.createTextNode(offset),
     Object.assign(document.createElement("span"), { textContent: "dp" }),
   );
-  const host = status.hostSaved?.scaleMultipliers;
+  const otherOrientation = draft.orientation === "portrait" ? "landscape" : "portrait";
   const hostMatches =
-    host &&
-    equalDesign(profileDesign(status.hostSaved!), draft.design) &&
-    equalHalo(profileHalo(status.hostSaved!), draft.halo) &&
-    equalSpirit(profileSpirit(status.hostSaved!), draft.spirit) &&
-    status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
-    modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
+    status.hostSaved &&
+    equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
+    equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout);
   const phoneMatches =
-    equalScales(draft.scales, status.state.savedScales) &&
-    draft.verticalOffsetDp === status.state.savedVerticalOffsetDp &&
-    equalDesign(draft.design, status.state.savedDesign) &&
-    equalHalo(draft.halo, status.state.savedHalo) &&
-    equalSpirit(draft.spirit, status.state.savedSpirit);
+    equalLayout(draft, {
+      scales: status.state.savedScales,
+      verticalOffsetDp: status.state.savedVerticalOffsetDp,
+      design: status.state.savedDesign,
+      halo: status.state.savedHalo,
+      spirit: status.state.savedSpirit,
+      personaSide: status.state.savedPersonaSide,
+    }) && equalLayout(status.state.otherLayout, status.state.savedOtherLayout);
   text(
     feedback,
     !connected
@@ -207,7 +206,12 @@ async function flush() {
   render();
   try {
     status = await api("preview", { ...selection, generation: requestGeneration });
-    if (!status.connected || status.generation !== requestGeneration) changed = false;
+    if (
+      !status.connected ||
+      status.generation !== requestGeneration ||
+      !sameOrientation(selection, status.state)
+    )
+      changed = false;
     if (edit === requestEdit || !changed) draft = previewOf(status.state);
     transientFailure = null;
   } catch (failure) {
@@ -325,7 +329,12 @@ save.addEventListener("click", async () => {
   saving = true;
   render();
   try {
-    status = await api("save", { revision: status.state.revision, generation: status.generation });
+    status = await api("save", {
+      revision: status.state.revision,
+      generation: status.generation,
+      orientation: status.state.orientation,
+      orientationEpoch: status.state.orientationEpoch,
+    });
     draft = previewOf(status.state);
     saveFailure = null;
     transientFailure = null;

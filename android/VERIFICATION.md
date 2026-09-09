@@ -7,8 +7,8 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Latest debug APK SHA-256:
-`d502d60596c1839789dac166b9336e30652eab8e761e5b38966c019975c2caa3`.
-The latest checks are recorded under [Square portrait stage](#square-portrait-stage);
+`0beddde8e8d643213918322a9b56851013996bc55919e4224d755a242fd5ac79`.
+The latest checks are recorded under [Independent landscape studio](#independent-landscape-studio);
 earlier sections retain the verification history.
 
 ## Automated checks
@@ -680,3 +680,52 @@ Evidence: `/tmp/agentvoice-square-build.log`,
 `/tmp/agentvoice-square-instrumentation.log`,
 `/tmp/agentvoice-square-phone-check.log`,
 `/tmp/agentvoice-square-phone-restored.png`.
+
+### Independent landscape studio
+
+Landscape places Persona beside the Rocker deck; a hidden side selection swaps
+the lanes without mirroring icons or HUMAN/AGENT ordering. Portrait remains a
+screen-width square. Geometry relocates over 320 ms, with gesture cancellation,
+reduced-motion snapping and traces fading into the destination arrangement.
+The native renderer remains the same instance when its selected variant remains
+the same. Different per-orientation Halo variants intentionally select different
+renderers. Portrait and landscape settings are independent under protocol/profile
+11; device-observed orientation epochs fence edits and Save on both host and phone.
+
+- Debug/test assembly and lint passed; 54 JVM tests passed.
+- 669 repository tests / 8,840 assertions passed, including 40 configurator tests /
+  1,718 assertions. Root/configurator typechecking and scoped Biome passed.
+- The final complete physical-phone instrumentation run passed all 43 tests in
+  86.949 seconds. A prior paused-clock scrolling test was corrected to use a
+  nonoverflowing fixture; overflow remains separately tested. A subsequent run
+  had three initial-touch failures and one missing-hierarchy failure. The affected
+  group then passed unchanged (7 tests), followed by the complete passing run.
+  The intermittent run is retained in the evidence rather than counted as passing.
+- Headless Chrome against an isolated fake phone verified that two queued portrait
+  edits are discarded when the first response returns a new landscape epoch.
+  Active controls/reset follow landscape while the inactive portrait stays exact.
+  No orientation or handedness selector is rendered; no Save was sent.
+- Actual phone rotations report the visible orientation. A portrait request with
+  its old epoch is refused after a portrait/landscape/portrait round trip without
+  changing the phone revision. Temporary landscape settings and side comparisons
+  were restored exactly. Both Contained landscape arrangements and the restored
+  portrait were visually reviewed. A recorded portrait-to-landscape transition
+  was sampled; Android also applies its own window-rotation animation. These
+  samples do not establish every-frame visibility at all settings.
+- Installed APK bytes match the hash above. Latest observed portrait choices,
+  fully muted channel state, free system rotation mode and both exact saved files
+  were restored. The host was rebound and the existing Chrome tab reconnected.
+  No profile Save, voice call, production layout or Persona asset change occurred.
+
+The existing conservative Original attachment envelope remains a limitation:
+unequal state sizes can leave routes absent. This round does not solve it.
+
+Evidence: `/tmp/agentvoice-orientation-{build,rebuild,tests,typecheck,lint}.log`,
+`/tmp/agentvoice-orientation-instrumentation-confirm.log` (final complete run),
+`/tmp/agentvoice-orientation-instrumentation-final.log` (earlier intermittent run),
+`/tmp/agentvoice-orientation-focused.log`,
+`/tmp/agentvoice-orientation-phone-check.log`,
+`/tmp/agentvoice-orientation-browser.lYdHOv/evidence.json`,
+`/tmp/agentvoice-orientation-landscape-{baseline,left,right}.png`,
+`/tmp/agentvoice-orientation-transition.mp4`, and
+`/tmp/agentvoice-orientation-restored.png`.

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { defaultDesign } from "../src/design.ts";
 import { defaultHalo } from "../src/halo.ts";
-import type { PhoneState } from "../src/protocol.ts";
+import { defaultLandscapeLayout, type PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 import { defaultSpirit } from "../src/spirit.ts";
 
@@ -15,7 +15,14 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 10,
+    protocol: 11,
+    orientation: "portrait",
+    orientationEpoch: 0,
+    personaSide: "left",
+    savedPersonaSide: "left",
+    defaultPersonaSide: "left",
+    otherLayout: defaultLandscapeLayout(),
+    savedOtherLayout: defaultLandscapeLayout(),
     activity: "voice",
     connection: "connecting",
     revision: 0,
@@ -92,6 +99,10 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   returned.state = {
     ...returned.state,
     mode: "idle",
+    orientation: "landscape",
+    orientationEpoch: 3,
+    personaSide: "right",
+    otherLayout: { ...defaultLandscapeLayout(), verticalOffsetDp: -96 },
     revision: 4,
     design: { ...returned.state.design, traces: returnedTraces },
   };
@@ -125,6 +136,10 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.orientation).toBe("landscape");
+  expect(phone.state.orientationEpoch).toBe(3);
+  expect(phone.state.personaSide).toBe("right");
+  expect(phone.state.otherLayout.verticalOffsetDp).toBe(-96);
   expect(phone.state.design.traces).toEqual(returnedTraces);
   expect(initial.state.design.traces).not.toEqual(returnedTraces);
   expect(phone.state.halo.variant).toBe("contained");

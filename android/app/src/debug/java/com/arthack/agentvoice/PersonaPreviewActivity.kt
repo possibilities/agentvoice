@@ -1,6 +1,7 @@
 package com.arthack.agentvoice
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.AtomicFile
 import android.view.WindowManager
@@ -35,10 +36,13 @@ class PersonaPreviewActivity : ComponentActivity() {
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
         session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(PersonaPlacement()),
             selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(PreviewHalo()),
-            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(PreviewSpirit()))
+            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(PreviewSpirit()),
+            runCatching { decodeLandscapeLayout(saved!!) }.getOrDefault(PreviewLayout()),
+            runCatching { decodePortraitSide(saved!!) }.getOrDefault("left"))
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide) }
         }
+        observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
         setContent { VoiceTheme { PersonaPreview(session.state, onExit = ::finish) { session.state = it } } }
@@ -61,6 +65,15 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     override fun onStart() { super.onStart(); startBridge() }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        observeOrientation(newConfig)
+    }
+
+    private fun observeOrientation(config: Configuration) {
+        session.state = session.state.rotate(if (config.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait")
+    }
 
     private fun startBridge() {
         val selected = binding ?: return
@@ -100,5 +113,6 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
-        onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity)
+        onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
+        personaSide = state.personaSide)
 }
