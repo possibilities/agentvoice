@@ -7,7 +7,7 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Final debug APK SHA-256:
-`c6d934a8cf3609e884d0d1c997a8535507d1dc2980a21d10ac67f1c855d4fcaf`.
+`cb2bd8f2789297f4ba89f871a6eb0500667a56b91129501d297b57521cd8c6e3`.
 
 ## Automated checks
 
@@ -380,3 +380,27 @@ Evidence for this run is in `/tmp/agentvoice-rocker-*.log`, the
 `/tmp/agentvoice-rocker-phone-*.png` captures and
 `/tmp/agentvoice-rocker-browser-{desktop,narrow}.png`. These are synthetic preview
 checks; no production call, microphone, inference or grant was opened.
+
+
+### Yoke intersection and rocker depth refinements
+
+The Persona specialist's native-resolution review found the Yoke stem visible
+inside Halo's transparent center. Shortening its stationary rise from 84 to
+56 dp and extending its fade removes that intersection at the operator's current
+70% Contained size and −12 dp offset. Idle/Listening native crops were reviewed
+by both owners. Four focused composition/studio instrumentation tests and
+build/lint passed. The general transparency lesson is in the shared Agentwiki
+playbook, alongside native renderer continuity guidance.
+
+The subsequent PTT refinement reduces Rocker's resting recess from a 12 dp base
+(8–17 dp after height scaling) to 7 dp (5–10 dp), and halves its lower bevel.
+It keeps the mechanical pivot, pressure response and restrained live color.
+Seven focused control/geometry instrumentation tests passed, including the
+128-combination size/share/text matrix and hold release cases. Build/lint passed.
+Native before/after resting and acknowledged-press captures confirm the shallower
+appearance. Both refinements preserved the operator's full unsaved preview and
+byte-identical phone/host profiles. No Save or production call was issued.
+
+Review artifacts: `/tmp/agentvoice-yoke-refined-comparison.png` and
+`/tmp/agentvoice-rocker-depth-comparison.png`. Logs use the
+`/tmp/agentvoice-yoke-refine-*` and `/tmp/agentvoice-rocker-depth-*` prefixes.

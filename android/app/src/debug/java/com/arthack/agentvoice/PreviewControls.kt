@@ -422,7 +422,7 @@ private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
         val compactFace = largeType || maxWidth < 300.dp
         val concise = compactFace || maxHeight < 100.dp
         val shallow = (4f * heightScale).coerceIn(3f, 6f).dp
-        val deep = (12f * heightScale).coerceIn(8f, 17f).dp
+        val deep = (7f * heightScale).coerceIn(5f, 10f).dp
         val upperInset = if (ui.holding) deep else shallow
         val lowerInset = if (ui.holding) shallow else deep
         Row(Modifier.fillMaxSize().drawBehind {
@@ -445,7 +445,7 @@ private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
                 lineTo(lowerSide + corner, bottom); lineTo(lowerSide, bottom - corner)
                 lineTo(upperSide, top + corner); close()
             }
-            val bevel = if (ui.holding) 2.dp.toPx() else 4.dp.toPx()
+            val bevel = if (ui.holding) 1.dp.toPx() else 2.dp.toPx()
             drawPath(Path().apply {
                 moveTo(lowerSide, bottom - corner); lineTo(lowerSide + corner, bottom)
                 lineTo(size.width - lowerSide - corner, bottom)
