@@ -34,14 +34,16 @@ class PersonaPreviewActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
-        val defaults = defaultPortraitLayout()
-        session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(defaults.placement),
-            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(defaults.design), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(defaults.halo),
-            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(defaults.spirit),
-            runCatching { decodeLandscapeLayout(saved!!) }.getOrDefault(defaultLandscapeLayout()),
-            runCatching { decodePortraitSide(saved!!) }.getOrDefault("left"))
+        val loaded = runCatching { decodePreviewProfileLayouts(saved!!) }.getOrElse {
+            val portrait = defaultPortraitLayout()
+            PreviewProfileLayouts(portrait, defaultLandscapeLayout(), PreviewSharedAppearance.from(portrait))
+        }
+        val portrait = loaded.portrait
+        session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
+            portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
+            portrait.appearanceOverrides, loaded.shared)
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance) }
         }
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
@@ -115,5 +117,5 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp)
 }

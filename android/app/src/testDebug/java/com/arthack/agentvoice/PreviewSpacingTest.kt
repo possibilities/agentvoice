@@ -19,7 +19,7 @@ class PreviewSpacingTest {
         )) assertThrows(IllegalArgumentException::class.java) { invalid() }
     }
 
-    @Test fun provisionalPortraitAndLegacyLandscapeHaveSeparateExplicitDefaults() {
+    @Test fun orientationsKeepSeparateGeometryAndShareAppearanceByDefault() {
         val portrait = defaultPortraitLayout()
         assertEquals(PersonaPlacement(.78f, .56f, .78f, (-22).dp), portrait.placement)
         assertEquals(387, portrait.design.controlsHeightDp)
@@ -32,9 +32,9 @@ class PreviewSpacingTest {
         assertEquals(PersonaPlacement(offsetY = 0.dp), landscape.placement)
         assertEquals(262, landscape.design.controlsHeightDp)
         assertEquals(116.0 / 262.0 * 100.0, landscape.design.holdSharePercent, 0.0)
-        assertEquals(PreviewTraces(), landscape.design.traces)
-        assertEquals(PreviewHalo(), landscape.halo)
-        assertEquals(PreviewSpirit(), landscape.spirit)
+        assertEquals(portrait.design.traces, landscape.design.traces)
+        assertEquals(portrait.halo, landscape.halo)
+        assertEquals(portrait.spirit, landscape.spirit)
         // These constructors also own old profile omissions and production placement defaults.
         assertEquals(35.dp, PersonaPlacement().offsetY)
         assertEquals(.58f, PersonaPlacement().listeningScale, 0f)

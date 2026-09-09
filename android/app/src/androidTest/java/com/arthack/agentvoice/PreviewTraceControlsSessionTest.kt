@@ -20,7 +20,7 @@ class PreviewTraceControlsSessionTest {
     @Test fun legacyProfilesAndSessionsGainOnlyJoinDefaultsWithoutWriting() {
         val original = PersonaPreviewState(mutedPresence = "contacts", presenceScope = "always",
             design = defaultPortraitLayout().design.copy(traces = PreviewTraces("splayed", 143, 230, 88, 55, 72, 183)),
-            otherLayout = defaultLandscapeLayout().copy(design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 30, 60, 183, 61))))
+            otherLayout = defaultLandscapeLayout().copy(appearanceOverrides = setOf("glow", "traces"), design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 30, 60, 183, 61))))
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "trace-legacy-${UUID.randomUUID()}.json")
         try {
             val old = JSONObject(encodePersonaTuning(original.placement, original.design, original.halo, original.spirit,
@@ -31,14 +31,15 @@ class PreviewTraceControlsSessionTest {
             assertEquals(old, file.readText())
             val oldSession = original.json().withoutTraceJoinFields().put("protocol", 15)
             assertEquals(original, restorePersonaPreview(oldSession, original.saved, original.savedDesign,
-                original.savedHalo, original.savedSpirit, original.savedOtherLayout, original.savedPersonaSide))
+                original.savedHalo, original.savedSpirit, original.savedOtherLayout, original.savedPersonaSide, original.savedHorizontalOffsetDp, original.savedAppearanceOverrides, original.savedSharedAppearance))
             assertTrue(runCatching { decodePersonaDesign(JSONObject(old).put("version", 14).toString()) }.isFailure)
         } finally { file.delete() }
     }
 
     @Test fun joinControlsAreAtomicOrientationScopedAndSavedOnlyExplicitly() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "trace-join-${UUID.randomUUID()}.json")
-        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
+        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file,
+            initialOverrides = setOf("traces"), initialLandscape = defaultLandscapeLayout().copy(appearanceOverrides = setOf("traces")))
         try {
             val initial = withContext(Dispatchers.Main) { session.state }
             for ((field, bad) in listOf("reachDp" to -41, "reachDp" to 121, "fadeLengthDp" to -1,
@@ -66,18 +67,18 @@ class PreviewTraceControlsSessionTest {
             val returned = withContext(Dispatchers.Main) { session.state }
             assertEquals(portrait, returned.design)
             assertEquals(landscape, returned.otherLayout.design)
-            assertEquals(16, returned.json().getInt("protocol"))
+            assertEquals(17, returned.json().getInt("protocol"))
             assertEquals(returned, restorePersonaPreview(returned.json(), returned.saved, returned.savedDesign,
-                returned.savedHalo, returned.savedSpirit, returned.savedOtherLayout, returned.savedPersonaSide))
+                returned.savedHalo, returned.savedSpirit, returned.savedOtherLayout, returned.savedPersonaSide, returned.savedHorizontalOffsetDp, returned.savedAppearanceOverrides, returned.savedSharedAppearance))
             assertFalse(file.exists())
             val response = session.command(JSONObject().put("id", 2).put("method", "save").put("revision", returned.revision)
                 .put("orientation", returned.orientation).put("orientationEpoch", returned.orientationEpoch))
             val saved = response.getString("profile")
-            assertEquals(14, JSONObject(saved).getInt("version"))
+            assertEquals(15, JSONObject(saved).getInt("version"))
             assertEquals(portrait, decodePersonaDesign(saved))
             assertEquals(landscape, decodeLandscapeLayout(saved).design)
             assertEquals(saved, file.readText())
-            assertTrue(response.toString().toByteArray().size < 8192)
+            assertTrue(response.toString().toByteArray().size < 16384)
         } finally { file.delete() }
     }
 }

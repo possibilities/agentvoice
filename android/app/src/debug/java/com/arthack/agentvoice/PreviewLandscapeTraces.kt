@@ -37,9 +37,7 @@ internal fun PreviewLandscapeTraces(
         val deckWidth = geometry.deckWidth.dp.toPx()
         val deckTop = geometry.deckY.dp.toPx()
         val radius = join.radiusPx
-        val gutter = deckX - (geometry.stageX.let {
-            if (mirror) size.width - it.dp.toPx() else (it + geometry.diameter).dp.toPx()
-        })
+        val gutter = previewLandscapeTraceGutterDp(geometry).dp.toPx()
         val corridor = deckTop - 8.dp.toPx()
         if (corridor < 0f || gutter <= 0f) return@Canvas
         val stroke = 1.2.dp.toPx() * settings.weightPercent / 100f
@@ -85,6 +83,13 @@ internal fun PreviewLandscapeTraces(
             }
         }
     }
+}
+
+/** The fixed routing lane survives manual movement; actual aperture ports still gate each route. */
+internal fun previewLandscapeTraceGutterDp(geometry: PreviewOrientationGeometry): Float {
+    val baselineStageX = geometry.stageX - geometry.horizontalOffsetDp
+    return if (geometry.personaSide == "right") baselineStageX - geometry.deckX - geometry.deckWidth
+        else geometry.deckX - baselineStageX - geometry.diameter
 }
 
 /** Lane width includes the full bundle and stroke; an impossible contact region draws no routes. */

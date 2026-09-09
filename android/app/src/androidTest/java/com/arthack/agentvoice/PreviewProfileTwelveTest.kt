@@ -46,12 +46,12 @@ class PreviewProfileTwelveTest {
             assertEquals(portrait.halo, decodePersonaHalo(read))
             assertEquals(portrait.spirit, decodePersonaSpirit(read))
             assertEquals(portrait.personaSide, decodePortraitSide(read))
-            assertEquals(landscape, decodeLandscapeLayout(read))
+            assertEquals(landscape.copy(appearanceOverrides = previewAppearanceGroups), decodeLandscapeLayout(read))
             assertArrayEquals(bytes, file.readBytes())
             assertEquals(11, JSONObject(file.readText()).getInt("version"))
             val v10 = JSONObject(old).apply { put("version", 10); remove("landscape"); remove("personaSide") }.toString()
             assertEquals(portrait.design, decodePersonaDesign(v10))
-            assertEquals(PreviewLayout(), decodeLandscapeLayout(v10))
+            assertEquals(PreviewSharedAppearance.from(portrait).applyTo(PreviewLayout()), decodeLandscapeLayout(v10))
         } finally { file.delete() }
     }
 
@@ -105,7 +105,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(14, encoded.getInt("version"))
+            assertEquals(15, encoded.getInt("version"))
             assertFalse(encoded.has("theme"))
             assertFalse(encoded.has("mutedPresence"))
             assertFalse(encoded.has("mutedTuning"))
@@ -117,7 +117,7 @@ class PreviewProfileTwelveTest {
             assertEquals(returned.design, decodePersonaDesign(profile))
             assertEquals(returned.otherLayout, decodeLandscapeLayout(profile))
             assertEquals(profile, file.readText())
-            assertTrue(reply.toString().toByteArray().size < 8192)
+            assertTrue(reply.toString().toByteArray().size < 16384)
             val saved = withContext(Dispatchers.Main) { session.state }
             val restored = restorePersonaPreview(saved.rotate("landscape").json(), saved.saved, saved.savedDesign,
                 saved.savedHalo, saved.savedSpirit, saved.savedOtherLayout, saved.savedPersonaSide)
@@ -169,7 +169,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(16, current.json().getInt("protocol"))
+                assertEquals(17, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())

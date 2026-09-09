@@ -12,6 +12,7 @@ internal data class PreviewOrientationGeometry(
     val deckViewportHeight: Float,
     val contentHeight: Float,
     val offsetY: Float,
+    val horizontalOffsetDp: Float = 0f,
 ) {
     val layoutKey get() = if (portrait) "portrait" else "landscape-$personaSide"
     fun towards(other: PreviewOrientationGeometry, progress: Float): PreviewOrientationGeometry {
@@ -20,7 +21,8 @@ internal data class PreviewOrientationGeometry(
             diameter = mix(diameter, other.diameter), deckX = mix(deckX, other.deckX),
             deckY = mix(deckY, other.deckY), deckWidth = mix(deckWidth, other.deckWidth),
             deckViewportHeight = mix(deckViewportHeight, other.deckViewportHeight),
-            contentHeight = mix(contentHeight, other.contentHeight), offsetY = mix(offsetY, other.offsetY))
+            contentHeight = mix(contentHeight, other.contentHeight), offsetY = mix(offsetY, other.offsetY),
+            horizontalOffsetDp = mix(horizontalOffsetDp, other.horizontalOffsetDp))
     }
 }
 
@@ -35,8 +37,10 @@ internal fun previewOrientationGeometry(
     personaSide: String = "left",
     spacing: PreviewSpacing = PreviewSpacing(),
     actualDeckHeight: Float = controlsHeight,
+    horizontalOffsetDp: Float = 0f,
 ): PreviewOrientationGeometry {
     require(actualDeckHeight.isFinite() && actualDeckHeight > 0f)
+    require(horizontalOffsetDp.isFinite())
     val baseline = baselinePreviewOrientationGeometry(width, height, screenWidth, portrait, controlsHeight, offsetY, personaSide)
     if (portrait) {
         val desiredSide = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
@@ -54,7 +58,10 @@ internal fun previewOrientationGeometry(
         return baseline.copy(deckX = side, deckY = deckTop, deckWidth = (width - side * 2f).coerceAtLeast(1f),
             deckViewportHeight = viewport, contentHeight = height)
     }
-    if (spacing == PreviewSpacing() && actualDeckHeight == controlsHeight) return baseline
+    // Manual screen-coordinate movement never reallocates the control lane or changes handedness.
+    val positioned = baseline.copy(stageX = baseline.stageX + horizontalOffsetDp,
+        horizontalOffsetDp = horizontalOffsetDp)
+    if (spacing == PreviewSpacing() && actualDeckHeight == controlsHeight) return positioned
     val leftPersona = personaSide == "left"
     val baselineInner = if (leftPersona) baseline.deckX else width - baseline.deckX - baseline.deckWidth
     val baselineOuterMargin = width - baselineInner - baseline.deckWidth
@@ -69,7 +76,7 @@ internal fun previewOrientationGeometry(
     val clearance = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else 16f * spacing.edgeClearancePercent / 100f
     val viewport = minOf(actualDeckHeight, (height - clearance * 2f).coerceAtLeast(1f))
-    return baseline.copy(deckX = if (leftPersona) inner else width - outer, deckY = (height - viewport) / 2f,
+    return positioned.copy(deckX = if (leftPersona) inner else width - outer, deckY = (height - viewport) / 2f,
         deckWidth = deckWidth, deckViewportHeight = viewport)
 }
 

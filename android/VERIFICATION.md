@@ -1,12 +1,12 @@
 # Android development build verification
 
-Latest synthetic UI work: **Center status text fitting**, September 9, 2026, on
+Latest synthetic UI work: **Shared appearance and orientation layout**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
 No emulator is active. No check starts a voice call, microphone, speaker or inference.
 The latest installed debug APK SHA-256 is
-`37ab95d493ef7c473cd3eb0902274e732424e79afefe859c9dc9cc63f649e12d`.
+`6195c7afc9655fafe70b7e2e7220c23010b21228efb43af8b622a5db4492f341`.
 
-Current evidence is under [Center status text fitting](#center-status-text-fitting).
+Current evidence is under [Shared appearance and orientation layout](#shared-appearance-and-orientation-layout).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1133,3 +1133,31 @@ previous build showed no text. Both layouts, latest live choices and gates are
 restored; host/phone saved files compare byte-identical, no Save. Evidence:
 `/tmp/agentvoice-words-fit-{build,native,phone-check}.log` and
 `/tmp/agentvoice-words-fit-phone/restored.png`.
+
+## Shared appearance and orientation layout
+
+Protocol 17/profile 15 separates shared appearance from local geometry. Traces,
+glow, Halo appearance and lighting each support explicit orientation overrides;
+Persona size/position and control spacing/dimensions stay orientation-local.
+Landscape uses a horizontal position control; portrait retains vertical position.
+Legacy profiles migrate in memory, without an implicit Save.
+
+- 111 JVM tests, Android debug/test builds and lint passed.
+- 694 repository tests passed; repository and configurator typecheck/Biome passed.
+  Host-specific coverage: 65 tests / 2706 assertions, including scope toggles
+  followed by queued edits, migration, reset and stale-orientation handling.
+- Corrected full physical S22 instrumentation: **69 tests / 119.802 seconds**,
+  `/tmp/agentvoice-shared-native-final.log`. Three new session tests exercise
+  shared/local edits, override snapshots/rejoining, strict receipts and migration.
+- Actual phone comparisons at horizontal offsets -55/+55 dp show the Persona,
+  indicator and trace contact moving together while the control deck stays fixed.
+  Shared glow edits reached portrait; a landscape-only override left portrait
+  unchanged; removing it rejoined the common value. Native stills are under
+  `/tmp/agentvoice-shared-phone/`; browser scope/axis/narrow evidence is under
+  `/tmp/agentvoice-studio17-browser/`. These are sampled synthetic compositions,
+  not proof of every transition or universal trace contact.
+- Restored both orientations' pre-install unsaved tuning, shared session choices
+  and mute gates, including the inactive landscape geometry. Phone and host saved
+  profile bytes match their pre-install snapshots exactly. No Save. Original
+  accelerometer/user-rotation settings restored to 1/0.
+- No production media, transport or Persona asset/renderer changes in this round.

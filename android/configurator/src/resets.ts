@@ -35,7 +35,7 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
   if (target.startsWith("trace-")) {
     const field = target.slice("trace-".length) as (typeof traceTipFields)[number];
     if (traceTipFields.includes(field))
-      next.design.traces[field] = defaults.defaultDesign.traces[field];
+      next.design.traces[field] = defaults.defaultSharedAppearance.traces[field];
     return next;
   }
   if (target.startsWith("spacing-")) {
@@ -50,12 +50,12 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
       break;
     case "traces":
       next.design.traces = {
-        ...defaults.defaultDesign.traces,
+        ...defaults.defaultSharedAppearance.traces,
         glowPercent: next.design.traces.glowPercent,
       };
       break;
     case "glow":
-      next.design.traces.glowPercent = defaults.defaultDesign.traces.glowPercent;
+      next.design.traces.glowPercent = defaults.defaultSharedAppearance.glowPercent;
       break;
     case "controls":
       next.design.controlsHeightDp = defaults.defaultDesign.controlsHeightDp;
@@ -67,20 +67,23 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
       else next.scales[next.mode] = defaults.defaults[next.mode];
       break;
     case "position":
-      next.verticalOffsetDp = defaults.defaultVerticalOffsetDp;
+      if (next.orientation === "landscape")
+        next.horizontalOffsetDp = defaults.defaultHorizontalOffsetDp;
+      else next.verticalOffsetDp = defaults.defaultVerticalOffsetDp;
       break;
     case "animation":
-      for (const key of haloMotionFields) next.halo[key] = defaults.defaultHalo[key];
+      for (const key of haloMotionFields)
+        next.halo[key] = defaults.defaultSharedAppearance.halo[key];
       break;
     case "colors":
-      next.halo.colors = { ...defaults.defaultHalo.colors };
+      next.halo.colors = { ...defaults.defaultSharedAppearance.halo.colors };
       break;
     case "light":
-      next.spirit.surface = defaults.defaultSpirit.surface;
-      next.spirit.strengthPercent = defaults.defaultSpirit.strengthPercent;
+      next.spirit.surface = defaults.defaultSharedAppearance.spirit.surface;
+      next.spirit.strengthPercent = defaults.defaultSharedAppearance.spirit.strengthPercent;
       break;
     case "spirit-colors":
-      next.spirit.persona = defaults.defaultSpirit.persona;
+      next.spirit.persona = defaults.defaultSharedAppearance.spirit.persona;
       break;
   }
   return next;

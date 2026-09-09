@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { equalSharedAppearance } from "./appearance.ts";
 import { saveProfile } from "./profile.ts";
 import {
   equalLayout,
@@ -12,6 +13,7 @@ import {
   parsePreview,
   parseProfile,
   profileLayout,
+  profileSharedAppearance,
   record,
   sameOrientation,
 } from "./protocol.ts";
@@ -114,6 +116,8 @@ export async function serveConfigurator(
             "mode",
             "scales",
             "verticalOffsetDp",
+            "horizontalOffsetDp",
+            "appearanceOverrides",
             "design",
             "halo",
             "spirit",
@@ -131,6 +135,8 @@ export async function serveConfigurator(
             mode: input["mode"],
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
+            horizontalOffsetDp: input["horizontalOffsetDp"],
+            appearanceOverrides: input["appearanceOverrides"],
             design: input["design"],
             halo: input["halo"],
             spirit: input["spirit"],
@@ -173,6 +179,8 @@ export async function serveConfigurator(
               mode: input["mode"],
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
+              horizontalOffsetDp: input["horizontalOffsetDp"],
+              appearanceOverrides: input["appearanceOverrides"],
               design: input["design"],
               halo: input["halo"],
               spirit: input["spirit"],
@@ -182,6 +190,7 @@ export async function serveConfigurator(
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = layoutOf(phone.state);
+          const expectedShared = structuredClone(phone.state.sharedAppearance);
           const expectedOther = layoutOf(phone.state.otherLayout);
           const expectedOrientation = phone.state.orientation;
           const otherOrientation = expectedOrientation === "portrait" ? "landscape" : "portrait";
@@ -199,7 +208,8 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 14 ||
+            profile.version !== 15 ||
+            !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
             !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
             !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
           )

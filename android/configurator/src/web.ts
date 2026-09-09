@@ -1,3 +1,9 @@
+import {
+  appearanceGroups,
+  appearanceOf,
+  applyAppearanceGroup,
+  equalSharedAppearance,
+} from "./appearance.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
@@ -13,6 +19,7 @@ import {
   type Profile,
   previewOf,
   profileLayout,
+  profileSharedAppearance,
   sameOrientation,
   type Theme,
 } from "./protocol.ts";
@@ -94,6 +101,14 @@ function render() {
   if (!status || !draft) return;
   element("device").textContent =
     `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
+  const orientationLabel = draft.orientation === "portrait" ? "Portrait" : "Landscape";
+  text(element("local-layout-scope"), `${orientationLabel} only`);
+  for (const group of appearanceGroups) {
+    const customized = draft.appearanceOverrides.includes(group);
+    element<HTMLInputElement>(`override-${group}`).checked = customized;
+    text(element(`override-${group}-label`), `Customize ${orientationLabel}`);
+    text(element(`scope-${group}`), customized ? `${orientationLabel} only` : "Shared");
+  }
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
   element("presence-scope-row").hidden =
@@ -191,8 +206,22 @@ function render() {
     document.createTextNode(String(size)),
     Object.assign(document.createElement("span"), { textContent: "%" }),
   );
-  position.value = String(draft.verticalOffsetDp);
-  const offset = `${draft.verticalOffsetDp > 0 ? "+" : ""}${draft.verticalOffsetDp}`;
+  const axisValue =
+    draft.orientation === "landscape" ? draft.horizontalOffsetDp : draft.verticalOffsetDp;
+  text(
+    element("position-label"),
+    draft.orientation === "landscape" ? "Horizontal position" : "Vertical position",
+  );
+  text(
+    element("position-min-label"),
+    draft.orientation === "landscape" ? "−200 (left)" : "−200 (up)",
+  );
+  text(
+    element("position-max-label"),
+    draft.orientation === "landscape" ? "+200 (right)" : "+200 (down)",
+  );
+  position.value = String(axisValue);
+  const offset = `${axisValue > 0 ? "+" : ""}${axisValue}`;
   position.setAttribute("aria-valuetext", `${offset} dp`);
   element("position-value").replaceChildren(
     document.createTextNode(offset),
@@ -202,16 +231,21 @@ function render() {
   const hostMatches =
     status.hostSaved &&
     equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
-    equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout);
+    equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout) &&
+    equalSharedAppearance(profileSharedAppearance(status.hostSaved), status.state.sharedAppearance);
   const phoneMatches =
     equalLayout(draft, {
       scales: status.state.savedScales,
       verticalOffsetDp: status.state.savedVerticalOffsetDp,
+      horizontalOffsetDp: status.state.savedHorizontalOffsetDp,
+      appearanceOverrides: status.state.savedAppearanceOverrides,
       design: status.state.savedDesign,
       halo: status.state.savedHalo,
       spirit: status.state.savedSpirit,
       personaSide: status.state.savedPersonaSide,
-    }) && equalLayout(status.state.otherLayout, status.state.savedOtherLayout);
+    }) &&
+    equalLayout(status.state.otherLayout, status.state.savedOtherLayout) &&
+    equalSharedAppearance(status.state.sharedAppearance, status.state.savedSharedAppearance);
   text(
     feedback,
     !connected
@@ -239,7 +273,23 @@ async function flush() {
   changed = false;
   const requestEdit = edit;
   const requestGeneration = status.generation;
-  const selection = structuredClone(draft);
+  let selection = structuredClone(draft);
+  const currentAppearance = appearanceOf(status.state);
+  for (const group of appearanceGroups) {
+    if (
+      selection.appearanceOverrides.includes(group) &&
+      !status.state.appearanceOverrides.includes(group)
+    )
+      selection = applyAppearanceGroup(selection, currentAppearance, group);
+    else if (
+      !selection.appearanceOverrides.includes(group) &&
+      status.state.appearanceOverrides.includes(group)
+    )
+      selection = applyAppearanceGroup(selection, status.state.sharedAppearance, group);
+  }
+  // Scope changes settle first; retain queued appearance edits for the next request.
+  const stagedAppearance = !equalLayout(selection, draft);
+  if (stagedAppearance) changed = true;
   render();
   try {
     status = await api("preview", { ...selection, generation: requestGeneration });
@@ -249,7 +299,7 @@ async function flush() {
       !sameOrientation(selection, status.state)
     )
       changed = false;
-    if (edit === requestEdit || !changed) draft = previewOf(status.state);
+    if ((edit === requestEdit && !stagedAppearance) || !changed) draft = previewOf(status.state);
     transientFailure = null;
   } catch (failure) {
     changed = false;
@@ -271,6 +321,18 @@ function update(change: (value: Preview) => Preview) {
   void flush();
 }
 
+for (const group of appearanceGroups) {
+  element<HTMLInputElement>(`override-${group}`).addEventListener("change", (event) => {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    update((current) => {
+      const appearanceOverrides = appearanceGroups.filter((item) =>
+        item === group ? checked : current.appearanceOverrides.includes(item),
+      );
+      const next = { ...current, appearanceOverrides };
+      return checked ? next : applyAppearanceGroup(next, status!.state.sharedAppearance, group);
+    });
+  });
+}
 element<HTMLSelectElement>("preview-theme").addEventListener("change", (event) => {
   const theme = (event.currentTarget as HTMLSelectElement).value as Theme;
   update((current) => ({ ...current, theme }));
@@ -388,8 +450,12 @@ slider.addEventListener("input", () => {
   );
 });
 position.addEventListener("input", () => {
-  const verticalOffsetDp = position.valueAsNumber;
-  update((current) => ({ ...current, verticalOffsetDp }));
+  const offsetDp = position.valueAsNumber;
+  update((current) =>
+    current.orientation === "landscape"
+      ? { ...current, horizontalOffsetDp: offsetDp }
+      : { ...current, verticalOffsetDp: offsetDp },
+  );
 });
 save.addEventListener("click", async () => {
   if (!status?.connected || inFlight || changed || saving) return;

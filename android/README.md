@@ -228,21 +228,22 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 14 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 15 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 16 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 17 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
-Their tuning is independent. The browser edits only the orientation reported
+Size, placement and control geometry are independent. Appearance groups share
+values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 14 stores portrait in the root fields and a separate `landscape` layout.
+Version 15 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–13 phone profiles load without rewriting; retired button styles map to
+version 1–14 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 14 only on Save. The real client and release
+become version 15 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -289,7 +290,7 @@ Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
-activity restoration but are not saved in a profile; profile version is 14.
+activity restoration but are not saved in a profile; profile version is 15.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
@@ -326,3 +327,28 @@ The join and fade apply to trace ink and offshoots, never to Persona pixels.
 Defaults reproduce the previous soft underlap. This remains a nominal join,
 not a mask following the Rive ellipse: strong positive reach can reveal lines
 inside the ring and, when the join radius reaches zero, at its center.
+
+### Shared appearance and orientation layout
+
+The studio labels each scope instead of assigning scope by column:
+
+- Theme, center indicator and its tuning apply to both orientations for this
+  preview session. They still do not enter saved design profiles.
+- Persona appearance (variant, animation, colors), Traces (including endpoint
+  geometry and fade), Background glow, and Button lighting/color response each
+  share a common value by default. **Customize this orientation** snapshots that
+  group's current appearance for local editing. Turning customization off adopts
+  shared values again; it does not publish the local choice as a new common value.
+  Shared edits update both inheriting layouts; an overridden layout is untouched.
+- Persona size, position, control height/share, padding and gaps always affect
+  only the orientation reported by the phone. Portrait position moves up/down;
+  landscape position moves left/right in screen coordinates. Previous landscape
+  vertical offsets are retained in profiles but no longer applied in the scene.
+
+Appearance resets use the common defaults and follow the displayed group scope.
+Layout resets use the current orientation's defaults. All changes require Save
+to persist. Profile 15 keeps common appearance and explicit per-orientation
+overrides. Older profiles take shared appearance from portrait; untouched legacy
+landscape appearance defaults inherit, while customized differing groups become
+overrides. Size and control geometry are retained. The app never infers a setting
+change from rotating scrcpy's display: Alt+R rotates Android itself.

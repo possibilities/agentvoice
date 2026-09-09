@@ -3,6 +3,12 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  appearanceGroups,
+  appearanceOf,
+  mergeAppearanceEdit,
+  parseSharedAppearance,
+} from "../src/appearance.ts";
 import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
@@ -17,6 +23,7 @@ import {
 import {
   defaultLandscapeLayout,
   defaultPortraitLayout,
+  defaultSharedAppearance,
   equalLayout,
   layoutOf,
   mutedPresences,
@@ -32,6 +39,7 @@ import {
   profileDesign,
   profileHalo,
   profileLayout,
+  profileSharedAppearance,
   profileSpirit,
   sameOrientation,
 } from "../src/protocol.ts";
@@ -57,7 +65,19 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 16,
+  protocol: 17,
+  horizontalOffsetDp: 0,
+  savedHorizontalOffsetDp: 0,
+  defaultHorizontalOffsetDp: 0,
+  appearanceOverrides: [...appearanceGroups],
+  savedAppearanceOverrides: [...appearanceGroups],
+  sharedAppearance: defaultSharedAppearance(),
+  savedSharedAppearance: defaultSharedAppearance(),
+  defaultSharedAppearance: appearanceOf({
+    design: defaultDesign,
+    halo: defaultHalo(),
+    spirit: defaultSpirit(),
+  }),
   presenceScope: "any-muted",
   mutedTuning: defaultMutedTuning(),
   theme: "bright",
@@ -107,11 +127,14 @@ const profile = (state: PhoneState): Extract<Profile, { version: 10 }> => ({
   disconnectedArtboardScale: 1.5,
   savedAtEpochMs: 1788917295182,
 });
-const currentProfile = (state: PhoneState): Extract<Profile, { version: 14 }> => {
+const currentProfile = (state: PhoneState): Extract<Profile, { version: 15 }> => {
   const portrait = state.orientation === "portrait" ? layoutOf(state) : state.otherLayout;
   return {
     ...profile({ ...state, ...portrait }),
-    version: 14,
+    version: 15,
+    horizontalOffsetDp: portrait.horizontalOffsetDp,
+    appearanceOverrides: [...portrait.appearanceOverrides],
+    sharedAppearance: structuredClone(state.sharedAppearance),
     design: structuredClone(portrait.design),
     personaSide: portrait.personaSide,
     landscape: layoutOf(state.orientation === "landscape" ? state : state.otherLayout),
@@ -137,6 +160,9 @@ class FakePhone implements Phone {
   wrongOtherReceipt = false;
   wrongSpacingReceipt: (typeof spacingFields)[number] | undefined;
   wrongSideReceipt = false;
+  wrongSharedReceipt = false;
+  wrongOverrideReceipt = false;
+  wrongHorizontalReceipt = false;
   wrongHaloReceipt:
     | "variant"
     | "color"
@@ -147,6 +173,8 @@ class FakePhone implements Phone {
   rotate() {
     const previous = layoutOf(this.state);
     const previousSaved = {
+      horizontalOffsetDp: this.state.savedHorizontalOffsetDp,
+      appearanceOverrides: [...this.state.savedAppearanceOverrides],
       scales: this.state.savedScales,
       verticalOffsetDp: this.state.savedVerticalOffsetDp,
       design: this.state.savedDesign,
@@ -162,6 +190,8 @@ class FakePhone implements Phone {
       orientation: this.state.orientation === "portrait" ? "landscape" : "portrait",
       orientationEpoch: this.state.orientationEpoch + 1,
       revision: this.state.revision + 1,
+      savedHorizontalOffsetDp: saved.horizontalOffsetDp,
+      savedAppearanceOverrides: [...saved.appearanceOverrides],
       savedScales: saved.scales,
       savedVerticalOffsetDp: saved.verticalOffsetDp,
       savedDesign: saved.design,
@@ -192,10 +222,24 @@ class FakePhone implements Phone {
         mode: command["mode"],
         scales: command["scales"],
         verticalOffsetDp: command["verticalOffsetDp"],
+        horizontalOffsetDp: command["horizontalOffsetDp"],
+        appearanceOverrides: command["appearanceOverrides"],
         design: command["design"],
         halo: command["halo"],
       });
-      this.state = { ...this.state, ...preview, revision: this.state.revision + 1 };
+      const merged = mergeAppearanceEdit(
+        previewOf(this.state),
+        preview,
+        this.state.sharedAppearance,
+        this.state.otherLayout,
+      );
+      this.state = {
+        ...this.state,
+        ...merged.preview,
+        sharedAppearance: merged.sharedAppearance,
+        otherLayout: merged.otherLayout,
+        revision: this.state.revision + 1,
+      };
     }
     if (command["method"] === "save") {
       if (!sameOrientation(command as unknown as PhoneState, this.state))
@@ -204,6 +248,9 @@ class FakePhone implements Phone {
       if (command["revision"] !== this.state.revision) throw Error("Stale revision");
       this.state = {
         ...this.state,
+        savedHorizontalOffsetDp: this.state.horizontalOffsetDp,
+        savedAppearanceOverrides: [...this.state.appearanceOverrides],
+        savedSharedAppearance: structuredClone(this.state.sharedAppearance),
         savedPersonaSide: this.state.personaSide,
         savedOtherLayout: layoutOf(this.state.otherLayout),
         savedScales: { ...this.state.scales },
@@ -213,6 +260,9 @@ class FakePhone implements Phone {
         savedSpirit: { ...this.state.spirit },
       };
       const receipt = currentProfile(this.state);
+      if (this.wrongSharedReceipt) receipt.sharedAppearance.glowPercent++;
+      if (this.wrongOverrideReceipt) receipt.appearanceOverrides = [];
+      if (this.wrongHorizontalReceipt) receipt.landscape.horizontalOffsetDp++;
       if (this.wrongSpacingReceipt) receipt.design.spacing[this.wrongSpacingReceipt]++;
       if (this.wrongOtherReceipt) receipt.landscape.verticalOffsetDp++;
       if (this.wrongSideReceipt) receipt.personaSide = "right";
@@ -282,6 +332,8 @@ async function fixture(options: { saveTo?: string } = {}) {
               activity: phone.state.activity,
               spirit: phone.state.spirit,
               verticalOffsetDp: phone.state.verticalOffsetDp,
+              horizontalOffsetDp: phone.state.horizontalOffsetDp,
+              appearanceOverrides: phone.state.appearanceOverrides,
               design: phone.state.design,
               halo: phone.state.halo,
             }
@@ -340,6 +392,21 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   }
 });
 
+function versionFourteen<
+  T extends {
+    horizontalOffsetDp: number;
+    appearanceOverrides: unknown;
+    sharedAppearance?: unknown;
+  },
+>(value: T) {
+  const {
+    horizontalOffsetDp: _x,
+    appearanceOverrides: _o,
+    sharedAppearance: _s,
+    ...previous
+  } = value;
+  return previous;
+}
 function versionThirteenTraces(traces = defaultTraces()) {
   const { reachDp: _, fadeLengthDp: _fade, tipOpacityPercent: _tip, ...previous } = traces;
   return previous;
@@ -691,7 +758,7 @@ test("every nested trace receipt must match before an existing host profile can 
   }
 });
 
-test("trace edits remain unsaved and exact version 14 Save snapshots the reviewed nested settings", async () => {
+test("trace edits remain unsaved and exact version 15 Save snapshots the reviewed nested settings", async () => {
   const { phone, post, saveTo } = await fixture();
   const traces: TraceSelection = {
     ...defaultTraces(),
@@ -718,7 +785,7 @@ test("trace edits remain unsaved and exact version 14 Save snapshots the reviewe
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
@@ -977,7 +1044,7 @@ test("device connection correlates split replies and fails pending work on disco
 test("oversized or unrelated device replies cannot update the preview", async () => {
   const { peer, phone } = await wire();
   const pending = phone.request({ method: "get" });
-  peer.write("x".repeat(8192));
+  peer.write("x".repeat(16384));
   await expect(pending).rejects.toThrow("disconnected");
   expect(phone.state).toBeUndefined();
   const next = await wire();
@@ -1031,7 +1098,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -1192,7 +1259,7 @@ test("old profile contracts keep exact fields and old compositions while spirit 
   expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
 });
 
-test("spirit is unsaved until exact version 14 Save and activity never enters the profile", async () => {
+test("spirit is unsaved until exact version 15 Save and activity never enters the profile", async () => {
   const { phone, post, saveTo } = await fixture();
   const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
   const design = { ...defaultDesign, composition: "traces" as const };
@@ -1213,7 +1280,7 @@ test("spirit is unsaved until exact version 14 Save and activity never enters th
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
@@ -1293,14 +1360,15 @@ test("independent layouts retain portrait choices and save both layouts from lan
   expect((await post("preview", landscape)).status).toBe(200);
   expect(phone.state.otherLayout).toEqual(layoutOf(portrait));
   const reset = resetPreview(previewOf(phone.state), phone.state, "position");
-  expect(reset.verticalOffsetDp).toBe(0);
+  expect(reset.horizontalOffsetDp).toBe(0);
+  expect(reset.verticalOffsetDp).toBe(-17);
   expect(reset.orientation).toBe("landscape");
   expect(reset.personaSide).toBe("right");
   expect(phone.state.otherLayout).toEqual(layoutOf(portrait));
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileLayout(saved, "portrait")).toEqual(layoutOf(portrait));
   expect(profileLayout(saved, "landscape")).toEqual(layoutOf(landscape));
   phone.rotate();
@@ -1308,7 +1376,7 @@ test("independent layouts retain portrait choices and save both layouts from lan
   expect(phone.state.otherLayout).toEqual(layoutOf(landscape));
 });
 
-test("version 10 preserves portrait bytes and seeds independent landscape defaults in memory", () => {
+test("version 10 preserves portrait bytes and seeds inherited landscape appearance in memory", () => {
   const old = profile({
     ...initial(),
     verticalOffsetDp: -187,
@@ -1328,6 +1396,7 @@ test("version 10 preserves portrait bytes and seeds independent landscape defaul
   expect(landscape).toEqual({
     ...defaultLandscapeLayout(),
     design: { ...defaultDesign, spacing: legacySpacing() },
+    spirit: defaultSpirit(),
   });
   landscape.design.traces.weightPercent = 209;
   landscape.halo.colors.idle = "#ffffff";
@@ -1335,6 +1404,7 @@ test("version 10 preserves portrait bytes and seeds independent landscape defaul
   expect(profileLayout(parsed, "landscape")).toEqual({
     ...defaultLandscapeLayout(),
     design: { ...defaultDesign, spacing: legacySpacing() },
+    spirit: defaultSpirit(),
   });
   expect(JSON.stringify(parsed)).toBe(encoded);
 });
@@ -1362,7 +1432,7 @@ test("wrong inactive layout or hidden side receipts cannot create a host copy", 
   }
 });
 
-test("protocol 16 validates independent layouts and fits bounded profile and receipt frames", async () => {
+test("protocol 17 validates independent layouts and fits bounded profile and receipt frames", async () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const invalid of [
@@ -1378,9 +1448,9 @@ test("protocol 16 validates independent layouts and fits bounded profile and rec
   for (const field of ["personaSide", "savedPersonaSide", "defaultPersonaSide"])
     expect(() => parseState({ ...state, [field]: "middle" })).toThrow();
   const encoded = JSON.stringify(profile, null, 2);
-  expect(encoded.length).toBeLessThanOrEqual(4096);
+  expect(encoded.length).toBeLessThanOrEqual(8192);
   const frame = JSON.stringify({ id: 1, state, profile: encoded });
-  expect(Buffer.byteLength(frame)).toBeLessThan(8192);
+  expect(Buffer.byteLength(frame)).toBeLessThan(16384);
   const { peer, phone } = await wire();
   const reply = phone.request({
     method: "save",
@@ -1430,18 +1500,24 @@ test("version 11 preserves both layouts and seeds only baseline spacing without 
   source.otherLayout.design.traces.personaSpacingPercent = 177;
   const current = currentProfile(source);
   const old = {
-    ...current,
+    ...versionFourteen(current),
     version: 11 as const,
     design: versionTenDesign(current.design),
-    landscape: { ...current.landscape, design: versionTenDesign(current.landscape.design) },
+    landscape: {
+      ...versionFourteen(current.landscape),
+      design: versionTenDesign(current.landscape.design),
+    },
   };
   const encoded = JSON.stringify(old);
   const parsed = parseProfile(encoded);
   expect(parsed.version).toBe(11);
   const portrait = profileLayout(parsed, "portrait");
   const landscape = profileLayout(parsed, "landscape");
-  expect(portrait).toEqual(layoutOf(source));
-  expect(landscape).toEqual(source.otherLayout);
+  expect(portrait).toEqual({ ...layoutOf(source), appearanceOverrides: [] });
+  expect(landscape).toEqual({
+    ...source.otherLayout,
+    appearanceOverrides: ["halo", "spirit", "traces"],
+  });
   expect(portrait.design.spacing).toEqual(legacySpacing());
   expect(landscape.design.spacing).toEqual(legacySpacing());
   portrait.design.spacing.sideMarginPercent = 11;
@@ -1588,7 +1664,8 @@ test("provisional portrait defaults are separate from landscape and legacy profi
   expect(landscape.scales.listening).toBe(58);
   expect(landscape.design.controlsHeightDp).toBe(262);
   expect(landscape.verticalOffsetDp).toBe(0);
-  expect(landscape.halo.variant).toBe("original");
+  expect(landscape.halo.variant).toBe("contained");
+  expect(appearanceOf(landscape)).toEqual(appearanceOf(portrait));
   expect(
     profileLayout(parseProfile(JSON.stringify(profile(initial()))), "portrait").verticalOffsetDp,
   ).toBe(35);
@@ -1629,7 +1706,7 @@ test("muted appearance requires exact bounded session fields before phone dispat
   expect(phone.calls).toHaveLength(0);
 });
 
-test("muted appearance survives rotation and Off while Save remains exactly profile 14", async () => {
+test("muted appearance survives rotation and Off while Save remains exactly profile 15", async () => {
   const { phone, post, saveTo } = await fixture();
   const before = currentProfile(phone.state);
   const mutedTuning = {
@@ -1655,7 +1732,7 @@ test("muted appearance survives rotation and Off while Save remains exactly prof
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
   expect(saved).toEqual(before);
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(savedText).not.toContain('"mutedTuning"');
   expect(() => parseProfile(JSON.stringify({ ...saved, mutedTuning }))).toThrow();
   expect(() =>
@@ -1749,10 +1826,13 @@ test("profile12 migrates both custom spacing layouts without changing bytes or a
   };
   const latest = currentProfile(state);
   const old = {
-    ...latest,
+    ...versionFourteen(latest),
     version: 12 as const,
     design: versionTwelveDesign(latest.design),
-    landscape: { ...latest.landscape, design: versionTwelveDesign(latest.landscape.design) },
+    landscape: {
+      ...versionFourteen(latest.landscape),
+      design: versionTwelveDesign(latest.landscape.design),
+    },
   };
   const encoded = JSON.stringify(old);
   const parsed = parseProfile(encoded);
@@ -1805,7 +1885,7 @@ test("unified padding and its reset preserve hidden legacy values, separation an
   expect(phone.state.otherLayout).toEqual(before.otherLayout);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileLayout(saved, "portrait").design.spacing).toEqual(phone.state.design.spacing);
   expect(profileLayout(saved, "landscape")).toEqual(before.otherLayout);
   for (const spacing of [
@@ -1912,7 +1992,7 @@ test("indicator style and scope persist across rotation, Off and appearance rese
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
   expect(saved).toEqual(originalProfile);
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(savedText).not.toContain('"presenceScope"');
   expect(savedText).not.toContain('"mutedPresence"');
   expect(() => parseProfile(JSON.stringify({ ...saved, presenceScope: "always" }))).toThrow();
@@ -1934,18 +2014,21 @@ test("profile13 preserves both layouts and bytes while trace tips gain only base
   source.otherLayout.design.spacing.paddingDp = -1;
   const latest = currentProfile(source);
   const old = {
-    ...latest,
+    ...versionFourteen(latest),
     version: 13 as const,
     design: versionThirteenDesign(latest.design),
-    landscape: { ...latest.landscape, design: versionThirteenDesign(latest.landscape.design) },
+    landscape: {
+      ...versionFourteen(latest.landscape),
+      design: versionThirteenDesign(latest.landscape.design),
+    },
   };
   const encoded = JSON.stringify(old);
   const parsed = parseProfile(encoded);
   expect(parsed).toEqual(old);
   const portrait = profileLayout(parsed, "portrait");
   const landscape = profileLayout(parsed, "landscape");
-  expect(portrait).toEqual(layoutOf(source));
-  expect(landscape).toEqual(source.otherLayout);
+  expect(portrait).toEqual({ ...layoutOf(source), appearanceOverrides: [] });
+  expect(landscape).toEqual({ ...source.otherLayout, appearanceOverrides: [...appearanceGroups] });
   portrait.design.traces.reachDp = 87;
   landscape.design.traces.fadeLengthDp = 0;
   expect(JSON.stringify(parsed)).toBe(encoded);
@@ -2059,7 +2142,240 @@ test("trace reach and fade save independently by orientation including hard ends
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(14);
+  expect(saved.version).toBe(15);
   expect(profileLayout(saved, "portrait").design.traces).toEqual(portrait);
   expect(profileLayout(saved, "landscape").design.traces).toEqual(landscape);
+});
+
+// The baseline fixture models an existing portrait with explicit appearance overrides.
+// Inheritance scenarios start from the fresh studio defaults.
+function inherit(phone: FakePhone) {
+  const shared = defaultSharedAppearance();
+  phone.state = {
+    ...phone.state,
+    ...defaultPortraitLayout(),
+    sharedAppearance: shared,
+    savedSharedAppearance: structuredClone(shared),
+    defaultSharedAppearance: structuredClone(shared),
+    savedAppearanceOverrides: [],
+    otherLayout: defaultLandscapeLayout(),
+    savedOtherLayout: defaultLandscapeLayout(),
+  };
+}
+
+test("shared appearance edits reach both inherited layouts while size and horizontal position stay local", async () => {
+  const { phone, post, saveTo } = await fixture();
+  inherit(phone);
+  const portrait = previewOf(phone.state);
+  const edit = structuredClone(portrait);
+  edit.design.traces.reachDp = 37;
+  edit.design.traces.glowPercent = 29;
+  edit.halo.colors.idle = "#abcdef";
+  edit.halo.containedSizePercent = 109;
+  edit.spirit.surface = "soft";
+  expect((await post("preview", edit)).status).toBe(200);
+  expect(appearanceOf(phone.state)).toEqual(appearanceOf(phone.state.otherLayout));
+  expect(phone.state.otherLayout.halo.containedSizePercent).toBe(78);
+  expect(phone.state.sharedAppearance).toEqual(appearanceOf(edit));
+  phone.rotate();
+  const selected = previewOf(phone.state);
+  selected.horizontalOffsetDp = 83;
+  selected.halo.containedSizePercent = 62;
+  const inactive = structuredClone(phone.state.otherLayout);
+  expect((await post("preview", selected)).status).toBe(200);
+  expect(phone.state.otherLayout).toEqual(inactive);
+  const reset = resetPreview(previewOf(phone.state), phone.state, "position");
+  expect(reset.horizontalOffsetDp).toBe(0);
+  expect(reset.verticalOffsetDp).toBe(selected.verticalOffsetDp);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(profileSharedAppearance(saved)).toEqual(phone.state.sharedAppearance);
+  expect(profileLayout(saved, "landscape").horizontalOffsetDp).toBe(83);
+  expect(profileLayout(saved, "portrait").halo.containedSizePercent).toBe(109);
+});
+
+test("override ON snapshots effective groups and OFF discards proposed local values without changing the shared base", async () => {
+  const { phone, post } = await fixture();
+  inherit(phone);
+  const shared = structuredClone(phone.state.sharedAppearance);
+  const local = previewOf(phone.state);
+  local.appearanceOverrides = [...appearanceGroups];
+  local.design.traces.reachDp = 76;
+  local.design.traces.glowPercent = 93;
+  local.halo.colors.idle = "#112233";
+  local.halo.containedSizePercent = 111;
+  local.spirit.strengthPercent = 91;
+  expect((await post("preview", local)).status).toBe(200);
+  expect(appearanceOf(phone.state)).toEqual(shared);
+  expect(phone.state.halo.containedSizePercent).toBe(111);
+  expect((await post("preview", local)).status).toBe(200);
+  expect(appearanceOf(phone.state)).toEqual(appearanceOf(local));
+  expect(phone.state.sharedAppearance).toEqual(shared);
+  phone.rotate();
+  const landscape = previewOf(phone.state);
+  landscape.design.traces.weightPercent = 214;
+  landscape.design.traces.glowPercent = 18;
+  landscape.halo.colors.idle = "#445566";
+  landscape.spirit.strengthPercent = 23;
+  const overridden = structuredClone(phone.state.otherLayout);
+  expect((await post("preview", landscape)).status).toBe(200);
+  expect(phone.state.otherLayout).toEqual(overridden);
+  expect(phone.state.sharedAppearance).toEqual(appearanceOf(landscape));
+  phone.rotate();
+  const discard = { ...previewOf(phone.state), appearanceOverrides: [] };
+  expect((await post("preview", discard)).status).toBe(200);
+  expect(appearanceOf(phone.state)).toEqual(appearanceOf(landscape));
+  expect(phone.state.sharedAppearance).toEqual(appearanceOf(landscape));
+  expect(phone.state.halo.containedSizePercent).toBe(111);
+});
+
+test("appearance resets use shared defaults even for overrides while local resets retain both appearance and inactive axis", () => {
+  const state = initial();
+  state.defaultSharedAppearance = defaultSharedAppearance();
+  const selection = previewOf(state);
+  selection.orientation = "landscape";
+  selection.horizontalOffsetDp = 92;
+  selection.verticalOffsetDp = -137;
+  selection.design.traces.reachDp = 54;
+  selection.halo.colors.idle = "#112233";
+  selection.spirit.persona = "fixed";
+  expect(resetPreview(selection, state, "traces").design.traces).toEqual({
+    ...state.defaultSharedAppearance.traces,
+    glowPercent: selection.design.traces.glowPercent,
+  });
+  expect(resetPreview(selection, state, "colors").halo.colors).toEqual(
+    state.defaultSharedAppearance.halo.colors,
+  );
+  expect(resetPreview(selection, state, "spirit-colors").spirit.persona).toBe("follow");
+  const reset = resetPreview(selection, state, "position");
+  expect(reset.horizontalOffsetDp).toBe(0);
+  expect(reset.verticalOffsetDp).toBe(-137);
+  expect(appearanceOf(reset)).toEqual(appearanceOf(selection));
+  expect(reset.appearanceOverrides).toEqual(selection.appearanceOverrides);
+});
+
+test("profile14 migration distinguishes canonical, portrait-equal and explicitly customized landscape groups without rewriting", () => {
+  const state = initial();
+  state.design.traces.weightPercent = 221;
+  state.design.traces.glowPercent = 34;
+  state.halo.variant = "contained";
+  state.spirit.persona = "follow";
+  const latest = currentProfile(state);
+  const canonical = {
+    ...versionFourteen(defaultLandscapeLayout()),
+    design: structuredClone(defaultDesign),
+    halo: defaultHalo(),
+    spirit: defaultSpirit(),
+  };
+  const old = { ...versionFourteen(latest), version: 14 as const, landscape: canonical };
+  const bytes = JSON.stringify(old, null, 2);
+  const parsed = parseProfile(bytes);
+  expect(JSON.stringify(parsed, null, 2)).toBe(bytes);
+  expect(profileLayout(parsed, "portrait").appearanceOverrides).toEqual([]);
+  expect(profileLayout(parsed, "landscape").appearanceOverrides).toEqual([]);
+  expect(appearanceOf(profileLayout(parsed, "landscape"))).toEqual(appearanceOf(state));
+  const equal = {
+    ...old,
+    landscape: {
+      ...canonical,
+      design: structuredClone(state.design),
+      halo: { ...structuredClone(state.halo), containedSizePercent: 117 },
+      spirit: { ...state.spirit },
+    },
+  };
+  expect(
+    profileLayout(parseProfile(JSON.stringify(equal)), "landscape").appearanceOverrides,
+  ).toEqual([]);
+  for (const group of appearanceGroups) {
+    const custom = structuredClone(old);
+    if (group === "traces") custom.landscape.design.traces.reachDp = 19;
+    if (group === "glow") custom.landscape.design.traces.glowPercent = 18;
+    if (group === "halo") custom.landscape.halo.colors.idle = "#123456";
+    if (group === "spirit") custom.landscape.spirit.strengthPercent = 71;
+    const migrated = profileLayout(parseProfile(JSON.stringify(custom)), "landscape");
+    expect(migrated.appearanceOverrides).toEqual([group]);
+    expect(appearanceOf(migrated)[group === "glow" ? "glowPercent" : group]).toEqual(
+      appearanceOf({ ...defaultLandscapeLayout(), ...custom.landscape })[
+        group === "glow" ? "glowPercent" : group
+      ],
+    );
+  }
+  expect(() => parseProfile(JSON.stringify({ ...old, horizontalOffsetDp: 0 }))).toThrow();
+  expect(() =>
+    parseProfile(JSON.stringify({ ...old, landscape: { ...canonical, appearanceOverrides: [] } })),
+  ).toThrow();
+});
+
+test("protocol17 strictly validates axes and override groups and accepts shared metadata only from the phone", async () => {
+  const { phone, post } = await fixture();
+  const saved = currentProfile(phone.state);
+  for (const value of [
+    undefined,
+    null,
+    "halo",
+    ["unknown"],
+    ["halo", "glow"],
+    ["halo", "halo"],
+    [1],
+  ]) {
+    expect(() => parsePreview({ ...previewOf(phone.state), appearanceOverrides: value })).toThrow();
+    expect(() => parseState({ ...phone.state, savedAppearanceOverrides: value })).toThrow();
+    expect(() => parseProfile(JSON.stringify({ ...saved, appearanceOverrides: value }))).toThrow();
+  }
+  for (const value of [-201, 201, 0.5, "0", null, undefined]) {
+    expect(() => parsePreview({ ...previewOf(phone.state), horizontalOffsetDp: value })).toThrow();
+    expect(() => parseState({ ...phone.state, defaultHorizontalOffsetDp: value })).toThrow();
+    expect(() => parseProfile(JSON.stringify({ ...saved, horizontalOffsetDp: value }))).toThrow();
+  }
+  for (const invalid of [
+    { ...saved.sharedAppearance, extra: 0 },
+    { ...saved.sharedAppearance, traces: phone.state.design.traces },
+    { ...saved.sharedAppearance, halo: phone.state.halo },
+    { ...saved.sharedAppearance, glowPercent: -1 },
+  ]) {
+    expect(() => parseSharedAppearance(invalid)).toThrow();
+    expect(() => parseState({ ...phone.state, sharedAppearance: invalid })).toThrow();
+    expect(() => parseProfile(JSON.stringify({ ...saved, sharedAppearance: invalid }))).toThrow();
+  }
+  expect(
+    (await post("preview", { ...previewOf(phone.state), sharedAppearance: saved.sharedAppearance }))
+      .status,
+  ).toBe(400);
+  expect(phone.calls).toHaveLength(0);
+});
+
+test("Save receipts validate shared snapshot, flags, horizontal axis and raw inherited effective fields", async () => {
+  for (const field of [
+    "wrongSharedReceipt",
+    "wrongOverrideReceipt",
+    "wrongHorizontalReceipt",
+    "wrongTraceReceipt",
+  ] as const) {
+    const { phone, post, saveTo } = await fixture();
+    if (field === "wrongTraceReceipt") {
+      inherit(phone);
+      phone.wrongTraceReceipt = "reachDp";
+    } else phone[field] = true;
+    phone.rotateDuringSave = true;
+    expect((await post("save", { revision: phone.state.revision })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
+});
+
+test("debug reply framing accepts16383 bytes and rejects16384 with or without a newline", async () => {
+  const frame = JSON.stringify({ id: 1, state: initial() });
+  const accepted = await wire();
+  const pending = accepted.phone.request({ method: "get" });
+  accepted.peer.write(`${frame}${" ".repeat(16383 - frame.length)}\n`);
+  expect((await pending).state.protocol).toBe(17);
+  for (const newline of ["", "\n"]) {
+    const rejected = await wire();
+    const pending = rejected.phone.request({ method: "get" });
+    rejected.peer.write(`${frame}${" ".repeat(16384 - frame.length)}${newline}`);
+    await expect(pending).rejects.toThrow("disconnected");
+    expect(rejected.phone.state).toBeUndefined();
+  }
+  const profile = JSON.stringify(currentProfile(initial()));
+  expect(parseProfile(profile.padEnd(8192, " ")).version).toBe(15);
+  expect(() => parseProfile(profile.padEnd(8193, " "))).toThrow("Profile too large");
 });

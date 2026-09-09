@@ -12,7 +12,10 @@
     <main>
       <header>
         <span class="wordmark">agentvoice</span>
-        <span id="connection" class="connection"><span class="signal" aria-hidden="true"></span><span id="connection-text">Connecting</span></span>
+        <span id="connection" class="connection">
+          <span class="signal" aria-hidden="true"></span>
+          <span id="connection-text">Connecting</span>
+        </span>
       </header>
       <section aria-labelledby="title">
         <div class="intro">
@@ -22,227 +25,432 @@
         <fieldset id="controls" disabled>
           <legend class="sr-only">Design preview controls</legend>
           <div class="studio-grid">
-            <fieldset class="button-controls">
-              <legend class="panel-title">Controls</legend>
-              <div class="mixing">
-                <label for="preview-theme">Theme</label>
-                <select id="preview-theme" aria-describedby="session-style-hint"><option value="bright">Bright</option><option value="quiet">Quiet</option><option value="grayscale">Grayscale</option></select>
-              </div>
-              <div class="mixing">
-                <label for="muted-presence">Center indicator</label>
-                <select id="muted-presence" aria-describedby="session-style-hint"><option value="off">Off</option><option value="tide">Tide (original)</option><option value="words">Words</option><option value="channels">Channel icons</option><option value="labeled">Icons + words</option><option value="contacts">Contacts</option></select>
-              </div>
-              <div id="presence-scope-row" class="mixing" hidden>
-                <label for="presence-scope">Show</label>
-                <select id="presence-scope"><option value="both-muted">Both muted</option><option value="any-muted">Either muted</option><option value="always">Always</option></select>
-              </div>
-              <p id="presence-contacts-hint" class="control-hint" hidden>Human left, agent right. Joined contacts are live; a lifted contact is muted.</p>
-              <fieldset id="muted-appearance" class="motion-controls">
-                <legend class="subpanel-title">Indicator appearance</legend>
-                <p id="muted-fit-hint" class="control-hint">Larger text, icons and motion may be limited to fit inside Persona. These choices last for this preview session and are not saved.</p>
-                <div class="mixing"><label for="muted-motion">Motion</label><select id="muted-motion"><option value="float">Float</option><option value="ripple">Ripple</option></select></div>
-                <button type="button" id="reset-muted-motion" data-reset="muted-motion" class="reset value-reset">Reset motion</button>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="muted-textSizeSp">Size</label><output id="muted-textSizeSp-value" for="muted-textSizeSp">14 sp</output></div>
-                  <input id="muted-textSizeSp" type="range" min="12" max="32" step="1" value="14" aria-describedby="muted-textSizeSp-hint muted-fit-hint" />
-                  <p id="muted-textSizeSp-hint" class="control-hint">Preferred text or icon size. Status indicators fit down when needed to stay inside Persona.</p>
-                  <button type="button" id="reset-muted-textSizeSp" data-reset="muted-textSizeSp" class="reset value-reset">Reset size</button>
-                </div>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="muted-brightnessPercent">Brightness</label><output id="muted-brightnessPercent-value" for="muted-brightnessPercent">0%</output></div>
-                  <input id="muted-brightnessPercent" type="range" min="-100" max="100" step="1" value="0" aria-describedby="muted-brightnessPercent-hint muted-fit-hint" />
-                  <p id="muted-brightnessPercent-hint" class="control-hint">Dim below or brighten above the baseline. Zero keeps the existing brightness; −100 makes the indicator invisible.</p>
-                  <button type="button" id="reset-muted-brightnessPercent" data-reset="muted-brightnessPercent" class="reset value-reset">Reset brightness</button>
-                </div>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="muted-driftPercent">Drift</label><output id="muted-driftPercent-value" for="muted-driftPercent">100%</output></div>
-                  <input id="muted-driftPercent" type="range" min="0" max="300" step="1" value="100" aria-describedby="muted-driftPercent-hint muted-fit-hint" />
-                  <p id="muted-driftPercent-hint" class="control-hint">Strength of the floating or rippling movement.</p>
-                  <button type="button" id="reset-muted-driftPercent" data-reset="muted-driftPercent" class="reset value-reset">Reset drift</button>
-                </div>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="muted-breathPercent">Breathing</label><output id="muted-breathPercent-value" for="muted-breathPercent">0%</output></div>
-                  <input id="muted-breathPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="muted-breathPercent-hint muted-fit-hint" />
-                  <p id="muted-breathPercent-hint" class="control-hint">Strength of the gentle size and brightness change.</p>
-                  <button type="button" id="reset-muted-breathPercent" data-reset="muted-breathPercent" class="reset value-reset">Reset breathing</button>
-                </div>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="muted-cycleSeconds">Cycle (s)</label><output id="muted-cycleSeconds-value" for="muted-cycleSeconds">14 s</output></div>
-                  <input id="muted-cycleSeconds" type="range" min="6" max="30" step="1" value="14" aria-describedby="muted-cycleSeconds-hint muted-fit-hint" />
-                  <p id="muted-cycleSeconds-hint" class="control-hint">Time for one complete motion cycle.</p>
-                  <button type="button" id="reset-muted-cycleSeconds" data-reset="muted-cycleSeconds" class="reset value-reset">Reset cycle</button>
-                </div>
-                <button type="button" id="reset-muted-appearance" data-reset="muted-appearance" class="reset value-reset">Reset indicator appearance</button>
-              </fieldset>
-              <p id="session-style-hint" class="control-hint">Theme and center indicator choices last for this preview session. Save profile keeps layout tuning.</p>
-              <fieldset class="trace-controls">
+            <fieldset class="appearance-panel">
+              <legend class="panel-title">Appearance</legend>
+              <p class="control-hint scope-explanation">Shared choices follow both orientations. Customize an orientation to keep its own appearance; unchecking returns it to the shared choice.</p>
+              <fieldset class="scope-group">
                 <legend class="subpanel-title">Traces</legend>
+                <div class="scope-row">
+                  <span id="scope-traces" class="scope-badge">Shared</span>
+                  <label class="scope-customize">
+                    <input type="checkbox" id="override-traces" />
+                    <span id="override-traces-label">Customize current orientation</span>
+                  </label>
+                </div>
                 <div class="mixing">
                   <label for="trace-pattern">Route</label>
-                  <select id="trace-pattern" aria-describedby="composition-hint"><option value="parallel">Parallel</option><option value="splayed">Splayed</option><option value="circuit">Circuit</option></select>
+                  <select id="trace-pattern" aria-describedby="composition-hint">
+                    <option value="parallel">Parallel</option>
+                    <option value="splayed">Splayed</option>
+                    <option value="circuit">Circuit</option>
+                  </select>
                 </div>
                 <p id="composition-hint" class="control-hint">Traces reach the selected Persona size and position.</p>
                 <p id="original-traces-hint" class="control-hint">Original shares one connection envelope across its state sizes; smaller states can sit farther from the traces.</p>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-stancePercent">Stance</label><output id="trace-stancePercent-value" for="trace-stancePercent">100%</output></div>
+                  <div class="size-heading">
+                    <label for="trace-stancePercent">Stance</label>
+                    <output id="trace-stancePercent-value" for="trace-stancePercent">100%</output>
+                  </div>
                   <input id="trace-stancePercent" type="range" min="75" max="150" step="1" value="100" />
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-personaSpacingPercent">Persona contact spacing</label><output id="trace-personaSpacingPercent-value" for="trace-personaSpacingPercent">100%</output></div>
+                  <div class="size-heading">
+                    <label for="trace-personaSpacingPercent">Persona contact spacing</label>
+                    <output id="trace-personaSpacingPercent-value" for="trace-personaSpacingPercent">100%</output>
+                  </div>
                   <input id="trace-personaSpacingPercent" type="range" min="50" max="200" step="1" value="100" aria-describedby="persona-spacing-hint" />
                   <p id="persona-spacing-hint" class="control-hint">Space between neighboring contacts in each bundle. At extreme Persona sizes, safety clearance can limit spacing.</p>
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-footSpacingPercent">Button foot spacing</label><output id="trace-footSpacingPercent-value" for="trace-footSpacingPercent">100%</output></div>
+                  <div class="size-heading">
+                    <label for="trace-footSpacingPercent">Button foot spacing</label>
+                    <output id="trace-footSpacingPercent-value" for="trace-footSpacingPercent">100%</output>
+                  </div>
                   <input id="trace-footSpacingPercent" type="range" min="50" max="200" step="1" value="100" aria-describedby="foot-spacing-hint" />
                   <p id="foot-spacing-hint" class="control-hint">Space between neighboring feet in each button-side bundle.</p>
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-weightPercent">Trace weight</label><output id="trace-weightPercent-value" for="trace-weightPercent">100%</output></div>
+                  <div class="size-heading">
+                    <label for="trace-weightPercent">Trace weight</label>
+                    <output id="trace-weightPercent-value" for="trace-weightPercent">100%</output>
+                  </div>
                   <input id="trace-weightPercent" type="range" min="50" max="250" step="1" value="100" />
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-offshootPercent">Offshoots</label><output id="trace-offshootPercent-value" for="trace-offshootPercent">Off</output></div>
+                  <div class="size-heading">
+                    <label for="trace-offshootPercent">Offshoots</label>
+                    <output id="trace-offshootPercent-value" for="trace-offshootPercent">Off</output>
+                  </div>
                   <input id="trace-offshootPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="offshoot-hint" />
                   <p id="offshoot-hint" class="control-hint">Lighter routes branch in other directions.</p>
                 </div>
                 <p id="trace-tip-baseline-hint" class="control-hint">Baseline: reach 0 dp, fade 12 dp and tip opacity 0%. The tip fades from transparent at the join to 72% at 2 dp and full opacity at 12 dp.</p>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-reachDp">Reach into Persona</label><output id="trace-reachDp-value" for="trace-reachDp">0 dp</output></div>
+                  <div class="size-heading">
+                    <label for="trace-reachDp">Reach into Persona</label>
+                    <output id="trace-reachDp-value" for="trace-reachDp">0 dp</output>
+                  </div>
                   <input id="trace-reachDp" type="range" min="-40" max="120" step="1" value="0" aria-describedby="trace-reachDp-hint trace-tip-baseline-hint" />
                   <p id="trace-reachDp-hint" class="control-hint">Positive reaches farther under Persona; negative pulls back from the existing join.</p>
                   <button type="button" id="reset-trace-reachDp" data-reset="trace-reachDp" class="reset value-reset">Reset reach into persona</button>
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-fadeLengthDp">Fade length</label><output id="trace-fadeLengthDp-value" for="trace-fadeLengthDp">12 dp</output></div>
+                  <div class="size-heading">
+                    <label for="trace-fadeLengthDp">Fade length</label>
+                    <output id="trace-fadeLengthDp-value" for="trace-fadeLengthDp">12 dp</output>
+                  </div>
                   <input id="trace-fadeLengthDp" type="range" min="0" max="80" step="1" value="12" aria-describedby="trace-fadeLengthDp-hint trace-tip-baseline-hint" />
                   <p id="trace-fadeLengthDp-hint" class="control-hint">Distance over which the tip reaches full opacity. Zero gives a hard end.</p>
                   <button type="button" id="reset-trace-fadeLengthDp" data-reset="trace-fadeLengthDp" class="reset value-reset">Reset fade length</button>
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-tipOpacityPercent">Tip opacity</label><output id="trace-tipOpacityPercent-value" for="trace-tipOpacityPercent">0%</output></div>
+                  <div class="size-heading">
+                    <label for="trace-tipOpacityPercent">Tip opacity</label>
+                    <output id="trace-tipOpacityPercent-value" for="trace-tipOpacityPercent">0%</output>
+                  </div>
                   <input id="trace-tipOpacityPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="trace-tipOpacityPercent-hint trace-tip-baseline-hint" />
                   <p id="trace-tipOpacityPercent-hint" class="control-hint">Minimum opacity at the tip. Increase it to keep more of the trace visible at the join.</p>
                   <button type="button" id="reset-trace-tipOpacityPercent" data-reset="trace-tipOpacityPercent" class="reset value-reset">Reset tip opacity</button>
                 </div>
                 <button type="button" id="reset-traces" data-reset="traces" class="reset value-reset">Reset traces</button>
+              </fieldset>
+              <fieldset class="scope-group">
+                <legend class="subpanel-title">Background glow</legend>
+                <div class="scope-row">
+                  <span id="scope-glow" class="scope-badge">Shared</span>
+                  <label class="scope-customize">
+                    <input type="checkbox" id="override-glow" />
+                    <span id="override-glow-label">Customize current orientation</span>
+                  </label>
+                </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="trace-glowPercent">Background glow</label><output id="trace-glowPercent-value" for="trace-glowPercent">Off</output></div>
+                  <div class="size-heading">
+                    <label for="trace-glowPercent">Background glow</label>
+                    <output id="trace-glowPercent-value" for="trace-glowPercent">Off</output>
+                  </div>
                   <input id="trace-glowPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="glow-hint" />
                   <p id="glow-hint" class="control-hint">A dim, slowly breathing glow behind the scene. Still with reduced motion.</p>
                 </div>
                 <button type="button" id="reset-glow" data-reset="glow" class="reset value-reset">Reset glow</button>
               </fieldset>
-              <fieldset class="motion-controls"><legend class="subpanel-title">Button light</legend>
+              <fieldset class="scope-group">
+                <legend class="subpanel-title">Halo appearance</legend>
+                <div class="scope-row">
+                  <span id="scope-halo" class="scope-badge">Shared</span>
+                  <label class="scope-customize">
+                    <input type="checkbox" id="override-halo" />
+                    <span id="override-halo-label">Customize current orientation</span>
+                  </label>
+                </div>
+                <div class="mixing">
+                  <label for="halo-variant">Halo</label>
+                  <select id="halo-variant">
+                    <option value="original">Original</option>
+                    <option value="contained">Contained</option>
+                  </select>
+                </div>
+                <div id="contained-controls" hidden>
+                  <fieldset class="motion-controls">
+                    <legend class="subpanel-title">Motion</legend>
+                    <div class="motion-control">
+                      <div class="size-heading">
+                        <label for="ringSpreadPercent">Ring spread</label>
+                        <output id="ringSpreadPercent-value" for="ringSpreadPercent">35%</output>
+                      </div>
+                      <input id="ringSpreadPercent" type="range" min="0" max="100" step="1" value="35" />
+                    </div>
+                    <div class="motion-control">
+                      <div class="size-heading">
+                        <label for="listeningPulsePercent">Listening pulse</label>
+                        <output id="listeningPulsePercent-value" for="listeningPulsePercent">25%</output>
+                      </div>
+                      <input id="listeningPulsePercent" type="range" min="0" max="100" step="1" value="25" />
+                    </div>
+                    <div class="motion-control">
+                      <div class="size-heading">
+                        <label for="speakingMotionPercent">Speaking motion</label>
+                        <output id="speakingMotionPercent-value" for="speakingMotionPercent">25%</output>
+                      </div>
+                      <input id="speakingMotionPercent" type="range" min="0" max="100" step="1" value="25" />
+                    </div>
+                    <div class="motion-control">
+                      <div class="size-heading">
+                        <label for="idleBreathingPercent">Idle breathing</label>
+                        <output id="idleBreathingPercent-value" for="idleBreathingPercent">25%</output>
+                      </div>
+                      <input id="idleBreathingPercent" type="range" min="0" max="100" step="1" value="25" />
+                    </div>
+                    <button type="button" id="reset-animation" data-reset="animation" class="reset value-reset">Reset animation</button>
+                  </fieldset>
+                  <fieldset class="color-controls">
+                    <legend class="subpanel-title">Color</legend>
+                    <div class="color-grid">
+                      <label class="color-choice" for="color-speaking">
+                        <span>Speaking</span>
+                        <input id="color-speaking" type="color" value="#bbaaff" />
+                        <output id="color-speaking-value" for="color-speaking">#bbaaff</output>
+                      </label>
+                      <label class="color-choice" for="color-listening">
+                        <span>Listening</span>
+                        <input id="color-listening" type="color" value="#d4ff72" />
+                        <output id="color-listening-value" for="color-listening">#d4ff72</output>
+                      </label>
+                      <label class="color-choice" for="color-idle">
+                        <span>Idle</span>
+                        <input id="color-idle" type="color" value="#f0f2e9" />
+                        <output id="color-idle-value" for="color-idle">#f0f2e9</output>
+                      </label>
+                    </div>
+                    <button type="button" id="reset-colors" data-reset="colors" class="reset value-reset">Reset colors</button>
+                  </fieldset>
+                </div>
+              </fieldset>
+              <fieldset class="scope-group">
+                <legend class="subpanel-title">Light and color behavior</legend>
+                <div class="scope-row">
+                  <span id="scope-spirit" class="scope-badge">Shared</span>
+                  <label class="scope-customize">
+                    <input type="checkbox" id="override-spirit" />
+                    <span id="override-spirit-label">Customize current orientation</span>
+                  </label>
+                </div>
                 <div class="mixing">
                   <label for="spirit-surface">Light</label>
-                  <select id="spirit-surface"><option value="still">Still</option><option value="soft">Soft</option></select>
+                  <select id="spirit-surface">
+                    <option value="still">Still</option>
+                    <option value="soft">Soft</option>
+                  </select>
                 </div>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="spirit-strength">Strength</label><output id="spirit-strength-value" for="spirit-strength">35%</output></div>
+                  <div class="size-heading">
+                    <label for="spirit-strength">Strength</label>
+                    <output id="spirit-strength-value" for="spirit-strength">35%</output>
+                  </div>
                   <input id="spirit-strength" type="range" min="0" max="100" step="1" value="35" />
                 </div>
                 <button type="button" id="reset-light" data-reset="light" class="reset value-reset">Reset light</button>
-              </fieldset>
-
-              <fieldset class="motion-controls"><legend class="subpanel-title">Spacing</legend>
-                <div class="motion-control">
-                  <div class="size-heading"><label for="spacing-paddingDp">Padding</label><output id="spacing-paddingDp-value" for="spacing-paddingDp">16 dp</output></div>
-                  <input id="spacing-paddingDp" type="range" min="0" max="40" step="1" value="16" aria-describedby="spacing-paddingDp-hint portrait-spacing-hint" />
-                  <p id="spacing-paddingDp-hint" class="control-hint">One amount for minimum outer control space and gaps between buttons. Custom preserves previously saved spacing until you adjust it.</p>
-                  <p id="portrait-spacing-hint" class="control-hint" hidden>Portrait keeps controls inside the visible safe area. Use Persona vertical position to adjust the space above the controls.</p>
-                  <button type="button" id="reset-spacing-paddingDp" data-reset="spacing-paddingDp" class="reset value-reset">Reset padding</button>
+                <div class="mixing">
+                  <label for="spirit-persona">Persona color</label>
+                  <select id="spirit-persona">
+                    <option value="fixed">Fixed</option>
+                    <option value="follow">Follow channels</option>
+                  </select>
                 </div>
-                <div id="section-separation-row" class="motion-control" hidden>
-                  <div class="size-heading"><label for="spacing-sectionGapDp">Section separation</label><output id="spacing-sectionGapDp-value" for="spacing-sectionGapDp">0 dp</output></div>
-                  <input id="spacing-sectionGapDp" type="range" min="0" max="80" step="1" value="0" aria-describedby="spacing-sectionGapDp-hint" />
-                  <p id="spacing-sectionGapDp-hint" class="control-hint">Minimum extra separation between Persona and controls.</p>
-                  <button type="button" id="reset-spacing-sectionGapDp" data-reset="spacing-sectionGapDp" class="reset value-reset">Reset section separation</button>
-                </div>
-                <button type="button" id="reset-spacing" data-reset="spacing" class="reset value-reset">Reset spacing</button>
+                <button type="button" id="reset-spirit-colors" data-reset="spirit-colors" class="reset value-reset">Reset color behavior</button>
               </fieldset>
-              <div class="size-control">
-                <div class="size-heading"><label for="controls-height">Controls height</label><output id="controls-height-value" for="controls-height">262 dp</output></div>
-                <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
-                <div class="range-ends"><span>240 dp</span><span id="controls-height-hint">All three buttons</span><span>480 dp</span></div>
-              </div>
-              <div class="position-control">
-                <div class="size-heading"><label for="hold-share">Push-to-talk share</label><output id="hold-share-value" for="hold-share">44.3%</output></div>
-                <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint" />
-                <div class="range-ends"><span>30%</span><span id="hold-share-hint">Of controls height</span><span>60%</span></div>
-              </div>
-              <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
             </fieldset>
-            <fieldset class="persona-controls">
-              <legend class="panel-title">Persona</legend>
-              <div class="mixing">
-                <label for="halo-variant">Halo</label>
-                <select id="halo-variant"><option value="original">Original</option><option value="contained">Contained</option></select>
-              </div>
-              <div class="mixing connection-preview">
-                <label for="connection-preview">Preview connection</label>
-                <select id="connection-preview"><option value="connected">Connected</option><option value="connecting">Connecting</option><option value="disconnected">Disconnected</option></select>
-              </div>
-              <div class="mixing">
-                <label for="preview-activity">Preview activity</label>
-                <select id="preview-activity" aria-describedby="activity-hint"><option value="steady">Steady</option><option value="voice">Synthetic voice</option></select>
-              </div>
-              <p id="activity-hint" class="control-hint">Simulated activity only. No microphone or playback.</p>
-              <fieldset class="modes">
-                <legend class="sr-only">Preview state</legend>
-                <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
-                <button type="button" data-mode="listening" aria-pressed="false"><span>Listening</span><small id="listening-value">58%</small></button>
-                <button type="button" data-mode="idle" aria-pressed="false"><span>Idle</span><small id="idle-value">78%</small></button>
-              </fieldset>
-              <div class="size-control">
-                <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
-                <input id="size" type="range" min="35" max="120" step="1" value="78" aria-describedby="size-hint" />
-                <div class="range-ends"><span>35%</span><span id="size-hint">Independent size for each state</span><span>120%</span></div>
-                <button type="button" id="reset-size" data-reset="size" class="reset value-reset">Reset size</button>
-              </div>
-              <div class="position-control">
-                <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
-                <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
-                <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
-                <button type="button" id="reset-position" data-reset="position" class="reset value-reset">Reset position</button>
-              </div>
-              <div id="contained-controls" hidden>
-                <fieldset class="motion-controls"><legend class="subpanel-title">Motion</legend>
-                  <div class="motion-control">
-                    <div class="size-heading"><label for="ringSpreadPercent">Ring spread</label><output id="ringSpreadPercent-value" for="ringSpreadPercent">35%</output></div>
-                    <input id="ringSpreadPercent" type="range" min="0" max="100" step="1" value="35" />
+            <div class="layout-session-column">
+              <fieldset class="local-layout">
+                <legend class="panel-title">Layout</legend>
+                <p class="scope-badge" id="local-layout-scope">Current orientation only</p>
+                <p class="control-hint scope-explanation">Persona size, position and button layout apply only to the orientation shown on the phone.</p>
+                <div class="size-control">
+                  <div class="size-heading">
+                    <label id="size-label" for="size">Speaking size</label>
+                    <output id="size-value" for="size">
+78                      <span>%</span>
+                    </output>
                   </div>
-                  <div class="motion-control">
-                    <div class="size-heading"><label for="listeningPulsePercent">Listening pulse</label><output id="listeningPulsePercent-value" for="listeningPulsePercent">25%</output></div>
-                    <input id="listeningPulsePercent" type="range" min="0" max="100" step="1" value="25" />
+                  <input id="size" type="range" min="35" max="120" step="1" value="78" aria-describedby="size-hint" />
+                  <div class="range-ends">
+                    <span>35%</span>
+                    <span id="size-hint">Independent size for each state</span>
+                    <span>120%</span>
                   </div>
-                  <div class="motion-control">
-                    <div class="size-heading"><label for="speakingMotionPercent">Speaking motion</label><output id="speakingMotionPercent-value" for="speakingMotionPercent">25%</output></div>
-                    <input id="speakingMotionPercent" type="range" min="0" max="100" step="1" value="25" />
+                  <button type="button" id="reset-size" data-reset="size" class="reset value-reset">Reset size</button>
+                </div>
+                <div class="position-control">
+                  <div class="size-heading">
+                    <label for="position" id="position-label">Vertical position</label>
+                    <output id="position-value" for="position">
++35                      <span>dp</span>
+                    </output>
                   </div>
-                  <div class="motion-control">
-                    <div class="size-heading"><label for="idleBreathingPercent">Idle breathing</label><output id="idleBreathingPercent-value" for="idleBreathingPercent">25%</output></div>
-                    <input id="idleBreathingPercent" type="range" min="0" max="100" step="1" value="25" />
+                  <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
+                  <div class="range-ends">
+                    <span id="position-min-label">−200 (up)</span>
+                    <span id="position-hint">All states</span>
+                    <span id="position-max-label">+200 (down)</span>
                   </div>
-                  <button type="button" id="reset-animation" data-reset="animation" class="reset value-reset">Reset animation</button>
+                  <button type="button" id="reset-position" data-reset="position" class="reset value-reset">Reset position</button>
+                </div>
+                <fieldset class="motion-controls">
+                  <legend class="subpanel-title">Spacing</legend>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="spacing-paddingDp">Padding</label>
+                      <output id="spacing-paddingDp-value" for="spacing-paddingDp">16 dp</output>
+                    </div>
+                    <input id="spacing-paddingDp" type="range" min="0" max="40" step="1" value="16" aria-describedby="spacing-paddingDp-hint portrait-spacing-hint" />
+                    <p id="spacing-paddingDp-hint" class="control-hint">One amount for minimum outer control space and gaps between buttons. Custom preserves previously saved spacing until you adjust it.</p>
+                    <p id="portrait-spacing-hint" class="control-hint" hidden>Portrait keeps controls inside the visible safe area. Use Persona vertical position to adjust the space above the controls.</p>
+                    <button type="button" id="reset-spacing-paddingDp" data-reset="spacing-paddingDp" class="reset value-reset">Reset padding</button>
+                  </div>
+                  <div id="section-separation-row" class="motion-control" hidden>
+                    <div class="size-heading">
+                      <label for="spacing-sectionGapDp">Section separation</label>
+                      <output id="spacing-sectionGapDp-value" for="spacing-sectionGapDp">0 dp</output>
+                    </div>
+                    <input id="spacing-sectionGapDp" type="range" min="0" max="80" step="1" value="0" aria-describedby="spacing-sectionGapDp-hint" />
+                    <p id="spacing-sectionGapDp-hint" class="control-hint">Minimum extra separation between Persona and controls.</p>
+                    <button type="button" id="reset-spacing-sectionGapDp" data-reset="spacing-sectionGapDp" class="reset value-reset">Reset section separation</button>
+                  </div>
+                  <button type="button" id="reset-spacing" data-reset="spacing" class="reset value-reset">Reset spacing</button>
                 </fieldset>
-                <fieldset class="color-controls"><legend class="subpanel-title">Color</legend>
+                <div class="size-control">
+                  <div class="size-heading">
+                    <label for="controls-height">Controls height</label>
+                    <output id="controls-height-value" for="controls-height">262 dp</output>
+                  </div>
+                  <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
+                  <div class="range-ends">
+                    <span>240 dp</span>
+                    <span id="controls-height-hint">All three buttons</span>
+                    <span>480 dp</span>
+                  </div>
+                </div>
+                <div class="position-control">
+                  <div class="size-heading">
+                    <label for="hold-share">Push-to-talk share</label>
+                    <output id="hold-share-value" for="hold-share">44.3%</output>
+                  </div>
+                  <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint" />
+                  <div class="range-ends">
+                    <span>30%</span>
+                    <span id="hold-share-hint">Of controls height</span>
+                    <span>60%</span>
+                  </div>
+                </div>
+                <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
+              </fieldset>
+              <fieldset class="shared-session">
+                <legend class="panel-title">Shared session</legend>
+                <p class="scope-badge">Both orientations</p>
+                <p class="control-hint scope-explanation" id="session-style-hint">Theme, synthetic state and center indicator apply across orientations for this session. They are not saved.</p>
+                <div class="mixing">
+                  <label for="preview-theme">Theme</label>
+                  <select id="preview-theme" aria-describedby="session-style-hint">
+                    <option value="bright">Bright</option>
+                    <option value="quiet">Quiet</option>
+                    <option value="grayscale">Grayscale</option>
+                  </select>
+                </div>
+                <div class="mixing connection-preview">
+                  <label for="connection-preview">Preview connection</label>
+                  <select id="connection-preview">
+                    <option value="connected">Connected</option>
+                    <option value="connecting">Connecting</option>
+                    <option value="disconnected">Disconnected</option>
+                  </select>
+                </div>
+                <div class="mixing">
+                  <label for="preview-activity">Preview activity</label>
+                  <select id="preview-activity" aria-describedby="activity-hint">
+                    <option value="steady">Steady</option>
+                    <option value="voice">Synthetic voice</option>
+                  </select>
+                </div>
+                <p id="activity-hint" class="control-hint">Simulated activity only. No microphone or playback.</p>
+                <fieldset class="modes">
+                  <legend class="sr-only">Preview state</legend>
+                  <button type="button" data-mode="speaking" aria-pressed="false">
+                    <span>Speaking</span>
+                    <small id="speaking-value">78%</small>
+                  </button>
+                  <button type="button" data-mode="listening" aria-pressed="false">
+                    <span>Listening</span>
+                    <small id="listening-value">58%</small>
+                  </button>
+                  <button type="button" data-mode="idle" aria-pressed="false">
+                    <span>Idle</span>
+                    <small id="idle-value">78%</small>
+                  </button>
+                </fieldset>
+                <div class="mixing">
+                  <label for="muted-presence">Center indicator</label>
+                  <select id="muted-presence" aria-describedby="session-style-hint">
+                    <option value="off">Off</option>
+                    <option value="tide">Tide (original)</option>
+                    <option value="words">Words</option>
+                    <option value="channels">Channel icons</option>
+                    <option value="labeled">Icons + words</option>
+                    <option value="contacts">Contacts</option>
+                  </select>
+                </div>
+                <div id="presence-scope-row" class="mixing" hidden>
+                  <label for="presence-scope">Show</label>
+                  <select id="presence-scope">
+                    <option value="both-muted">Both muted</option>
+                    <option value="any-muted">Either muted</option>
+                    <option value="always">Always</option>
+                  </select>
+                </div>
+                <p id="presence-contacts-hint" class="control-hint" hidden>Human left, agent right. Joined contacts are live; a lifted contact is muted.</p>
+                <fieldset id="muted-appearance" class="motion-controls">
+                  <legend class="subpanel-title">Indicator appearance</legend>
+                  <p id="muted-fit-hint" class="control-hint">Larger text, icons and motion may be limited to fit inside Persona. These choices last for this preview session and are not saved.</p>
                   <div class="mixing">
-                    <label for="spirit-persona">Persona color</label>
-                    <select id="spirit-persona"><option value="fixed">Fixed</option><option value="follow">Follow channels</option></select>
+                    <label for="muted-motion">Motion</label>
+                    <select id="muted-motion">
+                      <option value="float">Float</option>
+                      <option value="ripple">Ripple</option>
+                    </select>
                   </div>
-                  <button type="button" id="reset-spirit-colors" data-reset="spirit-colors" class="reset value-reset">Reset color behavior</button>
-                  <div class="color-grid">
-                    <label class="color-choice" for="color-speaking"><span>Speaking</span><input id="color-speaking" type="color" value="#bbaaff" /><output id="color-speaking-value" for="color-speaking">#bbaaff</output></label>
-                    <label class="color-choice" for="color-listening"><span>Listening</span><input id="color-listening" type="color" value="#d4ff72" /><output id="color-listening-value" for="color-listening">#d4ff72</output></label>
-                    <label class="color-choice" for="color-idle"><span>Idle</span><input id="color-idle" type="color" value="#f0f2e9" /><output id="color-idle-value" for="color-idle">#f0f2e9</output></label>
+                  <button type="button" id="reset-muted-motion" data-reset="muted-motion" class="reset value-reset">Reset motion</button>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="muted-textSizeSp">Size</label>
+                      <output id="muted-textSizeSp-value" for="muted-textSizeSp">14 sp</output>
+                    </div>
+                    <input id="muted-textSizeSp" type="range" min="12" max="32" step="1" value="14" aria-describedby="muted-textSizeSp-hint muted-fit-hint" />
+                    <p id="muted-textSizeSp-hint" class="control-hint">Preferred text or icon size. Status indicators fit down when needed to stay inside Persona.</p>
+                    <button type="button" id="reset-muted-textSizeSp" data-reset="muted-textSizeSp" class="reset value-reset">Reset size</button>
                   </div>
-                  <button type="button" id="reset-colors" data-reset="colors" class="reset value-reset">Reset colors</button>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="muted-brightnessPercent">Brightness</label>
+                      <output id="muted-brightnessPercent-value" for="muted-brightnessPercent">0%</output>
+                    </div>
+                    <input id="muted-brightnessPercent" type="range" min="-100" max="100" step="1" value="0" aria-describedby="muted-brightnessPercent-hint muted-fit-hint" />
+                    <p id="muted-brightnessPercent-hint" class="control-hint">Dim below or brighten above the baseline. Zero keeps the existing brightness; −100 makes the indicator invisible.</p>
+                    <button type="button" id="reset-muted-brightnessPercent" data-reset="muted-brightnessPercent" class="reset value-reset">Reset brightness</button>
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="muted-driftPercent">Drift</label>
+                      <output id="muted-driftPercent-value" for="muted-driftPercent">100%</output>
+                    </div>
+                    <input id="muted-driftPercent" type="range" min="0" max="300" step="1" value="100" aria-describedby="muted-driftPercent-hint muted-fit-hint" />
+                    <p id="muted-driftPercent-hint" class="control-hint">Strength of the floating or rippling movement.</p>
+                    <button type="button" id="reset-muted-driftPercent" data-reset="muted-driftPercent" class="reset value-reset">Reset drift</button>
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="muted-breathPercent">Breathing</label>
+                      <output id="muted-breathPercent-value" for="muted-breathPercent">0%</output>
+                    </div>
+                    <input id="muted-breathPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="muted-breathPercent-hint muted-fit-hint" />
+                    <p id="muted-breathPercent-hint" class="control-hint">Strength of the gentle size and brightness change.</p>
+                    <button type="button" id="reset-muted-breathPercent" data-reset="muted-breathPercent" class="reset value-reset">Reset breathing</button>
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="muted-cycleSeconds">Cycle (s)</label>
+                      <output id="muted-cycleSeconds-value" for="muted-cycleSeconds">14 s</output>
+                    </div>
+                    <input id="muted-cycleSeconds" type="range" min="6" max="30" step="1" value="14" aria-describedby="muted-cycleSeconds-hint muted-fit-hint" />
+                    <p id="muted-cycleSeconds-hint" class="control-hint">Time for one complete motion cycle.</p>
+                    <button type="button" id="reset-muted-cycleSeconds" data-reset="muted-cycleSeconds" class="reset value-reset">Reset cycle</button>
+                  </div>
+                  <button type="button" id="reset-muted-appearance" data-reset="muted-appearance" class="reset value-reset">Reset indicator appearance</button>
                 </fieldset>
-              </div>
-            </fieldset>
+              </fieldset>
+            </div>
           </div>
-          <div class="actions"><button type="button" id="save" class="save">Save profile</button></div>
+          <div class="actions">
+            <button type="button" id="save" class="save">Save profile</button>
+          </div>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>

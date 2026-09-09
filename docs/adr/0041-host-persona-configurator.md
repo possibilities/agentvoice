@@ -71,7 +71,7 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 14 on the phone, then
+checks the observed revision, atomically stores version 15 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
@@ -81,7 +81,7 @@ retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
 Versions 9–11 retain their compatible layout settings; all earlier versions gain
-only baseline scene spacing in memory. Older profiles become version 14 only on explicit Save. Production still
+only baseline scene spacing in memory. Older profiles become version 15 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -443,3 +443,40 @@ The existing aperture and 8 dp clearance stay unchanged; impossibly small spaces
 still omit the optional indicator. Tide keeps its previous behavior. Stored size,
 brightness, motion, scope and geometry are untouched, and this needs no protocol
 or profile migration.
+
+
+## Shared appearance with explicit orientation overrides
+
+Protocol 17/profile 15 separates appearance scope from local geometry. Four
+shared groups contain trace settings except glow, glow, Halo appearance except
+size, and spirit lighting/color response. Each layout stores a sorted unique
+override-group list. Root state reports the effective current layout, other
+layout, common appearance and their saved/default counterparts. The browser
+submits effective current fields plus scope flags; it never writes arbitrary
+common-base metadata or selects an unseen orientation.
+
+A shared-to-shared edit updates the common base and every inheriting layout.
+Turning an override on snapshots the preceding effective group, ignoring
+proposed group values in that toggle request. Turning it off adopts the existing
+common base, also ignoring stale local values. Subsequent local edits cannot
+change the common base or the other orientation. Common appearance can remain
+stored even when both layouts override it. Save captures both effective layouts,
+common data and scopes atomically under the existing revision/orientation fences.
+
+Appearance resets use common defaults in their current scope; sizes, axes, deck
+and spacing use orientation defaults. Theme/indicator remain shared session-only
+choices. Default/new layouts share portrait's provisional appearance. Legacy
+profiles derive common appearance from portrait; each old landscape group
+inherits if equal to the canonical legacy defaults or common values, otherwise
+its values survive as an explicit override. Loading never rewrites saved files.
+
+Each layout also gains horizontalOffsetDp (−200..200, default 0). Portrait uses
+its existing vertical offset; landscape uses horizontal offset and retains its
+old vertical value without rendering it. The stage, Persona and center indicator
+move together; traces use the actual center while retaining a stable routing
+lane. Controls do not move. The scalar interpolates with the existing rotation
+geometry; it introduces no renderer recreation or independent animation clock.
+
+Debug phone replies now have a 16 KiB bound and profile text an 8 KiB bound to
+carry the explicit common data and save receipt. Incoming preview requests remain
+8 KiB. Production transports and release code are unchanged.

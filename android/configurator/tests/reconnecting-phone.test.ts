@@ -2,7 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import { defaultDesign } from "../src/design.ts";
 import { defaultHalo } from "../src/halo.ts";
 import { defaultMutedTuning } from "../src/muted-presence.ts";
-import { defaultLandscapeLayout, type PhoneState } from "../src/protocol.ts";
+import {
+  defaultLandscapeLayout,
+  defaultSharedAppearance,
+  type PhoneState,
+} from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 import { defaultSpirit } from "../src/spirit.ts";
 import { defaultTraces } from "../src/traces.ts";
@@ -17,7 +21,15 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 16,
+    protocol: 17,
+    horizontalOffsetDp: 0,
+    savedHorizontalOffsetDp: 0,
+    defaultHorizontalOffsetDp: 0,
+    appearanceOverrides: ["glow", "halo", "spirit", "traces"],
+    savedAppearanceOverrides: [],
+    sharedAppearance: defaultSharedAppearance(),
+    savedSharedAppearance: defaultSharedAppearance(),
+    defaultSharedAppearance: defaultSharedAppearance(),
     presenceScope: "any-muted",
     mutedTuning: defaultMutedTuning(),
     theme: "bright",

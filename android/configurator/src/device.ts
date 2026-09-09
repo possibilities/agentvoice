@@ -72,10 +72,10 @@ export class PhoneConnection implements Phone {
       while (true) {
         const end = this.buffer.indexOf(10);
         if (end === -1) {
-          if (this.buffer.length >= 8192) throw Error("Oversized frame");
+          if (this.buffer.length >= 16384) throw Error("Oversized frame");
           return;
         }
-        if (end >= 8192) throw Error("Oversized frame");
+        if (end >= 16384) throw Error("Oversized frame");
         const message = record(JSON.parse(this.buffer.subarray(0, end).toString("utf8")));
         this.buffer = this.buffer.subarray(end + 1);
         const id = integer(message["id"], 1);

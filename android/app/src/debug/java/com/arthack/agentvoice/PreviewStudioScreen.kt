@@ -44,10 +44,11 @@ internal fun PreviewStudioScreen(
     mutedPresence: String = "tide",
     mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
     presenceScope: String = "any-muted",
+    horizontalOffsetDp: Int = 0,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp)
     }
 }
 
@@ -56,7 +57,7 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
@@ -81,8 +82,8 @@ private fun PreviewStudioScene(
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
-                portrait, design.controlsHeightDp.toFloat(), placement.offsetY.value, personaSide,
-                spacing = design.spacing, actualDeckHeight = deck.extentHeightDp)
+                portrait, design.controlsHeightDp.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
+                spacing = design.spacing, actualDeckHeight = deck.extentHeightDp, horizontalOffsetDp = horizontalOffsetDp.toFloat())
             var source by remember { mutableStateOf(target) }
             var destination by remember { mutableStateOf(target) }
             val progress = remember { Animatable(1f) }

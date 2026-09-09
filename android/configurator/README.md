@@ -2,16 +2,29 @@
 
 A separate host browser app for comparing native Android voice controls and
 tuning the existing Persona Halo. The phone renders the interactive demo;
-the browser holds separate Controls and Persona panels plus Save profile.
+the browser separates Appearance, orientation-local Layout and Shared session
+controls, plus Save profile.
 No tuning panel obscures the phone.
 
 Fresh portrait previews use provisional studio defaults: Contained at 78%,
 Original state sizes 78 / 56 / 78%, vertical offset −22 dp, controls height
 387 dp and Push-to-talk share 40.9%. Traces use Parallel, 130% stance, 175%
 weight, 88% offshoots, zero glow and 100% contact/foot spacing. Light is Still
-at 35%; Persona color follows channels. Landscape retains its independent
-baseline below. Existing saved profiles keep their choices; these experimental
-portrait defaults do not change the production app.
+at 35%; Persona color follows channels. Both orientations inherit this fresh
+appearance. Landscape keeps its local size and layout baseline below. These
+experimental defaults do not change the production app.
+
+Appearance has four groups: **Traces**, **Background glow**, **Halo appearance**
+(variant, motion and colors), and **Light and color behavior** (button light and
+Persona color response). Each shows **Shared** or **Portrait/Landscape only**.
+**Customize Portrait/Landscape** snapshots the current effective group for that
+orientation. Unchecking discards that local group and returns it to the existing
+shared choice. Editing a Shared group updates both inheriting orientations; an
+overridden orientation keeps its own choice. All trace properties, including
+reach, fade and contact/foot spacing, belong to the Traces group; glow is separate.
+Persona sizes, scales, positions, button dimensions, spacing and side always stay
+local to their orientation. Theme and synthetic session controls apply to both
+orientations but are never saved.
 
 Both mute buttons and **Push to talk** use Rockers. Press and keep the talk
 surface down to talk; release to mute. Active styling stays dark with focused
@@ -20,9 +33,9 @@ lime accents. There are no button-style, preset or header selectors.
 **Traces** is the fixed composition. **Route** compares Parallel (the baseline
 paired routes), Splayed (a wider fan of routes), and Circuit (staggered mechanical
 steps). **Stance** spans 75–150% of the baseline; **Trace weight** spans 50–250%,
-with 100% equal to 1.2 dp. Landscape starts both at 100%. **Offshoots** adds much lighter
+with 100% equal to 1.2 dp. **Offshoots** adds much lighter
 side and upward routes, independently of the selected pattern, from 0–100%.
-Landscape starts at zero. **Persona contact spacing** and **Button foot spacing** each
+**Persona contact spacing** and **Button foot spacing** each
 span 50–200%, default 100%. They separate neighboring traces within each bundle
 at its upper and lower ends; Stance moves the bundles themselves. Foot spacing
 remains fixed when stance hits a button edge. At large Persona sizes, protected
@@ -36,8 +49,8 @@ a hard end. **Tip opacity** spans 0–100% and lifts the minimum opacity at the 
 The defaults preserve the existing fade: reach 0 dp, fade length 12 dp and tip
 opacity 0%, yielding transparency at the join, 72% at 2 dp and full opacity at
 12 dp. Each control has an individual reset. **Reset traces** also resets all
-three, retaining Background glow. All three are independent per orientation and
-remain unsaved until explicit Save.
+three, retaining Background glow. These share the Traces group scope and remain
+unsaved until explicit Save.
 
 Routes now reach the selected Persona size and position instead of ending a
 fixed distance above the deck. Their geometry and soft clear aperture follow
@@ -45,7 +58,7 @@ settings, never animated pixels, and preserve the transparent center and native
 glow. Original uses one conservative attachment envelope across its three state
 sizes; a deliberately smaller state can sit farther from its routes. When that
 envelope reaches the deck, routes collapse and can disappear even while the
-current smaller ring remains above it. Contained's single shared size avoids
+current smaller ring remains above it. Contained's single size across states avoids
 that tradeoff. Contained now uses its nominal frame and maximum selected speaking
 expansion for a closer body boundary, with a 1 dp guard. Trace ink stays at 72%
 strength 2 dp outside that boundary and reaches full strength at 12 dp, making
@@ -127,14 +140,19 @@ size preserves that center, Halo diameter and saved tuning values.
 
 Landscape places a square Persona beside the existing Rocker deck. The deck
 scrolls independently if its requested height exceeds the viewport. Portrait
-and landscape have independent sizes, offsets, traces, colors, motion and light.
+and landscape have independent sizes and layout geometry; their appearance
+groups inherit shared choices unless explicitly customized. The position slider
+moves Persona vertically in portrait and horizontally in landscape. Both axes
+span−200 to200 dp; landscape preserves but does not render its historical
+vertical offset.
 Rotate the connected phone to edit that orientation: the browser follows its
 reported orientation and offers no orientation selector. Every edit and Save
 carries the observed orientation and rotation epoch as well as the host's peer
 generation; the host and phone refuse stale requests, including a round trip
 back to the same orientation. Queued browser drafts are dropped on rotation.
-Both layouts are stored on Save. Existing profiles remain portrait choices;
-landscape starts with independent baseline settings and zero vertical offset.
+Both effective layouts, their override flags and the shared base are stored on
+Save. Legacy portrait appearance seeds that base; untouched landscape appearance
+inherits it while explicit landscape differences stay local.
 The model supports swapping Persona and deck sides without mirroring icons or
 reordering HUMAN/AGENT. Its `personaSide` control is deliberately hidden for now.
 
@@ -200,32 +218,39 @@ envelopes; the production client does not yet use this experiment.
 Switching variants keeps each variant's settings. Resets affect only the named
 settings:
 
-- **Reset size** restores Contained's shared size or only the currently selected
+- **Reset size** restores Contained's orientation-local size or only the currently selected
   Original state's size.
-- **Reset position** restores −22 dp in portrait or 0 dp in landscape.
+- **Reset position** restores the active axis: −22 dp vertically in portrait or
+  0 dp horizontally in landscape. The other stored axis remains intact.
 - **Reset animation** restores only Ring spread, Listening pulse, Speaking motion
   and Idle breathing.
 - **Reset colors** restores only the three Contained colors.
 - **Reset light** restores Still and 35% without changing Persona color behavior.
-- **Reset color behavior** restores Follow channels in portrait or Fixed in landscape,
+- **Reset color behavior** restores the shared Follow channels default,
   without changing the chosen colors or light.
 - **Reset traces** restores the route, stance, weight and offshoots, preserving glow.
 - **Reset glow** restores only Background glow to zero.
 - **Reset spacing** restores only the active orientation's spacing values.
   Each individual spacing reset changes only its named field.
 
-Each reset preserves all other choices and remains unsaved until explicit Save.
+Appearance resets use the shared default group, including when the group has an
+orientation override. Size, axis, spacing and button-size resets use the active
+orientation defaults. Each reset preserves all other choices and remains unsaved
+until explicit Save.
 Save profile keeps the control design,
-all Halo sizes, motion, colors and the shared position.
+all Halo sizes, motion, colors and both local position axes.
 Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 14 profile atomically on the phone. Root geometry,
-`design`, `halo`, `spirit` and `personaSide` hold portrait; `landscape` holds the
-independent landscape layout (integer-percent `scales`, offset, design, Halo,
-spirit and side). Its root `design`
+Explicit Save writes a version 15 profile atomically on the phone. Root geometry,
+`design`, `halo`, `spirit` and `personaSide` hold effective portrait values;
+`landscape` holds effective landscape values (integer-percent `scales`, both
+offsets, design, Halo, spirit and side). Root and landscape each include sorted
+`appearanceOverrides`; root `sharedAppearance` stores the shared base. Both
+layouts and the shared snapshot must match the captured save request, even if
+the phone rotates before its receipt arrives. Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` and `spacing` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
@@ -238,7 +263,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–13 phone profiles remain readable without rewriting.
+until Save. Version 1–14 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -246,13 +271,21 @@ Halo sizes; versions 1–3 use the control geometry baseline. Stored position
 remains intact, with +35 dp when absent. Versions 4–10 retain saved control
 dimensions. Versions 1–4 select Original, while versions 5–10 retain their Halo variant,
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
-versions 7–10 keep their spirit settings. Version 11 preserves both existing layouts.
+versions 7–10 keep their spirit settings. Version11 preserves both existing layout geometries.
 All versions before 12 gain only baseline scene spacing in memory, without
-adopting the new portrait defaults. All profiles through version 12 migrate
+adopting new geometry defaults. All profiles through version 12 migrate
 to Custom padding in memory, keeping every previous spacing value. This also
 applies to an absent legacy landscape layout. Fresh layouts use unified 16 dp
 padding. Profiles through version 13 gain only the three baseline trace-tip defaults
-in memory, retaining all prior geometry and tuning. Older profiles become version 14 only on
+in memory. Sharing migration seeds the shared base from legacy portrait
+appearance. A legacy landscape group inherits when it equals either portrait or
+the old canonical defaults; any other group keeps an explicit landscape override.
+Old defaults mean Parallel, 100% stance/weight/contact/foot spacing, no offshoots
+or glow, reach/fade/tip 0/12/0, Original Halo with motion35/25/25/25 and the existing
+colors, and Still35/Fixed spirit. Halo size is excluded from this comparison. An
+absent landscape uses those canonical defaults and inherits portrait appearance.
+This migration changes only in-memory effective appearance and flags; local
+geometry and saved bytes remain intact. Older profiles become version15 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -271,8 +304,9 @@ The existing bundled IBM Plex Mono font is served under its [OFL](../fonts/OFL.t
 
 ADB forwards an ephemeral host port to a new abstract Unix socket owned by the
 debug preview. Its separate random token admits one peer at a time, including
-successive peers from the same host run. Frames are limited
-to 8 KiB; commands can only read preview state, select a bounded design,
+successive peers from the same host run. Incoming debug phone replies are
+limited to less than16 KiB; browser requests and outbound command bounds remain
+8 KiB. Profile parsing allows up to8 KiB. Commands can only read preview state, select a bounded design,
 select/resize/position Halo, or save its fixed private profile. The phone exposes
 no TCP listener. The bridge closes on
 activity stop and reopens on return using the same binding retained in private
@@ -290,8 +324,8 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 16 carries live/saved/default designs, sizes, vertical
-offsets, Halo and `spirit` selections, plus transient
+Preview protocol17 carries live/saved/default designs, sizes, vertical and
+horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
 `mutedPresence: off|tide|words|channels|labeled|contacts`, required
@@ -300,8 +334,9 @@ offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is 16;
-saved profile is version 14 for trace reach/fade tuning; session tuning stays excluded.
+session-root fields on Preview/PhoneState, never Layout. Protocol is17;
+saved profile is version15 for shared appearance and local horizontal position;
+session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -314,8 +349,8 @@ Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 `glowPercent` (0–100), `reachDp` (−40–120), `fadeLengthDp` (0–80) and
 `tipOpacityPercent` (0–100). The last three default to 0/12/0. Profiles through13
 retain their exact previous trace shapes and gain these defaults in memory.
-Landscape and legacy migration use Parallel, 100%
-stance/contact/foot/weight, zero offshoot and glow; new portrait defaults are
+The old canonical baseline uses Parallel, 100%
+stance/contact/foot/weight, zero offshoot and glow; fresh shared defaults are
 listed above. Required `design.spacing` has exactly integer `paddingDp` (−1–40),
 `sideMarginPercent` and `edgeClearancePercent` (0–200), `sectionGapDp` (0–80),
 `channelGapDp` (0–40), and `pushGapDp` (0–48). Padding −1 retains the legacy
@@ -324,13 +359,22 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently.
-Protocol 16's active fields describe the phone's visible orientation; it also
+Protocol17's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version 14 profile receipts must
+changes orientation; the host cannot select it. Version15 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
-variant, motion, colors and spirit
-before the host copy is written. Connection, activity, theme, indicator style, presence scope and
+variant, motion, colors, spirit, override flags and shared snapshot before the
+host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
+Portrait position edits use `verticalOffsetDp`; landscape edits use
+`horizontalOffsetDp`. Landscape rendering ignores its retained historical vertical
+offset. `appearanceOverrides` is a sorted, unique subset of
+`["glow", "halo", "spirit", "traces"]`. `sharedAppearance` has exactly `traces`
+(without glow), `glowPercent`, `halo` (without size), and `spirit`. Preview requests
+contain effective values and flags, never the shared base. The phone alone returns
+`sharedAppearance`, `savedSharedAppearance`, `defaultSharedAppearance`,
+`savedAppearanceOverrides`, `savedHorizontalOffsetDp` and
+`defaultHorizontalOffsetDp`. Connection, activity, theme, indicator style, presence scope and
 muted tuning are excluded from the profile. Use matching current host code and debug APK.
 
 ```sh

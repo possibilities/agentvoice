@@ -422,3 +422,45 @@ input[type="color"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+.scope-explanation {
+  margin: 10px 0 24px;
+  line-height: 1.65;
+}
+.scope-group {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 22px;
+}
+.scope-badge {
+  color: #d4ff72;
+  font-size: 11px;
+}
+.scope-customize {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.scope-customize input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+.shared-session {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.shared-session .modes {
+  margin: 20px 0;
+}
