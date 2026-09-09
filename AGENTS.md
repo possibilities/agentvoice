@@ -90,7 +90,9 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   Rockers with no style selectors, no header, and an overlay connection notice only
   while Connecting/Disconnected. Control height (240–480 dp) and talk share
   (30–60%) preserve Halo diameter. Traces is the fixed composition, with Parallel,
-  Splayed and Circuit patterns, independent stance, weight and faint offshoots.
+  Splayed and Circuit patterns, independent stance, weight and faint offshoots. Persona contact spacing and
+  button foot spacing independently span 50–200%, default 100%; wide stance must
+  reserve foot spacing at deck edges. Protected-center clearance may cap upper spacing.
   Its passive neutral routes meet selected Persona placement, with no fixed-height
   reach cap or animated-bounds tracking. Preserve geometry,
   pointer ownership and native renderer identity. Original keeps per-state sizes; debug-only Contained uses a checksum-
@@ -101,12 +103,13 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   remain independent, with separate resets for light and color behavior. Resets
   preserve all other choices and never save. Reset traces excludes background
   glow; Reset glow affects only its amount. Glow uses the shared slow clock,
-  pauses in background and becomes still under reduced motion. Protocol 9 carries control design,
+  pauses in background and becomes still under reduced motion. Protocol 10 carries control design,
   geometry, Halo variant/motion/colors and spirit settings; synthetic connection
-  and activity are transient. Save writes a version 9 profile excluding both.
-  Versions 1–8 load without rewriting, mapping retired button styles to Rockers
-  and compositions to Traces in memory. Preserve their other compatible choices;
-  versions 1–4 use Original, and versions 7–8 retain spirit. Preserve the original asset
+  and activity are transient. Save writes a version 10 profile excluding both.
+  Versions 1–9 load without rewriting, mapping retired button styles to Rockers
+  and compositions to Traces in memory. Version 9 retains its trace settings and
+  adds only default spacing values. Preserve their other compatible choices;
+  versions 1–4 use Original, and versions 7–9 retain spirit. Preserve the original asset
   and main PersonaHalo.kt sequencing. No on-phone tuner overlay or
   production layout/default changes; the Push to talk label also applies to the real client.
   Debug preview reconnect observes the same binding

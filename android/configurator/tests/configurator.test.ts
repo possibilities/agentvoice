@@ -34,7 +34,7 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 9,
+  protocol: 10,
   activity: "steady",
   connection: "connected",
   revision: 0,
@@ -58,8 +58,8 @@ const initial = (): PhoneState => ({
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Extract<Profile, { version: 9 }> => ({
-  version: 9,
+const profile = (state: PhoneState): Extract<Profile, { version: 10 }> => ({
+  version: 10,
   spirit: { ...state.spirit },
   design: structuredClone(state.design),
   halo: structuredClone(state.halo),
@@ -133,7 +133,11 @@ class FakePhone implements Phone {
         Object.assign(receipt.design, { composition: "dock" });
       if (this.wrongTraceReceipt === "pattern") receipt.design.traces.pattern = "splayed";
       else if (this.wrongTraceReceipt) receipt.design.traces[this.wrongTraceReceipt]++;
-      if (this.changeDuringSave) this.state.design.traces.weightPercent = 181;
+      if (this.changeDuringSave) {
+        this.state.design.traces.weightPercent = 181;
+        this.state.design.traces.personaSpacingPercent = 180;
+        this.state.design.traces.footSpacingPercent = 190;
+      }
       if (this.wrongHaloReceipt === "variant") receipt.halo.variant = "contained";
       else if (this.wrongHaloReceipt === "color") receipt.halo.colors.idle = "#ffffff";
       else if (this.wrongHaloReceipt) receipt.halo[this.wrongHaloReceipt]++;
@@ -147,7 +151,7 @@ class FakePhone implements Phone {
         state: this.state,
         profile: JSON.stringify(
           this.oldReceipt
-            ? { ...receipt, version: 8, design: previousDesign(receipt.design) }
+            ? { ...receipt, version: 9, design: versionNineDesign(receipt.design) }
             : receipt,
           null,
           2,
@@ -235,6 +239,15 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
     expect(() => parseProfile(JSON.stringify({ ...saved, verticalOffsetDp }))).toThrow();
   }
 });
+
+function versionNineDesign(design = defaultDesign) {
+  const {
+    personaSpacingPercent: _personaSpacing,
+    footSpacingPercent: _footSpacing,
+    ...traces
+  } = design.traces;
+  return { ...design, traces };
+}
 
 function previousDesign(design = defaultDesign) {
   const { traces: _traces, ...previous } = design;
@@ -373,7 +386,7 @@ test("every legacy button choice migrates to Rockers while retaining other choic
   }
 });
 
-test("current previews, states and version 9 profiles reject retired styles before dispatch", async () => {
+test("current previews, states and version 10 profiles reject retired styles before dispatch", async () => {
   const { phone, post } = await fixture();
   for (const change of [
     { mute: "keycaps" },
@@ -394,6 +407,8 @@ test("current previews, states and version 9 profiles reject retired styles befo
 test("trace settings have exact fields, routes and integer bounds at every current boundary", async () => {
   expect(traceBounds).toEqual({
     stancePercent: [75, 150],
+    personaSpacingPercent: [50, 200],
+    footSpacingPercent: [50, 200],
     weightPercent: [50, 250],
     offshootPercent: [0, 100],
     glowPercent: [0, 100],
@@ -402,6 +417,8 @@ test("trace settings have exact fields, routes and integer bounds at every curre
   expect(traces).toEqual({
     pattern: "parallel",
     stancePercent: 100,
+    personaSpacingPercent: 100,
+    footSpacingPercent: 100,
     weightPercent: 100,
     offshootPercent: 0,
     glowPercent: 0,
@@ -444,6 +461,96 @@ test("trace settings have exact fields, routes and integer bounds at every curre
   expect(() => parseState({ ...initial(), protocol: 8 })).toThrow();
 });
 
+test("version 9 profiles retain every previous trace value and add only baseline spacing in memory", () => {
+  for (const pattern of tracePatterns) {
+    const previous = {
+      ...profile(initial()),
+      version: 9 as const,
+      scaleMultipliers: { speaking: 0.92, listening: 0.47, idle: 0.83 },
+      verticalOffsetDp: -67,
+      design: {
+        ...versionNineDesign(),
+        controlsHeightDp: 374,
+        holdSharePercent: 57.3,
+        traces: {
+          pattern,
+          stancePercent: 123,
+          weightPercent: 211,
+          offshootPercent: 76,
+          glowPercent: 43,
+        },
+      },
+      halo: { ...defaultHalo(), variant: "contained" as const, containedSizePercent: 92 },
+      spirit: { surface: "soft", strengthPercent: 67, persona: "follow" } as const,
+    };
+    const encoded = JSON.stringify(previous);
+    const loaded = parseProfile(encoded);
+    expect(loaded).toEqual(previous);
+    const migrated = profileDesign(loaded);
+    expect(migrated).toEqual({
+      ...previous.design,
+      traces: { ...previous.design.traces, personaSpacingPercent: 100, footSpacingPercent: 100 },
+    });
+    expect(profileHalo(loaded)).toEqual(previous.halo);
+    expect(profileSpirit(loaded)).toEqual(previous.spirit);
+    migrated.traces.stancePercent = 150;
+    migrated.traces.personaSpacingPercent = 200;
+    expect(JSON.stringify(loaded)).toBe(encoded);
+    for (const field of ["personaSpacingPercent", "footSpacingPercent"]) {
+      const traces = { ...previous.design.traces, [field]: 100 };
+      expect(() =>
+        parseProfile(JSON.stringify({ ...previous, design: { ...previous.design, traces } })),
+      ).toThrow();
+      expect(() =>
+        parseProfile(
+          JSON.stringify({ ...previous, version: 10, design: { ...previous.design, traces } }),
+        ),
+      ).toThrow();
+    }
+    expect(() => parseProfile(JSON.stringify({ ...previous, version: 10 }))).toThrow();
+    expect(() =>
+      parseProfile(
+        JSON.stringify({ ...previous, design: { ...previous.design, traces: defaultTraces() } }),
+      ),
+    ).toThrow();
+  }
+  expect(() => parseState({ ...initial(), protocol: 9 })).toThrow();
+});
+
+test("Persona and button spacing edits remain independent from each other and stance", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const selection = previewOf(initial());
+  selection.design.traces.stancePercent = 127;
+  selection.design.traces.personaSpacingPercent = 173;
+  expect((await post("preview", selection)).status).toBe(200);
+  expect(phone.state.design.traces).toEqual({
+    ...defaultTraces(),
+    stancePercent: 127,
+    personaSpacingPercent: 173,
+  });
+  selection.design.traces.footSpacingPercent = 68;
+  expect((await post("preview", selection)).status).toBe(200);
+  expect(phone.state.design.traces).toEqual({
+    ...defaultTraces(),
+    stancePercent: 127,
+    personaSpacingPercent: 173,
+    footSpacingPercent: 68,
+  });
+  selection.design.traces.stancePercent = 91;
+  expect((await post("preview", selection)).status).toBe(200);
+  expect(phone.state.design.traces).toEqual({
+    ...defaultTraces(),
+    stancePercent: 91,
+    personaSpacingPercent: 173,
+    footSpacingPercent: 68,
+  });
+  expect(phone.state.savedDesign.traces).toEqual(defaultTraces());
+  expect(phone.state.scales).toEqual(defaults);
+  expect(phone.state.halo).toEqual(defaultHalo());
+  expect(phone.state.spirit).toEqual(defaultSpirit());
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+});
+
 test("every nested trace receipt must match before an existing host profile can be replaced", async () => {
   for (const field of ["pattern", ...traceAmountFields] as const) {
     const { phone, post, saveTo } = await fixture();
@@ -455,11 +562,13 @@ test("every nested trace receipt must match before an existing host profile can 
   }
 });
 
-test("trace edits remain unsaved and exact version 9 Save snapshots the reviewed nested settings", async () => {
+test("trace edits remain unsaved and exact version 10 Save snapshots the reviewed nested settings", async () => {
   const { phone, post, saveTo } = await fixture();
   const traces: TraceSelection = {
     pattern: "circuit",
     stancePercent: 136,
+    personaSpacingPercent: 83,
+    footSpacingPercent: 158,
     weightPercent: 170,
     offshootPercent: 51,
     glowPercent: 28,
@@ -479,10 +588,12 @@ test("trace edits remain unsaved and exact version 9 Save snapshots the reviewed
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(9);
+  expect(saved.version).toBe(10);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
+  expect(phone.state.design.traces.personaSpacingPercent).toBe(180);
+  expect(phone.state.design.traces.footSpacingPercent).toBe(190);
 });
 
 test("trace and glow resets isolate their scopes and all previous resets preserve nested tuning", () => {
@@ -491,6 +602,8 @@ test("trace and glow resets isolate their scopes and all previous resets preserv
   current.design.traces = {
     pattern: "splayed",
     stancePercent: 134,
+    personaSpacingPercent: 77,
+    footSpacingPercent: 192,
     weightPercent: 181,
     offshootPercent: 48,
     glowPercent: 37,
@@ -787,7 +900,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(9);
+  expect(saved.version).toBe(10);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -814,6 +927,8 @@ test("granular resets preserve unrelated choices and do not mutate saved state",
     traces: {
       pattern: "circuit",
       stancePercent: 132,
+      personaSpacingPercent: 169,
+      footSpacingPercent: 58,
       weightPercent: 184,
       offshootPercent: 49,
       glowPercent: 35,
@@ -945,7 +1060,7 @@ test("old profile contracts keep exact fields and old compositions while spirit 
   expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
 });
 
-test("spirit is unsaved until exact version 9 Save and activity never enters the profile", async () => {
+test("spirit is unsaved until exact version 10 Save and activity never enters the profile", async () => {
   const { phone, post, saveTo } = await fixture();
   const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
   const design = { ...defaultDesign, composition: "traces" as const };
@@ -966,7 +1081,7 @@ test("spirit is unsaved until exact version 9 Save and activity never enters the
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(9);
+  expect(saved.version).toBe(10);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);

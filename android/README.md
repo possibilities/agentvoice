@@ -173,7 +173,9 @@ Both mute buttons and **Push to talk** use Rockers:
 press and keep the talk surface down to talk, release to mute. Active styling stays
 dark with focused lime accents. Traces is the fixed composition: Parallel,
 Splayed and Circuit routes share independent stance, weight and lighter offshoot
-controls. Routes reach the selected Persona placement, preserving its clear
+controls. Persona contact spacing and Button foot spacing (50–200%, default 100%)
+separate neighboring routes at each end. Wider stance reserves room for the feet;
+protected-center clearance can limit upper spacing at large Persona sizes. Routes reach the selected Persona placement, preserving its clear
 center and glow. These stationary neutral layers change no layout, renderer,
 tuning or touch target and preserve full bleed. Original retains a conservative
 shared envelope, so unequal state sizes can leave a larger gap or no visible
@@ -222,15 +224,16 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 9 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 10 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 9 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 10 carries those
 choices plus transient connection and synthetic activity selections. Existing
-version 1–8 phone profiles load without rewriting; retired button styles map to
-Rockers and compositions to baseline Traces in memory. Versions 1–4 initially select Original; versions 5–8 keep
+version 1–9 phone profiles load without rewriting; retired button styles map to
+Rockers and compositions to baseline Traces in memory. Version 9 preserves its
+existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–9 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
-4–8 keep their dimensions. Versions 7–8 retain their spirit settings. Older profiles
-become version 9 only on Save. The real client and release
+4–9 keep their dimensions. Versions 7–9 retain their spirit settings. Older profiles
+become version 10 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher

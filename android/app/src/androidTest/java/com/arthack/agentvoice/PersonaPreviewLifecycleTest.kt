@@ -25,6 +25,11 @@ class PersonaPreviewLifecycleTest {
             val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
             assertEquals(original, restored)
         }
+        val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 72, 41)))
+        val v9 = v9State.json().put("protocol", 9).apply {
+            getJSONObject("design").getJSONObject("traces").apply { remove("personaSpacingPercent"); remove("footSpacingPercent") }
+        }
+        assertEquals(v9State, restorePersonaPreview(v9, v9State.saved, v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
     }
 
     @Test fun backgroundReturnAndRecreationRetainBindingAndUnsavedPreview() {
@@ -48,7 +53,7 @@ class PersonaPreviewLifecycleTest {
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55)).json())
+                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55, 75, 175)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")

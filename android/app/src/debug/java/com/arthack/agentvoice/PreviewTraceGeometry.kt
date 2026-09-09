@@ -45,8 +45,12 @@ internal fun previewTraceGeometry(
     if (!end.isFinite() || !channelWidth.isFinite() || !stroke.isFinite() ||
         end <= stageHeight || channelWidth <= maxOf(12f * unit, stroke * 5f)) return null
 
-    val fractions = if (settings.pattern == "splayed") listOf(.16f, .29f, .42f) else listOf(.22f, .36f)
-    val lane = minOf(8f * unit, channelWidth / (fractions.size + 2f))
+    val originalFractions = if (settings.pattern == "splayed") listOf(.16f, .29f, .42f) else listOf(.22f, .36f)
+    val fractions = if (settings.personaSpacingPercent == 100) originalFractions else originalFractions.map {
+        .29f + (it - .29f) * settings.personaSpacingPercent / 100f
+    }
+    val baselineLane = minOf(8f * unit, channelWidth / (fractions.size + 2f))
+    val lane = if (settings.footSpacingPercent == 100) baselineLane else baselineLane * settings.footSpacingPercent / 100f
     val halfSpan = (fractions.size - 1) * lane / 2f
     val margin = minOf(8f * unit, channelWidth * .16f)
     val nearest = gap / 2f + margin + halfSpan

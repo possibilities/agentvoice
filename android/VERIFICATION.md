@@ -7,8 +7,8 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Latest debug APK SHA-256:
-`8a2eee7fb4baa98c542d68c913fedf51bc23c1cd1d5fb54119aec2f68ea2401f`.
-The latest checks are recorded under [Traces composition variations](#traces-composition-variations);
+`5033262044143e8ff0148d6762cf9f731befbbb412af2f857a351517f8d25b96`.
+The latest checks are recorded under [Independent Traces end spacing](#independent-traces-end-spacing);
 earlier sections retain the verification history.
 
 ## Automated checks
@@ -589,3 +589,47 @@ choices were restored and saved phone/host profiles remained byte-identical;
 no Save was sent. Evidence: `/tmp/agentvoice-labels-final-build.log`,
 `/tmp/agentvoice-labels-instrumentation.log`, `/tmp/agentvoice-labels-phone.log`
 and `/tmp/agentvoice-labels-{restored,minimum-idle,minimum-listening}.png`.
+
+
+### Independent Traces end spacing
+
+Protocol/profile 10 adds Persona contact spacing and Button foot spacing, each
+50–200% with defaults of 100%. Stance preserves the requested foot spacing by
+reserving room at each button edge. Large apertures can cap upper contact spacing
+under the existing outward-only clearance rule. Profile 9 preserves all five
+previous trace settings and adds only default spacing; older migrations remain
+covered. Reset traces includes both new fields and preserves glow.
+
+- All 663 repository tests pass (8,768 assertions), including 34 configurator
+  tests. Root/configurator typecheck and Biome pass. All 50 Android JVM tests
+  pass, with explicit checks for independent spacing, stance-invariant foot gaps,
+  opposite spacing extremes, clear-center protection and route intersections.
+  Debug/test builds and debug lint pass.
+- The final test APK passed all 39 physical-phone tests in 80.252 seconds.
+  This includes version 9 saved/live migration, version 10 bounds and Save,
+  repeated spacing extremes with both native renderers and a held pointer,
+  64 typography layouts, lifecycle/reconnect and existing PTT regressions.
+  The first 39-test run also passed, but two test edits overlapped its compile;
+  an incremental source check rebuilt the test APK and the complete suite was
+  rerun. The final log is `/tmp/agentvoice-spacing-instrumentation-final.log`.
+- The disposable Chrome fixture exercised both slider endpoints, nine scoped
+  resets, exact profile 10 Save/reload and reconnect without replay. Desktop
+  and 390 px layouts show no overflow or browser errors.
+- Physical-phone browser updates and Reset traces round-trip both fields.
+  Six native comparisons cover Splayed baseline/wide feet/wide contacts/tight
+  spacing plus Parallel/Circuit with opposite endpoint spreads. Native crops
+  show distinct endpoint changes without obvious crossings or intrusion into
+  the clear center in these samples; the design team reviewed the same captures.
+  This is sampled visual evidence, not a guarantee of every animation frame.
+- The latest live choices were restored after the final test run, including
+  both 100% spacing defaults. Saved phone and host profiles are byte-identical
+  to fresh snapshots; no Save was sent. Headful Chrome shows the final live
+  studio. Installed and local debug APK hashes match the hash at this page's top.
+  No production source, Persona renderer or asset changes were made.
+
+Evidence: `/tmp/agentvoice-spacing-{build,tests,typecheck,lint}.log`,
+`/tmp/agentvoice-spacing-test-source-check.log`,
+`/tmp/agentvoice-spacing-browser-check.log`,
+`/tmp/agentvoice-spacing-phone-check.log`,
+`/tmp/agentvoice-spacing-route-comparison.png`, and
+`/tmp/agentvoice-spacing-final-before-restored.json`.

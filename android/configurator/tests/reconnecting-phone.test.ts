@@ -15,7 +15,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 9,
+    protocol: 10,
     activity: "voice",
     connection: "connecting",
     revision: 0,
@@ -33,6 +33,8 @@ class Connection implements PreviewConnection {
       composition: "traces",
       traces: {
         pattern: "circuit",
+        personaSpacingPercent: 75,
+        footSpacingPercent: 155,
         stancePercent: 140,
         weightPercent: 180,
         offshootPercent: 45,
@@ -80,6 +82,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   const returned = new Connection();
   const returnedTraces = {
     pattern: "splayed" as const,
+    personaSpacingPercent: 185,
+    footSpacingPercent: 65,
     stancePercent: 93,
     weightPercent: 225,
     offshootPercent: 71,

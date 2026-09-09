@@ -1,4 +1,11 @@
-import { defaultTraces, equalTraces, parseTraces, type TraceSelection } from "./traces.ts";
+import {
+  defaultTraces,
+  equalTraces,
+  parseTraces,
+  parseVersionNineTraces,
+  type TraceSelection,
+  type VersionNineTraceSelection,
+} from "./traces.ts";
 
 const legacyCompositions = ["open", "dock", "yoke", "socket", "traces"] as const;
 export type VersionEightDesign = {
@@ -13,6 +20,10 @@ export type VersionEightDesign = {
 export type Design = Omit<VersionEightDesign, "composition"> & {
   composition: "traces";
   traces: TraceSelection;
+};
+export type VersionNineDesign = Omit<VersionEightDesign, "composition"> & {
+  composition: "traces";
+  traces: VersionNineTraceSelection;
 };
 export type VersionSevenDesign = Omit<VersionEightDesign, "mute" | "hold"> & {
   mute: "rockers" | "keycaps";
@@ -62,6 +73,13 @@ export function parseVersionEightDesign(value: unknown): VersionEightDesign {
   const design = parseVersionSevenDesign(value);
   if (design.mute !== "rockers" || design.hold !== "rocker") throw Error("Invalid design");
   return { ...design, mute: "rockers", hold: "rocker" };
+}
+export function parseVersionNineDesign(value: unknown): VersionNineDesign {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const { traces, ...previous } = value as Record<string, unknown>;
+  const design = parseVersionEightDesign(previous);
+  if (design.composition !== "traces") throw Error("Invalid composition");
+  return { ...design, composition: "traces", traces: parseVersionNineTraces(traces) };
 }
 export function parseVersionSevenDesign(value: unknown): VersionSevenDesign {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");

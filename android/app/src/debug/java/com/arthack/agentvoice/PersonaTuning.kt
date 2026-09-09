@@ -23,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6, 7, 8, 9 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6, 7, 8, 9, 10 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -35,7 +35,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit()): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 9)
+        .put("version", 10)
         .put("spirit", spirit.json())
         .put("halo", halo.json())
         .put("design", design.json())
@@ -102,7 +102,7 @@ internal data class PersonaPreviewState(
     val micMuted: Boolean = mode != "listening" || holding,
     val speakerMuted: Boolean = false,
 ) {
-    fun json(): JSONObject = JSONObject().put("protocol", 9).put("connection", connection).put("revision", revision)
+    fun json(): JSONObject = JSONObject().put("protocol", 10).put("connection", connection).put("revision", revision)
         .put("mode", mode).put("activity", activity).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
@@ -148,8 +148,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     return PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
         mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let {
-            val protocol = data.optInt("protocol", 9)
-            if (protocol in 3..8) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
+            val protocol = data.optInt("protocol", 10)
+            if (protocol in 3..9) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
             else decodePreviewDesign(it)
         } ?: PreviewDesign(), savedDesign = savedDesign,
         halo = data.optJSONObject("halo")?.let(::decodePreviewHalo) ?: PreviewHalo(), savedHalo = savedHalo,

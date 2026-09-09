@@ -67,7 +67,7 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 9 on the phone, then
+checks the observed revision, atomically stores version 10 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
@@ -76,7 +76,7 @@ Rockers and old compositions map to baseline Traces in memory. Version 1 seeds a
 retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
-Older profiles become version 9 only on explicit Save. Production still
+Older profiles become version 10 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -201,3 +201,19 @@ disabled motion retains a static field, while background/disconnect/pending
 states clear it. Current profile snapshots deep-copy nested trace choices and
 require an exact version 9 receipt. Native v1–8 and host v2–8 readers validate
 their historical shapes before migration; no load or preview rewrites a saved file.
+
+
+The subsequent endpoint-spacing round adds protocol/profile 10 fields
+`personaSpacingPercent` and `footSpacingPercent`, both integers 50–200 with
+default 100. They scale within-bundle contact/foot spacing independently of
+stance, preserving the previous geometry at defaults. Stance clamps to the
+available landing region before squeezing feet; impossible regions draw no
+routes. Upper contacts retain outward-only clearance, which can cap the requested
+spacing at large apertures and make it dependent on foot placement. This is an
+explicit geometry limit, not animated-bounds tracking. No renderer or asset changes.
+
+Strict version 9 readers preserve every previous trace value and add only
+default spacing in memory. Older readers keep their prior migrations. Version 10
+Save receipts include both fields; Reset traces includes both and still excludes
+glow. All other scoped resets preserve the spacing choices. No saved file is
+rewritten until explicit Save.

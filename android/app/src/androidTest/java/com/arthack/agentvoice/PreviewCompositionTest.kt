@@ -27,11 +27,11 @@ class PreviewCompositionTest {
             compose.runOnIdle { state = state.copy(halo = state.halo.copy(variant = variant)) }
             compose.mainClock.advanceTimeBy(64)
             val view = compose.runOnIdle { nativeView() }
-            for (pattern in listOf("parallel", "splayed", "circuit")) {
+            for (pattern in listOf("parallel", "splayed", "circuit")) for (spacing in listOf(50, 200)) {
                 compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
                 compose.mainClock.advanceTimeBy(64)
                 compose.runOnIdle { assertTrue(state.holding) }
-                compose.runOnIdle { state = state.copy(design = state.design.copy(traces = PreviewTraces(pattern, 150, 250, 100, 100))) }
+                compose.runOnIdle { state = state.copy(design = state.design.copy(traces = PreviewTraces(pattern, 150, 250, 100, 100, spacing, 250 - spacing))) }
                 compose.mainClock.advanceTimeBy(64)
                 compose.runOnIdle { assertSame("Composition must not replay the native entry animation", view, nativeView()) }
                 assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())

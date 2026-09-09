@@ -82,6 +82,67 @@ class PreviewTraceGeometryTest {
         }
     }
 
+    @Test fun endSpacingIsIndependentAndStanceNeverSqueezesFeet() {
+        for (pattern in patterns) for (unit in listOf(1f, 3f)) {
+            val base = PreviewTraces(pattern = pattern)
+            val original = geometry(unit = unit, settings = base)!!
+            val expectedFractions = if (pattern == "splayed") listOf(.16f, .29f, .42f) else listOf(.22f, .36f)
+            for ((index, fraction) in expectedFractions.withIndex()) {
+                assertEquals("100% preserves the previous contacts", 55f * unit * fraction,
+                    abs(original.routes[index].port.x - 196f * unit), .001f)
+            }
+            for (spacing in listOf(50, 100, 200)) {
+                val top = geometry(unit = unit, settings = base.copy(personaSpacingPercent = spacing))!!
+                val feet = geometry(unit = unit, settings = base.copy(footSpacingPercent = spacing))!!
+                assertEquals(original.routes.map { it.landing }, top.routes.map { it.landing })
+                assertEquals(original.routes.map { it.port }, feet.routes.map { it.port })
+                val topGap = abs(top.routes[1].port.x - top.routes[0].port.x)
+                val oldGap = abs(original.routes[1].port.x - original.routes[0].port.x)
+                assertEquals(oldGap * spacing / 100f, topGap, .001f)
+                for (stance in listOf(75, 100, 150)) {
+                    val selected = geometry(unit = unit, settings = base.copy(stancePercent = stance, footSpacingPercent = spacing))!!
+                    val lanes = selected.routes.take(expectedFractions.size)
+                    for ((a, b) in lanes.zipWithNext()) {
+                        assertEquals("Foot spacing must survive stance changes", 8f * unit * spacing / 100f,
+                            abs(a.landing.x - b.landing.x), .001f)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun oppositeSpacingExtremesAndClampedAperturesDoNotCrossRoutes() {
+        for (pattern in patterns) for (radius in listOf(1f, 55f, 135f, 320f)) {
+            for (top in listOf(50, 200)) for (feet in listOf(50, 200)) for (stance in listOf(75, 150)) {
+                val settings = PreviewTraces(pattern = pattern, stancePercent = stance,
+                    personaSpacingPercent = top, footSpacingPercent = feet)
+                val result = geometry(radius = radius, centerY = 140f, settings = settings)!!
+                for (route in result.routes) {
+                    for (point in route.points) {
+                        assertTrue(distance(point, 196f, 140f) + .001f >= radius)
+                        assertTrue(point.x in 0f..392f)
+                    }
+                    for ((a, b) in route.points.zipWithNext()) {
+                        assertTrue(b.y >= a.y && abs(b.x - 196f) + .001f >= abs(a.x - 196f))
+                    }
+                }
+                for ((i, a) in result.routes.withIndex()) for (b in result.routes.drop(i + 1)) {
+                    for ((p, q) in a.points.zipWithNext()) for ((r, s) in b.points.zipWithNext()) {
+                        fun orientation(a: PreviewTracePoint, b: PreviewTracePoint, c: PreviewTracePoint): Double =
+                            (b.x - a.x).toDouble() * (c.y - a.y) - (b.y - a.y).toDouble() * (c.x - a.x)
+                        val crosses = orientation(p, q, r) * orientation(p, q, s) < -1e-6 &&
+                            orientation(r, s, p) * orientation(r, s, q) < -1e-6
+                        assertFalse("$settings radius $radius crossed routes", crosses)
+                    }
+                }
+            }
+        }
+        // Clearance can cap upper contacts at a large aperture; it never squeezes the requested feet.
+        val capped = geometry(radius = 320f, centerY = 140f,
+            settings = PreviewTraces(stancePercent = 75, personaSpacingPercent = 200, footSpacingPercent = 50))!!
+        for (route in capped.routes) assertTrue(abs(route.port.x - 196f) <= abs(route.landing.x - 196f) - 4f + .001f)
+    }
+
     @Test fun invalidOrMissingDrawingSpaceProducesNoGeometry() {
         assertNull(geometry(stage = Float.NaN))
         assertNull(geometry(centerY = Float.POSITIVE_INFINITY))

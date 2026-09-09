@@ -14,7 +14,12 @@ paired routes), Splayed (a wider fan of routes), and Circuit (staggered mechanic
 steps). **Stance** spans 75–150% of the baseline; **Trace weight** spans 50–250%,
 with 100% equal to 1.2 dp. Both start at 100%. **Offshoots** adds much lighter
 side and upward routes, independently of the selected pattern, from 0–100%.
-It starts at zero. The other compositions and their selector are removed.
+It starts at zero. **Persona contact spacing** and **Button foot spacing** each
+span 50–200%, default 100%. They separate neighboring traces within each bundle
+at its upper and lower ends; Stance moves the bundles themselves. Foot spacing
+remains fixed when stance hits a button edge. At large Persona sizes, protected
+center clearance can limit upper spacing or make it depend on the foot positions.
+The other compositions and their selector are removed.
 
 Routes now reach the selected Persona size and position instead of ending a
 fixed distance above the deck. Their geometry and soft clear aperture follow
@@ -130,7 +135,7 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 9 profile atomically on the phone. Its `design`
+Explicit Save writes a version 10 profile atomically on the phone. Its `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
@@ -143,14 +148,15 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–8 phone profiles remain readable without rewriting.
+until Save. Version 1–9 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
-with baseline trace settings in memory. Version 1 seeds all three
+with baseline trace settings in memory. Version 9 preserves every existing trace
+choice and adds only the two 100% spacing defaults. Version 1 seeds all three
 Halo sizes; versions 1–3 use the control geometry baseline. Stored position
-remains intact, with +35 dp when absent. Versions 4–8 retain saved control
-dimensions. Versions 1–4 select Original, while versions 5–8 retain their Halo variant,
+remains intact, with +35 dp when absent. Versions 4–9 retain saved control
+dimensions. Versions 1–4 select Original, while versions 5–9 retain their Halo variant,
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
-versions 7–8 keep their spirit settings. Older profiles become version 9 only on
+versions 7–9 keep their spirit settings. Older profiles become version 10 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -188,7 +194,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 9 carries live/saved/default designs, sizes, vertical
+Preview protocol 10 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected` and `activity: steady|voice`.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -198,10 +204,11 @@ and retains `controlsHeightDp` (integer 240–480)
 and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
 Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
-`stancePercent` (75–150), `weightPercent` (50–250), `offshootPercent` (0–100) and
-`glowPercent` (0–100). Defaults are Parallel, 100, 100, 0 and 0. Current and saved
+`stancePercent` (75–150), `personaSpacingPercent` and `footSpacingPercent`
+(each 50–200), `weightPercent` (50–250), `offshootPercent` (0–100) and
+`glowPercent` (0–100). Defaults are Parallel, 100% stance/spacing/weight, and zero offshoot/glow. Current and saved
 design snapshots copy these nested choices independently.
-Version 9 profile receipts must include the exact confirmed design, geometry,
+Version 10 profile receipts must include the exact confirmed design, geometry,
 variant, motion, colors and spirit
 before the host copy is written. Connection and activity preview state are
 excluded from the profile. Use matching current host code and debug APK.

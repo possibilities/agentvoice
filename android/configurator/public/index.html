@@ -37,6 +37,16 @@
                   <input id="trace-stancePercent" type="range" min="75" max="150" step="1" value="100" />
                 </div>
                 <div class="motion-control">
+                  <div class="size-heading"><label for="trace-personaSpacingPercent">Persona contact spacing</label><output id="trace-personaSpacingPercent-value" for="trace-personaSpacingPercent">100%</output></div>
+                  <input id="trace-personaSpacingPercent" type="range" min="50" max="200" step="1" value="100" aria-describedby="persona-spacing-hint" />
+                  <p id="persona-spacing-hint" class="control-hint">Space between neighboring contacts in each bundle. At extreme Persona sizes, safety clearance can limit spacing.</p>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-footSpacingPercent">Button foot spacing</label><output id="trace-footSpacingPercent-value" for="trace-footSpacingPercent">100%</output></div>
+                  <input id="trace-footSpacingPercent" type="range" min="50" max="200" step="1" value="100" aria-describedby="foot-spacing-hint" />
+                  <p id="foot-spacing-hint" class="control-hint">Space between neighboring feet in each button-side bundle.</p>
+                </div>
+                <div class="motion-control">
                   <div class="size-heading"><label for="trace-weightPercent">Trace weight</label><output id="trace-weightPercent-value" for="trace-weightPercent">100%</output></div>
                   <input id="trace-weightPercent" type="range" min="50" max="250" step="1" value="100" />
                 </div>
