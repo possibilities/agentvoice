@@ -110,6 +110,7 @@ internal data class PersonaPreviewState(
     val savedOtherLayout: PreviewLayout = otherLayout,
     val theme: String = "bright",
     val mutedPresence: String = "tide",
+    val mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
 ) {
     init { require(theme in previewThemes && mutedPresence in previewMutedPresences) }
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide)
@@ -131,8 +132,8 @@ internal data class PersonaPreviewState(
             savedSpirit = active.spirit, savedPersonaSide = active.personaSide,
             savedOtherLayout = if (orientation == "portrait") landscape else portrait)
     }
-    fun json(): JSONObject = JSONObject().put("protocol", 12)
-        .put("theme", theme).put("mutedPresence", mutedPresence)
+    fun json(): JSONObject = JSONObject().put("protocol", 13)
+        .put("theme", theme).put("mutedPresence", mutedPresence).put("mutedTuning", mutedTuning.json())
         .put("orientation", orientation).put("orientationEpoch", orientationEpoch)
         .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", "left")
         .put("otherLayout", otherLayout.json()).put("savedOtherLayout", savedOtherLayout.json()).put("connection", connection).put("revision", revision)
@@ -193,7 +194,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         orientation = orientation, orientationEpoch = epoch,
         personaSide = data.optString("personaSide", "left").also { require(it in previewPersonaSides) },
         otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, protocol) } ?: PreviewLayout(),
-        theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"))
+        theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"),
+        mutedTuning = if (protocol >= 13) decodePreviewMutedTuning(data.getJSONObject("mutedTuning")) else PreviewMutedTuning())
         .withSavedLayouts(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide), savedLandscape)
 }
 
@@ -225,7 +227,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -240,9 +242,11 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     require(activity in previewActivities)
                     val theme = request.getString("theme").also { require(it in previewThemes) }
                     val mutedPresence = request.getString("mutedPresence").also { require(it in previewMutedPresences) }
+                    val mutedTuning = decodePreviewMutedTuning(request.getJSONObject("mutedTuning"))
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
                     state = next.copy(personaSide = side, placement = placement, design = design, halo = halo, spirit = spirit,
-                        activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence, revision = state.revision + 1)
+                        activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
+                        mutedTuning = mutedTuning, revision = state.revision + 1)
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")

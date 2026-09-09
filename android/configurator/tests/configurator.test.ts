@@ -8,6 +8,13 @@ import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
 import { parseArgs } from "../src/main.ts";
 import {
+  defaultMutedTuning,
+  mutedTuningAmounts,
+  mutedTuningBounds,
+  mutedTuningFields,
+  parseMutedTuning,
+} from "../src/muted-presence.ts";
+import {
   defaultLandscapeLayout,
   defaultPortraitLayout,
   equalLayout,
@@ -41,7 +48,8 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 12,
+  protocol: 13,
+  mutedTuning: defaultMutedTuning(),
   theme: "bright",
   mutedPresence: "tide",
   orientation: "portrait",
@@ -163,6 +171,7 @@ class FakePhone implements Phone {
         ...previewOf(initial()),
         theme: command["theme"],
         mutedPresence: command["mutedPresence"],
+        mutedTuning: command["mutedTuning"],
         orientation: command["orientation"],
         orientationEpoch: command["orientationEpoch"],
         personaSide: command["personaSide"],
@@ -255,6 +264,7 @@ async function fixture(options: { saveTo?: string } = {}) {
           ? {
               theme: phone.state.theme,
               mutedPresence: phone.state.mutedPresence,
+              mutedTuning: phone.state.mutedTuning,
               personaSide: phone.state.personaSide,
               connection: phone.state.connection,
               activity: phone.state.activity,
@@ -1308,7 +1318,7 @@ test("wrong inactive layout or hidden side receipts cannot create a host copy", 
   }
 });
 
-test("protocol 12 validates independent layouts and fits bounded profile and receipt frames", async () => {
+test("protocol 13 validates independent layouts and fits bounded profile and receipt frames", async () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const invalid of [
@@ -1534,4 +1544,139 @@ test("provisional portrait defaults are separate from landscape and legacy profi
   expect(
     profileLayout(parseProfile(JSON.stringify(profile(initial()))), "portrait").verticalOffsetDp,
   ).toBe(35);
+});
+
+test("muted appearance requires exact bounded session fields before phone dispatch", async () => {
+  const { phone, post } = await fixture();
+  const baseline = defaultMutedTuning();
+  expect(baseline).toEqual({
+    textSizeSp: 14,
+    brightnessPercent: 0,
+    driftPercent: 100,
+    breathPercent: 0,
+    cycleSeconds: 14,
+    motion: "float",
+  });
+  const invalid: unknown[] = [
+    undefined,
+    null,
+    [],
+    {},
+    { ...baseline, extra: 1 },
+    { ...baseline, motion: "wave" },
+    { ...baseline, motion: undefined },
+  ];
+  for (const field of mutedTuningAmounts) {
+    const [min, max] = mutedTuningBounds[field];
+    for (const amount of [min, max])
+      expect(parseMutedTuning({ ...baseline, [field]: amount })[field]).toBe(amount);
+    for (const amount of [min - 1, max + 1, min + 0.5, "14", null, undefined, Infinity, NaN])
+      invalid.push({ ...baseline, [field]: amount });
+  }
+  for (const mutedTuning of invalid) {
+    expect(() => parseMutedTuning(mutedTuning)).toThrow();
+    expect(() => parseState({ ...phone.state, mutedTuning })).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), mutedTuning })).status).toBe(400);
+  }
+  expect(phone.calls).toHaveLength(0);
+});
+
+test("muted appearance survives rotation and Off while Save remains exactly profile 12", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const before = currentProfile(phone.state);
+  const mutedTuning = {
+    textSizeSp: 27,
+    brightnessPercent: 83,
+    driftPercent: 284,
+    breathPercent: 76,
+    cycleSeconds: 9,
+    motion: "ripple" as const,
+  };
+  expect((await post("preview", { ...previewOf(phone.state), mutedTuning })).status).toBe(200);
+  expect(phone.state.mutedTuning).toEqual(mutedTuning);
+  const draft = previewOf(phone.state);
+  draft.mutedTuning.textSizeSp = 12;
+  expect(phone.state.mutedTuning.textSizeSp).toBe(27);
+  phone.rotate();
+  expect(phone.state.mutedTuning).toEqual(mutedTuning);
+  expect((await post("preview", { ...previewOf(phone.state), mutedPresence: "off" })).status).toBe(
+    200,
+  );
+  expect(phone.state.mutedTuning).toEqual(mutedTuning);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const savedText = await readFile(saveTo, "utf8");
+  const saved = parseProfile(savedText);
+  expect(saved).toEqual(before);
+  expect(saved.version).toBe(12);
+  expect(savedText).not.toContain('"mutedTuning"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, mutedTuning }))).toThrow();
+  expect(() =>
+    parseState({ ...phone.state, otherLayout: { ...phone.state.otherLayout, mutedTuning } }),
+  ).toThrow();
+  expect(() =>
+    parseProfile(JSON.stringify({ ...before, landscape: { ...before.landscape, mutedTuning } })),
+  ).toThrow();
+});
+
+test("muted appearance group and individual resets preserve Tide/Off, theme and both layouts", () => {
+  const state = initial();
+  state.theme = "quiet";
+  state.mutedPresence = "off";
+  state.mutedTuning = {
+    textSizeSp: 30,
+    brightnessPercent: 90,
+    driftPercent: 260,
+    breathPercent: 87,
+    cycleSeconds: 24,
+    motion: "ripple",
+  };
+  state.otherLayout.verticalOffsetDp = 93;
+  const original = structuredClone(state);
+  const current = previewOf(state);
+  for (const field of mutedTuningFields) {
+    expect(resetPreview(current, state, `muted-${field}`)).toEqual({
+      ...current,
+      mutedTuning: { ...current.mutedTuning, [field]: defaultMutedTuning()[field] },
+    });
+  }
+  expect(resetPreview(current, state, "muted-appearance")).toEqual({
+    ...current,
+    mutedTuning: defaultMutedTuning(),
+  });
+  for (const target of [
+    "spacing",
+    "controls",
+    "size",
+    "position",
+    "traces",
+    "glow",
+    "animation",
+    "colors",
+    "light",
+    "spirit-colors",
+  ] as const)
+    expect(resetPreview(current, state, target).mutedTuning).toEqual(current.mutedTuning);
+  expect(state).toEqual(original);
+});
+
+test("muted tuning edits retain orientation and connection fences", async () => {
+  const { phone, post } = await fixture();
+  const before = previewOf(phone.state);
+  before.mutedTuning.driftPercent = 291;
+  phone.rotate();
+  expect((await post("preview", before)).status).toBe(409);
+  phone.rotate();
+  expect((await post("preview", before)).status).toBe(409);
+  phone.generation++;
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        generation: 1,
+        mutedTuning: before.mutedTuning,
+      })
+    ).status,
+  ).toBe(409);
+  expect(phone.calls).toHaveLength(0);
+  expect(phone.state.mutedTuning).toEqual(defaultMutedTuning());
 });

@@ -59,6 +59,57 @@ class PreviewMutedPresenceGeometryTest {
         assertNull(previewMutedPresenceFit(44f, 18f, 8f))
     }
 
+    @Test fun maximumTextAndMotionFitTheLargerTunedAperture() {
+        val tuning = PreviewMutedTuning(32, 100, 300, 100, 6, "ripple")
+        val fit = previewMutedPresenceFit(100f, 42f, 88f, tuning = tuning)!!
+        assertEquals(3f, fit.driftXPx, .0001f)
+        assertEquals(9f, fit.driftYPx, .0001f)
+        assertEquals(6f, fit.rippleYPx, .0001f)
+        assertEquals(.03f, fit.breathScale, .0001f)
+        assertTunedPhasesFit(100f, 42f, 88f, fit, tuning)
+    }
+
+    @Test fun tightFitReducesDriftWaveAndBreathingTogether() {
+        val tuning = PreviewMutedTuning(driftPercent = 300, breathPercent = 100, motion = "ripple")
+        val fit = previewMutedPresenceFit(80f, 36f, 54f, tuning = tuning)!!
+        assertTrue(fit.driftXPx > 0f && fit.driftXPx < 3f)
+        val fraction = fit.driftXPx / 3f
+        assertEquals(9f * fraction, fit.driftYPx, .0001f)
+        assertEquals(6f * fraction, fit.rippleYPx, .0001f)
+        assertEquals(.03f * fraction, fit.breathScale, .0001f)
+        assertTunedPhasesFit(80f, 36f, 54f, fit, tuning)
+
+        val still = previewMutedPresenceFit(48f, 14f, 33f, tuning = tuning)!!
+        assertEquals(PreviewMutedPresenceFit(0f, 0f), still)
+        assertNull(previewMutedPresenceFit(48f, 14f, 32.99f, tuning = tuning))
+    }
+
+    @Test fun zeroDriftCanStillBreatheWithoutMovingTheWordOrGlyphs() {
+        val tuning = PreviewMutedTuning(driftPercent = 0, breathPercent = 100, motion = "ripple")
+        val fit = previewMutedPresenceFit(44f, 18f, 40f, tuning = tuning)!!
+        val low = previewMutedPresenceFrame(0f, true, fit, tuning)
+        val high = previewMutedPresenceFrame(.5f, true, fit, tuning)
+        assertEquals(0f, high.offsetX, 0f)
+        assertEquals(0f, high.offsetY, 0f)
+        assertTrue(high.glyphOffsets.isEmpty())
+        assertTrue(high.scale > low.scale)
+        assertTrue(high.alpha > low.alpha)
+        assertTunedPhasesFit(44f, 18f, 40f, fit, tuning)
+    }
+
+    private fun assertTunedPhasesFit(width: Float, height: Float, radius: Float,
+        fit: PreviewMutedPresenceFit, tuning: PreviewMutedTuning) {
+        for (step in 0..360) {
+            val frame = previewMutedPresenceFrame(step / 360f, true, fit, tuning)
+            val waves = frame.glyphOffsets.ifEmpty { listOf(0f) }
+            for (wave in waves) for (side in listOf(-1, 1)) for (edge in listOf(-1, 1)) {
+                val x = frame.offsetX + side * width * frame.scale / 2.0
+                val y = frame.offsetY + wave + edge * height * frame.scale / 2.0
+                assertTrue("Fitted motion must retain 8 dp clearance at phase $step", hypot(x, y) + 8.0 <= radius + .0001)
+            }
+        }
+    }
+
     private fun assertEveryPhaseFits(width: Float, height: Float, radius: Float, unit: Float,
         fit: PreviewMutedPresenceFit) {
         for (step in 0..360) {

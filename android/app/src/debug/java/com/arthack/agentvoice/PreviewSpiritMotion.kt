@@ -49,6 +49,7 @@ private data class SpiritColorCue(
 /** One slow scene clock, with gate changes kept separate from its trailing energy. */
 internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHaloColors()) {
     private var seconds = 0f
+    private var mutedPhase = 0f
     private var capture = 0f
     private var playback = 0f
     private var amount = 0f
@@ -60,7 +61,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
 
     fun step(ui: CallUi, spirit: PreviewSpirit, base: CompactHaloColors, contained: Boolean,
         activity: String, deltaSeconds: Float, motionAllowed: Boolean,
-        ambientPercent: Int = 0, foreground: Boolean = true): PreviewSpiritFrame {
+        ambientPercent: Int = 0, foreground: Boolean = true, mutedCycleSeconds: Int = 14): PreviewSpiritFrame {
         val follows = contained && spirit.persona == "follow"
         val visible = foreground && ui.connected && !ui.controlsPending
         val ambientTarget = if (visible) ambientPercent.coerceIn(0, 100) / 100f else 0f
@@ -77,6 +78,8 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
         }
         val dt = if (deltaSeconds.isFinite()) deltaSeconds.coerceIn(0f, .1f) else 0f
         seconds += dt
+        // Integrating speed preserves the displayed phase when the cycle slider changes.
+        mutedPhase = (mutedPhase + dt / mutedCycleSeconds.coerceIn(6, 30)) % 1f
         val phase = (seconds / 14f) % 1f
         val state = personaState(ui)
         fun normalized(level: Float) = if (level.isFinite()) sqrt((level / .3f).coerceIn(0f, 1f)) else 0f
@@ -104,7 +107,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
             colorCue = null
         }
         return PreviewSpiritFrame(if (amount == 0f) PreviewButtonLight() else PreviewButtonLight(phase, amount, capture, playback), colors,
-            if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount), phase)
+            if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount), mutedPhase)
     }
 }
 
@@ -149,6 +152,7 @@ internal fun rememberPreviewSpirit(
     ambientPercent: Int = 0,
     foreground: Boolean = previewSpiritForeground(),
     mutedPresence: Boolean = false,
+    mutedCycleSeconds: Int = 14,
 ): PreviewSpiritScene {
     val base = halo.colors()
     val light = remember { mutableStateOf(PreviewButtonLight()) }
@@ -161,6 +165,7 @@ internal fun rememberPreviewSpirit(
     val latestHalo by rememberUpdatedState(halo)
     val latestActivity by rememberUpdatedState(activity)
     val latestAmbient by rememberUpdatedState(ambientPercent)
+    val latestMutedCycle by rememberUpdatedState(mutedCycleSeconds)
     val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0 || mutedPresence
     val moving = enabled && foreground && motionAllowed && ui.connected && !ui.controlsPending
     val latestMoving by rememberUpdatedState(moving)
@@ -184,7 +189,7 @@ internal fun rememberPreviewSpirit(
             if (elapsed < 1f / 30f) continue
             previous = now
             publish(motion.step(latestUi, latestSpirit, latestHalo.colors(), latestHalo.variant == "contained",
-                latestActivity, elapsed, true, latestAmbient, latestForeground))
+                latestActivity, elapsed, true, latestAmbient, latestForeground, latestMutedCycle))
         }
     }
     return remember { PreviewSpiritScene(light, colors, ambient, phase) }

@@ -284,3 +284,32 @@ and Original 78/56/78. Landscape keeps its independent baseline. Existing profil
 preserve their values and gain only baseline spacing. No load, reset or preview
 publishes a profile. Future Live/Design integration and product preferences remain
 separate; these are adjustable design experiments.
+
+
+## Adjustable muted typography and motion
+
+Protocol 13 adds required session-root `mutedTuning`; saved profiles remain version
+12. The exact object contains integer textSizeSp 12–32 (14), brightnessPercent
+0–100 (0), driftPercent 0–300 (100), breathPercent 0–100 (0), cycleSeconds 6–30
+(14), and motion float|ripple (float). Each reset changes only its value; group
+reset leaves Tide/Off, theme, geometry and saved layouts untouched. Brightness
+interpolates theme-appropriate secondary and primary ink. Ripple moves shaped
+letter slices through a slow wave without changing text, layout or native Halo.
+Reduced motion removes drift, ripple and breathing immediately.
+
+The existing scene clock integrates the selected cycle speed without resetting
+phase or changing the other scene animations. Typography edits keep the native
+Halo instance; fitting reserves maximum breathing and letter movement before
+reducing motion, then omits the optional word if readable text still cannot fit.
+
+The prior universal Contained inner-radius coefficient .07 unnecessarily limited
+larger type at ordinary motion settings. Its replacement is the conservative
+product .20*(1-.6S)*(1-10P/128)*(1-.06I)*(1-.071875M), with normalized spread,
+pulse, idle and speaking amounts from the checksum-pinned asset. Multiplying by
+stage diameter, 1.9 and shared size places the aperture inside all hard strokes,
+including transitions; diffuse feathered glow may enter it. Independent historical
+minimum size and coefficient cover crossed slider changes, tightening immediately
+and relaxing after 600 ms unchanged to cover source debounce and scale handover.
+This does not switch to an Idle-only bound: Listening can finish its current
+four-second loop before exiting. Original retains its earlier conservative bound.
+No Persona asset, production palette or audio behavior changes.

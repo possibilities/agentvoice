@@ -19,6 +19,7 @@ import {
   type VersionTenDesign,
 } from "./design.ts";
 import { defaultHalo, equalHalo, type HaloSelection, parseHalo } from "./halo.ts";
+import { type MutedTuning, parseMutedTuning } from "./muted-presence.ts";
 import { defaultSpacing } from "./spacing.ts";
 import { defaultSpirit, equalSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
 import { defaultTraces } from "./traces.ts";
@@ -51,12 +52,13 @@ export type Preview = Layout &
   OrientationFence & {
     theme: Theme;
     mutedPresence: MutedPresence;
+    mutedTuning: MutedTuning;
     connection: Connection;
     activity: Activity;
     mode: Mode;
   };
 export type PhoneState = Preview & {
-  protocol: 12;
+  protocol: 13;
   otherLayout: Layout;
   savedOtherLayout: Layout;
   savedPersonaSide: PersonaSide;
@@ -152,6 +154,7 @@ export function parsePreview(value: unknown): Preview {
     "personaSide",
     "theme",
     "mutedPresence",
+    "mutedTuning",
     "connection",
     "activity",
     "mode",
@@ -192,6 +195,7 @@ export function parseState(value: unknown): PhoneState {
     "personaSide",
     "theme",
     "mutedPresence",
+    "mutedTuning",
     "connection",
     "activity",
     "revision",
@@ -216,7 +220,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 12 ||
+    data["protocol"] !== 13 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -225,7 +229,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 12,
+    protocol: 13,
     otherLayout: parseLayout(data["otherLayout"]),
     savedOtherLayout: parseLayout(data["savedOtherLayout"]),
     savedPersonaSide: parsePersonaSide(data["savedPersonaSide"]),
@@ -366,6 +370,7 @@ export function previewOf(state: Preview): Preview {
     personaSide: state.personaSide,
     theme: state.theme,
     mutedPresence: state.mutedPresence,
+    mutedTuning: { ...state.mutedTuning },
     connection: state.connection,
     activity: state.activity,
     mode: state.mode,
@@ -489,11 +494,16 @@ export function equalLayout(a: Layout, b: Layout): boolean {
 export function parseSessionModes(data: Record<string, unknown>): {
   theme: Theme;
   mutedPresence: MutedPresence;
+  mutedTuning: MutedTuning;
 } {
   if (!themes.includes(data["theme"] as Theme)) throw Error("Invalid theme");
   if (!mutedPresences.includes(data["mutedPresence"] as MutedPresence))
     throw Error("Invalid muted presence");
-  return { theme: data["theme"] as Theme, mutedPresence: data["mutedPresence"] as MutedPresence };
+  return {
+    theme: data["theme"] as Theme,
+    mutedPresence: data["mutedPresence"] as MutedPresence,
+    mutedTuning: parseMutedTuning(data["mutedTuning"]),
+  };
 }
 
 export function defaultPortraitLayout(): Layout {

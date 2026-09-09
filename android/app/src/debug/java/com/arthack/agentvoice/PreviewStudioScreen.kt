@@ -42,10 +42,11 @@ internal fun PreviewStudioScreen(
     personaSide: String = "left",
     theme: String = "bright",
     mutedPresence: String = "tide",
+    mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning)
     }
 }
 
@@ -54,7 +55,7 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
@@ -70,7 +71,8 @@ private fun PreviewStudioScene(
     }
     val muted = mutedPresence == "tide" && previewMutedEligible(ui, foreground)
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
-        ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted)
+        ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted,
+        mutedCycleSeconds = mutedTuning.cycleSeconds)
     val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.pushGapDp)
     BoxWithConstraints(Modifier.fillMaxSize().background(theme.palette.ground)) {
         val screenWidth = maxWidth
@@ -149,7 +151,8 @@ private fun PreviewStudioScene(
                         val aperture = rememberMutedAperture(geometry.diameter, halo, placement, motionAllowed && foreground)
                         PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
                             geometry.offsetY.dp, aperture.dp,
-                            ink = theme.foreground(VoiceInk.muted, theme.palette.ground, opacity = .84f))
+                            ink = theme.foreground(VoiceInk.muted, theme.palette.ground, opacity = .84f),
+                            primaryInk = theme.foreground(VoiceInk.text, theme.palette.ground), tuning = mutedTuning)
                     }
                     Box(Modifier.offset { IntOffset(geometry.deckX.dp.roundToPx(), geometry.deckY.dp.roundToPx()) }
                         .requiredSize(geometry.deckWidth.dp, geometry.deckViewportHeight.dp)
@@ -201,12 +204,18 @@ private fun rememberMutedAperture(diameter: Float, halo: PreviewHalo, placement:
     animate: Boolean): Float {
     val scale = if (halo.variant == "contained") halo.containedSizePercent / 100f
         else minOf(placement.speakingScale, placement.listeningScale, placement.idleScale)
-    val target = diameter * scale * 1.9f * if (halo.variant == "contained") .07f else .16f
-    var settled by remember { mutableFloatStateOf(target) }
-    LaunchedEffect(target, animate) {
-        // Growing the text-safe region waits for size handover; shrink it immediately in composition.
-        if (animate && target > settled) kotlinx.coroutines.delay(600)
-        settled = target
+    val factor = previewMutedApertureFactor(halo)
+    var retainedScale by remember { mutableFloatStateOf(scale) }
+    var retainedFactor by remember { mutableFloatStateOf(factor) }
+    SideEffect {
+        retainedScale = minOf(retainedScale, scale)
+        retainedFactor = minOf(retainedFactor, factor)
     }
-    return minOf(settled, target)
+    LaunchedEffect(scale, factor, animate) {
+        // Independent minima cover crossed size/tuning edits and the old source's debounce window.
+        if (animate) kotlinx.coroutines.delay(600)
+        retainedScale = scale
+        retainedFactor = factor
+    }
+    return diameter * 1.9f * minOf(retainedScale, scale) * minOf(retainedFactor, factor)
 }

@@ -175,7 +175,7 @@ class PersonaPreviewTest {
                 val writer = socket.outputStream
                 writer.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
                 val request = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connected").put("mode", "listening")
-                    .put("theme", "bright").put("mutedPresence", "tide")
+                    .put("theme", "bright").put("mutedPresence", "tide").put("mutedTuning", PreviewMutedTuning().json())
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 62, 41, 65, 185)).json())

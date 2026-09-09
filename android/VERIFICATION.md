@@ -8,9 +8,9 @@ Earlier physical-phone and live-call evidence remains below. No current check
 started a voice call, microphone, speaker or inference.
 
 Latest debug APK SHA-256:
-`7ce2f79adae68f8b72b997267165ecb60fc94d0558f1167bc7fc017f4c5e4a8e`.
-The installed emulator APK matches these exact bytes. Latest checks are under
-[Tide, themes and independent spacing](#tide-themes-and-independent-spacing);
+`8f94d5ffab5327db77b71dfbc9b830dc0f25969b68c24a71fb399c95f2f0d9e0`.
+This build is installed on the emulator; the phone retains the previous round.
+Latest checks are under [Adjustable muted presence](#adjustable-muted-presence);
 earlier sections retain their original verification history.
 
 ## Automated checks
@@ -810,7 +810,8 @@ Grayscale pixel measurements).
 After reconnection, the existing preview was brought forward without replacing
 its session. Fresh snapshots captured both live orientation layouts, channel gates
 and exact native/host saved bytes before installation. The installed S22 APK
-matches the current SHA-256 above. The host now uses protocol 12.
+matches SHA-256 `7ce2f79adae68f8b72b997267165ecb60fc94d0558f1167bc7fc017f4c5e4a8e`.
+That phone host uses protocol 12.
 
 Eleven focused physical-phone tests passed in 12.995 seconds: Tide/theme native
 rendering and lifecycle, profile 12 migration and orientation fences, plus studio
@@ -832,3 +833,49 @@ Evidence: `/tmp/agentvoice-round12-phone-native.log`,
 `/tmp/agentvoice-round12-phone-restore.log`,
 `/tmp/agentvoice-round12-phone-installed-sha.txt`, and
 `/tmp/agentvoice-round12-phone/` (native captures and exact state JSON).
+
+
+### Adjustable muted presence
+
+Protocol 13 adds session-only text size, brightness, drift, breathing, cycle and
+Float/Ripple controls. Saved profiles remain version 12. Defaults reproduce the
+previous 14 sp Float treatment; individual and group resets preserve unrelated
+choices. Contained's nominal aperture now follows its selected motion parameters,
+with separate retained size/shape minima during deferred native updates. A geometry
+review checked the bound against the pinned asset's hard strokes, including its
+four-second listening loop and exits. Diffuse feathered glow can remain underneath.
+
+- Debug/test assembly and lint passed. 86 JVM tests passed with no failures,
+  errors or skips. 679 repository tests / 9,330 assertions passed, including
+  50 configurator tests / 2,208 assertions; TypeScript and Biome passed.
+- Complete API 35 emulator instrumentation passed **53 tests in 97.112 seconds**.
+  New rendered-pixel checks establish that larger text draws more glyph pixels,
+  brightness visibly increases, Ripple changes the word and reduced motion stays
+  still. Full-scene edits retain the native Halo and manual stage bounds, while
+  PTT removes the word immediately. Native protocol fixtures verify session
+  restoration across rotation, profile exclusion and strict invalid-request refusal.
+- A pure clock check verifies that changing the cycle preserves current phase and
+  affects only future muted-motion increments, leaving other scene speeds alone.
+  Geometry checks reserve combined drift, glyph wave and breathing before reducing
+  motion, and never shrink the selected text size.
+- An isolated browser fixture verified all five sliders, Float/Ripple, all six
+  individual resets, group reset, disabled-but-retained controls when Off, and
+  unchanged theme/layout/save state. The live Chrome accessibility tree also
+  confirmed the emulator's acknowledged Ripple/24/65/200/70/10 selection.
+- Native emulator comparisons cover baseline, larger Float, two Ripple phases,
+  maximum 32 sp/brightness 100/drift 300/breathing 100/cycle 6, Quiet/Grayscale,
+  and small/compressed placements where the optional text is omitted. The component
+  designer reviewed the actual captures: complete glyphs, no observed slice seams
+  or truncated strokes, readable wave and generous hard-ring clearance in these
+  samples. Stills do not establish every possible transition frame.
+- The isolated emulator is visible through scrcpy, with a temporary 24 sp Ripple
+  example in the host studio on port 4318. Reset muted appearance returns the old
+  baseline. No Save or phone operation occurred in this round; the phone was
+  disconnected. Its protocol 12 studio remains separate on port 4317. Fresh phone
+  state capture, protocol 13 installation and physical display review remain a
+  follow-up when it reconnects. Bundled Rive bytes and production sources are unchanged.
+
+Evidence: `/tmp/agentvoice-muted-tuning-{build,tests,typecheck,lint,native}.log`,
+`/tmp/agentvoice-studio13-browser.2kvOs3/evidence.json`,
+`/tmp/agentvoice-muted-tuning-visuals/` (raw captures, state JSON and comparison),
+and `/tmp/agentvoice-muted-tuning-scrcpy.log`.

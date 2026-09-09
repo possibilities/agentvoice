@@ -57,7 +57,7 @@ class PersonaPreviewLifecycleTest {
             var before: JSONObject
             connect().use { socket ->
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
-                    .put("theme", "bright").put("mutedPresence", "tide")
+                    .put("theme", "bright").put("mutedPresence", "tide").put("mutedTuning", PreviewMutedTuning().json())
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55, 75, 175)).json())

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { defaultDesign } from "../src/design.ts";
 import { defaultHalo } from "../src/halo.ts";
+import { defaultMutedTuning } from "../src/muted-presence.ts";
 import { defaultLandscapeLayout, type PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 import { defaultSpirit } from "../src/spirit.ts";
@@ -15,7 +16,8 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 12,
+    protocol: 13,
+    mutedTuning: defaultMutedTuning(),
     theme: "bright",
     mutedPresence: "tide",
     orientation: "portrait",
@@ -101,6 +103,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   returned.state = {
     ...returned.state,
     mode: "idle",
+    mutedTuning: { ...defaultMutedTuning(), textSizeSp: 23, motion: "ripple", driftPercent: 250 },
     theme: "grayscale",
     mutedPresence: "off",
     orientation: "landscape",
@@ -140,6 +143,12 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.mutedTuning).toEqual({
+    ...defaultMutedTuning(),
+    textSizeSp: 23,
+    motion: "ripple",
+    driftPercent: 250,
+  });
   expect(phone.state.theme).toBe("grayscale");
   expect(phone.state.mutedPresence).toBe("off");
   expect(phone.state.orientation).toBe("landscape");

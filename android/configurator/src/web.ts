@@ -1,4 +1,5 @@
 import { haloColorStates, haloMotionFields } from "./halo.ts";
+import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
   type Activity,
   type Connection,
@@ -94,6 +95,18 @@ function render() {
     `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
+  element<HTMLFieldSetElement>("muted-appearance").disabled = draft.mutedPresence === "off";
+  element<HTMLSelectElement>("muted-motion").value = draft.mutedTuning.motion;
+  for (const field of mutedTuningAmounts) {
+    const amount = draft.mutedTuning[field];
+    const unit = field === "textSizeSp" ? " sp" : field === "cycleSeconds" ? " s" : "%";
+    element<HTMLInputElement>(`muted-${field}`).value = String(amount);
+    text(element(`muted-${field}-value`), `${amount}${unit}`);
+    element(`muted-${field}`).setAttribute(
+      "aria-valuetext",
+      `${amount}${unit === "%" ? " percent" : unit}`,
+    );
+  }
   for (const field of spacingFields) {
     const amount = draft.design.spacing[field];
     const unit = field.endsWith("Percent") ? "%" : " dp";
@@ -257,6 +270,16 @@ element<HTMLSelectElement>("muted-presence").addEventListener("change", (event) 
   const mutedPresence = (event.currentTarget as HTMLSelectElement).value as MutedPresence;
   update((current) => ({ ...current, mutedPresence }));
 });
+element<HTMLSelectElement>("muted-motion").addEventListener("change", (event) => {
+  const motion = (event.currentTarget as HTMLSelectElement).value as MutedMotion;
+  update((current) => ({ ...current, mutedTuning: { ...current.mutedTuning, motion } }));
+});
+for (const field of mutedTuningAmounts) {
+  element<HTMLInputElement>(`muted-${field}`).addEventListener("input", (event) => {
+    const amount = (event.currentTarget as HTMLInputElement).valueAsNumber;
+    update((current) => ({ ...current, mutedTuning: { ...current.mutedTuning, [field]: amount } }));
+  });
+}
 for (const field of spacingFields) {
   element<HTMLInputElement>(`spacing-${field}`).addEventListener("input", (event) => {
     const amount = (event.currentTarget as HTMLInputElement).valueAsNumber;

@@ -71,7 +71,18 @@ only the visible orientation. Spacing remains unsaved until Save.
 
 **Theme** offers Bright (default), Quiet and Grayscale. **Muted presence** offers
 Tide (default) and Off. These are session choices: they survive orientation
-changes and ordinary tuning resets, but are excluded from Save profile.
+changes, activity recreation and ordinary tuning resets, but are excluded from Save profile.
+
+**Muted appearance** adjusts the Tide text with Float or Ripple motion,
+Text size (12–32 sp), Brightness (0–100%), Drift (0–300%), Breathing (0–100%)
+and Cycle (6–30 seconds). Defaults preserve the existing appearance: Float,
+14 sp, 0% brightness lift, 100% drift, 0% breathing and a 14-second cycle.
+Larger text and motion may be limited to fit inside Persona. The controls stay
+visible and are disabled while Muted presence is Off; turning Tide back on
+restores the session choices. Every field has an individual reset.
+**Reset muted appearance** restores the six tuning defaults without changing
+Tide/Off, theme, or either layout. This tuning is also session-only and never
+enters the saved profile.
 
 In portrait, the Persona stage is a screen-width square, independent of control
 height. Extra vertical room sits between the stage and the bottom-aligned deck.
@@ -241,11 +252,16 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 12 carries live/saved/default designs, sizes, vertical
+Preview protocol 13 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
-`theme: bright|quiet|grayscale` and `mutedPresence: tide|off`. Theme and muted
-presence are required session-root fields on Preview/PhoneState, never Layout.
+`theme: bright|quiet|grayscale`, `mutedPresence: tide|off`, and required
+`mutedTuning`. The latter has exactly integer `textSizeSp` (12–32),
+`brightnessPercent` (0–100), `driftPercent` (0–300), `breathPercent` (0–100),
+`cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
+14/0/100/0/14/float. Theme, muted presence and muted tuning are required
+session-root fields on Preview/PhoneState, never Layout. Protocol is 13;
+saved profile remains version 12 because session tuning is excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -261,14 +277,14 @@ listed above. Required `design.spacing` has exactly integer
 `sideMarginPercent` and `edgeClearancePercent` (0–200), `sectionGapDp` (0–80),
 `channelGapDp` (0–40), and `pushGapDp` (0–48). Their defaults are 100/100/0/10/16.
 Current and saved design snapshots copy nested choices independently.
-Protocol 12's active fields describe the phone's visible orientation; it also
+Protocol 13's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
 changes orientation; the host cannot select it. Version 12 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
-before the host copy is written. Connection, activity, theme and muted presence
-are excluded from the profile. Use matching current host code and debug APK.
+before the host copy is written. Connection, activity, theme, muted presence and
+muted tuning are excluded from the profile. Use matching current host code and debug APK.
 
 ```sh
 bun run test

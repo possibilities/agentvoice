@@ -230,7 +230,7 @@ bun run android:configure --device <adb-serial>
 Explicit Save retains the design, all three sizes and shared position in a
 version 12 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 12 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 13 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Their tuning is independent. The browser edits only the orientation reported
@@ -263,11 +263,20 @@ current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
 all preview layers neutral and dims decorative light, while captions retain a
 contrast floor. **Muted presence** compares Tide and Off. Tide shows lowercase
 `muted` inside the ring only while connected with both effective audio gates
-closed and no pending controls. It follows the existing 14-second clock, stays
+closed and no pending controls. Its Float motion follows a 14-second cycle by default, stays
 still under reduced motion and disappears immediately for PTT or an open channel.
 Measured text keeps an 8 dp clearance within a conservative inner aperture;
 if it cannot fit at a small size or large font scale, it is omitted rather than
-shrunk. These session selections survive rotation but are not saved in a profile.
+shrunk. **Muted appearance** adds 12–32 sp text, brightness lift (0–100%),
+drift (0–300%), breathing (0–100%) and a 6–30 second cycle, plus Float/Ripple.
+Ripple sends a quiet wave through the letters; breathing gently lifts brightness
+and scale. Each value and the whole appearance group have independent resets.
+The baseline remains 14 sp, brightness 0, drift 100, breathing 0, 14 seconds, Float.
+Cycle changes preserve the current phase instead of jumping to a different pose.
+Contained's aperture follows the selected motion's conservative hard-stroke bounds;
+large text is admitted only when its measured shape, movement and clearance fit.
+Diffuse glow may remain behind it. These session selections survive rotation and
+activity restoration but are not saved in a profile; profile version remains 12.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
