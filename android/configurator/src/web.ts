@@ -112,6 +112,8 @@ function render() {
       `${amount}${unit === "%" ? " percent" : unit}`,
     );
   }
+  element("section-separation-row").hidden = draft.orientation === "portrait";
+  element("portrait-spacing-hint").hidden = draft.orientation !== "portrait";
   for (const field of visibleSpacingFields) {
     const amount = draft.design.spacing[field];
     const custom = field === "paddingDp" && amount === -1;

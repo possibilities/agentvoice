@@ -52,15 +52,17 @@ internal fun PreviewControls(
     holdSharePercent: Double = DEFAULT_PREVIEW_HOLD_SHARE_PERCENT,
     light: State<PreviewButtonLight>? = null,
     spacing: PreviewSpacing = PreviewSpacing(),
+    availableHeightDp: Float? = null,
 ) {
     val inks = LocalPreviewTheme.current.palette
     val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.effectivePushGapDp)
+    val fit = geometry.fitWithin(availableHeightDp)
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
-    Column(modifier.height(geometry.extentHeightDp.dp).testTag("preview-controls")) {
-        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light, spacing.effectiveChannelGapDp)
-        Canvas(Modifier.fillMaxWidth().height(spacing.effectivePushGapDp.dp).clearAndSetSemantics { }) {
+    Column(modifier.height(fit.extent.dp).testTag("preview-controls")) {
+        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(fit.mute.dp), light, spacing.effectiveChannelGapDp)
+        Canvas(Modifier.fillMaxWidth().height(fit.gap.dp).clearAndSetSemantics { }) {
             if (size.height <= 0f) return@Canvas
             // Hold gates capture only; the conduit belongs to the microphone side of the deck.
             val x = (size.width - spacing.effectiveChannelGapDp.dp.toPx()) / 4f
@@ -71,9 +73,9 @@ internal fun PreviewControls(
             drawLine(ink, Offset(x - 8.dp.toPx(), capY),
                 Offset(x + 8.dp.toPx(), capY), capStroke)
         }
-        key(geometry) {
+        key(geometry, fit) {
             PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
-                Modifier.fillMaxWidth().height(geometry.holdHeightDp.dp), light)
+                Modifier.fillMaxWidth().height(fit.hold.dp), light)
         }
     }
 }

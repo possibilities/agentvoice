@@ -63,7 +63,7 @@ class PreviewStudioTest {
         }
     }
 
-    @Test fun portraitReservesScreenWidthSquareRegardlessOfControlsAndScrollsWhenNeeded() {
+    @Test fun portraitKeepsSquareAndAllControlsInsideVisibleSpaceWithoutScrolling() {
         var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
         compose.setContent {
             VoiceTheme {
@@ -75,14 +75,20 @@ class PreviewStudioTest {
         val stage = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true)
         val initial = stage.getUnclippedBoundsInRoot()
         stage.assertWidthIsEqualTo(320.dp).assertHeightIsEqualTo(320.dp)
-        for (height in listOf(240, 380, 480)) {
-            compose.runOnIdle { state = state.copy(design = state.design.copy(controlsHeightDp = height)) }
+        for (height in listOf(240, 380, 480)) for (padding in listOf(0, 16, 40)) {
+            compose.runOnIdle { state = state.copy(design = state.design.copy(controlsHeightDp = height, spacing = PreviewSpacing(paddingDp = padding))) }
             assertEquals("Deck size cannot resize or move the square stage", initial, stage.getUnclippedBoundsInRoot())
             val mute = compose.onNodeWithTag("mic-mute").getUnclippedBoundsInRoot()
-            assertTrue("Controls stay below the reserved square", mute.top >= initial.bottom)
+            val viewport = compose.onNodeWithTag("portrait-viewport").getUnclippedBoundsInRoot()
+            val ptt = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
+            assertTrue("Mute controls stay inside the visible viewport", mute.top >= viewport.top)
+            assertTrue("PTT and bottom padding stay visible", ptt.bottom <= viewport.bottom - padding.dp)
+            compose.onNodeWithTag("hold-to-talk").assertIsDisplayed()
         }
         val before = state.placement
-        compose.onNodeWithTag("hold-to-talk").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("portrait-viewport").performTouchInput { swipeUp() }
+        assertEquals("Portrait swipes cannot scroll Persona offscreen", initial, stage.getUnclippedBoundsInRoot())
+        compose.onNodeWithTag("hold-to-talk").assertIsDisplayed()
         stage.assertWidthIsEqualTo(320.dp).assertHeightIsEqualTo(320.dp)
         compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
         compose.runOnIdle { assertTrue(state.holding); assertEquals(before, state.placement) }

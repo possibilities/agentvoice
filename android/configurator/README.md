@@ -72,9 +72,11 @@ composition, light and Persona tuning.
 **Spacing** offers one **Padding** slider (0–40 dp) for minimum outer control
 space and both button gaps. Fresh layouts start at 16 dp. Older profiles show
 **Custom** and preserve their separate side, edge and button-gap settings until
-you adjust Padding; the slider rests at 16 without applying it. **Section separation**
-retains its existing 0–80 dp minimum extra gap between Persona and controls,
-with zero as its default. Each slider has its own reset. **Reset spacing** restores
+you adjust Padding; the slider rests at 16 without applying it. In portrait,
+controls stay inside the visible safe area; use Persona vertical position to
+adjust the space above them. **Section separation** is shown only in landscape,
+where it retains its existing 0–80 dp minimum extra gap between Persona and
+controls, with zero as its default. Hiding it in portrait retains its stored value. Each slider has its own reset. **Reset spacing** restores
 Padding to 16, section separation to zero, and the stored legacy baseline values
 for only the visible orientation. Spacing remains unsaved until Save.
 
@@ -104,12 +106,14 @@ individual reset. **Reset indicator appearance** restores the six tuning
 defaults without changing style, Show, theme, or either layout. This tuning is
 also session-only and never enters the saved profile.
 
-In portrait, the Persona stage is a screen-width square, independent of control
-height. Extra vertical room sits between the stage and the bottom-aligned deck.
-If the square and controls exceed the available height, the scene scrolls so
-Push to talk remains reachable. Traces use the square's center and the actual
-deck position. Changing control size preserves that center, Halo diameter and
-saved tuning values.
+In portrait, controls are bottom-aligned inside the visible safe area with the
+selected padding; the portrait page does not scroll. The Persona stage remains
+a screen-width square, independent of control height, with the selected size
+and vertical offset. Its position is not moved automatically to fit the deck.
+Use Persona vertical position to adjust clearance above the controls. Portrait
+section separation is retained in state and profiles but has no layout effect.
+Traces use the square's center and the actual deck position. Changing control
+size preserves that center, Halo diameter and saved tuning values.
 
 Landscape places a square Persona beside the existing Rocker deck. The deck
 scrolls independently if its requested height exceeds the viewport. Portrait

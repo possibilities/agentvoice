@@ -4,15 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PreviewOrientationGeometryTest {
-    @Test fun portraitSquareAndCenterAreIndependentOfDeckSize() {
+    @Test fun portraitSquareAndCenterStayFixedWhileTheDeckUsesOnlyVisibleHeight() {
         for (height in listOf(400f, 600f, 900f)) for (controls in listOf(240f, 262f, 480f)) {
             val geometry = previewOrientationGeometry(320f, height, 320f, true, controls, 35f)
             assertEquals(320f, geometry.diameter, 0f)
             assertEquals(0f, geometry.stageY, 0f)
             assertEquals(0f, geometry.stageX, 0f)
-            assertTrue(geometry.deckY >= 320f)
-            assertTrue(geometry.contentHeight >= geometry.deckY + controls + 20f)
-            assertEquals(controls, geometry.deckViewportHeight, 0f)
+            val bottom = if (height < 660f) 20f else 28f
+            assertEquals(height, geometry.contentHeight, 0f)
+            assertEquals(minOf(controls, height - bottom), geometry.deckViewportHeight, 0f)
+            assertEquals(bottom, height - geometry.deckY - geometry.deckViewportHeight, .001f)
+            assertTrue(geometry.deckY >= 0f)
         }
     }
 
@@ -69,8 +71,10 @@ class PreviewOrientationGeometryTest {
                         assertTrue(geometry.deckWidth > 0f && geometry.deckViewportHeight > 0f)
                         assertTrue(geometry.deckX >= 0f && geometry.deckX + geometry.deckWidth <= width + .001f)
                         if (portrait) {
-                            assertTrue(geometry.deckY >= geometry.stageY + geometry.diameter + gap)
-                            assertTrue(geometry.contentHeight >= geometry.deckY + 387f + push - 16f)
+                            assertEquals(height, geometry.contentHeight, 0f)
+                            assertTrue(geometry.deckY >= 0f)
+                            assertTrue(geometry.deckY + geometry.deckViewportHeight <= height + .001f)
+                            assertTrue(geometry.deckViewportHeight <= 387f + push - 16f)
                         } else {
                             assertTrue(geometry.deckWidth >= minOf(240f, baseline.deckWidth) - .001f)
                             if (side == "left") assertTrue(geometry.deckX > geometry.stageX + geometry.diameter)
@@ -92,7 +96,9 @@ class PreviewOrientationGeometryTest {
         val narrow = previewOrientationGeometry(180f, 220f, 180f, true, 262f, 35f,
             spacing = PreviewSpacing(sideMarginPercent = 200))
         assertEquals(180f, narrow.deckWidth, 0f)
-        assertEquals(230f, narrow.deckY, 0f)
+        assertEquals(0f, narrow.deckY, 0f)
+        assertEquals(200f, narrow.deckViewportHeight, 0f)
+        assertEquals(220f, narrow.contentHeight, 0f)
     }
     @Test fun linkedPaddingMatchesSidesBottomAndEveryButtonGapWithoutMovingPersona() {
         for (padding in listOf(0, 8, 16, 24, 40)) for (height in listOf(650f, 1000f)) {
@@ -107,7 +113,34 @@ class PreviewOrientationGeometryTest {
             assertEquals(360f, g.diameter, 0f)
             assertEquals(0f, g.stageY, 0f)
             assertEquals(-22f, g.offsetY, 0f)
-            assertTrue(g.contentHeight >= height)
+            assertEquals(height, g.contentHeight, 0f)
+        }
+    }
+
+    @Test fun portraitUsesEmptySquareSpaceBeforeClippingOrShrinkingTheDeck() {
+        val spacing = PreviewSpacing(sectionGapDp = 80, paddingDp = 24)
+        val geometry = previewOrientationGeometry(390f, 780f, 390f, true, 387f, -22f,
+            spacing = spacing, actualDeckHeight = 395f)
+        assertEquals(395f, geometry.deckViewportHeight, 0f)
+        assertEquals(361f, geometry.deckY, 0f)
+        assertTrue(geometry.deckY < geometry.stageY + geometry.diameter)
+        assertEquals(24f, 780f - geometry.deckY - geometry.deckViewportHeight, 0f)
+        assertEquals(780f, geometry.contentHeight, 0f)
+        val withoutGap = previewOrientationGeometry(390f, 780f, 390f, true, 387f, -22f,
+            spacing = spacing.copy(sectionGapDp = 0), actualDeckHeight = 395f)
+        assertEquals(withoutGap, geometry)
+    }
+
+    @Test fun impossiblePortraitDeckReceivesAnExplicitVisibleBudgetWithoutMovingPersona() {
+        for (height in listOf(.5f, 20f, 180f, 320f)) {
+            val geometry = previewOrientationGeometry(320f, height, 320f, true, 480f, -83f,
+                spacing = PreviewSpacing(paddingDp = 40), actualDeckHeight = 504f)
+            assertEquals(height, geometry.contentHeight, 0f)
+            assertEquals(0f, geometry.deckY, .001f)
+            assertTrue(geometry.deckViewportHeight > 0f && geometry.deckViewportHeight <= height)
+            assertEquals(320f, geometry.diameter, 0f)
+            assertEquals(0f, geometry.stageY, 0f)
+            assertEquals(-83f, geometry.offsetY, 0f)
         }
     }
 

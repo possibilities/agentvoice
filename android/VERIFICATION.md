@@ -1,12 +1,12 @@
 # Android development build verification
 
-Latest synthetic UI work: **Persona center indicators**, September 9, 2026, on
+Latest synthetic UI work: **Visible portrait layout and trace underlap**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
 No emulator is active. No check starts a voice call, microphone, speaker or inference.
 The latest installed debug APK SHA-256 is
-`d3aed4a2e4e6962f9ea33add625dac36c97822744e0da4f1500fbeb63f964999`.
+`dd731dfdaaf290b2ea1a50694204aec692e4b059dbed4afbaefb84a3501bd071`.
 
-Current evidence is under [Persona center indicators](#persona-center-indicators).
+Current evidence is under [Visible portrait layout and trace underlap](#visible-portrait-layout-and-trace-underlap).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1027,3 +1027,40 @@ recommended Channels for immediate clarity or Contacts for quiet character. Stat
 establish the sampled composition and readability, not every animation frame.
 Screenshots and matching state JSON are in `/tmp/agentvoice-indicators-phone/`;
 `full-options-sheet.png` and `center-options-sheet.png` assemble the comparison.
+
+
+### Visible portrait layout and trace underlap
+
+Portrait now anchors the deck and padding inside the safe viewport, with no page
+scrolling. Requested deck dimensions fit proportionally only if the deck itself
+exceeds that viewport; Persona's square/manual placement is unchanged. The square
+may overlap foreground controls at large settings. Section separation is hidden
+for portrait and stored unchanged. The Contained trace join uses a soft peripheral
+underlap instead of reserving maximum speaking expansion; Persona-side end tabs
+are gone. This is nominal attachment, not exact per-frame occlusion; short feeds
+can remain visible just inside an expanding outer ring, while the core stays clear.
+Original's prior unequal-state attachment limitation remains unchanged.
+
+Build, both debug APKs and lint pass; **99 JVM tests** and the entire **61-test
+phone suite in113.173seconds** pass. Native checks exercise full visible PTT,
+max-height/padding, unchanged square bounds after swipe, native/gesture retention,
+all existing indicator contracts and lifecycle behavior. **55 host tests /2,374
+assertions**, typecheck and Biome pass. The isolated browser verified portrait
+section hiding, landscape restoration and unchanged stored separation.
+
+Actual phone captures at the operator's85%/M68/I69 and motion0/100 compare Idle,
+Listening and Speaking. The lower-arc sheet shows the feeds meeting the peripheral
+ring area instead of the earlier17–23dp standoff. At480dp controls, padding0/16/40
+all leave PTT's full face/bottom border within the visible safe area. The layout
+reviewer confirmed the expected foreground overlap with the lower ring at those
+extremes; that is not scrolling or top-edge clipping. Manual placement and settings
+remain unchanged. No native Persona assets or renderer code changed.
+
+The fresh preinstall snapshot, including373dp controls, offset−17, selected Words,
+85% size,80/68/68/69 motion and both open gates, was restored exactly. Both layouts
+and session settings match; host/phone saved files are byte-identical. No Save,
+voice call or audio. Evidence: `/tmp/agentvoice-visible-layout-{build,native}.log`,
+`/tmp/agentvoice-visible-layout-phone-check.log`, snapshot prefix
+`/tmp/agentvoice-visible-layout-before-`, captures/state JSON in
+`/tmp/agentvoice-visible-layout-phone/`, and browser evidence
+`/tmp/agentvoice-portrait-safe-browser.1C6hFv/`.

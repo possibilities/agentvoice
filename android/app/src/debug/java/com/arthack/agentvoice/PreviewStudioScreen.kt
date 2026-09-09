@@ -116,17 +116,15 @@ private fun PreviewStudioScene(
             }
             // Ordinary tuning updates keep the existing immediate geometry behavior.
             val geometry = if (changing) source.towards(destination, progress.value) else target
-            val sceneScroll = rememberScrollState()
             val deckScroll = rememberScrollState()
-            LaunchedEffect(target.layoutKey) { sceneScroll.scrollTo(0); deckScroll.scrollTo(0) }
+            LaunchedEffect(target.layoutKey) { deckScroll.scrollTo(0) }
             val clearRadius = rememberTraceRadius(geometry.diameter, halo, placement).dp
             val traceAlpha = when {
                 destination.layoutKey != target.layoutKey -> 0f
                 changing -> (progress.value * 2f - 1f).coerceAtLeast(0f)
                 else -> 1f
             }
-            Box(Modifier.fillMaxSize().verticalScroll(sceneScroll,
-                enabled = portrait && target.contentHeight > maxHeight.value)) {
+            Box(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth().height(geometry.contentHeight.dp)) {
                     val traceLayer = Modifier.matchParentSize().graphicsLayer { alpha = traceAlpha }
                     if (portrait) {
@@ -177,7 +175,8 @@ private fun PreviewStudioScene(
                         key(target.layoutKey) {
                             PreviewControls(ui, { if (!latestChanging) onMute(it) }, { if (!latestChanging) onHold() }, release,
                                 Modifier.fillMaxWidth(), controlsHeightDp = design.controlsHeightDp,
-                                holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing)
+                                holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing,
+                                availableHeightDp = if (portrait) geometry.deckViewportHeight else null)
                         }
                     }
                 }
@@ -227,23 +226,18 @@ private fun rememberMutedAperture(diameter: Float, halo: PreviewHalo, placement:
 @Composable
 private fun rememberTraceRadius(diameter: Float, halo: PreviewHalo, placement: PersonaPlacement): Float {
     val size = halo.containedSizePercent / 100f
-    val expansion = 1f + .155f * halo.speakingMotionPercent / 100f
     var retainedSize by remember { mutableFloatStateOf(size) }
-    var retainedExpansion by remember { mutableFloatStateOf(expansion) }
     SideEffect {
         retainedSize = maxOf(retainedSize, size)
-        retainedExpansion = maxOf(retainedExpansion, expansion)
     }
-    LaunchedEffect(size, expansion) {
+    LaunchedEffect(size) {
         // Source debounce also applies to reduced motion; never expose its older larger pose.
         kotlinx.coroutines.delay(600)
         retainedSize = size
-        retainedExpansion = expansion
     }
     if (halo.variant != "contained") return diameter * 1.9f *
         maxOf(placement.speakingScale, placement.listeningScale, placement.idleScale) * .4f
-    // 128-unit frame in the 256-unit artboard; patched speaking axes peak below 1.155.
-    // Idle and listening only contract it. Keep a 1 dp neutral guard outside the nominal frame.
-    return diameter * 1.9f * maxOf(retainedSize, size) * .25f *
-        maxOf(retainedExpansion, expansion) + 1f
+    // Tuck feeds into the nominal frame's peripheral band instead of reserving the largest
+    // speaking pose. The trace-only fade preserves a clear core; native Halo paints above it.
+    return diameter * 1.9f * maxOf(retainedSize, size) * .23f
 }

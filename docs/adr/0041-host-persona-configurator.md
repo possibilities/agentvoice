@@ -379,3 +379,28 @@ shares the existing clock, theme, conservative aperture and appearance settings;
 it owns no Rive changes or interaction targets. Labeled rows reserve the longer
 caption width to prevent horizontal gate-change jumps. Fitting reduces motion
 first, then omits a block that cannot fit rather than shrinking selected type.
+
+
+## Visible portrait footprint and soft trace underlap
+
+Portrait no longer uses page scrolling or treats the screen-width Persona square
+as a minimum flow height above the deck. The square defines renderer coordinates;
+controls are bottom-anchored inside the safe viewport and visible padding. If the
+requested deck itself exceeds that budget, its faces fit proportionally and its
+join is bounded; stored controls-height/share/padding values are unchanged. The
+foreground deck may overlap the square's lower area. Manual Persona placement,
+size and native instance remain independent. Landscape retains its existing deck
+scroll behavior. Section separation is hidden in portrait and preserved in profiles;
+manual Persona offset controls separation there.
+
+The Contained trace mask formerly used the maximum speaking expansion even in
+contracted idle poses, producing a17–23dp standoff at the operator's85%/M68/I69
+settings. The new static join uses92% of the nominal frame radius, retaining the
+previous size briefly during source debounce, and removes bright Persona-side
+contact tabs. The existing trace-only fade extends from that peripheral join;
+Rive remains above it. This is an intentional soft underlap, not exact occlusion
+following every animated ellipse. High expansion can reveal short peripheral
+feeds inside the outer ring; the central disk remains clear. Original's conservative
+max-state envelope and unequal-size limitation remain. The pinned Rive11.12.0 API
+has no component world-transform getter; exact pose-derived masking would require
+a separate runtime integration, not another scalar promoted as universal contact.

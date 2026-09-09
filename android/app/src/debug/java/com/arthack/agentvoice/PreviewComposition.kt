@@ -45,7 +45,6 @@ internal fun PreviewPersonaTraces(
             for (trace in geometry.routes) {
                 drawPath(trace.points.tracePath(), route,
                     style = Stroke(geometry.strokeWidth, cap = StrokeCap.Butt, join = StrokeJoin.Bevel))
-                drawLine(contact, trace.port.offset(), trace.contactEnd.offset(), geometry.contactWidth, StrokeCap.Butt)
                 drawLine(contact, Offset(trace.landing.x, maxOf(trace.contactEnd.y, geometry.deckTop - 4.dp.toPx())),
                     trace.landing.offset(), geometry.contactWidth, StrokeCap.Butt)
             }

@@ -253,11 +253,14 @@ They never load a grant, controller or audio, or connect to the voice server.
 **Padding** links the deck's outer sides, bottom clearance and every button gap
 with one 0–40 dp control. Fresh defaults and Reset padding use 16 dp. Existing
 profiles preserve their different margins/gaps as Custom until Padding is moved;
-loading never rewrites them. Extra section separation remains 0–80 dp as before.
-Both controls have individual resets and Reset spacing affects only this group in
-the visible orientation. Persona's square, center, scale and manual offset remain
-unchanged. System safe insets and control-width constraints still apply; tall decks
-scroll to their padded bottom. The fixed square may leave extra space above the deck.
+loading never rewrites them. Portrait anchors the deck and bottom padding inside
+the visible safe area without page scrolling. A requested deck larger than that
+area fits its button faces proportionally while preserving the requested settings.
+Persona's square, center, scale and manual offset remain unchanged; the deck may
+use the square's empty lower area and stays in front of oversized Persona artwork.
+Use Persona's vertical position to tune the space above the deck. Section separation
+is shown only in landscape; existing portrait values remain stored without effect.
+Individual resets and Reset spacing remain scoped to the visible orientation.
 
 Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
 current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes

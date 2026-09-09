@@ -38,21 +38,23 @@ internal fun previewOrientationGeometry(
 ): PreviewOrientationGeometry {
     require(actualDeckHeight.isFinite() && actualDeckHeight > 0f)
     val baseline = baselinePreviewOrientationGeometry(width, height, screenWidth, portrait, controlsHeight, offsetY, personaSide)
-    if (spacing == PreviewSpacing() && actualDeckHeight == controlsHeight) return baseline
     if (portrait) {
         val desiredSide = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
             else baseline.deckX * spacing.sideMarginPercent / 100f
         // Existing sub-276dp portrait fixtures keep their exact baseline until their sides are edited.
         val side = if (spacing.paddingDp < 0 && spacing.sideMarginPercent == 100) desiredSide else
             minOf(desiredSide, (width - minOf(240f, width)) / 2f)
-        val bottom = if (spacing.paddingDp >= 0) side
+        val requestedBottom = if (spacing.paddingDp >= 0) side
             else (if (height < 660f) 20f else 28f) * spacing.edgeClearancePercent / 100f
-        val minimumStage = if (height < 500f) 230f else 160f
-        val deckTop = maxOf(baseline.stageY + baseline.diameter + spacing.sectionGapDp,
-            (height - actualDeckHeight - bottom).coerceAtLeast(minimumStage))
+        val bottom = minOf(requestedBottom, (height - 1f).coerceAtLeast(0f))
+        val viewport = minOf(actualDeckHeight, height - bottom)
+        // The square owns Persona placement, not minimum space above the controls. Section spacing
+        // uses only the room left above this bottom-aligned deck; it cannot extend the visible scene.
+        val deckTop = (height - bottom - viewport).coerceAtLeast(0f)
         return baseline.copy(deckX = side, deckY = deckTop, deckWidth = (width - side * 2f).coerceAtLeast(1f),
-            deckViewportHeight = actualDeckHeight, contentHeight = maxOf(height, deckTop + actualDeckHeight + bottom))
+            deckViewportHeight = viewport, contentHeight = height)
     }
+    if (spacing == PreviewSpacing() && actualDeckHeight == controlsHeight) return baseline
     val leftPersona = personaSide == "left"
     val baselineInner = if (leftPersona) baseline.deckX else width - baseline.deckX - baseline.deckWidth
     val baselineOuterMargin = width - baselineInner - baseline.deckWidth
@@ -85,12 +87,11 @@ private fun baselinePreviewOrientationGeometry(
     require(personaSide in setOf("left", "right"))
     val side = if (width < 360f) 18f else 24f
     if (portrait) {
-        val bottom = if (height < 660f) 20f else 28f
-        val minimumStage = if (height < 500f) 230f else 160f
-        val deckTop = maxOf(screenWidth, (height - controlsHeight - bottom).coerceAtLeast(minimumStage))
+        val bottom = minOf(if (height < 660f) 20f else 28f, (height - 1f).coerceAtLeast(0f))
+        val viewport = minOf(controlsHeight, height - bottom)
+        val deckTop = (height - viewport - bottom).coerceAtLeast(0f)
         return PreviewOrientationGeometry(true, personaSide, (width - screenWidth) / 2f, 0f, screenWidth,
-            side, deckTop, (width - side * 2f).coerceAtLeast(1f), controlsHeight,
-            maxOf(height, deckTop + controlsHeight + bottom), offsetY)
+            side, deckTop, (width - side * 2f).coerceAtLeast(1f), viewport, height, offsetY)
     }
     val innerWidth = (width - side * 2f).coerceAtLeast(2f)
     val gap = minOf(24f, innerWidth * .08f)

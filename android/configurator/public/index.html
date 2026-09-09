@@ -129,11 +129,12 @@
               <fieldset class="motion-controls"><legend class="subpanel-title">Spacing</legend>
                 <div class="motion-control">
                   <div class="size-heading"><label for="spacing-paddingDp">Padding</label><output id="spacing-paddingDp-value" for="spacing-paddingDp">16 dp</output></div>
-                  <input id="spacing-paddingDp" type="range" min="0" max="40" step="1" value="16" aria-describedby="spacing-paddingDp-hint" />
+                  <input id="spacing-paddingDp" type="range" min="0" max="40" step="1" value="16" aria-describedby="spacing-paddingDp-hint portrait-spacing-hint" />
                   <p id="spacing-paddingDp-hint" class="control-hint">One amount for minimum outer control space and gaps between buttons. Custom preserves previously saved spacing until you adjust it.</p>
+                  <p id="portrait-spacing-hint" class="control-hint" hidden>Portrait keeps controls inside the visible safe area. Use Persona vertical position to adjust the space above the controls.</p>
                   <button type="button" id="reset-spacing-paddingDp" data-reset="spacing-paddingDp" class="reset value-reset">Reset padding</button>
                 </div>
-                <div class="motion-control">
+                <div id="section-separation-row" class="motion-control" hidden>
                   <div class="size-heading"><label for="spacing-sectionGapDp">Section separation</label><output id="spacing-sectionGapDp-value" for="spacing-sectionGapDp">0 dp</output></div>
                   <input id="spacing-sectionGapDp" type="range" min="0" max="80" step="1" value="0" aria-describedby="spacing-sectionGapDp-hint" />
                   <p id="spacing-sectionGapDp-hint" class="control-hint">Minimum extra separation between Persona and controls.</p>
