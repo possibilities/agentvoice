@@ -148,9 +148,16 @@ class CompactHaloAnimationView(context: Context, attrs: AttributeSet? = null) : 
 
     internal fun present(state: PersonaState, color: Int, animate: Boolean) {
         val next = Triple(state, color, animate)
-        if (presentation == next) return
+        val previous = presentation
+        if (previous == next) return
         check(loaded)
         presentation = next
+        if (previous != null && previous.first == state && previous.third == animate) {
+            stateMachines.single().viewModelInstance!!.getColorProperty("color").value = color
+            // Recolor a frozen pose at zero elapsed time; only state/motion changes need settling.
+            if (!animate || !isPlaying) play(settleInitialState = false)
+            return
+        }
         motion = animate
         revision.incrementAndGet()
         setBooleanState("default", "listening", state == PersonaState.Listening)

@@ -1,7 +1,14 @@
 import { haloMotionFields } from "./halo.ts";
 import { type PhoneState, type Preview, previewOf } from "./protocol.ts";
 
-export type ResetTarget = "controls" | "size" | "position" | "animation" | "colors";
+export type ResetTarget =
+  | "controls"
+  | "size"
+  | "position"
+  | "animation"
+  | "colors"
+  | "light"
+  | "spirit-colors";
 
 export function resetPreview(current: Preview, defaults: PhoneState, target: ResetTarget): Preview {
   const next = previewOf(current);
@@ -23,6 +30,13 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
       break;
     case "colors":
       next.halo.colors = { ...defaults.defaultHalo.colors };
+      break;
+    case "light":
+      next.spirit.surface = defaults.defaultSpirit.surface;
+      next.spirit.strengthPercent = defaults.defaultSpirit.strengthPercent;
+      break;
+    case "spirit-colors":
+      next.spirit.persona = defaults.defaultSpirit.persona;
       break;
   }
   return next;

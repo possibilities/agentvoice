@@ -47,13 +47,14 @@ internal fun PreviewControls(
     modifier: Modifier = Modifier,
     controlsHeightDp: Int = DEFAULT_PREVIEW_CONTROLS_HEIGHT_DP,
     holdSharePercent: Double = DEFAULT_PREVIEW_HOLD_SHARE_PERCENT,
+    light: State<PreviewButtonLight>? = null,
 ) {
     val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent)
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
     Column(modifier.height(geometry.controlsHeightDp.dp).testTag("preview-controls")) {
-        PreviewMuteControls(ui, muteStyle, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp))
+        PreviewMuteControls(ui, muteStyle, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light)
         Canvas(Modifier.fillMaxWidth().height(PREVIEW_CONTROL_CONDUIT_DP.dp).clearAndSetSemantics { }) {
             // Hold gates capture only; the conduit belongs to the microphone side of the deck.
             val x = (size.width - 10.dp.toPx()) / 4f
@@ -64,7 +65,7 @@ internal fun PreviewControls(
         }
         key(geometry) {
             PreviewHoldControl(ui, holdStyle, { latestHold() }, { latestRelease() },
-                Modifier.fillMaxWidth().height(geometry.holdHeightDp.dp))
+                Modifier.fillMaxWidth().height(geometry.holdHeightDp.dp), light)
         }
     }
 }
@@ -75,6 +76,7 @@ internal fun PreviewMuteControls(
     style: String,
     onMute: (String) -> Unit,
     modifier: Modifier = Modifier,
+    light: State<PreviewButtonLight>? = null,
 ) {
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 130f).coerceIn(.6f, 1.6f)
@@ -86,9 +88,9 @@ internal fun PreviewMuteControls(
             }
         }, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PreviewMuteButton("YOU", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
-                VoiceInk.you, style, heightScale, onMute, Modifier.weight(1f).fillMaxHeight())
+                VoiceInk.you, style, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
             PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
-                VoiceInk.agent, style, heightScale, onMute, Modifier.weight(1f).fillMaxHeight())
+                VoiceInk.agent, style, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
@@ -103,6 +105,7 @@ private fun PreviewMuteButton(
     ink: Color,
     style: String,
     heightScale: Float,
+    light: State<PreviewButtonLight>?,
     onMute: (String) -> Unit,
     modifier: Modifier,
 ) {
@@ -129,8 +132,10 @@ private fun PreviewMuteButton(
         val face = Modifier.fillMaxSize().clearAndSetSemantics { }
         // Momentary capture never moves the persistent mute switch to its on position.
         when (style) {
-            "rockers" -> RockerMuteFace(name, target == "speaker", muted, color, status, pressed, heightScale, face)
-            "keycaps" -> KeycapMuteFace(name, target == "speaker", muted, color, pressed, heightScale, face)
+            "rockers" -> RockerMuteFace(name, target == "speaker", muted, color, status, pressed, heightScale,
+                face, light, enabled && !muted && open)
+            "keycaps" -> KeycapMuteFace(name, target == "speaker", muted, color, pressed, heightScale,
+                face, light, enabled && !muted && open)
             else -> GlyphMuteFace(name, target == "speaker", muted, color, status, pressed, heightScale, face)
         }
         if (focused) Canvas(Modifier.matchParentSize().clearAndSetSemantics { }) {
@@ -169,6 +174,7 @@ private fun GlyphMuteFace(
 private fun RockerMuteFace(
     name: String, speaker: Boolean, muted: Boolean, color: Color,
     status: String, pressed: Boolean, heightScale: Float, modifier: Modifier,
+    light: State<PreviewButtonLight>?, lightEnabled: Boolean,
 ) {
     val sink = if (pressed) 2.dp else 0.dp
     val statusFits = LocalDensity.current.fontScale <= 1.3f
@@ -178,14 +184,16 @@ private fun RockerMuteFace(
         val top = (if (muted) 9.dp else 4.dp).toPx() + sink.toPx()
         drawCutPlate(VoiceInk.line, cut = 10.dp.toPx())
         drawCutPlate(VoiceInk.ground, cut = 7.dp.toPx(), inset = 2.dp.toPx())
-        drawPath(Path().apply {
+        val upperFace = Path().apply {
             moveTo(edge + 3.dp.toPx(), top)
             lineTo(size.width - edge - 3.dp.toPx(), top)
             lineTo(size.width - edge, top + 4.dp.toPx())
             lineTo(size.width - edge - 3.dp.toPx(), seam)
             lineTo(edge + 3.dp.toPx(), seam)
             lineTo(edge, top + 4.dp.toPx()); close()
-        }, if (muted) VoiceInk.surface else color.copy(alpha = .12f))
+        }
+        drawPath(upperFace, if (muted) VoiceInk.surface else color.copy(alpha = .12f))
+        drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color)
         drawPath(Path().apply {
             moveTo(edge + 3.dp.toPx(), seam + 2.dp.toPx())
             lineTo(size.width - edge - 3.dp.toPx(), seam + 2.dp.toPx())
@@ -216,11 +224,13 @@ private fun RockerMuteFace(
 private fun KeycapMuteFace(
     name: String, speaker: Boolean, muted: Boolean, color: Color, pressed: Boolean,
     heightScale: Float, modifier: Modifier,
+    light: State<PreviewButtonLight>?, lightEnabled: Boolean,
 ) {
     val depression = if (pressed) 4.dp else 0.dp
     val largeType = LocalDensity.current.fontScale > 1.3f
     Column(modifier.drawBehind {
-        drawKeycap(VoiceInk.surface, if (muted) VoiceInk.line else color.copy(alpha = .48f), depression.toPx())
+        drawKeycap(VoiceInk.surface, if (muted) VoiceInk.line else color.copy(alpha = .48f), depression.toPx(),
+            light, lightEnabled, capture = !speaker, lightInk = color)
     }.padding(start = 17.dp, top = (12f * heightScale).coerceIn(7f, 18f).dp + depression,
         end = 17.dp, bottom = (18f * heightScale).coerceIn(11f, 24f).dp - depression),
         verticalArrangement = Arrangement.SpaceBetween) {
@@ -246,6 +256,7 @@ internal fun PreviewHoldControl(
     onHold: () -> Unit,
     onRelease: () -> Unit,
     modifier: Modifier = Modifier,
+    light: State<PreviewButtonLight>? = null,
 ) {
     val latestUi by rememberUpdatedState(ui)
     val latestHold by rememberUpdatedState(onHold)
@@ -291,7 +302,7 @@ internal fun PreviewHoldControl(
         role = Role.Button
         contentDescription = "Push to talk"
         stateDescription = when {
-            ui.holding && ui.micOpen -> "Release to mute"
+            microphoneIsLive(ui) -> if (ui.holding) "Live now. Release to mute" else "Live now. Microphone open"
             ui.holding -> "Opening microphone"
             ui.canHold -> "Ready"
             else -> "Unavailable. ${holdUnavailableReason(ui)}"
@@ -317,8 +328,8 @@ internal fun PreviewHoldControl(
     }.testTag("hold-to-talk")) {
         val face = Modifier.fillMaxSize().clearAndSetSemantics { }
         when (style) {
-            "trigger" -> TriggerHoldFace(ui, ink, surface, face)
-            "rocker" -> RockerHoldFace(ui, ink, surface, face)
+            "trigger" -> TriggerHoldFace(ui, ink, surface, face, light)
+            "rocker" -> RockerHoldFace(ui, ink, surface, face, light)
             "keycap" -> KeycapHoldFace(ui, ink, surface, face)
             else -> BeamHoldFace(ui, ink, surface, face)
         }
@@ -328,6 +339,7 @@ internal fun PreviewHoldControl(
 @Composable
 private fun BeamHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modifier) {
     val showPressGlyph = LocalDensity.current.fontScale <= 1.2f
+    val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
         val short = maxHeight < 100.dp
         Row(Modifier.fillMaxSize().drawBehind {
@@ -343,18 +355,20 @@ private fun BeamHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modif
             }
             Column(Modifier.weight(1f)) {
                 ControlText(when {
-                    ui.holding && ui.micOpen -> "Release to mute"
+                    microphoneLive -> "Live now"
                     ui.holding -> "Opening microphone"
                     ui.canHold -> "Push to talk"
                     else -> "Unavailable"
                 }, ink, when {
-                    ui.holding && !ui.micOpen -> 16
+                    ui.holding && !microphoneLive -> 16
                     !ui.canHold && !showPressGlyph -> 17
                     else -> 19
                 }, maxLines = 2)
-                if (!ui.canHold && !ui.holding) {
+                if (microphoneLive || (!ui.canHold && !ui.holding)) {
                     Spacer(Modifier.height(7.dp))
-                    ControlText(holdUnavailableReason(ui, concise = short), VoiceInk.muted, 11, maxLines = 2)
+                    ControlText(if (microphoneLive) {
+                        if (ui.holding) "release to mute" else "microphone open"
+                    } else holdUnavailableReason(ui, concise = short), VoiceInk.muted, 11, maxLines = 2)
                 }
             }
         }
@@ -362,10 +376,14 @@ private fun BeamHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modif
 }
 
 @Composable
-private fun TriggerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modifier) {
+private fun TriggerHoldFace(
+    ui: CallUi, ink: Color, surface: Color, modifier: Modifier, light: State<PreviewButtonLight>?,
+) {
     val largeType = LocalDensity.current.fontScale > 1.3f
+    val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
+        val liveTypeMaximum = if (maxWidth < 300.dp) 24 else 28
         val concise = largeType || maxHeight < 100.dp
         val restingDepth = (6f * heightScale).coerceIn(4f, 10f).dp
         val bottomPadding = (4f * heightScale).coerceIn(2f, 6f).dp
@@ -381,6 +399,8 @@ private fun TriggerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mo
                 lineTo(0f, bottom - 7.dp.toPx()); lineTo(0f, 7.dp.toPx()); close()
             }
             drawPath(face, surface)
+            drawPreviewButtonLight(face, light, ui.connected && !ui.controlsPending && ui.holding && ui.micOpen,
+                capture = true, ink = VoiceInk.you)
             if (ui.holding && ui.micOpen) drawPath(face, ink.copy(alpha = .65f), style = Stroke(1.5.dp.toPx()))
             drawLine(ink, Offset(5.dp.toPx(), inset.toPx()),
                 Offset(5.dp.toPx(), bottom - inset.toPx()), 4.dp.toPx())
@@ -395,15 +415,18 @@ private fun TriggerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mo
             verticalAlignment = Alignment.CenterVertically) {
             Column {
                 ControlText(when {
-                    ui.holding && ui.micOpen -> "Live"
+                    microphoneLive -> "Live now"
                     ui.holding -> if (concise) "Wait" else "Opening"
                     ui.canHold -> "Push"
                     else -> if (concise) "Off" else "Unavailable"
-                }, ink, if (!ui.canHold && !ui.holding) scaledType(22, heightScale, 18, 26)
-                    else scaledType(32, heightScale, 23, 42), bold = true)
+                }, ink, when {
+                    microphoneLive -> scaledType(24, heightScale, 19, liveTypeMaximum)
+                    !ui.canHold && !ui.holding -> scaledType(22, heightScale, 18, 26)
+                    else -> scaledType(32, heightScale, 23, 42)
+                }, bold = true)
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
-                    ui.holding && ui.micOpen -> "release to mute"
+                    microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.holding -> if (concise) "for microphone" else "microphone"
                     ui.canHold -> "to talk"
                     else -> holdUnavailableReason(ui, concise = concise)
@@ -414,11 +437,15 @@ private fun TriggerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mo
 }
 
 @Composable
-private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modifier) {
+private fun RockerHoldFace(
+    ui: CallUi, ink: Color, surface: Color, modifier: Modifier, light: State<PreviewButtonLight>?,
+) {
     val largeType = LocalDensity.current.fontScale > 1.3f
     val live = ui.holding && ui.micOpen
+    val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
+        val liveTypeMaximum = if (maxWidth < 300.dp) 24 else 28
         val compactFace = largeType || maxWidth < 300.dp
         val concise = compactFace || maxHeight < 100.dp
         val shallow = (4f * heightScale).coerceIn(3f, 6f).dp
@@ -456,6 +483,8 @@ private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
                 lineTo(lowerSide, bottom + bevel - corner); close()
             }, VoiceInk.line)
             drawPath(face, surface)
+            drawPreviewButtonLight(face, light, ui.connected && !ui.controlsPending && live,
+                capture = true, ink = VoiceInk.you)
             drawPath(face, VoiceInk.line, style = Stroke(1.dp.toPx()))
             // The face rocks on pressure; illumination follows confirmed capture, never the press alone.
             val lip = when {
@@ -474,15 +503,18 @@ private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
             Spacer(Modifier.width(if (compactFace) 14.dp else 20.dp))
             Column(Modifier.weight(1f)) {
                 ControlText(when {
-                    live -> "Live"
+                    microphoneLive -> "Live now"
                     ui.holding -> if (concise) "Wait" else "Opening"
                     ui.canHold -> "Push"
                     else -> if (concise) "Off" else "Unavailable"
-                }, ink, if (!ui.canHold && !ui.holding) scaledType(22, heightScale, 18, 26)
-                    else scaledType(32, heightScale, 23, 42), bold = true)
+                }, ink, when {
+                    microphoneLive -> scaledType(24, heightScale, 19, liveTypeMaximum)
+                    !ui.canHold && !ui.holding -> scaledType(22, heightScale, 18, 26)
+                    else -> scaledType(32, heightScale, 23, 42)
+                }, bold = true)
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
-                    live -> "release to mute"
+                    microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.holding -> if (concise) "for microphone" else "microphone"
                     ui.canHold -> "to talk"
                     else -> holdUnavailableReason(ui, concise = concise)
@@ -496,27 +528,27 @@ private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
 private fun KeycapHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modifier) {
     val depression = if (ui.holding) 5.dp else 0.dp
     val largeType = LocalDensity.current.fontScale > 1.3f
+    val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
+        val liveTypeMaximum = if (maxWidth < 300.dp) 24 else 28
         Row(Modifier.fillMaxSize().drawBehind {
             drawKeycap(surface, if (ui.canHold || ui.holding) ink.copy(alpha = .6f) else VoiceInk.line, depression.toPx())
         }.padding(start = 24.dp, top = depression, end = 24.dp, bottom = 8.dp - depression),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 ControlText(when {
-                    ui.holding && ui.micOpen -> "release to"
+                    microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.holding -> "opening"
                     ui.canHold -> "push to"
                     else -> "unavailable"
                 }, ink, scaledType(11, heightScale, 10, 14))
                 ControlText(when {
-                    ui.holding && ui.micOpen -> "mute"
+                    microphoneLive -> "Live now"
                     ui.holding -> "mic"
                     ui.canHold -> "talk"
-                    else -> if (ui.connected && !ui.micMuted) {
-                        if (largeType) "mute" else "mute YOU"
-                    } else "wait"
-                }, ink, if (!ui.canHold && ui.connected && !ui.micMuted) scaledType(26, heightScale, 21, 34)
+                    else -> "wait"
+                }, ink, if (microphoneLive) scaledType(24, heightScale, 19, liveTypeMaximum)
                     else scaledType(32, heightScale, 23, 42), bold = true)
             }
             if (!largeType) PressGlyph(ink, ui.holding, Modifier.size((36f * heightScale).coerceIn(26f, 52f).dp))
@@ -527,10 +559,12 @@ private fun KeycapHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mod
 private fun scaledType(base: Int, heightScale: Float, minimum: Int, maximum: Int): Int =
     (base * heightScale).roundToInt().coerceIn(minimum, maximum)
 
+private fun microphoneIsLive(ui: CallUi): Boolean = ui.connected && !ui.controlsPending && ui.micOpen
+
 private fun holdUnavailableReason(ui: CallUi, concise: Boolean = false): String = when {
     !ui.connected -> if (concise) "Not connected" else "Voice not connected"
     ui.controlsPending -> if (concise) "Updating" else "Updating controls"
-    !ui.micMuted -> "Mute YOU first"
+    !ui.micMuted -> "Opening microphone"
     else -> if (concise) "Waiting for mic" else "Waiting for microphone"
 }
 
@@ -627,9 +661,14 @@ private fun PressGlyph(ink: Color, pressed: Boolean, modifier: Modifier) {
     }
 }
 
-private fun DrawScope.drawKeycap(face: Color, edge: Color, depression: Float) {
+private fun DrawScope.drawKeycap(
+    face: Color, edge: Color, depression: Float,
+    light: State<PreviewButtonLight>? = null, lightEnabled: Boolean = false,
+    capture: Boolean = true, lightInk: Color = VoiceInk.you,
+) {
     drawCutPlate(VoiceInk.line, cut = 7.dp.toPx(), top = 7.dp.toPx())
-    drawCutPlate(face, cut = 7.dp.toPx(), top = depression, bottom = 8.dp.toPx() - depression)
+    val facePath = drawCutPlate(face, cut = 7.dp.toPx(), top = depression, bottom = 8.dp.toPx() - depression)
+    drawPreviewButtonLight(facePath, light, lightEnabled, capture, lightInk)
     drawCutPlate(edge, cut = 7.dp.toPx(), inset = .75.dp.toPx(), top = depression,
         bottom = 8.dp.toPx() - depression, stroke = 1.5.dp.toPx())
     drawLine(edge.copy(alpha = .6f), Offset(13.dp.toPx(), size.height - 4.dp.toPx()),
@@ -638,7 +677,7 @@ private fun DrawScope.drawKeycap(face: Color, edge: Color, depression: Float) {
 
 private fun DrawScope.drawCutPlate(
     color: Color, cut: Float, inset: Float = 0f, top: Float = 0f, bottom: Float = 0f, stroke: Float = 0f,
-) {
+): Path {
     val left = inset
     val right = size.width - inset
     val upper = top + inset
@@ -651,6 +690,7 @@ private fun DrawScope.drawCutPlate(
         lineTo(left, lower - corner); lineTo(left, upper + corner); close()
     }
     if (stroke > 0f) drawPath(path, color, style = Stroke(stroke)) else drawPath(path, color)
+    return path
 }
 
 private fun Color.over(ground: Color): Color = Color(

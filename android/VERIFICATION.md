@@ -404,3 +404,41 @@ byte-identical phone/host profiles. No Save or production call was issued.
 Review artifacts: `/tmp/agentvoice-yoke-refined-comparison.png` and
 `/tmp/agentvoice-rocker-depth-comparison.png`. Logs use the
 `/tmp/agentvoice-yoke-refine-*` and `/tmp/agentvoice-rocker-depth-*` prefixes.
+
+
+### Shared light, channel color and mechanical body experiments
+
+Protocol/profile 7 adds independent Still/Soft surface light, surface strength,
+and Fixed/Follow channels Persona color behavior. Socket and Traces add two
+stationary mechanical compositions; existing compositions remain available.
+The open-microphone PTT status reads Live now, with unchanged eligibility and
+release semantics. Synthetic voice activity is transient and never saved.
+
+- `bun run test`: 655 passing repository tests. Configurator fixtures account for
+  26 tests, including strict v2–6 migration, v7 receipts, independent resets,
+  and transient-activity rejection in profiles. Root/configurator typecheck and
+  lint pass.
+- Android debug/release assembly and debug lint pass. 36 JVM tests pass,
+  including color/gate policy and lazy envelopes with immediate closed-gate
+  fences. Debug APK SHA-256:
+  `43a895f56a5052b04b1c9aca2eaca7f4205fc8693bacc79135b5e3bda826f431`.
+  Release DEX inspection excludes the preview activity/bridge and new spirit
+  helpers; the original asset and production source remain unchanged.
+- 36 instrumentation tests passed on the physical Samsung S22 in 82 seconds.
+  Paused recoloring changes pixels while preserving exact alpha silhouette and
+  the same state machine; animated recoloring retains advancing geometry.
+  Scene ticks retain a held pointer and every control's bounds. Motion disable
+  stops phase and energy modulation. All five compositions preserve both native
+  renderer variants. Existing cancellation, large-text/extreme-size, dark active
+  face, lifecycle and bridge/profile tests also pass.
+- Headless Chrome with a disposable fake phone exercised 20 independent
+  mute/PTT/composition combinations, all seven scoped resets, independent light
+  and color behavior, exact v7 Save/reload, no activity in the profile, and no
+  edit/Save replay on reconnect. Desktop and narrow layouts have no horizontal
+  overflow or browser errors.
+
+Build/test logs and browser captures use `/tmp/agentvoice-spirit-*`.
+Final visual phone review is pending: USB disconnected after the passing native
+suite and installation. The preview was restored with the operator's geometry,
+motion and colors and the new Socket/Soft/Follow choices unsaved before the
+connection was lost. No Save or production media/inference was started.

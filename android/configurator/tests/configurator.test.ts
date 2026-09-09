@@ -18,13 +18,16 @@ import {
   previewOf,
   profileDesign,
   profileHalo,
+  profileSpirit,
 } from "../src/protocol.ts";
 import { resetPreview } from "../src/resets.ts";
 import { serveConfigurator } from "../src/server.ts";
+import { defaultSpirit, parseSpirit } from "../src/spirit.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 6,
+  protocol: 7,
+  activity: "steady",
   connection: "connected",
   revision: 0,
   holding: false,
@@ -41,11 +44,15 @@ const initial = (): PhoneState => ({
   halo: defaultHalo(),
   savedHalo: defaultHalo(),
   defaultHalo: defaultHalo(),
+  spirit: defaultSpirit(),
+  savedSpirit: defaultSpirit(),
+  defaultSpirit: defaultSpirit(),
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Extract<Profile, { version: 6 }> => ({
-  version: 6,
+const profile = (state: PhoneState): Extract<Profile, { version: 7 }> => ({
+  version: 7,
+  spirit: { ...state.spirit },
   design: { ...state.design },
   halo: structuredClone(state.halo),
   scaleMultipliers: {
@@ -70,6 +77,8 @@ class FakePhone implements Phone {
   calls: Record<string, unknown>[] = [];
   refuseSave = false;
   wrongOffsetReceipt = false;
+  wrongSpiritReceipt: "surface" | "strengthPercent" | "persona" | undefined;
+  oldReceipt = false;
   wrongHaloReceipt:
     | "variant"
     | "color"
@@ -81,7 +90,10 @@ class FakePhone implements Phone {
     this.calls.push(command);
     if (command["method"] === "preview") {
       const preview = parsePreview({
+        ...previewOf(initial()),
         connection: command["connection"],
+        activity: command["activity"],
+        spirit: command["spirit"],
         mode: command["mode"],
         scales: command["scales"],
         verticalOffsetDp: command["verticalOffsetDp"],
@@ -99,6 +111,7 @@ class FakePhone implements Phone {
         savedVerticalOffsetDp: this.state.verticalOffsetDp,
         savedDesign: { ...this.state.design },
         savedHalo: structuredClone(this.state.halo),
+        savedSpirit: { ...this.state.spirit },
       };
       const receipt = profile(this.state);
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
@@ -109,7 +122,20 @@ class FakePhone implements Phone {
       if (this.wrongHaloReceipt === "variant") receipt.halo.variant = "contained";
       else if (this.wrongHaloReceipt === "color") receipt.halo.colors.idle = "#ffffff";
       else if (this.wrongHaloReceipt) receipt.halo[this.wrongHaloReceipt]++;
-      return { state: this.state, profile: JSON.stringify(receipt, null, 2) };
+      if (this.wrongSpiritReceipt === "surface")
+        receipt.spirit.surface = receipt.spirit.surface === "still" ? "soft" : "still";
+      if (this.wrongSpiritReceipt === "strengthPercent")
+        receipt.spirit.strengthPercent = (receipt.spirit.strengthPercent + 1) % 101;
+      if (this.wrongSpiritReceipt === "persona")
+        receipt.spirit.persona = receipt.spirit.persona === "fixed" ? "follow" : "fixed";
+      return {
+        state: this.state,
+        profile: JSON.stringify(
+          this.oldReceipt ? { ...receipt, version: 6, spirit: undefined } : receipt,
+          null,
+          2,
+        ),
+      };
     }
     return { state: this.state };
   }
@@ -132,6 +158,8 @@ async function fixture(options: { saveTo?: string } = {}) {
         ...(path === "preview"
           ? {
               connection: phone.state.connection,
+              activity: phone.state.activity,
+              spirit: phone.state.spirit,
               verticalOffsetDp: phone.state.verticalOffsetDp,
               design: phone.state.design,
               halo: phone.state.halo,
@@ -159,6 +187,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   expect(() => parseScales({ ...defaults, offset: 35 })).toThrow();
   expect(() =>
     parsePreview({
+      ...previewOf(initial()),
       connection: "connected",
       mode: "thinking",
       scales: defaults,
@@ -177,6 +206,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   for (const verticalOffsetDp of [-201, 201, 20.5, "35", null, undefined]) {
     expect(() =>
       parsePreview({
+        ...previewOf(initial()),
         connection: "connected",
         mode: "idle",
         scales: defaults,
@@ -192,7 +222,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
 test("design choices are bounded and old profiles remain readable without migration", () => {
   for (const mute of ["rockers", "keycaps"] as const)
     for (const hold of ["trigger", "rocker"] as const)
-      for (const composition of ["open", "dock", "yoke"] as const)
+      for (const composition of ["open", "dock", "yoke", "socket", "traces"] as const)
         expect(parseDesign({ ...defaultDesign, mute, hold, composition })).toEqual({
           ...defaultDesign,
           mute,
@@ -208,7 +238,7 @@ test("design choices are bounded and old profiles remain readable without migrat
   ])
     expect(() => parseDesign({ ...defaultDesign, ...retired })).toThrow();
   expect(() => parseDesign({ ...defaultDesign, asset: "/arbitrary" })).toThrow();
-  const { design: _, halo: _halo, ...legacy } = profile(initial());
+  const { design: _, halo: _halo, spirit: _spirit, ...legacy } = profile(initial());
   const old = { ...legacy, version: 2 as const };
   expect(parseProfile(JSON.stringify(old))).toEqual(old);
   expect(profileHalo(parseProfile(JSON.stringify(old)))).toEqual(defaultHalo());
@@ -254,6 +284,7 @@ test("control dimensions and connection scenarios are bounded", () => {
     expect(() => parseDesign({ ...defaultDesign, holdSharePercent })).toThrow();
   expect(() =>
     parsePreview({
+      ...previewOf(initial()),
       connection: "reconnect-call",
       mode: "idle",
       scales: defaults,
@@ -500,7 +531,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(6);
+  expect(saved.version).toBe(7);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -539,6 +570,8 @@ test("granular resets preserve unrelated choices and do not mutate saved state",
     idleBreathingPercent: 61,
     colors: { speaking: "#ff0000", listening: "#00ff00", idle: "#0000ff" },
   };
+  selected.spirit = { surface: "soft", strengthPercent: 81, persona: "follow" };
+  selected.activity = "voice";
   const before = structuredClone(selected);
   const saved = structuredClone(phone);
   const animation = resetPreview(selected, phone, "animation");
@@ -569,6 +602,14 @@ test("granular resets preserve unrelated choices and do not mutate saved state",
       holdSharePercent: defaultDesign.holdSharePercent,
     },
   });
+  expect(resetPreview(selected, phone, "light")).toEqual({
+    ...selected,
+    spirit: { ...selected.spirit, surface: "still", strengthPercent: 35 },
+  });
+  expect(resetPreview(selected, phone, "spirit-colors")).toEqual({
+    ...selected,
+    spirit: { ...selected.spirit, persona: "fixed" },
+  });
   const original = { ...selected, halo: { ...selected.halo, variant: "original" as const } };
   expect(resetPreview(original, phone, "size")).toEqual({
     ...original,
@@ -576,4 +617,120 @@ test("granular resets preserve unrelated choices and do not mutate saved state",
   });
   expect(selected).toEqual(before);
   expect(phone).toEqual(saved);
+});
+
+test("spirit and activity validate exactly while Original retains its follow selection", () => {
+  const base = defaultSpirit();
+  expect(base).toEqual({ surface: "still", strengthPercent: 35, persona: "fixed" });
+  for (const surface of ["still", "soft"] as const)
+    for (const persona of ["fixed", "follow"] as const)
+      for (const strengthPercent of [0, 35, 100])
+        expect(parseSpirit({ surface, persona, strengthPercent })).toEqual({
+          surface,
+          persona,
+          strengthPercent,
+        });
+  for (const strengthPercent of [-1, 101, 35.5, "35", null, undefined, NaN, Infinity])
+    expect(() => parseSpirit({ ...base, strengthPercent })).toThrow();
+  for (const change of [{ surface: "glow" }, { persona: "automatic" }, { asset: "remote" }])
+    expect(() => parseSpirit({ ...base, ...change })).toThrow();
+  expect(() => parseSpirit({ surface: "still", strengthPercent: 35 })).toThrow();
+  const preview = previewOf(initial());
+  for (const activity of ["steady", "voice"] as const) {
+    const selected = parsePreview({ ...preview, activity, spirit: { ...base, persona: "follow" } });
+    expect(selected.activity).toBe(activity);
+    expect(selected.halo.variant).toBe("original");
+    expect(previewOf(selected).spirit.persona).toBe("follow");
+  }
+  for (const activity of ["live", null, undefined]) {
+    expect(() => parsePreview({ ...preview, activity })).toThrow();
+    expect(() => parseState({ ...initial(), activity })).toThrow();
+  }
+  for (const field of ["spirit", "savedSpirit", "defaultSpirit"] as const)
+    expect(() =>
+      parseState({ ...initial(), [field]: { ...base, strengthPercent: 101 } }),
+    ).toThrow();
+});
+
+test("old profile contracts keep exact fields and old compositions while spirit defaults in memory", () => {
+  const { spirit: _spirit, ...latestWithoutSpirit } = profile(initial());
+  const v6 = {
+    ...latestWithoutSpirit,
+    version: 6 as const,
+    design: { ...defaultDesign, composition: "yoke" as const },
+  };
+  const encoded = JSON.stringify(v6);
+  const decoded = parseProfile(encoded);
+  expect(decoded).toEqual(v6);
+  expect(JSON.stringify(decoded)).toBe(encoded);
+  expect(profileSpirit(decoded)).toEqual(defaultSpirit());
+  expect("spirit" in decoded).toBe(false);
+  expect(profileDesign(decoded).composition).toBe("yoke");
+  for (const composition of ["socket", "traces"])
+    expect(() =>
+      parseProfile(JSON.stringify({ ...v6, design: { ...v6.design, composition } })),
+    ).toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...v6, spirit: defaultSpirit() }))).toThrow();
+  const v7 = {
+    ...v6,
+    version: 7,
+    spirit: defaultSpirit(),
+    design: { ...v6.design, composition: "socket" },
+  };
+  expect(profileSpirit(parseProfile(JSON.stringify(v7)))).toEqual(defaultSpirit());
+  expect(() => parseProfile(JSON.stringify({ ...v7, activity: "voice" }))).toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
+});
+
+test("spirit is unsaved until exact version 7 Save and activity never enters the profile", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
+  const design = { ...defaultDesign, composition: "traces" as const };
+  expect(
+    (
+      await post("preview", {
+        mode: "speaking",
+        scales: defaults,
+        activity: "voice",
+        spirit,
+        design,
+      })
+    ).status,
+  ).toBe(200);
+  expect(phone.state.spirit).toEqual(spirit);
+  expect(phone.state.savedSpirit).toEqual(defaultSpirit());
+  expect(phone.state.activity).toBe("voice");
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(saved.version).toBe(7);
+  expect(profileSpirit(saved)).toEqual(spirit);
+  expect(profileDesign(saved)).toEqual(design);
+  expect(phone.state.savedSpirit).toEqual(spirit);
+  expect("activity" in saved).toBe(false);
+  expect("connection" in saved).toBe(false);
+});
+
+test("mismatched spirit or old-version receipts never publish a host copy", async () => {
+  for (const field of ["surface", "strengthPercent", "persona"] as const) {
+    const { phone, post, saveTo } = await fixture();
+    phone.wrongSpiritReceipt = field;
+    expect((await post("save", { revision: 0 })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
+  const { phone, post, saveTo } = await fixture();
+  phone.oldReceipt = true;
+  expect((await post("save", { revision: 0 })).status).toBe(502);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+});
+
+test("invalid activity or spirit never reaches the phone", async () => {
+  const { phone, post } = await fixture();
+  for (const change of [
+    { activity: "live" },
+    { spirit: { ...defaultSpirit(), strengthPercent: 101 } },
+    { spirit: null },
+  ])
+    expect((await post("preview", { mode: "idle", scales: defaults, ...change })).status).toBe(400);
+  expect(phone.calls).toHaveLength(0);
 });

@@ -44,7 +44,7 @@ class PreviewControlsTest {
         compose.onNodeWithTag("mic-mute").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.runOnIdle { assertEquals(1, presses); assertEquals(0, releases); ui = ui.copy(micOpen = true) }
-        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Release to mute"))
+        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Live now. Release to mute"))
         push.performTouchInput { up() }
         push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ready"))
         push.performTouchInput { down(center); cancel() }
@@ -57,7 +57,8 @@ class PreviewControlsTest {
             assertTrue(ui.micMuted)
             ui = ready.copy(canHold = false, micMuted = false, micOpen = true)
         }
-        push.assertIsNotEnabled().performTouchInput { click() }
+        push.assertIsNotEnabled().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Live now. Microphone open"))
+            .performTouchInput { click() }
         compose.runOnIdle { assertEquals(4, presses); assertEquals(4, releases) }
     }
 

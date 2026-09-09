@@ -23,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6, 7 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -32,10 +32,11 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
         else placement
 }
 
-internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo()): String {
+internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit()): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 6)
+        .put("version", 7)
+        .put("spirit", spirit.json())
         .put("halo", halo.json())
         .put("design", design.json())
         .put("scaleMultipliers", JSONObject()
@@ -95,17 +96,21 @@ internal data class PersonaPreviewState(
     val savedDesign: PreviewDesign = design,
     val halo: PreviewHalo = PreviewHalo(),
     val savedHalo: PreviewHalo = halo,
+    val spirit: PreviewSpirit = PreviewSpirit(),
+    val savedSpirit: PreviewSpirit = spirit,
+    val activity: String = "steady",
     val micMuted: Boolean = mode != "listening" || holding,
     val speakerMuted: Boolean = false,
 ) {
-    fun json(): JSONObject = JSONObject().put("protocol", 6).put("connection", connection).put("revision", revision)
-        .put("mode", mode).put("holding", holding).put("scales", placement.scalesJson())
+    fun json(): JSONObject = JSONObject().put("protocol", 7).put("connection", connection).put("revision", revision)
+        .put("mode", mode).put("activity", activity).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
         .put("savedVerticalOffsetDp", saved.offsetY.value.roundToInt())
         .put("defaultVerticalOffsetDp", PersonaPlacement().offsetY.value.roundToInt())
         .put("design", design.json()).put("savedDesign", savedDesign.json()).put("defaultDesign", PreviewDesign().json())
         .put("halo", halo.json()).put("savedHalo", savedHalo.json()).put("defaultHalo", PreviewHalo().json())
+        .put("spirit", spirit.json()).put("savedSpirit", savedSpirit.json()).put("defaultSpirit", PreviewSpirit().json())
         .put("micMuted", micMuted).put("speakerMuted", speakerMuted)
 
     fun select(next: String) = copy(mode = next, holding = false, micMuted = next != "listening", speakerMuted = false, revision = revision + 1)
@@ -131,41 +136,44 @@ internal data class PersonaPreviewState(
     }
 }
 
-internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, savedDesign: PreviewDesign = PreviewDesign(), savedHalo: PreviewHalo = PreviewHalo()): PersonaPreviewState {
+internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, savedDesign: PreviewDesign = PreviewDesign(), savedHalo: PreviewHalo = PreviewHalo(), savedSpirit: PreviewSpirit = PreviewSpirit()): PersonaPreviewState {
     val mode = data.getString("mode")
     val revision = data.get("revision")
     require(mode in previewModes && revision is Int && revision >= 0)
     val holding = data.getBoolean("holding")
     val connection = data.optString("connection", "connected")
     require(connection in previewConnections)
+    val activity = data.optString("activity", "steady")
+    require(activity in previewActivities)
     return PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
-        mode = if (holding) "idle" else mode, connection = connection, revision = revision,
+        mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let(::decodePreviewDesign) ?: PreviewDesign(), savedDesign = savedDesign,
         halo = data.optJSONObject("halo")?.let(::decodePreviewHalo) ?: PreviewHalo(), savedHalo = savedHalo,
+        spirit = data.optJSONObject("spirit")?.let(::decodePreviewSpirit) ?: PreviewSpirit(), savedSpirit = savedSpirit,
         micMuted = holding || data.optBoolean("micMuted", mode != "listening"), speakerMuted = data.optBoolean("speakerMuted", false))
 }
 
-internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = PreviewDesign(), initialHalo: PreviewHalo = PreviewHalo()) {
-    var state by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo))
+internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = PreviewDesign(), initialHalo: PreviewHalo = PreviewHalo(), initialSpirit: PreviewSpirit = PreviewSpirit()) {
+    var state by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo, spirit = initialSpirit))
 
     suspend fun command(request: JSONObject): JSONObject {
         val method = request.getString("method")
         var profile: String? = null
         if (method == "save") {
             require(request.fields() == setOf("id", "method", "revision"))
-            val placement = withContext(Dispatchers.Main) {
+            val selected = withContext(Dispatchers.Main) {
                 check(request.get("revision") == state.revision) { "Preview changed. Review it before saving." }
-                Triple(state.placement, state.design, state.halo)
+                state
             }
-            profile = encodePersonaTuning(placement.first, placement.second, placement.third)
+            profile = encodePersonaTuning(selected.placement, selected.design, selected.halo, selected.spirit)
             savePersonaTuning(selection, profile)
-            withContext(Dispatchers.Main) { state = state.copy(saved = placement.first, savedDesign = placement.second, savedHalo = placement.third) }
+            withContext(Dispatchers.Main) { state = state.copy(saved = selected.placement, savedDesign = selected.design, savedHalo = selected.halo, savedSpirit = selected.spirit) }
         }
         return withContext(Dispatchers.Main) {
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity"))
                     val mode = request.getString("mode")
                     require(mode in previewModes)
                     val connection = request.getString("connection")
@@ -173,8 +181,11 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val placement = decodePreviewPlacement(request)
                     val design = decodePreviewDesign(request.getJSONObject("design"))
                     val halo = decodePreviewHalo(request.getJSONObject("halo"))
+                    val spirit = decodePreviewSpirit(request.getJSONObject("spirit"))
+                    val activity = request.getString("activity")
+                    require(activity in previewActivities)
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
-                    state = next.copy(placement = placement, design = design, halo = halo, connection = connection, revision = state.revision + 1)
+                    state = next.copy(placement = placement, design = design, halo = halo, spirit = spirit, activity = activity, connection = connection, revision = state.revision + 1)
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")

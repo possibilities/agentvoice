@@ -40,7 +40,9 @@ class PersonaPreviewTest {
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(6, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(7, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
+            assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))
             assertEquals(PreviewHalo(), decodePersonaHalo(legacy))
             assertEquals(design, decodePersonaDesign(fixture.readText()))
@@ -63,6 +65,17 @@ class PersonaPreviewTest {
             val v5 = JSONObject(v4).put("version", 5).put("halo", halo.json()).toString()
             assertEquals(previous, decodePersonaDesign(v5))
             assertEquals(halo, decodePersonaHalo(v5))
+            val v6 = JSONObject(encodePersonaTuning(tuned, design, halo)).apply { put("version", 6); remove("spirit") }.toString()
+            assertEquals(PreviewSpirit(), decodePersonaSpirit(v6))
+            assertEquals(design, decodePersonaDesign(v6))
+            assertEquals(halo, decodePersonaHalo(v6))
+            val futureBody = JSONObject(v6).apply { getJSONObject("design").put("composition", "socket") }.toString()
+            assertThrows(IllegalArgumentException::class.java) { decodePersonaDesign(futureBody) }
+            assertEquals("socket", decodePersonaDesign(JSONObject(futureBody).put("version", 7).toString()).composition)
+            for (invalidSpirit in listOf(PreviewSpirit().json().put("strengthPercent", 101),
+                PreviewSpirit().json().put("strengthPercent", 1.5), PreviewSpirit().json().put("extra", true))) {
+                assertThrows(IllegalArgumentException::class.java) { decodePreviewSpirit(invalidSpirit) }
+            }
             for (old in listOf(v4, v5)) {
                 val invalid = JSONObject(old).apply { getJSONObject("design").put("hold", "rocker") }.toString()
                 assertThrows(IllegalArgumentException::class.java) { decodePersonaDesign(invalid) }
@@ -109,7 +122,7 @@ class PersonaPreviewTest {
             connect().use { socket ->
                 val writer = socket.outputStream
                 writer.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
-                val request = JSONObject().put("id", 1).put("method", "preview").put("connection", "connected").put("mode", "listening")
+                val request = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connected").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(mute = "rockers", hold = "rocker", composition = "dock", controlsHeightDp = 380, holdSharePercent = 54.3).json())
@@ -138,6 +151,8 @@ class PersonaPreviewTest {
                 assertEquals(380, decodePersonaDesign(fixture.readText()).controlsHeightDp)
                 assertEquals("rocker", decodePersonaDesign(fixture.readText()).hold)
                 assertEquals("dock", decodePersonaDesign(fixture.readText()).composition)
+                assertEquals(PreviewSpirit("soft", 42, "follow"), decodePersonaSpirit(fixture.readText()))
+                assertFalse(JSONObject(fixture.readText()).has("activity"))
                 assertEquals(54.3, decodePersonaDesign(fixture.readText()).holdSharePercent, 0.00001)
             }
             connect().use { socket ->

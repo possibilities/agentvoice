@@ -6,9 +6,15 @@ import {
   parseDesign,
   parseLegacyDesign,
   parsePreviousDesign,
+  parseVersionSixDesign,
+  type VersionSixDesign,
 } from "./design.ts";
 import { defaultHalo, type HaloSelection, parseHalo } from "./halo.ts";
 
+import { defaultSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
+
+export const activities = ["steady", "voice"] as const;
+export type Activity = (typeof activities)[number];
 export const modes = ["speaking", "listening", "idle"] as const;
 export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
@@ -16,14 +22,16 @@ export const connections = ["connected", "connecting", "disconnected"] as const;
 export type Connection = (typeof connections)[number];
 export type Preview = {
   connection: Connection;
+  activity: Activity;
   mode: Mode;
   scales: Scales;
   verticalOffsetDp: number;
   design: Design;
   halo: HaloSelection;
+  spirit: SpiritSelection;
 };
 export type PhoneState = Preview & {
-  protocol: 6;
+  protocol: 7;
   revision: number;
   holding: boolean;
   savedScales: Scales;
@@ -34,6 +42,8 @@ export type PhoneState = Preview & {
   defaultDesign: Design;
   savedHalo: HaloSelection;
   defaultHalo: HaloSelection;
+  savedSpirit: SpiritSelection;
+  defaultSpirit: SpiritSelection;
   micMuted: boolean;
   speakerMuted: boolean;
 };
@@ -48,7 +58,8 @@ export type Profile = {
   | { version: 3; design: LegacyDesign }
   | { version: 4; design: PreviousDesign }
   | { version: 5; design: PreviousDesign; halo: HaloSelection }
-  | { version: 6; design: Design; halo: HaloSelection }
+  | { version: 6; design: VersionSixDesign; halo: HaloSelection }
+  | { version: 7; design: Design; halo: HaloSelection; spirit: SpiritSelection }
 );
 
 export function record(value: unknown): Record<string, unknown> {
@@ -87,16 +98,28 @@ function mode(value: unknown): Mode {
 
 export function parsePreview(value: unknown): Preview {
   const data = record(value);
-  exact(data, ["connection", "mode", "scales", "verticalOffsetDp", "design", "halo"]);
+  exact(data, [
+    "connection",
+    "activity",
+    "mode",
+    "scales",
+    "verticalOffsetDp",
+    "design",
+    "halo",
+    "spirit",
+  ]);
   if (!connections.includes(data["connection"] as Connection))
     throw Error("Invalid connection preview");
+  if (!activities.includes(data["activity"] as Activity)) throw Error("Invalid preview activity");
   return {
     connection: data["connection"] as Connection,
+    activity: data["activity"] as Activity,
     mode: mode(data["mode"]),
     scales: parseScales(data["scales"]),
     verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
     design: parseDesign(data["design"]),
     halo: parseHalo(data["halo"]),
+    spirit: parseSpirit(data["spirit"]),
   };
 }
 
@@ -105,6 +128,7 @@ export function parseState(value: unknown): PhoneState {
   exact(data, [
     "protocol",
     "connection",
+    "activity",
     "revision",
     "holding",
     "mode",
@@ -120,20 +144,25 @@ export function parseState(value: unknown): PhoneState {
     "halo",
     "savedHalo",
     "defaultHalo",
+    "spirit",
+    "savedSpirit",
+    "defaultSpirit",
     "micMuted",
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 6 ||
+    data["protocol"] !== 7 ||
     !connections.includes(data["connection"] as Connection) ||
+    !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
     typeof data["micMuted"] !== "boolean" ||
     typeof data["speakerMuted"] !== "boolean"
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 6,
+    protocol: 7,
     connection: data["connection"] as Connection,
+    activity: data["activity"] as Activity,
     revision: integer(data["revision"]),
     holding: data["holding"],
     mode: mode(data["mode"]),
@@ -145,10 +174,13 @@ export function parseState(value: unknown): PhoneState {
     defaultVerticalOffsetDp: integer(data["defaultVerticalOffsetDp"], -200, 200),
     design: parseDesign(data["design"]),
     halo: parseHalo(data["halo"]),
+    spirit: parseSpirit(data["spirit"]),
     savedDesign: parseDesign(data["savedDesign"]),
     defaultDesign: parseDesign(data["defaultDesign"]),
     savedHalo: parseHalo(data["savedHalo"]),
     defaultHalo: parseHalo(data["defaultHalo"]),
+    savedSpirit: parseSpirit(data["savedSpirit"]),
+    defaultSpirit: parseSpirit(data["defaultSpirit"]),
     micMuted: data["micMuted"],
     speakerMuted: data["speakerMuted"],
   };
@@ -164,11 +196,12 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...([3, 4, 5, 6].includes(data["version"] as number) ? ["design"] : []),
-    ...([5, 6].includes(data["version"] as number) ? ["halo"] : []),
+    ...([3, 4, 5, 6, 7].includes(data["version"] as number) ? ["design"] : []),
+    ...([5, 6, 7].includes(data["version"] as number) ? ["halo"] : []),
+    ...(data["version"] === 7 ? ["spirit"] : []),
   ]);
   if (
-    ![2, 3, 4, 5, 6].includes(data["version"] as number) ||
+    ![2, 3, 4, 5, 6, 7].includes(data["version"] as number) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -188,30 +221,43 @@ export function parseProfile(text: string): Profile {
   integer(data["savedAtEpochMs"], 1);
   if (data["version"] === 3) parseLegacyDesign(data["design"]);
   if (data["version"] === 4 || data["version"] === 5) parsePreviousDesign(data["design"]);
-  if (data["version"] === 6) parseDesign(data["design"]);
-  if (data["version"] === 5 || data["version"] === 6) data["halo"] = parseHalo(data["halo"]);
+  if (data["version"] === 6) parseVersionSixDesign(data["design"]);
+  if (data["version"] === 7) {
+    parseDesign(data["design"]);
+    parseSpirit(data["spirit"]);
+  }
+  if (data["version"] === 5 || data["version"] === 6 || data["version"] === 7)
+    data["halo"] = parseHalo(data["halo"]);
   return data as Profile;
 }
 
 export function profileDesign(profile: Profile): Design {
-  if (profile.version === 6) return profile.design;
+  if (profile.version === 6 || profile.version === 7) return profile.design;
   if (profile.version === 4 || profile.version === 5)
     return { ...profile.design, composition: "open" };
   return currentDesign(profile.design);
 }
 
 export function profileHalo(profile: Profile): HaloSelection {
-  return profile.version === 5 || profile.version === 6 ? profile.halo : defaultHalo();
+  return profile.version === 5 || profile.version === 6 || profile.version === 7
+    ? profile.halo
+    : defaultHalo();
+}
+
+export function profileSpirit(profile: Profile): SpiritSelection {
+  return profile.version === 7 ? profile.spirit : defaultSpirit();
 }
 
 export function previewOf(state: Preview): Preview {
   return {
     connection: state.connection,
+    activity: state.activity,
     mode: state.mode,
     scales: { ...state.scales },
     verticalOffsetDp: state.verticalOffsetDp,
     design: { ...state.design },
     halo: structuredClone(state.halo),
+    spirit: { ...state.spirit },
   };
 }
 

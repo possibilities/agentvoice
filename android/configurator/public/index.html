@@ -34,9 +34,20 @@
               </div>
               <div class="mixing">
                 <label for="design-composition">Composition</label>
-                <select id="design-composition" aria-describedby="composition-hint"><option value="open">Open</option><option value="dock">Dock</option><option value="yoke">Yoke</option></select>
+                <select id="design-composition" aria-describedby="composition-hint"><option value="open">Open</option><option value="dock">Dock</option><option value="yoke">Yoke</option><option value="socket">Socket</option><option value="traces">Traces</option></select>
               </div>
               <p id="composition-hint" class="control-hint">Persona and controls float freely.</p>
+              <fieldset class="motion-controls"><legend class="subpanel-title">Surface light</legend>
+                <div class="mixing">
+                  <label for="spirit-surface">Light</label>
+                  <select id="spirit-surface"><option value="still">Still</option><option value="soft">Soft</option></select>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spirit-strength">Strength</label><output id="spirit-strength-value" for="spirit-strength">35%</output></div>
+                  <input id="spirit-strength" type="range" min="0" max="100" step="1" value="35" />
+                </div>
+                <button type="button" id="reset-light" data-reset="light" class="reset value-reset">Reset light</button>
+              </fieldset>
               <div class="size-control">
                 <div class="size-heading"><label for="controls-height">Controls height</label><output id="controls-height-value" for="controls-height">262 dp</output></div>
                 <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
@@ -59,6 +70,11 @@
                 <label for="connection-preview">Preview connection</label>
                 <select id="connection-preview"><option value="connected">Connected</option><option value="connecting">Connecting</option><option value="disconnected">Disconnected</option></select>
               </div>
+              <div class="mixing">
+                <label for="preview-activity">Preview activity</label>
+                <select id="preview-activity" aria-describedby="activity-hint"><option value="steady">Steady</option><option value="voice">Synthetic voice</option></select>
+              </div>
+              <p id="activity-hint" class="control-hint">Simulated activity only. No microphone or playback.</p>
               <fieldset class="modes">
                 <legend class="sr-only">Preview state</legend>
                 <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
@@ -98,6 +114,11 @@
                   <button type="button" id="reset-animation" data-reset="animation" class="reset value-reset">Reset animation</button>
                 </fieldset>
                 <fieldset class="color-controls"><legend class="subpanel-title">Color</legend>
+                  <div class="mixing">
+                    <label for="spirit-persona">Persona color</label>
+                    <select id="spirit-persona"><option value="fixed">Fixed</option><option value="follow">Follow channels</option></select>
+                  </div>
+                  <button type="button" id="reset-spirit-colors" data-reset="spirit-colors" class="reset value-reset">Reset color behavior</button>
                   <div class="color-grid">
                     <label class="color-choice" for="color-speaking"><span>Speaking</span><input id="color-speaking" type="color" value="#bbaaff" /><output id="color-speaking-value" for="color-speaking">#bbaaff</output></label>
                     <label class="color-choice" for="color-listening"><span>Listening</span><input id="color-listening" type="color" value="#d4ff72" /><output id="color-listening-value" for="color-listening">#d4ff72</output></label>

@@ -10,12 +10,24 @@ the Trigger or Rocker surface labeled **Push to talk**. Trigger remains the
 default. Press and keep either surface down to talk; release to mute. Active
 styling stays dark with focused lime accents. There are no preset or header selectors.
 
-**Composition** selects Open, Dock or Yoke. Open is the default, with Persona
-and controls floating freely. Dock adds a quiet shared plate with chamfered
+**Composition** selects Open, Dock, Yoke, Socket or Traces. Open is the default,
+with Persona and controls floating freely. Dock adds a quiet shared plate with chamfered
 shoulders fading upward behind lower Persona and the controls. Yoke adds a
-minimal center stem that divides toward the two mute buttons. Both use passive,
-stationary neutral layers; neither changes layout, Halo rendering or tuning,
-full-bleed artwork, touch targets, status or animation.
+minimal center stem that divides toward the two mute buttons. Socket gives the
+Persona a pair of chamfered mechanical supports; Traces routes paired PCB paths
+into the control deck. These are stationary neutral layers with no touch targets.
+The new supports leave a soft aperture based on selected placement and maximum
+size, never animated bounds, to keep the transparent center clear. Changing
+composition preserves layout, Halo rendering, tuning and glow bleed.
+
+**Surface light** offers Still (the unchanged default) or Soft: a broad matte
+light drifts inside the existing button faces on one 14-second cycle. Strength
+starts at 35% and affects only button light; even at maximum, the added wash is
+capped at 3.5% opacity. Active channel energy gently deepens it with a 200 ms
+attack and 850 ms release. Mute, pending controls and disconnect fence the light
+immediately. PTT still requires a muted mic; when the mic is already open its
+label reads **Live now / microphone open**. Holding confirmed PTT reads
+**Live now / release to mute**. Button shapes and hit targets do not animate.
 
 Controls height spans 240–480 dp, including the fixed 16 dp join between mute
 buttons and the talk surface. Push-to-talk share spans 30–60% of that total height;
@@ -72,6 +84,18 @@ spread/pulse moves the listening rings inward, without enlarging the frame.
 Contained also has Speaking, Listening and Idle color pickers, initially the
 app's violet `#bbaaff`, lime `#d4ff72` and warm white `#f0f2e9`. Disconnected stays
 muted. Original's rendering and colors remain the comparison reference.
+**Persona color** independently selects Fixed (default) or Follow channels for
+Contained. Following retains each chosen hue, adds a small shared sheen, quiets
+closed channels and softly tints Idle toward the sole open channel. Gate/palette
+changes blend over 900 ms. It does not retime the Rive animation. Reduced motion
+removes drift and level modulation, retaining static gate color; backgrounding
+stops the shared clock. Color updates retain the native view and its pose.
+
+**Preview activity** offers Steady or Synthetic voice, a deterministic rehearsal
+envelope with syllables and pauses. It never starts audio or inference and is
+not saved. The light integration accepts the existing `CallUi` input/output level
+envelopes; the production client does not yet use this experiment.
+
 Switching variants keeps each variant's settings. Resets affect only the named
 settings:
 
@@ -81,6 +105,8 @@ settings:
 - **Reset animation** restores only Ring spread, Listening pulse, Speaking motion
   and Idle breathing.
 - **Reset colors** restores only the three Contained colors.
+- **Reset light** restores Still and 35% without changing Persona color behavior.
+- **Reset color behavior** restores Fixed without changing the chosen colors or light.
 
 Each reset preserves all other choices and remains unsaved until explicit Save.
 Save profile keeps the control design,
@@ -90,10 +116,11 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 6 profile atomically on the phone. Its `design`
+Explicit Save writes a version 7 profile atomically on the phone. Its `design`
 contains the fixed layout/header, mute style, talk surface, composition, controls height
 and talk-button share. Its `halo` stores variant, common Contained size, motion
-and opaque RGB colors. Only after the phone confirms that exact profile does
+and opaque RGB colors. Its `spirit` stores surface light, light strength and
+Persona color behavior. Only after the phone confirms that exact profile does
 the host write a matching, mode-0600
 JSON copy to `profiles/<device-serial>.json`. Use `--save-to /absolute/file.json`
 to choose another destination. The browser names that destination after Save.
@@ -102,15 +129,17 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–5 phone profiles remain readable without rewriting:
+until Save. Version 1–6 phone profiles remain readable without rewriting:
 version 1 seeds all three Halo sizes. Version 3 retains Rockers or Keycaps;
 legacy Glyphs and profiles without a mute choice use Keycaps. Version 1–3 profiles
 start with the control geometry baseline and fixed headerless Trigger
 layout. Their Halo sizes and stored position remain intact; a missing position
 uses +35 dp. Versions 4 and 5 retain saved control dimensions and Trigger;
-all older profiles select Open composition. Versions 1–4 select Original,
-while version 5 retains its Halo variant, motion and colors. Older profiles
-become version 6 only on explicit Save. Profiles are ignored by Git.
+versions 1–5 select Open composition; version 6 keeps its composition. Versions
+1–4 select Original,
+while versions 5 and 6 retain their Halo variant, motion and colors. Versions
+1–6 start with Still light and Fixed colors. Older profiles
+become version 7 only on explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
 compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
@@ -147,17 +176,19 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 6 carries live/saved/default designs, sizes, vertical
-offsets and Halo selections, plus the transient `connection: connected|connecting|disconnected`.
+Preview protocol 7 carries live/saved/default designs, sizes, vertical
+offsets, Halo and `spirit` selections, plus transient
+`connection: connected|connecting|disconnected` and `activity: steady|voice`.
+`spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, permits
-`mute: rockers|keycaps`, `hold: trigger|rocker`, `composition: open|dock|yoke`,
+`mute: rockers|keycaps`, `hold: trigger|rocker`, `composition: open|dock|yoke|socket|traces`,
 and retains `controlsHeightDp` (integer 240–480)
 and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
-Version 6 profile receipts must include the exact confirmed design, geometry,
-variant, motion and colors
-before the host copy is written. Connection preview state is excluded from the
-profile. Use matching current host code and debug APK.
+Version 7 profile receipts must include the exact confirmed design, geometry,
+variant, motion, colors and spirit
+before the host copy is written. Connection and activity preview state are
+excluded from the profile. Use matching current host code and debug APK.
 
 ```sh
 bun run test

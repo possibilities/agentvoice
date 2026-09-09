@@ -13,6 +13,7 @@ import {
   parseProfile,
   record,
 } from "./protocol.ts";
+import { equalSpirit } from "./spirit.ts";
 
 export async function serveConfigurator(
   phone: Phone,
@@ -100,19 +101,23 @@ export async function serveConfigurator(
           exact(input, [
             "generation",
             "connection",
+            "activity",
             "mode",
             "scales",
             "verticalOffsetDp",
             "design",
             "halo",
+            "spirit",
           ]);
           parsePreview({
             connection: input["connection"],
+            activity: input["activity"],
             mode: input["mode"],
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
             design: input["design"],
             halo: input["halo"],
+            spirit: input["spirit"],
           });
         } else {
           exact(input, ["generation", "revision"]);
@@ -136,11 +141,13 @@ export async function serveConfigurator(
             method: "preview",
             ...parsePreview({
               connection: input["connection"],
+              activity: input["activity"],
               mode: input["mode"],
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
               design: input["design"],
               halo: input["halo"],
+              spirit: input["spirit"],
             }),
           });
         else {
@@ -150,6 +157,7 @@ export async function serveConfigurator(
           const expectedOffset = phone.state.verticalOffsetDp;
           const expectedDesign = { ...phone.state.design };
           const expectedHalo = structuredClone(phone.state.halo);
+          const expectedSpirit = { ...phone.state.spirit };
           const reply = await phone
             .request({ method: "save", revision: input["revision"] })
             .catch(() => {
@@ -160,10 +168,11 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 6 ||
+            profile.version !== 7 ||
             !profile.design ||
             !equalDesign(profile.design, expectedDesign) ||
             !equalHalo(profile.halo, expectedHalo) ||
+            !equalSpirit(profile.spirit, expectedSpirit) ||
             profile.verticalOffsetDp !== expectedOffset ||
             !equalScales(expected, {
               speaking: Math.round(profile.scaleMultipliers.speaking * 100),

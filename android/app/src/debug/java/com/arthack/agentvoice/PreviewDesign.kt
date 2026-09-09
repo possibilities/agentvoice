@@ -24,7 +24,7 @@ internal fun decodePreviewDesign(data: JSONObject): PreviewDesign {
     val hold = data.getString("hold")
     require(hold in setOf("trigger", "rocker"))
     val composition = data.getString("composition")
-    require(composition in setOf("open", "dock", "yoke"))
+    require(composition in setOf("open", "dock", "yoke", "socket", "traces"))
     val height = data.get("controlsHeightDp")
     val share = data.get("holdSharePercent")
     require(height is Number && height.toDouble() % 1.0 == 0.0 && height.toDouble() in 240.0..480.0)
@@ -52,7 +52,10 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
             require(old.getString("hold") == "trigger")
             decodePreviewDesign(old.put("composition", "open"))
         }
-        6 -> decodePreviewDesign(data.getJSONObject("design"))
+        6 -> decodePreviewDesign(data.getJSONObject("design")).also {
+            require(it.composition in setOf("open", "dock", "yoke"))
+        }
+        7 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

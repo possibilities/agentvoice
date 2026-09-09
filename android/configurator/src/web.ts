@@ -1,6 +1,7 @@
 import { type Design, equalDesign } from "./design.ts";
 import { equalHalo, haloColorStates, haloMotionFields } from "./halo.ts";
 import {
+  type Activity,
   type Connection,
   equalScales,
   type Mode,
@@ -11,8 +12,10 @@ import {
   previewOf,
   profileDesign,
   profileHalo,
+  profileSpirit,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
+import { equalSpirit, type SpiritSelection } from "./spirit.ts";
 
 type Status = {
   connected: boolean;
@@ -95,9 +98,20 @@ function render() {
       open: "Persona and controls float freely.",
       dock: "One quiet surface joins Persona and controls.",
       yoke: "A fine fork connects Persona to both channels.",
+      socket: "A quiet socket seats Persona above the controls.",
+      traces: "Fine traces link Persona and the control deck.",
     }[draft.design.composition],
   );
   element<HTMLSelectElement>("connection-preview").value = draft.connection;
+  element<HTMLSelectElement>("preview-activity").value = draft.activity;
+  element<HTMLSelectElement>("spirit-surface").value = draft.spirit.surface;
+  element<HTMLSelectElement>("spirit-persona").value = draft.spirit.persona;
+  element<HTMLInputElement>("spirit-strength").value = String(draft.spirit.strengthPercent);
+  text(element("spirit-strength-value"), `${draft.spirit.strengthPercent}%`);
+  element("spirit-strength").setAttribute(
+    "aria-valuetext",
+    `${draft.spirit.strengthPercent} percent`,
+  );
   controlHeight.value = String(draft.design.controlsHeightDp);
   holdShare.value = String(draft.design.holdSharePercent);
   text(element("controls-height-value"), `${draft.design.controlsHeightDp} dp`);
@@ -154,13 +168,15 @@ function render() {
     host &&
     equalDesign(profileDesign(status.hostSaved!), draft.design) &&
     equalHalo(profileHalo(status.hostSaved!), draft.halo) &&
+    equalSpirit(profileSpirit(status.hostSaved!), draft.spirit) &&
     status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
     modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
   const phoneMatches =
     equalScales(draft.scales, status.state.savedScales) &&
     draft.verticalOffsetDp === status.state.savedVerticalOffsetDp &&
     equalDesign(draft.design, status.state.savedDesign) &&
-    equalHalo(draft.halo, status.state.savedHalo);
+    equalHalo(draft.halo, status.state.savedHalo) &&
+    equalSpirit(draft.spirit, status.state.savedSpirit);
   text(
     feedback,
     !connected
@@ -246,6 +262,21 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-r
 element<HTMLSelectElement>("connection-preview").addEventListener("change", (event) => {
   const connection = (event.currentTarget as HTMLSelectElement).value as Connection;
   update((current) => ({ ...current, connection }));
+});
+
+element<HTMLSelectElement>("preview-activity").addEventListener("change", (event) => {
+  const activity = (event.currentTarget as HTMLSelectElement).value as Activity;
+  update((current) => ({ ...current, activity }));
+});
+for (const field of ["surface", "persona"] as const) {
+  element<HTMLSelectElement>(`spirit-${field}`).addEventListener("change", (event) => {
+    const value = (event.currentTarget as HTMLSelectElement).value as SpiritSelection[typeof field];
+    update((current) => ({ ...current, spirit: { ...current.spirit, [field]: value } }));
+  });
+}
+element<HTMLInputElement>("spirit-strength").addEventListener("input", (event) => {
+  const strengthPercent = (event.currentTarget as HTMLInputElement).valueAsNumber;
+  update((current) => ({ ...current, spirit: { ...current.spirit, strengthPercent } }));
 });
 
 element<HTMLSelectElement>("halo-variant").addEventListener("change", (event) => {

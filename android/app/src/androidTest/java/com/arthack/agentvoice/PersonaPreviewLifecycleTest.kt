@@ -30,7 +30,7 @@ class PersonaPreviewLifecycleTest {
         ActivityScenario.launch<PersonaPreviewActivity>(intent).use { scenario ->
             var before: JSONObject
             connect().use { socket ->
-                val preview = JSONObject().put("id", 1).put("method", "preview").put("connection", "connecting").put("mode", "listening")
+                val preview = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(mute = "rockers", hold = "rocker", composition = "yoke", controlsHeightDp = 380, holdSharePercent = 54.3).json())

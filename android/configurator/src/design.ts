@@ -1,6 +1,6 @@
 export const muteChoices = ["rockers", "keycaps"] as const;
 export const holdChoices = ["trigger", "rocker"] as const;
-export const compositionChoices = ["open", "dock", "yoke"] as const;
+export const compositionChoices = ["open", "dock", "yoke", "socket", "traces"] as const;
 export type Design = {
   layout: "studio";
   header: "none";
@@ -11,6 +11,9 @@ export type Design = {
   holdSharePercent: number;
 };
 export type PreviousDesign = Omit<Design, "hold" | "composition"> & { hold: "trigger" };
+export type VersionSixDesign = Omit<Design, "composition"> & {
+  composition: "open" | "dock" | "yoke";
+};
 export type LegacyDesign = {
   layout: "original" | "studio";
   header: "quiet" | "drawer" | "none";
@@ -75,6 +78,16 @@ export function parsePreviousDesign(value: unknown): PreviousDesign {
     throw Error("Invalid previous design");
   parseDesign({ ...data, composition: "open" });
   return data as PreviousDesign;
+}
+export function parseVersionSixDesign(value: unknown): VersionSixDesign {
+  const design = parseDesign(value);
+  if (
+    design.composition !== "open" &&
+    design.composition !== "dock" &&
+    design.composition !== "yoke"
+  )
+    throw Error("Invalid version 6 composition");
+  return { ...design, composition: design.composition };
 }
 export function parseLegacyDesign(value: unknown): LegacyDesign {
   if (!value || typeof value !== "object" || Array.isArray(value))

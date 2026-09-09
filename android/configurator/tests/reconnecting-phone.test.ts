@@ -3,6 +3,7 @@ import { defaultDesign } from "../src/design.ts";
 import { defaultHalo } from "../src/halo.ts";
 import type { PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
+import { defaultSpirit } from "../src/spirit.ts";
 
 const scales = { speaking: 78, listening: 58, idle: 78 };
 const timing = { poll: 5, retry: 10, maxRetry: 20 };
@@ -14,7 +15,8 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 6,
+    protocol: 7,
+    activity: "voice",
     connection: "connecting",
     revision: 0,
     holding: false,
@@ -37,6 +39,9 @@ class Connection implements PreviewConnection {
     halo: { ...defaultHalo(), variant: "contained", containedSizePercent: 83 },
     savedHalo: defaultHalo(),
     defaultHalo: defaultHalo(),
+    spirit: { surface: "soft", strengthPercent: 61, persona: "follow" },
+    savedSpirit: defaultSpirit(),
+    defaultSpirit: defaultSpirit(),
     micMuted: false,
     speakerMuted: false,
   };
@@ -89,6 +94,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.design.holdSharePercent).toBe(54.3);
   expect(phone.state.connection).toBe("connecting");
   expect(phone.state.halo.containedSizePercent).toBe(83);
+  expect(phone.state.activity).toBe("voice");
+  expect(phone.state.spirit).toEqual({ surface: "soft", strengthPercent: 61, persona: "follow" });
   await until(() => phone.connected);
   expect(dials).toBe(3);
   expect(phone.generation).toBe(2);

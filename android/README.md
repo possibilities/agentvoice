@@ -218,22 +218,33 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 6 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 7 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including independent control styles, composition, dimensions and Halo
-variant, motion and colors. Preview protocol 6 carries those choices and the
-transient connection selection. Existing version 1–5 phone profiles load without
-rewriting. Versions 1–4 initially select Original; version 5 keeps its Halo settings.
+variant, motion, colors and spirit settings. Preview protocol 7 carries those
+choices plus transient connection and synthetic activity selections. Existing
+version 1–6 phone profiles load without rewriting. Versions 1–4 initially select
+Original; versions 5 and 6 keep their Halo settings.
 Versions 1–3 use the control geometry baseline; versions 4 and 5 keep their
-dimensions and Trigger. All older profiles select Open composition.
+dimensions and Trigger. Versions 1–5 select Open; version 6 preserves its composition.
 Version 3 retains Rockers or Keycaps,
 while legacy Glyphs or absent mute choices become Keycaps. Older profiles
-become version 6 only on Save. The real client and release
+become version 7 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
 icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or audio, or connect to the voice server.
+
+The studio also offers **Socket** and **Traces**, two stationary mechanical
+relatives of Yoke, plus independent **Surface light: Soft** and **Persona color:
+Follow channels** experiments. Light drifts lazily within active button faces;
+Contained colors softly reflect effective channel gates without replacing the
+user palette. Strength affects only button light. **Synthetic voice** rehearses
+level response without audio. **Reset light** and **Reset color behavior** affect
+only their named settings. Versions 1–6 load with Still/Fixed behavior. The shared
+clock stops in the background, disconnected or disabled; reduced motion removes
+all added drift and level modulation. See the [studio guide](configurator/README.md).
 
 ## Remaining on-device acceptance
 

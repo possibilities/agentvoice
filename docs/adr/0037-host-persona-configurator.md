@@ -66,17 +66,18 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 6 on the phone, then
+checks the observed revision, atomically stores version 7 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
-design, geometry and Halo settings in the receipt before writing that copy. Partial save
-failure is visible. Live edits and all resets are unsaved changes. Version 1–5
+design, geometry, Halo and spirit settings in the receipt before writing that
+copy. Partial save failure is visible. Live edits and all resets are unsaved changes. Version 1–6
 phone profiles load without rewriting; version 1 seeds all three Halo
 sizes. Stored position is retained, with +35 dp used when absent. Versions 1–3
 use the control geometry baseline and headerless Trigger layout with Open composition.
 Version 3 retains Rockers or Keycaps; legacy Glyphs and missing mute choices
 use Keycaps. Versions 4 and 5 retain control dimensions and Trigger, adding Open
-composition. Versions 1–4 select Original; version 5 retains its Halo settings.
-Older profiles become version 6 only on explicit Save. Production still
+composition. Versions 1–4 select Original; versions 5 and 6 retain their Halo
+settings, and version 6 keeps its composition.
+Older profiles become version 7 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -134,3 +135,29 @@ other choices and remains unsaved until explicit Save. Save validates the exact
 composition, control styles, geometry and Halo receipt before the host copy is
 written. Version 1–5 profiles remain readable without automatic rewriting;
 existing defaults, including Original tuning and the exact control ratio, remain intact.
+
+
+Updated 2026-09-09: protocol/profile 7 adds independent `spirit` choices:
+`surface: still|soft`, `strengthPercent: 0..100` (default 35), and
+`persona: fixed|follow`. Still/Fixed preserves the current rendering and is the
+migration default for versions 1–6. Reset light affects surface/strength only;
+Reset color behavior affects persona only. Base Halo colors, motion and geometry
+remain independent. Exact Save receipts include spirit. Transient
+`activity: steady|voice` selects the rehearsal envelope and never enters a profile.
+
+Soft light uses one lifecycle-aware 14-second scene clock, a draw-only face wash
+capped at 3.5% alpha, and slow attack/release on the existing level-envelope seam.
+Binary mute state, acknowledged capture, touch geometry and text remain immediate.
+Closed gates fence activity immediately. Reduced motion freezes both drift and
+energy modulation; background/disconnect/Off stop frame work. Follow channels
+uses small per-family tonal changes and a 900 ms gate/palette blend; it neither
+changes Rive motion tuning nor repeatedly settles the native pose on recoloring.
+The preview remains synthetic and opens no microphone, playback or voice call.
+
+`design.composition` also accepts Socket and Traces: stationary mechanical
+supports and paired PCB routes. A placement-derived clear aperture prevents
+these layers from appearing inside the transparent Persona center; their geometry
+never follows an animated frame. Version 6 remains restricted to Open/Dock/Yoke
+on load. All five choices retain the same native renderer and control layout.
+An acknowledged open microphone is labelled Live now; PTT eligibility and
+release behavior remain unchanged.

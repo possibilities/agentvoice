@@ -24,7 +24,7 @@ class PreviewCompositionTest {
         for (variant in listOf("original", "contained")) {
             compose.runOnIdle { state = state.copy(halo = state.halo.copy(variant = variant)) }
             val view = compose.runOnIdle { nativeView() }
-            for (composition in listOf("dock", "yoke", "open")) {
+            for (composition in listOf("dock", "yoke", "socket", "traces", "open")) {
                 compose.runOnIdle { state = state.copy(design = state.design.copy(composition = composition, hold = "rocker")) }
                 compose.runOnIdle { assertSame("Composition must not replay the native entry animation", view, nativeView()) }
                 assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())

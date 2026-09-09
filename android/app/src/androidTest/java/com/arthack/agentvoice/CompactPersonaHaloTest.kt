@@ -44,6 +44,8 @@ class CompactPersonaHaloTest {
             indices.maxOf { it / 256 } - indices.minOf { it / 256 }) + 1
     }
 
+    private fun alpha(pixels: IntArray) = IntArray(pixels.size) { pixels[it] ushr 24 }
+
     private fun saveEvidence(name: String, view: RiveAnimationView) = compose.runOnIdle {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(context.cacheDir, "contained-halo-test").also { it.mkdirs() }
@@ -125,5 +127,56 @@ class CompactPersonaHaloTest {
         }
         val first = pixels(view)!!
         compose.waitUntil(3000) { !first.contentEquals(pixels(view)) }
+    }
+
+    @Test fun repeatedRecolorsPreserveThePausedShapeAndRunningMachine() {
+        lateinit var view: CompactHaloAnimationView
+        val bytes = compactHaloBytes(source(), CompactHaloTuning())
+        compose.setContent {
+            VoiceTheme {
+                Box(Modifier.fillMaxSize().background(VoiceInk.ground), contentAlignment = Alignment.Center) {
+                    AndroidView(factory = { context ->
+                        Rive.init(context)
+                        (LayoutInflater.from(context).inflate(R.layout.persona_halo_contained, null, false) as CompactHaloAnimationView)
+                            .also {
+                                it.loadSource(bytes)
+                                it.present(PersonaState.Listening, 0xFFD4FF72.toInt(), false)
+                                view = it
+                            }
+                    }, modifier = Modifier.size(240.dp), onRelease = { it.pause() })
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.waitUntil(5000) { pixels(view)?.let(::diameter)?.let { it > 100 } == true && !view.isPlaying }
+        val machine = compose.runOnIdle { view.stateMachines.single() }
+        val still = alpha(pixels(view)!!)
+        val palette = listOf(0xFFBBAAFF.toInt(), 0xFFF0F2E9.toInt(), 0xFF71E5C0.toInt(), 0xFFD4FF72.toInt())
+
+        for (color in palette) {
+            val before = pixels(view)!!
+            compose.runOnIdle { view.present(PersonaState.Listening, color, false) }
+            compose.waitUntil(3000) { pixels(view)?.let { !before.contentEquals(it) && !view.isPlaying } == true }
+            assertArrayEquals("A color-only update must not advance the paused silhouette", still, alpha(pixels(view)!!))
+            compose.runOnIdle {
+                assertSame(machine, view.stateMachines.single())
+                assertEquals(color, machine.viewModelInstance!!.getColorProperty("color").value)
+                assertTrue((machine.input("listening") as SMIBoolean).value)
+                assertFalse((machine.input("speaking") as SMIBoolean).value)
+            }
+        }
+
+        compose.runOnIdle { view.present(PersonaState.Listening, palette.last(), true) }
+        compose.waitUntil(3000) { pixels(view)?.let { view.isPlaying && !still.contentEquals(alpha(it)) } == true }
+        for (color in palette) {
+            val before = alpha(pixels(view)!!)
+            compose.runOnIdle { view.present(PersonaState.Listening, color, true) }
+            compose.waitUntil(3000) { pixels(view)?.let { view.isPlaying && !before.contentEquals(alpha(it)) } == true }
+            compose.runOnIdle {
+                assertSame(machine, view.stateMachines.single())
+                assertSame(view, (compose.activity.window.decorView as ViewGroup).descendants.filterIsInstance<CompactHaloAnimationView>().single())
+                assertEquals(color, machine.viewModelInstance!!.getColorProperty("color").value)
+            }
+        }
     }
 }
