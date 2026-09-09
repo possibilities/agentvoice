@@ -2,6 +2,7 @@ package com.arthack.agentvoice
 
 import android.util.AtomicFile
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -18,7 +19,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
         require(value.isFinite())
         return value.coerceIn(.35f, 1.2f)
     }
-    return when (data.getInt("version")) {
+    val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
         2 -> data.getJSONObject("scaleMultipliers").let {
@@ -26,6 +27,8 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
         }
         else -> error("Unsupported Persona tuning version")
     }
+    return if (data.has("verticalOffsetDp")) placement.copy(offsetY = decodePreviewOffset(data.get("verticalOffsetDp")).dp)
+        else placement
 }
 
 internal fun encodePersonaTuning(placement: PersonaPlacement): String {
@@ -70,6 +73,14 @@ internal fun decodePreviewScales(data: JSONObject): PersonaPlacement {
     return PersonaPlacement(scale("speaking"), scale("listening"), scale("idle"))
 }
 
+internal fun decodePreviewOffset(value: Any): Int {
+    require(value is Number && value.toDouble() % 1.0 == 0.0 && value.toDouble() in -200.0..200.0)
+    return value.toInt()
+}
+
+internal fun decodePreviewPlacement(data: JSONObject): PersonaPlacement =
+    decodePreviewScales(data.getJSONObject("scales")).copy(offsetY = decodePreviewOffset(data.get("verticalOffsetDp")).dp)
+
 internal data class PersonaPreviewState(
     val placement: PersonaPlacement = PersonaPlacement(),
     val saved: PersonaPlacement = placement,
@@ -77,9 +88,12 @@ internal data class PersonaPreviewState(
     val holding: Boolean = false,
     val revision: Int = 0,
 ) {
-    fun json(): JSONObject = JSONObject().put("protocol", 1).put("revision", revision)
+    fun json(): JSONObject = JSONObject().put("protocol", 2).put("revision", revision)
         .put("mode", mode).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
+        .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
+        .put("savedVerticalOffsetDp", saved.offsetY.value.roundToInt())
+        .put("defaultVerticalOffsetDp", PersonaPlacement().offsetY.value.roundToInt())
 
     fun select(next: String) = copy(mode = next, holding = false, revision = revision + 1)
 
@@ -94,7 +108,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement): P
     val revision = data.get("revision")
     require(mode in previewModes && revision is Int && revision >= 0)
     val holding = data.getBoolean("holding")
-    return PersonaPreviewState(placement = decodePreviewScales(data.getJSONObject("scales")), saved = saved,
+    return PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
         mode = if (holding) "idle" else mode, revision = revision)
 }
 
@@ -118,10 +132,10 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "mode", "scales"))
+                    require(request.fields() == setOf("id", "method", "mode", "scales", "verticalOffsetDp"))
                     val mode = request.getString("mode")
                     require(mode in previewModes)
-                    val placement = decodePreviewScales(request.getJSONObject("scales"))
+                    val placement = decodePreviewPlacement(request)
                     state = state.select(mode).copy(placement = placement)
                 }
                 "save" -> Unit

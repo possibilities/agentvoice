@@ -46,10 +46,8 @@ internal data class PersonaPlacement(
     val speakingScale: Float = .78f,
     val listeningScale: Float = .58f,
     val idleScale: Float = .78f,
+    val offsetY: Dp = 35.dp,
 ) {
-    // The operator's chosen vertical position stays fixed through every state.
-    val offsetY: Dp get() = 35.dp
-
     fun scaleFor(state: PersonaState): Float = when (state) {
         PersonaState.Speaking -> speakingScale
         PersonaState.Listening -> listeningScale

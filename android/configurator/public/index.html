@@ -32,8 +32,12 @@
             <input id="size" type="range" min="35" max="120" step="1" value="78" />
             <div class="range-ends" aria-hidden="true"><span>35%</span><span>120%</span></div>
           </div>
-          <p class="position">Position <span>+35 dp</span> in every state</p>
-          <div class="actions"><button type="button" id="reset" class="reset">Reset sizes</button><button type="button" id="save" class="save">Save profile</button></div>
+          <div class="position-control">
+            <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
+            <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
+            <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
+          </div>
+          <div class="actions"><button type="button" id="reset" class="reset">Reset</button><button type="button" id="save" class="save">Save profile</button></div>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>
@@ -41,7 +45,7 @@
           <p id="save-path" hidden></p>
         </div>
       </section>
-      <footer>Changes appear on your phone. Save keeps all three sizes.</footer>
+      <footer>Changes appear on your phone. Save keeps sizes and position.</footer>
     </main>
   </body>
 </html>

@@ -1,18 +1,20 @@
 export const modes = ["speaking", "listening", "idle"] as const;
 export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
-export type Preview = { mode: Mode; scales: Scales };
+export type Preview = { mode: Mode; scales: Scales; verticalOffsetDp: number };
 export type PhoneState = Preview & {
-  protocol: 1;
+  protocol: 2;
   revision: number;
   holding: boolean;
   savedScales: Scales;
   defaults: Scales;
+  savedVerticalOffsetDp: number;
+  defaultVerticalOffsetDp: number;
 };
 export type Profile = {
   version: 2;
   scaleMultipliers: Scales;
-  verticalOffsetDp: 35;
+  verticalOffsetDp: number;
   connectedArtboardScale: 1.9;
   disconnectedArtboardScale: 1.5;
   savedAtEpochMs: number;
@@ -54,23 +56,41 @@ function mode(value: unknown): Mode {
 
 export function parsePreview(value: unknown): Preview {
   const data = record(value);
-  exact(data, ["mode", "scales"]);
-  return { mode: mode(data["mode"]), scales: parseScales(data["scales"]) };
+  exact(data, ["mode", "scales", "verticalOffsetDp"]);
+  return {
+    mode: mode(data["mode"]),
+    scales: parseScales(data["scales"]),
+    verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
+  };
 }
 
 export function parseState(value: unknown): PhoneState {
   const data = record(value);
-  exact(data, ["protocol", "revision", "holding", "mode", "scales", "savedScales", "defaults"]);
-  if (data["protocol"] !== 1 || typeof data["holding"] !== "boolean")
+  exact(data, [
+    "protocol",
+    "revision",
+    "holding",
+    "mode",
+    "scales",
+    "savedScales",
+    "defaults",
+    "verticalOffsetDp",
+    "savedVerticalOffsetDp",
+    "defaultVerticalOffsetDp",
+  ]);
+  if (data["protocol"] !== 2 || typeof data["holding"] !== "boolean")
     throw Error("Invalid phone state");
   return {
-    protocol: 1,
+    protocol: 2,
     revision: integer(data["revision"]),
     holding: data["holding"],
     mode: mode(data["mode"]),
     scales: parseScales(data["scales"]),
     savedScales: parseScales(data["savedScales"]),
     defaults: parseScales(data["defaults"]),
+    verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
+    savedVerticalOffsetDp: integer(data["savedVerticalOffsetDp"], -200, 200),
+    defaultVerticalOffsetDp: integer(data["defaultVerticalOffsetDp"], -200, 200),
   };
 }
 
@@ -87,7 +107,6 @@ export function parseProfile(text: string): Profile {
   ]);
   if (
     data["version"] !== 2 ||
-    data["verticalOffsetDp"] !== 35 ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -103,6 +122,7 @@ export function parseProfile(text: string): Profile {
     }),
   );
   parseScales(percentages);
+  integer(data["verticalOffsetDp"], -200, 200);
   integer(data["savedAtEpochMs"], 1);
   return data as Profile;
 }

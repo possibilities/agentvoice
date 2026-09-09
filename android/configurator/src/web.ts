@@ -24,6 +24,7 @@ function element<T extends HTMLElement>(id: string): T {
 }
 const controls = element<HTMLFieldSetElement>("controls");
 const slider = element<HTMLInputElement>("size");
+const position = element<HTMLInputElement>("position");
 const feedback = element("feedback");
 const error = element("error");
 const save = element<HTMLButtonElement>("save");
@@ -88,10 +89,21 @@ function render() {
     document.createTextNode(String(draft.scales[draft.mode])),
     Object.assign(document.createElement("span"), { textContent: "%" }),
   );
+  position.value = String(draft.verticalOffsetDp);
+  const offset = `${draft.verticalOffsetDp > 0 ? "+" : ""}${draft.verticalOffsetDp}`;
+  position.setAttribute("aria-valuetext", `${offset} dp`);
+  element("position-value").replaceChildren(
+    document.createTextNode(offset),
+    Object.assign(document.createElement("span"), { textContent: "dp" }),
+  );
   const host = status.hostSaved?.scaleMultipliers;
   const hostMatches =
-    host && modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
-  const phoneMatches = equalScales(draft.scales, status.state.savedScales);
+    host &&
+    status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
+    modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
+  const phoneMatches =
+    equalScales(draft.scales, status.state.savedScales) &&
+    draft.verticalOffsetDp === status.state.savedVerticalOffsetDp;
   text(
     feedback,
     !connected
@@ -118,16 +130,27 @@ async function flush() {
   inFlight = true;
   changed = false;
   const requestEdit = edit;
+  const requestGeneration = status.generation;
   const selection = structuredClone(draft);
   render();
   try {
-    status = await api("preview", { ...selection, generation: status.generation });
-    if (edit === requestEdit)
-      draft = { mode: status.state.mode, scales: { ...status.state.scales } };
+    status = await api("preview", { ...selection, generation: requestGeneration });
+    if (!status.connected || status.generation !== requestGeneration) changed = false;
+    if (edit === requestEdit || !changed)
+      draft = {
+        mode: status.state.mode,
+        scales: { ...status.state.scales },
+        verticalOffsetDp: status.state.verticalOffsetDp,
+      };
     transientFailure = null;
   } catch (failure) {
     changed = false;
-    if (status) draft = { mode: status.state.mode, scales: { ...status.state.scales } };
+    if (status)
+      draft = {
+        mode: status.state.mode,
+        scales: { ...status.state.scales },
+        verticalOffsetDp: status.state.verticalOffsetDp,
+      };
     report(failure);
   } finally {
     inFlight = false;
@@ -154,8 +177,16 @@ slider.addEventListener("input", () => {
   const value = slider.valueAsNumber;
   update((current) => ({ ...current, scales: { ...current.scales, [current.mode]: value } }));
 });
+position.addEventListener("input", () => {
+  const verticalOffsetDp = position.valueAsNumber;
+  update((current) => ({ ...current, verticalOffsetDp }));
+});
 element("reset").addEventListener("click", () =>
-  update((current) => ({ ...current, scales: { ...status!.state.defaults } })),
+  update((current) => ({
+    ...current,
+    scales: { ...status!.state.defaults },
+    verticalOffsetDp: status!.state.defaultVerticalOffsetDp,
+  })),
 );
 save.addEventListener("click", async () => {
   if (!status?.connected || inFlight || changed || saving) return;
@@ -164,7 +195,11 @@ save.addEventListener("click", async () => {
   render();
   try {
     status = await api("save", { revision: status.state.revision, generation: status.generation });
-    draft = { mode: status.state.mode, scales: { ...status.state.scales } };
+    draft = {
+      mode: status.state.mode,
+      scales: { ...status.state.scales },
+      verticalOffsetDp: status.state.verticalOffsetDp,
+    };
     saveFailure = null;
     transientFailure = null;
   } catch (failure) {
@@ -190,7 +225,11 @@ async function poll() {
         if (next.connected) transientFailure = null;
         if (recovered || JSON.stringify(status) !== JSON.stringify(next)) {
           status = next;
-          draft = { mode: next.state.mode, scales: { ...next.state.scales } };
+          draft = {
+            mode: next.state.mode,
+            scales: { ...next.state.scales },
+            verticalOffsetDp: next.state.verticalOffsetDp,
+          };
           render();
         }
       }

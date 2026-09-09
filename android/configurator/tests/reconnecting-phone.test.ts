@@ -12,13 +12,16 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 1,
+    protocol: 2,
     revision: 0,
     holding: false,
     mode: "listening",
     scales: { ...scales, listening: 52 },
     savedScales: { ...scales },
     defaults: { ...scales },
+    verticalOffsetDp: -24,
+    savedVerticalOffsetDp: 35,
+    defaultVerticalOffsetDp: 35,
   };
   calls: Record<string, unknown>[] = [];
   close() {
@@ -62,11 +65,13 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.reconnecting).toBe(true);
   expect(phone.state.scales.listening).toBe(52);
   expect(phone.state.savedScales.listening).toBe(58);
+  expect(phone.state.verticalOffsetDp).toBe(-24);
   await until(() => phone.connected);
   expect(dials).toBe(3);
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.verticalOffsetDp).toBe(-24);
   await until(() => returned.calls.length > 0);
   expect(returned.calls.every((call) => call["method"] === "get")).toBe(true);
 });

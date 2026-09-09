@@ -95,8 +95,12 @@ export async function serveConfigurator(
         input = record(await request.json());
         integer(input["generation"], 1);
         if (path === "preview") {
-          exact(input, ["generation", "mode", "scales"]);
-          parsePreview({ mode: input["mode"], scales: input["scales"] });
+          exact(input, ["generation", "mode", "scales", "verticalOffsetDp"]);
+          parsePreview({
+            mode: input["mode"],
+            scales: input["scales"],
+            verticalOffsetDp: input["verticalOffsetDp"],
+          });
         } else {
           exact(input, ["generation", "revision"]);
           integer(input["revision"]);
@@ -117,12 +121,17 @@ export async function serveConfigurator(
         if (path === "preview")
           await phone.request({
             method: "preview",
-            ...parsePreview({ mode: input["mode"], scales: input["scales"] }),
+            ...parsePreview({
+              mode: input["mode"],
+              scales: input["scales"],
+              verticalOffsetDp: input["verticalOffsetDp"],
+            }),
           });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = { ...phone.state.scales };
+          const expectedOffset = phone.state.verticalOffsetDp;
           const reply = await phone
             .request({ method: "save", revision: input["revision"] })
             .catch(() => {
@@ -133,6 +142,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
+            profile.verticalOffsetDp !== expectedOffset ||
             !equalScales(expected, {
               speaking: Math.round(profile.scaleMultipliers.speaking * 100),
               listening: Math.round(profile.scaleMultipliers.listening * 100),

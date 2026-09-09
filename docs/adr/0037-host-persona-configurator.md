@@ -8,7 +8,7 @@ before expanding its scope. Supersedes the on-phone tuning overlay in
 `bun run android:configure --device <adb-serial>`. It owns the current three-state
 selector, one state-specific size slider, Reset and Save. The phone runs the
 shared native screen and unchanged Rive adapter, with synthetic voice state and
-no control overlay. The fixed +35 dp offset, 35–120% range, state transition
+no control overlay. The initial +35 dp offset, 35–120% range, state transition
 timing and existing saved choices are preserved. This avoids implementing a
 second renderer whose preview could differ from the phone.
 
@@ -43,6 +43,14 @@ copies the exact confirmed bytes to a private host JSON file. Partial save
 failure is visible. Live edits and Reset are unsaved changes. Version 1 loads
 without rewriting and migrates only on Save. Production still uses compiled
 defaults; saved tuning is adopted explicitly in code.
+
+Updated 2026-09-08: the operator requested restoring vertical position tuning.
+One host slider now sets a shared −200…+200 dp offset in integer steps; +35 dp
+remains the default. Reset restores sizes and position, and explicit Save keeps
+both. Preview protocol 2 adds live/saved/default offsets. Profile version 2
+already has `verticalOffsetDp`, so no new profile version or automatic rewrite
+is needed. This supersedes the configurator's fixed-offset choice. Production
+defaults and Halo animation sequencing remain unchanged.
 
 The browser, host transport, profile persistence and native preview are separate
 modules, so later configuration can extend this app without placing a settings

@@ -163,8 +163,10 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
 on-phone tuner panel. Choose Speaking, Listening or Idle and adjust that state's
-size (35–120%); the other sizes stay intact. Position remains fixed at +35 dp.
-Reset restores the current compiled defaults. The phone's synthetic channel and
+size (35–120%); the other sizes stay intact. The vertical position slider applies
+to every state, from −200 to +200 dp in 1 dp steps, initially +35 dp. Negative
+moves up; positive moves down. Reset restores the current compiled sizes and position.
+The phone's synthetic channel and
 hold-to-talk buttons still work, and changes appear in the browser.
 Leave the host app and browser open through backgrounding, activity recreation
 or temporary USB loss. The configurator waits for the same preview to return,
@@ -177,7 +179,7 @@ fresh host launch.
 bun run android:configure --device <adb-serial>
 ```
 
-Save retains all three sizes in app-private `files/persona-tuning.json` and a
+Save retains all three sizes and the shared position in app-private `files/persona-tuning.json` and a
 matching JSON copy on the host. Existing version 1 and 2 choices load without
 rewriting. The real client keeps its compiled defaults until a saved choice is
 adopted in `PersonaPlacement`. Debug builds include a **Halo preview** launcher

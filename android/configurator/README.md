@@ -2,7 +2,8 @@
 
 A separate host browser app controlling the native Halo preview on an Android
 phone. The phone is the preview surface; the browser holds Speaking, Listening,
-Idle, the selected state's size slider, Reset sizes, and Save profile. No tuning
+Idle, the selected state's size slider, a shared vertical position slider, Reset,
+and Save profile. No tuning
 panel obscures the phone.
 
 Install the current Android debug APK on an explicitly selected, ADB-authorized
@@ -18,7 +19,7 @@ ADB runs without a mirroring window. scrcpy is optional and can run alongside
 the configurator; it is not used for control or rendering by this app. Moving
 the preview between displays, recreating its activity or backgrounding it can
 interrupt the connection. Leave this browser tab open: it shows **Waiting for
-phone** and reconnects automatically when the preview returns. Unsaved sizes and
+phone** and reconnects automatically when the preview returns. Unsaved sizes, position and
 the selected state survive backgrounding and Android activity recreation.
 Temporary USB/ADB loss also reconnects to the same selected phone; the host
 recreates its own port forward if necessary. It never pulls the app into the
@@ -30,8 +31,10 @@ this binding; rerun the host command to establish a fresh session in those cases
 
 The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` without rewriting it. Size remains
-35–120%, independently for each state; position is fixed at +35 dp in all states.
-Reset restores the phone build's compiled defaults, currently 78 / 58 / 78%.
+35–120%, independently for each state. Vertical position applies to every state,
+from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
+Reset restores the phone build's compiled defaults, currently 78 / 58 / 78% and
++35 dp. Save keeps both sizes and position.
 Phone channel buttons and hold-to-talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
@@ -63,7 +66,7 @@ The existing bundled IBM Plex Mono font is served under its [OFL](../fonts/OFL.t
 ADB forwards an ephemeral host port to a new abstract Unix socket owned by the
 debug preview. Its separate random token admits one peer at a time, including
 successive peers from the same host run. Frames are limited
-to 8 KiB; commands can only read preview state, select/resize Halo, or save its
+to 8 KiB; commands can only read preview state, select/resize/position Halo, or save its
 fixed private profile. The phone exposes no TCP listener. The bridge closes on
 activity stop and reopens on return using the same binding retained in private
 Android activity state. Host loss, invalid framing or liveness failure closes
@@ -79,6 +82,10 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `src/protocol.ts` validates the preview contract. Android's debug
 `PersonaPreviewSession` applies the corresponding commands and `PersonaPreview`
 renders the shared production screen with synthetic state.
+Preview protocol 2 carries live, saved and default vertical offsets. The saved
+profile remains version 2, using its existing `verticalOffsetDp` field. Version
+1 and 2 profiles retain their stored position; older profiles without the field
+use +35 dp. Use matching current host code and debug APK.
 
 ```sh
 bun run test

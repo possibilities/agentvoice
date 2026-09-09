@@ -6,11 +6,11 @@ The desktop used its existing waiting AgentVoice service and Tailscale TLS route
 with an owned stock Codex 0.153.4 child. No service configuration was changed.
 
 Final debug APK SHA-256:
-`35330f771745d79a56b7154665801a17b47c162525bf3ab330642af44fb50e61`.
+`80c5ec15a4dc13ac672655b65ade2adfab753a83ce2f68caaea9cdbe6c854f44`.
 
 ## Automated checks
 
-- 641 repository tests, including twelve configurator tests; root and configurator
+- 642 repository tests, including thirteen configurator tests; root and configurator
   TypeScript and Biome checks passed.
 - 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
@@ -127,6 +127,28 @@ The subsequent reconnect update supersedes the initial disconnect behavior:
 
 Force-stop and task dismissal discard the activity binding and require a new
 host launch. Retry never foregrounds the app or replays a mutation.
+
+The restored vertical position slider was also checked on the same S22:
+
+- One shared −200…+200 dp control previews immediately in every state. It uses
+  the existing translation in the native Halo renderer; production still defaults
+  to +35 dp. Preview protocol 2 carries the current, saved and default positions.
+- All seventeen instrumentation tests passed, including a −24 dp profile save
+  and reload, rejection of 201 dp without mutation, successive peer observation,
+  background return and activity recreation with the unsaved position retained.
+  Saves used cache fixtures. All 22 JVM tests, debug/release builds and lint passed.
+- The 642-test repository suite, root/configurator typechecks and Biome passed.
+  Host tests verify signed integer bounds and refusal of a mismatched offset
+  receipt. Headless Chrome verified shared position across state/size changes,
+  exact host persistence, reload and Reset for both sizes and position. A queued
+  slider edit at disconnect is dropped so it cannot stall polling or be replayed.
+  Both 1100 px desktop and 390 px narrow layouts were inspected.
+- A browser-to-S22 check moved the native Halo to −40 and +80 dp and captured
+  only the synthetic preview, confirming movement while controls stayed fixed.
+  Listening and Idle kept the shared +80 dp position; background/return reconnected
+  with it intact. The operator's unsaved 48 / 58 / 78% sizes were carried through
+  APK installation and restored afterward at +35 dp. The phone profile remained
+  byte-for-byte unchanged; the live check never sent Save.
 
 Production voice acceptance limits below remain unchanged. This configurator
 check opened no media, inference, grants or voice-server connection.
