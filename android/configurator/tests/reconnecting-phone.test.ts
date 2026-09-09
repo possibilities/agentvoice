@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { defaultDesign } from "../src/design.ts";
+import { defaultHalo } from "../src/halo.ts";
 import type { PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 
@@ -13,7 +14,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 4,
+    protocol: 5,
     connection: "connecting",
     revision: 0,
     holding: false,
@@ -27,6 +28,9 @@ class Connection implements PreviewConnection {
     design: { ...defaultDesign, controlsHeightDp: 380, holdSharePercent: 54.3 },
     savedDesign: { ...defaultDesign },
     defaultDesign: { ...defaultDesign },
+    halo: { ...defaultHalo(), variant: "contained", containedSizePercent: 83 },
+    savedHalo: defaultHalo(),
+    defaultHalo: defaultHalo(),
     micMuted: false,
     speakerMuted: false,
   };
@@ -76,11 +80,14 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.design.controlsHeightDp).toBe(380);
   expect(phone.state.design.holdSharePercent).toBe(54.3);
   expect(phone.state.connection).toBe("connecting");
+  expect(phone.state.halo.containedSizePercent).toBe(83);
   await until(() => phone.connected);
   expect(dials).toBe(3);
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.halo.variant).toBe("contained");
+  expect(phone.state.halo.containedSizePercent).toBe(83);
   expect(phone.state.verticalOffsetDp).toBe(-24);
   await until(() => returned.calls.length > 0);
   expect(returned.calls.every((call) => call["method"] === "get")).toBe(true);

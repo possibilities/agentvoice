@@ -34,9 +34,9 @@ class PersonaPreviewActivity : ComponentActivity() {
         }
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
         session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(PersonaPlacement()),
-            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()))
+            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(PreviewHalo()))
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo) }
         }
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
@@ -99,5 +99,5 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
-        onRelease = release, onExit = onExit, connection = state.connection)
+        onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo)
 }

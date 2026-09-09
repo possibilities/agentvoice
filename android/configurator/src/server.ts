@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { equalDesign } from "./design.ts";
+import { equalHalo } from "./halo.ts";
 import { saveProfile } from "./profile.ts";
 import {
   equalScales,
@@ -103,6 +104,7 @@ export async function serveConfigurator(
             "scales",
             "verticalOffsetDp",
             "design",
+            "halo",
           ]);
           parsePreview({
             connection: input["connection"],
@@ -110,6 +112,7 @@ export async function serveConfigurator(
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
             design: input["design"],
+            halo: input["halo"],
           });
         } else {
           exact(input, ["generation", "revision"]);
@@ -137,6 +140,7 @@ export async function serveConfigurator(
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
               design: input["design"],
+              halo: input["halo"],
             }),
           });
         else {
@@ -145,6 +149,7 @@ export async function serveConfigurator(
           const expected = { ...phone.state.scales };
           const expectedOffset = phone.state.verticalOffsetDp;
           const expectedDesign = { ...phone.state.design };
+          const expectedHalo = structuredClone(phone.state.halo);
           const reply = await phone
             .request({ method: "save", revision: input["revision"] })
             .catch(() => {
@@ -155,9 +160,10 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 4 ||
+            profile.version !== 5 ||
             !profile.design ||
             !equalDesign(profile.design, expectedDesign) ||
+            !equalHalo(profile.halo, expectedHalo) ||
             profile.verticalOffsetDp !== expectedOffset ||
             !equalScales(expected, {
               speaking: Math.round(profile.scaleMultipliers.speaking * 100),

@@ -1,4 +1,5 @@
 import { type Design, equalDesign } from "./design.ts";
+import { equalHalo, haloColorStates, haloMotionFields } from "./halo.ts";
 import {
   type Connection,
   equalScales,
@@ -9,6 +10,7 @@ import {
   type Profile,
   previewOf,
   profileDesign,
+  profileHalo,
 } from "./protocol.ts";
 
 type Status = {
@@ -91,16 +93,38 @@ function render() {
   text(element("hold-share-value"), `${Number(draft.design.holdSharePercent.toFixed(1))}%`);
   controlHeight.setAttribute("aria-valuetext", `${draft.design.controlsHeightDp} dp`);
   holdShare.setAttribute("aria-valuetext", `${draft.design.holdSharePercent.toFixed(1)} percent`);
-  document.documentElement.style.setProperty("--accent", colors[draft.mode]);
+  const contained = draft.halo.variant === "contained";
+  element<HTMLSelectElement>("halo-variant").value = draft.halo.variant;
+  element("contained-controls").hidden = !contained;
+  text(
+    element("size-hint"),
+    contained ? "One size across all states" : "Independent size for each state",
+  );
+  for (const key of haloMotionFields) {
+    element<HTMLInputElement>(key).value = String(draft.halo[key]);
+    text(element(`${key}-value`), `${draft.halo[key]}%`);
+  }
+  for (const mode of haloColorStates) {
+    element<HTMLInputElement>(`color-${mode}`).value = draft.halo.colors[mode];
+    text(element(`color-${mode}-value`), draft.halo.colors[mode]);
+  }
+  document.documentElement.style.setProperty(
+    "--accent",
+    contained ? draft.halo.colors[draft.mode] : colors[draft.mode],
+  );
   for (const mode of modes) {
     const button = document.querySelector<HTMLButtonElement>(`button[data-mode="${mode}"]`)!;
     button.setAttribute("aria-pressed", String(draft.mode === mode));
-    element(`${mode}-value`).textContent = `${draft.scales[mode]}%`;
+    element(`${mode}-value`).textContent =
+      `${contained ? draft.halo.containedSizePercent : draft.scales[mode]}%`;
   }
-  element("size-label").textContent = `${draft.mode[0]!.toUpperCase()}${draft.mode.slice(1)} size`;
-  slider.value = String(draft.scales[draft.mode]);
+  element("size-label").textContent = contained
+    ? "Contained size"
+    : `${draft.mode[0]!.toUpperCase()}${draft.mode.slice(1)} size`;
+  const size = contained ? draft.halo.containedSizePercent : draft.scales[draft.mode];
+  slider.value = String(size);
   element("size-value").replaceChildren(
-    document.createTextNode(String(draft.scales[draft.mode])),
+    document.createTextNode(String(size)),
     Object.assign(document.createElement("span"), { textContent: "%" }),
   );
   position.value = String(draft.verticalOffsetDp);
@@ -114,12 +138,14 @@ function render() {
   const hostMatches =
     host &&
     equalDesign(profileDesign(status.hostSaved!), draft.design) &&
+    equalHalo(profileHalo(status.hostSaved!), draft.halo) &&
     status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
     modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
   const phoneMatches =
     equalScales(draft.scales, status.state.savedScales) &&
     draft.verticalOffsetDp === status.state.savedVerticalOffsetDp &&
-    equalDesign(draft.design, status.state.savedDesign);
+    equalDesign(draft.design, status.state.savedDesign) &&
+    equalHalo(draft.halo, status.state.savedHalo);
   text(
     feedback,
     !connected
@@ -202,6 +228,26 @@ element<HTMLSelectElement>("connection-preview").addEventListener("change", (eve
   update((current) => ({ ...current, connection }));
 });
 
+element<HTMLSelectElement>("halo-variant").addEventListener("change", (event) => {
+  const variant = (event.currentTarget as HTMLSelectElement).value as "original" | "contained";
+  update((current) => ({ ...current, halo: { ...current.halo, variant } }));
+});
+for (const key of haloMotionFields) {
+  element<HTMLInputElement>(key).addEventListener("input", (event) => {
+    const value = (event.currentTarget as HTMLInputElement).valueAsNumber;
+    update((current) => ({ ...current, halo: { ...current.halo, [key]: value } }));
+  });
+}
+for (const mode of haloColorStates) {
+  element<HTMLInputElement>(`color-${mode}`).addEventListener("input", (event) => {
+    const value = (event.currentTarget as HTMLInputElement).value;
+    update((current) => ({
+      ...current,
+      halo: { ...current.halo, colors: { ...current.halo.colors, [mode]: value } },
+    }));
+  });
+}
+
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-mode]")) {
   button.addEventListener("click", () =>
     update((current) => ({ ...current, mode: button.dataset["mode"] as Mode })),
@@ -209,7 +255,11 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-m
 }
 slider.addEventListener("input", () => {
   const value = slider.valueAsNumber;
-  update((current) => ({ ...current, scales: { ...current.scales, [current.mode]: value } }));
+  update((current) =>
+    current.halo.variant === "contained"
+      ? { ...current, halo: { ...current.halo, containedSizePercent: value } }
+      : { ...current, scales: { ...current.scales, [current.mode]: value } },
+  );
 });
 position.addEventListener("input", () => {
   const verticalOffsetDp = position.valueAsNumber;
@@ -218,7 +268,11 @@ position.addEventListener("input", () => {
 element("reset").addEventListener("click", () =>
   update((current) => ({
     ...current,
-    scales: { ...status!.state.defaults },
+    scales: current.halo.variant === "original" ? { ...status!.state.defaults } : current.scales,
+    halo:
+      current.halo.variant === "contained"
+        ? { ...structuredClone(status!.state.defaultHalo), variant: "contained" }
+        : current.halo,
     verticalOffsetDp: status!.state.defaultVerticalOffsetDp,
   })),
 );

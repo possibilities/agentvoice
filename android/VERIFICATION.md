@@ -7,15 +7,15 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Final debug APK SHA-256:
-`a6fbb472e93b3ba447bd08c8b32fb891317701fe0fff0e4f05eac736b82e25a3`.
+`083003a794372e93219d80a02c4a07e52bfc3f776ea01a4f26a9bbb4fe2048f4`.
 
 ## Automated checks
 
-- 646 repository tests, including seventeen configurator tests; root and configurator
+- 649 repository tests, including twenty configurator tests; root and configurator
   TypeScript and Biome checks passed.
-- 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
+- 24 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
-  headers and redirect rejection.
+  headers and redirect rejection, plus checksum-guarded Contained asset patches.
 - The original eight instrumentation tests passed on both the disposable emulator and
   S22: Compose touch release/cancellation/multitouch, fixed PTT placement,
   accessible labels, delayed acknowledgements, runtime replacement and stale
@@ -225,6 +225,60 @@ defaults remain compiled, with the shared Push to talk label updated there too.
   with the new baseline dimensions. The phone profile stayed byte-for-byte
   identical; device checks sent no Save. All captures were restricted to the
   synthetic preview, with its focused activity verified before each screenshot.
+
+### Contained Halo and per-state colors
+
+The next September 9 preview adds Original/Contained selection. Contained has
+one common size, inward listening rings/pulse, adjustable speaking motion and
+idle breathing, and three color pickers. Original retains its independent sizes
+and renderer. These choices are debug-only; the bundled original asset remains
+byte-identical with SHA-256 recorded in [its provenance file](third-party/persona-halo.md).
+
+- All 29 S22 instrumentation tests passed, including both new native Contained
+  tests and the existing Original entry/exit regressions. Actual GPU readback
+  verifies smaller listening bounds at equal native size, the same state/color
+  contract, moving frames, reduced-motion stillness and native-instance reuse
+  across state/color changes. Transparent PNG evidence must be composited over
+  the app background: low-alpha RGB otherwise exaggerates the faint exterior.
+- All 24 JVM tests, debug/test/release APK builds and Android lint passed. The
+  release DEX excludes the Compact renderer/patcher and preview classes; the
+  release manifest contains only MainActivity and still disables backup and
+  cleartext traffic. All four attribution/license files are packaged in both
+  APKs. Their notices distinguish component/runtime licenses from the external
+  asset's unspecified current license.
+- All 649 repository tests (7,353 assertions), including twenty configurator
+  tests, both TypeScript checks and Biome passed. Profile/protocol 5 validates
+  variant, shared size, four bounded motion amounts and three opaque RGB colors.
+  Save verifies the exact Halo receipt. Version 1–4 phone profiles load as
+  Original without rewriting; their prior geometry is retained or migrated
+  using the existing version rules.
+- Headless Chrome verified variant isolation, motion/colors, active-variant
+  Reset Persona, version 5 Save/reload in disposable fixtures, reconnect without
+  edit replay, and desktop/narrow layouts. Native Chrome then displayed the
+  live phone-linked studio with Contained selected and unsaved changes.
+- Browser-to-S22 checks exercised all four motion controls at 0%, 100% and their
+  defaults, and all three color changes visibly reached the native Halo. Shared
+  size remained consistent across states; switching Original/Contained retained
+  both configurations. Real Push to talk released correctly, and connection
+  notices did not move the controls. Home/return recovered unsaved Contained
+  size, motion and color settings in the same browser.
+- An 18-second phone recording covers normal and rapid state reversals plus
+  switching Original/Contained. Reviewed frames show inward rings resolving
+  into the bright boundary without the previous state-dependent enlargement.
+  All 869 recorded frames were checked for oversized/white flashes: visible
+  Halo bounds stayed within 129–142 pixels at 180-pixel analysis width; no white
+  screen occurred. Each explicit variant switch briefly hid the Persona for
+  two recorded frames while its native view was replaced, keeping the dark
+  background visible. This is evidence for the exercised sequence, not every
+  possible setting combination.
+- The operator's Rockers choice, 262 dp controls, 44.2748% talk share, −6 dp
+  position and Original 78 / 56 / 78% sizes were restored. Contained was left
+  selected at 78%, with 35% spread, 25% pulse/motion/breathing and the native
+  violet/lime/warm-white palette. Phone and host saved profiles remained
+  byte-for-byte identical. Live device checks never sent Save.
+
+All captures were limited to the synthetic preview after verifying its focused
+activity. These checks opened no voice call, microphone, playback or inference.
 
 ## Desktop backend viewer
 

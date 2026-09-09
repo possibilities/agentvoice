@@ -42,6 +42,10 @@
             </fieldset>
             <fieldset class="persona-controls">
               <legend class="panel-title">Persona</legend>
+              <div class="mixing">
+                <label for="halo-variant">Halo</label>
+                <select id="halo-variant"><option value="original">Original</option><option value="contained">Contained</option></select>
+              </div>
               <div class="mixing connection-preview">
                 <label for="connection-preview">Preview connection</label>
                 <select id="connection-preview"><option value="connected">Connected</option><option value="connecting">Connecting</option><option value="disconnected">Disconnected</option></select>
@@ -54,13 +58,40 @@
               </fieldset>
               <div class="size-control">
                 <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
-                <input id="size" type="range" min="35" max="120" step="1" value="78" />
-                <div class="range-ends" aria-hidden="true"><span>35%</span><span>120%</span></div>
+                <input id="size" type="range" min="35" max="120" step="1" value="78" aria-describedby="size-hint" />
+                <div class="range-ends"><span>35%</span><span id="size-hint">Independent size for each state</span><span>120%</span></div>
               </div>
               <div class="position-control">
                 <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
                 <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
                 <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
+              </div>
+              <div id="contained-controls" hidden>
+                <fieldset class="motion-controls"><legend class="subpanel-title">Motion</legend>
+                  <div class="motion-control">
+                    <div class="size-heading"><label for="ringSpreadPercent">Ring spread</label><output id="ringSpreadPercent-value" for="ringSpreadPercent">35%</output></div>
+                    <input id="ringSpreadPercent" type="range" min="0" max="100" step="1" value="35" />
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading"><label for="listeningPulsePercent">Listening pulse</label><output id="listeningPulsePercent-value" for="listeningPulsePercent">25%</output></div>
+                    <input id="listeningPulsePercent" type="range" min="0" max="100" step="1" value="25" />
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading"><label for="speakingMotionPercent">Speaking motion</label><output id="speakingMotionPercent-value" for="speakingMotionPercent">25%</output></div>
+                    <input id="speakingMotionPercent" type="range" min="0" max="100" step="1" value="25" />
+                  </div>
+                  <div class="motion-control">
+                    <div class="size-heading"><label for="idleBreathingPercent">Idle breathing</label><output id="idleBreathingPercent-value" for="idleBreathingPercent">25%</output></div>
+                    <input id="idleBreathingPercent" type="range" min="0" max="100" step="1" value="25" />
+                  </div>
+                </fieldset>
+                <fieldset class="color-controls"><legend class="subpanel-title">Color</legend>
+                  <div class="color-grid">
+                    <label class="color-choice" for="color-speaking"><span>Speaking</span><input id="color-speaking" type="color" value="#bbaaff" /><output id="color-speaking-value" for="color-speaking">#bbaaff</output></label>
+                    <label class="color-choice" for="color-listening"><span>Listening</span><input id="color-listening" type="color" value="#d4ff72" /><output id="color-listening-value" for="color-listening">#d4ff72</output></label>
+                    <label class="color-choice" for="color-idle"><span>Idle</span><input id="color-idle" type="color" value="#f0f2e9" /><output id="color-idle-value" for="color-idle">#f0f2e9</output></label>
+                  </div>
+                </fieldset>
               </div>
               <button type="button" id="reset" class="reset panel-reset">Reset Persona</button>
             </fieldset>
@@ -73,7 +104,7 @@
           <p id="save-path" hidden></p>
         </div>
       </section>
-      <footer>Save keeps your design, sizes and position. The app's final look is still yours to choose.</footer>
+      <footer>Save keeps your design, sizes, motion and colors. The app's final look is still yours to choose.</footer>
     </main>
   </body>
 </html>

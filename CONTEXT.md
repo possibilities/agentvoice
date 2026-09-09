@@ -8,11 +8,14 @@ features shape its motion; it neither infers conversation state nor owns a call.
 Halo preview over explicitly selected ADB. Rockers/Keycaps and a fixed Push to
 talk Trigger have adjustable control height and talk-button share. The phone
 has no header; an overlay notice appears only for synthetic Connecting or
-Disconnected states. Controls Reset defaults and Reset Persona restore their
-own geometry independently. Its synthetic phone preview owns no call or audio.
-Protocol 4 carries design, geometry and transient connection selection; explicit
-Save stores a version 4 phone profile and exact host copy without the connection
-selection. Older phone profiles load without rewriting. Production UI and
+Disconnected states. Controls Reset defaults restores only its dimensions;
+Reset Persona restores the active variant and shared offset. Its synthetic
+phone preview owns no call or audio.
+Original keeps its per-state Halo sizes; debug-only Contained adds a shared size,
+inward listening rings/pulse, adjustable state motion and colors. Switching variants
+retains both sets of choices. Protocol 5 carries these settings and transient
+connection selection; explicit Save stores a version 5 phone profile and exact host copy without the connection
+selection. Older phone profiles load as Original without rewriting. Production UI and
 defaults remain compiled. See ADR 0037.
 
 **Vanilla Codex** — The Codex client-and-server experience, including the voice

@@ -53,18 +53,30 @@ The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` without rewriting it. Size remains
 35–120%, independently for each state. Vertical position applies to every state,
 from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
-Reset Persona restores only the phone build's compiled Halo geometry defaults,
-currently 78 / 58 / 78% and +35 dp. It keeps control styling, control dimensions
-and the selected preview state. Save profile keeps the control design,
-all Halo sizes and the shared position.
+**Halo** switches between Original and Contained. Original retains its independent
+78 / 58 / 78% size defaults and established transitions. Contained uses one size
+for every state (78% initially), inward listening rings and pulse, softer speaking
+motion and idle breathing. Its Ring spread defaults to 35%; Listening pulse,
+Speaking motion and Idle breathing default to 25%, all adjustable from 0–100%.
+At zero, spread collapses to the frame and that motion is removed. Increasing
+spread/pulse moves the listening rings inward, without enlarging the frame.
+
+Contained also has Speaking, Listening and Idle color pickers, initially the
+app's violet `#bbaaff`, lime `#d4ff72` and warm white `#f0f2e9`. Disconnected stays
+muted. Original's rendering and colors remain the comparison reference.
+Switching variants keeps each variant's settings. Reset Persona restores the
+selected variant's defaults and shared +35 dp position, preserving the other
+variant's settings, control styling, dimensions and preview state. Save profile keeps the control design,
+all Halo sizes, motion, colors and the shared position.
 Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 4 profile atomically on the phone. Its `design`
+Explicit Save writes a version 5 profile atomically on the phone. Its `design`
 contains the fixed layout/header/trigger choices, mute style, controls height
-and talk-button share. Only after the phone confirms that exact profile does
+and talk-button share. Its `halo` stores variant, common Contained size, motion
+and opaque RGB colors. Only after the phone confirms that exact profile does
 the host write a matching, mode-0600
 JSON copy to `profiles/<device-serial>.json`. Use `--save-to /absolute/file.json`
 to choose another destination. The browser names that destination after Save.
@@ -73,19 +85,20 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1, 2 and 3 phone profiles remain readable without rewriting:
+until Save. Version 1, 2, 3 and 4 phone profiles remain readable without rewriting:
 version 1 seeds all three Halo sizes. Version 3 retains Rockers or Keycaps;
-legacy Glyphs and profiles without a mute choice use Keycaps. Older profiles
-start with the new control geometry baseline and fixed headerless Trigger
+legacy Glyphs and profiles without a mute choice use Keycaps. Version 1–3 profiles
+start with the control geometry baseline and fixed headerless Trigger
 layout. Their Halo sizes and stored position remain intact; a missing position
-uses +35 dp. They become version 4 only on explicit Save. Profiles are ignored by Git.
+uses +35 dp. Version 4 retains its saved control dimensions. All older profiles
+start as Original and become version 5 only on explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
 compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
 Saving a demo choice does not adopt it into the
 product; adoption remains an explicit code change after the operator selects
-the final design. The unchanged native Halo adapter owns its rendering and
-state-transition timing.
+the final design. Original's native Halo adapter retains its rendering and
+state-transition timing; Contained has a separate debug renderer.
 
 ## Boundary
 
@@ -115,13 +128,14 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 4 carries live/saved/default designs, sizes and vertical
-offsets, plus the transient `connection: connected|connecting|disconnected`.
+Preview protocol 5 carries live/saved/default designs, sizes, vertical
+offsets and Halo selections, plus the transient `connection: connected|connecting|disconnected`.
 The design contract fixes `layout: studio`, `header: none`, `hold: trigger`,
 permits `mute: rockers|keycaps`, and adds `controlsHeightDp` (integer 240–480)
 and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
-Version 4 profile receipts must include the exact confirmed design and geometry
+Version 5 profile receipts must include the exact confirmed design, geometry,
+variant, motion and colors
 before the host copy is written. Connection preview state is excluded from the
 profile. Use matching current host code and debug APK.
 
@@ -137,3 +151,9 @@ using a unique cache file. Tests never overwrite the operator's tuning profile.
 The existing Halo animation regressions still run against the same renderer.
 
 See [ADR 0037](../../docs/adr/0037-host-persona-configurator.md).
+
+Contained patches a checksum-verified in-memory copy of the bundled Halo. It
+never writes the original asset or accepts an asset path/URL. The changed bytes
+and renderer stay in debug builds. See [Persona provenance and notices](../third-party/persona-halo.md)
+for creator attribution, code/runtime licenses, and the external asset's published
+license evidence.

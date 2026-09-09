@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
+import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
 import { parseArgs } from "../src/main.ts";
 import {
   type Phone,
@@ -15,12 +16,13 @@ import {
   parseScales,
   parseState,
   profileDesign,
+  profileHalo,
 } from "../src/protocol.ts";
 import { serveConfigurator } from "../src/server.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 4,
+  protocol: 5,
   connection: "connected",
   revision: 0,
   holding: false,
@@ -34,12 +36,16 @@ const initial = (): PhoneState => ({
   design: { ...defaultDesign },
   savedDesign: { ...defaultDesign },
   defaultDesign: { ...defaultDesign },
+  halo: defaultHalo(),
+  savedHalo: defaultHalo(),
+  defaultHalo: defaultHalo(),
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Extract<Profile, { version: 4 }> => ({
-  version: 4,
+const profile = (state: PhoneState): Extract<Profile, { version: 5 }> => ({
+  version: 5,
   design: { ...state.design },
+  halo: structuredClone(state.halo),
   scaleMultipliers: {
     speaking: state.scales.speaking / 100,
     listening: state.scales.listening / 100,
@@ -62,6 +68,12 @@ class FakePhone implements Phone {
   calls: Record<string, unknown>[] = [];
   refuseSave = false;
   wrongOffsetReceipt = false;
+  wrongHaloReceipt:
+    | "variant"
+    | "color"
+    | "containedSizePercent"
+    | (typeof haloMotionFields)[number]
+    | undefined;
   wrongDesignReceipt: "height" | "share" | undefined;
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
@@ -72,6 +84,7 @@ class FakePhone implements Phone {
         scales: command["scales"],
         verticalOffsetDp: command["verticalOffsetDp"],
         design: command["design"],
+        halo: command["halo"],
       });
       this.state = { ...this.state, ...preview, revision: this.state.revision + 1 };
     }
@@ -83,11 +96,15 @@ class FakePhone implements Phone {
         savedScales: { ...this.state.scales },
         savedVerticalOffsetDp: this.state.verticalOffsetDp,
         savedDesign: { ...this.state.design },
+        savedHalo: structuredClone(this.state.halo),
       };
       const receipt = profile(this.state);
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
       if (this.wrongDesignReceipt === "height") receipt.design.controlsHeightDp++;
       if (this.wrongDesignReceipt === "share") receipt.design.holdSharePercent++;
+      if (this.wrongHaloReceipt === "variant") receipt.halo.variant = "contained";
+      else if (this.wrongHaloReceipt === "color") receipt.halo.colors.idle = "#ffffff";
+      else if (this.wrongHaloReceipt) receipt.halo[this.wrongHaloReceipt]++;
       return { state: this.state, profile: JSON.stringify(receipt, null, 2) };
     }
     return { state: this.state };
@@ -113,6 +130,7 @@ async function fixture(options: { saveTo?: string } = {}) {
               connection: phone.state.connection,
               verticalOffsetDp: phone.state.verticalOffsetDp,
               design: phone.state.design,
+              halo: phone.state.halo,
             }
           : {}),
         ...(body as object),
@@ -142,6 +160,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
       scales: defaults,
       verticalOffsetDp: 35,
       design: defaultDesign,
+      halo: defaultHalo(),
     }),
   ).toThrow();
   const saved = profile(initial());
@@ -159,6 +178,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
         scales: defaults,
         verticalOffsetDp,
         design: defaultDesign,
+        halo: defaultHalo(),
       }),
     ).toThrow();
     expect(() => parseProfile(JSON.stringify({ ...saved, verticalOffsetDp }))).toThrow();
@@ -177,9 +197,10 @@ test("design choices are bounded and old profiles remain readable without migrat
   ])
     expect(() => parseDesign({ ...defaultDesign, ...retired })).toThrow();
   expect(() => parseDesign({ ...defaultDesign, asset: "/arbitrary" })).toThrow();
-  const { design: _, ...legacy } = profile(initial());
+  const { design: _, halo: _halo, ...legacy } = profile(initial());
   const old = { ...legacy, version: 2 as const };
   expect(parseProfile(JSON.stringify(old))).toEqual(old);
+  expect(profileHalo(parseProfile(JSON.stringify(old)))).toEqual(defaultHalo());
   const v3 = {
     ...legacy,
     version: 3 as const,
@@ -187,7 +208,10 @@ test("design choices are bounded and old profiles remain readable without migrat
   };
   expect(parseProfile(JSON.stringify(v3))).toEqual(v3 as Profile);
   expect(profileDesign(parseProfile(JSON.stringify(v3)))).toEqual(defaultDesign);
-  expect(() => parseProfile(JSON.stringify({ ...legacy, version: 4 }))).toThrow();
+  const v4 = { ...legacy, version: 4 as const, design: defaultDesign };
+  expect(parseProfile(JSON.stringify(v4))).toEqual(v4);
+  expect(profileHalo(parseProfile(JSON.stringify(v4)))).toEqual(defaultHalo());
+  expect(() => parseProfile(JSON.stringify({ ...v4, version: 5 }))).toThrow();
 });
 
 test("control dimensions and connection scenarios are bounded", () => {
@@ -207,6 +231,7 @@ test("control dimensions and connection scenarios are bounded", () => {
       scales: defaults,
       verticalOffsetDp: 35,
       design: defaultDesign,
+      halo: defaultHalo(),
     }),
   ).toThrow();
 });
@@ -399,4 +424,63 @@ test("oversized or unrelated device replies cannot update the preview", async ()
   next.peer.write(`${JSON.stringify({ id: 99, state: initial() })}\n`);
   await expect(requested).rejects.toThrow("disconnected");
   expect(next.phone.state).toBeUndefined();
+});
+
+test("Halo tuning bounds every field and accepts only opaque RGB colors", () => {
+  const base = defaultHalo();
+  expect(parseHalo(base)).toEqual(base);
+  for (const key of haloMotionFields) {
+    for (const value of [0, 100]) expect(parseHalo({ ...base, [key]: value })[key]).toBe(value);
+    for (const value of [-1, 101, 25.5, "25", null, NaN, Infinity])
+      expect(() => parseHalo({ ...base, [key]: value })).toThrow();
+  }
+  for (const value of [34, 121, 78.5, "78", null])
+    expect(() => parseHalo({ ...base, containedSizePercent: value })).toThrow();
+  expect(() => parseHalo({ ...base, variant: "remote" })).toThrow();
+  expect(() => parseHalo({ ...base, asset: "/arbitrary" })).toThrow();
+  for (const value of ["red", "#fff", "#ffffff80", "url(test)", "#zzzzzz", 0, null])
+    expect(() => parseHalo({ ...base, colors: { ...base.colors, idle: value } })).toThrow();
+  expect(parseHalo({ ...base, colors: { ...base.colors, idle: "#ABCDEF" } }).colors.idle).toBe(
+    "#abcdef",
+  );
+  expect(() => parseHalo({ ...base, colors: { ...base.colors, extra: "#000000" } })).toThrow();
+});
+
+test("Contained saves motion colors and common size without replacing Original sizes", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const halo = {
+    ...defaultHalo(),
+    variant: "contained" as const,
+    containedSizePercent: 83,
+    ringSpreadPercent: 42,
+    listeningPulsePercent: 12,
+    speakingMotionPercent: 65,
+    idleBreathingPercent: 0,
+    colors: { speaking: "#ff82dd", listening: "#44efbb", idle: "#eeedcc" },
+  };
+  const scales = { speaking: 80, listening: 53, idle: 75 };
+  expect((await post("preview", { mode: "listening", scales, halo })).status).toBe(200);
+  expect(phone.state.halo).toEqual(halo);
+  expect(phone.state.savedHalo).toEqual(defaultHalo());
+  expect(
+    (await post("preview", { mode: "idle", scales, halo: { ...halo, variant: "original" } }))
+      .status,
+  ).toBe(200);
+  expect(phone.state.scales).toEqual(scales);
+  expect(phone.state.halo.containedSizePercent).toBe(83);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(saved.version).toBe(5);
+  expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
+  expect(phone.state.savedHalo).toEqual(phone.state.halo);
+  expect("connection" in saved).toBe(false);
+});
+
+test("a mismatched Halo receipt cannot overwrite the host profile", async () => {
+  for (const field of ["variant", "color", "containedSizePercent", ...haloMotionFields] as const) {
+    const { phone, post, saveTo } = await fixture();
+    phone.wrongHaloReceipt = field;
+    expect((await post("save", { revision: 0 })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
 });

@@ -345,3 +345,55 @@ footer {
     margin-top: 34px;
   }
 }
+
+.motion-controls,
+.color-controls {
+  margin: 28px 0 0;
+  padding: 0;
+  border: 0;
+}
+.subpanel-title {
+  padding: 0;
+  margin-bottom: 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.motion-control + .motion-control {
+  margin-top: 20px;
+}
+.motion-control output {
+  font-size: 16px;
+  letter-spacing: 0;
+}
+.motion-control input[type="range"] {
+  margin-top: 14px;
+}
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.color-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 10px;
+}
+.color-choice output {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+input[type="color"] {
+  width: 100%;
+  height: 42px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="color"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}

@@ -31,13 +31,18 @@ class PersonaPreviewTest {
             assertEquals(35.dp, initial.offsetY)
             val tuned = initial.copy(listeningScale = .52f, offsetY = (-24).dp)
             val design = PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3)
-            savePersonaTuning(fixture, encodePersonaTuning(tuned, design))
+            val halo = PreviewHalo(variant = "contained", containedSizePercent = 82, ringSpreadPercent = 45,
+                listeningPulsePercent = 15, speakingMotionPercent = 80, idleBreathingPercent = 0,
+                speakingColor = "#ff82dd", listeningColor = "#44efbb", idleColor = "#eeedcc")
+            savePersonaTuning(fixture, encodePersonaTuning(tuned, design, halo))
             val restored = decodePersonaTuning(fixture.readText())
             assertEquals(.78f, restored.speakingScale)
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(4, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(5, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(halo, decodePersonaHalo(fixture.readText()))
+            assertEquals(PreviewHalo(), decodePersonaHalo(legacy))
             assertEquals(design, decodePersonaDesign(fixture.readText()))
             assertEquals(PreviewDesign(), decodePersonaDesign(legacy))
             val v3 = JSONObject(encodePersonaTuning(tuned, design)).put("version", 3)
@@ -47,6 +52,10 @@ class PersonaPreviewTest {
             assertEquals(PreviewDesign(mute = "rockers"), decodePersonaDesign(fixture.readText()))
             assertEquals(tuned, decodePersonaTuning(fixture.readText()))
             assertEquals(v3, fixture.readText())
+            assertEquals(PreviewHalo(), decodePersonaHalo(v3))
+            val v4 = JSONObject(encodePersonaTuning(tuned, design)).apply { put("version", 4); remove("halo") }.toString()
+            assertEquals(PreviewHalo(), decodePersonaHalo(v4))
+            assertEquals(design, decodePersonaDesign(v4))
         } finally { fixture.delete() }
     }
 
@@ -93,6 +102,7 @@ class PersonaPreviewTest {
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3).json())
+                    .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 writer.write((request.toString() + "\n").toByteArray())
                 val response = JSONObject(readFrame(socket.inputStream)!!)
                 assertEquals(1, response.getInt("id"))
@@ -112,6 +122,8 @@ class PersonaPreviewTest {
                 assertEquals(fixture.readText(), saved.getString("profile"))
                 assertEquals(.52f, decodePersonaTuning(fixture.readText()).listeningScale)
                 assertEquals((-24).dp, decodePersonaTuning(fixture.readText()).offsetY)
+                assertEquals(82, decodePersonaHalo(fixture.readText()).containedSizePercent)
+                assertEquals("#ff82dd", decodePersonaHalo(fixture.readText()).speakingColor)
                 assertEquals(380, decodePersonaDesign(fixture.readText()).controlsHeightDp)
                 assertEquals(54.3, decodePersonaDesign(fixture.readText()).holdSharePercent, 0.00001)
             }

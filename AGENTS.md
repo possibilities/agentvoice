@@ -69,10 +69,14 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   fixed Push to talk Trigger, no header, and an overlay connection notice only
   while Connecting/Disconnected. Control height (240–480 dp) and talk share
   (30–60%) preserve Halo diameter; Controls Reset defaults resets only those
-  dimensions, while Reset Persona resets Halo geometry. Protocol 4 carries
-  control design/geometry plus transient connection selection; explicit Save
-  writes a version 4 profile excluding that connection state. Version 1/2/3
-  phone profiles load without rewriting. No on-phone tuner overlay or
+  dimensions. Original keeps per-state sizes; debug-only Contained uses a checksum-
+  guarded in-memory asset patch, shared size, inward listening motion, four motion
+  amounts and three opaque RGB colors. Reset Persona resets the active variant and
+  shared offset, preserving the other variant. Protocol 5 carries control design,
+  geometry, Halo variant/motion/colors and transient connection selection; Save
+  writes a version 5 profile excluding that connection state. Version 1/2/3/4
+  phone profiles load as Original without rewriting. Preserve the original asset
+  and main PersonaHalo.kt sequencing. No on-phone tuner overlay or
   production layout/default changes; the Push to talk label also applies to the real client.
   Debug preview reconnect observes the same binding
   after backgrounding/recreation or ADB loss; never replay edits/Save or foreground

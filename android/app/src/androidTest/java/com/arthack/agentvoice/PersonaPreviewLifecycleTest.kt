@@ -34,6 +34,7 @@ class PersonaPreviewLifecycleTest {
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3).json())
+                    .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
                 scenario.moveToState(Lifecycle.State.CREATED)

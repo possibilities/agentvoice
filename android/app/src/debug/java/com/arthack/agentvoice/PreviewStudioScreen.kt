@@ -21,6 +21,7 @@ internal fun PreviewStudioScreen(
     onRelease: () -> Unit,
     onExit: () -> Unit,
     connection: String = "connected",
+    halo: PreviewHalo = PreviewHalo(),
 ) {
     androidx.activity.compose.BackHandler(onBack = onExit)
     val currentRelease by rememberUpdatedState(onRelease)
@@ -37,8 +38,11 @@ internal fun PreviewStudioScreen(
         val diameter = minOf(maxWidth, (maxHeight - 262.dp - bottomGap).coerceAtLeast(minimumStage))
         Column(Modifier.fillMaxSize().then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
             Box(Modifier.fillMaxWidth().height(stageHeight)) {
-                PersonaHalo(ui, Modifier.align(Alignment.Center).requiredSize(diameter)
-                    .testTag("studio-persona-stage"), placement)
+                val stage = Modifier.align(Alignment.Center).requiredSize(diameter).testTag("studio-persona-stage")
+                key(halo.variant) {
+                    if (halo.variant == "contained") CompactPersonaHalo(ui, stage, halo.placement(placement), halo.tuning(), halo.colors())
+                    else PersonaHalo(ui, stage, placement)
+                }
             }
             PreviewControls(ui, design.mute, design.hold, onMute, onHold, onRelease,
                 Modifier.fillMaxWidth().padding(horizontal = side),

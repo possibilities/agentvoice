@@ -40,7 +40,7 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
                 old.getString("hold") in setOf("beam", "trigger", "keycap"))
             PreviewDesign(mute = if (old.getString("mute") == "rockers") "rockers" else "keycaps")
         }
-        4 -> decodePreviewDesign(data.getJSONObject("design"))
+        4, 5 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

@@ -121,6 +121,8 @@ The first [native Android app](android/README.md) implements this authenticated
 client API directly, with a Compose voice screen, private device-grant import,
 client-owned WebRTC and foreground call ownership. It is a development build;
 on-device native audio acceptance and release distribution remain pending.
+See [Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
+for creator notices, code/runtime licenses and the external animation's license evidence.
 
 One server and one active frontend are allowed per canonical workspace.
 Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
