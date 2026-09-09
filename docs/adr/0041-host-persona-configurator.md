@@ -71,7 +71,7 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 13 on the phone, then
+checks the observed revision, atomically stores version 14 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
@@ -81,7 +81,7 @@ retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
 Versions 9–11 retain their compatible layout settings; all earlier versions gain
-only baseline scene spacing in memory. Older profiles become version 13 only on explicit Save. Production still
+only baseline scene spacing in memory. Older profiles become version 14 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -404,3 +404,28 @@ feeds inside the outer ring; the central disk remains clear. Original's conserva
 max-state envelope and unequal-size limitation remain. The pinned Rive11.12.0 API
 has no component world-transform getter; exact pose-derived masking would require
 a separate runtime integration, not another scalar promoted as universal contact.
+
+
+## Independent trace join controls
+
+Protocol 16 / profile 14 adds orientation-local `design.traces.reachDp`
+(−40..120, default 0), `fadeLengthDp` (0..80, default 12), and
+`tipOpacityPercent` (0..100, default 0). Historical profile schemas stay strict;
+profiles through 13 and activity sessions through protocol 15 gain only baseline
+join fields in memory. Explicit Save is still the only profile write.
+
+Both orientations derive the join radius as `max(0, previousRadius − reachDp)`,
+with dp converted to scene pixels once. Routes, offshoots and radial trace ink
+share that radius. The fade retains the old 72% shoulder at one sixth of its
+length; selected tip opacity interpolates that shoulder toward full ink. A
+zero fade is a hard edge. A positive radius still protects its inner disk, but
+zero radius deliberately permits full center reach. No mask paints over native
+Persona pixels. Per-field reset and Reset traces restore 0/12/0 without changing
+other layout, Halo, indicator, spirit or glow choices.
+
+This is the requested adjustable fallback, not exact animation-derived occlusion.
+Pinned Rive Android 11.12.0 lacks a component/world-transform getter; artboard
+bounds are canvas bounds and this asset exposes only a color binding. Following
+the moving ellipse requires a separately scoped native runtime bridge. This round
+changes neither the asset nor its renderer, and claims no universal clear-center
+protection when the operator explicitly extends traces into that region.

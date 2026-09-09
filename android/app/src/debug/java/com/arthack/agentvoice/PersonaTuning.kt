@@ -23,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -35,7 +35,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit(), landscape: PreviewLayout = PreviewLayout(), personaSide: String = "left"): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 13)
+        .put("version", 14)
         .put("landscape", landscape.json()).put("personaSide", personaSide)
         .put("spirit", spirit.json())
         .put("halo", halo.json())
@@ -133,7 +133,7 @@ internal data class PersonaPreviewState(
             savedSpirit = active.spirit, savedPersonaSide = active.personaSide,
             savedOtherLayout = if (orientation == "portrait") landscape else portrait)
     }
-    fun json(): JSONObject = JSONObject().put("protocol", 15)
+    fun json(): JSONObject = JSONObject().put("protocol", 16)
         .put("theme", theme).put("mutedPresence", mutedPresence).put("mutedTuning", mutedTuning.json()).put("presenceScope", presenceScope)
         .put("orientation", orientation).put("orientationEpoch", orientationEpoch)
         .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", "left")
@@ -187,14 +187,17 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let {
             if (protocol in 3..11) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
-            else decodePreviewDesign(if (protocol <= 13) withVersionTwelvePadding(it) else it)
+            else {
+                val spaced = if (protocol <= 13) withVersionTwelvePadding(it) else it
+                decodePreviewDesign(if (protocol <= 15) withLegacyTraceJoin(spaced) else spaced)
+            }
         } ?: PreviewDesign(), savedDesign = savedDesign,
         halo = data.optJSONObject("halo")?.let(::decodePreviewHalo) ?: PreviewHalo(), savedHalo = savedHalo,
         spirit = data.optJSONObject("spirit")?.let(::decodePreviewSpirit) ?: PreviewSpirit(), savedSpirit = savedSpirit,
         micMuted = holding || data.optBoolean("micMuted", mode != "listening"), speakerMuted = data.optBoolean("speakerMuted", false),
         orientation = orientation, orientationEpoch = epoch,
         personaSide = data.optString("personaSide", "left").also { require(it in previewPersonaSides) },
-        otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, if (protocol == 13) 12 else if (protocol >= 14) 13 else protocol) } ?: PreviewLayout(),
+        otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, if (protocol >= 16) 14 else if (protocol >= 14) 13 else if (protocol == 13) 12 else protocol) } ?: PreviewLayout(),
         theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"),
         mutedTuning = if (protocol >= 13) decodePreviewMutedTuning(data.getJSONObject("mutedTuning")) else PreviewMutedTuning(),
         presenceScope = if (protocol >= 15) data.getString("presenceScope") else "any-muted")

@@ -106,6 +106,25 @@
                   <input id="trace-offshootPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="offshoot-hint" />
                   <p id="offshoot-hint" class="control-hint">Lighter routes branch in other directions.</p>
                 </div>
+                <p id="trace-tip-baseline-hint" class="control-hint">Baseline: reach 0 dp, fade 12 dp and tip opacity 0%. The tip fades from transparent at the join to 72% at 2 dp and full opacity at 12 dp.</p>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-reachDp">Reach into Persona</label><output id="trace-reachDp-value" for="trace-reachDp">0 dp</output></div>
+                  <input id="trace-reachDp" type="range" min="-40" max="120" step="1" value="0" aria-describedby="trace-reachDp-hint trace-tip-baseline-hint" />
+                  <p id="trace-reachDp-hint" class="control-hint">Positive reaches farther under Persona; negative pulls back from the existing join.</p>
+                  <button type="button" id="reset-trace-reachDp" data-reset="trace-reachDp" class="reset value-reset">Reset reach into persona</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-fadeLengthDp">Fade length</label><output id="trace-fadeLengthDp-value" for="trace-fadeLengthDp">12 dp</output></div>
+                  <input id="trace-fadeLengthDp" type="range" min="0" max="80" step="1" value="12" aria-describedby="trace-fadeLengthDp-hint trace-tip-baseline-hint" />
+                  <p id="trace-fadeLengthDp-hint" class="control-hint">Distance over which the tip reaches full opacity. Zero gives a hard end.</p>
+                  <button type="button" id="reset-trace-fadeLengthDp" data-reset="trace-fadeLengthDp" class="reset value-reset">Reset fade length</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-tipOpacityPercent">Tip opacity</label><output id="trace-tipOpacityPercent-value" for="trace-tipOpacityPercent">0%</output></div>
+                  <input id="trace-tipOpacityPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="trace-tipOpacityPercent-hint trace-tip-baseline-hint" />
+                  <p id="trace-tipOpacityPercent-hint" class="control-hint">Minimum opacity at the tip. Increase it to keep more of the trace visible at the join.</p>
+                  <button type="button" id="reset-trace-tipOpacityPercent" data-reset="trace-tipOpacityPercent" class="reset value-reset">Reset tip opacity</button>
+                </div>
                 <button type="button" id="reset-traces" data-reset="traces" class="reset value-reset">Reset traces</button>
                 <div class="motion-control">
                   <div class="size-heading"><label for="trace-glowPercent">Background glow</label><output id="trace-glowPercent-value" for="trace-glowPercent">Off</output></div>

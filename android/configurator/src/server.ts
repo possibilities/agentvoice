@@ -199,7 +199,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 13 ||
+            profile.version !== 14 ||
             !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
             !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
           )

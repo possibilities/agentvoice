@@ -128,10 +128,12 @@ function render() {
   for (const field of traceAmountFields) {
     const amount = draft.design.traces[field];
     element<HTMLInputElement>(`trace-${field}`).value = String(amount);
-    text(element(`trace-${field}-value`), amount === 0 ? "Off" : `${amount}%`);
+    const unit = field.endsWith("Dp") ? " dp" : "%";
+    const off = amount === 0 && (field === "offshootPercent" || field === "glowPercent");
+    text(element(`trace-${field}-value`), off ? "Off" : `${amount}${unit}`);
     element(`trace-${field}`).setAttribute(
       "aria-valuetext",
-      amount === 0 ? "Off" : `${amount} percent`,
+      off ? "Off" : `${amount}${unit === "%" ? " percent" : unit}`,
     );
   }
   element<HTMLSelectElement>("connection-preview").value = draft.connection;

@@ -139,7 +139,6 @@ private fun traceRoute(port: TracePort, sharedStart: Float, end: Float, unit: Fl
 /** These branches have fixed geometry; their separate control changes only the underlay's opacity. */
 private fun traceOffshoots(width: Float, deckTop: Float, inset: Float, centerY: Float, radius: Float,
     unit: Float): List<List<PreviewTracePoint>> {
-    if (radius <= 0f) return emptyList()
     val outer = width / 2f - maxOf(12f * unit, inset / 2f)
     val paths = mutableListOf<List<PreviewTracePoint>>()
     repeat(2) { side ->

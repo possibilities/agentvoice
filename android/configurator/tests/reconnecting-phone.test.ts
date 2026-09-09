@@ -5,6 +5,7 @@ import { defaultMutedTuning } from "../src/muted-presence.ts";
 import { defaultLandscapeLayout, type PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 import { defaultSpirit } from "../src/spirit.ts";
+import { defaultTraces } from "../src/traces.ts";
 
 const scales = { speaking: 78, listening: 58, idle: 78 };
 const timing = { poll: 5, retry: 10, maxRetry: 20 };
@@ -16,7 +17,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 15,
+    protocol: 16,
     presenceScope: "any-muted",
     mutedTuning: defaultMutedTuning(),
     theme: "bright",
@@ -44,6 +45,7 @@ class Connection implements PreviewConnection {
       hold: "rocker",
       composition: "traces",
       traces: {
+        ...defaultTraces(),
         pattern: "circuit",
         personaSpacingPercent: 75,
         footSpacingPercent: 155,
@@ -93,6 +95,10 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   const initial = new Connection();
   const returned = new Connection();
   const returnedTraces = {
+    ...defaultTraces(),
+    reachDp: 36,
+    fadeLengthDp: 41,
+    tipOpacityPercent: 57,
     pattern: "splayed" as const,
     personaSpacingPercent: 185,
     footSpacingPercent: 65,

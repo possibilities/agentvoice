@@ -29,6 +29,16 @@ remains fixed when stance hits a button edge. At large Persona sizes, protected
 center clearance can limit upper spacing or make it depend on the foot positions.
 The other compositions and their selector are removed.
 
+**Reach into Persona** moves the trace endpoint relative to its existing join
+from −40 to +120 dp. Zero keeps the existing reach; positive reaches farther
+under Persona and negative pulls back. **Fade length** spans 0–80 dp; zero gives
+a hard end. **Tip opacity** spans 0–100% and lifts the minimum opacity at the tip.
+The defaults preserve the existing fade: reach 0 dp, fade length 12 dp and tip
+opacity 0%, yielding transparency at the join, 72% at 2 dp and full opacity at
+12 dp. Each control has an individual reset. **Reset traces** also resets all
+three, retaining Background glow. All three are independent per orientation and
+remain unsaved until explicit Save.
+
 Routes now reach the selected Persona size and position instead of ending a
 fixed distance above the deck. Their geometry and soft clear aperture follow
 settings, never animated pixels, and preserve the transparent center and native
@@ -212,7 +222,7 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 13 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 14 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold portrait; `landscape` holds the
 independent landscape layout (integer-percent `scales`, offset, design, Halo,
 spirit and side). Its root `design`
@@ -228,7 +238,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–12 phone profiles remain readable without rewriting.
+until Save. Version 1–13 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -241,7 +251,8 @@ All versions before 12 gain only baseline scene spacing in memory, without
 adopting the new portrait defaults. All profiles through version 12 migrate
 to Custom padding in memory, keeping every previous spacing value. This also
 applies to an absent legacy landscape layout. Fresh layouts use unified 16 dp
-padding. Older profiles become version 13 only on
+padding. Profiles through version 13 gain only the three baseline trace-tip defaults
+in memory, retaining all prior geometry and tuning. Older profiles become version 14 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -279,7 +290,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 15 carries live/saved/default designs, sizes, vertical
+Preview protocol 16 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -289,8 +300,8 @@ offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is 15;
-saved profile is version 13 for unified padding; session tuning stays excluded.
+session-root fields on Preview/PhoneState, never Layout. Protocol is 16;
+saved profile is version 14 for trace reach/fade tuning; session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -300,7 +311,10 @@ protocol meaning; the visible and accessible control is Push to talk.
 Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 `stancePercent` (75–150), `personaSpacingPercent` and `footSpacingPercent`
 (each 50–200), `weightPercent` (50–250), `offshootPercent` (0–100) and
-`glowPercent` (0–100). Landscape and legacy migration use Parallel, 100%
+`glowPercent` (0–100), `reachDp` (−40–120), `fadeLengthDp` (0–80) and
+`tipOpacityPercent` (0–100). The last three default to 0/12/0. Profiles through13
+retain their exact previous trace shapes and gain these defaults in memory.
+Landscape and legacy migration use Parallel, 100%
 stance/contact/foot/weight, zero offshoot and glow; new portrait defaults are
 listed above. Required `design.spacing` has exactly integer `paddingDp` (−1–40),
 `sideMarginPercent` and `edgeClearancePercent` (0–200), `sectionGapDp` (0–80),
@@ -310,10 +324,10 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently.
-Protocol 15's active fields describe the phone's visible orientation; it also
+Protocol 16's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version 13 profile receipts must
+changes orientation; the host cannot select it. Version 14 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
 before the host copy is written. Connection, activity, theme, indicator style, presence scope and

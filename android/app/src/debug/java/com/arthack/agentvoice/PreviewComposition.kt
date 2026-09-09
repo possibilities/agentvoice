@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.Dp
@@ -30,14 +29,16 @@ internal fun PreviewPersonaTraces(
 ) {
     val theme = LocalPreviewTheme.current
     Canvas(modifier) {
+        val join = previewTraceJoin(personaClearRadius.toPx(), 1.dp.toPx(), settings) ?: return@Canvas
         val geometry = previewTraceGeometry(size.width, size.height, stageHeight.toPx(), controlsHeight.toPx(),
-            sideInset.toPx(), personaCenterY.toPx(), personaClearRadius.toPx(), 1.dp.toPx(), settings, channelGapDp) ?: return@Canvas
-        val route = compositionInk(theme.decoration(VoiceInk.line.copy(alpha = .84f)), personaCenterY, personaClearRadius)
-        val contact = compositionInk(theme.decoration(VoiceInk.muted.copy(alpha = .32f)), personaCenterY, personaClearRadius)
+            sideInset.toPx(), personaCenterY.toPx(), join.radiusPx, 1.dp.toPx(), settings, channelGapDp) ?: return@Canvas
+        val center = Offset(size.width / 2f, personaCenterY.toPx())
+        val route = previewTraceInk(theme.decoration(VoiceInk.line.copy(alpha = .84f)), center, join)
+        val contact = previewTraceInk(theme.decoration(VoiceInk.muted.copy(alpha = .32f)), center, join)
         clipRect(bottom = geometry.endY) {
             if (settings.offshootPercent > 0) {
-                val offshoot = compositionInk(theme.decoration(VoiceInk.line.copy(alpha = .28f * settings.offshootPercent.coerceIn(0, 100) / 100f)),
-                    personaCenterY, personaClearRadius)
+                val offshoot = previewTraceInk(theme.decoration(VoiceInk.line.copy(alpha = .28f * settings.offshootPercent.coerceIn(0, 100) / 100f)),
+                    center, join)
                 for (points in geometry.offshoots) drawPath(points.tracePath(), offshoot,
                     style = Stroke(maxOf(.45.dp.toPx(), geometry.strokeWidth * .62f),
                         cap = StrokeCap.Butt, join = StrokeJoin.Bevel))
@@ -59,20 +60,9 @@ private fun List<PreviewTracePoint>.tracePath() = Path().apply {
     for (point in drop(1)) lineTo(point.x, point.y)
 }
 
-private fun DrawScope.compositionInk(color: Color, personaCenterY: Dp, personaClearRadius: Dp): Brush {
-    val centerY = personaCenterY.toPx()
-    val clearRadius = personaClearRadius.toPx()
-    if (!centerY.isFinite() || !clearRadius.isFinite()) return SolidColor(Color.Transparent)
-    if (clearRadius <= 0f) return SolidColor(color)
-    val outerRadius = clearRadius + 12.dp.toPx()
-    // Keep the feeds strong through the glow, then hide only the trace pixels at the protected body.
-    // The transparent disk never clips or repaints native Halo pixels.
-    return Brush.radialGradient(
-        0f to color.copy(alpha = 0f),
-        clearRadius / outerRadius to color.copy(alpha = 0f),
-        (clearRadius + 2.dp.toPx()) / outerRadius to color.copy(alpha = color.alpha * .72f),
-        1f to color,
-        center = Offset(size.width / 2f, centerY),
-        radius = outerRadius,
-    )
+internal fun previewTraceInk(color: Color, center: Offset, join: PreviewTraceJoin): Brush {
+    if (!center.x.isFinite() || !center.y.isFinite()) return SolidColor(Color.Transparent)
+    if (join.outerRadiusPx == 0f) return SolidColor(color)
+    val stops = join.opacityStops().map { (position, opacity) -> position to color.copy(alpha = color.alpha * opacity) }
+    return Brush.radialGradient(*stops.toTypedArray(), center = center, radius = join.outerRadiusPx)
 }

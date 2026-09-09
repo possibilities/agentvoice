@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -27,6 +26,7 @@ internal fun PreviewLandscapeTraces(
         // Scrolled-away top contacts must not draw across the now-visible button faces.
         if (deckScrollPixels > 0) return@Canvas
         val settings = design.traces
+        val join = previewTraceJoin(clearRadius.toPx(), 1.dp.toPx(), settings) ?: return@Canvas
         val mirror = geometry.personaSide == "right"
         fun screenX(x: Float) = if (mirror) size.width - x else x
         val center = Offset((geometry.stageX + geometry.diameter / 2f).dp.toPx(),
@@ -36,19 +36,14 @@ internal fun PreviewLandscapeTraces(
             else geometry.deckX.dp.toPx()
         val deckWidth = geometry.deckWidth.dp.toPx()
         val deckTop = geometry.deckY.dp.toPx()
-        val radius = clearRadius.toPx()
+        val radius = join.radiusPx
         val gutter = deckX - (geometry.stageX.let {
             if (mirror) size.width - it.dp.toPx() else (it + geometry.diameter).dp.toPx()
         })
         val corridor = deckTop - 8.dp.toPx()
-        if (radius <= 0f || corridor < 0f || gutter <= 0f) return@Canvas
+        if (corridor < 0f || gutter <= 0f) return@Canvas
         val stroke = 1.2.dp.toPx() * settings.weightPercent / 100f
-        val outerRadius = radius + 12.dp.toPx()
-        fun ink(alpha: Float) = Brush.radialGradient(
-            0f to theme.decoration(VoiceInk.line).copy(alpha = 0f),
-            radius / outerRadius to theme.decoration(VoiceInk.line).copy(alpha = 0f),
-            (radius + 2.dp.toPx()) / outerRadius to theme.decoration(VoiceInk.line.copy(alpha = alpha * .72f)),
-            1f to theme.decoration(VoiceInk.line.copy(alpha = alpha)), center = center, radius = outerRadius)
+        fun ink(alpha: Float) = previewTraceInk(theme.decoration(VoiceInk.line.copy(alpha = alpha)), center, join)
         val count = if (settings.pattern == "splayed") 3 else 2
         val footSpacing = 8.dp.toPx() * settings.footSpacingPercent / 100f
         val halfSpan = (count - 1) * footSpacing / 2f

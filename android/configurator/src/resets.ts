@@ -2,6 +2,7 @@ import { haloMotionFields } from "./halo.ts";
 import { type MutedTuningField, mutedTuningFields, resetMutedTuning } from "./muted-presence.ts";
 import { type PhoneState, type Preview, previewOf } from "./protocol.ts";
 import { type SpacingField, spacingFields } from "./spacing.ts";
+import { traceTipFields } from "./traces.ts";
 
 export type ResetTarget =
   | "muted-appearance"
@@ -14,6 +15,7 @@ export type ResetTarget =
   | "animation"
   | "colors"
   | "light"
+  | `trace-${(typeof traceTipFields)[number]}`
   | "traces"
   | "glow"
   | "spirit-colors";
@@ -28,6 +30,12 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     const field = target.slice("muted-".length) as MutedTuningField;
     if (mutedTuningFields.includes(field))
       next.mutedTuning = resetMutedTuning(next.mutedTuning, field);
+    return next;
+  }
+  if (target.startsWith("trace-")) {
+    const field = target.slice("trace-".length) as (typeof traceTipFields)[number];
+    if (traceTipFields.includes(field))
+      next.design.traces[field] = defaults.defaultDesign.traces[field];
     return next;
   }
   if (target.startsWith("spacing-")) {

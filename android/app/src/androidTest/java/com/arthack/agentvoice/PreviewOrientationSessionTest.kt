@@ -58,7 +58,7 @@ class PreviewOrientationSessionTest {
     @Test fun oldProfilesSeedIndependentLandscapeWithoutChangingPortraitOrWriting() {
         val placement = PersonaPlacement(listeningScale = .41f, offsetY = (-83).dp)
         val v10 = JSONObject(encodePersonaTuning(placement)).apply {
-            put("version", 10); remove("landscape"); remove("personaSide")
+            withoutTraceJoinFields(); put("version", 10); remove("landscape"); remove("personaSide")
             getJSONObject("design").remove("spacing")
         }.toString()
         assertEquals(placement, decodePersonaTuning(v10))

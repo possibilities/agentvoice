@@ -32,7 +32,7 @@ class PreviewProfileTwelveTest {
             PreviewHalo(variant = "contained", containedSizePercent = 69), PreviewSpirit("still", 26, "follow"), "left")
         val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit,
             landscape, portrait.personaSide)).apply {
-            put("version", 11)
+            withoutTraceJoinFields(); put("version", 11)
             getJSONObject("design").remove("spacing")
             getJSONObject("landscape").getJSONObject("design").remove("spacing")
         }.toString(2)
@@ -105,7 +105,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(13, encoded.getInt("version"))
+            assertEquals(14, encoded.getInt("version"))
             assertFalse(encoded.has("theme"))
             assertFalse(encoded.has("mutedPresence"))
             assertFalse(encoded.has("mutedTuning"))
@@ -123,7 +123,7 @@ class PreviewProfileTwelveTest {
                 saved.savedHalo, saved.savedSpirit, saved.savedOtherLayout, saved.savedPersonaSide)
             assertEquals(saved.rotate("landscape"), restored)
             val oldState = saved.json().apply {
-                put("protocol", 11); remove("theme"); remove("mutedPresence")
+                withoutTraceJoinFields(); put("protocol", 11); remove("theme"); remove("mutedPresence")
                 getJSONObject("design").remove("spacing")
                 getJSONObject("otherLayout").getJSONObject("design").remove("spacing")
             }
@@ -169,14 +169,14 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(15, current.json().getInt("protocol"))
+                assertEquals(16, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())
             }
             val original = withContext(Dispatchers.Main) { session.state }.copy(mutedPresence = "tide",
                 theme = "quiet", mutedTuning = PreviewMutedTuning(29, -73, 166, 41, 14, "float"))
-            val legacy = original.json().put("protocol", 14).apply { remove("presenceScope") }
+            val legacy = original.json().withoutTraceJoinFields().put("protocol", 14).apply { remove("presenceScope") }
             assertEquals(original.copy(presenceScope = "any-muted"), restorePersonaPreview(legacy,
                 original.saved, original.savedDesign, original.savedHalo, original.savedSpirit,
                 original.savedOtherLayout, original.savedPersonaSide))
@@ -192,7 +192,7 @@ class PreviewProfileTwelveTest {
             spacing = PreviewSpacing(42, 178, 23, 29, 9)))
         val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo,
             portrait.spirit, landscape, portrait.personaSide)).apply {
-            put("version", 12)
+            withoutTraceJoinFields(); put("version", 12)
             getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
             getJSONObject("landscape").getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
         }
@@ -205,7 +205,7 @@ class PreviewProfileTwelveTest {
             assertArrayEquals(bytes, file.readBytes())
             val oldSession = PersonaPreviewState(design = portrait.design, otherLayout = landscape,
                 mutedTuning = PreviewMutedTuning(24, 65, 200, 70, 10, "ripple")).json().apply {
-                put("protocol", 13)
+                withoutTraceJoinFields(); put("protocol", 13)
                 getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
                 getJSONObject("otherLayout").getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
             }

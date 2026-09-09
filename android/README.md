@@ -228,21 +228,21 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 13 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 14 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 15 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 16 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Their tuning is independent. The browser edits only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 13 stores portrait in the root fields and a separate `landscape` layout.
+Version 14 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–12 phone profiles load without rewriting; retired button styles map to
+version 1–13 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 13 only on Save. The real client and release
+become version 14 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -287,7 +287,7 @@ Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
-activity restoration but are not saved in a profile; profile version is 13.
+activity restoration but are not saved in a profile; profile version is 14.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
@@ -308,3 +308,19 @@ callbacks. The controller's delayed-response and stale-session cases are covered
 with fake media; those do not establish native audio behavior. Background teardown
 and active-call revocation were checked against desktop process identity and
 saved voice JSONL. Finish with a human spoken command and an audible answer.
+
+### Trace reach and fade
+
+Each orientation has three independent controls: **Reach into Persona** (−40 to
+120 dp, default 0), **Fade length** (0–80 dp, default 12), and **Tip opacity**
+(0–100%, default 0). Positive reach extends the routes inward; negative reach
+pulls them back. Fade length sets the distance over which ink returns to full
+strength; tip opacity keeps ink visible at the inner edge. Zero fade is a hard
+edge, so tip opacity has no fade span there. Each has its own reset, and Reset
+traces includes all three while retaining ambient glow. Changes remain unsaved
+until Save. Profiles through 13 gain only these defaults in memory.
+
+The join and fade apply to trace ink and offshoots, never to Persona pixels.
+Defaults reproduce the previous soft underlap. This remains a nominal join,
+not a mask following the Rive ellipse: strong positive reach can reveal lines
+inside the ring and, when the join radius reaches zero, at its center.

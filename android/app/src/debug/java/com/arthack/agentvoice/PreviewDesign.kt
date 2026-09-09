@@ -67,11 +67,12 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
             val design = data.getJSONObject("design")
             require(design.fields() == setOf("layout", "header", "mute", "hold", "composition", "controlsHeightDp", "holdSharePercent", "traces"))
             val migrated = JSONObject(design.toString()).put("traces", migrateVersionNineTraces(design.getJSONObject("traces")))
-            decodePreviewDesign(withLegacyPreviewSpacing(migrated))
+            decodePreviewDesign(withLegacyTraceJoin(withLegacyPreviewSpacing(migrated)))
         }
-        10, 11 -> decodePreviewDesign(withLegacyPreviewSpacing(data.getJSONObject("design")))
-        12 -> decodePreviewDesign(withVersionTwelvePadding(data.getJSONObject("design")))
-        13 -> decodePreviewDesign(data.getJSONObject("design"))
+        10, 11 -> decodePreviewDesign(withLegacyTraceJoin(withLegacyPreviewSpacing(data.getJSONObject("design"))))
+        12 -> decodePreviewDesign(withLegacyTraceJoin(withVersionTwelvePadding(data.getJSONObject("design"))))
+        13 -> decodePreviewDesign(withLegacyTraceJoin(data.getJSONObject("design")))
+        14 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

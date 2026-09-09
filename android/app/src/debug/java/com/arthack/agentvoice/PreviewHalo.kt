@@ -60,7 +60,7 @@ internal fun decodePersonaHalo(json: String): PreviewHalo {
     val data = JSONObject(json)
     return when (data.getInt("version")) {
         1, 2, 3, 4 -> PreviewHalo()
-        5, 6, 7, 8, 9, 10, 11, 12, 13 -> decodePreviewHalo(data.getJSONObject("halo"))
+        5, 6, 7, 8, 9, 10, 11, 12, 13, 14 -> decodePreviewHalo(data.getJSONObject("halo"))
         else -> error("Unsupported Persona tuning version")
     }
 }

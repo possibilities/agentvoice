@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class PersonaPreviewTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun legacyProfile(profile: String, version: Int) = JSONObject(profile).put("version", version).apply {
+    private fun legacyProfile(profile: String, version: Int) = JSONObject(profile).withoutTraceJoinFields().put("version", version).apply {
         remove("landscape"); remove("personaSide")
         getJSONObject("design").remove("spacing")
     }
@@ -45,7 +45,7 @@ class PersonaPreviewTest {
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(13, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(14, JSONObject(fixture.readText()).getInt("version"))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))

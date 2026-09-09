@@ -5,7 +5,7 @@ const versionNineAmountFields = [
   "offshootPercent",
   "glowPercent",
 ] as const;
-export const traceAmountFields = [
+const versionThirteenAmountFields = [
   "stancePercent",
   "personaSpacingPercent",
   "footSpacingPercent",
@@ -13,6 +13,8 @@ export const traceAmountFields = [
   "offshootPercent",
   "glowPercent",
 ] as const;
+export const traceTipFields = ["reachDp", "fadeLengthDp", "tipOpacityPercent"] as const;
+export const traceAmountFields = [...versionThirteenAmountFields, ...traceTipFields] as const;
 export type VersionNineTraceSelection = {
   pattern: (typeof tracePatterns)[number];
   stancePercent: number;
@@ -20,10 +22,12 @@ export type VersionNineTraceSelection = {
   offshootPercent: number;
   glowPercent: number;
 };
-export type TraceSelection = VersionNineTraceSelection & {
+export type VersionThirteenTraceSelection = VersionNineTraceSelection & {
   personaSpacingPercent: number;
   footSpacingPercent: number;
 };
+export type TraceSelection = VersionThirteenTraceSelection &
+  Record<(typeof traceTipFields)[number], number>;
 const versionNineBounds = {
   stancePercent: [75, 150],
   weightPercent: [50, 250],
@@ -32,6 +36,9 @@ const versionNineBounds = {
 } as const;
 export const traceBounds = {
   ...versionNineBounds,
+  reachDp: [-40, 120],
+  fadeLengthDp: [0, 80],
+  tipOpacityPercent: [0, 100],
   personaSpacingPercent: [50, 200],
   footSpacingPercent: [50, 200],
 } as const;
@@ -45,11 +52,18 @@ export function defaultTraces(): TraceSelection {
     weightPercent: 100,
     offshootPercent: 0,
     glowPercent: 0,
+    reachDp: 0,
+    fadeLengthDp: 12,
+    tipOpacityPercent: 0,
   };
 }
 
 export function parseTraces(value: unknown): TraceSelection {
   return parseTraceFields(value, traceAmountFields) as TraceSelection;
+}
+
+export function parseVersionThirteenTraces(value: unknown): VersionThirteenTraceSelection {
+  return parseTraceFields(value, versionThirteenAmountFields) as VersionThirteenTraceSelection;
 }
 
 export function parseVersionNineTraces(value: unknown): VersionNineTraceSelection {

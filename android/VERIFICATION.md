@@ -1,12 +1,12 @@
 # Android development build verification
 
-Latest synthetic UI work: **Visible portrait layout and trace underlap**, September 9, 2026, on
+Latest synthetic UI work: **Trace reach and fade controls**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
 No emulator is active. No check starts a voice call, microphone, speaker or inference.
 The latest installed debug APK SHA-256 is
-`dd731dfdaaf290b2ea1a50694204aec692e4b059dbed4afbaefb84a3501bd071`.
+`b60ee4fe3fca55bbd08b65a735f6f05448219cc1272732522928391d8fd7e6b4`.
 
-Current evidence is under [Visible portrait layout and trace underlap](#visible-portrait-layout-and-trace-underlap).
+Current evidence is under [Trace reach and fade controls](#trace-reach-and-fade-controls).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1064,3 +1064,49 @@ voice call or audio. Evidence: `/tmp/agentvoice-visible-layout-{build,native}.lo
 `/tmp/agentvoice-visible-layout-before-`, captures/state JSON in
 `/tmp/agentvoice-visible-layout-phone/`, and browser evidence
 `/tmp/agentvoice-portrait-safe-browser.1C6hFv/`.
+
+
+## Trace reach and fade controls
+
+Protocol 16/profile 14 adds orientation-local reach −40..120 dp, fade length
+0..80 dp and tip opacity 0..100%, baseline 0/12/0. Historical schema fixtures
+validate the original shapes before adding only these defaults in memory.
+
+- 105 JVM tests pass; debug app/test builds and lint pass. Root checks report
+  687 tests, 0 failures, plus TypeScript and Biome. Included host tests report
+  58 tests / 2,589 assertions. No production/main/release source changed.
+- The complete corrected S22 instrumentation suite passes **65 tests / 108.152 s**
+  against the APK hash at the top of this document. Initial run had one test
+  expectation at a duplicate gradient stop; the corrected test samples one pixel
+  outside it. Renderer unchanged. New native tests verify byte-exact default
+  brush pixels, partial/full tip opacity, hard edges and untouched underlying
+  pixels inside a positive-radius disk. At radius zero, ink deliberately reaches
+  the center. Existing gesture coverage now changes reach/fade/tip while PTT is
+  held, retaining the native Halo instance and scene geometry.
+- Native profile/session tests cover strict rejection, no partial mutation,
+  independent portrait/landscape values, historical profile/session migration,
+  restoration, explicit Save receipt and the 8 KiB reply bound. Save tests use
+  isolated cache files; the operator's profiles are not their fixtures.
+- Headless host UI evidence verifies all three controls/units, per-field and
+  group reset, retained ambient glow, inactive layout and unrelated tuning,
+  with no Save. Evidence: `/tmp/agentvoice-studio16-browser.PmTlTv/evidence.json`.
+- Actual S22 captures compare reach −40/0/40/120, fade 0/80 and tip 0/50/100,
+  plus offshoots and listening/speaking samples. One-variable pairs retain
+  identical Persona/deck settings. Visual review confirms distinct route reach
+  and opacity effects with stable button placement. Animated Halo frames differ;
+  these stills do not establish exact moving-ellipse occlusion. Positive reach
+  intentionally exposes more interior traces.
+
+Evidence: `/tmp/agentvoice-trace-controls-{build,recheck-build,root-test,native-final}.log`,
+`/tmp/agentvoice-trace-controls-phone/`, and
+`/tmp/agentvoice-trace-controls-comparison.png`.
+
+The actual phone was also rotated to landscape: baseline routes were absent
+under that retained Original envelope, while reach80/fade32/tip70 exposed routes
+and offshoots toward the ring. This verifies the landscape control path, not
+automatic baseline attachment. Both orientation layouts, session appearance,
+mode, mute gates and phone rotation lock were restored. Fresh operator choices
+(78/56/78 sizes, −30 dp offset, 396 dp deck, 36.4% PTT, 17 dp padding and
+Splayed/101 stance/250 weight/89 contact/200 feet) were retained. Phone and host
+saved profile bytes compare exactly with the pre-install snapshot; no Save.
+Final restoration receipt: `/tmp/agentvoice-trace-controls-phone-check.log`.

@@ -12,7 +12,7 @@ import org.junit.Test
 import java.util.UUID
 
 class PersonaPreviewLifecycleTest {
-    private fun legacySession(state: PersonaPreviewState, protocol: Int) = state.json().put("protocol", protocol).apply {
+    private fun legacySession(state: PersonaPreviewState, protocol: Int) = state.json().withoutTraceJoinFields().put("protocol", protocol).apply {
         remove("theme"); remove("mutedPresence"); remove("otherLayout"); remove("savedOtherLayout")
         for (field in listOf("orientation", "orientationEpoch", "personaSide", "savedPersonaSide", "defaultPersonaSide")) remove(field)
         for (field in listOf("design", "savedDesign", "defaultDesign")) getJSONObject(field).remove("spacing")
