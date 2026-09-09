@@ -79,11 +79,14 @@ On entry, any reduction to Listening's scale completes before enabling its
 native animation. Color follows the selected audio state immediately. Cancelling
 that reduction cancels the pending native entry; controls and audio gates are
 independent of this visual sequencing.
-The tuner's hideable overlay leaves layout geometry intact. Its states are
+The original tuner's hideable overlay left layout geometry intact. Its states were
 synthetic; there is no media or controller. Save writes all sizes in a private
 version 2 placement JSON for explicit adoption into the compiled defaults. A
 version 1 profile seeds every state from its original size and is not rewritten
 on load. The real client does not load that file or gain a settings screen.
+The on-phone tuning overlay is superseded by
+[ADR 0037's host browser configurator](0037-host-persona-configurator.md), which
+preserves this profile format and the native preview's layout and animations.
 
 Security and lifecycle stay narrow: verified WSS, exact subprotocol and private
 device grant; AES-GCM Keystore storage, backup exclusion and protected capture;

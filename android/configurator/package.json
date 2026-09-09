@@ -1,0 +1,10 @@
+{
+  "name": "agentvoice-configurator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/main.ts",
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit"
+  }
+}

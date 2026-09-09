@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Halo · AgentVoice</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="wordmark">agentvoice</span>
+        <span id="connection" class="connection"><span class="signal" aria-hidden="true"></span><span id="connection-text">Connecting</span></span>
+      </header>
+      <section aria-labelledby="title">
+        <div class="intro">
+          <h1 id="title">Halo</h1>
+          <p id="device">Native phone preview</p>
+        </div>
+        <fieldset id="controls" disabled>
+          <legend class="sr-only">Halo preview controls</legend>
+          <fieldset class="modes">
+            <legend class="sr-only">Preview state</legend>
+            <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
+            <button type="button" data-mode="listening" aria-pressed="false"><span>Listening</span><small id="listening-value">58%</small></button>
+            <button type="button" data-mode="idle" aria-pressed="false"><span>Idle</span><small id="idle-value">78%</small></button>
+          </fieldset>
+          <div class="size-control">
+            <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
+            <input id="size" type="range" min="35" max="120" step="1" value="78" />
+            <div class="range-ends" aria-hidden="true"><span>35%</span><span>120%</span></div>
+          </div>
+          <p class="position">Position <span>+35 dp</span> in every state</p>
+          <div class="actions"><button type="button" id="reset" class="reset">Reset sizes</button><button type="button" id="save" class="save">Save profile</button></div>
+        </fieldset>
+        <div class="feedback">
+          <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>
+          <p id="error" role="alert" hidden></p>
+          <p id="save-path" hidden></p>
+        </div>
+      </section>
+      <footer>Changes appear on your phone. Save keeps all three sizes.</footer>
+    </main>
+  </body>
+</html>

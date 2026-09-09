@@ -160,25 +160,25 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 
 ## Persona tuning
 
-Debug builds also include a **Halo tuner** launcher icon. It renders synthetic
-Speaking, Listening and Idle states. Select a state and adjust its size
-(35–120% of the full-width artboard treatment); the other states keep their sizes.
-Position is fixed at the operator's chosen +35 dp for all states. The panel overlays the existing
-layout; **Hide** exposes the full screen at the same placement and **Adjust Halo**
-brings it back. **Reset** restores all three sizes to the current compiled defaults.
-
-**Save** writes all three sizes and the fixed position to app-private
-`files/persona-tuning.json` using version 2, and reopening the tuner restores them.
-An existing version 1 choice initializes all three sizes from its saved multiplier;
-opening the tuner never rewrites the file. The real client keeps its compiled
-defaults until the per-state choices are adopted in `PersonaPlacement`. This activity never
-opens audio, a controller or a connection, and it is absent from release builds.
+The [separate host configurator](configurator/README.md) runs in your desktop
+browser and controls a full-screen native preview over ADB. It replaces the
+on-phone tuner panel. Choose Speaking, Listening or Idle and adjust that state's
+size (35–120%); the other sizes stay intact. Position remains fixed at +35 dp.
+Reset restores the current compiled defaults. The phone's synthetic channel and
+hold-to-talk buttons still work, and changes appear in the browser.
 
 ```sh
-adb -s <device-id> shell am start \
-  -n com.arthack.agentvoice.dev/com.arthack.agentvoice.PersonaTunerActivity
-adb -s <device-id> shell run-as com.arthack.agentvoice.dev cat files/persona-tuning.json
+# From the repository root, with the current debug APK installed:
+bun run android:configure --device <adb-serial>
 ```
+
+Save retains all three sizes in app-private `files/persona-tuning.json` and a
+matching JSON copy on the host. Existing version 1 and 2 choices load without
+rewriting. The real client keeps its compiled defaults until a saved choice is
+adopted in `PersonaPlacement`. Debug builds include a **Halo preview** launcher
+icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
+The preview and its narrowly scoped ADB bridge are absent from release builds.
+They never load a grant, controller or audio, or connect to the voice server.
 
 ## Remaining on-device acceptance
 

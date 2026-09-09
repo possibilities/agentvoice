@@ -4,6 +4,11 @@
 listening, thinking, speaking and asleep states. Optional input/output audio
 features shape its motion; it neither infers conversation state nor owns a call.
 
+**Android configurator** — A separate host browser app for tuning the native Halo
+preview over explicitly selected ADB. Its synthetic phone preview owns no call
+or audio. Save retains the phone profile and an exact host copy; production
+defaults remain compiled. See ADR 0037.
+
 **Vanilla Codex** — The Codex client-and-server experience, including the voice
 frontend and working agent. AgentVoice supplies its own frontend, so an explicit
 value matching Codex's client can be part of vanilla behavior. Distinguish client

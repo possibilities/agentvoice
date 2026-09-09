@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
   "files": {
-    "includes": ["src/**", "tests/**", "scripts/**", "*.json"]
+    "includes": [
+      "src/**",
+      "tests/**",
+      "scripts/**",
+      "android/configurator/**",
+      "!android/configurator/profiles",
+      "*.json"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

@@ -6,11 +6,12 @@ The desktop used its existing waiting AgentVoice service and Tailscale TLS route
 with an owned stock Codex 0.153.4 child. No service configuration was changed.
 
 Final debug APK SHA-256:
-`89a2310e1ae49cd9298424c6c954c9d4032cf8f19baeb886e416bd36c846c83c`.
+`12f1a6b829c2e2f18192b6b2c46a282af4d32891c79b84b060660b28e214ec94`.
 
 ## Automated checks
 
-- 629 repository tests; root TypeScript and Biome checks passed.
+- 637 repository tests, including eight configurator tests; root and configurator
+  TypeScript and Biome checks passed.
 - 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
   headers and redirect rejection.
@@ -70,6 +71,38 @@ Final debug APK SHA-256:
   settling the first native pose before drawing removes that ramp. The final
   recording shows its first visible Halo at the intended size and position.
   No production `FLAG_SECURE` capture was bypassed.
+
+## Host browser configurator
+
+The installed debug build replaces the on-phone tuner with `PersonaPreviewActivity`.
+The separate Bun app in `android/configurator/` serves host browser controls and
+uses an authenticated ADB forward to the preview's abstract Unix socket. The
+native Halo adapter, compiled defaults and release activity are unchanged.
+
+- All fifteen S22 instrumentation tests passed. The extracted preview keeps the
+  native channel and PTT controls and has no tuning overlay. New bridge checks
+  cover invalid admission, state/scale commands, invalid scales, stale saves,
+  the exact atomically saved receipt and socket teardown. Saves use a unique
+  cache fixture, never the operator's profile. The first shutdown check caught
+  a blocked Android socket read surviving `close`; explicit socket shutdown now
+  wakes it and the regression passes. The existing Halo transition tests pass.
+- All 22 Android JVM tests, debug/release builds and Android lint passed. The
+  release manifest still contains only `MainActivity`; no debug bridge or
+  cleartext exception is shipped there.
+- Eight host tests cover device selection, strict bounds, independent sizes,
+  exact private host persistence, Host/Origin restrictions, stale-save refusal,
+  partial save failure, fragmented responses and disconnect/oversize handling.
+- Chrome displayed the host controls and selected Listening on the S22. The
+  dark layout and native phone preview were visually inspected. An ADB-only
+  exercise verified five state transitions and a temporary Listening resize
+  to 52%, then restored 78 / 58 / 78% with +35 dp. The connection stayed live;
+  the phone profile remained byte-for-byte identical to its pre-install copy.
+- Closing the host process removed its exact forward. A fresh run established
+  a new session. Moving/backgrounding or recreating the phone preview ends that
+  session; scrcpy is optional and is not part of the configurator transport.
+
+Production voice acceptance limits below remain unchanged. This configurator
+check opened no media, inference, grants or voice-server connection.
 
 ## Desktop backend viewer
 

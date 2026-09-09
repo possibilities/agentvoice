@@ -61,6 +61,11 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
 - `bun run android:build` — cross-compile the ARM64 Android/Termux standalone
   executable at `dist/agentvoice-android-arm64`. It neither installs to a device
   nor opens media/inference; phone calls do not require the native audio build.
+- `bun run android:configure --device <adb-serial>` — separate host browser
+  configurator for the debug APK's native Halo preview. Uses only its dedicated
+  authenticated ADB preview socket, never a production call or grant. Save keeps
+  the existing private phone profile and an exact host JSON copy. Fixed +35 dp;
+  no on-phone tuner overlay. See android/configurator/README.md and ADR 0037.
 - `scripts/install-android --install --host <ssh-target>` — explicitly build and
   atomically converge that standalone on an already prepared Termux phone. It is
   never part of the desktop installer or an unattended update and starts no call.
