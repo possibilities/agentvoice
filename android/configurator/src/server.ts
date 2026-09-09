@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { equalDesign } from "./design.ts";
 import { saveProfile } from "./profile.ts";
 import {
   equalScales,
@@ -95,11 +96,12 @@ export async function serveConfigurator(
         input = record(await request.json());
         integer(input["generation"], 1);
         if (path === "preview") {
-          exact(input, ["generation", "mode", "scales", "verticalOffsetDp"]);
+          exact(input, ["generation", "mode", "scales", "verticalOffsetDp", "design"]);
           parsePreview({
             mode: input["mode"],
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
+            design: input["design"],
           });
         } else {
           exact(input, ["generation", "revision"]);
@@ -125,6 +127,7 @@ export async function serveConfigurator(
               mode: input["mode"],
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
+              design: input["design"],
             }),
           });
         else {
@@ -132,6 +135,7 @@ export async function serveConfigurator(
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = { ...phone.state.scales };
           const expectedOffset = phone.state.verticalOffsetDp;
+          const expectedDesign = { ...phone.state.design };
           const reply = await phone
             .request({ method: "save", revision: input["revision"] })
             .catch(() => {
@@ -142,6 +146,9 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
+            profile.version !== 3 ||
+            !profile.design ||
+            !equalDesign(profile.design, expectedDesign) ||
             profile.verticalOffsetDp !== expectedOffset ||
             !equalScales(expected, {
               speaking: Math.round(profile.scaleMultipliers.speaking * 100),

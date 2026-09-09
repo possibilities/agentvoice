@@ -1,23 +1,30 @@
+import { type Design, parseDesign } from "./design.ts";
+
 export const modes = ["speaking", "listening", "idle"] as const;
 export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
-export type Preview = { mode: Mode; scales: Scales; verticalOffsetDp: number };
+export type Preview = { mode: Mode; scales: Scales; verticalOffsetDp: number; design: Design };
 export type PhoneState = Preview & {
-  protocol: 2;
+  protocol: 3;
   revision: number;
   holding: boolean;
   savedScales: Scales;
   defaults: Scales;
   savedVerticalOffsetDp: number;
   defaultVerticalOffsetDp: number;
+  savedDesign: Design;
+  defaultDesign: Design;
+  micMuted: boolean;
+  speakerMuted: boolean;
 };
 export type Profile = {
-  version: 2;
+  version: 2 | 3;
   scaleMultipliers: Scales;
   verticalOffsetDp: number;
   connectedArtboardScale: 1.9;
   disconnectedArtboardScale: 1.5;
   savedAtEpochMs: number;
+  design?: Design;
 };
 
 export function record(value: unknown): Record<string, unknown> {
@@ -56,11 +63,12 @@ function mode(value: unknown): Mode {
 
 export function parsePreview(value: unknown): Preview {
   const data = record(value);
-  exact(data, ["mode", "scales", "verticalOffsetDp"]);
+  exact(data, ["mode", "scales", "verticalOffsetDp", "design"]);
   return {
     mode: mode(data["mode"]),
     scales: parseScales(data["scales"]),
     verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
+    design: parseDesign(data["design"]),
   };
 }
 
@@ -77,11 +85,21 @@ export function parseState(value: unknown): PhoneState {
     "verticalOffsetDp",
     "savedVerticalOffsetDp",
     "defaultVerticalOffsetDp",
+    "design",
+    "savedDesign",
+    "defaultDesign",
+    "micMuted",
+    "speakerMuted",
   ]);
-  if (data["protocol"] !== 2 || typeof data["holding"] !== "boolean")
+  if (
+    data["protocol"] !== 3 ||
+    typeof data["holding"] !== "boolean" ||
+    typeof data["micMuted"] !== "boolean" ||
+    typeof data["speakerMuted"] !== "boolean"
+  )
     throw Error("Invalid phone state");
   return {
-    protocol: 2,
+    protocol: 3,
     revision: integer(data["revision"]),
     holding: data["holding"],
     mode: mode(data["mode"]),
@@ -91,6 +109,11 @@ export function parseState(value: unknown): PhoneState {
     verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
     savedVerticalOffsetDp: integer(data["savedVerticalOffsetDp"], -200, 200),
     defaultVerticalOffsetDp: integer(data["defaultVerticalOffsetDp"], -200, 200),
+    design: parseDesign(data["design"]),
+    savedDesign: parseDesign(data["savedDesign"]),
+    defaultDesign: parseDesign(data["defaultDesign"]),
+    micMuted: data["micMuted"],
+    speakerMuted: data["speakerMuted"],
   };
 }
 
@@ -104,9 +127,10 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
+    ...(data["version"] === 3 ? ["design"] : []),
   ]);
   if (
-    data["version"] !== 2 ||
+    (data["version"] !== 2 && data["version"] !== 3) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -124,7 +148,17 @@ export function parseProfile(text: string): Profile {
   parseScales(percentages);
   integer(data["verticalOffsetDp"], -200, 200);
   integer(data["savedAtEpochMs"], 1);
+  if (data["version"] === 3) parseDesign(data["design"]);
   return data as Profile;
+}
+
+export function previewOf(state: Preview): Preview {
+  return {
+    mode: state.mode,
+    scales: { ...state.scales },
+    verticalOffsetDp: state.verticalOffsetDp,
+    design: { ...state.design },
+  };
 }
 
 export function equalScales(a: Scales, b: Scales): boolean {

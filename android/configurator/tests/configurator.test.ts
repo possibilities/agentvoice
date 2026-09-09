@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { directions, originalDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { parseArgs } from "../src/main.ts";
 import {
@@ -18,7 +19,7 @@ import { serveConfigurator } from "../src/server.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 2,
+  protocol: 3,
   revision: 0,
   holding: false,
   mode: "speaking",
@@ -28,9 +29,15 @@ const initial = (): PhoneState => ({
   verticalOffsetDp: 35,
   savedVerticalOffsetDp: 35,
   defaultVerticalOffsetDp: 35,
+  design: { ...originalDesign },
+  savedDesign: { ...originalDesign },
+  defaultDesign: { ...originalDesign },
+  micMuted: true,
+  speakerMuted: false,
 });
 const profile = (state: PhoneState): Profile => ({
-  version: 2,
+  version: 3,
+  design: { ...state.design },
   scaleMultipliers: {
     speaking: state.scales.speaking / 100,
     listening: state.scales.listening / 100,
@@ -53,6 +60,7 @@ class FakePhone implements Phone {
   calls: Record<string, unknown>[] = [];
   refuseSave = false;
   wrongOffsetReceipt = false;
+  wrongDesignReceipt = false;
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
     if (command["method"] === "preview") {
@@ -60,6 +68,7 @@ class FakePhone implements Phone {
         mode: command["mode"],
         scales: command["scales"],
         verticalOffsetDp: command["verticalOffsetDp"],
+        design: command["design"],
       });
       this.state = { ...this.state, ...preview, revision: this.state.revision + 1 };
     }
@@ -70,9 +79,11 @@ class FakePhone implements Phone {
         ...this.state,
         savedScales: { ...this.state.scales },
         savedVerticalOffsetDp: this.state.verticalOffsetDp,
+        savedDesign: { ...this.state.design },
       };
       const receipt = profile(this.state);
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
+      if (this.wrongDesignReceipt) receipt.design = { ...receipt.design!, header: "none" };
       return { state: this.state, profile: JSON.stringify(receipt, null, 2) };
     }
     return { state: this.state };
@@ -93,7 +104,9 @@ async function fixture(options: { saveTo?: string } = {}) {
       headers: { "Content-Type": "application/json", Origin: origin, ...headers },
       body: JSON.stringify({
         generation: phone.generation,
-        ...(path === "preview" ? { verticalOffsetDp: phone.state.verticalOffsetDp } : {}),
+        ...(path === "preview"
+          ? { verticalOffsetDp: phone.state.verticalOffsetDp, design: phone.state.design }
+          : {}),
         ...(body as object),
       }),
     });
@@ -115,7 +128,12 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   expect(() => parseScales({ ...defaults, listening: NaN })).toThrow();
   expect(() => parseScales({ ...defaults, offset: 35 })).toThrow();
   expect(() =>
-    parsePreview({ mode: "thinking", scales: defaults, verticalOffsetDp: 35 }),
+    parsePreview({
+      mode: "thinking",
+      scales: defaults,
+      verticalOffsetDp: 35,
+      design: originalDesign,
+    }),
   ).toThrow();
   const saved = profile(initial());
   expect(parseProfile(JSON.stringify(saved))).toEqual(saved);
@@ -125,9 +143,48 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
     );
   }
   for (const verticalOffsetDp of [-201, 201, 20.5, "35", null, undefined]) {
-    expect(() => parsePreview({ mode: "idle", scales: defaults, verticalOffsetDp })).toThrow();
+    expect(() =>
+      parsePreview({ mode: "idle", scales: defaults, verticalOffsetDp, design: originalDesign }),
+    ).toThrow();
     expect(() => parseProfile(JSON.stringify({ ...saved, verticalOffsetDp }))).toThrow();
   }
+});
+
+test("design choices are bounded and old profiles remain readable without migration", () => {
+  for (const direction of directions)
+    expect(parseDesign(direction.design)).toEqual(direction.design);
+  expect(() => parseDesign({ ...originalDesign, header: "remote-content" })).toThrow();
+  expect(() => parseDesign({ ...originalDesign, asset: "/arbitrary" })).toThrow();
+  const { design: _, ...legacy } = profile(initial());
+  const old = { ...legacy, version: 2 as const };
+  expect(parseProfile(JSON.stringify(old))).toEqual(old);
+  expect(() => parseProfile(JSON.stringify({ ...legacy, version: 3 }))).toThrow();
+});
+
+test("switching a direction preserves tuning and only explicit Save keeps the design", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const design = directions.find((direction) => direction.id === "radio")!.design;
+  const preview = {
+    mode: "idle",
+    scales: { ...defaults, speaking: 48 },
+    verticalOffsetDp: -24,
+    design,
+  };
+  expect((await post("preview", preview)).status).toBe(200);
+  expect(phone.state.design).toEqual(design);
+  expect(phone.state.scales).toEqual(preview.scales);
+  expect(phone.state.savedDesign).toEqual(originalDesign);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  expect(parseProfile(await readFile(saveTo, "utf8")).design).toEqual(design);
+  expect(phone.state.savedDesign).toEqual(design);
+});
+
+test("a different design in the phone receipt is refused before writing the host copy", async () => {
+  const { phone, post, saveTo } = await fixture();
+  phone.wrongDesignReceipt = true;
+  expect((await post("save", { revision: 0 })).status).toBe(502);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
 });
 
 test("browser updates one state and saves the exact phone receipt privately on host", async () => {

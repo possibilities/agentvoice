@@ -30,13 +30,16 @@ class PersonaPreviewTest {
             assertEquals(legacy, fixture.readText())
             assertEquals(35.dp, initial.offsetY)
             val tuned = initial.copy(listeningScale = .52f, offsetY = (-24).dp)
-            savePersonaTuning(fixture, encodePersonaTuning(tuned))
+            val design = PreviewDesign("studio", "drawer", "rockers", "trigger")
+            savePersonaTuning(fixture, encodePersonaTuning(tuned, design))
             val restored = decodePersonaTuning(fixture.readText())
             assertEquals(.78f, restored.speakingScale)
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(2, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(3, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(design, decodePersonaDesign(fixture.readText()))
+            assertEquals(PreviewDesign(), decodePersonaDesign(legacy))
         } finally { fixture.delete() }
     }
 
@@ -47,6 +50,8 @@ class PersonaPreviewTest {
         compose.onNodeWithText("Adjust Halo").assertDoesNotExist()
         compose.onNodeWithTag("mic-mute").performClick()
         compose.runOnIdle { assertEquals("listening", state.mode) }
+        compose.onNodeWithTag("speaker-mute").performClick()
+        compose.runOnIdle { assertTrue(state.speakerMuted); assertEquals("listening", state.mode) }
         compose.onNodeWithTag("speaker-mute").performClick()
         compose.runOnIdle { assertEquals("speaking", state.mode) }
         compose.onNodeWithTag("end-call").performClick()
@@ -80,6 +85,7 @@ class PersonaPreviewTest {
                 val request = JSONObject().put("id", 1).put("method", "preview").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
+                    .put("design", PreviewDesign("studio", "quiet", "glyphs", "beam").json())
                 writer.write((request.toString() + "\n").toByteArray())
                 val response = JSONObject(readFrame(socket.inputStream)!!)
                 assertEquals(1, response.getInt("id"))
@@ -99,6 +105,7 @@ class PersonaPreviewTest {
                 assertEquals(fixture.readText(), saved.getString("profile"))
                 assertEquals(.52f, decodePersonaTuning(fixture.readText()).listeningScale)
                 assertEquals((-24).dp, decodePersonaTuning(fixture.readText()).offsetY)
+                assertEquals("studio", decodePersonaDesign(fixture.readText()).layout)
             }
             connect().use { socket ->
                 socket.outputStream.write("{\"token\":\"wrong\"}\n".toByteArray())

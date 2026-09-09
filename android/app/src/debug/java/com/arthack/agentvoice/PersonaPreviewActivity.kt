@@ -16,7 +16,7 @@ import androidx.lifecycle.Lifecycle
 import org.json.JSONObject
 import java.io.File
 
-/** Synthetic native preview. Its ADB bridge can only select, size, and save the Halo. */
+/** Synthetic native preview. Its ADB bridge owns only visual choices and their private profile. */
 class PersonaPreviewActivity : ComponentActivity() {
     private val selection get() = File(filesDir, "persona-tuning.json")
     private lateinit var session: PersonaPreviewSession
@@ -32,15 +32,15 @@ class PersonaPreviewActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             hide(WindowInsetsCompat.Type.systemBars())
         }
-        session = PersonaPreviewSession(runCatching {
-            decodePersonaTuning(AtomicFile(selection).readFully().toString(Charsets.UTF_8))
-        }.getOrDefault(PersonaPlacement()), selection)
+        val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
+        session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(PersonaPlacement()),
+            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()))
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign) }
         }
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
-        setContent { VoiceTheme { PersonaPreview(session.state) { session.state = it } } }
+        setContent { VoiceTheme { PersonaPreview(session.state, onExit = ::finish) { session.state = it } } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -79,7 +79,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     override fun onStop() {
         bridge?.close()
         bridge = null
-        if (session.state.holding) session.state = session.state.select("idle")
+        session.state = session.state.endHold()
         super.onStop()
     }
 }
@@ -94,12 +94,18 @@ internal class PersonaPreviewBinding(val name: String, val token: String) {
 }
 
 @Composable
-internal fun PersonaPreview(state: PersonaPreviewState, change: (PersonaPreviewState) -> Unit) {
+internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, change: (PersonaPreviewState) -> Unit) {
+    val currentState by rememberUpdatedState(state)
+    val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
+    if (state.design.layout == "studio") {
+        PreviewStudioScreen(state.ui(), state.design, state.placement,
+            onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
+            onRelease = release, onExit = onExit)
+        return
+    }
     VoiceScreen(state.ui(), true, start = {}, stop = { change(state.select("idle")) }, importGrant = {},
-        mute = { target -> change(state.select(if (target == "mic") {
-            if (state.mode == "listening") "idle" else "listening"
-        } else if (state.mode == "speaking") "idle" else "speaking")) },
-        hold = { change(state.select("listening").copy(holding = true)) },
-        release = { if (state.holding) change(state.select("idle")) },
+        mute = { change(currentState.toggle(it)) },
+        hold = { change(currentState.beginHold()) },
+        release = release,
         preview = true, personaPlacement = state.placement)
 }

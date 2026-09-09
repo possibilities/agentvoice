@@ -33,6 +33,7 @@ class PersonaPreviewLifecycleTest {
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
+                    .put("design", PreviewDesign("studio", "none", "keycaps", "keycap").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
                 scenario.moveToState(Lifecycle.State.CREATED)

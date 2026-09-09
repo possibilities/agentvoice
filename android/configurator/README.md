@@ -1,10 +1,25 @@
-# AgentVoice configurator
+# AgentVoice design studio
 
-A separate host browser app controlling the native Halo preview on an Android
-phone. The phone is the preview surface; the browser holds Speaking, Listening,
-Idle, the selected state's size slider, a shared vertical position slider, Reset,
-and Save profile. No tuning
-panel obscures the phone.
+A separate host browser app for comparing native Android voice controls and
+tuning the existing Persona Halo. The phone renders the interactive demo;
+the browser holds design choices, Speaking/Listening/Idle, per-state size,
+shared vertical position, Reset tuning and Save profile. No tuning panel
+obscures the phone.
+
+| Direction | Header | Mute controls | Hold to talk |
+| --- | --- | --- | --- |
+| Current | Existing production screen | Existing controls | Existing surface |
+| Signal | Quiet rail | Glyphs | Beam |
+| Field radio | Slide-away | Rockers | Trigger |
+| Ghost terminal | Hidden | Keycaps | Keycap |
+
+Choose a direction, then mix its header, mute controls and hold surface using
+the three selectors. Changing any selector switches to the experimental studio
+layout. Current returns to the existing screen for comparison. Presets and
+individual design choices preserve all three Halo sizes and the shared offset.
+In the studio, revealing or hiding the header eases Halo's center while the
+mute and hold targets stay fixed; it does not change the Halo diameter. Hidden
+chrome has an explicit reveal control. Slide-away can remain open with Keep open.
 
 Install the current Android debug APK on an explicitly selected, ADB-authorized
 phone, then run from the repository root:
@@ -19,8 +34,8 @@ ADB runs without a mirroring window. scrcpy is optional and can run alongside
 the configurator; it is not used for control or rendering by this app. Moving
 the preview between displays, recreating its activity or backgrounding it can
 interrupt the connection. Leave this browser tab open: it shows **Waiting for
-phone** and reconnects automatically when the preview returns. Unsaved sizes, position and
-the selected state survive backgrounding and Android activity recreation.
+phone** and reconnects automatically when the preview returns. Unsaved design,
+sizes, position and selected state survive backgrounding and Android activity recreation.
 Temporary USB/ADB loss also reconnects to the same selected phone; the host
 recreates its own port forward if necessary. It never pulls the app into the
 foreground. Return to **Halo preview** on the phone when ready.
@@ -33,14 +48,16 @@ The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` without rewriting it. Size remains
 35–120%, independently for each state. Vertical position applies to every state,
 from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
-Reset restores the phone build's compiled defaults, currently 78 / 58 / 78% and
-+35 dp. Save keeps both sizes and position.
+Reset tuning restores only the phone build's compiled geometry defaults,
+currently 78 / 58 / 78% and +35 dp. It keeps the selected design and state.
+Save profile keeps the design, all sizes and the shared position.
 Phone channel buttons and hold-to-talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Save writes the existing version 2 profile atomically on the phone. Only after
+Explicit Save writes a version 3 profile atomically on the phone. Its `design`
+contains the layout, header, mute and hold choices. Only after
 the phone confirms that exact profile does the host write a matching, mode-0600
 JSON copy to `profiles/<device-serial>.json`. Use `--save-to /absolute/file.json`
 to choose another destination. The browser names that destination after Save.
@@ -49,12 +66,16 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Reset and live edits do not persist
-until Save. Version 1 phone profiles still seed all three sizes and migrate on
-explicit Save. Profiles are ignored by Git.
+until Save. Version 1 and 2 phone profiles remain readable without rewriting:
+version 1 seeds all three sizes, and both older versions select Current. Their
+stored position remains intact; a missing position uses +35 dp. They become
+version 3 only on explicit Save. Profiles are ignored by Git.
 
-The real voice client retains its compiled `PersonaPlacement` defaults; adopting
-a saved profile into those defaults remains an explicit code change, as before.
-The unchanged native Halo adapter owns all rendering and transition timing.
+The real voice client and release APK retain their existing UI and compiled
+`PersonaPlacement` defaults. Saving a demo choice does not adopt it into the
+product; adoption remains an explicit code change after the operator selects
+the final design. The unchanged native Halo adapter owns its rendering and
+state-transition timing.
 
 ## Boundary
 
@@ -66,8 +87,9 @@ The existing bundled IBM Plex Mono font is served under its [OFL](../fonts/OFL.t
 ADB forwards an ephemeral host port to a new abstract Unix socket owned by the
 debug preview. Its separate random token admits one peer at a time, including
 successive peers from the same host run. Frames are limited
-to 8 KiB; commands can only read preview state, select/resize/position Halo, or save its
-fixed private profile. The phone exposes no TCP listener. The bridge closes on
+to 8 KiB; commands can only read preview state, select a bounded design,
+select/resize/position Halo, or save its fixed private profile. The phone exposes
+no TCP listener. The bridge closes on
 activity stop and reopens on return using the same binding retained in private
 Android activity state. Host loss, invalid framing or liveness failure closes
 the peer; a new peer must authenticate again. The bridge is absent from
@@ -80,12 +102,16 @@ does not change or forward the production phone-browser gateway.
 and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `src/reconnecting-phone.ts` handles bounded retries and shutdown;
 `src/protocol.ts` validates the preview contract. Android's debug
-`PersonaPreviewSession` applies the corresponding commands and `PersonaPreview`
-renders the shared production screen with synthetic state.
-Preview protocol 2 carries live, saved and default vertical offsets. The saved
-profile remains version 2, using its existing `verticalOffsetDp` field. Version
-1 and 2 profiles retain their stored position; older profiles without the field
-use +35 dp. Use matching current host code and debug APK.
+`PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
+renders either the shared production screen or debug-only `PreviewStudioScreen`
+with synthetic state. The studio composes `PreviewHeader` and `PreviewControls`
+around the existing native Halo.
+Preview protocol 3 carries live/saved/default designs as well as sizes and
+vertical offsets. The design contract permits `layout: original|studio`,
+`header: quiet|drawer|none`, `mute: glyphs|rockers|keycaps`, and
+`hold: beam|trigger|keycap`. Version 3 profile receipts must include the exact
+confirmed design and geometry before the host copy is written. Use matching
+current host code and debug APK.
 
 ```sh
 bun run test

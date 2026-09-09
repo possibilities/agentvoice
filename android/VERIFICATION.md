@@ -6,11 +6,11 @@ The desktop used its existing waiting AgentVoice service and Tailscale TLS route
 with an owned stock Codex 0.153.4 child. No service configuration was changed.
 
 Final debug APK SHA-256:
-`80c5ec15a4dc13ac672655b65ade2adfab753a83ce2f68caaea9cdbe6c854f44`.
+`7d475e9706177ef376d749934ac63c38b9f4f829075a4603bfd94ae6a5481f22`.
 
 ## Automated checks
 
-- 642 repository tests, including thirteen configurator tests; root and configurator
+- 645 repository tests, including sixteen configurator tests; root and configurator
   TypeScript and Biome checks passed.
 - 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
@@ -152,6 +152,41 @@ The restored vertical position slider was also checked on the same S22:
 
 Production voice acceptance limits below remain unchanged. This configurator
 check opened no media, inference, grants or voice-server connection.
+
+## Interactive design studio
+
+The debug preview now offers Current, Signal, Field radio and Ghost terminal,
+plus independent header, mute-control and hold-surface selection. The production
+screen, bundled Halo renderer and compiled placement defaults are unchanged.
+
+- All twenty S22 instrumentation tests passed on the final APK. New checks cover
+  independent mute toggles across all three directions and a custom mix, stable
+  talk targets, original/studio switching, and release on outside movement,
+  cancellation and a second pointer for every talk surface. Momentary capture
+  leaves the persistent microphone mute switch off. Disabled holds do not start.
+- Opening and closing the drawer shifts Halo's center by half the measured
+  header-height change without changing its dimensions or the talk target. The
+  test reads the layer's translated bounds, with Android measurement and Compose
+  animation frames synchronized. All existing native Halo entry/exit regressions
+  passed against the unchanged renderer.
+- All 645 repository tests, root/configurator typechecks, Biome, 22 Android JVM
+  tests, debug/release builds and Android lint passed. Protocol 3 bounds design
+  choices, and new Save requires the exact version 3 design-and-geometry receipt.
+  Version 1/2 phone profiles load without rewriting. Save tests use disposable
+  phone cache and host fixtures.
+- Local headless Chrome exercised every preset and a custom mix, preserved size
+  and position across selections, saved and reloaded a version 3 fixture, and
+  checked Reset tuning leaves the design intact. A queued edit at disconnect was
+  dropped; reconnection retained the phone's design. Desktop and narrow layouts
+  were visually inspected without using the operator's browser profile.
+- Browser-to-S22 checks exercised each direction's actual mute and hold targets,
+  then a custom mix. The drawer expanded, hid after inactivity, and stayed open
+  when pinned. Idle, Listening and Speaking previews were visually inspected;
+  capture was limited to the synthetic activity. After Home/return, the same
+  browser recovered the unsaved mixed design and geometry. The operator's
+  48 / 58 / 78% sizes and +35 dp position survived installation and were restored
+  with Signal selected. The private saved profile remained byte-for-byte
+  identical; the live-device checks sent no Save.
 
 ## Desktop backend viewer
 

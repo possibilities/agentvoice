@@ -1,3 +1,4 @@
+import { type Design, directions, equalDesign, originalDesign } from "./design.ts";
 import {
   equalScales,
   type Mode,
@@ -5,6 +6,7 @@ import {
   type PhoneState,
   type Preview,
   type Profile,
+  previewOf,
 } from "./protocol.ts";
 
 type Status = {
@@ -77,6 +79,21 @@ function render() {
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
   element("device").textContent = `Previewing on ${status.device}`;
+  for (const direction of directions) {
+    element<HTMLButtonElement>(`direction-${direction.id}`).setAttribute(
+      "aria-pressed",
+      String(equalDesign(direction.design, draft.design)),
+    );
+  }
+  for (const part of ["header", "mute", "hold"] as const)
+    element<HTMLSelectElement>(`design-${part}`).value = draft.design[part];
+  text(
+    element("design-description"),
+    draft.design.layout === "original"
+      ? "Current app layout. Choose any component below to start a custom mix."
+      : (directions.find((direction) => equalDesign(direction.design, draft!.design))
+          ?.description ?? "Your mix. Changes appear on the phone."),
+  );
   document.documentElement.style.setProperty("--accent", colors[draft.mode]);
   for (const mode of modes) {
     const button = document.querySelector<HTMLButtonElement>(`button[data-mode="${mode}"]`)!;
@@ -99,11 +116,13 @@ function render() {
   const host = status.hostSaved?.scaleMultipliers;
   const hostMatches =
     host &&
+    equalDesign(status.hostSaved?.design ?? originalDesign, draft.design) &&
     status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
     modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
   const phoneMatches =
     equalScales(draft.scales, status.state.savedScales) &&
-    draft.verticalOffsetDp === status.state.savedVerticalOffsetDp;
+    draft.verticalOffsetDp === status.state.savedVerticalOffsetDp &&
+    equalDesign(draft.design, status.state.savedDesign);
   text(
     feedback,
     !connected
@@ -136,21 +155,11 @@ async function flush() {
   try {
     status = await api("preview", { ...selection, generation: requestGeneration });
     if (!status.connected || status.generation !== requestGeneration) changed = false;
-    if (edit === requestEdit || !changed)
-      draft = {
-        mode: status.state.mode,
-        scales: { ...status.state.scales },
-        verticalOffsetDp: status.state.verticalOffsetDp,
-      };
+    if (edit === requestEdit || !changed) draft = previewOf(status.state);
     transientFailure = null;
   } catch (failure) {
     changed = false;
-    if (status)
-      draft = {
-        mode: status.state.mode,
-        scales: { ...status.state.scales },
-        verticalOffsetDp: status.state.verticalOffsetDp,
-      };
+    if (status) draft = previewOf(status.state);
     report(failure);
   } finally {
     inFlight = false;
@@ -166,6 +175,21 @@ function update(change: (value: Preview) => Preview) {
   changed = true;
   render();
   void flush();
+}
+
+for (const direction of directions) {
+  element(`direction-${direction.id}`).addEventListener("click", () =>
+    update((current) => ({ ...current, design: { ...direction.design } })),
+  );
+}
+for (const part of ["header", "mute", "hold"] as const) {
+  const select = element<HTMLSelectElement>(`design-${part}`);
+  select.addEventListener("change", () =>
+    update((current) => ({
+      ...current,
+      design: { ...current.design, layout: "studio", [part]: select.value } as Design,
+    })),
+  );
 }
 
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-mode]")) {
@@ -195,11 +219,7 @@ save.addEventListener("click", async () => {
   render();
   try {
     status = await api("save", { revision: status.state.revision, generation: status.generation });
-    draft = {
-      mode: status.state.mode,
-      scales: { ...status.state.scales },
-      verticalOffsetDp: status.state.verticalOffsetDp,
-    };
+    draft = previewOf(status.state);
     saveFailure = null;
     transientFailure = null;
   } catch (failure) {
@@ -225,11 +245,7 @@ async function poll() {
         if (next.connected) transientFailure = null;
         if (recovered || JSON.stringify(status) !== JSON.stringify(next)) {
           status = next;
-          draft = {
-            mode: next.state.mode,
-            scales: { ...next.state.scales },
-            verticalOffsetDp: next.state.verticalOffsetDp,
-          };
+          draft = previewOf(next.state);
           render();
         }
       }

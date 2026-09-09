@@ -25,7 +25,7 @@ body {
   min-width: 300px;
 }
 main {
-  width: min(640px, calc(100% - 64px));
+  width: min(1040px, calc(100% - 64px));
   margin: 0 auto;
   padding: 44px 0 36px;
 }
@@ -83,7 +83,8 @@ fieldset {
   min-width: 0;
 }
 button,
-input {
+input,
+select {
   font: inherit;
 }
 button {
@@ -97,9 +98,83 @@ fieldset:disabled input {
   opacity: 0.45;
 }
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 6px;
+}
+.studio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 72px;
+}
+.panel-title {
+  font-size: 20px;
+  font-weight: 400;
+  margin: 0 0 28px;
+  padding: 0;
+}
+.direction-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.direction {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 116px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  text-align: left;
+}
+.direction strong {
+  font-size: 14px;
+  font-weight: 400;
+}
+.direction-caption {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.direction[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #101311;
+  color: var(--accent);
+}
+.design-description {
+  min-height: 54px;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.mixing {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, 1.2fr);
+  gap: 12px 20px;
+  align-items: center;
+  font-size: 12px;
+}
+select {
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--text, #f0f2e9);
+  background: #101311;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+fieldset:disabled select {
+  opacity: 0.45;
+}
+.phone-hint {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-top: 24px;
 }
 .modes {
   display: grid;
@@ -211,6 +286,8 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   margin-top: 34px;
   gap: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
 }
 .actions button {
   min-height: 46px;
@@ -257,7 +334,13 @@ footer {
   font-size: 10px;
   line-height: 1.7;
   margin-top: 28px;
-  max-width: 52ch;
+  max-width: 78ch;
+}
+@media (max-width: 800px) {
+  .studio-grid {
+    grid-template-columns: 1fr;
+    gap: 42px;
+  }
 }
 .sr-only {
   position: absolute;

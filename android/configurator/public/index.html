@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Halo · AgentVoice</title>
+    <title>AgentVoice design studio</title>
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./app.js"></script>
   </head>
@@ -16,11 +16,33 @@
       </header>
       <section aria-labelledby="title">
         <div class="intro">
-          <h1 id="title">Halo</h1>
+          <h1 id="title">Design studio</h1>
           <p id="device">Native phone preview</p>
         </div>
         <fieldset id="controls" disabled>
-          <legend class="sr-only">Halo preview controls</legend>
+          <legend class="sr-only">Design preview controls</legend>
+          <div class="studio-grid">
+            <fieldset class="directions">
+              <legend class="panel-title">Directions</legend>
+              <div class="direction-grid">
+                <button type="button" id="direction-original" class="direction" aria-pressed="false"><strong>Current</strong><span class="direction-caption">The existing app, for comparison.</span></button>
+                <button type="button" id="direction-signal" class="direction" aria-pressed="false"><strong>Signal</strong><span class="direction-caption">Quiet chrome. Bold symbols.</span></button>
+                <button type="button" id="direction-radio" class="direction" aria-pressed="false"><strong>Field radio</strong><span class="direction-caption">A revealing header and physical controls.</span></button>
+                <button type="button" id="direction-terminal" class="direction" aria-pressed="false"><strong>Ghost terminal</strong><span class="direction-caption">Hidden chrome. Oversized keycaps.</span></button>
+              </div>
+              <p id="design-description" class="design-description">Choose a direction, then mix its parts.</p>
+              <div class="mixing">
+                <label for="design-header">Header</label>
+                <select id="design-header"><option value="quiet">Quiet rail</option><option value="drawer">Slide-away</option><option value="none">Hidden</option></select>
+                <label for="design-mute">Mute controls</label>
+                <select id="design-mute"><option value="glyphs">Glyphs</option><option value="rockers">Rockers</option><option value="keycaps">Keycaps</option></select>
+                <label for="design-hold">Hold to talk</label>
+                <select id="design-hold"><option value="beam">Beam</option><option value="trigger">Trigger</option><option value="keycap">Keycap</option></select>
+              </div>
+              <p class="phone-hint">Try the controls on your phone. Tap its top handle to reveal the header.</p>
+            </fieldset>
+            <fieldset class="persona-controls">
+              <legend class="panel-title">Persona</legend>
           <fieldset class="modes">
             <legend class="sr-only">Preview state</legend>
             <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
@@ -37,7 +59,9 @@
             <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
             <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
           </div>
-          <div class="actions"><button type="button" id="reset" class="reset">Reset</button><button type="button" id="save" class="save">Save profile</button></div>
+            </fieldset>
+          </div>
+          <div class="actions"><button type="button" id="reset" class="reset">Reset tuning</button><button type="button" id="save" class="save">Save profile</button></div>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>
@@ -45,7 +69,7 @@
           <p id="save-path" hidden></p>
         </div>
       </section>
-      <footer>Changes appear on your phone. Save keeps sizes and position.</footer>
+      <footer>Save keeps your design, sizes and position. The app's final look is still yours to choose.</footer>
     </main>
   </body>
 </html>
