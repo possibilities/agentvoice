@@ -92,6 +92,18 @@ class PersonaPreviewTest {
                 val saved = JSONObject(readFrame(socket.inputStream)!!)
                 assertEquals(fixture.readText(), saved.getString("profile"))
                 assertEquals(.52f, decodePersonaTuning(fixture.readText()).listeningScale)
+            }
+            connect().use { socket ->
+                socket.outputStream.write("{\"token\":\"wrong\"}\n".toByteArray())
+                assertEquals(-1, socket.inputStream.read())
+            }
+            assertEquals(4, commands.get())
+            connect().use { socket ->
+                socket.outputStream.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
+                socket.outputStream.write("{\"id\":1,\"method\":\"get\"}\n".toByteArray())
+                val returned = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
+                assertEquals(1, returned.getInt("revision"))
+                assertEquals(52, returned.getJSONObject("scales").getInt("listening"))
                 bridge.close()
                 assertEquals(-1, socket.inputStream.read())
             }

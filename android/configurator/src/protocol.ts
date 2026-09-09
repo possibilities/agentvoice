@@ -115,5 +115,7 @@ export interface Phone {
   state: PhoneState;
   connected: boolean;
   disconnectReason?: string;
+  reconnecting?: boolean;
+  generation?: number;
   request(command: Record<string, unknown>): Promise<{ state: PhoneState; profile?: string }>;
 }

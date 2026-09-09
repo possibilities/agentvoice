@@ -46,6 +46,7 @@ afterEach(async () => {
 class FakePhone implements Phone {
   state = initial();
   connected = true;
+  generation = 1;
   calls: Record<string, unknown>[] = [];
   refuseSave = false;
   async request(command: Record<string, unknown>) {
@@ -76,7 +77,7 @@ async function fixture(options: { saveTo?: string } = {}) {
     fetch(new URL(path, url), {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: origin, ...headers },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ generation: phone.generation, ...(body as object) }),
     });
   return { phone, saveTo, url, origin, post };
 }
@@ -161,6 +162,30 @@ test("a host file failure reports that the phone saved but the host did not", as
   expect(response.status).toBe(500);
   expect((await response.json()).error).toContain("Saved on the phone, but");
   expect(phone.calls[0]?.["method"]).toBe("save");
+});
+
+test("a returned phone rejects browser edits and saves from the previous connection", async () => {
+  const { phone, post, saveTo, url } = await fixture();
+  phone.connected = false;
+  expect((await (await fetch(new URL("state", url))).json()).connected).toBe(false);
+  phone.generation = 2;
+  phone.connected = true;
+  expect((await post("preview", { generation: 1, mode: "idle", scales: defaults })).status).toBe(
+    409,
+  );
+  expect((await post("save", { generation: 1, revision: 0 })).status).toBe(409);
+  expect((await post("preview", { generation: null, mode: "idle", scales: defaults })).status).toBe(
+    400,
+  );
+  expect(phone.calls).toHaveLength(0);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  const state = await (await fetch(new URL("state", url))).json();
+  expect(state.generation).toBe(2);
+  expect(state.connected).toBe(true);
+  expect(
+    (await post("preview", { generation: state.generation, mode: "idle", scales: defaults }))
+      .status,
+  ).toBe(200);
 });
 
 async function wire() {

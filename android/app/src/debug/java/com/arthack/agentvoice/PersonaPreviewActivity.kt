@@ -13,6 +13,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import org.json.JSONObject
 import java.io.File
 
 /** Synthetic native preview. Its ADB bridge can only select, size, and save the Halo. */
@@ -20,7 +21,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     private val selection get() = File(filesDir, "persona-tuning.json")
     private lateinit var session: PersonaPreviewSession
     private var bridge: PersonaPreviewBridge? = null
-    private var pending: Pair<String, String>? = null
+    private var binding: PersonaPreviewBinding? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +35,10 @@ class PersonaPreviewActivity : ComponentActivity() {
         session = PersonaPreviewSession(runCatching {
             decodePersonaTuning(AtomicFile(selection).readFully().toString(Charsets.UTF_8))
         }.getOrDefault(PersonaPlacement()), selection)
+        savedInstanceState?.getString("previewState")?.let { json ->
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved) }
+        }
+        binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
         setContent { VoiceTheme { PersonaPreview(session.state) { session.state = it } } }
     }
@@ -45,29 +50,46 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     private fun configure(intent: Intent) {
-        bridge?.close()
-        bridge = null
-        val name = intent.getStringExtra("previewSocket").orEmpty()
-        val token = intent.getStringExtra("previewToken").orEmpty()
-        pending = if (name.matches(Regex("agentvoice-halo-[a-f0-9]{32}")) && token.matches(Regex("[a-f0-9]{64}"))) name to token else null
+        val next = PersonaPreviewBinding.parse(intent.getStringExtra("previewSocket"), intent.getStringExtra("previewToken")) ?: return
         intent.removeExtra("previewSocket")
         intent.removeExtra("previewToken")
+        if (binding?.name == next.name && binding?.token == next.token) return
+        bridge?.close()
+        bridge = null
+        binding = next
     }
 
     override fun onStart() { super.onStart(); startBridge() }
 
     private fun startBridge() {
-        val (name, token) = pending ?: return
-        pending = null
-        bridge = PersonaPreviewBridge(name, token, session::command)
+        val selected = binding ?: return
+        if (bridge == null) bridge = PersonaPreviewBridge(selected.name, selected.token, session::command)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("previewState", session.state.json().toString())
+        binding?.let {
+            // Only the debug preview capability enters Android's private activity state, never a voice grant.
+            outState.putString("previewSocket", it.name)
+            outState.putString("previewToken", it.token)
+        }
+        super.onSaveInstanceState(outState)
     }
 
     override fun onStop() {
         bridge?.close()
         bridge = null
-        pending = null
-        session.state = session.state.copy(holding = false)
+        if (session.state.holding) session.state = session.state.select("idle")
         super.onStop()
+    }
+}
+
+internal class PersonaPreviewBinding(val name: String, val token: String) {
+    override fun toString() = "PersonaPreviewBinding(redacted)"
+    companion object {
+        fun parse(name: String?, token: String?): PersonaPreviewBinding? =
+            if (name?.matches(Regex("agentvoice-halo-[a-f0-9]{32}")) == true && token?.matches(Regex("[a-f0-9]{64}")) == true)
+                PersonaPreviewBinding(name, token) else null
     }
 }
 

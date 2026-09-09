@@ -6,11 +6,11 @@ The desktop used its existing waiting AgentVoice service and Tailscale TLS route
 with an owned stock Codex 0.153.4 child. No service configuration was changed.
 
 Final debug APK SHA-256:
-`12f1a6b829c2e2f18192b6b2c46a282af4d32891c79b84b060660b28e214ec94`.
+`35330f771745d79a56b7154665801a17b47c162525bf3ab330642af44fb50e61`.
 
 ## Automated checks
 
-- 637 repository tests, including eight configurator tests; root and configurator
+- 641 repository tests, including twelve configurator tests; root and configurator
   TypeScript and Biome checks passed.
 - 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
@@ -98,8 +98,35 @@ native Halo adapter, compiled defaults and release activity are unchanged.
   to 52%, then restored 78 / 58 / 78% with +35 dp. The connection stayed live;
   the phone profile remained byte-for-byte identical to its pre-install copy.
 - Closing the host process removed its exact forward. A fresh run established
-  a new session. Moving/backgrounding or recreating the phone preview ends that
-  session; scrcpy is optional and is not part of the configurator transport.
+  a new session; scrcpy is optional and is not part of the configurator transport.
+
+The subsequent reconnect update supersedes the initial disconnect behavior:
+
+- All seventeen S22 instrumentation tests passed. Successive peers authenticate
+  independently; a wrong token is refused even after a valid peer disconnects.
+  Background/return, launcher re-entry without binding extras and
+  `ActivityScenario.recreate()` retain the same binding and unsaved 69 / 49 / 72%
+  sizes. Restoring a held preview releases the hold. No activity test saves to
+  the operator's profile.
+- Twelve host tests cover reconnect, retained last state, fresh phone observation,
+  failed dial retries, one-shot Save, old browser-generation refusal, and shutdown
+  during a dial including a late candidate. The full 641-test repository suite,
+  both TypeScript checks, Biome, debug/release builds, 22 JVM tests and lint passed.
+- A local headless Chrome check verified disabled controls while waiting,
+  automatic recovery with the same unsaved size, and preservation of an
+  unconfirmed Save notice after recovery and later successful edits. Save was
+  attempted exactly once against a synthetic fixture.
+- A browser-to-S22 check set Listening to an unsaved 52%, backgrounded the
+  preview with Home, and observed Waiting for phone. While disconnected it
+  removed only that host run's ADB forward, then returned to the activity without
+  new admission extras. The same browser page recovered, the host allocated a
+  different port for its own socket, and Listening remained 52%. The check restored
+  78 / 58 / 78% without Save. The existing private profile remained byte-for-byte
+  identical before installation, after instrumentation and after reconnection.
+  This exercises lost forwarding; physically unplugging USB was not automated.
+
+Force-stop and task dismissal discard the activity binding and require a new
+host launch. Retry never foregrounds the app or replays a mutation.
 
 Production voice acceptance limits below remain unchanged. This configurator
 check opened no media, inference, grants or voice-server connection.

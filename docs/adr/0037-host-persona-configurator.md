@@ -15,12 +15,27 @@ second renderer whose preview could differ from the phone.
 The host serves fixed assets on loopback with a per-run capability URL and exact
 Host/Origin validation. Explicitly selected, authorized ADB forwards a fresh
 port to a debug-activity-owned abstract Unix socket. A separate per-session
-token admits one owner; bounded requests can only observe/select/size the
-preview and save the fixed private profile. Activity stop and transport loss
-close that session; no automatic replacement or replay occurs. The host removes
+token admits one peer at a time; bounded requests can only observe/select/size the
+preview and save the fixed private profile. The host removes
 only its own forward on exit. There is no phone TCP listener, production grant,
 Codex connection, audio or media. Release manifests and TLS policy are unchanged.
 The production same-device browser gateway is not reused or widened.
+
+Updated 2026-09-08 at the operator's request: the debug configurator now
+automatically reconnects after preview backgrounding/recreation and temporary
+ADB loss, superseding this ADR's initial no-reconnect choice. Activity stop
+closes the listener; returning reopens it with the same private binding and
+unsaved preview state. The host retries with bounded backoff, recreates only
+its own missing forward and authenticates each new peer before publishing its
+state. It retains the browser URL and never foregrounds the activity on retry.
+Force-stop/task dismissal and host restart require a fresh binding. Android's
+private saved-instance state retains this debug token, never a production grant.
+Production voice and attachment disconnect policies remain unchanged.
+
+Only observation is retried. Browser edits and saves name the observed connection
+generation and are refused after reconnect. In-flight commands are not replayed;
+an ambiguous Save stays visible even after the connection recovers. Closing the
+host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
 checks the observed revision, atomically stores version 2 on the phone, then

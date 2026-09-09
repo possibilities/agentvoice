@@ -12,7 +12,7 @@ import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** One authenticated ADB session on an abstract Unix socket; never a TCP listener. */
+/** One authenticated peer at a time; reconnects must present this host run's same token. */
 internal class PersonaPreviewBridge(
     name: String,
     private val token: String,
@@ -30,7 +30,6 @@ internal class PersonaPreviewBridge(
                     val socket = server.accept()
                     peer = socket
                     if (closed.get()) { socket.close(); break }
-                    var authenticated = false
                     socket.use {
                         try {
                             socket.soTimeout = 2000
@@ -38,7 +37,6 @@ internal class PersonaPreviewBridge(
                             val hello = JSONObject(readFrame(input) ?: error("Missing hello"))
                             require(hello.fields() == setOf("token"))
                             require(MessageDigest.isEqual(token.toByteArray(), hello.getString("token").toByteArray()))
-                            authenticated = true
                             socket.soTimeout = 10000
                             val output = socket.outputStream.buffered()
                             while (isActive) {
@@ -56,8 +54,6 @@ internal class PersonaPreviewBridge(
                         } catch (_: Exception) { /* Closing, invalid authentication, or malformed input ends this peer. */ }
                     }
                     peer = null
-                    // A lost authenticated owner cannot be silently replaced.
-                    if (authenticated) break
                 }
             } catch (_: Exception) { /* Listener shutdown wakes a blocking accept. */ }
             finally { close() }

@@ -9,6 +9,8 @@ import {
 
 type Status = {
   connected: boolean;
+  reconnecting: boolean;
+  generation: number;
   disconnectReason?: string;
   state: PhoneState;
   device: string;
@@ -32,6 +34,8 @@ let inFlight = false;
 let saving = false;
 let changed = false;
 let edit = 0;
+let saveFailure: string | null = null;
+let transientFailure: string | null = null;
 
 function text(node: HTMLElement, value: string) {
   if (node.textContent !== value) node.textContent = value;
@@ -54,16 +58,19 @@ async function api(path: string, body?: unknown): Promise<Status> {
   return result;
 }
 
-function report(failure: unknown) {
-  error.hidden = false;
-  error.textContent =
+function report(failure: unknown, isSave = false) {
+  const message =
     failure instanceof Error ? failure.message : "Could not reach the host configurator.";
+  if (isSave) saveFailure = message;
+  else transientFailure = message;
 }
 
 function render() {
   const connected = status?.connected === true;
+  error.hidden = !(saveFailure || transientFailure);
+  text(error, saveFailure || transientFailure || "");
   element("connection").dataset["connected"] = String(connected);
-  element("connection-text").textContent = connected ? "Phone linked" : "Disconnected";
+  element("connection-text").textContent = connected ? "Phone linked" : "Waiting for phone";
   controls.disabled = !connected || saving;
   save.disabled = !connected || inFlight || changed || saving;
   save.textContent = saving ? "Saving…" : "Save profile";
@@ -88,7 +95,9 @@ function render() {
   text(
     feedback,
     !connected
-      ? `${status.disconnectReason ?? "Phone disconnected."} Restart the configurator to reconnect.`
+      ? status.reconnecting
+        ? "Return to the Halo preview. It will reconnect automatically."
+        : "Waiting for the host configurator…"
       : saving
         ? "Saving to phone and host…"
         : inFlight || changed
@@ -105,17 +114,17 @@ function render() {
 }
 
 async function flush() {
-  if (inFlight || saving || !changed || !draft) return;
+  if (inFlight || saving || !changed || !draft || !status?.connected) return;
   inFlight = true;
   changed = false;
   const requestEdit = edit;
   const selection = structuredClone(draft);
   render();
   try {
-    status = await api("preview", selection);
+    status = await api("preview", { ...selection, generation: status.generation });
     if (edit === requestEdit)
       draft = { mode: status.state.mode, scales: { ...status.state.scales } };
-    error.hidden = true;
+    transientFailure = null;
   } catch (failure) {
     changed = false;
     if (status) draft = { mode: status.state.mode, scales: { ...status.state.scales } };
@@ -154,11 +163,17 @@ save.addEventListener("click", async () => {
   saving = true;
   render();
   try {
-    status = await api("save", { revision: status.state.revision });
+    status = await api("save", { revision: status.state.revision, generation: status.generation });
     draft = { mode: status.state.mode, scales: { ...status.state.scales } };
-    error.hidden = true;
+    saveFailure = null;
+    transientFailure = null;
   } catch (failure) {
-    report(failure);
+    report(
+      failure instanceof TypeError || failure instanceof DOMException
+        ? Error("Save was not confirmed. Review the preview and host copy before saving again.")
+        : failure,
+      true,
+    );
   } finally {
     saving = false;
     render();
@@ -171,14 +186,16 @@ async function poll() {
     try {
       const next = await api("state");
       if (pollEdit === edit && !inFlight && !saving) {
-        if (JSON.stringify(status) !== JSON.stringify(next)) {
+        const recovered = next.connected && transientFailure !== null;
+        if (next.connected) transientFailure = null;
+        if (recovered || JSON.stringify(status) !== JSON.stringify(next)) {
           status = next;
           draft = { mode: next.state.mode, scales: { ...next.state.scales } };
           render();
         }
       }
     } catch (failure) {
-      if (status) status = { ...status, connected: false };
+      if (status) status = { ...status, connected: false, reconnecting: false };
       report(failure);
       render();
     }

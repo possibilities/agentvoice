@@ -166,6 +166,11 @@ on-phone tuner panel. Choose Speaking, Listening or Idle and adjust that state's
 size (35–120%); the other sizes stay intact. Position remains fixed at +35 dp.
 Reset restores the current compiled defaults. The phone's synthetic channel and
 hold-to-talk buttons still work, and changes appear in the browser.
+Leave the host app and browser open through backgrounding, activity recreation
+or temporary USB loss. The configurator waits for the same preview to return,
+reconnects automatically and retains unsaved tuning. It never replays Save or
+brings the app to the foreground. A force-stop or dismissed task requires a
+fresh host launch.
 
 ```sh
 # From the repository root, with the current debug APK installed:

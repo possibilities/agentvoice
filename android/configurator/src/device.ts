@@ -10,14 +10,15 @@ import {
   parseState,
   record,
 } from "./protocol.ts";
+import { ReconnectingPhone } from "./reconnecting-phone.ts";
 
 const execute = promisify(execFile);
 const activity = "com.arthack.agentvoice.dev/com.arthack.agentvoice.PersonaPreviewActivity";
 
-async function adb(device: string, args: string[]): Promise<string> {
+async function adb(device: string, args: string[], signal?: AbortSignal): Promise<string> {
   try {
     return (
-      await execute("adb", ["-s", device, ...args], { timeout: 12000, maxBuffer: 65536 })
+      await execute("adb", ["-s", device, ...args], { timeout: 12000, maxBuffer: 65536, signal })
     ).stdout.trim();
   } catch {
     // Activity arguments include this preview's admission token.
@@ -55,7 +56,7 @@ export class PhoneConnection implements Phone {
 
   request(command: Record<string, unknown>): Promise<Reply> {
     if (!this.connected)
-      return Promise.reject(Error("Phone disconnected. Restart the configurator to reconnect."));
+      return Promise.reject(Error("Phone disconnected. Waiting for the preview to return."));
     if (this.pending.size >= 8) return Promise.reject(Error("Phone is busy. Try again."));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
@@ -112,7 +113,7 @@ export class PhoneConnection implements Phone {
     this.socket.destroy();
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(Error("Phone disconnected. Restart the configurator to reconnect."));
+      pending.reject(Error("Phone disconnected. Waiting for the preview to return."));
     }
     this.pending.clear();
   }
@@ -142,55 +143,66 @@ export async function connectPhone(device: string) {
   ]);
   if (/Error|Exception/.test(launch))
     throw Error("Install the current Android debug APK before opening the configurator.");
-  const port = await adb(device, ["forward", "--no-rebind", "tcp:0", `localabstract:${name}`]);
-  if (!/^\d+$/.test(port)) throw Error("ADB did not allocate a preview port.");
-  let phone: PhoneConnection | undefined;
-  let poll: ReturnType<typeof setInterval> | undefined;
+  let phone: ReconnectingPhone | undefined;
   let closed = false;
+  const ownedForward = (line: string) => {
+    const [serial, local, remote] = line.trim().split(/\s+/);
+    return serial === device && remote === `localabstract:${name}` && /^tcp:\d+$/.test(local ?? "")
+      ? local
+      : undefined;
+  };
   async function close() {
     if (closed) return;
     closed = true;
-    clearInterval(poll);
-    phone?.close();
+    await phone?.close();
     const forwards = await adb(device, ["forward", "--list"]);
-    if (
-      forwards
-        .split("\n")
-        .some(
-          (line) =>
-            line.trim().split(/\s+/).join(" ") === `${device} tcp:${port} localabstract:${name}`,
-        )
-    ) {
-      await adb(device, ["forward", "--remove", `tcp:${port}`]);
+    for (const line of forwards.split("\n")) {
+      const local = ownedForward(line);
+      if (local) await adb(device, ["forward", "--remove", local]);
     }
   }
-  try {
+
+  async function dial(signal?: AbortSignal): Promise<PhoneConnection> {
+    if ((await adb(device, ["get-state"], signal)) !== "device") throw Error("Phone unavailable");
+    const forwards = await adb(device, ["forward", "--list"], signal);
+    const existing = forwards
+      .split("\n")
+      .map(ownedForward)
+      .find((local) => local !== undefined);
+    // USB reconnection can discard the forward. Allocate a new port without replacing another mapping.
+    const port =
+      existing?.slice(4) ??
+      (await adb(device, ["forward", "--no-rebind", "tcp:0", `localabstract:${name}`], signal));
+    if (!/^\d+$/.test(port)) throw Error("ADB did not allocate a preview port.");
+    signal?.throwIfAborted();
     const socket = createConnection({ host: "127.0.0.1", port: Number(port) });
-    await new Promise<void>((resolve, reject) => {
-      socket.setTimeout(3500, () => {
-        socket.destroy();
-        reject(Error("Phone preview did not answer."));
+    const abort = () => socket.destroy(Error("Preview connection cancelled"));
+    signal?.addEventListener("abort", abort, { once: true });
+    let candidate: PhoneConnection | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.setTimeout(3500, () => socket.destroy(Error("Phone preview did not answer.")));
+        socket.once("error", reject);
+        socket.once("connect", () => {
+          socket.setTimeout(0);
+          resolve();
+        });
       });
-      socket.once("error", reject);
-      socket.once("connect", () => {
-        socket.setTimeout(0);
-        resolve();
-      });
-    });
-    phone = new PhoneConnection(socket, token);
-    await phone.request({ method: "get" });
-    let polling = false;
-    poll = setInterval(async () => {
-      if (polling || !phone?.connected) return;
-      polling = true;
-      try {
-        await phone.request({ method: "get" });
-      } catch {
-        /* The browser shows connection loss. */
-      } finally {
-        polling = false;
-      }
-    }, 300);
+      candidate = new PhoneConnection(socket, token);
+      await candidate.request({ method: "get" });
+      signal?.throwIfAborted();
+      return candidate;
+    } catch (error) {
+      candidate?.close();
+      socket.destroy();
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
+  }
+
+  try {
+    phone = new ReconnectingPhone(await dial(), dial);
     return { phone, label, close };
   } catch (error) {
     await close();

@@ -65,7 +65,10 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   configurator for the debug APK's native Halo preview. Uses only its dedicated
   authenticated ADB preview socket, never a production call or grant. Save keeps
   the existing private phone profile and an exact host JSON copy. Fixed +35 dp;
-  no on-phone tuner overlay. See android/configurator/README.md and ADR 0037.
+  no on-phone tuner overlay. Debug preview reconnect observes the same binding
+  after backgrounding/recreation or ADB loss; never replay edits/Save or foreground
+  on retry. This does not change production disconnect policy. See
+  android/configurator/README.md and ADR 0037.
 - `scripts/install-android --install --host <ssh-target>` — explicitly build and
   atomically converge that standalone on an already prepared Termux phone. It is
   never part of the desktop installer or an unattended update and starts no call.

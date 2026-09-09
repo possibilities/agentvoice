@@ -89,6 +89,15 @@ internal data class PersonaPreviewState(
         outputLevel = if (mode == "speaking") .14f else 0f)
 }
 
+internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement): PersonaPreviewState {
+    val mode = data.getString("mode")
+    val revision = data.get("revision")
+    require(mode in previewModes && revision is Int && revision >= 0)
+    val holding = data.getBoolean("holding")
+    return PersonaPreviewState(placement = decodePreviewScales(data.getJSONObject("scales")), saved = saved,
+        mode = if (holding) "idle" else mode, revision = revision)
+}
+
 internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File) {
     var state by mutableStateOf(PersonaPreviewState(placement = initial))
 

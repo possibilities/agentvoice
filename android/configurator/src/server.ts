@@ -36,6 +36,8 @@ export async function serveConfigurator(
   };
   const status = () => ({
     connected: phone.connected,
+    reconnecting: phone.reconnecting ?? false,
+    generation: phone.generation ?? 1,
     disconnectReason: phone.disconnectReason,
     state: phone.state,
     device: options.device,
@@ -86,29 +88,48 @@ export async function serveConfigurator(
       )
         return json({ error: "Invalid request origin or content type" }, 403);
       if (path !== "preview" && path !== "save") return json({ error: "Not found" }, 404);
-      if (!phone.connected)
-        return json({ error: "Phone disconnected. Restart the configurator to reconnect." }, 503);
+      if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
       let input: Record<string, unknown>;
       try {
         input = record(await request.json());
-        if (path === "preview") parsePreview(input);
-        else {
-          exact(input, ["revision"]);
+        integer(input["generation"], 1);
+        if (path === "preview") {
+          exact(input, ["generation", "mode", "scales"]);
+          parsePreview({ mode: input["mode"], scales: input["scales"] });
+        } else {
+          exact(input, ["generation", "revision"]);
           integer(input["revision"]);
         }
       } catch {
         return json({ error: "Invalid preview settings" }, 400);
       }
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
+      // Reading a request body can span a disconnect. Never dispatch an old browser edit on a new peer.
+      if (input["generation"] !== (phone.generation ?? 1))
+        return json(
+          { error: "Phone reconnected. Review its preview before making another change." },
+          409,
+        );
+      if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
       mutating = true;
       try {
-        if (path === "preview") await phone.request({ method: "preview", ...parsePreview(input) });
+        if (path === "preview")
+          await phone.request({
+            method: "preview",
+            ...parsePreview({ mode: input["mode"], scales: input["scales"] }),
+          });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = { ...phone.state.scales };
-          const reply = await phone.request({ method: "save", revision: input["revision"] });
+          const reply = await phone
+            .request({ method: "save", revision: input["revision"] })
+            .catch(() => {
+              throw Error(
+                "Save was not confirmed. It may have reached the phone. Review the preview before saving again.",
+              );
+            });
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
