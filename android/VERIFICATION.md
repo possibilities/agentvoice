@@ -996,17 +996,34 @@ checked every style/scope, conditional Show visibility, retained scope and isola
 appearance resets. Evidence: `/tmp/agentvoice-indicators-{build,tests,typecheck,lint}.log`
 and `/tmp/agentvoice-studio15-browser.zJrf64/`.
 
-Physical-phone testing is not yet complete. The user unplugged the phone during
-full instrumentation: the first **31 of 61 tests passed**, including all five new
-rendered-pixel tests (29 sp fit, four gate combinations, contact gap, immediate
-color removal, reduced motion/dimming and pointer pass-through). The run ended
-without a final suite result. The remaining integration tests and actual visual
-comparison/restoration must run after reconnection; this is not a full-suite pass.
-Log: `/tmp/agentvoice-indicators-native.log`.
+The complete physical-phone suite now passes: **61 tests in 106.808 seconds**,
+including actual glyph/contact pixels, scopes/PTT, retained Halo identity and held
+pointer, strict session validation, lifecycle restoration and Save exclusion. The
+first attempt was interrupted by the user's unplug; a second ADB output stream
+also ended early after one Halo settling timeout. The clean run stored its output
+on the phone and passed unchanged. This final result is
+`/tmp/agentvoice-indicators-native-durable.log`; incomplete host streams remain
+as diagnostic history rather than passing evidence.
 
 Before installation, revision 495's current layouts and session choices were
 captured in `/tmp/agentvoice-indicators-phone-before-state.json`, alongside exact
 phone/host saved bytes in the same prefix's `-phone.json` and `-host.json` files.
 These include 32 sp/−19 brightness/196 drift/65 breathing/13 s Float, Contained84%,
-−6 dp placement and both muted gates. No Save was issued. The host was stopped
-for tests and requires restart with protocol 15, followed by exact restoration.
+−6 dp placement and both muted gates. No Save was issued. The protocol 15 host is running again. Both visible and
+inactive layouts, manual placement, palette/motion, Tide, session appearance and
+both muted gates were restored exactly; phone and host saved files are byte-identical.
+Restoration evidence: `/tmp/agentvoice-indicators-phone-check.log` and
+`/tmp/agentvoice-indicators-phone/restored.{png,json}`.
+
+The actual phone comparison covers all four styles and all four effective-gate
+combinations, after rerunning captures interrupted by user interaction and checking
+intended gates before every capture. At the operator's 32 sp/Contained84%, the
+Words and Labeled blocks fit without clipping; Labeled also fits 29 sp/78% and is
+omitted at35%. The sampled Original at14 sp fits. Quiet/Grayscale Labeled and a
+mixed-gate Grayscale Contacts comparison retain shape differences. The native
+renderer designer found no visual blockers in those samples. The independent
+Contacts designer confirmed joined/lifted gaps remain legible in Grayscale and
+recommended Channels for immediate clarity or Contacts for quiet character. Static captures
+establish the sampled composition and readability, not every animation frame.
+Screenshots and matching state JSON are in `/tmp/agentvoice-indicators-phone/`;
+`full-options-sheet.png` and `center-options-sheet.png` assemble the comparison.
