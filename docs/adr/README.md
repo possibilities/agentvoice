@@ -49,6 +49,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0037: Native descendant navigation through TUI attachment](0037-descendant-tui-attachment.md) | Accepted | — |
 | [0038: Thread mailbox wake-ups](0038-thread-mailbox-wakeups.md) | Recorded | — |
 | [0039: Project memory is part of the default role](0039-project-memory-in-default-role.md) | Accepted | — |
+| [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Accepted | — |
 
 ## Identifier history
 

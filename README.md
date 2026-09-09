@@ -784,6 +784,16 @@ later mode message. See the [audit](docs/delegation-policy-audit.md) and
 [ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
 binary stay intact.
 
+The default append includes a dated Codex model guide and requires a deliberate
+model, effort, context fork and semantic name for each child assignment. Spark
+remains reference material for a future harness; current worker routing excludes
+it because its independent capacity cannot sustain the non-Spark Codex lead
+after main quota is exhausted. Quota remains unknown without a fresh observation
+tied to the call's account. See the
+[routing research and proposed quota integration](docs/subagent-model-routing.md)
+and [ADR 0040](docs/adr/0040-deliberate-subagent-routing.md). This is role guidance;
+it adds no quota feed or account switching.
+
 | Role file | Effect in AgentVoice |
 | --- | --- |
 | `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
