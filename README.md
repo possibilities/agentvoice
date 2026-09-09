@@ -203,7 +203,10 @@ count-only wake-up: accumulated completion notices and the current number of
 children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
 and clears completion metadata; native Codex supplies the full results.
 Multiple pending notices and empty openings are expected. The mailbox survives
-runtime replacement, has no per-message read receipts, and adds no system prompt.
+runtime replacement and has no per-message read receipts. The default role and
+mailbox tool description explicitly explain fire-and-forget dispatch: stay
+available to the human and process automatic notices without waiting or polling
+for completion. The runtime adds no system prompt of its own.
 Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
 for external clients. See [thread mailbox](docs/thread-mailbox.md) for scope,
 retry semantics and bounds.
