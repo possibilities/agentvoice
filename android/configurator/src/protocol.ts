@@ -1,12 +1,14 @@
 import {
-  currentDesign,
   type Design,
+  defaultDesign,
   type LegacyDesign,
   type PreviousDesign,
   parseDesign,
   parseLegacyDesign,
   parsePreviousDesign,
+  parseVersionSevenDesign,
   parseVersionSixDesign,
+  type VersionSevenDesign,
   type VersionSixDesign,
 } from "./design.ts";
 import { defaultHalo, type HaloSelection, parseHalo } from "./halo.ts";
@@ -31,7 +33,7 @@ export type Preview = {
   spirit: SpiritSelection;
 };
 export type PhoneState = Preview & {
-  protocol: 7;
+  protocol: 8;
   revision: number;
   holding: boolean;
   savedScales: Scales;
@@ -59,7 +61,8 @@ export type Profile = {
   | { version: 4; design: PreviousDesign }
   | { version: 5; design: PreviousDesign; halo: HaloSelection }
   | { version: 6; design: VersionSixDesign; halo: HaloSelection }
-  | { version: 7; design: Design; halo: HaloSelection; spirit: SpiritSelection }
+  | { version: 7; design: VersionSevenDesign; halo: HaloSelection; spirit: SpiritSelection }
+  | { version: 8; design: Design; halo: HaloSelection; spirit: SpiritSelection }
 );
 
 export function record(value: unknown): Record<string, unknown> {
@@ -151,7 +154,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 7 ||
+    data["protocol"] !== 8 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -160,7 +163,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 7,
+    protocol: 8,
     connection: data["connection"] as Connection,
     activity: data["activity"] as Activity,
     revision: integer(data["revision"]),
@@ -196,12 +199,12 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...([3, 4, 5, 6, 7].includes(data["version"] as number) ? ["design"] : []),
-    ...([5, 6, 7].includes(data["version"] as number) ? ["halo"] : []),
-    ...(data["version"] === 7 ? ["spirit"] : []),
+    ...([3, 4, 5, 6, 7, 8].includes(data["version"] as number) ? ["design"] : []),
+    ...([5, 6, 7, 8].includes(data["version"] as number) ? ["halo"] : []),
+    ...([7, 8].includes(data["version"] as number) ? ["spirit"] : []),
   ]);
   if (
-    ![2, 3, 4, 5, 6, 7].includes(data["version"] as number) ||
+    ![2, 3, 4, 5, 6, 7, 8].includes(data["version"] as number) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -222,30 +225,35 @@ export function parseProfile(text: string): Profile {
   if (data["version"] === 3) parseLegacyDesign(data["design"]);
   if (data["version"] === 4 || data["version"] === 5) parsePreviousDesign(data["design"]);
   if (data["version"] === 6) parseVersionSixDesign(data["design"]);
-  if (data["version"] === 7) {
-    parseDesign(data["design"]);
+  if (data["version"] === 7) parseVersionSevenDesign(data["design"]);
+  if (data["version"] === 8) parseDesign(data["design"]);
+  if (data["version"] === 7 || data["version"] === 8) {
     parseSpirit(data["spirit"]);
   }
-  if (data["version"] === 5 || data["version"] === 6 || data["version"] === 7)
-    data["halo"] = parseHalo(data["halo"]);
+  if ([5, 6, 7, 8].includes(data["version"] as number)) data["halo"] = parseHalo(data["halo"]);
   return data as Profile;
 }
 
 export function profileDesign(profile: Profile): Design {
-  if (profile.version === 6 || profile.version === 7) return profile.design;
+  if (profile.version === 8) return profile.design;
+  if (profile.version === 6 || profile.version === 7)
+    return { ...profile.design, mute: "rockers", hold: "rocker" };
   if (profile.version === 4 || profile.version === 5)
-    return { ...profile.design, composition: "open" };
-  return currentDesign(profile.design);
+    return { ...profile.design, mute: "rockers", hold: "rocker", composition: "open" };
+  return { ...defaultDesign };
 }
 
 export function profileHalo(profile: Profile): HaloSelection {
-  return profile.version === 5 || profile.version === 6 || profile.version === 7
+  return profile.version === 5 ||
+    profile.version === 6 ||
+    profile.version === 7 ||
+    profile.version === 8
     ? profile.halo
     : defaultHalo();
 }
 
 export function profileSpirit(profile: Profile): SpiritSelection {
-  return profile.version === 7 ? profile.spirit : defaultSpirit();
+  return profile.version === 7 || profile.version === 8 ? profile.spirit : defaultSpirit();
 }
 
 export function previewOf(state: Preview): Preview {

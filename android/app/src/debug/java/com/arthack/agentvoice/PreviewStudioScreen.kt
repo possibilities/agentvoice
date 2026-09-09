@@ -59,7 +59,7 @@ internal fun PreviewStudioScreen(
                         else PersonaHalo(ui, stage, placement)
                     }
                 }
-                PreviewControls(ui, design.mute, design.hold, onMute, onHold, onRelease,
+                PreviewControls(ui, onMute, onHold, onRelease,
                     Modifier.fillMaxWidth().padding(horizontal = side),
                     controlsHeightDp = design.controlsHeightDp, holdSharePercent = design.holdSharePercent, light = scene.light)
                 Spacer(Modifier.height(bottomGap))

@@ -5,8 +5,8 @@ before expanding its scope. Supersedes the on-phone tuning overlay in
 [ADR 0035](0035-native-android-voice-client.md).
 
 `android/configurator/` is a separate Bun browser app, launched explicitly with
-`bun run android:configure --device <adb-serial>`. Its Controls panel owns mute
-style, talk surface, composition, control height and talk-button share; its
+`bun run android:configure --device <adb-serial>`. Its Controls panel owns
+composition, surface light, control height and talk-button share; its
 Persona panel owns connection preview, state, variant, size, position, motion
 and colors. Save profile retains both panels' design and geometry. The phone
 runs debug-only studio controls around native Halo, with synthetic voice state
@@ -17,16 +17,17 @@ a browser Halo renderer for the phone.
 The operator narrowed the initial Current/Signal/Field radio/Ghost terminal
 exploration to Rockers or Keycaps for mute controls and, initially, one fixed Trigger.
 That iteration removed preset, header and talk-surface selectors; protocol 6
-restores an independent Trigger/Rocker talk-surface selector. Its visible and accessible
+restored an independent Trigger/Rocker talk-surface selector. Protocol 8 converges
+both controls on Rockers and removes those style selectors. The visible and accessible
 label is Push to talk; pressing and holding still opens the temporary capture
 gate, and release or cancellation closes it. Active styling keeps a dark face
-with focused lime accents rather than filling the whole trigger.
+with focused lime accents.
 
 Controls height spans 240–480 dp, including the fixed 16 dp join. Push-to-talk
 share spans 30–60% of the total; the mute row uses the remaining height after
 the join. Baseline geometry is 130 + 16 + 116 = 262 dp, so the exact talk share
 is `116 / 262 × 100` (about 44.3%). Reset button sizes restores only these
-two dimensions, keeping mute style, talk surface and composition. The granular
+two dimensions, keeping composition, light and Persona tuning. The granular
 Persona resets below replace the former Reset Persona. Increasing control height moves
 the available center without changing Halo's diameter or its tuning values.
 
@@ -66,18 +67,17 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 7 on the phone, then
+checks the observed revision, atomically stores version 8 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
-copy. Partial save failure is visible. Live edits and all resets are unsaved changes. Version 1–6
-phone profiles load without rewriting; version 1 seeds all three Halo
-sizes. Stored position is retained, with +35 dp used when absent. Versions 1–3
-use the control geometry baseline and headerless Trigger layout with Open composition.
-Version 3 retains Rockers or Keycaps; legacy Glyphs and missing mute choices
-use Keycaps. Versions 4 and 5 retain control dimensions and Trigger, adding Open
-composition. Versions 1–4 select Original; versions 5 and 6 retain their Halo
-settings, and version 6 keeps its composition.
-Older profiles become version 7 only on explicit Save. Production still
+copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
+Version 1–7 phone profiles load without rewriting; retired button styles map to
+Rockers in memory. Version 1 seeds all three Halo sizes. Stored position is
+retained, with +35 dp used when absent. Versions 1–3 use the control geometry
+baseline; versions 4–7 retain control dimensions. Versions 1–5 select Open;
+versions 6–7 keep their composition. Versions 1–4 select Original; versions 5–7
+retain their Halo settings. Version 7 keeps its spirit settings.
+Older profiles become version 8 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -120,7 +120,7 @@ media remains absent.
 
 Protocol/profile 6 adds `design.composition: open|dock|yoke` and permits
 `design.hold: trigger|rocker`, independently of `mute: rockers|keycaps`.
-Trigger and Open remain the defaults. Dock is a quiet chamfered shared plate
+Trigger and Open were its defaults. Dock is a quiet chamfered shared plate
 behind lower Persona and the control deck. Yoke is a minimal stem that branches
 toward the mute buttons. Both are passive stationary neutral drawing layers:
 they add no status, animation or interaction and change no layout, Halo renderer,
@@ -161,3 +161,14 @@ never follows an animated frame. Version 6 remains restricted to Open/Dock/Yoke
 on load. All five choices retain the same native renderer and control layout.
 An acknowledged open microphone is labelled Live now; PTT eligibility and
 release behavior remain unchanged.
+
+Protocol/profile 8 converges the studio on Rockers for both mute and Push to
+talk. The non-Rocker painters, selectable styles and browser controls are
+removed. The current design contract fixes `mute: rockers` and `hold: rocker`;
+separate legacy readers validate each older shape before mapping its styles in
+memory. Placement, composition, dimensions, Halo and spirit values survive
+migration, and neither saved phone nor host profile is rewritten until Save.
+Current receipts require version 8 and the exact fixed-style design. Rocker
+geometry, dark active styling, PTT gates, renderer identity and all seven scoped
+resets retain their behavior. This remains a debug studio convergence;
+production adoption is still a separate decision.

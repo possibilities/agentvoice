@@ -1,5 +1,7 @@
 package com.arthack.agentvoice
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,7 +28,7 @@ class PreviewControlsTest {
         var releases = 0
         compose.setContent {
             VoiceTheme {
-                PreviewControls(ui, "rockers", "rocker", {}, {
+                PreviewControls(ui, {}, {
                     presses++
                     ui = ui.copy(holding = true, micOpen = false)
                 }, {
@@ -62,48 +64,46 @@ class PreviewControlsTest {
         compose.runOnIdle { assertEquals(4, presses); assertEquals(4, releases) }
     }
 
-    @Test fun changingPushStyleReleasesTheCurrentOwnerAndCannotRearmTheRemainingFinger() {
+    @Test fun disposingRockerReleasesAndReentryRequiresANewPress() {
         var ui by mutableStateOf(ready)
-        var style by mutableStateOf("trigger")
         var visible by mutableStateOf(true)
         var presses = 0
-        val releasedWith = mutableListOf<String>()
+        var releases = 0
         compose.setContent {
-            val renderedStyle = style
-            if (visible) VoiceTheme {
-                PreviewControls(ui, "keycaps", style, {}, {
-                    presses++
-                    ui = ui.copy(holding = true, micOpen = true)
-                }, {
-                    releasedWith.add(renderedStyle)
-                    ui = ui.copy(holding = false, micOpen = false)
-                }, Modifier.width(312.dp))
+            VoiceTheme {
+                Box(Modifier.fillMaxSize()) {
+                    if (visible) PreviewControls(ui, {}, {
+                        presses++
+                        ui = ui.copy(holding = true, micOpen = true)
+                    }, {
+                        releases++
+                        ui = ui.copy(holding = false, micOpen = false)
+                    }, Modifier.width(312.dp))
+                }
             }
         }
         val initialBounds = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
-        for ((index, next) in listOf("rocker", "trigger", "rocker").withIndex()) {
-            compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
-            compose.runOnIdle { assertTrue(ui.holding); style = next }
-            compose.waitForIdle()
-            compose.runOnIdle {
-                assertEquals(index + 1, releasedWith.size)
-                assertEquals(next, releasedWith.last())
-                assertFalse(ui.holding)
-            }
-            val replacement = compose.onNodeWithTag("hold-to-talk")
-            assertEquals(initialBounds, replacement.getUnclippedBoundsInRoot())
-            replacement.performTouchInput { moveTo(center); up() }
-            compose.runOnIdle { assertEquals(index + 1, presses); assertEquals(presses, releasedWith.size) }
-        }
         compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
-        compose.runOnIdle { visible = false }
+        compose.runOnIdle { assertTrue(ui.holding); visible = false }
         compose.waitForIdle()
+        compose.onNodeWithTag("hold-to-talk").assertDoesNotExist()
         compose.runOnIdle {
-            assertEquals(4, presses)
-            assertEquals(4, releasedWith.size)
-            assertEquals("rocker", releasedWith.last())
+            assertEquals(1, presses)
+            assertEquals(1, releases)
             assertFalse(ui.holding)
+            assertFalse(ui.micOpen)
+            visible = true
         }
+        val replacement = compose.onNodeWithTag("hold-to-talk")
+        assertEquals(initialBounds, replacement.getUnclippedBoundsInRoot())
+        replacement.assertIsEnabled()
+        // Re-entry cannot adopt the finger that belonged to the disposed surface.
+        replacement.performTouchInput { moveTo(center); up() }
+        compose.runOnIdle { assertEquals(1, presses); assertEquals(1, releases); assertFalse(ui.holding) }
+        replacement.performTouchInput { down(center) }
+        compose.runOnIdle { assertEquals(2, presses); assertEquals(1, releases); assertTrue(ui.holding) }
+        replacement.performTouchInput { up() }
+        compose.runOnIdle { assertEquals(2, releases); assertFalse(ui.holding); assertFalse(ui.micOpen) }
     }
 
     @Test fun rockerOffersExplicitAccessibilityStartAndStopWithoutAToggleState() {
@@ -112,7 +112,7 @@ class PreviewControlsTest {
         var releases = 0
         compose.setContent {
             VoiceTheme {
-                PreviewControls(ui, "keycaps", "rocker", {}, {
+                PreviewControls(ui, {}, {
                     presses++
                     ui = ui.copy(holding = true, micOpen = false)
                 }, {

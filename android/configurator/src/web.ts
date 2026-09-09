@@ -89,8 +89,6 @@ function render() {
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
   element("device").textContent = `Previewing on ${status.device}`;
-  element<HTMLSelectElement>("design-mute").value = draft.design.mute;
-  element<HTMLSelectElement>("design-hold").value = draft.design.hold;
   element<HTMLSelectElement>("design-composition").value = draft.design.composition;
   text(
     element("composition-hint"),
@@ -231,14 +229,6 @@ function update(change: (value: Preview) => Preview) {
   void flush();
 }
 
-element<HTMLSelectElement>("design-mute").addEventListener("change", (event) => {
-  const mute = (event.currentTarget as HTMLSelectElement).value as Design["mute"];
-  update((current) => ({ ...current, design: { ...current.design, mute } }));
-});
-element<HTMLSelectElement>("design-hold").addEventListener("change", (event) => {
-  const hold = (event.currentTarget as HTMLSelectElement).value as Design["hold"];
-  update((current) => ({ ...current, design: { ...current.design, hold } }));
-});
 element<HTMLSelectElement>("design-composition").addEventListener("change", (event) => {
   const composition = (event.currentTarget as HTMLSelectElement).value as Design["composition"];
   update((current) => ({ ...current, design: { ...current.design, composition } }));

@@ -15,7 +15,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 7,
+    protocol: 8,
     activity: "voice",
     connection: "connecting",
     revision: 0,

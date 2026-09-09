@@ -167,18 +167,18 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 
 The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
-on-phone tuner panel. Controls independently selects Rockers or Keycaps for the
-mute buttons and Trigger or Rocker for **Push to talk**. Trigger stays the default:
-press and keep either surface down to talk, release to mute. Active styling stays
-dark with focused lime accents. Composition selects Open (default), Dock or
-Yoke. Dock adds a shared plate fading upward behind lower Persona and the controls;
-Yoke joins the mute buttons with a quiet branching stem. These stationary neutral
+on-phone tuner panel. Both mute buttons and **Push to talk** use Rockers:
+press and keep the talk surface down to talk, release to mute. Active styling stays
+dark with focused lime accents. Composition selects Open (default), Dock, Yoke,
+Socket or Traces. Dock adds a shared plate fading upward behind lower Persona and
+the controls; Yoke joins the mute buttons with a quiet branching stem. Socket adds
+mechanical supports and Traces adds PCB paths. These stationary neutral
 layers change no layout, renderer, tuning or touch target and preserve full bleed.
 Controls height spans 240–480 dp, including a fixed 16 dp join; Push-to-talk
-share spans 30–60% of the total. The baseline is 262 dp with a 116 dp trigger
+share spans 30–60% of the total. The baseline is 262 dp with a 116 dp talk surface
 (about 44.3%). **Reset button sizes** restores only those two dimensions,
-keeping mute style, talk surface, composition and Persona tuning. Control sizing
-preserves the Halo diameter; presets and header selectors are removed.
+keeping composition, light and Persona tuning. Control sizing preserves the Halo
+diameter; button-style, preset and header selectors are removed.
 
 **Halo** selects Original or Contained. Original preserves the current animation
 and its separate state sizes. Contained keeps one common size (78% initially),
@@ -218,17 +218,16 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 7 app-private `files/persona-tuning.json` and a matching JSON copy on the
-host, including independent control styles, composition, dimensions and Halo
-variant, motion, colors and spirit settings. Preview protocol 7 carries those
+version 8 app-private `files/persona-tuning.json` and a matching JSON copy on the
+host, including the fixed Rockers, composition, dimensions and Halo
+variant, motion, colors and spirit settings. Preview protocol 8 carries those
 choices plus transient connection and synthetic activity selections. Existing
-version 1–6 phone profiles load without rewriting. Versions 1–4 initially select
-Original; versions 5 and 6 keep their Halo settings.
-Versions 1–3 use the control geometry baseline; versions 4 and 5 keep their
-dimensions and Trigger. Versions 1–5 select Open; version 6 preserves its composition.
-Version 3 retains Rockers or Keycaps,
-while legacy Glyphs or absent mute choices become Keycaps. Older profiles
-become version 7 only on Save. The real client and release
+version 1–7 phone profiles load without rewriting; retired button styles map to
+Rockers in memory. Versions 1–4 initially select Original; versions 5–7 keep
+their Halo settings. Versions 1–3 use the control geometry baseline; versions
+4–7 keep their dimensions. Versions 1–5 select Open; versions 6–7 preserve their
+composition. Version 7 retains its spirit settings. Older profiles
+become version 8 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher

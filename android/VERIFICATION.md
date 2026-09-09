@@ -438,7 +438,59 @@ release semantics. Synthetic voice activity is transient and never saved.
   overflow or browser errors.
 
 Build/test logs and browser captures use `/tmp/agentvoice-spirit-*`.
-Final visual phone review is pending: USB disconnected after the passing native
-suite and installation. The preview was restored with the operator's geometry,
-motion and colors and the new Socket/Soft/Follow choices unsaved before the
-connection was lost. No Save or production media/inference was started.
+The physical-phone visual review completed after USB returned. Native captures
+cover Yoke, Socket and Traces in Idle, Listening and Speaking at the operator's
+then-current Contained 70%, −12 dp placement and 387 dp deck. Both owners reviewed
+the composition and native-resolution lower-arc crops: the supports stay outside
+the clear center, with no ring clipping in those samples. Still versus Soft100
+captures confirm active face lighting is present but very faint: temporal motion
+changes average roughly 0.7 RGB levels out of 255, with a maximum of 3. No light
+calibration change was included. The exact latest preview was restored, and phone
+and host saved profile bytes remained identical; no Save was issued.
+
+Review evidence: `/tmp/agentvoice-spirit-review-body-sheet.png`,
+`/tmp/agentvoice-spirit-review-{speaking,listening}-light-crops.png`,
+`/tmp/agentvoice-spirit-review-pixels.json` and
+`/tmp/agentvoice-spirit-specialist-lower-arc-review.png`.
+
+
+### Rockers-only studio convergence
+
+Protocol/profile 8 removes the non-Rocker debug renderers and both browser style
+selectors. Mute and Push to talk now use fixed Rockers; composition, dimensions,
+light, Persona controls and scoped resets remain independent.
+
+- All 657 repository tests pass (8,282 assertions), including 28 configurator
+  tests with legacy-style migration, strict current design validation and exact
+  v8 Save receipts. Both TypeScript checks and Biome pass.
+- Android debug/test/release assembly and debug lint pass; all 36 JVM tests pass.
+  All 37 physical S22 instrumentation tests pass in 58 seconds. The retained
+  controls tests cover 32 size/share/state/font configurations, pointer disposal
+  and re-entry, resizing, accessibility, native hold confirmation and dark
+  capture styling. Saved-instance migration changes only the retired styles.
+  All five compositions retain both native Halo renderers; clock and recoloring
+  regressions pass without Persona source changes.
+- A disposable Chrome fixture verifies absent style selectors, all five
+  compositions, seven scoped resets, exact v8 Save/reload and reconnect without
+  replay. Desktop and 390 px layouts were inspected with no overflow or browser
+  errors.
+- The real phone's saved profile loaded with only its button styles migrated in
+  memory. Browser-to-phone checks exercised Socket/Traces, a real Rocker hold and
+  release, and actual background/return reconnection. The operator's fresh
+  Contained 78%, −22 dp, Traces, 387 dp / 40.9% deck, default motion and
+  Still35/Follow choices were restored in Listening with both channels open.
+  Phone and host saved files remain byte-identical to the pre-install snapshots;
+  no Save was sent. Current phone captures retain the clear center and restrained
+  live face. The live host page was opened and verified in headful Google Chrome.
+- Debug APK SHA-256:
+  `9c7ded11c356961cd2bf50fd450c9b5d45e2c65d81c282b6572a6252d52134db`.
+  Release APK is byte-identical to the previous build:
+  `6c19aa351345146b3490f02e91464bfb395e6e97d6431e877e8eefff6af2bf16`.
+  Release DEX/layout inspection confirms debug studio, Contained and Spirit
+  classes/layout are absent. No production media, grant or inference was opened.
+
+Logs, preserved snapshots and captures use `/tmp/agentvoice-rockers-only-*`.
+Key visual evidence: `agentvoice-rockers-only-phone-restored.png`,
+`agentvoice-rockers-only-phone-rocker-live.png`,
+`agentvoice-rockers-only-studio-live.png` and
+`agentvoice-rockers-only-browser-{desktop,narrow}.png` in that directory.

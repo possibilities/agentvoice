@@ -1,17 +1,19 @@
-export const muteChoices = ["rockers", "keycaps"] as const;
-export const holdChoices = ["trigger", "rocker"] as const;
 export const compositionChoices = ["open", "dock", "yoke", "socket", "traces"] as const;
 export type Design = {
   layout: "studio";
   header: "none";
-  mute: (typeof muteChoices)[number];
-  hold: (typeof holdChoices)[number];
+  mute: "rockers";
+  hold: "rocker";
   composition: (typeof compositionChoices)[number];
   controlsHeightDp: number;
   holdSharePercent: number;
 };
-export type PreviousDesign = Omit<Design, "hold" | "composition"> & { hold: "trigger" };
-export type VersionSixDesign = Omit<Design, "composition"> & {
+export type VersionSevenDesign = Omit<Design, "mute" | "hold"> & {
+  mute: "rockers" | "keycaps";
+  hold: "trigger" | "rocker";
+};
+export type PreviousDesign = Omit<VersionSevenDesign, "hold" | "composition"> & { hold: "trigger" };
+export type VersionSixDesign = Omit<VersionSevenDesign, "composition"> & {
   composition: "open" | "dock" | "yoke";
 };
 export type LegacyDesign = {
@@ -23,8 +25,8 @@ export type LegacyDesign = {
 export const defaultDesign: Design = {
   layout: "studio",
   header: "none",
-  mute: "keycaps",
-  hold: "trigger",
+  mute: "rockers",
+  hold: "rocker",
   composition: "open",
   controlsHeightDp: 262,
   // Retain the exact 130 + 16 + 116 dp layout, including the fixed join.
@@ -42,15 +44,20 @@ export function equalDesign(a: Design, b: Design) {
   );
 }
 export function parseDesign(value: unknown): Design {
+  const design = parseVersionSevenDesign(value);
+  if (design.mute !== "rockers" || design.hold !== "rocker") throw Error("Invalid design");
+  return { ...design, mute: "rockers", hold: "rocker" };
+}
+export function parseVersionSevenDesign(value: unknown): VersionSevenDesign {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
   const data = value as Record<string, unknown>;
   if (
     Object.keys(data).length !== 7 ||
     data["layout"] !== "studio" ||
     data["header"] !== "none" ||
-    !holdChoices.includes(data["hold"] as Design["hold"]) ||
+    !["trigger", "rocker"].includes(data["hold"] as string) ||
     !compositionChoices.includes(data["composition"] as Design["composition"]) ||
-    !muteChoices.includes(data["mute"] as Design["mute"]) ||
+    !["rockers", "keycaps"].includes(data["mute"] as string) ||
     !Number.isInteger(data["controlsHeightDp"]) ||
     typeof data["controlsHeightDp"] !== "number" ||
     data["controlsHeightDp"] < 240 ||
@@ -64,8 +71,8 @@ export function parseDesign(value: unknown): Design {
   return {
     layout: "studio",
     header: "none",
-    mute: data["mute"] as Design["mute"],
-    hold: data["hold"] as Design["hold"],
+    mute: data["mute"] as VersionSevenDesign["mute"],
+    hold: data["hold"] as VersionSevenDesign["hold"],
     composition: data["composition"] as Design["composition"],
     controlsHeightDp: data["controlsHeightDp"],
     holdSharePercent: data["holdSharePercent"],
@@ -76,11 +83,11 @@ export function parsePreviousDesign(value: unknown): PreviousDesign {
   const data = value as Record<string, unknown>;
   if (Object.keys(data).length !== 6 || "composition" in data || data["hold"] !== "trigger")
     throw Error("Invalid previous design");
-  parseDesign({ ...data, composition: "open" });
+  parseVersionSevenDesign({ ...data, composition: "open" });
   return data as PreviousDesign;
 }
 export function parseVersionSixDesign(value: unknown): VersionSixDesign {
-  const design = parseDesign(value);
+  const design = parseVersionSevenDesign(value);
   if (
     design.composition !== "open" &&
     design.composition !== "dock" &&
@@ -102,7 +109,4 @@ export function parseLegacyDesign(value: unknown): LegacyDesign {
   )
     throw Error("Invalid legacy design");
   return data as LegacyDesign;
-}
-export function currentDesign(legacy?: LegacyDesign): Design {
-  return { ...defaultDesign, mute: legacy?.mute === "rockers" ? "rockers" : "keycaps" };
 }

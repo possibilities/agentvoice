@@ -20,7 +20,7 @@ class PreviewSpiritTest {
         var stops = 0
         compose.setContent {
             VoiceTheme {
-                PreviewControls(ui, "rockers", "rocker", {}, {
+                PreviewControls(ui, {}, {
                     starts++
                     ui = ui.copy(holding = true, micOpen = true)
                 }, {

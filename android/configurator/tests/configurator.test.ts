@@ -26,7 +26,7 @@ import { defaultSpirit, parseSpirit } from "../src/spirit.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 7,
+  protocol: 8,
   activity: "steady",
   connection: "connected",
   revision: 0,
@@ -50,8 +50,8 @@ const initial = (): PhoneState => ({
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Extract<Profile, { version: 7 }> => ({
-  version: 7,
+const profile = (state: PhoneState): Extract<Profile, { version: 8 }> => ({
+  version: 8,
   spirit: { ...state.spirit },
   design: { ...state.design },
   halo: structuredClone(state.halo),
@@ -85,7 +85,7 @@ class FakePhone implements Phone {
     | "containedSizePercent"
     | (typeof haloMotionFields)[number]
     | undefined;
-  wrongDesignReceipt: "height" | "share" | "hold" | "composition" | undefined;
+  wrongDesignReceipt: "height" | "share" | "mute" | "hold" | "composition" | undefined;
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
     if (command["method"] === "preview") {
@@ -117,7 +117,8 @@ class FakePhone implements Phone {
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
       if (this.wrongDesignReceipt === "height") receipt.design.controlsHeightDp++;
       if (this.wrongDesignReceipt === "share") receipt.design.holdSharePercent++;
-      if (this.wrongDesignReceipt === "hold") receipt.design.hold = "rocker";
+      if (this.wrongDesignReceipt === "mute") Object.assign(receipt.design, { mute: "keycaps" });
+      if (this.wrongDesignReceipt === "hold") Object.assign(receipt.design, { hold: "trigger" });
       if (this.wrongDesignReceipt === "composition") receipt.design.composition = "dock";
       if (this.wrongHaloReceipt === "variant") receipt.halo.variant = "contained";
       else if (this.wrongHaloReceipt === "color") receipt.halo.colors.idle = "#ffffff";
@@ -130,11 +131,7 @@ class FakePhone implements Phone {
         receipt.spirit.persona = receipt.spirit.persona === "fixed" ? "follow" : "fixed";
       return {
         state: this.state,
-        profile: JSON.stringify(
-          this.oldReceipt ? { ...receipt, version: 6, spirit: undefined } : receipt,
-          null,
-          2,
-        ),
+        profile: JSON.stringify(this.oldReceipt ? { ...receipt, version: 7 } : receipt, null, 2),
       };
     }
     return { state: this.state };
@@ -219,20 +216,18 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   }
 });
 
-test("design choices are bounded and old profiles remain readable without migration", () => {
-  for (const mute of ["rockers", "keycaps"] as const)
-    for (const hold of ["trigger", "rocker"] as const)
-      for (const composition of ["open", "dock", "yoke", "socket", "traces"] as const)
-        expect(parseDesign({ ...defaultDesign, mute, hold, composition })).toEqual({
-          ...defaultDesign,
-          mute,
-          hold,
-          composition,
-        });
+test("current design requires Rockers and old profiles remain readable without rewriting", () => {
+  for (const composition of ["open", "dock", "yoke", "socket", "traces"] as const)
+    expect(parseDesign({ ...defaultDesign, composition })).toEqual({
+      ...defaultDesign,
+      composition,
+    });
   expect(() => parseDesign({ ...defaultDesign, header: "remote-content" })).toThrow();
   for (const retired of [
     { header: "drawer" },
     { hold: "beam" },
+    { hold: "trigger" },
+    { mute: "keycaps" },
     { mute: "glyphs" },
     { layout: "original" },
   ])
@@ -270,6 +265,102 @@ test("design choices are bounded and old profiles remain readable without migrat
       parseProfile(JSON.stringify({ ...saved, design: { ...saved.design, composition: "dock" } })),
     ).toThrow();
   }
+});
+
+test("every legacy button choice migrates to Rockers while retaining other choices and reset scopes", () => {
+  const latest = profile(initial());
+  const { design: _design, halo: _halo, spirit: _spirit, ...base } = latest;
+  const halo = { ...defaultHalo(), variant: "contained" as const, containedSizePercent: 93 };
+  const spirit = { surface: "soft", strengthPercent: 77, persona: "follow" } as const;
+  const candidates: unknown[] = [{ ...base, version: 2 }];
+  for (const layout of ["original", "studio"])
+    for (const header of ["quiet", "drawer", "none"])
+      for (const mute of ["glyphs", "rockers", "keycaps"])
+        for (const hold of ["beam", "trigger", "keycap"])
+          candidates.push({ ...base, version: 3, design: { layout, header, mute, hold } });
+  for (const version of [4, 5, 6, 7])
+    for (const mute of ["rockers", "keycaps"])
+      for (const hold of version < 6 ? ["trigger"] : ["trigger", "rocker"])
+        for (const composition of version < 6
+          ? [undefined]
+          : version === 6
+            ? ["open", "dock", "yoke"]
+            : ["open", "dock", "yoke", "socket", "traces"])
+          candidates.push({
+            ...base,
+            version,
+            verticalOffsetDp: -72,
+            scaleMultipliers: { speaking: 0.83, listening: 0.52, idle: 0.91 },
+            design: {
+              layout: "studio",
+              header: "none",
+              mute,
+              hold,
+              ...(composition ? { composition } : {}),
+              controlsHeightDp: 371,
+              holdSharePercent: 53.7,
+            },
+            ...(version >= 5 ? { halo } : {}),
+            ...(version === 7 ? { spirit } : {}),
+          });
+  for (const candidate of candidates) {
+    const encoded = JSON.stringify(candidate);
+    const loaded = parseProfile(encoded);
+    const design = profileDesign(loaded);
+    expect(design.mute).toBe("rockers");
+    expect(design.hold).toBe("rocker");
+    if (loaded.version !== 2 && loaded.version !== 3) {
+      expect(design).toEqual({
+        ...loaded.design,
+        composition: "composition" in loaded.design ? loaded.design.composition : "open",
+        mute: "rockers",
+        hold: "rocker",
+      });
+      expect(loaded.verticalOffsetDp).toBe(-72);
+      expect(loaded.scaleMultipliers).toEqual({ speaking: 0.83, listening: 0.52, idle: 0.91 });
+    } else expect(design).toEqual(defaultDesign);
+    expect(profileHalo(loaded)).toEqual(loaded.version >= 5 ? halo : defaultHalo());
+    expect(profileSpirit(loaded)).toEqual(loaded.version === 7 ? spirit : defaultSpirit());
+    const current = {
+      ...previewOf(initial()),
+      design,
+      halo: profileHalo(loaded),
+      spirit: profileSpirit(loaded),
+      activity: "voice" as const,
+      verticalOffsetDp: loaded.verticalOffsetDp,
+    };
+    expect(resetPreview(current, initial(), "controls")).toEqual({
+      ...current,
+      design: {
+        ...design,
+        controlsHeightDp: defaultDesign.controlsHeightDp,
+        holdSharePercent: defaultDesign.holdSharePercent,
+      },
+    });
+    expect(resetPreview(current, initial(), "position")).toEqual({
+      ...current,
+      verticalOffsetDp: 35,
+    });
+    expect(JSON.stringify(loaded)).toBe(encoded);
+  }
+});
+
+test("current previews, states and version 8 profiles reject retired styles before dispatch", async () => {
+  const { phone, post } = await fixture();
+  for (const change of [
+    { mute: "keycaps" },
+    { hold: "trigger" },
+    { mute: "glyphs" },
+    { hold: "beam" },
+  ]) {
+    const design = { ...defaultDesign, ...change };
+    expect(() => parseProfile(JSON.stringify({ ...profile(initial()), design }))).toThrow();
+    for (const field of ["design", "savedDesign", "defaultDesign"])
+      expect(() => parseState({ ...initial(), [field]: design })).toThrow();
+    expect((await post("preview", { mode: "idle", scales: defaults, design })).status).toBe(400);
+  }
+  expect(() => parseState({ ...initial(), protocol: 7 })).toThrow();
+  expect(phone.calls).toHaveLength(0);
 });
 
 test("control dimensions and connection scenarios are bounded", () => {
@@ -323,7 +414,7 @@ test("resizing controls preserves Persona tuning and only explicit Save keeps th
 });
 
 test("a different design in the phone receipt is refused before writing the host copy", async () => {
-  for (const field of ["height", "share", "hold", "composition"] as const) {
+  for (const field of ["height", "share", "mute", "hold", "composition"] as const) {
     const { phone, post, saveTo } = await fixture();
     phone.wrongDesignReceipt = field;
     expect((await post("save", { revision: 0 })).status).toBe(502);
@@ -531,7 +622,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(7);
+  expect(saved.version).toBe(8);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -682,7 +773,7 @@ test("old profile contracts keep exact fields and old compositions while spirit 
   expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
 });
 
-test("spirit is unsaved until exact version 7 Save and activity never enters the profile", async () => {
+test("spirit is unsaved until exact version 8 Save and activity never enters the profile", async () => {
   const { phone, post, saveTo } = await fixture();
   const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
   const design = { ...defaultDesign, composition: "traces" as const };
@@ -703,7 +794,7 @@ test("spirit is unsaved until exact version 7 Save and activity never enters the
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(7);
+  expect(saved.version).toBe(8);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
