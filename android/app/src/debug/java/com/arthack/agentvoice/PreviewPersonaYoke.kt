@@ -31,7 +31,7 @@ internal fun PreviewPersonaYoke(
         val center = size.width / 2f
         val leftChannel = inset + channelWidth / 2f
         val rightChannel = size.width - leftChannel
-        val rise = minOf(84.dp.toPx(), deckTop)
+        val rise = minOf(56.dp.toPx(), deckTop)
         val top = deckTop - rise
         val split = deckTop - minOf(30.dp.toPx(), rise * .45f)
         val shoulder = deckTop - minOf(15.dp.toPx(), rise * .23f)
@@ -43,7 +43,7 @@ internal fun PreviewPersonaYoke(
         // and the controls cover the final few pixels of each arm.
         clipRect(top = top, bottom = end) {
             drawLine(Brush.verticalGradient(
-                0f to ink.copy(alpha = 0f), .45f to ink, 1f to ink,
+                0f to ink.copy(alpha = 0f), .75f to ink.copy(alpha = ink.alpha * .7f), 1f to ink,
                 startY = top, endY = split,
             ), start = Offset(center, top), end = Offset(center, split),
                 strokeWidth = stroke, cap = StrokeCap.Butt)
