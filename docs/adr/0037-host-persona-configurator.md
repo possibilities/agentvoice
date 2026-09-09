@@ -5,23 +5,38 @@ before expanding its scope. Supersedes the on-phone tuning overlay in
 [ADR 0035](0035-native-android-voice-client.md).
 
 `android/configurator/` is a separate Bun browser app, launched explicitly with
-`bun run android:configure --device <adb-serial>`. It owns the design directions,
-three-state selector, one state-specific size slider, shared vertical position,
-Reset tuning and Save profile. The phone runs the shared native screen or
+`bun run android:configure --device <adb-serial>`. Its Controls panel owns mute
+style, control height and talk-button share; its Persona panel owns connection
+preview, the three-state selector, state-specific size and shared vertical
+position. Save profile retains both panels' design and geometry. The phone runs
 debug-only studio controls around the unchanged Rive adapter, with synthetic
 voice state and no tuning overlay. The initial +35 dp offset, 35–120% range,
 state transition timing and existing saved choices are preserved. This avoids
 implementing a second Halo renderer whose preview could differ from the phone.
 
-The design studio presents Current as the existing screen, Signal as quiet
-header/glyph mutes/beam hold, Field radio as slide-away header/rockers/trigger,
-and Ghost terminal as hidden header/keycaps/keycap hold. Header, mute and hold
-choices can be mixed independently; selecting a part enters the studio layout.
-Presets preserve all three size values and shared position. Studio disclosure
-eases only Halo's center to reflect the header's space; its diameter and the
-mute/PTT targets remain fixed. Header reveal is explicit, and slide-away chrome
-stays open during interaction or when Keep open is selected. These choices are
-reviewable alternatives; the production UI is unchanged until explicit adoption.
+The operator narrowed the initial Current/Signal/Field radio/Ghost terminal
+exploration to Rockers or Keycaps for mute controls and one fixed Trigger.
+Preset, header and talk-surface selectors are removed. Its visible and accessible
+label is Push to talk; pressing and holding still opens the temporary capture
+gate, and release or cancellation closes it. Active styling keeps a dark face
+with focused lime accents rather than filling the whole trigger.
+
+Controls height spans 240–480 dp, including the fixed 16 dp join. Push-to-talk
+share spans 30–60% of the total; the mute row uses the remaining height after
+the join. Baseline geometry is 130 + 16 + 116 = 262 dp, so the exact talk share
+is `116 / 262 × 100` (about 44.3%). Controls Reset defaults restores only these
+two dimensions, keeping the selected mute style. Reset Persona independently
+restores Halo's three sizes and shared offset. Increasing control height moves
+the available center without changing Halo's diameter or its tuning values.
+
+The operator then removed the header entirely. A top overlay with a static
+glyph remains visible only while Connecting or Disconnected; it slides down
+and away over 240 ms, respecting disabled animations. Connected removes the
+notice without a success toast. The notice reserves no height and shifts
+neither Halo nor controls. The host's connection selector is a synthetic preview
+condition, distinct from its actual ADB link. It cannot start media and is not
+persisted in the profile. The production layout and behavior stay as before
+until explicit adoption; its labels now say Push to talk.
 
 The host serves fixed assets on loopback with a per-run capability URL and exact
 Host/Origin validation. Explicitly selected, authorized ADB forwards a fresh
@@ -50,25 +65,29 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 3 on the phone, then
+checks the observed revision, atomically stores version 4 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 both design and geometry in the receipt before writing that copy. Partial save
-failure is visible. Live edits and Reset tuning are unsaved changes. Version 1
-and 2 phone profiles load without rewriting and select Current; version 1 seeds
-all three sizes. Stored position is retained, with +35 dp used when absent.
-Older phone profiles become version 3 only on explicit Save. Production still
+failure is visible. Live edits and both resets are unsaved changes. Version 1,
+2 and 3 phone profiles load without rewriting; version 1 seeds all three Halo
+sizes. Stored position is retained, with +35 dp used when absent. Legacy profiles
+use the new control geometry baseline and fixed headerless Trigger layout.
+Version 3 retains Rockers or Keycaps; legacy Glyphs and missing mute choices
+use Keycaps. Older phone profiles become version 4 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
 shared −200…+200 dp slider in integer steps; +35 dp remains the default.
-That extension used protocol 2 and retained profile version 2. The design studio
-supersedes those wire/save versions with preview protocol 3 and profile version 3.
-Protocol 3 carries live, saved and default designs alongside sizes and offsets.
-Its bounded design object contains `layout: original|studio`,
-`header: quiet|drawer|none`, `mute: glyphs|rockers|keycaps`, and
-`hold: beam|trigger|keycap`. Reset tuning restores only geometry, preserving
-the selected design and synthetic state. Save keeps all design and geometry
-choices. Production defaults and Halo animation sequencing remain unchanged.
+That extension used protocol 2 and retained profile version 2. The initial
+design comparison added protocol/profile version 3. The narrowed studio uses
+preview protocol 4 and profile version 4. Its bounded design fixes
+`layout: studio`, `header: none`, `hold: trigger`, permits
+`mute: rockers|keycaps`, and adds integer `controlsHeightDp` (240–480) and finite
+`holdSharePercent` (30–60). Protocol 4 carries live, saved and default designs
+alongside sizes and offsets, plus transient
+`connection: connected|connecting|disconnected`. Save excludes the connection
+selection. The retained internal `hold` field does not change the user-facing
+Push to talk label. Production defaults and Halo animation sequencing remain unchanged.
 
 The browser, host transport, profile persistence and native preview are separate
 modules, so later configuration can extend this app without placing a settings

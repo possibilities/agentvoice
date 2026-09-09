@@ -1,16 +1,12 @@
 package com.arthack.agentvoice
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
@@ -24,30 +20,31 @@ internal fun PreviewStudioScreen(
     onHold: () -> Unit,
     onRelease: () -> Unit,
     onExit: () -> Unit,
+    connection: String = "connected",
 ) {
-    var expanded by rememberSaveable(design.header) { mutableStateOf(false) }
-    var reserved by remember(design.header) { mutableStateOf(0.dp) }
-    val headerSpace by animateDpAsState(reserved, tween(280, easing = FastOutSlowInEasing), label = "header-space")
+    androidx.activity.compose.BackHandler(onBack = onExit)
     val currentRelease by rememberUpdatedState(onRelease)
     DisposableEffect(Unit) { onDispose { currentRelease() } }
     BoxWithConstraints(Modifier.fillMaxSize().background(VoiceInk.ground).safeDrawingPadding()) {
         val compact = maxHeight < 660.dp
         val shallow = maxHeight < 500.dp
         val side = if (maxWidth < 360.dp) 18.dp else 24.dp
-        Column(Modifier.fillMaxSize().then(if (shallow) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
-            Box(Modifier.fillMaxWidth().then(if (shallow) Modifier.height(230.dp) else Modifier.weight(1f))) {
-                // A header changes the open space's center, not the artboard diameter or control geometry.
-                // Semantics must sit inside the layer to expose its translated bounds.
-                PersonaHalo(ui, Modifier.fillMaxSize().graphicsLayer {
-                    translationY = headerSpace.toPx() / 2f
-                }.testTag("studio-persona-stage"), placement)
-                PreviewHeader(design.header, expanded, { expanded = it }, ui, onExit,
-                    Modifier.fillMaxWidth(), interactionActive = ui.holding,
-                    onReservedHeightChange = { reserved = it })
+        val bottomGap = if (compact) 20.dp else 28.dp
+        val minimumStage = if (shallow) 230.dp else 160.dp
+        val stageHeight = (maxHeight - design.controlsHeightDp.dp - bottomGap).coerceAtLeast(minimumStage)
+        val scrolls = stageHeight + design.controlsHeightDp.dp + bottomGap > maxHeight
+        // Taller controls move the available center without changing the operator's Halo size.
+        val diameter = minOf(maxWidth, (maxHeight - 262.dp - bottomGap).coerceAtLeast(minimumStage))
+        Column(Modifier.fillMaxSize().then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Box(Modifier.fillMaxWidth().height(stageHeight)) {
+                PersonaHalo(ui, Modifier.align(Alignment.Center).requiredSize(diameter)
+                    .testTag("studio-persona-stage"), placement)
             }
             PreviewControls(ui, design.mute, design.hold, onMute, onHold, onRelease,
-                Modifier.fillMaxWidth().padding(horizontal = side), compact = compact)
-            Spacer(Modifier.height(if (compact) 20.dp else 28.dp))
+                Modifier.fillMaxWidth().padding(horizontal = side),
+                controlsHeightDp = design.controlsHeightDp, holdSharePercent = design.holdSharePercent)
+            Spacer(Modifier.height(bottomGap))
         }
+        PreviewConnectionNotice(connection, Modifier.align(Alignment.TopCenter).fillMaxWidth())
     }
 }

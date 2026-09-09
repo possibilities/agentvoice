@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { originalDesign } from "../src/design.ts";
+import { defaultDesign } from "../src/design.ts";
 import type { PhoneState } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
 
@@ -13,7 +13,8 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 3,
+    protocol: 4,
+    connection: "connecting",
     revision: 0,
     holding: false,
     mode: "listening",
@@ -23,9 +24,9 @@ class Connection implements PreviewConnection {
     verticalOffsetDp: -24,
     savedVerticalOffsetDp: 35,
     defaultVerticalOffsetDp: 35,
-    design: { ...originalDesign, layout: "studio", header: "drawer" },
-    savedDesign: { ...originalDesign },
-    defaultDesign: { ...originalDesign },
+    design: { ...defaultDesign, controlsHeightDp: 380, holdSharePercent: 54.3 },
+    savedDesign: { ...defaultDesign },
+    defaultDesign: { ...defaultDesign },
     micMuted: false,
     speakerMuted: false,
   };
@@ -72,7 +73,9 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.scales.listening).toBe(52);
   expect(phone.state.savedScales.listening).toBe(58);
   expect(phone.state.verticalOffsetDp).toBe(-24);
-  expect(phone.state.design.header).toBe("drawer");
+  expect(phone.state.design.controlsHeightDp).toBe(380);
+  expect(phone.state.design.holdSharePercent).toBe(54.3);
+  expect(phone.state.connection).toBe("connecting");
   await until(() => phone.connected);
   expect(dials).toBe(3);
   expect(phone.generation).toBe(2);

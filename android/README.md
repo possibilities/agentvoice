@@ -1,7 +1,7 @@
 # AgentVoice for Android
 
 A native, foreground voice client for the existing AgentVoice server. One screen:
-YOU and AGENT mute controls, a fixed hold-to-talk surface, and Vercel AI Elements'
+YOU and AGENT mute controls, a fixed push-to-talk surface, and Vercel AI Elements'
 Persona Halo. Kotlin/Compose and native Rive draw the interface; native WebRTC owns audio. Android
 12 / API 31 or newer, ARM64 phones and x86-64 emulators.
 
@@ -162,21 +162,29 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 
 The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
-on-phone tuner panel and compares four directions: Current shows the existing
-screen; Signal combines a quiet header, glyph mutes and a beam hold surface;
-Field radio combines a slide-away header, rockers and a trigger; Ghost terminal
-combines hidden chrome with oversized keycaps. Mix the three header, mute and
-hold variants independently. Changing a preset or variant keeps the Halo tuning
-values. In the studio layouts, header disclosure moves only Halo's center;
-the mute and hold targets stay anchored and the Halo diameter stays unchanged.
+on-phone tuner panel. Controls offers Rockers or Keycaps for the mute buttons
+and a fixed Trigger labeled **Push to talk**: press and keep it down to talk,
+release to mute. Its active surface stays dark with focused lime accents.
+Controls height spans 240–480 dp, including a fixed 16 dp join; Push-to-talk
+share spans 30–60% of the total. The baseline is 262 dp with a 116 dp trigger
+(about 44.3%). **Reset defaults** in Controls restores only those two dimensions,
+keeping the mute style and Persona tuning. Control sizing preserves the Halo
+diameter; presets and header/talk-surface selectors are removed.
+
+The preview has no header. **Preview connection** selects synthetic Connected,
+Connecting or Disconnected. A notice with a static glyph slides down from the
+top and stays while Connecting or Disconnected, then slides away on Connected
+without a success toast. Its 240 ms transition reserves no space and shifts
+neither Halo nor the controls. This selection is not saved in the profile and
+does not change the actual ADB connection.
 
 Choose Speaking, Listening or Idle and adjust that state's
 size (35–120%); the other sizes stay intact. The vertical position slider applies
 to every state, from −200 to +200 dp in 1 dp steps, initially +35 dp. Negative
-moves up; positive moves down. Reset tuning restores the current compiled sizes
-and position while keeping the selected design and state.
+moves up; positive moves down. Reset Persona restores the compiled Halo sizes
+and position while keeping control design, dimensions and selected preview state.
 The phone's synthetic channel and
-hold-to-talk buttons still work, and changes appear in the browser.
+Push to talk buttons still work, and changes appear in the browser.
 Leave the host app and browser open through backgrounding, activity recreation
 or temporary USB loss. The configurator waits for the same preview to return,
 reconnects automatically and retains unsaved tuning and design. It never replays Save or
@@ -189,12 +197,16 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 3 app-private `files/persona-tuning.json` and a matching JSON copy on the
-host. Preview protocol 3 carries those choices between the host and debug app.
-Existing version 1 and 2 phone profiles load without rewriting and select the
-Current design; they become version 3 only on Save. The real client and release
-APK keep their existing UI and compiled defaults until the operator chooses a
-design for explicit adoption in code. Debug builds include a **Halo preview** launcher
+version 4 app-private `files/persona-tuning.json` and a matching JSON copy on the
+host, including control height and talk-button share. Preview protocol 4 carries
+those choices and the transient connection selection. Existing version 1, 2
+and 3 phone profiles load without rewriting. They keep their Halo tuning and
+use the new control geometry baseline; version 3 retains Rockers or Keycaps,
+while legacy Glyphs or absent mute choices become Keycaps. Older profiles
+become version 4 only on Save. The real client and release
+APK keep their existing layout, behavior and compiled defaults until the operator
+chooses a design for explicit adoption in code; their labels now also say Push to talk.
+Debug builds include a **Halo preview** launcher
 icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or audio, or connect to the voice server.

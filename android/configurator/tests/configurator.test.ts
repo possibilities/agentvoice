@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { directions, originalDesign, parseDesign } from "../src/design.ts";
+import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { parseArgs } from "../src/main.ts";
 import {
@@ -14,12 +14,14 @@ import {
   parseProfile,
   parseScales,
   parseState,
+  profileDesign,
 } from "../src/protocol.ts";
 import { serveConfigurator } from "../src/server.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 3,
+  protocol: 4,
+  connection: "connected",
   revision: 0,
   holding: false,
   mode: "speaking",
@@ -29,14 +31,14 @@ const initial = (): PhoneState => ({
   verticalOffsetDp: 35,
   savedVerticalOffsetDp: 35,
   defaultVerticalOffsetDp: 35,
-  design: { ...originalDesign },
-  savedDesign: { ...originalDesign },
-  defaultDesign: { ...originalDesign },
+  design: { ...defaultDesign },
+  savedDesign: { ...defaultDesign },
+  defaultDesign: { ...defaultDesign },
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Profile => ({
-  version: 3,
+const profile = (state: PhoneState): Extract<Profile, { version: 4 }> => ({
+  version: 4,
   design: { ...state.design },
   scaleMultipliers: {
     speaking: state.scales.speaking / 100,
@@ -60,11 +62,12 @@ class FakePhone implements Phone {
   calls: Record<string, unknown>[] = [];
   refuseSave = false;
   wrongOffsetReceipt = false;
-  wrongDesignReceipt = false;
+  wrongDesignReceipt: "height" | "share" | undefined;
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
     if (command["method"] === "preview") {
       const preview = parsePreview({
+        connection: command["connection"],
         mode: command["mode"],
         scales: command["scales"],
         verticalOffsetDp: command["verticalOffsetDp"],
@@ -83,7 +86,8 @@ class FakePhone implements Phone {
       };
       const receipt = profile(this.state);
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
-      if (this.wrongDesignReceipt) receipt.design = { ...receipt.design!, header: "none" };
+      if (this.wrongDesignReceipt === "height") receipt.design.controlsHeightDp++;
+      if (this.wrongDesignReceipt === "share") receipt.design.holdSharePercent++;
       return { state: this.state, profile: JSON.stringify(receipt, null, 2) };
     }
     return { state: this.state };
@@ -105,7 +109,11 @@ async function fixture(options: { saveTo?: string } = {}) {
       body: JSON.stringify({
         generation: phone.generation,
         ...(path === "preview"
-          ? { verticalOffsetDp: phone.state.verticalOffsetDp, design: phone.state.design }
+          ? {
+              connection: phone.state.connection,
+              verticalOffsetDp: phone.state.verticalOffsetDp,
+              design: phone.state.design,
+            }
           : {}),
         ...(body as object),
       }),
@@ -129,10 +137,11 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   expect(() => parseScales({ ...defaults, offset: 35 })).toThrow();
   expect(() =>
     parsePreview({
+      connection: "connected",
       mode: "thinking",
       scales: defaults,
       verticalOffsetDp: 35,
-      design: originalDesign,
+      design: defaultDesign,
     }),
   ).toThrow();
   const saved = profile(initial());
@@ -144,27 +153,74 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   }
   for (const verticalOffsetDp of [-201, 201, 20.5, "35", null, undefined]) {
     expect(() =>
-      parsePreview({ mode: "idle", scales: defaults, verticalOffsetDp, design: originalDesign }),
+      parsePreview({
+        connection: "connected",
+        mode: "idle",
+        scales: defaults,
+        verticalOffsetDp,
+        design: defaultDesign,
+      }),
     ).toThrow();
     expect(() => parseProfile(JSON.stringify({ ...saved, verticalOffsetDp }))).toThrow();
   }
 });
 
 test("design choices are bounded and old profiles remain readable without migration", () => {
-  for (const direction of directions)
-    expect(parseDesign(direction.design)).toEqual(direction.design);
-  expect(() => parseDesign({ ...originalDesign, header: "remote-content" })).toThrow();
-  expect(() => parseDesign({ ...originalDesign, asset: "/arbitrary" })).toThrow();
+  for (const mute of ["rockers", "keycaps"] as const)
+    expect(parseDesign({ ...defaultDesign, mute })).toEqual({ ...defaultDesign, mute });
+  expect(() => parseDesign({ ...defaultDesign, header: "remote-content" })).toThrow();
+  for (const retired of [
+    { header: "drawer" },
+    { hold: "beam" },
+    { mute: "glyphs" },
+    { layout: "original" },
+  ])
+    expect(() => parseDesign({ ...defaultDesign, ...retired })).toThrow();
+  expect(() => parseDesign({ ...defaultDesign, asset: "/arbitrary" })).toThrow();
   const { design: _, ...legacy } = profile(initial());
   const old = { ...legacy, version: 2 as const };
   expect(parseProfile(JSON.stringify(old))).toEqual(old);
-  expect(() => parseProfile(JSON.stringify({ ...legacy, version: 3 }))).toThrow();
+  const v3 = {
+    ...legacy,
+    version: 3 as const,
+    design: { layout: "studio", header: "drawer", mute: "keycaps", hold: "trigger" },
+  };
+  expect(parseProfile(JSON.stringify(v3))).toEqual(v3 as Profile);
+  expect(profileDesign(parseProfile(JSON.stringify(v3)))).toEqual(defaultDesign);
+  expect(() => parseProfile(JSON.stringify({ ...legacy, version: 4 }))).toThrow();
 });
 
-test("switching a direction preserves tuning and only explicit Save keeps the design", async () => {
+test("control dimensions and connection scenarios are bounded", () => {
+  for (const controlsHeightDp of [240, 262, 480])
+    for (const holdSharePercent of [30, defaultDesign.holdSharePercent, 60])
+      expect(
+        parseDesign({ ...defaultDesign, controlsHeightDp, holdSharePercent }).controlsHeightDp,
+      ).toBe(controlsHeightDp);
+  for (const controlsHeightDp of [239, 481, 300.5, "262", null, Infinity])
+    expect(() => parseDesign({ ...defaultDesign, controlsHeightDp })).toThrow();
+  for (const holdSharePercent of [29.9, 60.1, "44", null, NaN, Infinity])
+    expect(() => parseDesign({ ...defaultDesign, holdSharePercent })).toThrow();
+  expect(() =>
+    parsePreview({
+      connection: "reconnect-call",
+      mode: "idle",
+      scales: defaults,
+      verticalOffsetDp: 35,
+      design: defaultDesign,
+    }),
+  ).toThrow();
+});
+
+test("resizing controls preserves Persona tuning and only explicit Save keeps the design", async () => {
   const { phone, post, saveTo } = await fixture();
-  const design = directions.find((direction) => direction.id === "radio")!.design;
+  const design = {
+    ...defaultDesign,
+    mute: "rockers" as const,
+    controlsHeightDp: 380,
+    holdSharePercent: 54.3,
+  };
   const preview = {
+    connection: "connecting",
     mode: "idle",
     scales: { ...defaults, speaking: 48 },
     verticalOffsetDp: -24,
@@ -173,7 +229,7 @@ test("switching a direction preserves tuning and only explicit Save keeps the de
   expect((await post("preview", preview)).status).toBe(200);
   expect(phone.state.design).toEqual(design);
   expect(phone.state.scales).toEqual(preview.scales);
-  expect(phone.state.savedDesign).toEqual(originalDesign);
+  expect(phone.state.savedDesign).toEqual(defaultDesign);
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   expect(parseProfile(await readFile(saveTo, "utf8")).design).toEqual(design);
@@ -181,10 +237,12 @@ test("switching a direction preserves tuning and only explicit Save keeps the de
 });
 
 test("a different design in the phone receipt is refused before writing the host copy", async () => {
-  const { phone, post, saveTo } = await fixture();
-  phone.wrongDesignReceipt = true;
-  expect((await post("save", { revision: 0 })).status).toBe(502);
-  expect(await Bun.file(saveTo).exists()).toBe(false);
+  for (const field of ["height", "share"] as const) {
+    const { phone, post, saveTo } = await fixture();
+    phone.wrongDesignReceipt = field;
+    expect((await post("save", { revision: 0 })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
 });
 
 test("browser updates one state and saves the exact phone receipt privately on host", async () => {

@@ -96,8 +96,16 @@ export async function serveConfigurator(
         input = record(await request.json());
         integer(input["generation"], 1);
         if (path === "preview") {
-          exact(input, ["generation", "mode", "scales", "verticalOffsetDp", "design"]);
+          exact(input, [
+            "generation",
+            "connection",
+            "mode",
+            "scales",
+            "verticalOffsetDp",
+            "design",
+          ]);
           parsePreview({
+            connection: input["connection"],
             mode: input["mode"],
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
@@ -124,6 +132,7 @@ export async function serveConfigurator(
           await phone.request({
             method: "preview",
             ...parsePreview({
+              connection: input["connection"],
               mode: input["mode"],
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
@@ -146,7 +155,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 3 ||
+            profile.version !== 4 ||
             !profile.design ||
             !equalDesign(profile.design, expectedDesign) ||
             profile.verticalOffsetDp !== expectedOffset ||

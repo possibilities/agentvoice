@@ -119,7 +119,7 @@ internal fun VoiceScreen(
                 }
                 Box(Modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
                     when {
-                        ui.running && ui.connected && !ui.micMuted -> Label("Mute YOU to use hold to talk", color = VoiceInk.muted, size = 11)
+                        ui.running && ui.connected && !ui.micMuted -> Label("Mute YOU to use push to talk", color = VoiceInk.muted, size = 11)
                         !ui.running && hasGrant -> Box(Modifier.fillMaxHeight()
                             .clickable(enabled = !importing, role = Role.Button, onClick = importGrant), contentAlignment = Alignment.Center) {
                             Label("Replace device grant", color = VoiceInk.muted, size = 11)
@@ -231,7 +231,7 @@ private fun HoldSurface(ui: CallUi, hold: () -> Unit, release: () -> Unit, modif
             }
         }.semantics {
             role = Role.Button
-            contentDescription = "Hold to talk"
+            contentDescription = "Push to talk"
             stateDescription = if (ui.holding) "Release to mute" else if (ui.canHold) "Ready" else "Unavailable"
             if (!ui.canHold) disabled()
             // TalkBack exposes explicit start/stop actions; no timed fake press or automatic release.
@@ -242,7 +242,7 @@ private fun HoldSurface(ui: CallUi, hold: () -> Unit, release: () -> Unit, modif
                 })
         }.testTag("hold-to-talk"), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Label(when { glowing -> "Release to mute"; ui.holding -> "Opening microphone"; else -> "Hold to talk" }, color = color, size = 18)
+            Label(when { glowing -> "Release to mute"; ui.holding -> "Opening microphone"; else -> "Push to talk" }, color = color, size = 18)
             if (ui.holding) {
                 Spacer(Modifier.height(8.dp))
                 Label(if (glowing) "YOU are live" else "Waiting for confirmation", color = color, size = 10)

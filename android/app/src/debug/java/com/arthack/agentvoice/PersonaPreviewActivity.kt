@@ -97,15 +97,7 @@ internal class PersonaPreviewBinding(val name: String, val token: String) {
 internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, change: (PersonaPreviewState) -> Unit) {
     val currentState by rememberUpdatedState(state)
     val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
-    if (state.design.layout == "studio") {
-        PreviewStudioScreen(state.ui(), state.design, state.placement,
-            onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
-            onRelease = release, onExit = onExit)
-        return
-    }
-    VoiceScreen(state.ui(), true, start = {}, stop = { change(state.select("idle")) }, importGrant = {},
-        mute = { change(currentState.toggle(it)) },
-        hold = { change(currentState.beginHold()) },
-        release = release,
-        preview = true, personaPlacement = state.placement)
+    PreviewStudioScreen(state.ui(), state.design, state.placement,
+        onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
+        onRelease = release, onExit = onExit, connection = state.connection)
 }

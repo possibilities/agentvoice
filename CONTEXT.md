@@ -5,12 +5,15 @@ listening, thinking, speaking and asleep states. Optional input/output audio
 features shape its motion; it neither infers conversation state nor owns a call.
 
 **Android configurator** — A separate host browser design studio for the native
-Halo preview over explicitly selected ADB. Current, Signal, Field radio and
-Ghost terminal compare mixable headers, mute controls and hold surfaces while
-preserving tuning. Reset tuning restores geometry only. Its synthetic phone
-preview owns no call or audio. Protocol 3 carries design and geometry; explicit
-Save stores a version 3 phone profile and exact host copy. Older phone profiles
-load without rewriting. Production UI and defaults remain compiled. See ADR 0037.
+Halo preview over explicitly selected ADB. Rockers/Keycaps and a fixed Push to
+talk Trigger have adjustable control height and talk-button share. The phone
+has no header; an overlay notice appears only for synthetic Connecting or
+Disconnected states. Controls Reset defaults and Reset Persona restore their
+own geometry independently. Its synthetic phone preview owns no call or audio.
+Protocol 4 carries design, geometry and transient connection selection; explicit
+Save stores a version 4 phone profile and exact host copy without the connection
+selection. Older phone profiles load without rewriting. Production UI and
+defaults remain compiled. See ADR 0037.
 
 **Vanilla Codex** — The Codex client-and-server experience, including the voice
 frontend and working agent. AgentVoice supplies its own frontend, so an explicit

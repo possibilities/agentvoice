@@ -2,24 +2,29 @@
 
 A separate host browser app for comparing native Android voice controls and
 tuning the existing Persona Halo. The phone renders the interactive demo;
-the browser holds design choices, Speaking/Listening/Idle, per-state size,
-shared vertical position, Reset tuning and Save profile. No tuning panel
-obscures the phone.
+the browser holds separate Controls and Persona panels plus Save profile.
+No tuning panel obscures the phone.
 
-| Direction | Header | Mute controls | Hold to talk |
-| --- | --- | --- | --- |
-| Current | Existing production screen | Existing controls | Existing surface |
-| Signal | Quiet rail | Glyphs | Beam |
-| Field radio | Slide-away | Rockers | Trigger |
-| Ghost terminal | Hidden | Keycaps | Keycap |
+Controls offers Rockers or Keycaps for the two mute buttons and one fixed
+Trigger surface labeled **Push to talk**. Press and keep it down to talk;
+release to mute. The active trigger stays dark with focused lime accents.
+There are no preset, header or talk-surface selectors.
 
-Choose a direction, then mix its header, mute controls and hold surface using
-the three selectors. Changing any selector switches to the experimental studio
-layout. Current returns to the existing screen for comparison. Presets and
-individual design choices preserve all three Halo sizes and the shared offset.
-In the studio, revealing or hiding the header eases Halo's center while the
-mute and hold targets stay fixed; it does not change the Halo diameter. Hidden
-chrome has an explicit reveal control. Slide-away can remain open with Keep open.
+Controls height spans 240–480 dp, including the fixed 16 dp join between mute
+buttons and the trigger. Push-to-talk share spans 30–60% of that total height;
+the mute row gets the remainder after subtracting the join. The baseline is
+262 dp: 130 dp mute row, 16 dp join and 116 dp trigger, an exact share of
+`116 / 262 × 100` (about 44.3%). **Reset defaults** inside Controls restores
+only these two sliders, keeping the chosen mute style and Persona tuning.
+Changing control size preserves the Halo diameter and its saved tuning values.
+
+The phone has no header while connected. **Preview connection** selects a
+synthetic Connected, Connecting or Disconnected state. A notice with a static glyph
+slides down from the top for Connecting or Disconnected and remains until that
+condition ends. It slides away when Connected returns; there is no connected
+toast. The 240 ms transition reserves no layout space and moves neither Halo
+nor the controls. The connection selection is transient and is not saved in
+the profile. It does not change the host's actual ADB connection.
 
 Install the current Android debug APK on an explicitly selected, ADB-authorized
 phone, then run from the repository root:
@@ -48,31 +53,36 @@ The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` without rewriting it. Size remains
 35–120%, independently for each state. Vertical position applies to every state,
 from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
-Reset tuning restores only the phone build's compiled geometry defaults,
-currently 78 / 58 / 78% and +35 dp. It keeps the selected design and state.
-Save profile keeps the design, all sizes and the shared position.
-Phone channel buttons and hold-to-talk also select synthetic states, which the
+Reset Persona restores only the phone build's compiled Halo geometry defaults,
+currently 78 / 58 / 78% and +35 dp. It keeps control styling, control dimensions
+and the selected preview state. Save profile keeps the control design,
+all Halo sizes and the shared position.
+Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 3 profile atomically on the phone. Its `design`
-contains the layout, header, mute and hold choices. Only after
-the phone confirms that exact profile does the host write a matching, mode-0600
+Explicit Save writes a version 4 profile atomically on the phone. Its `design`
+contains the fixed layout/header/trigger choices, mute style, controls height
+and talk-button share. Only after the phone confirms that exact profile does
+the host write a matching, mode-0600
 JSON copy to `profiles/<device-serial>.json`. Use `--save-to /absolute/file.json`
 to choose another destination. The browser names that destination after Save.
 A changed phone revision refuses a stale save. Browser edits and saves are also
 bound to the observed connection, so delayed requests cannot run after reconnect.
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
-separately from a successful phone save. Reset and live edits do not persist
-until Save. Version 1 and 2 phone profiles remain readable without rewriting:
-version 1 seeds all three sizes, and both older versions select Current. Their
-stored position remains intact; a missing position uses +35 dp. They become
-version 3 only on explicit Save. Profiles are ignored by Git.
+separately from a successful phone save. Resets and live edits do not persist
+until Save. Version 1, 2 and 3 phone profiles remain readable without rewriting:
+version 1 seeds all three Halo sizes. Version 3 retains Rockers or Keycaps;
+legacy Glyphs and profiles without a mute choice use Keycaps. Older profiles
+start with the new control geometry baseline and fixed headerless Trigger
+layout. Their Halo sizes and stored position remain intact; a missing position
+uses +35 dp. They become version 4 only on explicit Save. Profiles are ignored by Git.
 
-The real voice client and release APK retain their existing UI and compiled
-`PersonaPlacement` defaults. Saving a demo choice does not adopt it into the
+The real voice client and release APK retain their existing layout, behavior and
+compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
+Saving a demo choice does not adopt it into the
 product; adoption remains an explicit code change after the operator selects
 the final design. The unchanged native Halo adapter owns its rendering and
 state-transition timing.
@@ -103,15 +113,17 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `src/reconnecting-phone.ts` handles bounded retries and shutdown;
 `src/protocol.ts` validates the preview contract. Android's debug
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
-renders either the shared production screen or debug-only `PreviewStudioScreen`
-with synthetic state. The studio composes `PreviewHeader` and `PreviewControls`
-around the existing native Halo.
-Preview protocol 3 carries live/saved/default designs as well as sizes and
-vertical offsets. The design contract permits `layout: original|studio`,
-`header: quiet|drawer|none`, `mute: glyphs|rockers|keycaps`, and
-`hold: beam|trigger|keycap`. Version 3 profile receipts must include the exact
-confirmed design and geometry before the host copy is written. Use matching
-current host code and debug APK.
+renders debug-only `PreviewStudioScreen` with synthetic state. The studio
+composes a connection notice and controls around the existing native Halo.
+Preview protocol 4 carries live/saved/default designs, sizes and vertical
+offsets, plus the transient `connection: connected|connecting|disconnected`.
+The design contract fixes `layout: studio`, `header: none`, `hold: trigger`,
+permits `mute: rockers|keycaps`, and adds `controlsHeightDp` (integer 240–480)
+and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
+protocol meaning; the visible and accessible control is Push to talk.
+Version 4 profile receipts must include the exact confirmed design and geometry
+before the host copy is written. Connection preview state is excluded from the
+profile. Use matching current host code and debug APK.
 
 ```sh
 bun run test

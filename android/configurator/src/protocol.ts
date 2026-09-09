@@ -1,11 +1,25 @@
-import { type Design, parseDesign } from "./design.ts";
+import {
+  currentDesign,
+  type Design,
+  type LegacyDesign,
+  parseDesign,
+  parseLegacyDesign,
+} from "./design.ts";
 
 export const modes = ["speaking", "listening", "idle"] as const;
 export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
-export type Preview = { mode: Mode; scales: Scales; verticalOffsetDp: number; design: Design };
+export const connections = ["connected", "connecting", "disconnected"] as const;
+export type Connection = (typeof connections)[number];
+export type Preview = {
+  connection: Connection;
+  mode: Mode;
+  scales: Scales;
+  verticalOffsetDp: number;
+  design: Design;
+};
 export type PhoneState = Preview & {
-  protocol: 3;
+  protocol: 4;
   revision: number;
   holding: boolean;
   savedScales: Scales;
@@ -18,14 +32,16 @@ export type PhoneState = Preview & {
   speakerMuted: boolean;
 };
 export type Profile = {
-  version: 2 | 3;
   scaleMultipliers: Scales;
   verticalOffsetDp: number;
   connectedArtboardScale: 1.9;
   disconnectedArtboardScale: 1.5;
   savedAtEpochMs: number;
-  design?: Design;
-};
+} & (
+  | { version: 2; design?: never }
+  | { version: 3; design: LegacyDesign }
+  | { version: 4; design: Design }
+);
 
 export function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -63,8 +79,11 @@ function mode(value: unknown): Mode {
 
 export function parsePreview(value: unknown): Preview {
   const data = record(value);
-  exact(data, ["mode", "scales", "verticalOffsetDp", "design"]);
+  exact(data, ["connection", "mode", "scales", "verticalOffsetDp", "design"]);
+  if (!connections.includes(data["connection"] as Connection))
+    throw Error("Invalid connection preview");
   return {
+    connection: data["connection"] as Connection,
     mode: mode(data["mode"]),
     scales: parseScales(data["scales"]),
     verticalOffsetDp: integer(data["verticalOffsetDp"], -200, 200),
@@ -76,6 +95,7 @@ export function parseState(value: unknown): PhoneState {
   const data = record(value);
   exact(data, [
     "protocol",
+    "connection",
     "revision",
     "holding",
     "mode",
@@ -92,14 +112,16 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 3 ||
+    data["protocol"] !== 4 ||
+    !connections.includes(data["connection"] as Connection) ||
     typeof data["holding"] !== "boolean" ||
     typeof data["micMuted"] !== "boolean" ||
     typeof data["speakerMuted"] !== "boolean"
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 3,
+    protocol: 4,
+    connection: data["connection"] as Connection,
     revision: integer(data["revision"]),
     holding: data["holding"],
     mode: mode(data["mode"]),
@@ -127,10 +149,10 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...(data["version"] === 3 ? ["design"] : []),
+    ...([3, 4].includes(data["version"] as number) ? ["design"] : []),
   ]);
   if (
-    (data["version"] !== 2 && data["version"] !== 3) ||
+    (data["version"] !== 2 && data["version"] !== 3 && data["version"] !== 4) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -148,12 +170,18 @@ export function parseProfile(text: string): Profile {
   parseScales(percentages);
   integer(data["verticalOffsetDp"], -200, 200);
   integer(data["savedAtEpochMs"], 1);
-  if (data["version"] === 3) parseDesign(data["design"]);
+  if (data["version"] === 3) parseLegacyDesign(data["design"]);
+  if (data["version"] === 4) parseDesign(data["design"]);
   return data as Profile;
+}
+
+export function profileDesign(profile: Profile): Design {
+  return profile.version === 4 ? profile.design : currentDesign(profile.design);
 }
 
 export function previewOf(state: Preview): Preview {
   return {
+    connection: state.connection,
     mode: state.mode,
     scales: { ...state.scales },
     verticalOffsetDp: state.verticalOffsetDp,

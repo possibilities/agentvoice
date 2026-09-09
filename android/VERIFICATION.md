@@ -1,16 +1,17 @@
 # Android development build verification
 
-2026-09-08. Samsung Galaxy S22 (SM-S901U), Android 16 / API 36,
+Latest synthetic UI checks: 2026-09-09. Samsung Galaxy S22 (SM-S901U), Android 16 / API 36,
 1080 × 2340 at density 480. Native development package `com.arthack.agentvoice.dev`.
-The desktop used its existing waiting AgentVoice service and Tailscale TLS route,
-with an owned stock Codex 0.153.4 child. No service configuration was changed.
+Earlier live-call checks used the desktop's existing waiting AgentVoice service
+and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
+configuration was changed. The latest configurator checks opened no voice call.
 
 Final debug APK SHA-256:
-`7d475e9706177ef376d749934ac63c38b9f4f829075a4603bfd94ae6a5481f22`.
+`a6fbb472e93b3ba447bd08c8b32fb891317701fe0fff0e4f05eac736b82e25a3`.
 
 ## Automated checks
 
-- 645 repository tests, including sixteen configurator tests; root and configurator
+- 646 repository tests, including seventeen configurator tests; root and configurator
   TypeScript and Biome checks passed.
 - 22 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
@@ -155,7 +156,7 @@ check opened no media, inference, grants or voice-server connection.
 
 ## Interactive design studio
 
-The debug preview now offers Current, Signal, Field radio and Ghost terminal,
+The initial debug preview offered Current, Signal, Field radio and Ghost terminal,
 plus independent header, mute-control and hold-surface selection. The production
 screen, bundled Halo renderer and compiled placement defaults are unchanged.
 
@@ -187,6 +188,43 @@ screen, bundled Halo renderer and compiled placement defaults are unchanged.
   48 / 58 / 78% sizes and +35 dp position survived installation and were restored
   with Signal selected. The private saved profile remained byte-for-byte
   identical; the live-device checks sent no Save.
+
+### Controls sizing and connection notices
+
+The September 9 update supersedes those preset and header choices. The preview
+now has Rockers/Keycaps, a fixed Trigger labeled Push to talk, and no header.
+Controls height and Push-to-talk share retain the exact previous 130 + 16 + 116 dp
+baseline. A top notice appears only for Connecting or Disconnected. The native
+Halo adapter and transition sequencing remain unchanged; production layout and
+defaults remain compiled, with the shared Push to talk label updated there too.
+
+- All 27 S22 instrumentation tests passed on the final APK, including the existing
+  Halo transition regressions. New coverage verifies exact default geometry,
+  64 combinations of dimensions/style/font scale/availability, release during
+  resize, a dark active Trigger face from actual pixels, notice entry/exit and
+  interruption, and connection changes that cannot resume a held microphone.
+  The geometry matrix verifies target containment; physical screenshots verify
+  the layouts at the phone's normal font size.
+- Notice visibility reserves no height and moves neither Persona nor controls.
+  Increasing controls height moves Persona's center while retaining its diameter.
+  Debug/release builds, all 22 Android JVM tests and Android lint passed.
+- Local headless Chrome verified the narrowed options, baseline slider values,
+  independent Controls/Persona resets, a version 4 Save/reload fixture, transient
+  connection previews and reconnect without queued-edit replay. Desktop and
+  390 px layouts had no overflow or JavaScript errors. All 646 repository tests,
+  both TypeScript checks and Biome passed.
+- Browser-to-S22 checks measured 130/16/116 dp at the defaults and exercised both
+  mute styles at 350 dp and the 240/480 dp extremes. Labels and glyphs remained
+  contained, the deck's bottom stayed fixed, and its active Trigger retained a
+  dark face with lime accents. Connecting/Disconnected notices appeared without
+  phone interaction and disappeared on Connected without shifting the buttons.
+- Changing the synthetic connection during a held Trigger released it; returning
+  to Connected did not resume capture. Home/return recovered the same browser
+  with unsaved 336 dp / 48% controls intact. The operator's latest 78 / 56 / 78%
+  sizes, −6 dp offset and Rockers choice survived installation and were restored
+  with the new baseline dimensions. The phone profile stayed byte-for-byte
+  identical; device checks sent no Save. All captures were restricted to the
+  synthetic preview, with its focused activity verified before each screenshot.
 
 ## Desktop backend viewer
 

@@ -2,7 +2,9 @@
 
 Explore an oversized voice instrument with less writing and more tactile form.
 The existing native Persona Halo remains the expressive centerpiece. This demo
-keeps the production UI and compiled placement defaults unchanged.
+kept the production UI and compiled placement defaults unchanged. These are the
+initial directions; [ADR 0037](../../docs/adr/0037-host-persona-configurator.md)
+records the current narrowed controls and headerless layout.
 
 | Preset | Header | Mutes | Hold | Intent |
 | --- | --- | --- | --- | --- |
@@ -13,7 +15,7 @@ keeps the production UI and compiled placement defaults unchanged.
 Capture uses the existing lime and playback the existing violet. Off states
 remain recognizable through a slash, shape or position; color never carries the
 whole distinction. Large icons can replace repeated explanations, while accessible
-names retain microphone, speaker and hold-to-talk meaning.
+names retain microphone, speaker and push-to-talk meaning.
 Persistent mute and temporary capture are distinct: a hold may light the capture
 path, but it must not flip the microphone's binary mute detent. Large-font
 instructions should wrap or shorten inside the fixed target instead of clipping

@@ -1,5 +1,6 @@
-import { type Design, directions, equalDesign, originalDesign } from "./design.ts";
+import { type Design, equalDesign } from "./design.ts";
 import {
+  type Connection,
   equalScales,
   type Mode,
   modes,
@@ -7,6 +8,7 @@ import {
   type Preview,
   type Profile,
   previewOf,
+  profileDesign,
 } from "./protocol.ts";
 
 type Status = {
@@ -27,6 +29,8 @@ function element<T extends HTMLElement>(id: string): T {
 const controls = element<HTMLFieldSetElement>("controls");
 const slider = element<HTMLInputElement>("size");
 const position = element<HTMLInputElement>("position");
+const controlHeight = element<HTMLInputElement>("controls-height");
+const holdShare = element<HTMLInputElement>("hold-share");
 const feedback = element("feedback");
 const error = element("error");
 const save = element<HTMLButtonElement>("save");
@@ -79,21 +83,14 @@ function render() {
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
   element("device").textContent = `Previewing on ${status.device}`;
-  for (const direction of directions) {
-    element<HTMLButtonElement>(`direction-${direction.id}`).setAttribute(
-      "aria-pressed",
-      String(equalDesign(direction.design, draft.design)),
-    );
-  }
-  for (const part of ["header", "mute", "hold"] as const)
-    element<HTMLSelectElement>(`design-${part}`).value = draft.design[part];
-  text(
-    element("design-description"),
-    draft.design.layout === "original"
-      ? "Current app layout. Choose any component below to start a custom mix."
-      : (directions.find((direction) => equalDesign(direction.design, draft!.design))
-          ?.description ?? "Your mix. Changes appear on the phone."),
-  );
+  element<HTMLSelectElement>("design-mute").value = draft.design.mute;
+  element<HTMLSelectElement>("connection-preview").value = draft.connection;
+  controlHeight.value = String(draft.design.controlsHeightDp);
+  holdShare.value = String(draft.design.holdSharePercent);
+  text(element("controls-height-value"), `${draft.design.controlsHeightDp} dp`);
+  text(element("hold-share-value"), `${Number(draft.design.holdSharePercent.toFixed(1))}%`);
+  controlHeight.setAttribute("aria-valuetext", `${draft.design.controlsHeightDp} dp`);
+  holdShare.setAttribute("aria-valuetext", `${draft.design.holdSharePercent.toFixed(1)} percent`);
   document.documentElement.style.setProperty("--accent", colors[draft.mode]);
   for (const mode of modes) {
     const button = document.querySelector<HTMLButtonElement>(`button[data-mode="${mode}"]`)!;
@@ -116,7 +113,7 @@ function render() {
   const host = status.hostSaved?.scaleMultipliers;
   const hostMatches =
     host &&
-    equalDesign(status.hostSaved?.design ?? originalDesign, draft.design) &&
+    equalDesign(profileDesign(status.hostSaved!), draft.design) &&
     status.hostSaved?.verticalOffsetDp === draft.verticalOffsetDp &&
     modes.every((mode) => Math.round(host[mode] * 100) === draft!.scales[mode]);
   const phoneMatches =
@@ -177,20 +174,33 @@ function update(change: (value: Preview) => Preview) {
   void flush();
 }
 
-for (const direction of directions) {
-  element(`direction-${direction.id}`).addEventListener("click", () =>
-    update((current) => ({ ...current, design: { ...direction.design } })),
-  );
-}
-for (const part of ["header", "mute", "hold"] as const) {
-  const select = element<HTMLSelectElement>(`design-${part}`);
-  select.addEventListener("change", () =>
-    update((current) => ({
-      ...current,
-      design: { ...current.design, layout: "studio", [part]: select.value } as Design,
-    })),
-  );
-}
+element<HTMLSelectElement>("design-mute").addEventListener("change", (event) => {
+  const mute = (event.currentTarget as HTMLSelectElement).value as Design["mute"];
+  update((current) => ({ ...current, design: { ...current.design, mute } }));
+});
+controlHeight.addEventListener("input", () => {
+  const controlsHeightDp = controlHeight.valueAsNumber;
+  update((current) => ({ ...current, design: { ...current.design, controlsHeightDp } }));
+});
+holdShare.addEventListener("input", () => {
+  const holdSharePercent = Math.round(holdShare.valueAsNumber * 10) / 10;
+  update((current) => ({ ...current, design: { ...current.design, holdSharePercent } }));
+});
+element("reset-controls").addEventListener("click", () =>
+  update((current) => ({
+    ...current,
+    design: {
+      ...current.design,
+      controlsHeightDp: status!.state.defaultDesign.controlsHeightDp,
+      holdSharePercent: status!.state.defaultDesign.holdSharePercent,
+    },
+  })),
+);
+
+element<HTMLSelectElement>("connection-preview").addEventListener("change", (event) => {
+  const connection = (event.currentTarget as HTMLSelectElement).value as Connection;
+  update((current) => ({ ...current, connection }));
+});
 
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-mode]")) {
   button.addEventListener("click", () =>

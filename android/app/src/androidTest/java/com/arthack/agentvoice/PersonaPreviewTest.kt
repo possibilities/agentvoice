@@ -30,16 +30,23 @@ class PersonaPreviewTest {
             assertEquals(legacy, fixture.readText())
             assertEquals(35.dp, initial.offsetY)
             val tuned = initial.copy(listeningScale = .52f, offsetY = (-24).dp)
-            val design = PreviewDesign("studio", "drawer", "rockers", "trigger")
+            val design = PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3)
             savePersonaTuning(fixture, encodePersonaTuning(tuned, design))
             val restored = decodePersonaTuning(fixture.readText())
             assertEquals(.78f, restored.speakingScale)
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(3, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(4, JSONObject(fixture.readText()).getInt("version"))
             assertEquals(design, decodePersonaDesign(fixture.readText()))
             assertEquals(PreviewDesign(), decodePersonaDesign(legacy))
+            val v3 = JSONObject(encodePersonaTuning(tuned, design)).put("version", 3)
+                .put("design", JSONObject().put("layout", "studio").put("header", "drawer")
+                    .put("mute", "rockers").put("hold", "trigger")).toString()
+            fixture.writeText(v3)
+            assertEquals(PreviewDesign(mute = "rockers"), decodePersonaDesign(fixture.readText()))
+            assertEquals(tuned, decodePersonaTuning(fixture.readText()))
+            assertEquals(v3, fixture.readText())
         } finally { fixture.delete() }
     }
 
@@ -54,8 +61,8 @@ class PersonaPreviewTest {
         compose.runOnIdle { assertTrue(state.speakerMuted); assertEquals("listening", state.mode) }
         compose.onNodeWithTag("speaker-mute").performClick()
         compose.runOnIdle { assertEquals("speaking", state.mode) }
-        compose.onNodeWithTag("end-call").performClick()
-        compose.runOnIdle { assertEquals("idle", state.mode) }
+        compose.onNodeWithTag("preview-header").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Push to talk").assertExists()
     }
 
     @Test fun adbPreviewBridgeAuthenticatesBoundsFramesAndReleasesItsSocket() {
@@ -82,10 +89,10 @@ class PersonaPreviewTest {
             connect().use { socket ->
                 val writer = socket.outputStream
                 writer.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
-                val request = JSONObject().put("id", 1).put("method", "preview").put("mode", "listening")
+                val request = JSONObject().put("id", 1).put("method", "preview").put("connection", "connected").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign("studio", "quiet", "glyphs", "beam").json())
+                    .put("design", PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3).json())
                 writer.write((request.toString() + "\n").toByteArray())
                 val response = JSONObject(readFrame(socket.inputStream)!!)
                 assertEquals(1, response.getInt("id"))
@@ -105,7 +112,8 @@ class PersonaPreviewTest {
                 assertEquals(fixture.readText(), saved.getString("profile"))
                 assertEquals(.52f, decodePersonaTuning(fixture.readText()).listeningScale)
                 assertEquals((-24).dp, decodePersonaTuning(fixture.readText()).offsetY)
-                assertEquals("studio", decodePersonaDesign(fixture.readText()).layout)
+                assertEquals(380, decodePersonaDesign(fixture.readText()).controlsHeightDp)
+                assertEquals(54.3, decodePersonaDesign(fixture.readText()).holdSharePercent, 0.00001)
             }
             connect().use { socket ->
                 socket.outputStream.write("{\"token\":\"wrong\"}\n".toByteArray())

@@ -114,43 +114,6 @@ select:focus-visible {
   margin: 0 0 28px;
   padding: 0;
 }
-.direction-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.direction {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 116px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: transparent;
-  text-align: left;
-}
-.direction strong {
-  font-size: 14px;
-  font-weight: 400;
-}
-.direction-caption {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.7;
-}
-.direction[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: #101311;
-  color: var(--accent);
-}
-.design-description {
-  min-height: 54px;
-  margin-top: 20px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.7;
-}
 .mixing {
   display: grid;
   grid-template-columns: 1fr minmax(150px, 1.2fr);
@@ -170,11 +133,13 @@ select {
 fieldset:disabled select {
   opacity: 0.45;
 }
-.phone-hint {
-  font-size: 10px;
-  color: var(--muted);
-  line-height: 1.8;
-  margin-top: 24px;
+.panel-reset {
+  margin-top: 28px;
+  min-height: 44px;
+  font-size: 11px;
+}
+.connection-preview {
+  margin-bottom: 26px;
 }
 .modes {
   display: grid;
@@ -228,6 +193,12 @@ output span {
   letter-spacing: 0;
   margin-left: 4px;
 }
+.button-controls output {
+  font-size: 30px;
+  letter-spacing: -1px;
+  white-space: nowrap;
+}
+
 input[type="range"] {
   display: block;
   appearance: none;
@@ -282,7 +253,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-top: 34px;
   gap: 20px;

@@ -22,46 +22,50 @@
         <fieldset id="controls" disabled>
           <legend class="sr-only">Design preview controls</legend>
           <div class="studio-grid">
-            <fieldset class="directions">
-              <legend class="panel-title">Directions</legend>
-              <div class="direction-grid">
-                <button type="button" id="direction-original" class="direction" aria-pressed="false"><strong>Current</strong><span class="direction-caption">The existing app, for comparison.</span></button>
-                <button type="button" id="direction-signal" class="direction" aria-pressed="false"><strong>Signal</strong><span class="direction-caption">Quiet chrome. Bold symbols.</span></button>
-                <button type="button" id="direction-radio" class="direction" aria-pressed="false"><strong>Field radio</strong><span class="direction-caption">A revealing header and physical controls.</span></button>
-                <button type="button" id="direction-terminal" class="direction" aria-pressed="false"><strong>Ghost terminal</strong><span class="direction-caption">Hidden chrome. Oversized keycaps.</span></button>
-              </div>
-              <p id="design-description" class="design-description">Choose a direction, then mix its parts.</p>
+            <fieldset class="button-controls">
+              <legend class="panel-title">Controls</legend>
               <div class="mixing">
-                <label for="design-header">Header</label>
-                <select id="design-header"><option value="quiet">Quiet rail</option><option value="drawer">Slide-away</option><option value="none">Hidden</option></select>
-                <label for="design-mute">Mute controls</label>
-                <select id="design-mute"><option value="glyphs">Glyphs</option><option value="rockers">Rockers</option><option value="keycaps">Keycaps</option></select>
-                <label for="design-hold">Hold to talk</label>
-                <select id="design-hold"><option value="beam">Beam</option><option value="trigger">Trigger</option><option value="keycap">Keycap</option></select>
+                <label for="design-mute">Mute buttons</label>
+                <select id="design-mute"><option value="rockers">Rockers</option><option value="keycaps">Keycaps</option></select>
               </div>
-              <p class="phone-hint">Try the controls on your phone. Tap its top handle to reveal the header.</p>
+              <div class="size-control">
+                <div class="size-heading"><label for="controls-height">Controls height</label><output id="controls-height-value" for="controls-height">262 dp</output></div>
+                <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
+                <div class="range-ends"><span>240 dp</span><span id="controls-height-hint">All three buttons</span><span>480 dp</span></div>
+              </div>
+              <div class="position-control">
+                <div class="size-heading"><label for="hold-share">Push-to-talk share</label><output id="hold-share-value" for="hold-share">44.3%</output></div>
+                <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint" />
+                <div class="range-ends"><span>30%</span><span id="hold-share-hint">Of controls height</span><span>60%</span></div>
+              </div>
+              <button type="button" id="reset-controls" class="reset panel-reset">Reset defaults</button>
             </fieldset>
             <fieldset class="persona-controls">
               <legend class="panel-title">Persona</legend>
-          <fieldset class="modes">
-            <legend class="sr-only">Preview state</legend>
-            <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
-            <button type="button" data-mode="listening" aria-pressed="false"><span>Listening</span><small id="listening-value">58%</small></button>
-            <button type="button" data-mode="idle" aria-pressed="false"><span>Idle</span><small id="idle-value">78%</small></button>
-          </fieldset>
-          <div class="size-control">
-            <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
-            <input id="size" type="range" min="35" max="120" step="1" value="78" />
-            <div class="range-ends" aria-hidden="true"><span>35%</span><span>120%</span></div>
-          </div>
-          <div class="position-control">
-            <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
-            <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
-            <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
-          </div>
+              <div class="mixing connection-preview">
+                <label for="connection-preview">Preview connection</label>
+                <select id="connection-preview"><option value="connected">Connected</option><option value="connecting">Connecting</option><option value="disconnected">Disconnected</option></select>
+              </div>
+              <fieldset class="modes">
+                <legend class="sr-only">Preview state</legend>
+                <button type="button" data-mode="speaking" aria-pressed="false"><span>Speaking</span><small id="speaking-value">78%</small></button>
+                <button type="button" data-mode="listening" aria-pressed="false"><span>Listening</span><small id="listening-value">58%</small></button>
+                <button type="button" data-mode="idle" aria-pressed="false"><span>Idle</span><small id="idle-value">78%</small></button>
+              </fieldset>
+              <div class="size-control">
+                <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
+                <input id="size" type="range" min="35" max="120" step="1" value="78" />
+                <div class="range-ends" aria-hidden="true"><span>35%</span><span>120%</span></div>
+              </div>
+              <div class="position-control">
+                <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
+                <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
+                <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
+              </div>
+              <button type="button" id="reset" class="reset panel-reset">Reset Persona</button>
             </fieldset>
           </div>
-          <div class="actions"><button type="button" id="reset" class="reset">Reset tuning</button><button type="button" id="save" class="save">Save profile</button></div>
+          <div class="actions"><button type="button" id="save" class="save">Save profile</button></div>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>

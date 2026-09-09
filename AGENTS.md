@@ -65,11 +65,15 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   configurator for the debug APK's native Halo preview. Uses only its dedicated
   authenticated ADB preview socket, never a production call or grant. Save keeps
   the existing private phone profile and an exact host JSON copy. A shared vertical
-  slider spans −200…+200 dp, default +35 dp. Current/Signal/Field radio/Ghost
-  terminal and mixable header/mute/hold variants preserve tuning; Reset tuning
-  restores geometry only. Protocol 3 carries design and geometry; explicit Save
-  writes a version 3 profile with both. Version 1/2 phone profiles load without
-  rewriting. No on-phone tuner overlay or production UI/default changes.
+  slider spans −200…+200 dp, default +35 dp. The studio has Rockers/Keycaps,
+  fixed Push to talk Trigger, no header, and an overlay connection notice only
+  while Connecting/Disconnected. Control height (240–480 dp) and talk share
+  (30–60%) preserve Halo diameter; Controls Reset defaults resets only those
+  dimensions, while Reset Persona resets Halo geometry. Protocol 4 carries
+  control design/geometry plus transient connection selection; explicit Save
+  writes a version 4 profile excluding that connection state. Version 1/2/3
+  phone profiles load without rewriting. No on-phone tuner overlay or
+  production layout/default changes; the Push to talk label also applies to the real client.
   Debug preview reconnect observes the same binding
   after backgrounding/recreation or ADB loss; never replay edits/Save or foreground
   on retry. This does not change production disconnect policy. See

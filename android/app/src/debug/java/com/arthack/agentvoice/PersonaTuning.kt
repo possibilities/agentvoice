@@ -9,6 +9,7 @@ import org.json.JSONObject
 import java.io.File
 import kotlin.math.roundToInt
 
+internal val previewConnections = setOf("connected", "connecting", "disconnected")
 internal val previewModes = setOf("speaking", "listening", "idle")
 internal fun JSONObject.fields(): Set<String> = keys().asSequence().toSet()
 
@@ -22,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -34,7 +35,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign()): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 3)
+        .put("version", 4)
         .put("design", design.json())
         .put("scaleMultipliers", JSONObject()
             .put("speaking", percent(placement.speakingScale))
@@ -86,6 +87,7 @@ internal data class PersonaPreviewState(
     val placement: PersonaPlacement = PersonaPlacement(),
     val saved: PersonaPlacement = placement,
     val mode: String = "speaking",
+    val connection: String = "connected",
     val holding: Boolean = false,
     val revision: Int = 0,
     val design: PreviewDesign = PreviewDesign(),
@@ -93,7 +95,7 @@ internal data class PersonaPreviewState(
     val micMuted: Boolean = mode != "listening" || holding,
     val speakerMuted: Boolean = false,
 ) {
-    fun json(): JSONObject = JSONObject().put("protocol", 3).put("revision", revision)
+    fun json(): JSONObject = JSONObject().put("protocol", 4).put("connection", connection).put("revision", revision)
         .put("mode", mode).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
@@ -104,7 +106,7 @@ internal data class PersonaPreviewState(
 
     fun select(next: String) = copy(mode = next, holding = false, micMuted = next != "listening", speakerMuted = false, revision = revision + 1)
 
-    fun toggle(target: String): PersonaPreviewState = when (target) {
+    fun toggle(target: String): PersonaPreviewState = if (connection != "connected") this else when (target) {
         "mic" -> copy(micMuted = !micMuted, holding = false,
             mode = if (micMuted) "listening" else if (mode == "speaking") "speaking" else "idle", revision = revision + 1)
         "speaker" -> copy(speakerMuted = !speakerMuted, holding = false,
@@ -112,13 +114,17 @@ internal data class PersonaPreviewState(
         else -> error("Unknown channel")
     }
 
-    fun beginHold() = if (micMuted) copy(mode = "listening", holding = true, revision = revision + 1) else this
+    fun beginHold() = if (connection == "connected" && micMuted) copy(mode = "listening", holding = true, revision = revision + 1) else this
     fun endHold() = if (holding) copy(mode = "idle", micMuted = true, holding = false, revision = revision + 1) else this
 
-    fun ui() = CallUi(running = true, connected = true, phase = "Connected",
-        micMuted = micMuted, micOpen = !micMuted || holding, speakerMuted = speakerMuted,
-        speakerOpen = !speakerMuted, canHold = micMuted, holding = holding,
-        outputLevel = if (mode == "speaking" && !speakerMuted) .14f else 0f)
+    fun ui(): CallUi {
+        val connected = connection == "connected"
+        return CallUi(running = connection != "disconnected", connected = connected,
+            phase = when (connection) { "connecting" -> "Connecting"; "disconnected" -> "Disconnected"; else -> "Connected" },
+            micMuted = micMuted, micOpen = connected && (!micMuted || holding), speakerMuted = speakerMuted,
+            speakerOpen = connected && !speakerMuted, canHold = connected && micMuted, holding = connected && holding,
+            outputLevel = if (connected && mode == "speaking" && !speakerMuted) .14f else 0f)
+    }
 }
 
 internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, savedDesign: PreviewDesign = PreviewDesign()): PersonaPreviewState {
@@ -126,8 +132,10 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val revision = data.get("revision")
     require(mode in previewModes && revision is Int && revision >= 0)
     val holding = data.getBoolean("holding")
+    val connection = data.optString("connection", "connected")
+    require(connection in previewConnections)
     return PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
-        mode = if (holding) "idle" else mode, revision = revision,
+        mode = if (holding) "idle" else mode, connection = connection, revision = revision,
         design = data.optJSONObject("design")?.let(::decodePreviewDesign) ?: PreviewDesign(), savedDesign = savedDesign,
         micMuted = holding || data.optBoolean("micMuted", mode != "listening"), speakerMuted = data.optBoolean("speakerMuted", false))
 }
@@ -152,13 +160,15 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "mode", "scales", "verticalOffsetDp", "design"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design"))
                     val mode = request.getString("mode")
                     require(mode in previewModes)
+                    val connection = request.getString("connection")
+                    require(connection in previewConnections)
                     val placement = decodePreviewPlacement(request)
                     val design = decodePreviewDesign(request.getJSONObject("design"))
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
-                    state = next.copy(placement = placement, design = design, revision = state.revision + 1)
+                    state = next.copy(placement = placement, design = design, connection = connection, revision = state.revision + 1)
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")
