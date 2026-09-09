@@ -949,3 +949,36 @@ Evidence: `/tmp/agentvoice-padding-build-final.log`,
 `/tmp/agentvoice-studio14-browser.QHVKfY/evidence.json`,
 `/tmp/agentvoice-padding-phone-before-{state,phone,host}.json`,
 `/tmp/agentvoice-padding-restore.log`, and `/tmp/agentvoice-padding-phone/`.
+
+
+### Stronger feeds and closer Contained body contact
+
+Final installed debug APK SHA-256:
+`82b0c06620034322f534f5e6c6647240b59654aa705447ff0547edf746469122`.
+Debug/test assembly and lint passed. The preceding geometry build also passed
+88 JVM tests; the final source change retained maxima unconditionally to cover
+reduced-motion source debounce. The physical composition test passed in 13.459
+seconds, exercising both variants, all route patterns and endpoint spacing extremes,
+native-view identity, held controls, fixed stage and target bounds. Its first attempt
+lost the Compose activity; the operator confirmed accidentally closing the app,
+and the unchanged test passed on rerun.
+
+The design reviewer inspected baseline, Idle, Listening, Speaking, speaking motion
+0/100 with full idle motion, and shared size 35/120 native captures. Baseline and
+Speaking now read as traces tucked under the lower arc; no trace intrusion into
+the center was observed in these samples. Idle/Listening and some extremes retain
+small standoff. Size 120 overlaps the control deck and its routes disappear rather
+than painting through the center or buttons. No claim of every-frame contour
+contact or universal Original attachment is made. Bundled asset and native
+renderer sources remain unchanged.
+
+Fresh live choices were captured again before the final install and restored after
+comparison, including transient muted appearance and both orientation layouts.
+Native and host saved profile bytes are unchanged. No Save, voice call or emulator
+operation occurred.
+
+Evidence: `/tmp/agentvoice-trace-contact-geometry-final-build.log`,
+`/tmp/agentvoice-trace-contact-geometry-native-confirm.log`,
+`/tmp/agentvoice-trace-contact-final-phone/`,
+`/tmp/agentvoice-trace-contact-final-phone-before-{state,phone,host}.json`, and
+`/tmp/agentvoice-trace-contact-final-restore.log`.

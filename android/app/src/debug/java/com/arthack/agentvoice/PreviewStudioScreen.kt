@@ -118,10 +118,7 @@ private fun PreviewStudioScene(
             val sceneScroll = rememberScrollState()
             val deckScroll = rememberScrollState()
             LaunchedEffect(target.layoutKey) { sceneScroll.scrollTo(0); deckScroll.scrollTo(0) }
-            // The underlay's aperture follows selected geometry, never an animated frame or state.
-            val maximumScale = if (halo.variant == "contained") halo.containedSizePercent / 100f
-                else maxOf(placement.speakingScale, placement.listeningScale, placement.idleScale)
-            val clearRadius = geometry.diameter.dp * maximumScale * 1.9f * if (halo.variant == "contained") .27f else .4f
+            val clearRadius = rememberTraceRadius(geometry.diameter, halo, placement).dp
             val traceAlpha = when {
                 destination.layoutKey != target.layoutKey -> 0f
                 changing -> (progress.value * 2f - 1f).coerceAtLeast(0f)
@@ -218,4 +215,29 @@ private fun rememberMutedAperture(diameter: Float, halo: PreviewHalo, placement:
         retainedFactor = factor
     }
     return diameter * 1.9f * minOf(retainedScale, scale) * minOf(retainedFactor, factor)
+}
+
+
+@Composable
+private fun rememberTraceRadius(diameter: Float, halo: PreviewHalo, placement: PersonaPlacement): Float {
+    val size = halo.containedSizePercent / 100f
+    val expansion = 1f + .155f * halo.speakingMotionPercent / 100f
+    var retainedSize by remember { mutableFloatStateOf(size) }
+    var retainedExpansion by remember { mutableFloatStateOf(expansion) }
+    SideEffect {
+        retainedSize = maxOf(retainedSize, size)
+        retainedExpansion = maxOf(retainedExpansion, expansion)
+    }
+    LaunchedEffect(size, expansion) {
+        // Source debounce also applies to reduced motion; never expose its older larger pose.
+        kotlinx.coroutines.delay(600)
+        retainedSize = size
+        retainedExpansion = expansion
+    }
+    if (halo.variant != "contained") return diameter * 1.9f *
+        maxOf(placement.speakingScale, placement.listeningScale, placement.idleScale) * .4f
+    // 128-unit frame in the 256-unit artboard; patched speaking axes peak below 1.155.
+    // Idle and listening only contract it. Keep a 1 dp neutral guard outside the nominal frame.
+    return diameter * 1.9f * maxOf(retainedSize, size) * .25f *
+        maxOf(retainedExpansion, expansion) + 1f
 }

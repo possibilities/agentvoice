@@ -66,10 +66,12 @@ private fun DrawScope.compositionInk(color: Color, personaCenterY: Dp, personaCl
     if (!centerY.isFinite() || !clearRadius.isFinite()) return SolidColor(Color.Transparent)
     if (clearRadius <= 0f) return SolidColor(color)
     val outerRadius = clearRadius + 12.dp.toPx()
-    // Alpha belongs only to the routes. The transparent disk never clips or repaints native Halo pixels.
+    // Keep the feeds strong through the glow, then hide only the trace pixels at the protected body.
+    // The transparent disk never clips or repaints native Halo pixels.
     return Brush.radialGradient(
         0f to color.copy(alpha = 0f),
         clearRadius / outerRadius to color.copy(alpha = 0f),
+        (clearRadius + 2.dp.toPx()) / outerRadius to color.copy(alpha = color.alpha * .72f),
         1f to color,
         center = Offset(size.width / 2f, centerY),
         radius = outerRadius,

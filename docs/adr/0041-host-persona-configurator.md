@@ -333,3 +333,21 @@ Muted brightness now spans −100..100. Negative values multiply the entire orig
 opacity cycle toward zero, preserving its phase, scale and hue. Zero and positive
 values retain the previous behavior; the reduced-motion pose uses the same dimming.
 This remains session-only and does not change the saved profile.
+
+
+## Closer Contained trace contact
+
+The trace-only radial fade now reaches 72% ink strength 2 dp outside its protected
+boundary, then full strength at 12 dp. It never paints a disk over the Rive layer.
+Contained's route and zero-alpha radius use D ×1.9×size×.25×(1+.155M)+1 dp,
+where M is normalized speaking motion. This bounds the nominal centered frame:
+the mapped speaking maximum is 1.15468752384, idle never exceeds 1, listening
+contracts inward, and the relevant cubic is monotone. It is not an outer-glow
+bound. Size and expansion retain independent historical maxima for 600 ms before
+tightening; this also applies without animation because source debounce remains.
+Original keeps its prior .4×maximum-selected-state envelope and known unequal-state
+standoff. Neither variant tracks animated GPU bounds or changes the Rive asset.
+
+Phone samples show Contained's feeds tucked below the lower arc in baseline and
+speaking; some contracted/extreme poses still have a small gap. This is a closer
+stationary connection, not exact contour tracking in every animation frame.

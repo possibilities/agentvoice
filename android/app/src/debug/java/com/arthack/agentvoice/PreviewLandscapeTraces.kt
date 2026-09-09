@@ -47,6 +47,7 @@ internal fun PreviewLandscapeTraces(
         fun ink(alpha: Float) = Brush.radialGradient(
             0f to theme.decoration(VoiceInk.line).copy(alpha = 0f),
             radius / outerRadius to theme.decoration(VoiceInk.line).copy(alpha = 0f),
+            (radius + 2.dp.toPx()) / outerRadius to theme.decoration(VoiceInk.line.copy(alpha = alpha * .72f)),
             1f to theme.decoration(VoiceInk.line.copy(alpha = alpha)), center = center, radius = outerRadius)
         val count = if (settings.pattern == "splayed") 3 else 2
         val footSpacing = 8.dp.toPx() * settings.footSpacingPercent / 100f

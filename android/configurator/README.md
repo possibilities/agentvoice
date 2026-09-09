@@ -36,7 +36,14 @@ glow. Original uses one conservative attachment envelope across its three state
 sizes; a deliberately smaller state can sit farther from its routes. When that
 envelope reaches the deck, routes collapse and can disappear even while the
 current smaller ring remains above it. Contained's single shared size avoids
-that tradeoff. Routes add no touch targets and never
+that tradeoff. Contained now uses its nominal frame and maximum selected speaking
+expansion for a closer body boundary, with a 1 dp guard. Trace ink stays at 72%
+strength 2 dp outside that boundary and reaches full strength at 12 dp, making
+the feeds less washed out near the glow. The hollow center stays protected;
+this stationary boundary can still leave a small gap in contracted poses.
+Independent size/expansion maxima persist for 600 ms after edits, including
+reduced motion, to cover the native scale transition and source debounce.
+Routes add no touch targets and never
 move controls or replace the native Halo instance.
 
 **Background glow** adds two broad, dim fields behind the scene. Zero (default)
