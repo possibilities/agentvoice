@@ -47,6 +47,22 @@ path explicitly selects it, while omitted WebRTC version on stock app-server
 0.153.4 selects v1. Do not label v3 non-vanilla merely because it differs from
 that server fallback. See ADR 0019 and the field guide's default comparison audit.
 
+## Android collaboration
+
+The operator's current worktree roles are:
+
+- `silver-forest-a21f` is the Halo/Persona specialist: Rive assets and decoding,
+  animation behavior, Contained motion/colors, renderer tests, licensing/provenance
+  research and Persona visual review.
+- `green-river-71c3` owns the native app and Design studio: primary app/integration
+  code, controls and saved profiles, attribution/docs integration, builds, tests
+  and delivery, plus ADB/device, Android VM, scrcpy and live studio operations.
+
+Green-river collaborates closely with silver-forest on Persona-specific changes
+and owns their integration and delivery. Coordinate file ownership before
+overlapping edits in a shared checkout; keep device and host operations with
+green-river.
+
 ## Commands
 
 - `bun run test` — tests in tests/, fake protocol/media, no credentials or mic.
