@@ -228,21 +228,21 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 12 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 13 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 13 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 14 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Their tuning is independent. The browser edits only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 12 stores portrait in the root fields and a separate `landscape` layout.
+Version 13 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–11 phone profiles load without rewriting; retired button styles map to
+version 1–12 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 12 only on Save. The real client and release
+become version 13 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -250,13 +250,14 @@ icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or audio, or connect to the voice server.
 
-**Spacing** adds five controls for the visible orientation: outer sides (0–200%),
-minimum edge clearance (0–200%), extra section separation (0–80 dp), channel gap
-(0–40 dp), and Push-to-talk join (0–48 dp). Baselines are 100/100/0/10/16.
-Each has its own reset, plus **Reset spacing**. These affect only the control
-deck; Persona’s square, center, scale and manual offset remain unchanged.
-Impossible margins are bounded to usable control width, and tall decks scroll.
-Older profiles gain baseline spacing in memory; they are never rewritten on load.
+**Padding** links the deck's outer sides, bottom clearance and every button gap
+with one 0–40 dp control. Fresh defaults and Reset padding use 16 dp. Existing
+profiles preserve their different margins/gaps as Custom until Padding is moved;
+loading never rewrites them. Extra section separation remains 0–80 dp as before.
+Both controls have individual resets and Reset spacing affects only this group in
+the visible orientation. Persona's square, center, scale and manual offset remain
+unchanged. System safe insets and control-width constraints still apply; tall decks
+scroll to their padded bottom. The fixed square may leave extra space above the deck.
 
 Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
 current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
@@ -267,16 +268,17 @@ closed and no pending controls. Its Float motion follows a 14-second cycle by de
 still under reduced motion and disappears immediately for PTT or an open channel.
 Measured text keeps an 8 dp clearance within a conservative inner aperture;
 if it cannot fit at a small size or large font scale, it is omitted rather than
-shrunk. **Muted appearance** adds 12–32 sp text, brightness lift (0–100%),
+shrunk. **Muted appearance** adds 12–32 sp text, brightness (−100–100%),
 drift (0–300%), breathing (0–100%) and a 6–30 second cycle, plus Float/Ripple.
 Ripple sends a quiet wave through the letters; breathing gently lifts brightness
 and scale. Each value and the whole appearance group have independent resets.
-The baseline remains 14 sp, brightness 0, drift 100, breathing 0, 14 seconds, Float.
+Negative brightness dims the entire breathing cycle; −100 hides the text and
+zero retains the original ink. The baseline remains 14 sp, brightness 0, drift 100, breathing 0, 14 seconds, Float.
 Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. These session selections survive rotation and
-activity restoration but are not saved in a profile; profile version remains 12.
+activity restoration but are not saved in a profile; profile version is 13.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:

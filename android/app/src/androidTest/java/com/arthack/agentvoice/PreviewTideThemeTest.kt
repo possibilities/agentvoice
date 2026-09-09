@@ -113,7 +113,7 @@ class PreviewTideThemeTest {
         }
         push.performTouchInput { up() }
         compose.mainClock.advanceTimeBy(32)
-        compose.runOnIdle { assertEquals(1, stops); spacing = PreviewSpacing(sideMarginPercent = 160, sectionGapDp = 40, pushGapDp = 40) }
+        compose.runOnIdle { assertEquals(1, stops); spacing = PreviewSpacing(sectionGapDp = 40, paddingDp = 24) }
         compose.mainClock.advanceTimeBy(650)
         assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())
         compose.runOnIdle {

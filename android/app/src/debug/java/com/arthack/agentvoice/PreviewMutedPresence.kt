@@ -90,8 +90,9 @@ internal fun previewMutedPresenceFrame(
     fit: PreviewMutedPresenceFit,
     tuning: PreviewMutedTuning = PreviewMutedTuning(),
 ): PreviewMutedPresenceFrame {
-    val baseAlpha = .84f + .16f * (tuning.brightnessPercent / 100f)
-    if (!motionAllowed || !phase.isFinite()) return PreviewMutedPresenceFrame(alpha = baseAlpha)
+    val dim = 1f + minOf(tuning.brightnessPercent, 0) / 100f
+    val baseAlpha = .84f + .16f * (maxOf(tuning.brightnessPercent, 0) / 100f)
+    if (!motionAllowed || !phase.isFinite()) return PreviewMutedPresenceFrame(alpha = baseAlpha * dim)
     val angle = (phase.toDouble() % 1.0) * 2.0 * PI
     val breath = ((1.0 - cos(angle)) / 2.0).toFloat()
     val excursion = .15f * (tuning.breathPercent / 100f)
@@ -104,7 +105,7 @@ internal fun previewMutedPresenceFrame(
         offsetX = fit.driftXPx * sin(angle).toFloat(),
         offsetY = fit.driftYPx * cos(angle).toFloat(),
         scale = 1f + fit.breathScale * breath,
-        alpha = alpha,
+        alpha = alpha * dim,
         glyphOffsets = if (tuning.motion == "ripple" && fit.rippleYPx > 0f)
             List(5) { fit.rippleYPx * sin(angle - it * .8).toFloat() } else emptyList(),
     )
@@ -138,7 +139,7 @@ internal fun PreviewMutedPresence(
         previewMutedPresenceFit(text.size.width.toFloat(), text.size.height.toFloat(),
             with(density) { innerRadius.toPx() }, density.density, tuning)
     } ?: return
-    val tint = when (tuning.brightnessPercent) {
+    val tint = when (maxOf(tuning.brightnessPercent, 0)) {
         0 -> ink
         100 -> primaryInk
         else -> lerp(ink, primaryInk, tuning.brightnessPercent / 100f)

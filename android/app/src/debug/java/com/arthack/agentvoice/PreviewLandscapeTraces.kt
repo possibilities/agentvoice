@@ -51,7 +51,7 @@ internal fun PreviewLandscapeTraces(
         val count = if (settings.pattern == "splayed") 3 else 2
         val footSpacing = 8.dp.toPx() * settings.footSpacingPercent / 100f
         val halfSpan = (count - 1) * footSpacing / 2f
-        val reach = previewLandscapeFootReach(deckWidth, design.spacing.channelGapDp.dp.toPx(),
+        val reach = previewLandscapeFootReach(deckWidth, design.spacing.effectiveChannelGapDp.dp.toPx(),
             halfSpan, stroke, 1.dp.toPx(), settings.stancePercent) ?: return@Canvas
         fun path(points: List<Offset>) = Path().apply {
             points.firstOrNull()?.let { moveTo(screenX(it.x), it.y) }

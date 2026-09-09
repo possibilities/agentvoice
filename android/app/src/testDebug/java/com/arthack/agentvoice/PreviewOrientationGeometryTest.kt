@@ -94,4 +94,21 @@ class PreviewOrientationGeometryTest {
         assertEquals(180f, narrow.deckWidth, 0f)
         assertEquals(230f, narrow.deckY, 0f)
     }
+    @Test fun linkedPaddingMatchesSidesBottomAndEveryButtonGapWithoutMovingPersona() {
+        for (padding in listOf(0, 8, 16, 24, 40)) for (height in listOf(650f, 1000f)) {
+            val spacing = PreviewSpacing(paddingDp = padding)
+            val deck = PreviewControlGeometry(387, 40.9, spacing.effectivePushGapDp)
+            val g = previewOrientationGeometry(360f, height, 360f, true, 387f, -22f,
+                spacing = spacing, actualDeckHeight = deck.extentHeightDp)
+            assertEquals(padding.toFloat(), g.deckX, 0f)
+            assertEquals(padding.toFloat(), g.contentHeight - g.deckY - deck.extentHeightDp, .001f)
+            assertEquals(padding, spacing.effectiveChannelGapDp)
+            assertEquals(padding, spacing.effectivePushGapDp)
+            assertEquals(360f, g.diameter, 0f)
+            assertEquals(0f, g.stageY, 0f)
+            assertEquals(-22f, g.offsetY, 0f)
+            assertTrue(g.contentHeight >= height)
+        }
+    }
+
 }

@@ -14,7 +14,7 @@ internal data class PreviewMutedTuning(
 ) {
     init {
         require(textSizeSp in 12..32)
-        require(brightnessPercent in 0..100)
+        require(brightnessPercent in -100..100)
         require(driftPercent in 0..300)
         require(breathPercent in 0..100)
         require(cycleSeconds in 6..30)
@@ -37,6 +37,6 @@ internal fun decodePreviewMutedTuning(data: JSONObject): PreviewMutedTuning {
     }
     val motion = data.get("motion")
     require(motion is String && motion in setOf("float", "ripple"))
-    return PreviewMutedTuning(integer("textSizeSp", 12..32), integer("brightnessPercent", 0..100),
+    return PreviewMutedTuning(integer("textSizeSp", 12..32), integer("brightnessPercent", -100..100),
         integer("driftPercent", 0..300), integer("breathPercent", 0..100), integer("cycleSeconds", 6..30), motion)
 }

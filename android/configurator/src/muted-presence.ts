@@ -1,6 +1,6 @@
 export const mutedTuningBounds = {
   textSizeSp: [12, 32],
-  brightnessPercent: [0, 100],
+  brightnessPercent: [-100, 100],
   driftPercent: [0, 300],
   breathPercent: [0, 100],
   cycleSeconds: [6, 30],

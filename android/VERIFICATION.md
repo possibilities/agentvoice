@@ -909,3 +909,43 @@ Evidence: `/tmp/agentvoice-muted-tuning-phone-native.log`,
 `/tmp/agentvoice-muted-tuning-phone-restore.log`,
 `/tmp/agentvoice-muted-tuning-phone/` (native captures and state JSON), and
 `/tmp/agentvoice-muted-tuning-phone-studio.log`.
+
+
+### Linked padding and muted-text dimming
+
+Protocol 14/profile 13 was built and installed on the S22, debug APK SHA-256
+`d162a1d13c19a3dc32d419b2676845efa2766ba59390ed15f5d4043fe7976b18`.
+88 JVM tests and 682 repository tests / 9,404 assertions passed, including
+53 configurator tests / 2,282 assertions. Debug/test assembly, Android lint,
+TypeScript and Biome passed. An isolated browser fixture verified Custom without
+an unsolicited edit, linked Padding/reset, unchanged section separation,
+orientation fencing and negative brightness/reset.
+
+The complete physical-phone run executed 54 tests: 53 passed and one historical
+session fixture failed because it constructed a fresh landscape with linked padding
+while simulating a pre-landscape session. The fixture now explicitly uses the
+historical layout; all three lifecycle tests passed on rerun in 2.822 seconds.
+The app APK did not change for this test-only correction. The complete run also
+passed native negative-brightness pixel checks, profile 12 migration of unequal
+layouts without file changes, protocol 13 live restoration, renderer identity,
+manual stage and pointer/lifecycle checks.
+
+Actual S22 captures compared Padding 8/16/32 and muted brightness 0/−50/−85.
+The 16 dp scene shows consistent side and button-join spacing; the more negative
+brightness visibly dims the word while retaining its complete glyphs. The Persona
+stage and tuned values remain fixed; tall scenes retain scroll access to the padded
+bottom. Section separation keeps its original range and semantics.
+
+Fresh revision 1153 was captured before installation. Both layouts, custom
+48% side / 200% edge / 18 dp button gaps, −6 dp Persona position, 29 sp muted
+text with 166% drift, theme, mode and channel gates were restored. Both saved
+files remained byte-identical; no Save, call or emulator operation occurred.
+Trace fade behavior is unchanged in this round; its stronger-continuation request
+is separately queued.
+
+Evidence: `/tmp/agentvoice-padding-build-final.log`,
+`/tmp/agentvoice-padding-{tests,typecheck,lint,native}.log`,
+`/tmp/agentvoice-padding-lifecycle-confirm.log`,
+`/tmp/agentvoice-studio14-browser.QHVKfY/evidence.json`,
+`/tmp/agentvoice-padding-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-padding-restore.log`, and `/tmp/agentvoice-padding-phone/`.

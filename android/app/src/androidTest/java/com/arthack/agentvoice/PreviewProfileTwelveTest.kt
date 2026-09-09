@@ -51,7 +51,7 @@ class PreviewProfileTwelveTest {
             assertEquals(11, JSONObject(file.readText()).getInt("version"))
             val v10 = JSONObject(old).apply { put("version", 10); remove("landscape"); remove("personaSide") }.toString()
             assertEquals(portrait.design, decodePersonaDesign(v10))
-            assertEquals(defaultLandscapeLayout(), decodeLandscapeLayout(v10))
+            assertEquals(PreviewLayout(), decodeLandscapeLayout(v10))
         } finally { file.delete() }
     }
 
@@ -61,7 +61,7 @@ class PreviewProfileTwelveTest {
         assertEquals(PreviewDesign(), decodePersonaDesign(v1))
         assertEquals(PreviewHalo(), decodePersonaHalo(v1))
         assertEquals(PreviewSpirit(), decodePersonaSpirit(v1))
-        assertEquals(defaultLandscapeLayout(), decodeLandscapeLayout(v1))
+        assertEquals(PreviewLayout(), decodeLandscapeLayout(v1))
         for (orientation in previewOrientations) {
             val state = if (orientation == "portrait") PersonaPreviewState() else PersonaPreviewState().rotate(orientation)
             val json = state.json()
@@ -91,7 +91,7 @@ class PreviewProfileTwelveTest {
             assertEquals("quiet", landscape.theme)
             assertEquals("off", landscape.mutedPresence)
             assertEquals(tuning, landscape.mutedTuning)
-            assertEquals(PreviewSpacing(), landscape.design.spacing)
+            assertEquals(PreviewSpacing(paddingDp = 16), landscape.design.spacing)
             session.command(preview(landscape).put("theme", "grayscale")
                 .put("design", landscape.design.copy(spacing = PreviewSpacing(0, 200, 17, 0, 0)).json()))
             withContext(Dispatchers.Main) { session.state = session.state.rotate("portrait") }
@@ -104,7 +104,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(12, encoded.getInt("version"))
+            assertEquals(13, encoded.getInt("version"))
             assertFalse(encoded.has("theme"))
             assertFalse(encoded.has("mutedPresence"))
             assertFalse(encoded.has("mutedTuning"))
@@ -155,4 +155,44 @@ class PreviewProfileTwelveTest {
             }
         } finally { file.delete() }
     }
+    @Test fun versionTwelveAddsCustomPaddingWithoutChangingEitherLayoutOrSavedBytes() {
+        val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
+            spacing = PreviewSpacing(137, 63, 19, 7, 31)))
+        val landscape = defaultLandscapeLayout().copy(design = defaultLandscapeLayout().design.copy(
+            spacing = PreviewSpacing(42, 178, 23, 29, 9)))
+        val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo,
+            portrait.spirit, landscape, portrait.personaSide)).apply {
+            put("version", 12)
+            getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
+            getJSONObject("landscape").getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
+        }
+        val file = fixture()
+        try {
+            file.writeText(old.toString(2))
+            val bytes = file.readBytes()
+            assertEquals(portrait.design, decodePersonaDesign(file.readText()))
+            assertEquals(landscape, decodeLandscapeLayout(file.readText()))
+            assertArrayEquals(bytes, file.readBytes())
+            val oldSession = PersonaPreviewState(design = portrait.design, otherLayout = landscape,
+                mutedTuning = PreviewMutedTuning(24, 65, 200, 70, 10, "ripple")).json().apply {
+                put("protocol", 13)
+                getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
+                getJSONObject("otherLayout").getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
+            }
+            val restored = restorePersonaPreview(oldSession, portrait.placement, portrait.design,
+                portrait.halo, portrait.spirit, landscape, portrait.personaSide)
+            assertEquals(portrait.design, restored.design)
+            assertEquals(landscape, restored.otherLayout)
+            assertEquals("ripple", restored.mutedTuning.motion)
+            assertThrows(IllegalArgumentException::class.java) {
+                decodePreviewDesign(old.getJSONObject("design"))
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                decodePersonaDesign(JSONObject(old.toString()).apply {
+                    getJSONObject("design").getJSONObject("spacing").put("paddingDp", 16)
+                }.toString())
+            }
+        } finally { file.delete() }
+    }
+
 }

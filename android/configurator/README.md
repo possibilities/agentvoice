@@ -62,22 +62,26 @@ the mute row gets the remainder after subtracting the join. The landscape baseli
 only these two sliders to the visible orientation's defaults, keeping spacing,
 composition, light and Persona tuning.
 
-**Spacing** independently adjusts outer sides and top/bottom edge clearance
-from 0–200% of their baseline, minimum extra Persona/controls separation from
-0–80 dp, the microphone/speaker channel gap from 0–40 dp, and the Push-to-talk
-join from 0–48 dp. Defaults are 100%, 100%, 0 dp, 10 dp and 16 dp respectively.
-Each slider has its own reset; **Reset spacing** restores the five values for
-only the visible orientation. Spacing remains unsaved until Save.
+**Spacing** offers one **Padding** slider (0–40 dp) for minimum outer control
+space and both button gaps. Fresh layouts start at 16 dp. Older profiles show
+**Custom** and preserve their separate side, edge and button-gap settings until
+you adjust Padding; the slider rests at 16 without applying it. **Section separation**
+retains its existing 0–80 dp minimum extra gap between Persona and controls,
+with zero as its default. Each slider has its own reset. **Reset spacing** restores
+Padding to 16, section separation to zero, and the stored legacy baseline values
+for only the visible orientation. Spacing remains unsaved until Save.
 
 **Theme** offers Bright (default), Quiet and Grayscale. **Muted presence** offers
 Tide (default) and Off. These are session choices: they survive orientation
 changes, activity recreation and ordinary tuning resets, but are excluded from Save profile.
 
 **Muted appearance** adjusts the Tide text with Float or Ripple motion,
-Text size (12–32 sp), Brightness (0–100%), Drift (0–300%), Breathing (0–100%)
+Text size (12–32 sp), Brightness (−100–100%), Drift (0–300%), Breathing (0–100%)
 and Cycle (6–30 seconds). Defaults preserve the existing appearance: Float,
-14 sp, 0% brightness lift, 100% drift, 0% breathing and a 14-second cycle.
-Larger text and motion may be limited to fit inside Persona. The controls stay
+14 sp, 0% brightness adjustment, 100% drift, 0% breathing and a 14-second cycle.
+Negative brightness dims the text, reaching invisible at −100%; zero retains
+the existing brightness. Larger text and motion may be limited to fit inside
+Persona. The controls stay
 visible and are disabled while Muted presence is Off; turning Tide back on
 restores the session choices. Every field has an individual reset.
 **Reset muted appearance** restores the six tuning defaults without changing
@@ -177,7 +181,7 @@ settings:
   without changing the chosen colors or light.
 - **Reset traces** restores the route, stance, weight and offshoots, preserving glow.
 - **Reset glow** restores only Background glow to zero.
-- **Reset spacing** restores only the active orientation's five spacing values.
+- **Reset spacing** restores only the active orientation's spacing values.
   Each individual spacing reset changes only its named field.
 
 Each reset preserves all other choices and remains unsaved until explicit Save.
@@ -188,7 +192,7 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 12 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 13 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold portrait; `landscape` holds the
 independent landscape layout (integer-percent `scales`, offset, design, Halo,
 spirit and side). Its root `design`
@@ -204,7 +208,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–11 phone profiles remain readable without rewriting.
+until Save. Version 1–12 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -214,7 +218,10 @@ dimensions. Versions 1–4 select Original, while versions 5–10 retain their H
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
 versions 7–10 keep their spirit settings. Version 11 preserves both existing layouts.
 All versions before 12 gain only baseline scene spacing in memory, without
-adopting the new portrait defaults. Older profiles become version 12 only on
+adopting the new portrait defaults. All profiles through version 12 migrate
+to Custom padding in memory, keeping every previous spacing value. This also
+applies to an absent legacy landscape layout. Fresh layouts use unified 16 dp
+padding. Older profiles become version 13 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -252,16 +259,16 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 13 carries live/saved/default designs, sizes, vertical
+Preview protocol 14 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`, `mutedPresence: tide|off`, and required
 `mutedTuning`. The latter has exactly integer `textSizeSp` (12–32),
-`brightnessPercent` (0–100), `driftPercent` (0–300), `breathPercent` (0–100),
+`brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, muted presence and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is 13;
-saved profile remains version 12 because session tuning is excluded.
+session-root fields on Preview/PhoneState, never Layout. Protocol is 14;
+saved profile is version 13 for unified padding; session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -273,14 +280,18 @@ Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 (each 50–200), `weightPercent` (50–250), `offshootPercent` (0–100) and
 `glowPercent` (0–100). Landscape and legacy migration use Parallel, 100%
 stance/contact/foot/weight, zero offshoot and glow; new portrait defaults are
-listed above. Required `design.spacing` has exactly integer
+listed above. Required `design.spacing` has exactly integer `paddingDp` (−1–40),
 `sideMarginPercent` and `edgeClearancePercent` (0–200), `sectionGapDp` (0–80),
-`channelGapDp` (0–40), and `pushGapDp` (0–48). Their defaults are 100/100/0/10/16.
+`channelGapDp` (0–40), and `pushGapDp` (0–48). Padding −1 retains the legacy
+custom fields; 0–40 selects unified padding while retaining those fields in the
+wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
+Version 12 profiles require their original five-field spacing object and gain
+only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently.
-Protocol 13's active fields describe the phone's visible orientation; it also
+Protocol 14's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version 12 profile receipts must
+changes orientation; the host cannot select it. Version 13 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
 before the host copy is written. Connection, activity, theme, muted presence and

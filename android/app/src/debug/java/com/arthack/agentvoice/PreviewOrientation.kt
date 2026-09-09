@@ -26,36 +26,36 @@ internal data class PreviewLayout(
 internal fun defaultPortraitLayout() = PreviewLayout(
     placement = PersonaPlacement(.78f, .56f, .78f, (-22).dp),
     design = PreviewDesign(controlsHeightDp = 387, holdSharePercent = 40.9,
-        traces = PreviewTraces("parallel", 130, 175, 88, 0)),
+        traces = PreviewTraces("parallel", 130, 175, 88, 0), spacing = PreviewSpacing(paddingDp = 16)),
     halo = PreviewHalo(variant = "contained"),
     spirit = PreviewSpirit(persona = "follow"),
 )
 
-internal fun defaultLandscapeLayout() = PreviewLayout()
+internal fun defaultLandscapeLayout() = PreviewLayout(design = PreviewDesign(spacing = PreviewSpacing(paddingDp = 16)))
 
 internal fun defaultPreviewLayout(orientation: String): PreviewLayout {
     require(orientation in previewOrientations)
     return if (orientation == "portrait") defaultPortraitLayout() else defaultLandscapeLayout()
 }
 
-internal fun decodePreviewLayout(data: JSONObject, version: Int = 12): PreviewLayout {
+internal fun decodePreviewLayout(data: JSONObject, version: Int = 13): PreviewLayout {
     require(data.fields() == setOf("scales", "verticalOffsetDp", "design", "halo", "spirit", "personaSide"))
     val design = data.getJSONObject("design")
-    return PreviewLayout(decodePreviewPlacement(data), decodePreviewDesign(if (version <= 11) withLegacyPreviewSpacing(design) else design),
+    return PreviewLayout(decodePreviewPlacement(data), decodePreviewDesign(when { version <= 11 -> withLegacyPreviewSpacing(design); version == 12 -> withVersionTwelvePadding(design); else -> design }),
         decodePreviewHalo(data.getJSONObject("halo")), decodePreviewSpirit(data.getJSONObject("spirit")), data.getString("personaSide"))
 }
 
 internal fun decodeLandscapeLayout(json: String): PreviewLayout {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..12)
-    return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else defaultLandscapeLayout()
+    require(version in 1..13)
+    return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else PreviewLayout()
 }
 
 internal fun decodePortraitSide(json: String): String {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..12)
+    require(version in 1..13)
     return (if (version >= 11) data.getString("personaSide") else "left")
         .also { require(it in previewPersonaSides) }
 }

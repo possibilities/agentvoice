@@ -71,7 +71,7 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 12 on the phone, then
+checks the observed revision, atomically stores version 13 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
@@ -81,7 +81,7 @@ retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
 Versions 9–11 retain their compatible layout settings; all earlier versions gain
-only baseline scene spacing in memory. Older profiles become version 12 only on explicit Save. Production still
+only baseline scene spacing in memory. Older profiles become version 13 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -313,3 +313,23 @@ and relaxing after 600 ms unchanged to cover source debounce and scale handover.
 This does not switch to an Idle-only bound: Listening can finish its current
 four-second loop before exiting. Original retains its earlier conservative bound.
 No Persona asset, production palette or audio behavior changes.
+
+
+## Linked padding and dimmer muted text
+
+Protocol 14/profile 13 adds required `design.spacing.paddingDp` (integer −1..40).
+−1 preserves the five historical spacing values without changing geometry. Strict
+profile 12 readers add only this sentinel, in both orientations; older omissions
+retain their prior spacing. Fresh layouts and scoped padding reset select 16 dp.
+The studio displays Custom for the sentinel, then one Padding slider links deck
+side/bottom clearance and both button gaps. The existing section separation stays
+0–80 dp; the operator withdrew the proposed negative range in favor of manual
+Persona positioning. Persona stage/size/offset and safe system insets stay fixed.
+Extra separation and constrained viewports can require additional room or scrolling.
+Legacy fields remain in the model for lossless restoration and are overridden only
+when linked padding is selected. Nothing is saved until explicit Save.
+
+Muted brightness now spans −100..100. Negative values multiply the entire original
+opacity cycle toward zero, preserving its phase, scale and hue. Zero and positive
+values retain the previous behavior; the reduced-motion pose uses the same dimming.
+This remains session-only and does not change the saved profile.

@@ -12,15 +12,17 @@ import {
   parseVersionSevenDesign,
   parseVersionSixDesign,
   parseVersionTenDesign,
+  parseVersionTwelveDesign,
   type VersionEightDesign,
   type VersionNineDesign,
   type VersionSevenDesign,
   type VersionSixDesign,
   type VersionTenDesign,
+  type VersionTwelveDesign,
 } from "./design.ts";
 import { defaultHalo, equalHalo, type HaloSelection, parseHalo } from "./halo.ts";
 import { type MutedTuning, parseMutedTuning } from "./muted-presence.ts";
-import { defaultSpacing } from "./spacing.ts";
+import { legacySpacing } from "./spacing.ts";
 import { defaultSpirit, equalSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
 import { defaultTraces } from "./traces.ts";
 
@@ -47,6 +49,7 @@ export type Layout = {
   spirit: SpiritSelection;
   personaSide: PersonaSide;
 };
+export type VersionTwelveLayout = Omit<Layout, "design"> & { design: VersionTwelveDesign };
 export type VersionElevenLayout = Omit<Layout, "design"> & { design: VersionTenDesign };
 export type Preview = Layout &
   OrientationFence & {
@@ -58,7 +61,7 @@ export type Preview = Layout &
     mode: Mode;
   };
 export type PhoneState = Preview & {
-  protocol: 13;
+  protocol: 14;
   otherLayout: Layout;
   savedOtherLayout: Layout;
   savedPersonaSide: PersonaSide;
@@ -104,6 +107,14 @@ export type Profile = {
     }
   | {
       version: 12;
+      design: VersionTwelveDesign;
+      halo: HaloSelection;
+      spirit: SpiritSelection;
+      personaSide: PersonaSide;
+      landscape: VersionTwelveLayout;
+    }
+  | {
+      version: 13;
       design: Design;
       halo: HaloSelection;
       spirit: SpiritSelection;
@@ -220,7 +231,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 13 ||
+    data["protocol"] !== 14 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -229,7 +240,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 13,
+    protocol: 14,
     otherLayout: parseLayout(data["otherLayout"]),
     savedOtherLayout: parseLayout(data["savedOtherLayout"]),
     savedPersonaSide: parsePersonaSide(data["savedPersonaSide"]),
@@ -272,13 +283,15 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...([11, 12].includes(data["version"] as number) ? ["personaSide", "landscape"] : []),
-    ...([3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(data["version"] as number) ? ["design"] : []),
-    ...([5, 6, 7, 8, 9, 10, 11, 12].includes(data["version"] as number) ? ["halo"] : []),
-    ...([7, 8, 9, 10, 11, 12].includes(data["version"] as number) ? ["spirit"] : []),
+    ...([11, 12, 13].includes(data["version"] as number) ? ["personaSide", "landscape"] : []),
+    ...([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number)
+      ? ["design"]
+      : []),
+    ...([5, 6, 7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number) ? ["halo"] : []),
+    ...([7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number) ? ["spirit"] : []),
   ]);
   if (
-    ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(data["version"] as number) ||
+    ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -303,29 +316,36 @@ export function parseProfile(text: string): Profile {
   if (data["version"] === 8) parseVersionEightDesign(data["design"]);
   if (data["version"] === 9) parseVersionNineDesign(data["design"]);
   if (data["version"] === 10 || data["version"] === 11) parseVersionTenDesign(data["design"]);
-  if (data["version"] === 12) parseDesign(data["design"]);
-  if (data["version"] === 11 || data["version"] === 12) {
+  if (data["version"] === 12) parseVersionTwelveDesign(data["design"]);
+  if (data["version"] === 13) parseDesign(data["design"]);
+  if (data["version"] === 11 || data["version"] === 12 || data["version"] === 13) {
     parsePersonaSide(data["personaSide"]);
     if (data["version"] === 11) parseVersionElevenLayout(data["landscape"]);
+    else if (data["version"] === 12) parseVersionTwelveLayout(data["landscape"]);
     else data["landscape"] = parseLayout(data["landscape"]);
   }
-  if ([7, 8, 9, 10, 11, 12].includes(data["version"] as number)) {
+  if ([7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number)) {
     parseSpirit(data["spirit"]);
   }
-  if ([5, 6, 7, 8, 9, 10, 11, 12].includes(data["version"] as number))
+  if ([5, 6, 7, 8, 9, 10, 11, 12, 13].includes(data["version"] as number))
     data["halo"] = parseHalo(data["halo"]);
   return data as Profile;
 }
 
 export function profileDesign(profile: Profile): Design {
-  if (profile.version === 12) return structuredClone(profile.design);
+  if (profile.version === 13) return structuredClone(profile.design);
+  if (profile.version === 12)
+    return {
+      ...structuredClone(profile.design),
+      spacing: { ...profile.design.spacing, paddingDp: -1 },
+    };
   if (profile.version === 10 || profile.version === 11)
-    return { ...structuredClone(profile.design), spacing: defaultSpacing() };
+    return { ...structuredClone(profile.design), spacing: legacySpacing() };
   if (profile.version === 9)
     return {
       ...profile.design,
       traces: { ...defaultTraces(), ...profile.design.traces },
-      spacing: defaultSpacing(),
+      spacing: legacySpacing(),
     };
   if (profile.version !== 2 && profile.version !== 3)
     return {
@@ -334,9 +354,9 @@ export function profileDesign(profile: Profile): Design {
       hold: "rocker",
       composition: "traces",
       traces: defaultTraces(),
-      spacing: defaultSpacing(),
+      spacing: legacySpacing(),
     };
-  return structuredClone(defaultDesign);
+  return { ...structuredClone(defaultDesign), spacing: legacySpacing() };
 }
 
 export function profileHalo(profile: Profile): HaloSelection {
@@ -347,7 +367,8 @@ export function profileHalo(profile: Profile): HaloSelection {
     profile.version === 9 ||
     profile.version === 10 ||
     profile.version === 11 ||
-    profile.version === 12
+    profile.version === 12 ||
+    profile.version === 13
     ? profile.halo
     : defaultHalo();
 }
@@ -358,7 +379,8 @@ export function profileSpirit(profile: Profile): SpiritSelection {
     profile.version === 9 ||
     profile.version === 10 ||
     profile.version === 11 ||
-    profile.version === 12
+    profile.version === 12 ||
+    profile.version === 13
     ? profile.spirit
     : defaultSpirit();
 }
@@ -417,6 +439,10 @@ export function parseLayout(value: unknown): Layout {
   const previous = parseVersionElevenLayoutFields(value);
   return { ...previous, design: parseDesign(previous.design) };
 }
+export function parseVersionTwelveLayout(value: unknown): VersionTwelveLayout {
+  const previous = parseVersionElevenLayoutFields(value);
+  return { ...previous, design: parseVersionTwelveDesign(previous.design) };
+}
 export function parseVersionElevenLayout(value: unknown): VersionElevenLayout {
   const previous = parseVersionElevenLayoutFields(value);
   return { ...previous, design: parseVersionTenDesign(previous.design) };
@@ -458,13 +484,22 @@ export function defaultLandscapeLayout(): Layout {
 
 export function profileLayout(profile: Profile, orientation: Orientation): Layout {
   if (orientation === "landscape") {
-    if (profile.version === 12) return layoutOf(profile.landscape);
+    if (profile.version === 13) return layoutOf(profile.landscape);
+    if (profile.version === 12)
+      return {
+        ...structuredClone(profile.landscape),
+        design: {
+          ...structuredClone(profile.landscape.design),
+          spacing: { ...profile.landscape.design.spacing, paddingDp: -1 },
+        },
+      };
     if (profile.version === 11)
       return {
         ...structuredClone(profile.landscape),
-        design: { ...structuredClone(profile.landscape.design), spacing: defaultSpacing() },
+        design: { ...structuredClone(profile.landscape.design), spacing: legacySpacing() },
       };
-    return defaultLandscapeLayout();
+    const landscape = defaultLandscapeLayout();
+    return { ...landscape, design: { ...landscape.design, spacing: legacySpacing() } };
   }
   return {
     scales: {
@@ -476,7 +511,10 @@ export function profileLayout(profile: Profile, orientation: Orientation): Layou
     design: profileDesign(profile),
     halo: structuredClone(profileHalo(profile)),
     spirit: { ...profileSpirit(profile) },
-    personaSide: profile.version === 11 || profile.version === 12 ? profile.personaSide : "left",
+    personaSide:
+      profile.version === 11 || profile.version === 12 || profile.version === 13
+        ? profile.personaSide
+        : "left",
   };
 }
 

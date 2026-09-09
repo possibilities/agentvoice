@@ -1,4 +1,11 @@
-import { defaultSpacing, equalSpacing, parseSpacing, type Spacing } from "./spacing.ts";
+import {
+  defaultSpacing,
+  equalSpacing,
+  parseSpacing,
+  parseVersionTwelveSpacing,
+  type Spacing,
+  type VersionTwelveSpacing,
+} from "./spacing.ts";
 import {
   defaultTraces,
   equalTraces,
@@ -23,6 +30,7 @@ export type VersionTenDesign = Omit<VersionEightDesign, "composition"> & {
   traces: TraceSelection;
 };
 export type Design = VersionTenDesign & { spacing: Spacing };
+export type VersionTwelveDesign = VersionTenDesign & { spacing: VersionTwelveSpacing };
 export type VersionNineDesign = Omit<VersionEightDesign, "composition"> & {
   composition: "traces";
   traces: VersionNineTraceSelection;
@@ -70,6 +78,11 @@ export function parseDesign(value: unknown): Design {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
   const { spacing, ...previous } = value as Record<string, unknown>;
   return { ...parseVersionTenDesign(previous), spacing: parseSpacing(spacing) };
+}
+export function parseVersionTwelveDesign(value: unknown): VersionTwelveDesign {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const { spacing, ...previous } = value as Record<string, unknown>;
+  return { ...parseVersionTenDesign(previous), spacing: parseVersionTwelveSpacing(spacing) };
 }
 export function parseVersionTenDesign(value: unknown): VersionTenDesign {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");

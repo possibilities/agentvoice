@@ -54,16 +54,16 @@ internal fun PreviewControls(
     spacing: PreviewSpacing = PreviewSpacing(),
 ) {
     val inks = LocalPreviewTheme.current.palette
-    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.pushGapDp)
+    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.effectivePushGapDp)
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
     Column(modifier.height(geometry.extentHeightDp.dp).testTag("preview-controls")) {
-        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light, spacing.channelGapDp)
-        Canvas(Modifier.fillMaxWidth().height(spacing.pushGapDp.dp).clearAndSetSemantics { }) {
+        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light, spacing.effectiveChannelGapDp)
+        Canvas(Modifier.fillMaxWidth().height(spacing.effectivePushGapDp.dp).clearAndSetSemantics { }) {
             if (size.height <= 0f) return@Canvas
             // Hold gates capture only; the conduit belongs to the microphone side of the deck.
-            val x = (size.width - spacing.channelGapDp.dp.toPx()) / 4f
+            val x = (size.width - spacing.effectiveChannelGapDp.dp.toPx()) / 4f
             val ink = if (ui.canHold || ui.holding) inks.you else inks.line
             drawLine(ink, Offset(x, 0f), Offset(x, size.height), 3.dp.toPx())
             val capStroke = minOf(2.dp.toPx(), size.height)

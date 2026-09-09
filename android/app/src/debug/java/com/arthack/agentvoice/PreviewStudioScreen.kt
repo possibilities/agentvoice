@@ -73,7 +73,7 @@ private fun PreviewStudioScene(
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
         ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted,
         mutedCycleSeconds = mutedTuning.cycleSeconds)
-    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.pushGapDp)
+    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.effectivePushGapDp)
     BoxWithConstraints(Modifier.fillMaxSize().background(theme.palette.ground)) {
         val screenWidth = maxWidth
         val portrait = maxHeight >= maxWidth
@@ -134,7 +134,7 @@ private fun PreviewStudioScene(
                     if (portrait) {
                         PreviewPersonaTraces(geometry.deckY.dp, deck.extentHeightDp.dp, geometry.deckX.dp,
                             traceLayer, (geometry.stageY + geometry.diameter / 2f + geometry.offsetY).dp,
-                            clearRadius, design.traces, design.spacing.channelGapDp)
+                            clearRadius, design.traces, design.spacing.effectiveChannelGapDp)
                     } else {
                         PreviewLandscapeTraces(geometry, clearRadius, design, deckScroll.value, traceLayer)
                     }

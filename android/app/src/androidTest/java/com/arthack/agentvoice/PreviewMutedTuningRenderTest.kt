@@ -36,6 +36,13 @@ class PreviewMutedTuningRenderTest {
             return List(image.width * image.height) { image[it % image.width, it / image.width].red }
         }
         val small = pixels()
+        compose.runOnIdle { tuning = tuning.copy(brightnessPercent = -75) }
+        compose.mainClock.advanceTimeBy(32)
+        val dimmed = pixels()
+        assertTrue("Negative brightness dims actual ink", dimmed.max() < small.max() * .5f)
+        compose.runOnIdle { tuning = tuning.copy(brightnessPercent = -100) }
+        compose.mainClock.advanceTimeBy(32)
+        assertTrue("Minimum brightness removes visible ink", pixels().max() < .04f)
         compose.runOnIdle { tuning = tuning.copy(textSizeSp = 32, brightnessPercent = 100) }
         compose.mainClock.advanceTimeBy(32)
         val large = pixels()

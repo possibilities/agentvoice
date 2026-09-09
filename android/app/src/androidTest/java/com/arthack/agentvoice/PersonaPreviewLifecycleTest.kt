@@ -19,7 +19,7 @@ class PersonaPreviewLifecycleTest {
     }
 
     @Test fun restoringOldLiveChoicesKeepsTuningAndMigratesRetiredDesigns() {
-        val original = PersonaPreviewState(mode = "listening", activity = "voice", design = PreviewDesign(controlsHeightDp = 387),
+        val original = PersonaPreviewState(mode = "listening", activity = "voice", otherLayout = PreviewLayout(), design = PreviewDesign(controlsHeightDp = 387),
             halo = PreviewHalo(variant = "contained", ringSpreadPercent = 52), spirit = PreviewSpirit("soft", 72, "follow"))
         for (protocol in listOf(7, 8)) {
             val old = legacySession(original, protocol).apply {

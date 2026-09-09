@@ -15,6 +15,7 @@ class PreviewSpacingTest {
             { PreviewSpacing(sectionGapDp = -1) }, { PreviewSpacing(sectionGapDp = 81) },
             { PreviewSpacing(channelGapDp = -1) }, { PreviewSpacing(channelGapDp = 41) },
             { PreviewSpacing(pushGapDp = -1) }, { PreviewSpacing(pushGapDp = 49) },
+            { PreviewSpacing(paddingDp = -2) }, { PreviewSpacing(paddingDp = 41) },
         )) assertThrows(IllegalArgumentException::class.java) { invalid() }
     }
 
@@ -24,7 +25,7 @@ class PreviewSpacingTest {
         assertEquals(387, portrait.design.controlsHeightDp)
         assertEquals(40.9, portrait.design.holdSharePercent, 0.0)
         assertEquals(PreviewTraces("parallel", 130, 175, 88, 0), portrait.design.traces)
-        assertEquals(PreviewSpacing(), portrait.design.spacing)
+        assertEquals(PreviewSpacing(paddingDp = 16), portrait.design.spacing)
         assertEquals("contained", portrait.halo.variant)
         assertEquals(PreviewSpirit("still", 35, "follow"), portrait.spirit)
         val landscape = defaultLandscapeLayout()

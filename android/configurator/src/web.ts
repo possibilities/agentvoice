@@ -16,7 +16,7 @@ import {
   type Theme,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
-import { spacingFields } from "./spacing.ts";
+import { visibleSpacingFields } from "./spacing.ts";
 import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
@@ -107,14 +107,14 @@ function render() {
       `${amount}${unit === "%" ? " percent" : unit}`,
     );
   }
-  for (const field of spacingFields) {
+  for (const field of visibleSpacingFields) {
     const amount = draft.design.spacing[field];
-    const unit = field.endsWith("Percent") ? "%" : " dp";
-    element<HTMLInputElement>(`spacing-${field}`).value = String(amount);
-    text(element(`spacing-${field}-value`), `${amount}${unit}`);
+    const custom = field === "paddingDp" && amount === -1;
+    element<HTMLInputElement>(`spacing-${field}`).value = String(custom ? 16 : amount);
+    text(element(`spacing-${field}-value`), custom ? "Custom" : `${amount} dp`);
     element(`spacing-${field}`).setAttribute(
       "aria-valuetext",
-      `${amount}${unit === "%" ? " percent" : unit}`,
+      custom ? "Custom padding" : `${amount} dp`,
     );
   }
   element<HTMLSelectElement>("trace-pattern").value = draft.design.traces.pattern;
@@ -280,7 +280,7 @@ for (const field of mutedTuningAmounts) {
     update((current) => ({ ...current, mutedTuning: { ...current.mutedTuning, [field]: amount } }));
   });
 }
-for (const field of spacingFields) {
+for (const field of visibleSpacingFields) {
   element<HTMLInputElement>(`spacing-${field}`).addEventListener("input", (event) => {
     const amount = (event.currentTarget as HTMLInputElement).valueAsNumber;
     update((current) => ({

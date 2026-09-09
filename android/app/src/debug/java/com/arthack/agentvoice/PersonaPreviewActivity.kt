@@ -38,7 +38,7 @@ class PersonaPreviewActivity : ComponentActivity() {
         session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(defaults.placement),
             selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(defaults.design), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(defaults.halo),
             runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(defaults.spirit),
-            runCatching { decodeLandscapeLayout(saved!!) }.getOrDefault(PreviewLayout()),
+            runCatching { decodeLandscapeLayout(saved!!) }.getOrDefault(defaultLandscapeLayout()),
             runCatching { decodePortraitSide(saved!!) }.getOrDefault("left"))
         savedInstanceState?.getString("previewState")?.let { json ->
             runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide) }

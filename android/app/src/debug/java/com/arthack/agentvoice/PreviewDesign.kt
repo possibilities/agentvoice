@@ -70,7 +70,8 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
             decodePreviewDesign(withLegacyPreviewSpacing(migrated))
         }
         10, 11 -> decodePreviewDesign(withLegacyPreviewSpacing(data.getJSONObject("design")))
-        12 -> decodePreviewDesign(data.getJSONObject("design"))
+        12 -> decodePreviewDesign(withVersionTwelvePadding(data.getJSONObject("design")))
+        13 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

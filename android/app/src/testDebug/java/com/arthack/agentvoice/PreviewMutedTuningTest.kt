@@ -61,6 +61,19 @@ class PreviewMutedTuningTest {
         assertEquals(still, previewMutedPresenceFrame(Float.POSITIVE_INFINITY, true, fit, tuning))
     }
 
+    @Test fun negativeBrightnessDimsTheWholeBreathWithoutRaisingItsFloor() {
+        val base = PreviewMutedTuning(breathPercent = 100)
+        val fit = previewMutedPresenceFit(44f, 18f, 40f, tuning = base)!!
+        for (phase in listOf(0f, .25f, .5f, .75f)) {
+            val original = previewMutedPresenceFrame(phase, true, fit, base)
+            val dimmed = previewMutedPresenceFrame(phase, true, fit, base.copy(brightnessPercent = -75))
+            assertEquals(original.alpha * .25f, dimmed.alpha, .0001f)
+            assertEquals(original.offsetY, dimmed.offsetY, 0f)
+            assertEquals(0f, previewMutedPresenceFrame(phase, true, fit, base.copy(brightnessPercent = -100)).alpha, 0f)
+        }
+        assertEquals(.21f, previewMutedPresenceFrame(0f, false, fit, base.copy(brightnessPercent = -75)).alpha, .0001f)
+    }
+
     @Test fun cycleSelectionDoesNotReinterpretTheAlreadyIntegratedPhase() {
         val tuning = PreviewMutedTuning()
         val fit = previewMutedPresenceFit(44f, 18f, 40f)!!
@@ -75,9 +88,9 @@ class PreviewMutedTuningTest {
         PreviewMutedTuning(32, 100, 300, 100, 30, "ripple")
         for (value in listOf(11, 33)) assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(textSizeSp = value) }
         for (value in listOf(-1, 101)) {
-            assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(brightnessPercent = value) }
             assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(breathPercent = value) }
         }
+        for (value in listOf(-101, 101)) assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(brightnessPercent = value) }
         for (value in listOf(-1, 301)) assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(driftPercent = value) }
         for (value in listOf(5, 31)) assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(cycleSeconds = value) }
         for (value in listOf("", "Float", "orbit")) assertThrows(IllegalArgumentException::class.java) { PreviewMutedTuning(motion = value) }
