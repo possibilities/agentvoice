@@ -36,18 +36,24 @@ internal fun PreviewStudioScreen(
         val scrolls = stageHeight + design.controlsHeightDp.dp + bottomGap > maxHeight
         // Taller controls move the available center without changing the operator's Halo size.
         val diameter = minOf(maxWidth, (maxHeight - 262.dp - bottomGap).coerceAtLeast(minimumStage))
-        Column(Modifier.fillMaxSize().then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
-            Box(Modifier.fillMaxWidth().height(stageHeight)) {
-                val stage = Modifier.align(Alignment.Center).requiredSize(diameter).testTag("studio-persona-stage")
-                key(halo.variant) {
-                    if (halo.variant == "contained") CompactPersonaHalo(ui, stage, halo.placement(placement), halo.tuning(), halo.colors())
-                    else PersonaHalo(ui, stage, placement)
-                }
+        Box(Modifier.fillMaxSize().then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            when (design.composition) {
+                "dock" -> PreviewPersonaDock(stageHeight, design.controlsHeightDp.dp, side, Modifier.matchParentSize())
+                "yoke" -> PreviewPersonaYoke(stageHeight, design.controlsHeightDp.dp, side, Modifier.matchParentSize())
             }
-            PreviewControls(ui, design.mute, design.hold, onMute, onHold, onRelease,
-                Modifier.fillMaxWidth().padding(horizontal = side),
-                controlsHeightDp = design.controlsHeightDp, holdSharePercent = design.holdSharePercent)
-            Spacer(Modifier.height(bottomGap))
+            Column(Modifier.fillMaxWidth()) {
+                Box(Modifier.fillMaxWidth().height(stageHeight)) {
+                    val stage = Modifier.align(Alignment.Center).requiredSize(diameter).testTag("studio-persona-stage")
+                    key(halo.variant) {
+                        if (halo.variant == "contained") CompactPersonaHalo(ui, stage, halo.placement(placement), halo.tuning(), halo.colors())
+                        else PersonaHalo(ui, stage, placement)
+                    }
+                }
+                PreviewControls(ui, design.mute, design.hold, onMute, onHold, onRelease,
+                    Modifier.fillMaxWidth().padding(horizontal = side),
+                    controlsHeightDp = design.controlsHeightDp, holdSharePercent = design.holdSharePercent)
+                Spacer(Modifier.height(bottomGap))
+            }
         }
         PreviewConnectionNotice(connection, Modifier.align(Alignment.TopCenter).fillMaxWidth())
     }

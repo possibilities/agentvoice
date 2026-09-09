@@ -14,7 +14,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 5,
+    protocol: 6,
     connection: "connecting",
     revision: 0,
     holding: false,
@@ -25,7 +25,13 @@ class Connection implements PreviewConnection {
     verticalOffsetDp: -24,
     savedVerticalOffsetDp: 35,
     defaultVerticalOffsetDp: 35,
-    design: { ...defaultDesign, controlsHeightDp: 380, holdSharePercent: 54.3 },
+    design: {
+      ...defaultDesign,
+      hold: "rocker",
+      composition: "dock",
+      controlsHeightDp: 380,
+      holdSharePercent: 54.3,
+    },
     savedDesign: { ...defaultDesign },
     defaultDesign: { ...defaultDesign },
     halo: { ...defaultHalo(), variant: "contained", containedSizePercent: 83 },
@@ -78,6 +84,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.savedScales.listening).toBe(58);
   expect(phone.state.verticalOffsetDp).toBe(-24);
   expect(phone.state.design.controlsHeightDp).toBe(380);
+  expect(phone.state.design.hold).toBe("rocker");
+  expect(phone.state.design.composition).toBe("dock");
   expect(phone.state.design.holdSharePercent).toBe(54.3);
   expect(phone.state.connection).toBe("connecting");
   expect(phone.state.halo.containedSizePercent).toBe(83);

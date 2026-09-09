@@ -15,14 +15,16 @@ import {
   parseProfile,
   parseScales,
   parseState,
+  previewOf,
   profileDesign,
   profileHalo,
 } from "../src/protocol.ts";
+import { resetPreview } from "../src/resets.ts";
 import { serveConfigurator } from "../src/server.ts";
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 5,
+  protocol: 6,
   connection: "connected",
   revision: 0,
   holding: false,
@@ -42,8 +44,8 @@ const initial = (): PhoneState => ({
   micMuted: true,
   speakerMuted: false,
 });
-const profile = (state: PhoneState): Extract<Profile, { version: 5 }> => ({
-  version: 5,
+const profile = (state: PhoneState): Extract<Profile, { version: 6 }> => ({
+  version: 6,
   design: { ...state.design },
   halo: structuredClone(state.halo),
   scaleMultipliers: {
@@ -74,7 +76,7 @@ class FakePhone implements Phone {
     | "containedSizePercent"
     | (typeof haloMotionFields)[number]
     | undefined;
-  wrongDesignReceipt: "height" | "share" | undefined;
+  wrongDesignReceipt: "height" | "share" | "hold" | "composition" | undefined;
   async request(command: Record<string, unknown>) {
     this.calls.push(command);
     if (command["method"] === "preview") {
@@ -102,6 +104,8 @@ class FakePhone implements Phone {
       if (this.wrongOffsetReceipt) receipt.verticalOffsetDp++;
       if (this.wrongDesignReceipt === "height") receipt.design.controlsHeightDp++;
       if (this.wrongDesignReceipt === "share") receipt.design.holdSharePercent++;
+      if (this.wrongDesignReceipt === "hold") receipt.design.hold = "rocker";
+      if (this.wrongDesignReceipt === "composition") receipt.design.composition = "dock";
       if (this.wrongHaloReceipt === "variant") receipt.halo.variant = "contained";
       else if (this.wrongHaloReceipt === "color") receipt.halo.colors.idle = "#ffffff";
       else if (this.wrongHaloReceipt) receipt.halo[this.wrongHaloReceipt]++;
@@ -187,7 +191,14 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
 
 test("design choices are bounded and old profiles remain readable without migration", () => {
   for (const mute of ["rockers", "keycaps"] as const)
-    expect(parseDesign({ ...defaultDesign, mute })).toEqual({ ...defaultDesign, mute });
+    for (const hold of ["trigger", "rocker"] as const)
+      for (const composition of ["open", "dock", "yoke"] as const)
+        expect(parseDesign({ ...defaultDesign, mute, hold, composition })).toEqual({
+          ...defaultDesign,
+          mute,
+          hold,
+          composition,
+        });
   expect(() => parseDesign({ ...defaultDesign, header: "remote-content" })).toThrow();
   for (const retired of [
     { header: "drawer" },
@@ -208,10 +219,27 @@ test("design choices are bounded and old profiles remain readable without migrat
   };
   expect(parseProfile(JSON.stringify(v3))).toEqual(v3 as Profile);
   expect(profileDesign(parseProfile(JSON.stringify(v3)))).toEqual(defaultDesign);
-  const v4 = { ...legacy, version: 4 as const, design: defaultDesign };
+  const { composition: _composition, ...previous } = defaultDesign;
+  const v4 = { ...legacy, version: 4 as const, design: { ...previous, hold: "trigger" as const } };
   expect(parseProfile(JSON.stringify(v4))).toEqual(v4);
   expect(profileHalo(parseProfile(JSON.stringify(v4)))).toEqual(defaultHalo());
   expect(() => parseProfile(JSON.stringify({ ...v4, version: 5 }))).toThrow();
+  const v5 = {
+    ...v4,
+    version: 5 as const,
+    halo: { ...defaultHalo(), variant: "contained" as const, containedSizePercent: 83 },
+  };
+  expect(parseProfile(JSON.stringify(v5))).toEqual(v5);
+  expect(profileDesign(parseProfile(JSON.stringify(v5)))).toEqual(defaultDesign);
+  expect(profileHalo(parseProfile(JSON.stringify(v5)))).toEqual(v5.halo);
+  for (const saved of [v4, v5]) {
+    expect(() =>
+      parseProfile(JSON.stringify({ ...saved, design: { ...saved.design, hold: "rocker" } })),
+    ).toThrow();
+    expect(() =>
+      parseProfile(JSON.stringify({ ...saved, design: { ...saved.design, composition: "dock" } })),
+    ).toThrow();
+  }
 });
 
 test("control dimensions and connection scenarios are bounded", () => {
@@ -241,6 +269,8 @@ test("resizing controls preserves Persona tuning and only explicit Save keeps th
   const design = {
     ...defaultDesign,
     mute: "rockers" as const,
+    hold: "rocker" as const,
+    composition: "yoke" as const,
     controlsHeightDp: 380,
     holdSharePercent: 54.3,
   };
@@ -262,7 +292,7 @@ test("resizing controls preserves Persona tuning and only explicit Save keeps th
 });
 
 test("a different design in the phone receipt is refused before writing the host copy", async () => {
-  for (const field of ["height", "share"] as const) {
+  for (const field of ["height", "share", "hold", "composition"] as const) {
     const { phone, post, saveTo } = await fixture();
     phone.wrongDesignReceipt = field;
     expect((await post("save", { revision: 0 })).status).toBe(502);
@@ -470,7 +500,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(5);
+  expect(saved.version).toBe(6);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -483,4 +513,67 @@ test("a mismatched Halo receipt cannot overwrite the host profile", async () => 
     expect((await post("save", { revision: 0 })).status).toBe(502);
     expect(await Bun.file(saveTo).exists()).toBe(false);
   }
+});
+
+test("granular resets preserve unrelated choices and do not mutate saved state", () => {
+  const phone = initial();
+  const selected = previewOf(phone);
+  selected.mode = "listening";
+  selected.design = {
+    ...selected.design,
+    mute: "rockers",
+    hold: "rocker",
+    composition: "dock",
+    controlsHeightDp: 380,
+    holdSharePercent: 55,
+  };
+  selected.scales = { speaking: 81, listening: 53, idle: 70 };
+  selected.verticalOffsetDp = -24;
+  selected.halo = {
+    ...selected.halo,
+    variant: "contained",
+    containedSizePercent: 91,
+    ringSpreadPercent: 82,
+    listeningPulsePercent: 99,
+    speakingMotionPercent: 73,
+    idleBreathingPercent: 61,
+    colors: { speaking: "#ff0000", listening: "#00ff00", idle: "#0000ff" },
+  };
+  const before = structuredClone(selected);
+  const saved = structuredClone(phone);
+  const animation = resetPreview(selected, phone, "animation");
+  expect(animation).toEqual({
+    ...selected,
+    halo: {
+      ...selected.halo,
+      ringSpreadPercent: 35,
+      listeningPulsePercent: 25,
+      speakingMotionPercent: 25,
+      idleBreathingPercent: 25,
+    },
+  });
+  expect(resetPreview(selected, phone, "colors")).toEqual({
+    ...selected,
+    halo: { ...selected.halo, colors: phone.defaultHalo.colors },
+  });
+  expect(resetPreview(selected, phone, "size")).toEqual({
+    ...selected,
+    halo: { ...selected.halo, containedSizePercent: 78 },
+  });
+  expect(resetPreview(selected, phone, "position")).toEqual({ ...selected, verticalOffsetDp: 35 });
+  expect(resetPreview(selected, phone, "controls")).toEqual({
+    ...selected,
+    design: {
+      ...selected.design,
+      controlsHeightDp: 262,
+      holdSharePercent: defaultDesign.holdSharePercent,
+    },
+  });
+  const original = { ...selected, halo: { ...selected.halo, variant: "original" as const } };
+  expect(resetPreview(original, phone, "size")).toEqual({
+    ...original,
+    scales: { ...original.scales, listening: 58 },
+  });
+  expect(selected).toEqual(before);
+  expect(phone).toEqual(saved);
 });

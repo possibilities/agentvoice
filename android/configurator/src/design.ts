@@ -1,12 +1,16 @@
 export const muteChoices = ["rockers", "keycaps"] as const;
+export const holdChoices = ["trigger", "rocker"] as const;
+export const compositionChoices = ["open", "dock", "yoke"] as const;
 export type Design = {
   layout: "studio";
   header: "none";
   mute: (typeof muteChoices)[number];
-  hold: "trigger";
+  hold: (typeof holdChoices)[number];
+  composition: (typeof compositionChoices)[number];
   controlsHeightDp: number;
   holdSharePercent: number;
 };
+export type PreviousDesign = Omit<Design, "hold" | "composition"> & { hold: "trigger" };
 export type LegacyDesign = {
   layout: "original" | "studio";
   header: "quiet" | "drawer" | "none";
@@ -18,6 +22,7 @@ export const defaultDesign: Design = {
   header: "none",
   mute: "keycaps",
   hold: "trigger",
+  composition: "open",
   controlsHeightDp: 262,
   // Retain the exact 130 + 16 + 116 dp layout, including the fixed join.
   holdSharePercent: (116 / 262) * 100,
@@ -28,6 +33,7 @@ export function equalDesign(a: Design, b: Design) {
     a.header === b.header &&
     a.mute === b.mute &&
     a.hold === b.hold &&
+    a.composition === b.composition &&
     a.controlsHeightDp === b.controlsHeightDp &&
     Math.abs(a.holdSharePercent - b.holdSharePercent) < 1e-9
   );
@@ -36,10 +42,11 @@ export function parseDesign(value: unknown): Design {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
   const data = value as Record<string, unknown>;
   if (
-    Object.keys(data).length !== 6 ||
+    Object.keys(data).length !== 7 ||
     data["layout"] !== "studio" ||
     data["header"] !== "none" ||
-    data["hold"] !== "trigger" ||
+    !holdChoices.includes(data["hold"] as Design["hold"]) ||
+    !compositionChoices.includes(data["composition"] as Design["composition"]) ||
     !muteChoices.includes(data["mute"] as Design["mute"]) ||
     !Number.isInteger(data["controlsHeightDp"]) ||
     typeof data["controlsHeightDp"] !== "number" ||
@@ -55,10 +62,19 @@ export function parseDesign(value: unknown): Design {
     layout: "studio",
     header: "none",
     mute: data["mute"] as Design["mute"],
-    hold: "trigger",
+    hold: data["hold"] as Design["hold"],
+    composition: data["composition"] as Design["composition"],
     controlsHeightDp: data["controlsHeightDp"],
     holdSharePercent: data["holdSharePercent"],
   };
+}
+export function parsePreviousDesign(value: unknown): PreviousDesign {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const data = value as Record<string, unknown>;
+  if (Object.keys(data).length !== 6 || "composition" in data || data["hold"] !== "trigger")
+    throw Error("Invalid previous design");
+  parseDesign({ ...data, composition: "open" });
+  return data as PreviousDesign;
 }
 export function parseLegacyDesign(value: unknown): LegacyDesign {
   if (!value || typeof value !== "object" || Array.isArray(value))

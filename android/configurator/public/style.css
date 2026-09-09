@@ -121,6 +121,20 @@ select:focus-visible {
   align-items: center;
   font-size: 12px;
 }
+.mixing + .mixing {
+  margin-top: 14px;
+}
+.control-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.value-reset {
+  min-height: 44px;
+  margin-top: 8px;
+  font-size: 11px;
+}
 select {
   min-height: 44px;
   min-width: 0;

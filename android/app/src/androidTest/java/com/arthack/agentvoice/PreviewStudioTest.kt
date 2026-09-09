@@ -10,12 +10,13 @@ import org.junit.Test
 class PreviewStudioTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun bothMuteStylesKeepTargetsFixedAndToggleIndependently() {
+    @Test fun independentStylesAndCompositionsKeepTargetsFixedAndToggleIndependently() {
         var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
         compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
         val before = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
-        for (mute in listOf("rockers", "keycaps")) {
-            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(mute = mute)) }
+        for (mute in listOf("rockers", "keycaps")) for (hold in listOf("trigger", "rocker"))
+            for (composition in listOf("open", "dock", "yoke")) {
+            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(mute = mute, hold = hold, composition = composition)) }
             assertEquals(before, compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot())
             compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("YOU microphone").performClick()
             compose.runOnIdle { assertFalse(state.micMuted); assertEquals("listening", state.mode) }

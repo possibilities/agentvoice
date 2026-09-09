@@ -2,8 +2,10 @@ import {
   currentDesign,
   type Design,
   type LegacyDesign,
+  type PreviousDesign,
   parseDesign,
   parseLegacyDesign,
+  parsePreviousDesign,
 } from "./design.ts";
 import { defaultHalo, type HaloSelection, parseHalo } from "./halo.ts";
 
@@ -21,7 +23,7 @@ export type Preview = {
   halo: HaloSelection;
 };
 export type PhoneState = Preview & {
-  protocol: 5;
+  protocol: 6;
   revision: number;
   holding: boolean;
   savedScales: Scales;
@@ -44,8 +46,9 @@ export type Profile = {
 } & (
   | { version: 2; design?: never }
   | { version: 3; design: LegacyDesign }
-  | { version: 4; design: Design }
-  | { version: 5; design: Design; halo: HaloSelection }
+  | { version: 4; design: PreviousDesign }
+  | { version: 5; design: PreviousDesign; halo: HaloSelection }
+  | { version: 6; design: Design; halo: HaloSelection }
 );
 
 export function record(value: unknown): Record<string, unknown> {
@@ -121,7 +124,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 5 ||
+    data["protocol"] !== 6 ||
     !connections.includes(data["connection"] as Connection) ||
     typeof data["holding"] !== "boolean" ||
     typeof data["micMuted"] !== "boolean" ||
@@ -129,7 +132,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 5,
+    protocol: 6,
     connection: data["connection"] as Connection,
     revision: integer(data["revision"]),
     holding: data["holding"],
@@ -161,11 +164,11 @@ export function parseProfile(text: string): Profile {
     "connectedArtboardScale",
     "disconnectedArtboardScale",
     "savedAtEpochMs",
-    ...([3, 4, 5].includes(data["version"] as number) ? ["design"] : []),
-    ...(data["version"] === 5 ? ["halo"] : []),
+    ...([3, 4, 5, 6].includes(data["version"] as number) ? ["design"] : []),
+    ...([5, 6].includes(data["version"] as number) ? ["halo"] : []),
   ]);
   if (
-    ![2, 3, 4, 5].includes(data["version"] as number) ||
+    ![2, 3, 4, 5, 6].includes(data["version"] as number) ||
     data["connectedArtboardScale"] !== 1.9 ||
     data["disconnectedArtboardScale"] !== 1.5
   ) {
@@ -184,19 +187,21 @@ export function parseProfile(text: string): Profile {
   integer(data["verticalOffsetDp"], -200, 200);
   integer(data["savedAtEpochMs"], 1);
   if (data["version"] === 3) parseLegacyDesign(data["design"]);
-  if (data["version"] === 4 || data["version"] === 5) parseDesign(data["design"]);
-  if (data["version"] === 5) data["halo"] = parseHalo(data["halo"]);
+  if (data["version"] === 4 || data["version"] === 5) parsePreviousDesign(data["design"]);
+  if (data["version"] === 6) parseDesign(data["design"]);
+  if (data["version"] === 5 || data["version"] === 6) data["halo"] = parseHalo(data["halo"]);
   return data as Profile;
 }
 
 export function profileDesign(profile: Profile): Design {
-  return profile.version === 4 || profile.version === 5
-    ? profile.design
-    : currentDesign(profile.design);
+  if (profile.version === 6) return profile.design;
+  if (profile.version === 4 || profile.version === 5)
+    return { ...profile.design, composition: "open" };
+  return currentDesign(profile.design);
 }
 
 export function profileHalo(profile: Profile): HaloSelection {
-  return profile.version === 5 ? profile.halo : defaultHalo();
+  return profile.version === 5 || profile.version === 6 ? profile.halo : defaultHalo();
 }
 
 export function previewOf(state: Preview): Preview {

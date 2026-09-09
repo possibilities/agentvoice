@@ -318,6 +318,7 @@ internal fun PreviewHoldControl(
         val face = Modifier.fillMaxSize().clearAndSetSemantics { }
         when (style) {
             "trigger" -> TriggerHoldFace(ui, ink, surface, face)
+            "rocker" -> RockerHoldFace(ui, ink, surface, face)
             "keycap" -> KeycapHoldFace(ui, ink, surface, face)
             else -> BeamHoldFace(ui, ink, surface, face)
         }
@@ -403,6 +404,85 @@ private fun TriggerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Mo
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
                     ui.holding && ui.micOpen -> "release to mute"
+                    ui.holding -> if (concise) "for microphone" else "microphone"
+                    ui.canHold -> "to talk"
+                    else -> holdUnavailableReason(ui, concise = concise)
+                }, ink, scaledType(11, heightScale, 10, 14), maxLines = 2)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RockerHoldFace(ui: CallUi, ink: Color, surface: Color, modifier: Modifier) {
+    val largeType = LocalDensity.current.fontScale > 1.3f
+    val live = ui.holding && ui.micOpen
+    BoxWithConstraints(modifier) {
+        val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
+        val compactFace = largeType || maxWidth < 300.dp
+        val concise = compactFace || maxHeight < 100.dp
+        val shallow = (4f * heightScale).coerceIn(3f, 6f).dp
+        val deep = (12f * heightScale).coerceIn(8f, 17f).dp
+        val upperInset = if (ui.holding) deep else shallow
+        val lowerInset = if (ui.holding) shallow else deep
+        Row(Modifier.fillMaxSize().drawBehind {
+            val cut = (12f * heightScale).coerceIn(8f, 16f).dp.toPx()
+            val top = upperInset.toPx()
+            val bottom = size.height - lowerInset.toPx()
+            val upperSide = if (ui.holding) 9.dp.toPx() else 6.dp.toPx()
+            val lowerSide = if (ui.holding) 6.dp.toPx() else 9.dp.toPx()
+            val corner = (6f * heightScale).coerceIn(4f, 9f).dp.toPx()
+            drawCutPlate(VoiceInk.line, cut = cut)
+            drawCutPlate(VoiceInk.ground, cut = cut - 2.dp.toPx(), inset = 2.dp.toPx())
+            val pivot = size.height / 2f
+            drawLine(VoiceInk.muted.copy(alpha = .45f), Offset(3.dp.toPx(), pivot),
+                Offset(size.width - 3.dp.toPx(), pivot), 3.dp.toPx())
+            val face = Path().apply {
+                moveTo(upperSide + corner, top); lineTo(size.width - upperSide - corner, top)
+                lineTo(size.width - upperSide, top + corner)
+                lineTo(size.width - lowerSide, bottom - corner)
+                lineTo(size.width - lowerSide - corner, bottom)
+                lineTo(lowerSide + corner, bottom); lineTo(lowerSide, bottom - corner)
+                lineTo(upperSide, top + corner); close()
+            }
+            val bevel = if (ui.holding) 2.dp.toPx() else 4.dp.toPx()
+            drawPath(Path().apply {
+                moveTo(lowerSide, bottom - corner); lineTo(lowerSide + corner, bottom)
+                lineTo(size.width - lowerSide - corner, bottom)
+                lineTo(size.width - lowerSide, bottom - corner)
+                lineTo(size.width - lowerSide, bottom + bevel - corner)
+                lineTo(size.width - lowerSide - corner, bottom + bevel)
+                lineTo(lowerSide + corner, bottom + bevel)
+                lineTo(lowerSide, bottom + bevel - corner); close()
+            }, VoiceInk.line)
+            drawPath(face, surface)
+            drawPath(face, VoiceInk.line, style = Stroke(1.dp.toPx()))
+            // The face rocks on pressure; illumination follows confirmed capture, never the press alone.
+            val lip = when {
+                live -> ink.copy(alpha = .65f)
+                ui.canHold && !ui.holding -> ink.copy(alpha = .24f)
+                else -> VoiceInk.line
+            }
+            val lipY = if (ui.holding) bottom else top
+            val lipInset = (if (ui.holding) lowerSide else upperSide) + corner + 4.dp.toPx()
+            drawLine(lip, Offset(lipInset, lipY), Offset(size.width - lipInset, lipY), 1.5.dp.toPx())
+        }.padding(start = if (compactFace) 20.dp else 24.dp, top = upperInset,
+            end = if (compactFace) 20.dp else 24.dp, bottom = lowerInset),
+            verticalAlignment = Alignment.CenterVertically) {
+            RockerPressGlyph(ink, ui.holding,
+                Modifier.size(((if (compactFace) 28f else 36f) * heightScale).coerceIn(26f, 48f).dp))
+            Spacer(Modifier.width(if (compactFace) 14.dp else 20.dp))
+            Column(Modifier.weight(1f)) {
+                ControlText(when {
+                    live -> "Live"
+                    ui.holding -> if (concise) "Wait" else "Opening"
+                    ui.canHold -> "Push"
+                    else -> if (concise) "Off" else "Unavailable"
+                }, ink, if (!ui.canHold && !ui.holding) scaledType(22, heightScale, 18, 26)
+                    else scaledType(32, heightScale, 23, 42), bold = true)
+                Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
+                ControlText(when {
+                    live -> "release to mute"
                     ui.holding -> if (concise) "for microphone" else "microphone"
                     ui.canHold -> "to talk"
                     else -> holdUnavailableReason(ui, concise = concise)
@@ -510,6 +590,23 @@ private fun ChunkyChannelGlyph(speaker: Boolean, muted: Boolean, ink: Color, gro
                     drawLine(ink, Offset(8f, 7f), Offset(56f, 57f), 5.5f, StrokeCap.Square)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RockerPressGlyph(ink: Color, pressed: Boolean, modifier: Modifier) {
+    Canvas(modifier) {
+        val unit = size.minDimension / 48f
+        scale(unit, unit, Offset.Zero) {
+            val drop = if (pressed) 3f else 0f
+            drawRect(ink, Offset(20f, 2f + drop), Size(8f, 18f))
+            drawPath(Path().apply {
+                moveTo(9f, 17f + drop); lineTo(39f, 17f + drop)
+                lineTo(24f, 32f + drop); close()
+            }, ink)
+            drawRoundRect(ink, Offset(7f, 36f), Size(34f, 4f), CornerRadius(1f))
+            drawRoundRect(ink.copy(alpha = .55f), Offset(11f, 44f), Size(26f, 3f), CornerRadius(1f))
         }
     }
 }

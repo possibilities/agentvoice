@@ -23,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -35,7 +35,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo()): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 5)
+        .put("version", 6)
         .put("halo", halo.json())
         .put("design", design.json())
         .put("scaleMultipliers", JSONObject()
@@ -98,7 +98,7 @@ internal data class PersonaPreviewState(
     val micMuted: Boolean = mode != "listening" || holding,
     val speakerMuted: Boolean = false,
 ) {
-    fun json(): JSONObject = JSONObject().put("protocol", 5).put("connection", connection).put("revision", revision)
+    fun json(): JSONObject = JSONObject().put("protocol", 6).put("connection", connection).put("revision", revision)
         .put("mode", mode).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())

@@ -5,17 +5,24 @@ tuning the existing Persona Halo. The phone renders the interactive demo;
 the browser holds separate Controls and Persona panels plus Save profile.
 No tuning panel obscures the phone.
 
-Controls offers Rockers or Keycaps for the two mute buttons and one fixed
-Trigger surface labeled **Push to talk**. Press and keep it down to talk;
-release to mute. The active trigger stays dark with focused lime accents.
-There are no preset, header or talk-surface selectors.
+Controls offers Rockers or Keycaps for the two mute buttons, independently of
+the Trigger or Rocker surface labeled **Push to talk**. Trigger remains the
+default. Press and keep either surface down to talk; release to mute. Active
+styling stays dark with focused lime accents. There are no preset or header selectors.
+
+**Composition** selects Open, Dock or Yoke. Open is the default, with Persona
+and controls floating freely. Dock adds a quiet shared plate with chamfered
+shoulders fading upward behind lower Persona and the controls. Yoke adds a
+minimal center stem that divides toward the two mute buttons. Both use passive,
+stationary neutral layers; neither changes layout, Halo rendering or tuning,
+full-bleed artwork, touch targets, status or animation.
 
 Controls height spans 240–480 dp, including the fixed 16 dp join between mute
-buttons and the trigger. Push-to-talk share spans 30–60% of that total height;
+buttons and the talk surface. Push-to-talk share spans 30–60% of that total height;
 the mute row gets the remainder after subtracting the join. The baseline is
 262 dp: 130 dp mute row, 16 dp join and 116 dp trigger, an exact share of
-`116 / 262 × 100` (about 44.3%). **Reset defaults** inside Controls restores
-only these two sliders, keeping the chosen mute style and Persona tuning.
+`116 / 262 × 100` (about 44.3%). **Reset button sizes** restores
+only these two sliders, keeping mute style, talk surface, composition and Persona tuning.
 Changing control size preserves the Halo diameter and its saved tuning values.
 
 The phone has no header while connected. **Preview connection** selects a
@@ -51,7 +58,8 @@ this binding; rerun the host command to establish a fresh session in those cases
 
 The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` without rewriting it. Size remains
-35–120%, independently for each state. Vertical position applies to every state,
+35–120%. Original keeps independent state sizes; Contained shares one size.
+Vertical position applies to every state,
 from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
 **Halo** switches between Original and Contained. Original retains its independent
 78 / 58 / 78% size defaults and established transitions. Contained uses one size
@@ -64,17 +72,26 @@ spread/pulse moves the listening rings inward, without enlarging the frame.
 Contained also has Speaking, Listening and Idle color pickers, initially the
 app's violet `#bbaaff`, lime `#d4ff72` and warm white `#f0f2e9`. Disconnected stays
 muted. Original's rendering and colors remain the comparison reference.
-Switching variants keeps each variant's settings. Reset Persona restores the
-selected variant's defaults and shared +35 dp position, preserving the other
-variant's settings, control styling, dimensions and preview state. Save profile keeps the control design,
+Switching variants keeps each variant's settings. Resets affect only the named
+settings:
+
+- **Reset size** restores Contained's shared size or only the currently selected
+  Original state's size.
+- **Reset position** restores the shared +35 dp offset.
+- **Reset animation** restores only Ring spread, Listening pulse, Speaking motion
+  and Idle breathing.
+- **Reset colors** restores only the three Contained colors.
+
+Each reset preserves all other choices and remains unsaved until explicit Save.
+Save profile keeps the control design,
 all Halo sizes, motion, colors and the shared position.
 Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 5 profile atomically on the phone. Its `design`
-contains the fixed layout/header/trigger choices, mute style, controls height
+Explicit Save writes a version 6 profile atomically on the phone. Its `design`
+contains the fixed layout/header, mute style, talk surface, composition, controls height
 and talk-button share. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Only after the phone confirms that exact profile does
 the host write a matching, mode-0600
@@ -85,13 +102,15 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1, 2, 3 and 4 phone profiles remain readable without rewriting:
+until Save. Version 1–5 phone profiles remain readable without rewriting:
 version 1 seeds all three Halo sizes. Version 3 retains Rockers or Keycaps;
 legacy Glyphs and profiles without a mute choice use Keycaps. Version 1–3 profiles
 start with the control geometry baseline and fixed headerless Trigger
 layout. Their Halo sizes and stored position remain intact; a missing position
-uses +35 dp. Version 4 retains its saved control dimensions. All older profiles
-start as Original and become version 5 only on explicit Save. Profiles are ignored by Git.
+uses +35 dp. Versions 4 and 5 retain saved control dimensions and Trigger;
+all older profiles select Open composition. Versions 1–4 select Original,
+while version 5 retains its Halo variant, motion and colors. Older profiles
+become version 6 only on explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
 compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
@@ -128,13 +147,14 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 5 carries live/saved/default designs, sizes, vertical
+Preview protocol 6 carries live/saved/default designs, sizes, vertical
 offsets and Halo selections, plus the transient `connection: connected|connecting|disconnected`.
-The design contract fixes `layout: studio`, `header: none`, `hold: trigger`,
-permits `mute: rockers|keycaps`, and adds `controlsHeightDp` (integer 240–480)
+The design contract fixes `layout: studio`, `header: none`, permits
+`mute: rockers|keycaps`, `hold: trigger|rocker`, `composition: open|dock|yoke`,
+and retains `controlsHeightDp` (integer 240–480)
 and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
-Version 5 profile receipts must include the exact confirmed design, geometry,
+Version 6 profile receipts must include the exact confirmed design, geometry,
 variant, motion and colors
 before the host copy is written. Connection preview state is excluded from the
 profile. Use matching current host code and debug APK.

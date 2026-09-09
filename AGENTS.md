@@ -81,17 +81,20 @@ green-river.
   configurator for the debug APK's native Halo preview. Uses only its dedicated
   authenticated ADB preview socket, never a production call or grant. Save keeps
   the existing private phone profile and an exact host JSON copy. A shared vertical
-  slider spans −200…+200 dp, default +35 dp. The studio has Rockers/Keycaps,
-  fixed Push to talk Trigger, no header, and an overlay connection notice only
+  slider spans −200…+200 dp, default +35 dp. The studio has independent mute
+  Rockers/Keycaps and Push to talk Trigger/Rocker choices, no header, and an overlay connection notice only
   while Connecting/Disconnected. Control height (240–480 dp) and talk share
-  (30–60%) preserve Halo diameter; Controls Reset defaults resets only those
-  dimensions. Original keeps per-state sizes; debug-only Contained uses a checksum-
+  (30–60%) preserve Halo diameter. Open (default), Dock and Yoke compositions
+  use passive neutral layers behind the Persona and controls; preserve geometry,
+  pointer ownership and native renderer identity. Original keeps per-state sizes; debug-only Contained uses a checksum-
   guarded in-memory asset patch, shared size, inward listening motion, four motion
-  amounts and three opaque RGB colors. Reset Persona resets the active variant and
-  shared offset, preserving the other variant. Protocol 5 carries control design,
+  amounts and three opaque RGB colors. Separate resets target button dimensions,
+  active size (current state for Original), shared position, four animation amounts,
+  or colors. Resets preserve all other choices and never save. Protocol 6 carries control design,
   geometry, Halo variant/motion/colors and transient connection selection; Save
-  writes a version 5 profile excluding that connection state. Version 1/2/3/4
-  phone profiles load as Original without rewriting. Preserve the original asset
+  writes a version 6 profile excluding that connection state. Versions 1–5 load
+  without rewriting; old profiles gain Open, versions 1–4 use Original, and version 5
+  keeps its Halo choices. Trigger remains the default. Preserve the original asset
   and main PersonaHalo.kt sequencing. No on-phone tuner overlay or
   production layout/default changes; the Push to talk label also applies to the real client.
   Debug preview reconnect observes the same binding

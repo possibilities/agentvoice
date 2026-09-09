@@ -167,14 +167,18 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 
 The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
-on-phone tuner panel. Controls offers Rockers or Keycaps for the mute buttons
-and a fixed Trigger labeled **Push to talk**: press and keep it down to talk,
-release to mute. Its active surface stays dark with focused lime accents.
+on-phone tuner panel. Controls independently selects Rockers or Keycaps for the
+mute buttons and Trigger or Rocker for **Push to talk**. Trigger stays the default:
+press and keep either surface down to talk, release to mute. Active styling stays
+dark with focused lime accents. Composition selects Open (default), Dock or
+Yoke. Dock adds a shared plate fading upward behind lower Persona and the controls;
+Yoke joins the mute buttons with a quiet branching stem. These stationary neutral
+layers change no layout, renderer, tuning or touch target and preserve full bleed.
 Controls height spans 240–480 dp, including a fixed 16 dp join; Push-to-talk
 share spans 30–60% of the total. The baseline is 262 dp with a 116 dp trigger
-(about 44.3%). **Reset defaults** in Controls restores only those two dimensions,
-keeping the mute style and Persona tuning. Control sizing preserves the Halo
-diameter; presets and header/talk-surface selectors are removed.
+(about 44.3%). **Reset button sizes** restores only those two dimensions,
+keeping mute style, talk surface, composition and Persona tuning. Control sizing
+preserves the Halo diameter; presets and header selectors are removed.
 
 **Halo** selects Original or Contained. Original preserves the current animation
 and its separate state sizes. Contained keeps one common size (78% initially),
@@ -195,8 +199,11 @@ does not change the actual ADB connection.
 Choose Speaking, Listening or Idle and adjust that state's
 size (35–120%); Original keeps independent state sizes and Contained shares one. The vertical position slider applies
 to every state, from −200 to +200 dp in 1 dp steps, initially +35 dp. Negative
-moves up; positive moves down. Reset Persona restores the selected Halo variant and shared position to their
-defaults while keeping the other variant, control design, dimensions and preview state.
+moves up; positive moves down. **Reset size** restores Contained's shared size
+or only the current Original state's size. **Reset position** restores +35 dp.
+**Reset animation** affects only the four Contained motion fields; **Reset colors**
+affects only its three colors. Each reset preserves all other choices and stays
+unsaved until explicit Save.
 The phone's synthetic channel and
 Push to talk buttons still work, and changes appear in the browser.
 Leave the host app and browser open through backgrounding, activity recreation
@@ -211,14 +218,16 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 5 app-private `files/persona-tuning.json` and a matching JSON copy on the
-host, including control dimensions and Halo variant, motion and colors. Preview protocol 5 carries
-those choices and the transient connection selection. Existing version 1, 2, 3
-and 4 phone profiles load without rewriting and initially select Original. They keep their Halo tuning and
-use the control geometry baseline for versions 1–3; version 4 keeps its dimensions.
+version 6 app-private `files/persona-tuning.json` and a matching JSON copy on the
+host, including independent control styles, composition, dimensions and Halo
+variant, motion and colors. Preview protocol 6 carries those choices and the
+transient connection selection. Existing version 1–5 phone profiles load without
+rewriting. Versions 1–4 initially select Original; version 5 keeps its Halo settings.
+Versions 1–3 use the control geometry baseline; versions 4 and 5 keep their
+dimensions and Trigger. All older profiles select Open composition.
 Version 3 retains Rockers or Keycaps,
 while legacy Glyphs or absent mute choices become Keycaps. Older profiles
-become version 5 only on Save. The real client and release
+become version 6 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher

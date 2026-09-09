@@ -123,6 +123,9 @@ client-owned WebRTC and foreground call ownership. It is a development build;
 on-device native audio acceptance and release distribution remain pending.
 See [Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
 for creator notices, code/runtime licenses and the external animation's license evidence.
+The shared Agentwiki playbook explains this live design workflow for Android, web
+and native desktop apps. Retrieve it with
+`agentwiki get design-studio-playbook-for-android-web-and-native-apps`.
 
 One server and one active frontend are allowed per canonical workspace.
 Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the

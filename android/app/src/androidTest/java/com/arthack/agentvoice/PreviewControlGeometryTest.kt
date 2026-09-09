@@ -23,24 +23,29 @@ class PreviewControlGeometryTest {
         speakerMuted = false, speakerOpen = true, canHold = true)
 
     @Test fun defaultsKeepTheOriginal130_16_116DeckExactly() {
-        compose.setContent { ControlFixture(ready) }
-        compose.onNodeWithTag("preview-controls").assertHeightIsEqualTo(262.dp)
-        compose.onNodeWithTag("mic-mute").assertHeightIsEqualTo(130.dp)
-        compose.onNodeWithTag("speaker-mute").assertHeightIsEqualTo(130.dp)
-        compose.onNodeWithTag("hold-to-talk").assertHeightIsEqualTo(116.dp)
-            .assertContentDescriptionEquals("Push to talk")
-        val deck = bounds("preview-controls")
-        val talk = bounds("hold-to-talk")
-        assertEquals(146f, (talk.top - deck.top).value, .5f)
-        assertEquals(16f, (talk.top - bounds("mic-mute").bottom).value, .5f)
+        var holdStyle by mutableStateOf("trigger")
+        compose.setContent { ControlFixture(ready, holdStyle = holdStyle) }
+        for (next in listOf("trigger", "rocker")) {
+            compose.runOnIdle { holdStyle = next }
+            compose.onNodeWithTag("preview-controls").assertHeightIsEqualTo(262.dp)
+            compose.onNodeWithTag("mic-mute").assertHeightIsEqualTo(130.dp)
+            compose.onNodeWithTag("speaker-mute").assertHeightIsEqualTo(130.dp)
+            compose.onNodeWithTag("hold-to-talk").assertHeightIsEqualTo(116.dp)
+                .assertContentDescriptionEquals("Push to talk")
+            val deck = bounds("preview-controls")
+            val talk = bounds("hold-to-talk")
+            assertEquals(146f, (talk.top - deck.top).value, .5f)
+            assertEquals(16f, (talk.top - bounds("mic-mute").bottom).value, .5f)
+        }
     }
 
     @Test fun extremeSplitsContainEveryTargetAtNormalAndLargerTextSizes() {
         var geometry by mutableStateOf(PreviewControlGeometry())
         var style by mutableStateOf("rockers")
+        var holdStyle by mutableStateOf("trigger")
         var fontScale by mutableStateOf(1f)
         var ui by mutableStateOf(ready)
-        compose.setContent { ControlFixture(ui, geometry, style, fontScale) }
+        compose.setContent { ControlFixture(ui, geometry, style, fontScale, holdStyle) }
         val states = listOf(ready,
             ready.copy(connected = false, phase = "Connecting voice", canHold = false),
             ready.copy(micMuted = false, micOpen = true, canHold = false),
@@ -49,15 +54,16 @@ class PreviewControlGeometryTest {
             val expectedTalk = (height * share / 100).toFloat()
             val expectedMute = height - 16f - expectedTalk
             for (scale in listOf(1f, 1.5f)) for (state in states) {
-                var rockerBounds: List<DpRect>? = null
-                for (mute in listOf("rockers", "keycaps")) {
+                var firstBounds: List<DpRect>? = null
+                for (mute in listOf("rockers", "keycaps")) for (push in listOf("trigger", "rocker")) {
                     compose.runOnIdle {
                         geometry = PreviewControlGeometry(height, share)
                         style = mute
+                        holdStyle = push
                         fontScale = scale
                         ui = state
                     }
-                    val context = "$height dp, $share%, $mute, font $scale, $state"
+                    val context = "$height dp, $share%, $mute/$push, font $scale, $state"
                     val deck = bounds("preview-controls")
                     val targets = listOf("mic-mute", "speaker-mute", "hold-to-talk").map { tag ->
                         compose.onNodeWithTag(tag).assertIsDisplayed()
@@ -72,7 +78,7 @@ class PreviewControlGeometryTest {
                     assertTrue(context, (targets[2].bottom - targets[2].top).value >= 71.5f)
                     if (state.canHold) compose.onNodeWithTag("hold-to-talk").assertIsEnabled()
                     else compose.onNodeWithTag("hold-to-talk").assertIsNotEnabled()
-                    if (rockerBounds == null) rockerBounds = targets else assertEquals(context, rockerBounds, targets)
+                    if (firstBounds == null) firstBounds = targets else assertEquals(context, firstBounds, targets)
                 }
             }
         }
@@ -86,7 +92,7 @@ class PreviewControlGeometryTest {
         val releasedWith = mutableListOf<PreviewControlGeometry>()
         compose.setContent {
             val renderedGeometry = geometry
-            if (visible) ControlFixture(ui, geometry, onHold = {
+            if (visible) ControlFixture(ui, geometry, holdStyle = "rocker", onHold = {
                 presses++
                 ui = ui.copy(holding = true, micOpen = true)
             }, onRelease = {
@@ -118,19 +124,25 @@ class PreviewControlGeometryTest {
         compose.runOnIdle { assertEquals(4, presses); assertEquals(4, releasedWith.size); assertFalse(ui.holding) }
     }
 
-    @Test fun confirmedCaptureKeepsTheTriggerFaceDark() {
+    @Test fun confirmedCaptureKeepsBothPushFacesDark() {
         var ui by mutableStateOf(ready)
+        var holdStyle by mutableStateOf("trigger")
         compose.setContent {
-            ControlFixture(ui, onHold = { ui = ui.copy(holding = true, micOpen = true) },
+            ControlFixture(ui, holdStyle = holdStyle, onHold = { ui = ui.copy(holding = true, micOpen = true) },
                 onRelease = { ui = ui.copy(holding = false, micOpen = false) })
         }
-        val talk = compose.onNodeWithTag("hold-to-talk")
-        talk.performTouchInput { down(center) }
-        val pixels = talk.captureToImage().toPixelMap()
-        val face = pixels[(pixels.width * .85f).toInt(), pixels.height / 2]
-        assertTrue("Confirmed capture must not flood the thumb surface with bright lime", face.luminance() < .1f)
-        talk.performTouchInput { up() }
-        compose.runOnIdle { assertFalse(ui.holding) }
+        for (next in listOf("trigger", "rocker")) {
+            compose.runOnIdle { holdStyle = next }
+            val talk = compose.onNodeWithTag("hold-to-talk")
+            talk.performTouchInput { down(center) }
+            val pixels = talk.captureToImage().toPixelMap()
+            for (x in listOf(.7f, .8f, .9f)) for (y in listOf(.35f, .5f, .65f)) {
+                val face = pixels[(pixels.width * x).toInt(), (pixels.height * y).toInt()]
+                assertTrue("$next must not flood the thumb surface with bright lime", face.luminance() < .1f)
+            }
+            talk.performTouchInput { up() }
+            compose.runOnIdle { assertFalse(ui.holding) }
+        }
     }
 
     private fun bounds(tag: String): DpRect = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
@@ -149,6 +161,7 @@ private fun ControlFixture(
     geometry: PreviewControlGeometry = PreviewControlGeometry(),
     style: String = "rockers",
     fontScale: Float = 1f,
+    holdStyle: String = "trigger",
     onHold: () -> Unit = {},
     onRelease: () -> Unit = {},
 ) {
@@ -156,7 +169,7 @@ private fun ControlFixture(
     CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
         VoiceTheme {
             Box(Modifier.fillMaxSize()) {
-                PreviewControls(ui, style, "trigger", {}, onHold, onRelease, Modifier.width(312.dp),
+                PreviewControls(ui, style, holdStyle, {}, onHold, onRelease, Modifier.width(312.dp),
                     controlsHeightDp = geometry.controlsHeightDp, holdSharePercent = geometry.holdSharePercent)
             }
         }

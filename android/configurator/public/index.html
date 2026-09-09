@@ -28,6 +28,15 @@
                 <label for="design-mute">Mute buttons</label>
                 <select id="design-mute"><option value="rockers">Rockers</option><option value="keycaps">Keycaps</option></select>
               </div>
+              <div class="mixing">
+                <label for="design-hold">Push to talk</label>
+                <select id="design-hold"><option value="trigger">Trigger</option><option value="rocker">Rocker</option></select>
+              </div>
+              <div class="mixing">
+                <label for="design-composition">Composition</label>
+                <select id="design-composition" aria-describedby="composition-hint"><option value="open">Open</option><option value="dock">Dock</option><option value="yoke">Yoke</option></select>
+              </div>
+              <p id="composition-hint" class="control-hint">Persona and controls float freely.</p>
               <div class="size-control">
                 <div class="size-heading"><label for="controls-height">Controls height</label><output id="controls-height-value" for="controls-height">262 dp</output></div>
                 <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
@@ -38,7 +47,7 @@
                 <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint" />
                 <div class="range-ends"><span>30%</span><span id="hold-share-hint">Of controls height</span><span>60%</span></div>
               </div>
-              <button type="button" id="reset-controls" class="reset panel-reset">Reset defaults</button>
+              <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
             </fieldset>
             <fieldset class="persona-controls">
               <legend class="panel-title">Persona</legend>
@@ -60,11 +69,13 @@
                 <div class="size-heading"><label id="size-label" for="size">Speaking size</label><output id="size-value" for="size">78<span>%</span></output></div>
                 <input id="size" type="range" min="35" max="120" step="1" value="78" aria-describedby="size-hint" />
                 <div class="range-ends"><span>35%</span><span id="size-hint">Independent size for each state</span><span>120%</span></div>
+                <button type="button" id="reset-size" data-reset="size" class="reset value-reset">Reset size</button>
               </div>
               <div class="position-control">
                 <div class="size-heading"><label for="position">Vertical position</label><output id="position-value" for="position">+35<span>dp</span></output></div>
                 <input id="position" type="range" min="-200" max="200" step="1" value="35" aria-describedby="position-hint" />
                 <div class="range-ends"><span>−200 (up)</span><span id="position-hint">All states</span><span>+200 (down)</span></div>
+                <button type="button" id="reset-position" data-reset="position" class="reset value-reset">Reset position</button>
               </div>
               <div id="contained-controls" hidden>
                 <fieldset class="motion-controls"><legend class="subpanel-title">Motion</legend>
@@ -84,6 +95,7 @@
                     <div class="size-heading"><label for="idleBreathingPercent">Idle breathing</label><output id="idleBreathingPercent-value" for="idleBreathingPercent">25%</output></div>
                     <input id="idleBreathingPercent" type="range" min="0" max="100" step="1" value="25" />
                   </div>
+                  <button type="button" id="reset-animation" data-reset="animation" class="reset value-reset">Reset animation</button>
                 </fieldset>
                 <fieldset class="color-controls"><legend class="subpanel-title">Color</legend>
                   <div class="color-grid">
@@ -91,9 +103,9 @@
                     <label class="color-choice" for="color-listening"><span>Listening</span><input id="color-listening" type="color" value="#d4ff72" /><output id="color-listening-value" for="color-listening">#d4ff72</output></label>
                     <label class="color-choice" for="color-idle"><span>Idle</span><input id="color-idle" type="color" value="#f0f2e9" /><output id="color-idle-value" for="color-idle">#f0f2e9</output></label>
                   </div>
+                  <button type="button" id="reset-colors" data-reset="colors" class="reset value-reset">Reset colors</button>
                 </fieldset>
               </div>
-              <button type="button" id="reset" class="reset panel-reset">Reset Persona</button>
             </fieldset>
           </div>
           <div class="actions"><button type="button" id="save" class="save">Save profile</button></div>

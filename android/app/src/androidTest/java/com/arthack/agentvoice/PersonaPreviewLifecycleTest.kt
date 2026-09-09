@@ -33,7 +33,7 @@ class PersonaPreviewLifecycleTest {
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("connection", "connecting").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(mute = "rockers", controlsHeightDp = 380, holdSharePercent = 54.3).json())
+                    .put("design", PreviewDesign(mute = "rockers", hold = "rocker", composition = "yoke", controlsHeightDp = 380, holdSharePercent = 54.3).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")

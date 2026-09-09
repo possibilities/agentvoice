@@ -7,11 +7,11 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Final debug APK SHA-256:
-`083003a794372e93219d80a02c4a07e52bfc3f776ea01a4f26a9bbb4fe2048f4`.
+`c6d934a8cf3609e884d0d1c997a8535507d1dc2980a21d10ac67f1c855d4fcaf`.
 
 ## Automated checks
 
-- 649 repository tests, including twenty configurator tests; root and configurator
+- 650 repository tests, including twenty-one configurator tests; root and configurator
   TypeScript and Biome checks passed.
 - 24 Android JVM tests passed: strict shared protocol fixtures, request/liveness
   bounds, server-authoritative mute gates, truthful Persona state, TLS trust,
@@ -335,3 +335,48 @@ route changes, lock, Wi-Fi/cellular/Tailscale loss, silent half-open transport,
 revocation during negotiation and native behavior through server redial/runtime
 restart. Some corresponding protocol/controller cases have automated coverage;
 that coverage is not a hardware claim. Release signing/distribution is not configured.
+
+
+## Rocker Push to talk, composition and scoped resets
+
+The 2026-09-09 physical-phone update adds independent mute Rockers/Keycaps and
+Push to talk Trigger/Rocker selections. Trigger remains the compiled default.
+Open (default), Dock and Yoke add optional static neutral material or a fine fork
+behind the Persona and controls. They preserve renderer identity, geometry and
+input ownership. No Persona asset or main renderer source changed.
+
+- All 33 S22 instrumentation tests passed. The controls matrix covers 128
+  combinations of size, share, font scale, availability and both button styles.
+  Rocker and Trigger stay dark on acknowledged capture. Pointer up, cancellation,
+  moving out, second pointer, disposal, resizing and style changes release an
+  owned hold; accessibility uses explicit start/stop. Profile fixtures validate
+  version 6 and retain version 4/5 dimensions/Trigger and version 5 Halo settings.
+- Native screen tests verify all twelve style/composition combinations, fixed
+  targets and independent mute behavior. Original and Contained keep their native
+  Rive instance across composition changes; existing Persona transition tests pass.
+  Lifecycle tests retain unsaved Rocker/Yoke choices through background/recreation.
+- All 650 repository tests (7,384 assertions), 24 JVM tests, both TypeScript
+  checks, Biome, debug/unsigned-release builds and Android lint passed. The
+  release APK contains no debug preview, composition or Contained renderer symbols
+  or Contained layout. An initial instrumentation compilation error used the
+  wrong Compose semantics key; corrected to `SemanticsActions.CustomActions`
+  before the successful build and device run.
+- A Chrome fixture exercised the twelve independent combinations, five granular
+  resets, a single atomic animation reset, exact version 6 Save/reload and
+  reconnect without mutation replay. Desktop and 390 px layouts were inspected;
+  the fixture reported zero page errors. Reset size affects only the current
+  Original state or shared Contained size; position, animation, colors and button
+  dimensions each have separate scopes. Resets never save.
+- Browser-to-phone checks covered all button choices and all three compositions
+  in Idle and Listening, physical rocker press/release, control size extremes,
+  simulated connection states and actual background/return reconnect. Animation
+  reset changed only the four motion values. The operator's current sizes,
+  position, geometry, colors and motion were restored afterward; saved phone and
+  host profile bytes remained identical. Rocker/Dock were left selected unsaved.
+  The current studio was opened and verified in headful Google Chrome. Existing
+  physical-phone scrcpy was left running; no emulator was recreated.
+
+Evidence for this run is in `/tmp/agentvoice-rocker-*.log`, the
+`/tmp/agentvoice-rocker-phone-*.png` captures and
+`/tmp/agentvoice-rocker-browser-{desktop,narrow}.png`. These are synthetic preview
+checks; no production call, microphone, inference or grant was opened.

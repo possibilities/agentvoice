@@ -5,18 +5,22 @@ listening, thinking, speaking and asleep states. Optional input/output audio
 features shape its motion; it neither infers conversation state nor owns a call.
 
 **Android configurator** — A separate host browser design studio for the native
-Halo preview over explicitly selected ADB. Rockers/Keycaps and a fixed Push to
-talk Trigger have adjustable control height and talk-button share. The phone
-has no header; an overlay notice appears only for synthetic Connecting or
-Disconnected states. Controls Reset defaults restores only its dimensions;
-Reset Persona restores the active variant and shared offset. Its synthetic
-phone preview owns no call or audio.
+Halo preview over explicitly selected ADB. Rockers/Keycaps mute buttons and
+Trigger/Rocker Push to talk surfaces are independent; Trigger stays default.
+Open/Dock/Yoke composition adds optional stationary neutral structure, with
+Open default and no layout or renderer changes. Control height and talk-button
+share remain adjustable. The phone has no header; an overlay notice appears only for synthetic Connecting or
+Disconnected states. Reset button sizes, Reset size, Reset position, Reset
+animation and Reset colors affect only their named settings and remain unsaved.
+Reset size affects the active Contained shared size or current Original state.
+Its synthetic phone preview owns no call or audio.
 Original keeps its per-state Halo sizes; debug-only Contained adds a shared size,
 inward listening rings/pulse, adjustable state motion and colors. Switching variants
-retains both sets of choices. Protocol 5 carries these settings and transient
-connection selection; explicit Save stores a version 5 phone profile and exact host copy without the connection
-selection. Older phone profiles load as Original without rewriting. Production UI and
-defaults remain compiled. See ADR 0037.
+retains both sets of choices. Protocol 6 carries these settings and transient
+connection selection; explicit Save stores a version 6 phone profile and exact
+host copy without the connection selection. Version 1–5 phone profiles load
+without rewriting; older compositions become Open and version 5 retains its Halo
+settings. Production layout and defaults remain compiled. See ADR 0037.
 
 **Vanilla Codex** — The Codex client-and-server experience, including the voice
 frontend and working agent. AgentVoice supplies its own frontend, so an explicit

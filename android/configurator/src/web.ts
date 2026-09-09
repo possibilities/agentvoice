@@ -12,6 +12,7 @@ import {
   profileDesign,
   profileHalo,
 } from "./protocol.ts";
+import { type ResetTarget, resetPreview } from "./resets.ts";
 
 type Status = {
   connected: boolean;
@@ -86,6 +87,16 @@ function render() {
   if (!status || !draft) return;
   element("device").textContent = `Previewing on ${status.device}`;
   element<HTMLSelectElement>("design-mute").value = draft.design.mute;
+  element<HTMLSelectElement>("design-hold").value = draft.design.hold;
+  element<HTMLSelectElement>("design-composition").value = draft.design.composition;
+  text(
+    element("composition-hint"),
+    {
+      open: "Persona and controls float freely.",
+      dock: "One quiet surface joins Persona and controls.",
+      yoke: "A fine fork connects Persona to both channels.",
+    }[draft.design.composition],
+  );
   element<HTMLSelectElement>("connection-preview").value = draft.connection;
   controlHeight.value = String(draft.design.controlsHeightDp);
   holdShare.value = String(draft.design.holdSharePercent);
@@ -121,6 +132,10 @@ function render() {
   element("size-label").textContent = contained
     ? "Contained size"
     : `${draft.mode[0]!.toUpperCase()}${draft.mode.slice(1)} size`;
+  element("reset-size").setAttribute(
+    "aria-label",
+    contained ? "Reset Contained size" : `Reset ${draft.mode} size`,
+  );
   const size = contained ? draft.halo.containedSizePercent : draft.scales[draft.mode];
   slider.value = String(size);
   element("size-value").replaceChildren(
@@ -204,6 +219,14 @@ element<HTMLSelectElement>("design-mute").addEventListener("change", (event) => 
   const mute = (event.currentTarget as HTMLSelectElement).value as Design["mute"];
   update((current) => ({ ...current, design: { ...current.design, mute } }));
 });
+element<HTMLSelectElement>("design-hold").addEventListener("change", (event) => {
+  const hold = (event.currentTarget as HTMLSelectElement).value as Design["hold"];
+  update((current) => ({ ...current, design: { ...current.design, hold } }));
+});
+element<HTMLSelectElement>("design-composition").addEventListener("change", (event) => {
+  const composition = (event.currentTarget as HTMLSelectElement).value as Design["composition"];
+  update((current) => ({ ...current, design: { ...current.design, composition } }));
+});
 controlHeight.addEventListener("input", () => {
   const controlsHeightDp = controlHeight.valueAsNumber;
   update((current) => ({ ...current, design: { ...current.design, controlsHeightDp } }));
@@ -212,16 +235,13 @@ holdShare.addEventListener("input", () => {
   const holdSharePercent = Math.round(holdShare.valueAsNumber * 10) / 10;
   update((current) => ({ ...current, design: { ...current.design, holdSharePercent } }));
 });
-element("reset-controls").addEventListener("click", () =>
-  update((current) => ({
-    ...current,
-    design: {
-      ...current.design,
-      controlsHeightDp: status!.state.defaultDesign.controlsHeightDp,
-      holdSharePercent: status!.state.defaultDesign.holdSharePercent,
-    },
-  })),
-);
+for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-reset]")) {
+  button.addEventListener("click", () =>
+    update((current) =>
+      resetPreview(current, status!.state, button.dataset["reset"] as ResetTarget),
+    ),
+  );
+}
 
 element<HTMLSelectElement>("connection-preview").addEventListener("change", (event) => {
   const connection = (event.currentTarget as HTMLSelectElement).value as Connection;
@@ -265,17 +285,6 @@ position.addEventListener("input", () => {
   const verticalOffsetDp = position.valueAsNumber;
   update((current) => ({ ...current, verticalOffsetDp }));
 });
-element("reset").addEventListener("click", () =>
-  update((current) => ({
-    ...current,
-    scales: current.halo.variant === "original" ? { ...status!.state.defaults } : current.scales,
-    halo:
-      current.halo.variant === "contained"
-        ? { ...structuredClone(status!.state.defaultHalo), variant: "contained" }
-        : current.halo,
-    verticalOffsetDp: status!.state.defaultVerticalOffsetDp,
-  })),
-);
 save.addEventListener("click", async () => {
   if (!status?.connected || inFlight || changed || saving) return;
   edit++;
