@@ -26,11 +26,12 @@ internal fun DrawScope.drawPreviewButtonLight(
     enabled: Boolean,
     capture: Boolean,
     ink: Color,
+    strength: Float = 1f,
 ) {
     // Read the frame in the drawing phase only, and never retain activity after a gate closes.
     if (!enabled || light == null) return
     val frame = light.value
-    val amount = frame.amount.lightUnit()
+    val amount = frame.amount.lightUnit() * strength.lightUnit()
     if (amount == 0f) return
     val energy = (if (capture) frame.captureEnergy else frame.playbackEnergy).lightUnit()
     val alpha = (amount * (.010f + .025f * energy)).coerceAtMost(.035f)

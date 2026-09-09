@@ -1,6 +1,7 @@
 package com.arthack.agentvoice
 
 import android.animation.ValueAnimator
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -35,7 +36,7 @@ internal fun syntheticSpiritEnergy(seconds: Float): Float {
 }
 
 internal data class PreviewSpiritFrame(val light: PreviewButtonLight, val colors: CompactHaloColors,
-    val ambient: PreviewAmbientFrame = PreviewAmbientFrame())
+    val ambient: PreviewAmbientFrame = PreviewAmbientFrame(), val phaseTurns: Float = 0f)
 
 private data class SpiritColorCue(
     val palette: CompactHaloColors,
@@ -103,12 +104,12 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
             colorCue = null
         }
         return PreviewSpiritFrame(if (amount == 0f) PreviewButtonLight() else PreviewButtonLight(phase, amount, capture, playback), colors,
-            if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount))
+            if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount), phase)
     }
 }
 
 internal class PreviewSpiritScene(val light: State<PreviewButtonLight>, val colors: State<CompactHaloColors>,
-    val ambient: State<PreviewAmbientFrame>)
+    val ambient: State<PreviewAmbientFrame>, val phaseTurns: State<Float>)
 
 @Composable
 private fun previewSpiritForeground(): Boolean {
@@ -147,38 +148,44 @@ internal fun rememberPreviewSpirit(
     motionAllowed: Boolean = previewSpiritMotionAllowed(),
     ambientPercent: Int = 0,
     foreground: Boolean = previewSpiritForeground(),
+    mutedPresence: Boolean = false,
 ): PreviewSpiritScene {
     val base = halo.colors()
     val light = remember { mutableStateOf(PreviewButtonLight()) }
     val colors = remember { mutableStateOf(base) }
     val ambient = remember { mutableStateOf(PreviewAmbientFrame()) }
+    val phase = remember { mutableFloatStateOf(0f) }
     val motion = remember { PreviewSpiritMotion(base) }
     val latestUi by rememberUpdatedState(ui)
     val latestSpirit by rememberUpdatedState(spirit)
     val latestHalo by rememberUpdatedState(halo)
     val latestActivity by rememberUpdatedState(activity)
     val latestAmbient by rememberUpdatedState(ambientPercent)
-    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0
+    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0 || mutedPresence
     val moving = enabled && foreground && motionAllowed && ui.connected && !ui.controlsPending
+    val latestMoving by rememberUpdatedState(moving)
+    val latestForeground by rememberUpdatedState(foreground)
     fun publish(frame: PreviewSpiritFrame) {
         light.value = frame.light
         colors.value = frame.colors
         ambient.value = frame.ambient
+        phase.floatValue = frame.phaseTurns
     }
     SideEffect {
         if (!moving) publish(motion.step(ui, spirit, base, halo.variant == "contained", activity, 0f, false, ambientPercent, foreground))
     }
     LaunchedEffect(moving) {
         if (!moving) return@LaunchedEffect
-        var previous = withFrameNanos { it }
+        var previous = withInfiniteAnimationFrameNanos { it }
         while (isActive) {
-            val now = withFrameNanos { it }
+            val now = withInfiniteAnimationFrameNanos { it }
+            if (!latestMoving) return@LaunchedEffect
             val elapsed = (now - previous) / 1_000_000_000f
             if (elapsed < 1f / 30f) continue
             previous = now
             publish(motion.step(latestUi, latestSpirit, latestHalo.colors(), latestHalo.variant == "contained",
-                latestActivity, elapsed, true, latestAmbient, true))
+                latestActivity, elapsed, true, latestAmbient, latestForeground))
         }
     }
-    return remember { PreviewSpiritScene(light, colors, ambient) }
+    return remember { PreviewSpiritScene(light, colors, ambient, phase) }
 }

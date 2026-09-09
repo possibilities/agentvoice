@@ -51,20 +51,25 @@ internal fun PreviewControls(
     controlsHeightDp: Int = DEFAULT_PREVIEW_CONTROLS_HEIGHT_DP,
     holdSharePercent: Double = DEFAULT_PREVIEW_HOLD_SHARE_PERCENT,
     light: State<PreviewButtonLight>? = null,
+    spacing: PreviewSpacing = PreviewSpacing(),
 ) {
-    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent)
+    val inks = LocalPreviewTheme.current.palette
+    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.pushGapDp)
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
-    Column(modifier.height(geometry.controlsHeightDp.dp).testTag("preview-controls")) {
-        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light)
-        Canvas(Modifier.fillMaxWidth().height(PREVIEW_CONTROL_CONDUIT_DP.dp).clearAndSetSemantics { }) {
+    Column(modifier.height(geometry.extentHeightDp.dp).testTag("preview-controls")) {
+        PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(geometry.muteHeightDp.dp), light, spacing.channelGapDp)
+        Canvas(Modifier.fillMaxWidth().height(spacing.pushGapDp.dp).clearAndSetSemantics { }) {
+            if (size.height <= 0f) return@Canvas
             // Hold gates capture only; the conduit belongs to the microphone side of the deck.
-            val x = (size.width - 10.dp.toPx()) / 4f
-            val ink = if (ui.canHold || ui.holding) VoiceInk.you else VoiceInk.line
+            val x = (size.width - spacing.channelGapDp.dp.toPx()) / 4f
+            val ink = if (ui.canHold || ui.holding) inks.you else inks.line
             drawLine(ink, Offset(x, 0f), Offset(x, size.height), 3.dp.toPx())
-            drawLine(ink, Offset(x - 8.dp.toPx(), size.height - 1.dp.toPx()),
-                Offset(x + 8.dp.toPx(), size.height - 1.dp.toPx()), 2.dp.toPx())
+            val capStroke = minOf(2.dp.toPx(), size.height)
+            val capY = size.height - capStroke / 2f
+            drawLine(ink, Offset(x - 8.dp.toPx(), capY),
+                Offset(x + 8.dp.toPx(), capY), capStroke)
         }
         key(geometry) {
             PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
@@ -79,14 +84,16 @@ internal fun PreviewMuteControls(
     onMute: (String) -> Unit,
     modifier: Modifier = Modifier,
     light: State<PreviewButtonLight>? = null,
+    channelGapDp: Int = 10,
 ) {
+    val inks = LocalPreviewTheme.current.palette
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 130f).coerceIn(.6f, 1.6f)
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(channelGapDp.dp)) {
             PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
-                VoiceInk.you, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
+                inks.you, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
             PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
-                VoiceInk.agent, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
+                inks.agent, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
@@ -104,12 +111,13 @@ private fun PreviewMuteButton(
     onMute: (String) -> Unit,
     modifier: Modifier,
 ) {
+    val inks = LocalPreviewTheme.current.palette
     val currentOnMute by rememberUpdatedState(onMute)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
     val on = !muted || open
-    val color = if (enabled && on) ink else VoiceInk.muted
+    val color = if (enabled && on) ink else inks.muted
     val status = when { !enabled -> "wait"; muted && open -> "live"; muted -> "off"; else -> "on" }
     Box(modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled,
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
@@ -129,7 +137,7 @@ private fun PreviewMuteButton(
         RockerMuteFace(name, target == "speaker", muted, color, status, pressed, heightScale,
             face, light, enabled && !muted && open)
         if (focused) Canvas(Modifier.matchParentSize().clearAndSetSemantics { }) {
-            drawCutPlate(VoiceInk.text, cut = 5.dp.toPx(), inset = 1.dp.toPx(), stroke = 2.dp.toPx())
+            drawCutPlate(inks.text, cut = 5.dp.toPx(), inset = 1.dp.toPx(), stroke = 2.dp.toPx())
         }
     }
 }
@@ -140,6 +148,8 @@ internal fun RockerMuteFace(
     status: String, pressed: Boolean, heightScale: Float, modifier: Modifier,
     light: State<PreviewButtonLight>?, lightEnabled: Boolean,
 ) {
+    val theme = LocalPreviewTheme.current
+    val inks = theme.palette
     val sink = if (pressed) 2.dp else 0.dp
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -156,8 +166,8 @@ internal fun RockerMuteFace(
             val edge = 5.dp.toPx()
             val seam = size.height * if (muted) .65f else .72f
             val top = (if (muted) 9.dp else 4.dp).toPx() + sink.toPx()
-            drawCutPlate(VoiceInk.line, cut = 10.dp.toPx())
-            drawCutPlate(VoiceInk.ground, cut = 7.dp.toPx(), inset = 2.dp.toPx())
+            drawCutPlate(inks.line, cut = 10.dp.toPx())
+            drawCutPlate(inks.ground, cut = 7.dp.toPx(), inset = 2.dp.toPx())
             val upperFace = Path().apply {
                 moveTo(edge + 3.dp.toPx(), top)
                 lineTo(size.width - edge - 3.dp.toPx(), top)
@@ -166,22 +176,22 @@ internal fun RockerMuteFace(
                 lineTo(edge + 3.dp.toPx(), seam)
                 lineTo(edge, top + 4.dp.toPx()); close()
             }
-            drawPath(upperFace, if (muted) VoiceInk.surface else color.copy(alpha = .12f))
-            drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color)
+            drawPath(upperFace, if (muted) inks.surface else color.copy(alpha = .12f))
+            drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color, strength = theme.decorationStrength)
             drawPath(Path().apply {
                 moveTo(edge + 3.dp.toPx(), seam + 2.dp.toPx())
                 lineTo(size.width - edge - 3.dp.toPx(), seam + 2.dp.toPx())
                 lineTo(size.width - edge, size.height - edge - if (muted) 4.dp.toPx() else 0f)
                 lineTo(edge, size.height - edge - if (muted) 4.dp.toPx() else 0f); close()
-            }, if (muted) VoiceInk.line else VoiceInk.surface)
-            drawLine(if (muted) VoiceInk.line else color.copy(alpha = .7f),
+            }, if (muted) inks.line else inks.surface)
+            drawLine(if (muted) inks.line else color.copy(alpha = .7f),
                 Offset(edge + 6.dp.toPx(), top), Offset(size.width - edge - 6.dp.toPx(), top), 2.dp.toPx())
         }.padding(top = topPadding + sink, bottom = bottomPadding - sink),
             verticalArrangement = Arrangement.SpaceBetween) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 ChunkyChannelGlyph(speaker, muted, color,
-                    if (muted) VoiceInk.surface else color.copy(alpha = .12f).over(VoiceInk.ground),
+                    if (muted) inks.surface else color.copy(alpha = .12f).over(inks.ground),
                     Modifier.size(glyphSize).testTag("rocker-channel-glyph"))
                 BinaryDetent(!muted, color, Modifier.width(12.dp).height((38f * heightScale).coerceIn(24f, 48f).dp))
             }
@@ -191,7 +201,7 @@ internal fun RockerMuteFace(
                 Spacer(Modifier.width(6.dp))
                 Text(status, modifier = Modifier.width(with(density) { caption.statusWidth.toDp() })
                     .alignByBaseline().testTag("rocker-state-caption"),
-                    color = if (muted) VoiceInk.text else VoiceInk.muted, style = caption.status,
+                    color = if (muted) inks.text else inks.muted, style = caption.status,
                     textAlign = TextAlign.End, maxLines = 1, softWrap = false)
             }
         }
@@ -229,6 +239,7 @@ internal fun PreviewHoldControl(
     modifier: Modifier = Modifier,
     light: State<PreviewButtonLight>? = null,
 ) {
+    val inks = LocalPreviewTheme.current.palette
     val latestUi by rememberUpdatedState(ui)
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
@@ -252,14 +263,14 @@ internal fun PreviewHoldControl(
     val live = ui.holding && ui.micOpen
     val acknowledgedTouch = touchingLive && canAcknowledgeTouch
     val ink = when {
-        ui.canHold || ui.holding -> VoiceInk.you
-        acknowledgedTouch -> androidx.compose.ui.graphics.lerp(VoiceInk.muted, VoiceInk.you, .18f)
-        else -> VoiceInk.muted
+        ui.canHold || ui.holding -> inks.you
+        acknowledgedTouch -> androidx.compose.ui.graphics.lerp(inks.muted, inks.you, .18f)
+        else -> inks.muted
     }
     val surface = when {
-        live -> VoiceInk.you.copy(alpha = .08f).over(VoiceInk.surface)
-        acknowledgedTouch -> VoiceInk.you.copy(alpha = .025f).over(VoiceInk.surface)
-        else -> VoiceInk.surface
+        live -> inks.you.copy(alpha = .08f).over(inks.surface)
+        acknowledgedTouch -> inks.you.copy(alpha = .025f).over(inks.surface)
+        else -> inks.surface
     }
     Box(modifier.pointerInput(Unit) {
         awaitEachGesture {
@@ -333,6 +344,8 @@ private fun RockerHoldFace(
     ui: CallUi, ink: Color, surface: Color, modifier: Modifier, light: State<PreviewButtonLight>?,
     acknowledgedTouch: Boolean,
 ) {
+    val theme = LocalPreviewTheme.current
+    val inks = theme.palette
     val largeType = LocalDensity.current.fontScale > 1.3f
     val live = ui.holding && ui.micOpen
     val microphoneLive = microphoneIsLive(ui)
@@ -352,10 +365,10 @@ private fun RockerHoldFace(
             val upperSide = if (ui.holding) 9.dp.toPx() else 6.dp.toPx()
             val lowerSide = if (ui.holding) 6.dp.toPx() else 9.dp.toPx()
             val corner = (6f * heightScale).coerceIn(4f, 9f).dp.toPx()
-            drawCutPlate(VoiceInk.line, cut = cut)
-            drawCutPlate(VoiceInk.ground, cut = cut - 2.dp.toPx(), inset = 2.dp.toPx())
+            drawCutPlate(inks.line, cut = cut)
+            drawCutPlate(inks.ground, cut = cut - 2.dp.toPx(), inset = 2.dp.toPx())
             val pivot = size.height / 2f
-            drawLine(VoiceInk.muted.copy(alpha = .45f), Offset(3.dp.toPx(), pivot),
+            drawLine(inks.muted.copy(alpha = .45f), Offset(3.dp.toPx(), pivot),
                 Offset(size.width - 3.dp.toPx(), pivot), 3.dp.toPx())
             val face = Path().apply {
                 moveTo(upperSide + corner, top); lineTo(size.width - upperSide - corner, top)
@@ -374,17 +387,17 @@ private fun RockerHoldFace(
                 lineTo(size.width - lowerSide - corner, bottom + bevel)
                 lineTo(lowerSide + corner, bottom + bevel)
                 lineTo(lowerSide, bottom + bevel - corner); close()
-            }, VoiceInk.line)
+            }, inks.line)
             drawPath(face, surface)
             drawPreviewButtonLight(face, light, ui.connected && !ui.controlsPending && live,
-                capture = true, ink = VoiceInk.you)
-            drawPath(face, VoiceInk.line, style = Stroke(1.dp.toPx()))
+                capture = true, ink = inks.you, strength = theme.decorationStrength)
+            drawPath(face, inks.line, style = Stroke(1.dp.toPx()))
             // Only PTT rocks the face; an already-open microphone gets a quieter touch acknowledgement.
             val lip = when {
                 live -> ink.copy(alpha = .65f)
-                acknowledgedTouch -> VoiceInk.you.copy(alpha = .3f)
+                acknowledgedTouch -> inks.you.copy(alpha = .3f)
                 ui.canHold && !ui.holding -> ink.copy(alpha = .24f)
-                else -> VoiceInk.line
+                else -> inks.line
             }
             val lipY = if (ui.holding) bottom else top
             val lipInset = (if (ui.holding) lowerSide else upperSide) + corner + 4.dp.toPx()
@@ -439,10 +452,11 @@ private fun ControlText(text: String, color: Color, size: Int, bold: Boolean = f
 
 @Composable
 private fun BinaryDetent(on: Boolean, ink: Color, modifier: Modifier) {
+    val inks = LocalPreviewTheme.current.palette
     Canvas(modifier) {
-        drawLine(if (on) ink else VoiceInk.line, Offset(size.width / 2, 2.dp.toPx()),
+        drawLine(if (on) ink else inks.line, Offset(size.width / 2, 2.dp.toPx()),
             Offset(size.width / 2, 12.dp.toPx()), 3.dp.toPx())
-        drawCircle(if (on) VoiceInk.line else ink, radius = 4.dp.toPx(),
+        drawCircle(if (on) inks.line else ink, radius = 4.dp.toPx(),
             center = Offset(size.width / 2, size.height - 6.dp.toPx()), style = Stroke(2.dp.toPx()))
     }
 }

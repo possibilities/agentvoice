@@ -34,9 +34,10 @@ class PersonaPreviewActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
-        session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(PersonaPlacement()),
-            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(PreviewHalo()),
-            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(PreviewSpirit()),
+        val defaults = defaultPortraitLayout()
+        session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(defaults.placement),
+            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(defaults.design), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(defaults.halo),
+            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(defaults.spirit),
             runCatching { decodeLandscapeLayout(saved!!) }.getOrDefault(PreviewLayout()),
             runCatching { decodePortraitSide(saved!!) }.getOrDefault("left"))
         savedInstanceState?.getString("previewState")?.let { json ->
@@ -114,5 +115,5 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence)
 }

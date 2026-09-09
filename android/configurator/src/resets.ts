@@ -1,7 +1,10 @@
 import { haloMotionFields } from "./halo.ts";
 import { type PhoneState, type Preview, previewOf } from "./protocol.ts";
+import { type SpacingField, spacingFields } from "./spacing.ts";
 
 export type ResetTarget =
+  | "spacing"
+  | `spacing-${SpacingField}`
   | "controls"
   | "size"
   | "position"
@@ -14,7 +17,16 @@ export type ResetTarget =
 
 export function resetPreview(current: Preview, defaults: PhoneState, target: ResetTarget): Preview {
   const next = previewOf(current);
+  if (target.startsWith("spacing-")) {
+    const field = target.slice("spacing-".length) as SpacingField;
+    if (spacingFields.includes(field))
+      next.design.spacing[field] = defaults.defaultDesign.spacing[field];
+    return next;
+  }
   switch (target) {
+    case "spacing":
+      next.design.spacing = { ...defaults.defaultDesign.spacing };
+      break;
     case "traces":
       next.design.traces = {
         ...defaults.defaultDesign.traces,

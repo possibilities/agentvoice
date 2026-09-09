@@ -42,6 +42,20 @@ import kotlin.math.roundToInt
 
 internal enum class PersonaState { Asleep, Idle, Listening, Speaking }
 
+internal data class PersonaColors(
+    val listening: Int = VoiceInk.you.toArgb(),
+    val speaking: Int = VoiceInk.agent.toArgb(),
+    val idle: Int = VoiceInk.text.toArgb(),
+    val asleep: Int = VoiceInk.muted.toArgb(),
+) {
+    fun forState(state: PersonaState): Int = when (state) {
+        PersonaState.Listening -> listening
+        PersonaState.Speaking -> speaking
+        PersonaState.Idle -> idle
+        PersonaState.Asleep -> asleep
+    }
+}
+
 internal data class PersonaPlacement(
     val speakingScale: Float = .78f,
     val listeningScale: Float = .58f,
@@ -64,7 +78,8 @@ internal fun personaState(ui: CallUi): PersonaState = when {
 }
 
 @Composable
-internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlacement = PersonaPlacement()) {
+internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlacement = PersonaPlacement(),
+    colors: PersonaColors = PersonaColors()) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
@@ -92,12 +107,7 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
         if (state == PersonaState.Speaking && requested != PersonaState.Speaking && ui.connected && ui.speakerOpen) delay(180)
         state = requested
     }
-    val ink = when (state) {
-        PersonaState.Listening -> VoiceInk.you
-        PersonaState.Speaking -> VoiceInk.agent
-        PersonaState.Idle -> VoiceInk.text
-        PersonaState.Asleep -> VoiceInk.muted
-    }
+    val ink = colors.forState(state)
     val artboardScale = if (ui.connected) 1.9f else 1.5f
     val targetScale = artboardScale * placement.scaleFor(state)
     val animate = ui.connected && resumed && !reducedMotion
@@ -138,7 +148,7 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
             },
             update = { view ->
                 view.onGrowthReady = { growthDuration.value = it }
-                view.present(renderedState, ink.toArgb(), animate)
+                view.present(renderedState, ink, animate)
             },
             onRelease = { view -> view.onGrowthReady = null; view.pause() },
         )
@@ -178,8 +188,15 @@ class HaloAnimationView(context: Context, attrs: AttributeSet? = null) : RiveAni
         if (presentation?.first == PersonaState.Listening) "listening_loop" else "listening_off"
     internal fun present(state: PersonaState, color: Int, animate: Boolean) {
         val next = Triple(state, color, animate)
-        if (presentation == next) return
+        val previous = presentation
+        if (previous == next) return
         presentation = next
+        if (previous != null && previous.first == state && previous.third == animate) {
+            stateMachines.first().viewModelInstance!!.getColorProperty("color").value = color
+            // Palette changes redraw the current pose without restarting paused settlement or scale handover.
+            if (!animate || !isPlaying) play(settleInitialState = false)
+            return
+        }
         motion = animate
         revision.incrementAndGet()
         setBooleanState("default", "listening", state == PersonaState.Listening)

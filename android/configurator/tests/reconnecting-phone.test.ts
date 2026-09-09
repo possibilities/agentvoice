@@ -15,7 +15,9 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 11,
+    protocol: 12,
+    theme: "bright",
+    mutedPresence: "tide",
     orientation: "portrait",
     orientationEpoch: 0,
     personaSide: "left",
@@ -99,6 +101,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   returned.state = {
     ...returned.state,
     mode: "idle",
+    theme: "grayscale",
+    mutedPresence: "off",
     orientation: "landscape",
     orientationEpoch: 3,
     personaSide: "right",
@@ -136,6 +140,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.theme).toBe("grayscale");
+  expect(phone.state.mutedPresence).toBe("off");
   expect(phone.state.orientation).toBe("landscape");
   expect(phone.state.orientationEpoch).toBe(3);
   expect(phone.state.personaSide).toBe("right");

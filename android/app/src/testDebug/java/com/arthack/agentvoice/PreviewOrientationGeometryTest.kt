@@ -51,4 +51,47 @@ class PreviewOrientationGeometryTest {
         assertEquals(middle.stageX, middle.towards(portrait, 0f).stageX, 0f)
         assertEquals(17.5f, middle.offsetY, 0f)
     }
+
+    @Test fun everySpacingExtremeKeepsManualPersonaBoundsAndOffset() {
+        for ((width, height) in listOf(320f to 600f, 250f to 400f, 180f to 220f, 780f to 360f, 352f to 320f)) {
+            val portrait = height >= width
+            for (side in listOf("left", "right")) for (offset in listOf(-200f, -22f, 200f)) {
+                val baseline = previewOrientationGeometry(width, height, width, portrait, 387f, offset, side)
+                for (margin in listOf(0, 100, 200)) for (edge in listOf(0, 100, 200))
+                    for (gap in listOf(0, 80)) for (push in listOf(0, 16, 48)) {
+                        val spacing = PreviewSpacing(margin, edge, gap, 40, push)
+                        val geometry = previewOrientationGeometry(width, height, width, portrait, 387f, offset, side,
+                            spacing, 387f + push - 16f)
+                        assertEquals(baseline.stageX, geometry.stageX, 0f)
+                        assertEquals(baseline.stageY, geometry.stageY, 0f)
+                        assertEquals(baseline.diameter, geometry.diameter, 0f)
+                        assertEquals(baseline.offsetY, geometry.offsetY, 0f)
+                        assertTrue(geometry.deckWidth > 0f && geometry.deckViewportHeight > 0f)
+                        assertTrue(geometry.deckX >= 0f && geometry.deckX + geometry.deckWidth <= width + .001f)
+                        if (portrait) {
+                            assertTrue(geometry.deckY >= geometry.stageY + geometry.diameter + gap)
+                            assertTrue(geometry.contentHeight >= geometry.deckY + 387f + push - 16f)
+                        } else {
+                            assertTrue(geometry.deckWidth >= minOf(240f, baseline.deckWidth) - .001f)
+                            if (side == "left") assertTrue(geometry.deckX > geometry.stageX + geometry.diameter)
+                            else assertTrue(geometry.deckX + geometry.deckWidth < geometry.stageX)
+                            assertTrue(geometry.deckY + geometry.deckViewportHeight <= height + .001f)
+                        }
+                    }
+            }
+        }
+    }
+
+    @Test fun onlyEditedPortraitSidesAreBoundedByTheUsableWidth() {
+        val legacy = previewOrientationGeometry(250f, 400f, 250f, true, 262f, 35f)
+        assertEquals(18f, legacy.deckX, 0f)
+        assertEquals(214f, legacy.deckWidth, 0f)
+        val spaced = previewOrientationGeometry(250f, 400f, 250f, true, 262f, 35f,
+            spacing = PreviewSpacing(sideMarginPercent = 200))
+        assertEquals(240f, spaced.deckWidth, 0f)
+        val narrow = previewOrientationGeometry(180f, 220f, 180f, true, 262f, 35f,
+            spacing = PreviewSpacing(sideMarginPercent = 200))
+        assertEquals(180f, narrow.deckWidth, 0f)
+        assertEquals(230f, narrow.deckY, 0f)
+    }
 }

@@ -26,15 +26,17 @@ internal fun PreviewPersonaTraces(
     personaCenterY: Dp = stageHeight / 2f,
     personaClearRadius: Dp = 0.dp,
     settings: PreviewTraces = PreviewTraces(),
+    channelGapDp: Int = 10,
 ) {
+    val theme = LocalPreviewTheme.current
     Canvas(modifier) {
         val geometry = previewTraceGeometry(size.width, size.height, stageHeight.toPx(), controlsHeight.toPx(),
-            sideInset.toPx(), personaCenterY.toPx(), personaClearRadius.toPx(), 1.dp.toPx(), settings) ?: return@Canvas
-        val route = compositionInk(VoiceInk.line.copy(alpha = .84f), personaCenterY, personaClearRadius)
-        val contact = compositionInk(VoiceInk.muted.copy(alpha = .32f), personaCenterY, personaClearRadius)
+            sideInset.toPx(), personaCenterY.toPx(), personaClearRadius.toPx(), 1.dp.toPx(), settings, channelGapDp) ?: return@Canvas
+        val route = compositionInk(theme.decoration(VoiceInk.line.copy(alpha = .84f)), personaCenterY, personaClearRadius)
+        val contact = compositionInk(theme.decoration(VoiceInk.muted.copy(alpha = .32f)), personaCenterY, personaClearRadius)
         clipRect(bottom = geometry.endY) {
             if (settings.offshootPercent > 0) {
-                val offshoot = compositionInk(VoiceInk.line.copy(alpha = .28f * settings.offshootPercent.coerceIn(0, 100) / 100f),
+                val offshoot = compositionInk(theme.decoration(VoiceInk.line.copy(alpha = .28f * settings.offshootPercent.coerceIn(0, 100) / 100f)),
                     personaCenterY, personaClearRadius)
                 for (points in geometry.offshoots) drawPath(points.tracePath(), offshoot,
                     style = Stroke(maxOf(.45.dp.toPx(), geometry.strokeWidth * .62f),

@@ -5,6 +5,14 @@ tuning the existing Persona Halo. The phone renders the interactive demo;
 the browser holds separate Controls and Persona panels plus Save profile.
 No tuning panel obscures the phone.
 
+Fresh portrait previews use provisional studio defaults: Contained at 78%,
+Original state sizes 78 / 56 / 78%, vertical offset −22 dp, controls height
+387 dp and Push-to-talk share 40.9%. Traces use Parallel, 130% stance, 175%
+weight, 88% offshoots, zero glow and 100% contact/foot spacing. Light is Still
+at 35%; Persona color follows channels. Landscape retains its independent
+baseline below. Existing saved profiles keep their choices; these experimental
+portrait defaults do not change the production app.
+
 Both mute buttons and **Push to talk** use Rockers. Press and keep the talk
 surface down to talk; release to mute. Active styling stays dark with focused
 lime accents. There are no button-style, preset or header selectors.
@@ -12,9 +20,9 @@ lime accents. There are no button-style, preset or header selectors.
 **Traces** is the fixed composition. **Route** compares Parallel (the baseline
 paired routes), Splayed (a wider fan of routes), and Circuit (staggered mechanical
 steps). **Stance** spans 75–150% of the baseline; **Trace weight** spans 50–250%,
-with 100% equal to 1.2 dp. Both start at 100%. **Offshoots** adds much lighter
+with 100% equal to 1.2 dp. Landscape starts both at 100%. **Offshoots** adds much lighter
 side and upward routes, independently of the selected pattern, from 0–100%.
-It starts at zero. **Persona contact spacing** and **Button foot spacing** each
+Landscape starts at zero. **Persona contact spacing** and **Button foot spacing** each
 span 50–200%, default 100%. They separate neighboring traces within each bundle
 at its upper and lower ends; Stance moves the bundles themselves. Foot spacing
 remains fixed when stance hits a button edge. At large Persona sizes, protected
@@ -46,12 +54,25 @@ immediately. PTT still requires a muted mic; when the mic is already open its
 label reads **Live now / microphone open**. Holding confirmed PTT reads
 **Live now / release to mute**. Button shapes and hit targets do not animate.
 
-Controls height spans 240–480 dp, including the fixed 16 dp join between mute
+Controls height spans 240–480 dp, including the adjustable join between mute
 buttons and the talk surface. Push-to-talk share spans 30–60% of that total height;
-the mute row gets the remainder after subtracting the join. The baseline is
+the mute row gets the remainder after subtracting the join. The landscape baseline is
 262 dp: 130 dp mute row, 16 dp join and 116 dp talk surface, an exact share of
 `116 / 262 × 100` (about 44.3%). **Reset button sizes** restores
-only these two sliders, keeping composition, light and Persona tuning.
+only these two sliders to the visible orientation's defaults, keeping spacing,
+composition, light and Persona tuning.
+
+**Spacing** independently adjusts outer sides and top/bottom edge clearance
+from 0–200% of their baseline, minimum extra Persona/controls separation from
+0–80 dp, the microphone/speaker channel gap from 0–40 dp, and the Push-to-talk
+join from 0–48 dp. Defaults are 100%, 100%, 0 dp, 10 dp and 16 dp respectively.
+Each slider has its own reset; **Reset spacing** restores the five values for
+only the visible orientation. Spacing remains unsaved until Save.
+
+**Theme** offers Bright (default), Quiet and Grayscale. **Muted presence** offers
+Tide (default) and Off. These are session choices: they survive orientation
+changes and ordinary tuning resets, but are excluded from Save profile.
+
 In portrait, the Persona stage is a screen-width square, independent of control
 height. Extra vertical room sits between the stage and the bottom-aligned deck.
 If the square and controls exceed the available height, the scene scrolls so
@@ -109,7 +130,7 @@ existing private `files/persona-tuning.json` without rewriting it. Size remains
 Vertical position applies to every state,
 from −200 to +200 dp in 1 dp steps: negative moves up, positive moves down.
 **Halo** switches between Original and Contained. Original retains its independent
-78 / 58 / 78% size defaults and established transitions. Contained uses one size
+78 / 56 / 78% portrait and 78 / 58 / 78% landscape defaults, with established transitions. Contained uses one size
 for every state (78% initially), inward listening rings and pulse, softer speaking
 motion and idle breathing. Its Ring spread defaults to 35%; Listening pulse,
 Speaking motion and Idle breathing default to 25%, all adjustable from 0–100%.
@@ -119,7 +140,7 @@ spread/pulse moves the listening rings inward, without enlarging the frame.
 Contained also has Speaking, Listening and Idle color pickers, initially the
 app's violet `#bbaaff`, lime `#d4ff72` and warm white `#f0f2e9`. Disconnected stays
 muted. Original's rendering and colors remain the comparison reference.
-**Persona color** independently selects Fixed (default) or Follow channels for
+**Persona color** independently selects Fixed or Follow channels for
 Contained. Following retains each chosen hue, adds a small shared sheen, quiets
 closed channels and softly tints Idle toward the sole open channel. Gate/palette
 changes blend over 900 ms. It does not retime the Rive animation. Reduced motion
@@ -136,14 +157,17 @@ settings:
 
 - **Reset size** restores Contained's shared size or only the currently selected
   Original state's size.
-- **Reset position** restores the shared +35 dp offset.
+- **Reset position** restores −22 dp in portrait or 0 dp in landscape.
 - **Reset animation** restores only Ring spread, Listening pulse, Speaking motion
   and Idle breathing.
 - **Reset colors** restores only the three Contained colors.
 - **Reset light** restores Still and 35% without changing Persona color behavior.
-- **Reset color behavior** restores Fixed without changing the chosen colors or light.
+- **Reset color behavior** restores Follow channels in portrait or Fixed in landscape,
+  without changing the chosen colors or light.
 - **Reset traces** restores the route, stance, weight and offshoots, preserving glow.
 - **Reset glow** restores only Background glow to zero.
+- **Reset spacing** restores only the active orientation's five spacing values.
+  Each individual spacing reset changes only its named field.
 
 Each reset preserves all other choices and remains unsaved until explicit Save.
 Save profile keeps the control design,
@@ -153,12 +177,12 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 11 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 12 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold portrait; `landscape` holds the
 independent landscape layout (integer-percent `scales`, offset, design, Halo,
 spirit and side). Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
-and talk-button share, plus nested `traces` settings. Its `halo` stores variant, common Contained size, motion
+and talk-button share, plus nested `traces` and `spacing` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
 Persona color behavior. Only after the phone confirms that exact profile does
 the host write a matching, mode-0600
@@ -169,7 +193,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–10 phone profiles remain readable without rewriting.
+until Save. Version 1–11 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -177,7 +201,9 @@ Halo sizes; versions 1–3 use the control geometry baseline. Stored position
 remains intact, with +35 dp when absent. Versions 4–10 retain saved control
 dimensions. Versions 1–4 select Original, while versions 5–10 retain their Halo variant,
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
-versions 7–10 keep their spirit settings. Older profiles become version 11 only on
+versions 7–10 keep their spirit settings. Version 11 preserves both existing layouts.
+All versions before 12 gain only baseline scene spacing in memory, without
+adopting the new portrait defaults. Older profiles become version 12 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -215,9 +241,11 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 11 carries live/saved/default designs, sizes, vertical
+Preview protocol 12 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
-`connection: connected|connecting|disconnected` and `activity: steady|voice`.
+`connection: connected|connecting|disconnected`, `activity: steady|voice`,
+`theme: bright|quiet|grayscale` and `mutedPresence: tide|off`. Theme and muted
+presence are required session-root fields on Preview/PhoneState, never Layout.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -227,16 +255,20 @@ protocol meaning; the visible and accessible control is Push to talk.
 Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 `stancePercent` (75–150), `personaSpacingPercent` and `footSpacingPercent`
 (each 50–200), `weightPercent` (50–250), `offshootPercent` (0–100) and
-`glowPercent` (0–100). Defaults are Parallel, 100% stance/spacing/weight, and zero offshoot/glow. Current and saved
-design snapshots copy these nested choices independently.
-Protocol 11's active fields describe the phone's visible orientation; it also
+`glowPercent` (0–100). Landscape and legacy migration use Parallel, 100%
+stance/contact/foot/weight, zero offshoot and glow; new portrait defaults are
+listed above. Required `design.spacing` has exactly integer
+`sideMarginPercent` and `edgeClearancePercent` (0–200), `sectionGapDp` (0–80),
+`channelGapDp` (0–40), and `pushGapDp` (0–48). Their defaults are 100/100/0/10/16.
+Current and saved design snapshots copy nested choices independently.
+Protocol 12's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version 11 profile receipts must
+changes orientation; the host cannot select it. Version 12 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
-before the host copy is written. Connection and activity preview state are
-excluded from the profile. Use matching current host code and debug APK.
+before the host copy is written. Connection, activity, theme and muted presence
+are excluded from the profile. Use matching current host code and debug APK.
 
 ```sh
 bun run test

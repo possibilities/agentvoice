@@ -23,7 +23,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6, 7, 8, 9, 10, 11 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -35,7 +35,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit(), landscape: PreviewLayout = PreviewLayout(), personaSide: String = "left"): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 11)
+        .put("version", 12)
         .put("landscape", landscape.json()).put("personaSide", personaSide)
         .put("spirit", spirit.json())
         .put("halo", halo.json())
@@ -87,17 +87,17 @@ internal fun decodePreviewPlacement(data: JSONObject): PersonaPlacement =
     decodePreviewScales(data.getJSONObject("scales")).copy(offsetY = decodePreviewOffset(data.get("verticalOffsetDp")).dp)
 
 internal data class PersonaPreviewState(
-    val placement: PersonaPlacement = PersonaPlacement(),
+    val placement: PersonaPlacement = defaultPortraitLayout().placement,
     val saved: PersonaPlacement = placement,
     val mode: String = "speaking",
     val connection: String = "connected",
     val holding: Boolean = false,
     val revision: Int = 0,
-    val design: PreviewDesign = PreviewDesign(),
+    val design: PreviewDesign = defaultPortraitLayout().design,
     val savedDesign: PreviewDesign = design,
-    val halo: PreviewHalo = PreviewHalo(),
+    val halo: PreviewHalo = defaultPortraitLayout().halo,
     val savedHalo: PreviewHalo = halo,
-    val spirit: PreviewSpirit = PreviewSpirit(),
+    val spirit: PreviewSpirit = defaultPortraitLayout().spirit,
     val savedSpirit: PreviewSpirit = spirit,
     val activity: String = "steady",
     val micMuted: Boolean = mode != "listening" || holding,
@@ -108,7 +108,10 @@ internal data class PersonaPreviewState(
     val savedPersonaSide: String = personaSide,
     val otherLayout: PreviewLayout = PreviewLayout(),
     val savedOtherLayout: PreviewLayout = otherLayout,
+    val theme: String = "bright",
+    val mutedPresence: String = "tide",
 ) {
+    init { require(theme in previewThemes && mutedPresence in previewMutedPresences) }
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide)
     fun rotate(next: String): PersonaPreviewState {
@@ -128,18 +131,19 @@ internal data class PersonaPreviewState(
             savedSpirit = active.spirit, savedPersonaSide = active.personaSide,
             savedOtherLayout = if (orientation == "portrait") landscape else portrait)
     }
-    fun json(): JSONObject = JSONObject().put("protocol", 11)
+    fun json(): JSONObject = JSONObject().put("protocol", 12)
+        .put("theme", theme).put("mutedPresence", mutedPresence)
         .put("orientation", orientation).put("orientationEpoch", orientationEpoch)
         .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", "left")
         .put("otherLayout", otherLayout.json()).put("savedOtherLayout", savedOtherLayout.json()).put("connection", connection).put("revision", revision)
         .put("mode", mode).put("activity", activity).put("holding", holding).put("scales", placement.scalesJson())
-        .put("savedScales", saved.scalesJson()).put("defaults", PersonaPlacement().scalesJson())
+        .put("savedScales", saved.scalesJson()).put("defaults", defaultPreviewLayout(orientation).placement.scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
         .put("savedVerticalOffsetDp", saved.offsetY.value.roundToInt())
-        .put("defaultVerticalOffsetDp", if (orientation == "portrait") PersonaPlacement().offsetY.value.roundToInt() else 0)
-        .put("design", design.json()).put("savedDesign", savedDesign.json()).put("defaultDesign", PreviewDesign().json())
-        .put("halo", halo.json()).put("savedHalo", savedHalo.json()).put("defaultHalo", PreviewHalo().json())
-        .put("spirit", spirit.json()).put("savedSpirit", savedSpirit.json()).put("defaultSpirit", PreviewSpirit().json())
+        .put("defaultVerticalOffsetDp", defaultPreviewLayout(orientation).placement.offsetY.value.roundToInt())
+        .put("design", design.json()).put("savedDesign", savedDesign.json()).put("defaultDesign", defaultPreviewLayout(orientation).design.json())
+        .put("halo", halo.json()).put("savedHalo", savedHalo.json()).put("defaultHalo", defaultPreviewLayout(orientation).halo.json())
+        .put("spirit", spirit.json()).put("savedSpirit", savedSpirit.json()).put("defaultSpirit", defaultPreviewLayout(orientation).spirit.json())
         .put("micMuted", micMuted).put("speakerMuted", speakerMuted)
 
     fun select(next: String) = copy(mode = next, holding = false, micMuted = next != "listening", speakerMuted = false, revision = revision + 1)
@@ -176,11 +180,11 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     require(activity in previewActivities)
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
+    val protocol = data.optInt("protocol", 10)
     return PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
         mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let {
-            val protocol = data.optInt("protocol", 10)
-            if (protocol in 3..9) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
+            if (protocol in 3..11) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
             else decodePreviewDesign(it)
         } ?: PreviewDesign(), savedDesign = savedDesign,
         halo = data.optJSONObject("halo")?.let(::decodePreviewHalo) ?: PreviewHalo(), savedHalo = savedHalo,
@@ -188,11 +192,12 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         micMuted = holding || data.optBoolean("micMuted", mode != "listening"), speakerMuted = data.optBoolean("speakerMuted", false),
         orientation = orientation, orientationEpoch = epoch,
         personaSide = data.optString("personaSide", "left").also { require(it in previewPersonaSides) },
-        otherLayout = data.optJSONObject("otherLayout")?.let(::decodePreviewLayout) ?: PreviewLayout())
+        otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, protocol) } ?: PreviewLayout(),
+        theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"))
         .withSavedLayouts(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide), savedLandscape)
 }
 
-internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = PreviewDesign(), initialHalo: PreviewHalo = PreviewHalo(), initialSpirit: PreviewSpirit = PreviewSpirit(), initialLandscape: PreviewLayout = PreviewLayout(), initialPortraitSide: String = "left") {
+internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = defaultPortraitLayout().design, initialHalo: PreviewHalo = defaultPortraitLayout().halo, initialSpirit: PreviewSpirit = defaultPortraitLayout().spirit, initialLandscape: PreviewLayout = PreviewLayout(), initialPortraitSide: String = "left") {
     var state by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo, spirit = initialSpirit, otherLayout = initialLandscape, personaSide = initialPortraitSide))
 
     private fun checkOrientation(request: JSONObject) {
@@ -220,7 +225,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -233,8 +238,11 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val spirit = decodePreviewSpirit(request.getJSONObject("spirit"))
                     val activity = request.getString("activity")
                     require(activity in previewActivities)
+                    val theme = request.getString("theme").also { require(it in previewThemes) }
+                    val mutedPresence = request.getString("mutedPresence").also { require(it in previewMutedPresences) }
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
-                    state = next.copy(personaSide = side, placement = placement, design = design, halo = halo, spirit = spirit, activity = activity, connection = connection, revision = state.revision + 1)
+                    state = next.copy(personaSide = side, placement = placement, design = design, halo = halo, spirit = spirit,
+                        activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence, revision = state.revision + 1)
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")

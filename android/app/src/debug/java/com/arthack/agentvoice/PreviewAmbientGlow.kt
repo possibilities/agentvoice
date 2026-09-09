@@ -55,6 +55,7 @@ internal fun previewAmbientLobes(frame: PreviewAmbientFrame): List<PreviewAmbien
 
 @Composable
 internal fun PreviewAmbientGlow(frame: State<PreviewAmbientFrame>, modifier: Modifier = Modifier) {
+    val theme = LocalPreviewTheme.current
     Canvas(modifier) {
         if (!size.width.isFinite() || !size.height.isFinite() || size.width <= 0f || size.height <= 0f) return@Canvas
         // Draw-phase observation keeps shared clock ticks out of layout, input, and native identity.
@@ -65,9 +66,9 @@ internal fun PreviewAmbientGlow(frame: State<PreviewAmbientFrame>, modifier: Mod
                 val radius = size.width * lobe.radiusX
                 val stretch = size.height * lobe.radiusY / radius
                 if (!stretch.isFinite() || stretch <= 0f) continue
-                val color = Color(lobe.tint)
+                val color = theme.decoration(Color(lobe.tint))
                 val stops = previewAmbientFeatherStops.map { (position, weight) ->
-                    position to color.copy(alpha = lobe.alpha * weight)
+                    position to color.copy(alpha = color.alpha * lobe.alpha * weight)
                 }.toTypedArray()
                 val brush = Brush.radialGradient(*stops, center = center, radius = radius)
                 scale(scaleX = 1f, scaleY = stretch, pivot = center) {

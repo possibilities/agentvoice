@@ -31,6 +31,7 @@ internal fun previewTraceGeometry(
     personaClearRadius: Float,
     unit: Float,
     settings: PreviewTraces = PreviewTraces(),
+    channelGapDp: Int = 10,
 ): PreviewTraceGeometry? {
     if (listOf(width, height, stageHeight, controlsHeight, sideInset, personaCenterY,
             personaClearRadius, unit).any { !it.isFinite() }) return null
@@ -39,7 +40,8 @@ internal fun previewTraceGeometry(
     if (settings.pattern !in setOf("parallel", "splayed", "circuit")) return null
     val end = minOf(stageHeight + 4f * unit, stageHeight + controlsHeight, height)
     val inset = sideInset.coerceAtLeast(0f)
-    val gap = 10f * unit
+    if (channelGapDp !in 0..40) return null
+    val gap = channelGapDp * unit
     val channelWidth = (width - inset * 2f - gap) / 2f
     val stroke = 1.2f * unit * settings.weightPercent.coerceIn(50, 250) / 100f
     if (!end.isFinite() || !channelWidth.isFinite() || !stroke.isFinite() ||

@@ -144,7 +144,7 @@ Apache-2.0 AI Elements component code, the MIT Rive runtime, and the separately
 hosted Halo asset whose current license is not explicit in the inspected
 sources. It records the Surge Studio/Vercel provenance and AgentVoice's
 2026-09-09 modifications for the Contained Halo debug variant. The original
-asset and production renderer remain unchanged. Full code/runtime licenses
+asset and production defaults are preserved; palette-only redraws retain the native pose. Full code/runtime licenses
 and the separate Halo attribution notice ship in the APK's `assets/notices`.
 
 ## Design previews
@@ -182,9 +182,10 @@ center and glow. These stationary neutral layers change no layout, renderer,
 tuning or touch target and preserve full bleed. Original retains a conservative
 shared envelope, so unequal state sizes can leave a larger gap or no visible
 routes when the envelope reaches the deck.
-Controls height spans 240–480 dp, including a fixed 16 dp join; Push-to-talk
-share spans 30–60% of the total. The baseline is 262 dp with a 116 dp talk surface
-(about 44.3%). **Reset button sizes** restores only those two dimensions,
+Controls size spans 240–480 dp, including the baseline 16 dp join; Push-to-talk
+share spans 30–60% of that size basis. Extra join space changes total deck height
+while preserving both button-face heights. Provisional portrait defaults use
+387 dp and a 40.9% talk share; landscape retains 262 dp and `116 / 262 × 100`. **Reset button sizes** restores only those two dimensions,
 keeping composition, light and Persona tuning. Control sizing preserves the Halo
 diameter; button-style, preset and header selectors are removed.
 
@@ -194,8 +195,8 @@ moves listening rings and pulse inward, and exposes Ring spread (35%), Listening
 pulse (25%), Speaking motion (25%) and Idle breathing (25%), each from 0–100%.
 Contained also offers Speaking/Listening/Idle color pickers initialized to the
 existing violet/lime/warm-white palette. Switching variants retains both sets of
-choices. Only Contained uses the patched in-memory asset; Original and production
-rendering remain unchanged.
+choices. Only Contained uses the patched in-memory asset. Theme colors are applied
+after channel following and do not alter the underlying palette or animation asset.
 
 The preview has no header. **Preview connection** selects synthetic Connected,
 Connecting or Disconnected. A notice with a static glyph slides down from the
@@ -206,9 +207,10 @@ does not change the actual ADB connection.
 
 Choose Speaking, Listening or Idle and adjust that state's
 size (35–120%); Original keeps independent state sizes and Contained shares one. The vertical position slider applies
-to every state, from −200 to +200 dp in 1 dp steps, initially +35 dp. Negative
+to every state, from −200 to +200 dp in 1 dp steps. Portrait starts at −22 dp;
+landscape starts at 0 dp. Negative
 moves up; positive moves down. **Reset size** restores Contained's shared size
-or only the current Original state's size. **Reset position** restores +35 dp.
+or only the current Original state's size. **Reset position** restores the active orientation’s default.
 **Reset animation** affects only the four Contained motion fields; **Reset colors**
 affects only its three colors. Each reset preserves all other choices and stays
 unsaved until explicit Save.
@@ -226,27 +228,46 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 11 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 12 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 11 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 12 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Their tuning is independent. The browser edits only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 11 stores portrait in the root fields and a separate `landscape` layout.
+Version 12 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–10 phone profiles load without rewriting; retired button styles map to
+version 1–11 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 11 only on Save. The real client and release
+become version 12 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
 icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or audio, or connect to the voice server.
+
+**Spacing** adds five controls for the visible orientation: outer sides (0–200%),
+minimum edge clearance (0–200%), extra section separation (0–80 dp), channel gap
+(0–40 dp), and Push-to-talk join (0–48 dp). Baselines are 100/100/0/10/16.
+Each has its own reset, plus **Reset spacing**. These affect only the control
+deck; Persona’s square, center, scale and manual offset remain unchanged.
+Impossible margins are bounded to usable control width, and tall decks scroll.
+Older profiles gain baseline spacing in memory; they are never rewritten on load.
+
+Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
+current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
+all preview layers neutral and dims decorative light, while captions retain a
+contrast floor. **Muted presence** compares Tide and Off. Tide shows lowercase
+`muted` inside the ring only while connected with both effective audio gates
+closed and no pending controls. It follows the existing 14-second clock, stays
+still under reduced motion and disappears immediately for PTT or an open channel.
+Measured text keeps an 8 dp clearance within a conservative inner aperture;
+if it cannot fit at a small size or large font scale, it is omitted rather than
+shrunk. These session selections survive rotation but are not saved in a profile.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:

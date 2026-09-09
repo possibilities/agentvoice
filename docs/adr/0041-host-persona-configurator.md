@@ -71,16 +71,17 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 11 on the phone, then
+checks the observed revision, atomically stores version 12 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
-Version 1–8 phone profiles load without rewriting; retired button styles map to
+Version 1–11 phone profiles load without rewriting; retired button styles map to
 Rockers and old compositions map to baseline Traces in memory. Version 1 seeds all three Halo sizes. Stored position is
 retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
-Older profiles become version 11 only on explicit Save. Production still
+Versions 9–11 retain their compatible layout settings; all earlier versions gain
+only baseline scene spacing in memory. Older profiles become version 12 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -244,3 +245,42 @@ and seed baseline landscape with zero offset. Save validates both captured
 layouts even if the phone rotates before the response arrives. Loading and
 rotation never rewrite either saved file. This remains a synthetic debug studio;
 Live/Design integration and production preferences are separate work.
+
+
+## Muted presence, themes and spacing experiments
+
+Protocol/profile 12 adds five per-orientation `design.spacing` values:
+`sideMarginPercent` and `edgeClearancePercent` (0–200, default 100),
+`sectionGapDp` (0–80, default 0), `channelGapDp` (0–40, default 10), and
+`pushGapDp` (0–48, default 16). Each has an individual reset and the group has
+an atomic reset. Defaults retain the prior 2 dp spacing rhythm. The Persona
+stage is calculated from the existing baseline before spacing is resolved;
+only the deck changes. Increasing the PTT join preserves both face heights and
+adds the difference from 16 dp to deck extent. The size/share controls keep their
+original denominator. Trace feet and the capture conduit use the actual channel
+gap. Impossible margins are bounded to usable width without rewriting settings.
+
+`theme: bright|quiet|grayscale` and `mutedPresence: tide|off` are transient preview
+conditions shared across orientations, not fields of the saved visual profile.
+Theme transformations read the original chosen colors after Spirit blending;
+Bright is an exact bypass. Quiet/Grayscale use linear-light Halo gains .45/.2 and
+chroma retention .25/0. Decorative opacity is .5/.2; captions and glyphs use a
+separate contrast floor. Native color properties cover Original, Contained and
+Asleep; a palette-only update redraws a paused pose without re-running settlement.
+The bundled asset is unchanged. Production callers retain their original palette.
+
+Tide is a separate input-transparent layer: lowercase muted in measured 14 sp Plex,
+84% muted ink, at most 1 dp horizontal / 3 dp vertical drift on the shared 14-second
+clock, and a 450 ms entrance. Effective gates own eligibility; PTT, pending controls,
+disconnect or background removes it immediately. Reduced motion draws a static
+word. Its measured rectangle plus 8 dp radial clearance must fit a conservative
+inner aperture; drift decreases before the word is omitted at impossible sizes.
+This is deliberately distinct from the outer trace-attachment envelope.
+
+The operator's captured portrait choices become provisional studio defaults:
+Contained 78% / offset −22 dp, controls 387 dp / share 40.9%, Parallel traces 130/175/88/0 with both
+endpoint spacings 100, motion 35/25/25/25, existing base colors, Still 35 / Follow,
+and Original 78/56/78. Landscape keeps its independent baseline. Existing profiles
+preserve their values and gain only baseline spacing. No load, reset or preview
+publishes a profile. Future Live/Design integration and product preferences remain
+separate; these are adjustable design experiments.

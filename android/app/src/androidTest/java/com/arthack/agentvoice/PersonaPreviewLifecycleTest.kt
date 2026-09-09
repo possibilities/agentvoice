@@ -12,11 +12,17 @@ import org.junit.Test
 import java.util.UUID
 
 class PersonaPreviewLifecycleTest {
+    private fun legacySession(state: PersonaPreviewState, protocol: Int) = state.json().put("protocol", protocol).apply {
+        remove("theme"); remove("mutedPresence"); remove("otherLayout"); remove("savedOtherLayout")
+        for (field in listOf("orientation", "orientationEpoch", "personaSide", "savedPersonaSide", "defaultPersonaSide")) remove(field)
+        for (field in listOf("design", "savedDesign", "defaultDesign")) getJSONObject(field).remove("spacing")
+    }
+
     @Test fun restoringOldLiveChoicesKeepsTuningAndMigratesRetiredDesigns() {
         val original = PersonaPreviewState(mode = "listening", activity = "voice", design = PreviewDesign(controlsHeightDp = 387),
             halo = PreviewHalo(variant = "contained", ringSpreadPercent = 52), spirit = PreviewSpirit("soft", 72, "follow"))
         for (protocol in listOf(7, 8)) {
-            val old = original.json().put("protocol", protocol).apply {
+            val old = legacySession(original, protocol).apply {
                 getJSONObject("design").apply {
                     remove("traces"); put("composition", "socket")
                     if (protocol == 7) { put("mute", "keycaps"); put("hold", "trigger") }
@@ -26,7 +32,7 @@ class PersonaPreviewLifecycleTest {
             assertEquals(original, restored)
         }
         val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 72, 41)))
-        val v9 = v9State.json().put("protocol", 9).apply {
+        val v9 = legacySession(v9State, 9).apply {
             getJSONObject("design").getJSONObject("traces").apply { remove("personaSpacingPercent"); remove("footSpacingPercent") }
         }
         assertEquals(v9State, restorePersonaPreview(v9, v9State.saved, v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
@@ -51,6 +57,7 @@ class PersonaPreviewLifecycleTest {
             var before: JSONObject
             connect().use { socket ->
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
+                    .put("theme", "bright").put("mutedPresence", "tide")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55, 75, 175)).json())

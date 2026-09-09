@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -39,7 +40,23 @@ internal fun PreviewStudioScreen(
     spirit: PreviewSpirit = PreviewSpirit(),
     activity: String = "steady",
     personaSide: String = "left",
+    theme: String = "bright",
+    mutedPresence: String = "tide",
 ) {
+    CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
+        PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
+            connection, halo, spirit, activity, personaSide, mutedPresence)
+    }
+}
+
+@Composable
+private fun PreviewStudioScene(
+    ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
+    onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
+    connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
+    personaSide: String, mutedPresence: String,
+) {
+    val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
     val currentRelease by rememberUpdatedState(onRelease)
     DisposableEffect(Unit) { onDispose { currentRelease() } }
@@ -51,14 +68,18 @@ internal fun PreviewStudioScreen(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val scene = rememberPreviewSpirit(ui, spirit, halo, activity, ambientPercent = design.traces.glowPercent)
-    BoxWithConstraints(Modifier.fillMaxSize().background(VoiceInk.ground)) {
+    val muted = mutedPresence == "tide" && previewMutedEligible(ui, foreground)
+    val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
+        ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted)
+    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.pushGapDp)
+    BoxWithConstraints(Modifier.fillMaxSize().background(theme.palette.ground)) {
         val screenWidth = maxWidth
         val portrait = maxHeight >= maxWidth
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
-                portrait, design.controlsHeightDp.toFloat(), placement.offsetY.value, personaSide)
+                portrait, design.controlsHeightDp.toFloat(), placement.offsetY.value, personaSide,
+                spacing = design.spacing, actualDeckHeight = deck.extentHeightDp)
             var source by remember { mutableStateOf(target) }
             var destination by remember { mutableStateOf(target) }
             val progress = remember { Animatable(1f) }
@@ -109,9 +130,9 @@ internal fun PreviewStudioScreen(
                 Box(Modifier.fillMaxWidth().height(geometry.contentHeight.dp)) {
                     val traceLayer = Modifier.matchParentSize().graphicsLayer { alpha = traceAlpha }
                     if (portrait) {
-                        PreviewPersonaTraces(geometry.deckY.dp, design.controlsHeightDp.dp, geometry.deckX.dp,
+                        PreviewPersonaTraces(geometry.deckY.dp, deck.extentHeightDp.dp, geometry.deckX.dp,
                             traceLayer, (geometry.stageY + geometry.diameter / 2f + geometry.offsetY).dp,
-                            clearRadius, design.traces)
+                            clearRadius, design.traces, design.spacing.channelGapDp)
                     } else {
                         PreviewLandscapeTraces(geometry, clearRadius, design, deckScroll.value, traceLayer)
                     }
@@ -121,8 +142,14 @@ internal fun PreviewStudioScreen(
                         key(halo.variant) {
                             val presentedPlacement = placement.copy(offsetY = geometry.offsetY.dp)
                             if (halo.variant == "contained") PreviewSpiritHalo(ui, stage, presentedPlacement, halo, scene.colors)
-                            else PersonaHalo(ui, stage, presentedPlacement)
+                            else PersonaHalo(ui, stage, presentedPlacement, PersonaColors(
+                                listening = theme.haloArgb(VoiceInk.you.toArgb()), speaking = theme.haloArgb(VoiceInk.agent.toArgb()),
+                                idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())))
                         }
+                        val aperture = rememberMutedAperture(geometry.diameter, halo, placement, motionAllowed && foreground)
+                        PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
+                            geometry.offsetY.dp, aperture.dp,
+                            ink = theme.foreground(VoiceInk.muted, theme.palette.ground, opacity = .84f))
                     }
                     Box(Modifier.offset { IntOffset(geometry.deckX.dp.roundToPx(), geometry.deckY.dp.roundToPx()) }
                         .requiredSize(geometry.deckWidth.dp, geometry.deckViewportHeight.dp)
@@ -139,12 +166,12 @@ internal fun PreviewStudioScreen(
                             }
                         }
                         .then(if (changing) Modifier.clearAndSetSemantics { disabled() } else Modifier)
-                        .verticalScroll(deckScroll, enabled = !portrait && target.deckViewportHeight < design.controlsHeightDp)) {
+                        .verticalScroll(deckScroll, enabled = !portrait && target.deckViewportHeight < deck.extentHeightDp)) {
                         // A relocated target cannot inherit the finger that owned its previous position.
                         key(target.layoutKey) {
                             PreviewControls(ui, { if (!latestChanging) onMute(it) }, { if (!latestChanging) onHold() }, release,
                                 Modifier.fillMaxWidth(), controlsHeightDp = design.controlsHeightDp,
-                                holdSharePercent = design.holdSharePercent, light = scene.light)
+                                holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing)
                         }
                     }
                 }
@@ -157,5 +184,29 @@ internal fun PreviewStudioScreen(
 @Composable
 private fun PreviewSpiritHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlacement, halo: PreviewHalo,
     colors: State<CompactHaloColors>) {
-    CompactPersonaHalo(ui, modifier, halo.placement(placement), halo.tuning(), colors.value)
+    val theme = LocalPreviewTheme.current
+    val base = colors.value
+    val themed = if (theme == PreviewTheme.Bright) base else CompactHaloColors(
+        theme.haloArgb(base.speaking), theme.haloArgb(base.listening), theme.haloArgb(base.idle),
+        theme.haloArgb(base.asleep))
+    CompactPersonaHalo(ui, modifier, halo.placement(placement), halo.tuning(), themed)
+}
+
+internal fun previewMutedEligible(ui: CallUi, foreground: Boolean): Boolean =
+    foreground && ui.connected && !ui.controlsPending && !ui.micOpen && !ui.speakerOpen
+
+/** Conservative inner apertures include the smallest transition pose, not the trace attachment radius. */
+@Composable
+private fun rememberMutedAperture(diameter: Float, halo: PreviewHalo, placement: PersonaPlacement,
+    animate: Boolean): Float {
+    val scale = if (halo.variant == "contained") halo.containedSizePercent / 100f
+        else minOf(placement.speakingScale, placement.listeningScale, placement.idleScale)
+    val target = diameter * scale * 1.9f * if (halo.variant == "contained") .07f else .16f
+    var settled by remember { mutableFloatStateOf(target) }
+    LaunchedEffect(target, animate) {
+        // Growing the text-safe region waits for size handover; shrink it immediately in composition.
+        if (animate && target > settled) kotlinx.coroutines.delay(600)
+        settled = target
+    }
+    return minOf(settled, target)
 }

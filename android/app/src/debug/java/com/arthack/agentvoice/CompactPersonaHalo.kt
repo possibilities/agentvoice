@@ -82,7 +82,7 @@ internal fun CompactPersonaHalo(
     val bytes = source.getOrNull()
     if (bytes == null) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text("Contained Halo unavailable. Choose Original.", color = VoiceInk.text, fontFamily = VoiceInk.type)
+            Text("Contained Halo unavailable. Choose Original.", color = LocalPreviewTheme.current.palette.text, fontFamily = VoiceInk.type)
         }
         return
     }

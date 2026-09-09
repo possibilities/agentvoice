@@ -1,3 +1,4 @@
+import { defaultSpacing, equalSpacing, parseSpacing, type Spacing } from "./spacing.ts";
 import {
   defaultTraces,
   equalTraces,
@@ -17,10 +18,11 @@ export type VersionEightDesign = {
   controlsHeightDp: number;
   holdSharePercent: number;
 };
-export type Design = Omit<VersionEightDesign, "composition"> & {
+export type VersionTenDesign = Omit<VersionEightDesign, "composition"> & {
   composition: "traces";
   traces: TraceSelection;
 };
+export type Design = VersionTenDesign & { spacing: Spacing };
 export type VersionNineDesign = Omit<VersionEightDesign, "composition"> & {
   composition: "traces";
   traces: VersionNineTraceSelection;
@@ -46,6 +48,7 @@ export const defaultDesign: Design = {
   hold: "rocker",
   composition: "traces",
   traces: defaultTraces(),
+  spacing: defaultSpacing(),
   controlsHeightDp: 262,
   // Retain the exact 130 + 16 + 116 dp layout, including the fixed join.
   holdSharePercent: (116 / 262) * 100,
@@ -59,10 +62,16 @@ export function equalDesign(a: Design, b: Design) {
     a.composition === b.composition &&
     a.controlsHeightDp === b.controlsHeightDp &&
     Math.abs(a.holdSharePercent - b.holdSharePercent) < 1e-9 &&
-    equalTraces(a.traces, b.traces)
+    equalTraces(a.traces, b.traces) &&
+    equalSpacing(a.spacing, b.spacing)
   );
 }
 export function parseDesign(value: unknown): Design {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const { spacing, ...previous } = value as Record<string, unknown>;
+  return { ...parseVersionTenDesign(previous), spacing: parseSpacing(spacing) };
+}
+export function parseVersionTenDesign(value: unknown): VersionTenDesign {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
   const { traces, ...previous } = value as Record<string, unknown>;
   const design = parseVersionEightDesign(previous);

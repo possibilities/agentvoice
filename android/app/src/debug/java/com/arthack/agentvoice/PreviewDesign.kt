@@ -8,6 +8,7 @@ internal data class PreviewDesign(
     val controlsHeightDp: Int = 262,
     val holdSharePercent: Double = 116.0 / 262.0 * 100.0,
     val traces: PreviewTraces = PreviewTraces(),
+    val spacing: PreviewSpacing = PreviewSpacing(),
 ) {
     val mute: String = "rockers"
     val hold: String = "rocker"
@@ -15,10 +16,11 @@ internal data class PreviewDesign(
     fun json(): JSONObject = JSONObject().put("layout", layout).put("header", header).put("mute", mute).put("hold", hold)
         .put("composition", composition)
         .put("controlsHeightDp", controlsHeightDp).put("holdSharePercent", holdSharePercent).put("traces", traces.json())
+        .put("spacing", spacing.json())
 }
 
 internal fun decodePreviewDesign(data: JSONObject): PreviewDesign {
-    require(data.fields() == setOf("layout", "header", "mute", "hold", "composition", "controlsHeightDp", "holdSharePercent", "traces"))
+    require(data.fields() == setOf("layout", "header", "mute", "hold", "composition", "controlsHeightDp", "holdSharePercent", "traces", "spacing"))
     require(data.getString("layout") == "studio" && data.getString("header") == "none")
     require(data.getString("mute") == "rockers" && data.getString("hold") == "rocker")
     require(data.getString("composition") == "traces")
@@ -26,7 +28,8 @@ internal fun decodePreviewDesign(data: JSONObject): PreviewDesign {
     val share = data.get("holdSharePercent")
     require(height is Number && height.toDouble() % 1.0 == 0.0 && height.toDouble() in 240.0..480.0)
     require(share is Number && share.toDouble().isFinite() && share.toDouble() in 30.0..60.0)
-    return PreviewDesign(controlsHeightDp = height.toInt(), holdSharePercent = share.toDouble(), traces = decodePreviewTraces(data.getJSONObject("traces")))
+    return PreviewDesign(controlsHeightDp = height.toInt(), holdSharePercent = share.toDouble(),
+        traces = decodePreviewTraces(data.getJSONObject("traces")), spacing = decodePreviewSpacing(data.getJSONObject("spacing")))
 }
 
 private fun decodeLegacyStudioDesign(data: JSONObject, version: Int): PreviewDesign {
@@ -35,8 +38,8 @@ private fun decodeLegacyStudioDesign(data: JSONObject, version: Int): PreviewDes
     require(data.getString("hold") in if (version == 8) setOf("rocker") else setOf("trigger", "rocker"))
     require(data.getString("composition") in if (version <= 6) setOf("open", "dock", "yoke") else setOf("open", "dock", "yoke", "socket", "traces"))
     // Old shapes are validated before migration; loading never publishes a profile.
-    return decodePreviewDesign(data.put("mute", "rockers").put("hold", "rocker")
-        .put("composition", "traces").put("traces", PreviewTraces().json()))
+    return decodePreviewDesign(withLegacyPreviewSpacing(data.put("mute", "rockers").put("hold", "rocker")
+        .put("composition", "traces").put("traces", PreviewTraces().json())))
 }
 
 internal fun decodePersonaDesign(json: String): PreviewDesign {
@@ -64,9 +67,10 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
             val design = data.getJSONObject("design")
             require(design.fields() == setOf("layout", "header", "mute", "hold", "composition", "controlsHeightDp", "holdSharePercent", "traces"))
             val migrated = JSONObject(design.toString()).put("traces", migrateVersionNineTraces(design.getJSONObject("traces")))
-            decodePreviewDesign(migrated)
+            decodePreviewDesign(withLegacyPreviewSpacing(migrated))
         }
-        10, 11 -> decodePreviewDesign(data.getJSONObject("design"))
+        10, 11 -> decodePreviewDesign(withLegacyPreviewSpacing(data.getJSONObject("design")))
+        12 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

@@ -24,6 +24,15 @@
           <div class="studio-grid">
             <fieldset class="button-controls">
               <legend class="panel-title">Controls</legend>
+              <div class="mixing">
+                <label for="preview-theme">Theme</label>
+                <select id="preview-theme" aria-describedby="session-style-hint"><option value="bright">Bright</option><option value="quiet">Quiet</option><option value="grayscale">Grayscale</option></select>
+              </div>
+              <div class="mixing">
+                <label for="muted-presence">Muted presence</label>
+                <select id="muted-presence" aria-describedby="session-style-hint"><option value="tide">Tide</option><option value="off">Off</option></select>
+              </div>
+              <p id="session-style-hint" class="control-hint">Theme and muted presence last for this preview session. Save profile keeps layout tuning.</p>
               <fieldset class="trace-controls">
                 <legend class="subpanel-title">Traces</legend>
                 <div class="mixing">
@@ -73,6 +82,40 @@
                   <input id="spirit-strength" type="range" min="0" max="100" step="1" value="35" />
                 </div>
                 <button type="button" id="reset-light" data-reset="light" class="reset value-reset">Reset light</button>
+              </fieldset>
+
+              <fieldset class="motion-controls"><legend class="subpanel-title">Spacing</legend>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spacing-sideMarginPercent">Outer sides</label><output id="spacing-sideMarginPercent-value" for="spacing-sideMarginPercent">100%</output></div>
+                  <input id="spacing-sideMarginPercent" type="range" min="0" max="200" step="1" value="100" aria-describedby="spacing-sideMarginPercent-hint" />
+                  <p id="spacing-sideMarginPercent-hint" class="control-hint">Space outside the left and right edges of the scene.</p>
+                  <button type="button" id="reset-spacing-sideMarginPercent" data-reset="spacing-sideMarginPercent" class="reset value-reset">Reset outer sides</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spacing-edgeClearancePercent">Edge clearance</label><output id="spacing-edgeClearancePercent-value" for="spacing-edgeClearancePercent">100%</output></div>
+                  <input id="spacing-edgeClearancePercent" type="range" min="0" max="200" step="1" value="100" aria-describedby="spacing-edgeClearancePercent-hint" />
+                  <p id="spacing-edgeClearancePercent-hint" class="control-hint">Clearance from the top and bottom edges of the scene.</p>
+                  <button type="button" id="reset-spacing-edgeClearancePercent" data-reset="spacing-edgeClearancePercent" class="reset value-reset">Reset edge clearance</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spacing-sectionGapDp">Section separation</label><output id="spacing-sectionGapDp-value" for="spacing-sectionGapDp">0 dp</output></div>
+                  <input id="spacing-sectionGapDp" type="range" min="0" max="80" step="1" value="0" aria-describedby="spacing-sectionGapDp-hint" />
+                  <p id="spacing-sectionGapDp-hint" class="control-hint">Minimum extra separation between Persona and controls.</p>
+                  <button type="button" id="reset-spacing-sectionGapDp" data-reset="spacing-sectionGapDp" class="reset value-reset">Reset section separation</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spacing-channelGapDp">Channel gap</label><output id="spacing-channelGapDp-value" for="spacing-channelGapDp">10 dp</output></div>
+                  <input id="spacing-channelGapDp" type="range" min="0" max="40" step="1" value="10" aria-describedby="spacing-channelGapDp-hint" />
+                  <p id="spacing-channelGapDp-hint" class="control-hint">Space between the microphone and speaker buttons.</p>
+                  <button type="button" id="reset-spacing-channelGapDp" data-reset="spacing-channelGapDp" class="reset value-reset">Reset channel gap</button>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="spacing-pushGapDp">Push-to-talk join</label><output id="spacing-pushGapDp-value" for="spacing-pushGapDp">16 dp</output></div>
+                  <input id="spacing-pushGapDp" type="range" min="0" max="48" step="1" value="16" aria-describedby="spacing-pushGapDp-hint" />
+                  <p id="spacing-pushGapDp-hint" class="control-hint">Space between the channel buttons and Push to talk.</p>
+                  <button type="button" id="reset-spacing-pushGapDp" data-reset="spacing-pushGapDp" class="reset value-reset">Reset push-to-talk join</button>
+                </div>
+                <button type="button" id="reset-spacing" data-reset="spacing" class="reset value-reset">Reset spacing</button>
               </fieldset>
               <div class="size-control">
                 <div class="size-heading"><label for="controls-height">Controls height</label><output id="controls-height-value" for="controls-height">262 dp</output></div>

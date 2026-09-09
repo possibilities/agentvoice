@@ -1,15 +1,17 @@
 # Android development build verification
 
-Latest synthetic UI checks: 2026-09-09. Samsung Galaxy S22 (SM-S901U), Android 16 / API 36,
-1080 × 2340 at density 480. Native development package `com.arthack.agentvoice.dev`.
-Earlier live-call checks used the desktop's existing waiting AgentVoice service
-and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
-configuration was changed. The latest configurator checks opened no voice call.
+Latest synthetic UI checks: 2026-09-09 on the disposable API 35 ARM64 emulator
+`agentvoice_round12_checks`, 480 × 1040 at density 213. Native development package
+`com.arthack.agentvoice.dev`. The physical S22 was unplugged throughout this round;
+its latest live choices and saved files were not read, installed over or restored.
+Earlier physical-phone and live-call evidence remains below. No current check
+started a voice call, microphone, speaker or inference.
 
 Latest debug APK SHA-256:
-`0beddde8e8d643213918322a9b56851013996bc55919e4224d755a242fd5ac79`.
-The latest checks are recorded under [Independent landscape studio](#independent-landscape-studio);
-earlier sections retain the verification history.
+`7ce2f79adae68f8b72b997267165ecb60fc94d0558f1167bc7fc017f4c5e4a8e`.
+The installed emulator APK matches these exact bytes. Latest checks are under
+[Tide, themes and independent spacing](#tide-themes-and-independent-spacing);
+earlier sections retain their original verification history.
 
 ## Automated checks
 
@@ -729,3 +731,75 @@ Evidence: `/tmp/agentvoice-orientation-{build,rebuild,tests,typecheck,lint}.log`
 `/tmp/agentvoice-orientation-landscape-{baseline,left,right}.png`,
 `/tmp/agentvoice-orientation-transition.mp4`, and
 `/tmp/agentvoice-orientation-restored.png`.
+
+
+### Tide, themes and independent spacing
+
+Protocol/profile 12 adds five independently resettable spacing values per
+orientation. Only the deck and connecting routes use them; Persona's square,
+size and manual offset retain their baseline geometry. PTT join spacing adds to
+the deck's extent without rescaling its button faces. Impossible margins are
+bounded by usable control width without rewriting requested values.
+
+Tide places a measured lowercase `muted` inside a conservative clear aperture,
+with a shared 14-second clock, 450 ms entrance and immediate removal when either
+effective audio gate opens. Reduced motion is static; background/pending state
+suppresses it. At sizes or font scales that cannot fit the word plus clearance,
+the optional layer is omitted. Bright, Quiet and Grayscale theme both native Halo
+variants and scene colors after channel following. Theme and Tide are session-only
+experiments, shared across rotation and excluded from saved layout profiles.
+Portrait reset/factory defaults adopt the operator's explicitly captured choices;
+landscape keeps its independent baseline and existing profiles keep their values.
+
+- 675 repository tests / 9,140 assertions passed, including 46 configurator tests /
+  2,018 assertions. Root/configurator TypeScript and scoped Biome passed.
+- 75 JVM tests passed with zero failures, errors or skips. Debug/test APK assembly,
+  Android lint and unsigned release assembly passed. The release manifest excludes
+  the preview activities; the theme/presence selectors remain debug-only. Original's
+  optional color input keeps its production default palette unchanged.
+- Final complete emulator instrumentation: **51 tests passed in 92.5 seconds**.
+  Coverage includes native Original recoloring with unchanged paused silhouette,
+  held pointer and native-view continuity, Tide motion/removal/reduced motion,
+  background clock fencing, independent orientation profiles and stale-epoch
+  rejection, reset/migration boundaries, geometry, real gestures and overflow scroll.
+- Earlier failures are retained: the initial theme test used an incorrect 8-bit
+  rounding tolerance; Tide's test tag was hidden by semantics clearing; a resumed
+  clock frame could overwrite background reset. Those were corrected. Continuous
+  animation also prevented automatic-clock tests reaching idle; the shared clock
+  now uses Compose's infinite-animation API, while motion tests explicitly use a
+  manual clock. A subsequent full run completed 51 tests with one fixture failure:
+  changing traces also replaced the new tall default deck. The fixture now keeps
+  its explicit fitting deck and changes only traces. The final complete run above
+  uses that correction; aborted and failing runs are not counted as passing.
+- Headless Chrome against an isolated phone fixture verified all five sliders,
+  individual/group resets, session-only appearance across rotation, preservation
+  of the inactive layout and rejection of queued stale-orientation edits. No Save.
+- Actual native emulator screenshots were reviewed by the integration owner and
+  three design reviewers. Bright retains lime/violet hierarchy; Quiet softens it;
+  Grayscale keeps glyphs and captions stronger than Halo. Every RGB pixel in the
+  Grayscale listening, speaking and muted captures has equal channel values,
+  including maximum ambient glow. These captures do not establish OLED brightness
+  or subjective comfort on the physical phone.
+- At Contained 78%, Tide is readable with ample clear-center space; at 35%, it is
+  omitted. Stills verify this sampled composition, not universal animation bounds.
+  Maximum spacing/Splayed stance/foot spread keeps feet on their button tops in
+  portrait and both landscape sides. Zero join adds no connector over the faces.
+  The tall portrait deck intentionally scrolls below the screenshots; separate
+  native gesture tests verify reachability. The conservative Original attachment
+  limitation recorded above remains unresolved.
+- Emulator comparisons were returned to provisional portrait and baseline landscape
+  choices. No profile Save or phone operation occurred. The standalone emulator
+  studio uses port 4318 and a disposable /tmp profile destination, separate from
+  the disconnected physical-phone studio on port 4317. Physical-phone installation,
+  fresh state preservation and final display review remain the delivery follow-up.
+
+Evidence: `/tmp/agentvoice-round12-final-build.log`,
+`/tmp/agentvoice-round12-fixture-build.log`,
+`/tmp/agentvoice-round12-build-final.log` (release build),
+`/tmp/agentvoice-round12-native-confirm.log` (final complete run),
+`/tmp/agentvoice-round12-native-final.log` (one fixture failure),
+`/tmp/agentvoice-round12-{tests,typecheck,lint}.log`,
+`/tmp/agentvoice-studio12-browser.Kx52d9/evidence.json`,
+`/tmp/agentvoice-round12-install-receipt.txt`, and
+`/tmp/agentvoice-round12-visuals/` (native PNGs with state JSON, theme sheet and
+Grayscale pixel measurements).

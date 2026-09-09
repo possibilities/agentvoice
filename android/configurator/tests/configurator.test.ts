@@ -9,6 +9,7 @@ import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
 import { parseArgs } from "../src/main.ts";
 import {
   defaultLandscapeLayout,
+  defaultPortraitLayout,
   equalLayout,
   layoutOf,
   type Phone,
@@ -27,6 +28,7 @@ import {
 } from "../src/protocol.ts";
 import { resetPreview } from "../src/resets.ts";
 import { serveConfigurator } from "../src/server.ts";
+import { defaultSpacing, parseSpacing, spacingBounds, spacingFields } from "../src/spacing.ts";
 import { defaultSpirit, parseSpirit } from "../src/spirit.ts";
 import {
   defaultTraces,
@@ -39,7 +41,9 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 11,
+  protocol: 12,
+  theme: "bright",
+  mutedPresence: "tide",
   orientation: "portrait",
   orientationEpoch: 0,
   personaSide: "left",
@@ -73,7 +77,7 @@ const initial = (): PhoneState => ({
 const profile = (state: PhoneState): Extract<Profile, { version: 10 }> => ({
   version: 10,
   spirit: { ...state.spirit },
-  design: structuredClone(state.design),
+  design: versionTenDesign(state.design),
   halo: structuredClone(state.halo),
   scaleMultipliers: {
     speaking: state.scales.speaking / 100,
@@ -85,11 +89,12 @@ const profile = (state: PhoneState): Extract<Profile, { version: 10 }> => ({
   disconnectedArtboardScale: 1.5,
   savedAtEpochMs: 1788917295182,
 });
-const currentProfile = (state: PhoneState): Extract<Profile, { version: 11 }> => {
+const currentProfile = (state: PhoneState): Extract<Profile, { version: 12 }> => {
   const portrait = state.orientation === "portrait" ? layoutOf(state) : state.otherLayout;
   return {
     ...profile({ ...state, ...portrait }),
-    version: 11,
+    version: 12,
+    design: structuredClone(portrait.design),
     personaSide: portrait.personaSide,
     landscape: layoutOf(state.orientation === "landscape" ? state : state.otherLayout),
   };
@@ -112,6 +117,7 @@ class FakePhone implements Phone {
   changeDuringSave = false;
   rotateDuringSave = false;
   wrongOtherReceipt = false;
+  wrongSpacingReceipt: (typeof spacingFields)[number] | undefined;
   wrongSideReceipt = false;
   wrongHaloReceipt:
     | "variant"
@@ -155,6 +161,8 @@ class FakePhone implements Phone {
         throw Error("Stale orientation");
       const preview = parsePreview({
         ...previewOf(initial()),
+        theme: command["theme"],
+        mutedPresence: command["mutedPresence"],
         orientation: command["orientation"],
         orientationEpoch: command["orientationEpoch"],
         personaSide: command["personaSide"],
@@ -185,6 +193,7 @@ class FakePhone implements Phone {
         savedSpirit: { ...this.state.spirit },
       };
       const receipt = currentProfile(this.state);
+      if (this.wrongSpacingReceipt) receipt.design.spacing[this.wrongSpacingReceipt]++;
       if (this.wrongOtherReceipt) receipt.landscape.verticalOffsetDp++;
       if (this.wrongSideReceipt) receipt.personaSide = "right";
       if (this.rotateDuringSave) this.rotate();
@@ -244,6 +253,8 @@ async function fixture(options: { saveTo?: string } = {}) {
         orientationEpoch: phone.state.orientationEpoch,
         ...(path === "preview"
           ? {
+              theme: phone.state.theme,
+              mutedPresence: phone.state.mutedPresence,
               personaSide: phone.state.personaSide,
               connection: phone.state.connection,
               activity: phone.state.activity,
@@ -307,17 +318,21 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   }
 });
 
+function versionTenDesign(design = defaultDesign) {
+  const { spacing: _, ...previous } = design;
+  return previous;
+}
 function versionNineDesign(design = defaultDesign) {
   const {
     personaSpacingPercent: _personaSpacing,
     footSpacingPercent: _footSpacing,
     ...traces
   } = design.traces;
-  return { ...design, traces };
+  return { ...versionTenDesign(design), traces };
 }
 
 function previousDesign(design = defaultDesign) {
-  const { traces: _traces, ...previous } = design;
+  const { traces: _traces, ...previous } = versionTenDesign(design);
   return previous;
 }
 
@@ -421,6 +436,7 @@ test("every legacy button choice migrates to Rockers while retaining other choic
         ...loaded.design,
         composition: "traces",
         traces: defaultTraces(),
+        spacing: defaultSpacing(),
         mute: "rockers",
         hold: "rocker",
       });
@@ -556,6 +572,7 @@ test("version 9 profiles retain every previous trace value and add only baseline
     const migrated = profileDesign(loaded);
     expect(migrated).toEqual({
       ...previous.design,
+      spacing: defaultSpacing(),
       traces: { ...previous.design.traces, personaSpacingPercent: 100, footSpacingPercent: 100 },
     });
     expect(profileHalo(loaded)).toEqual(previous.halo);
@@ -629,7 +646,7 @@ test("every nested trace receipt must match before an existing host profile can 
   }
 });
 
-test("trace edits remain unsaved and exact version 11 Save snapshots the reviewed nested settings", async () => {
+test("trace edits remain unsaved and exact version 12 Save snapshots the reviewed nested settings", async () => {
   const { phone, post, saveTo } = await fixture();
   const traces: TraceSelection = {
     pattern: "circuit",
@@ -655,7 +672,7 @@ test("trace edits remain unsaved and exact version 11 Save snapshots the reviewe
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(11);
+  expect(saved.version).toBe(12);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
@@ -967,7 +984,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(11);
+  expect(saved.version).toBe(12);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -1127,7 +1144,7 @@ test("old profile contracts keep exact fields and old compositions while spirit 
   expect(() => parseProfile(JSON.stringify({ ...v7, spirit: undefined }))).toThrow();
 });
 
-test("spirit is unsaved until exact version 11 Save and activity never enters the profile", async () => {
+test("spirit is unsaved until exact version 12 Save and activity never enters the profile", async () => {
   const { phone, post, saveTo } = await fixture();
   const spirit = { surface: "soft", strengthPercent: 72, persona: "follow" } as const;
   const design = { ...defaultDesign, composition: "traces" as const };
@@ -1148,7 +1165,7 @@ test("spirit is unsaved until exact version 11 Save and activity never enters th
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(11);
+  expect(saved.version).toBe(12);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
@@ -1235,7 +1252,7 @@ test("independent layouts retain portrait choices and save both layouts from lan
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(11);
+  expect(saved.version).toBe(12);
   expect(profileLayout(saved, "portrait")).toEqual(layoutOf(portrait));
   expect(profileLayout(saved, "landscape")).toEqual(layoutOf(landscape));
   phone.rotate();
@@ -1291,7 +1308,7 @@ test("wrong inactive layout or hidden side receipts cannot create a host copy", 
   }
 });
 
-test("protocol 11 validates independent layouts and fits bounded profile and receipt frames", async () => {
+test("protocol 12 validates independent layouts and fits bounded profile and receipt frames", async () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const invalid of [
@@ -1319,4 +1336,202 @@ test("protocol 11 validates independent layouts and fits bounded profile and rec
   });
   peer.write(`${frame}\n`);
   expect((await reply).profile).toBe(encoded);
+});
+
+test("spacing has exact bounded integer fields at every live and saved boundary", async () => {
+  const { phone, post } = await fixture();
+  const spacing = defaultSpacing();
+  const invalid: unknown[] = [null, {}, [], undefined, { ...spacing, extra: 1 }];
+  for (const field of spacingFields) {
+    const [min, max] = spacingBounds[field];
+    for (const amount of [min, max])
+      expect(parseSpacing({ ...spacing, [field]: amount })[field]).toBe(amount);
+    for (const amount of [min - 1, max + 1, 0.5, "10", null, undefined, Infinity, NaN])
+      invalid.push({ ...spacing, [field]: amount });
+  }
+  for (const spacing of invalid) {
+    const design = { ...defaultDesign, spacing };
+    expect(() => parseDesign(design)).toThrow();
+    expect(() =>
+      parseProfile(JSON.stringify({ ...currentProfile(phone.state), design })),
+    ).toThrow();
+    expect(() =>
+      parseState({ ...phone.state, otherLayout: { ...phone.state.otherLayout, design } }),
+    ).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), design })).status).toBe(400);
+  }
+  expect(phone.calls).toHaveLength(0);
+});
+
+test("version 11 preserves both layouts and seeds only baseline spacing without changing saved bytes", () => {
+  const source = initial();
+  source.verticalOffsetDp = -96;
+  source.design.controlsHeightDp = 479;
+  source.otherLayout.design.controlsHeightDp = 249;
+  source.otherLayout.verticalOffsetDp = 108;
+  source.otherLayout.personaSide = "right";
+  source.otherLayout.halo.containedSizePercent = 119;
+  source.otherLayout.design.traces.personaSpacingPercent = 177;
+  const current = currentProfile(source);
+  const old = {
+    ...current,
+    version: 11 as const,
+    design: versionTenDesign(current.design),
+    landscape: { ...current.landscape, design: versionTenDesign(current.landscape.design) },
+  };
+  const encoded = JSON.stringify(old);
+  const parsed = parseProfile(encoded);
+  expect(parsed.version).toBe(11);
+  const portrait = profileLayout(parsed, "portrait");
+  const landscape = profileLayout(parsed, "landscape");
+  expect(portrait).toEqual(layoutOf(source));
+  expect(landscape).toEqual(source.otherLayout);
+  expect(portrait.design.spacing).toEqual(defaultSpacing());
+  expect(landscape.design.spacing).toEqual(defaultSpacing());
+  portrait.design.spacing.sideMarginPercent = 11;
+  landscape.design.spacing.sideMarginPercent = 188;
+  expect(profileLayout(parsed, "portrait").design.spacing).toEqual(defaultSpacing());
+  expect(profileLayout(parsed, "landscape").design.spacing).toEqual(defaultSpacing());
+  expect(JSON.stringify(parsed)).toBe(encoded);
+  expect(() => parseProfile(JSON.stringify({ ...old, design: current.design }))).toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...old, landscape: current.landscape }))).toThrow();
+});
+
+test("theme and muted presence are transient across layout switches, resets and explicit Save", async () => {
+  const { phone, post, saveTo } = await fixture();
+  for (const theme of ["bright", "quiet", "grayscale"] as const)
+    for (const mutedPresence of ["tide", "off"] as const) {
+      expect(
+        (await post("preview", { ...previewOf(phone.state), theme, mutedPresence })).status,
+      ).toBe(200);
+      expect(phone.state.theme).toBe(theme);
+      expect(phone.state.mutedPresence).toBe(mutedPresence);
+    }
+  phone.rotate();
+  expect(phone.state.theme).toBe("grayscale");
+  expect(phone.state.mutedPresence).toBe("off");
+  const reset = resetPreview(previewOf(phone.state), phone.state, "spacing");
+  expect(reset.theme).toBe("grayscale");
+  expect(reset.mutedPresence).toBe("off");
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const savedText = await readFile(saveTo, "utf8");
+  const saved = parseProfile(savedText);
+  expect(savedText).not.toContain('"theme"');
+  expect(savedText).not.toContain('"mutedPresence"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, theme: "quiet" }))).toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...saved, mutedPresence: "off" }))).toThrow();
+  for (const invalid of [
+    { theme: "dark" },
+    { theme: undefined },
+    { mutedPresence: "always" },
+    { mutedPresence: undefined },
+  ]) {
+    expect(() => parseState({ ...phone.state, ...invalid })).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), ...invalid })).status).toBe(400);
+  }
+});
+
+test("spacing resets isolate each field or the group and preserve the other orientation and session modes", () => {
+  const state = initial();
+  state.theme = "quiet";
+  state.mutedPresence = "off";
+  state.design.spacing = {
+    sideMarginPercent: 165,
+    edgeClearancePercent: 53,
+    sectionGapDp: 49,
+    channelGapDp: 32,
+    pushGapDp: 41,
+  };
+  const original = structuredClone(state);
+  const current = previewOf(state);
+  for (const field of spacingFields) {
+    const reset = resetPreview(current, state, `spacing-${field}`);
+    expect(reset).toEqual({
+      ...current,
+      design: {
+        ...current.design,
+        spacing: { ...current.design.spacing, [field]: defaultSpacing()[field] },
+      },
+    });
+  }
+  const reset = resetPreview(current, state, "spacing");
+  expect(reset).toEqual({ ...current, design: { ...current.design, spacing: defaultSpacing() } });
+  for (const target of [
+    "controls",
+    "size",
+    "position",
+    "traces",
+    "glow",
+    "animation",
+    "colors",
+    "light",
+    "spirit-colors",
+  ] as const) {
+    const reset = resetPreview(current, state, target);
+    expect(reset.design.spacing).toEqual(current.design.spacing);
+    expect(reset.theme).toBe("quiet");
+    expect(reset.mutedPresence).toBe("off");
+  }
+  expect(state).toEqual(original);
+});
+
+test("spacing saves separately per orientation and every field must match the receipt", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const portrait = { ...defaultSpacing(), sideMarginPercent: 155, sectionGapDp: 57, pushGapDp: 34 };
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        design: { ...phone.state.design, spacing: portrait },
+      })
+    ).status,
+  ).toBe(200);
+  phone.rotate();
+  const landscape = { ...defaultSpacing(), edgeClearancePercent: 44, channelGapDp: 31 };
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        design: { ...phone.state.design, spacing: landscape },
+      })
+    ).status,
+  ).toBe(200);
+  expect(phone.state.otherLayout.design.spacing).toEqual(portrait);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(profileLayout(saved, "portrait").design.spacing).toEqual(portrait);
+  expect(profileLayout(saved, "landscape").design.spacing).toEqual(landscape);
+  for (const field of spacingFields) {
+    const { phone, post, saveTo } = await fixture();
+    phone.wrongSpacingReceipt = field;
+    expect((await post("save", { revision: 0 })).status).toBe(502);
+    expect(await Bun.file(saveTo).exists()).toBe(false);
+  }
+});
+
+test("provisional portrait defaults are separate from landscape and legacy profile migration", () => {
+  const portrait = defaultPortraitLayout();
+  const landscape = defaultLandscapeLayout();
+  expect(portrait.scales).toEqual({ speaking: 78, listening: 56, idle: 78 });
+  expect(portrait.verticalOffsetDp).toBe(-22);
+  expect(portrait.design.controlsHeightDp).toBe(387);
+  expect(portrait.design.holdSharePercent).toBe(40.9);
+  expect(portrait.design.traces).toEqual({
+    pattern: "parallel",
+    stancePercent: 130,
+    weightPercent: 175,
+    offshootPercent: 88,
+    glowPercent: 0,
+    personaSpacingPercent: 100,
+    footSpacingPercent: 100,
+  });
+  expect(portrait.halo).toEqual({ ...defaultHalo(), variant: "contained" });
+  expect(portrait.spirit).toEqual({ ...defaultSpirit(), persona: "follow" });
+  expect(landscape.scales.listening).toBe(58);
+  expect(landscape.design.controlsHeightDp).toBe(262);
+  expect(landscape.verticalOffsetDp).toBe(0);
+  expect(landscape.halo.variant).toBe("original");
+  expect(
+    profileLayout(parseProfile(JSON.stringify(profile(initial()))), "portrait").verticalOffsetDp,
+  ).toBe(35);
 });

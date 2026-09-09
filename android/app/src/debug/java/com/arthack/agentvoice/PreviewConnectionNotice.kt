@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 /** A read-only preview status. The parent owns its overlay placement and safe drawing insets. */
 @Composable
 internal fun PreviewConnectionNotice(connection: String, modifier: Modifier = Modifier) {
+    val inks = LocalPreviewTheme.current.palette
     require(connection == "connected" || connection == "connecting" || connection == "disconnected")
     val visibility = remember { MutableTransitionState(false) }
     visibility.targetState = connection != "connected"
@@ -48,14 +49,14 @@ internal fun PreviewConnectionNotice(connection: String, modifier: Modifier = Mo
         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.TopCenter) {
             val shape = CutCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
             Row(Modifier.widthIn(min = 176.dp, max = 280.dp).heightIn(min = 36.dp)
-                .background(VoiceInk.surface, shape).border(1.dp, VoiceInk.line, shape)
+                .background(inks.surface, shape).border(1.dp, inks.line, shape)
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
                 .testTag("preview-connection-notice").padding(horizontal = 14.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
                 ConnectionNoticeGlyph(displayedConnection == "disconnected")
                 Text(if (displayedConnection == "disconnected") "Disconnected" else "Connecting…",
-                    modifier = Modifier.testTag("preview-connection-label"), color = VoiceInk.text,
+                    modifier = Modifier.testTag("preview-connection-label"), color = inks.text,
                     fontFamily = VoiceInk.type, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2)
             }
         }
@@ -64,17 +65,18 @@ internal fun PreviewConnectionNotice(connection: String, modifier: Modifier = Mo
 
 @Composable
 private fun ConnectionNoticeGlyph(disconnected: Boolean) {
+    val inks = LocalPreviewTheme.current.palette
     Canvas(Modifier.size(14.dp).clearAndSetSemantics { }.testTag("preview-connection-glyph")) {
         fun point(x: Float, y: Float) = Offset(size.width * x, size.height * y)
         val stroke = 1.5.dp.toPx()
-        drawLine(VoiceInk.muted, point(.05f, .5f), point(.28f, .5f), stroke, StrokeCap.Square)
-        drawLine(VoiceInk.muted, point(.28f, .2f), point(.28f, .8f), stroke, StrokeCap.Square)
-        drawLine(VoiceInk.muted, point(.72f, .2f), point(.72f, .8f), stroke, StrokeCap.Square)
-        drawLine(VoiceInk.muted, point(.72f, .5f), point(.95f, .5f), stroke, StrokeCap.Square)
+        drawLine(inks.muted, point(.05f, .5f), point(.28f, .5f), stroke, StrokeCap.Square)
+        drawLine(inks.muted, point(.28f, .2f), point(.28f, .8f), stroke, StrokeCap.Square)
+        drawLine(inks.muted, point(.72f, .2f), point(.72f, .8f), stroke, StrokeCap.Square)
+        drawLine(inks.muted, point(.72f, .5f), point(.95f, .5f), stroke, StrokeCap.Square)
         if (disconnected) {
-            drawLine(VoiceInk.text, point(.42f, .9f), point(.58f, .1f), stroke, StrokeCap.Square)
+            drawLine(inks.text, point(.42f, .9f), point(.58f, .1f), stroke, StrokeCap.Square)
         } else {
-            drawLine(VoiceInk.muted, point(.4f, .5f), point(.6f, .5f), stroke, StrokeCap.Square)
+            drawLine(inks.muted, point(.4f, .5f), point(.6f, .5f), stroke, StrokeCap.Square)
         }
     }
 }

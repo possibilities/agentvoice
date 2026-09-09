@@ -22,6 +22,7 @@ internal fun PreviewLandscapeTraces(
     deckScrollPixels: Int,
     modifier: Modifier = Modifier,
 ) {
+    val theme = LocalPreviewTheme.current
     Canvas(modifier) {
         // Scrolled-away top contacts must not draw across the now-visible button faces.
         if (deckScrollPixels > 0) return@Canvas
@@ -44,16 +45,14 @@ internal fun PreviewLandscapeTraces(
         val stroke = 1.2.dp.toPx() * settings.weightPercent / 100f
         val outerRadius = radius + 12.dp.toPx()
         fun ink(alpha: Float) = Brush.radialGradient(
-            0f to VoiceInk.line.copy(alpha = 0f),
-            radius / outerRadius to VoiceInk.line.copy(alpha = 0f),
-            1f to VoiceInk.line.copy(alpha = alpha), center = center, radius = outerRadius)
+            0f to theme.decoration(VoiceInk.line).copy(alpha = 0f),
+            radius / outerRadius to theme.decoration(VoiceInk.line).copy(alpha = 0f),
+            1f to theme.decoration(VoiceInk.line.copy(alpha = alpha)), center = center, radius = outerRadius)
         val count = if (settings.pattern == "splayed") 3 else 2
         val footSpacing = 8.dp.toPx() * settings.footSpacingPercent / 100f
         val halfSpan = (count - 1) * footSpacing / 2f
-        val channelWidth = (deckWidth - 10.dp.toPx()) / 2f
-        val footMargin = minOf(channelWidth * .2f, 8.dp.toPx() + halfSpan)
-        val reach = (deckWidth / 4f * settings.stancePercent / 100f)
-            .coerceIn(5.dp.toPx() + footMargin, (deckWidth / 2f - footMargin).coerceAtLeast(5.dp.toPx() + footMargin))
+        val reach = previewLandscapeFootReach(deckWidth, design.spacing.channelGapDp.dp.toPx(),
+            halfSpan, stroke, 1.dp.toPx(), settings.stancePercent) ?: return@Canvas
         fun path(points: List<Offset>) = Path().apply {
             points.firstOrNull()?.let { moveTo(screenX(it.x), it.y) }
             for (point in points.drop(1)) lineTo(screenX(point.x), point.y)
@@ -90,4 +89,18 @@ internal fun PreviewLandscapeTraces(
             }
         }
     }
+}
+
+/** Lane width includes the full bundle and stroke; an impossible contact region draws no routes. */
+internal fun previewLandscapeFootReach(deckWidth: Float, channelGap: Float, halfSpan: Float,
+    stroke: Float, unit: Float, stancePercent: Int): Float? {
+    if (listOf(deckWidth, channelGap, halfSpan, stroke, unit).any { !it.isFinite() } ||
+        deckWidth <= 0f || channelGap < 0f || halfSpan < 0f || stroke <= 0f || unit <= 0f) return null
+    val channelWidth = (deckWidth - channelGap) / 2f
+    val margin = halfSpan + maxOf(5f * unit, stroke / 2f)
+    if (channelWidth <= margin * 2f) return null
+    val minimum = channelGap / 2f + margin
+    val maximum = deckWidth / 2f - margin
+    val opticalCenter = deckWidth / 4f + (channelGap - 10f * unit) / 4f
+    return (opticalCenter * stancePercent.coerceIn(75, 150) / 100f).coerceIn(minimum, maximum)
 }

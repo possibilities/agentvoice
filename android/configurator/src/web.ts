@@ -4,6 +4,7 @@ import {
   type Connection,
   equalLayout,
   type Mode,
+  type MutedPresence,
   modes,
   type PhoneState,
   type Preview,
@@ -11,8 +12,10 @@ import {
   previewOf,
   profileLayout,
   sameOrientation,
+  type Theme,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
+import { spacingFields } from "./spacing.ts";
 import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
@@ -89,6 +92,18 @@ function render() {
   if (!status || !draft) return;
   element("device").textContent =
     `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
+  element<HTMLSelectElement>("preview-theme").value = draft.theme;
+  element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
+  for (const field of spacingFields) {
+    const amount = draft.design.spacing[field];
+    const unit = field.endsWith("Percent") ? "%" : " dp";
+    element<HTMLInputElement>(`spacing-${field}`).value = String(amount);
+    text(element(`spacing-${field}-value`), `${amount}${unit}`);
+    element(`spacing-${field}`).setAttribute(
+      "aria-valuetext",
+      `${amount}${unit === "%" ? " percent" : unit}`,
+    );
+  }
   element<HTMLSelectElement>("trace-pattern").value = draft.design.traces.pattern;
   for (const field of traceAmountFields) {
     const amount = draft.design.traces[field];
@@ -234,6 +249,23 @@ function update(change: (value: Preview) => Preview) {
   void flush();
 }
 
+element<HTMLSelectElement>("preview-theme").addEventListener("change", (event) => {
+  const theme = (event.currentTarget as HTMLSelectElement).value as Theme;
+  update((current) => ({ ...current, theme }));
+});
+element<HTMLSelectElement>("muted-presence").addEventListener("change", (event) => {
+  const mutedPresence = (event.currentTarget as HTMLSelectElement).value as MutedPresence;
+  update((current) => ({ ...current, mutedPresence }));
+});
+for (const field of spacingFields) {
+  element<HTMLInputElement>(`spacing-${field}`).addEventListener("input", (event) => {
+    const amount = (event.currentTarget as HTMLInputElement).valueAsNumber;
+    update((current) => ({
+      ...current,
+      design: { ...current.design, spacing: { ...current.design.spacing, [field]: amount } },
+    }));
+  });
+}
 element<HTMLSelectElement>("trace-pattern").addEventListener("change", (event) => {
   const pattern = (event.currentTarget as HTMLSelectElement).value as TraceSelection["pattern"];
   update((current) => ({

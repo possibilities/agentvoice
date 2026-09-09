@@ -17,13 +17,13 @@ class PreviewStudioTest {
 
     @Test fun tracePatternsKeepRockerTargetsFixedAndChannelsIndependent() {
         compose.mainClock.autoAdvance = false
-        var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle", design = PreviewDesign()))
         compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
         compose.mainClock.advanceTimeBy(64)
         val targets = listOf("mic-mute", "speaker-mute", "hold-to-talk")
         val before = targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
         for (pattern in listOf("parallel", "splayed", "circuit")) {
-            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(traces = PreviewTraces(pattern, 135, 190, 75, 60))) }
+            compose.runOnIdle { state = state.select("idle").copy(design = state.design.copy(traces = PreviewTraces(pattern, 135, 190, 75, 60))) }
             compose.mainClock.advanceTimeBy(1200)
             assertEquals("$pattern moved a rocker target", before,
                 targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })

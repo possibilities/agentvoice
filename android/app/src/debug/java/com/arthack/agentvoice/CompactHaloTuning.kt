@@ -19,9 +19,10 @@ internal data class CompactHaloColors(
     val speaking: Int = VoiceInk.agent.toArgb(),
     val listening: Int = VoiceInk.you.toArgb(),
     val idle: Int = VoiceInk.text.toArgb(),
+    val asleep: Int = VoiceInk.muted.toArgb(),
 ) {
     init {
-        require(listOf(speaking, listening, idle).all { (it ushr 24) == 255 }) {
+        require(listOf(speaking, listening, idle, asleep).all { (it ushr 24) == 255 }) {
             "Contained Halo colors must be opaque."
         }
     }
@@ -30,6 +31,6 @@ internal data class CompactHaloColors(
         PersonaState.Speaking -> speaking
         PersonaState.Listening -> listening
         PersonaState.Idle -> idle
-        PersonaState.Asleep -> VoiceInk.muted.toArgb()
+        PersonaState.Asleep -> asleep
     }
 }
