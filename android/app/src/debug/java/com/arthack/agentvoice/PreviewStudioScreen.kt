@@ -29,7 +29,8 @@ internal fun PreviewStudioScreen(
     val currentRelease by rememberUpdatedState(onRelease)
     DisposableEffect(Unit) { onDispose { currentRelease() } }
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, ambientPercent = design.traces.glowPercent)
-    Box(Modifier.fillMaxSize().background(VoiceInk.ground)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(VoiceInk.ground)) {
+        val portraitWidth = maxWidth.takeIf { maxHeight >= maxWidth }
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val compact = maxHeight < 660.dp
@@ -37,17 +38,19 @@ internal fun PreviewStudioScreen(
             val side = if (maxWidth < 360.dp) 18.dp else 24.dp
             val bottomGap = if (compact) 20.dp else 28.dp
             val minimumStage = if (shallow) 230.dp else 160.dp
-            val stageHeight = (maxHeight - design.controlsHeightDp.dp - bottomGap).coerceAtLeast(minimumStage)
-            val scrolls = stageHeight + design.controlsHeightDp.dp + bottomGap > maxHeight
-            // Taller controls move the available center without changing the operator's Halo size.
-            val diameter = minOf(maxWidth, (maxHeight - 262.dp - bottomGap).coerceAtLeast(minimumStage))
+            val availableStage = (maxHeight - design.controlsHeightDp.dp - bottomGap).coerceAtLeast(minimumStage)
+            val stageHeight = portraitWidth ?: availableStage
+            val deckTop = maxOf(stageHeight, availableStage)
+            val scrolls = deckTop + design.controlsHeightDp.dp + bottomGap > maxHeight
+            // Portrait reserves a screen-width square; excess room belongs between stage and deck.
+            val diameter = portraitWidth ?: minOf(maxWidth, (maxHeight - 262.dp - bottomGap).coerceAtLeast(minimumStage))
             // The underlay's aperture follows selected geometry, never an animated frame or state.
             val maximumScale = if (halo.variant == "contained") halo.containedSizePercent / 100f
                 else maxOf(placement.speakingScale, placement.listeningScale, placement.idleScale)
             val clearRadius = diameter * maximumScale * 1.9f * if (halo.variant == "contained") .27f else .4f
             val personaCenter = stageHeight / 2f + placement.offsetY
             Box(Modifier.fillMaxSize().then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
-                PreviewPersonaTraces(stageHeight, design.controlsHeightDp.dp, side,
+                PreviewPersonaTraces(deckTop, design.controlsHeightDp.dp, side,
                     Modifier.matchParentSize(), personaCenter, clearRadius, design.traces)
                 Column(Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth().height(stageHeight)) {
@@ -57,6 +60,7 @@ internal fun PreviewStudioScreen(
                             else PersonaHalo(ui, stage, placement)
                         }
                     }
+                    Spacer(Modifier.height(deckTop - stageHeight))
                     PreviewControls(ui, onMute, onHold, onRelease,
                         Modifier.fillMaxWidth().padding(horizontal = side),
                         controlsHeightDp = design.controlsHeightDp, holdSharePercent = design.holdSharePercent, light = scene.light)

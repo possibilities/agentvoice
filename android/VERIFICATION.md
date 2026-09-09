@@ -7,8 +7,8 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Latest debug APK SHA-256:
-`a9b74cd3f610c11b75af47ce2f842729fefe3328d5b2d2352e0b48ba257b7cb2`.
-The latest checks are recorded under [Live microphone touch response](#live-microphone-touch-response);
+`d502d60596c1839789dac166b9336e30652eab8e761e5b38966c019975c2caa3`.
+The latest checks are recorded under [Square portrait stage](#square-portrait-stage);
 earlier sections retain the verification history.
 
 ## Automated checks
@@ -656,3 +656,27 @@ Latest choices are restored and phone/host saved profiles remain byte-identical;
 no Save or voice call was sent. Evidence: `/tmp/agentvoice-touch-build.log`,
 `/tmp/agentvoice-touch-instrumentation.log`,
 `/tmp/agentvoice-touch-phone-check.log`, `/tmp/agentvoice-touch-comparison.png`.
+
+### Square portrait stage
+
+Portrait reserves a screen-width square for Persona regardless of control height.
+The deck stays bottom-aligned when there is room; overflow scrolls instead of
+shrinking the square. Trace geometry uses the square center and actual deck top.
+Landscape composition is deferred. Profiles, protocol and renderers are unchanged.
+
+Debug/test APK assembly and lint passed. Eight focused physical-phone tests
+passed in 28.087 seconds: a 320 × 600 dp portrait fixture retains a 320 × 320 dp
+stage across 240/380/480 dp decks, scrolls to a working PTT hold/release, and
+preserves placement settings. Existing connection, channel, native-view continuity
+and Rocker touch/cancellation tests passed in the same run.
+
+The restored native capture was visually reviewed at the operator's Contained
+78%, −22 dp offset and 387 dp deck. This geometry has slight scroll overflow;
+the Persona remains above the controls with traces between them. Installed APK
+bytes match the local hash above. Latest live choices and both saved profile
+files match fresh pre-install snapshots; no Save or call was sent.
+
+Evidence: `/tmp/agentvoice-square-build.log`,
+`/tmp/agentvoice-square-instrumentation.log`,
+`/tmp/agentvoice-square-phone-check.log`,
+`/tmp/agentvoice-square-phone-restored.png`.

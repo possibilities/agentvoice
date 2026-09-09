@@ -52,7 +52,12 @@ the mute row gets the remainder after subtracting the join. The baseline is
 262 dp: 130 dp mute row, 16 dp join and 116 dp talk surface, an exact share of
 `116 / 262 × 100` (about 44.3%). **Reset button sizes** restores
 only these two sliders, keeping composition, light and Persona tuning.
-Changing control size preserves the Halo diameter and its saved tuning values.
+In portrait, the Persona stage is a screen-width square, independent of control
+height. Extra vertical room sits between the stage and the bottom-aligned deck.
+If the square and controls exceed the available height, the scene scrolls so
+Push to talk remains reachable. Traces use the square's center and the actual
+deck position. Changing control size preserves that center, Halo diameter and
+saved tuning values. Landscape composition is deferred to a separate design pass.
 
 The phone has no header while connected. **Preview connection** selects a
 synthetic Connected, Connecting or Disconnected state. A notice with a static glyph

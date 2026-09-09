@@ -28,8 +28,12 @@ share spans 30–60% of the total; the mute row uses the remaining height after
 the join. Baseline geometry is 130 + 16 + 116 = 262 dp, so the exact talk share
 is `116 / 262 × 100` (about 44.3%). Reset button sizes restores only these
 two dimensions, keeping composition, light and Persona tuning. The granular
-Persona resets below replace the former Reset Persona. Increasing control height moves
-the available center without changing Halo's diameter or its tuning values.
+Persona resets below replace the former Reset Persona. Portrait now reserves a
+screen-width square for Persona, independent of control height. Surplus room
+separates that square from the bottom-aligned deck; overflow scrolls instead of
+shrinking the stage. Traces follow the actual deck position and square's center.
+Control resizing leaves Persona's layout center, diameter and tuning unchanged.
+Landscape needs a later dedicated composition and is outside this refinement.
 
 The operator then removed the header entirely. A top overlay with a static
 glyph remains visible only while Connecting or Disconnected; it slides down
