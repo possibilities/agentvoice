@@ -1,9 +1,9 @@
 # Android development build verification
 
-Latest synthetic UI checks: 2026-09-09 on the disposable API 35 ARM64 emulator
+Latest synthetic UI checks: 2026-09-09 on the physical S22 and disposable API 35 ARM64 emulator
 `agentvoice_round12_checks`, 480 × 1040 at density 213. Native development package
-`com.arthack.agentvoice.dev`. The physical S22 was unplugged throughout this round;
-its latest live choices and saved files were not read, installed over or restored.
+`com.arthack.agentvoice.dev`. The emulator round ran while the S22 was unplugged. The subsequent physical-phone
+installation and restoration are recorded at the end of this document.
 Earlier physical-phone and live-call evidence remains below. No current check
 started a voice call, microphone, speaker or inference.
 
@@ -803,3 +803,32 @@ Evidence: `/tmp/agentvoice-round12-final-build.log`,
 `/tmp/agentvoice-round12-install-receipt.txt`, and
 `/tmp/agentvoice-round12-visuals/` (native PNGs with state JSON, theme sheet and
 Grayscale pixel measurements).
+
+
+### S22 delivery of Tide, themes and spacing
+
+After reconnection, the existing preview was brought forward without replacing
+its session. Fresh snapshots captured both live orientation layouts, channel gates
+and exact native/host saved bytes before installation. The installed S22 APK
+matches the current SHA-256 above. The host now uses protocol 12.
+
+Eleven focused physical-phone tests passed in 12.995 seconds: Tide/theme native
+rendering and lifecycle, profile 12 migration and orientation fences, plus studio
+trace/control independence, connection notices and square-stage overflow scrolling.
+Actual S22 captures of all three themes in Listening and fully muted Idle were
+reviewed, together with a Splayed spacing comparison. The word remains subordinate
+and readable; spacing changes preserve manual Persona placement. These screenshots
+establish rendered composition, not a user's subjective OLED brightness preference.
+
+The original live mode and both open channel preferences were restored, together
+with the exact portrait/landscape selections, adding only baseline spacing.
+Bright/Tide are the new transient defaults. Native and host saved files remained
+byte-identical; no Save or call occurred. System rotation settings were unchanged.
+The new studio URL was opened in Chrome and the phone was left on its restored
+native preview, ready for continued configuration.
+
+Evidence: `/tmp/agentvoice-round12-phone-native.log`,
+`/tmp/agentvoice-round12-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-round12-phone-restore.log`,
+`/tmp/agentvoice-round12-phone-installed-sha.txt`, and
+`/tmp/agentvoice-round12-phone/` (native captures and exact state JSON).
