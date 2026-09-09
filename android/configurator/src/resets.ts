@@ -8,11 +8,22 @@ export type ResetTarget =
   | "animation"
   | "colors"
   | "light"
+  | "traces"
+  | "glow"
   | "spirit-colors";
 
 export function resetPreview(current: Preview, defaults: PhoneState, target: ResetTarget): Preview {
   const next = previewOf(current);
   switch (target) {
+    case "traces":
+      next.design.traces = {
+        ...defaults.defaultDesign.traces,
+        glowPercent: next.design.traces.glowPercent,
+      };
+      break;
+    case "glow":
+      next.design.traces.glowPercent = defaults.defaultDesign.traces.glowPercent;
+      break;
     case "controls":
       next.design.controlsHeightDp = defaults.defaultDesign.controlsHeightDp;
       next.design.holdSharePercent = defaults.defaultDesign.holdSharePercent;

@@ -10,18 +10,23 @@ import org.junit.Test
 class PreviewStudioTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun compositionsKeepRockerTargetsFixedAndChannelsIndependent() {
+    @Test fun tracePatternsKeepRockerTargetsFixedAndChannelsIndependent() {
+        compose.mainClock.autoAdvance = false
         var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
         compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
+        compose.mainClock.advanceTimeBy(64)
         val targets = listOf("mic-mute", "speaker-mute", "hold-to-talk")
         val before = targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
-        for (composition in listOf("open", "dock", "yoke", "socket", "traces")) {
-            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(composition = composition)) }
-            assertEquals("$composition moved a rocker target", before,
+        for (pattern in listOf("parallel", "splayed", "circuit")) {
+            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(traces = PreviewTraces(pattern, 135, 190, 75, 60))) }
+            compose.mainClock.advanceTimeBy(1200)
+            assertEquals("$pattern moved a rocker target", before,
                 targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
             compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("YOU microphone").performClick()
+            compose.mainClock.advanceTimeBy(64)
             compose.runOnIdle { assertFalse(state.micMuted); assertEquals("listening", state.mode) }
             compose.onNodeWithTag("speaker-mute").assertContentDescriptionEquals("AGENT speaker").performClick()
+            compose.mainClock.advanceTimeBy(64)
             compose.runOnIdle { assertTrue(state.speakerMuted); assertFalse(state.micMuted) }
         }
         compose.onNodeWithTag("preview-header").assertDoesNotExist()

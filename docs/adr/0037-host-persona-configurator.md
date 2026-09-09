@@ -6,7 +6,7 @@ before expanding its scope. Supersedes the on-phone tuning overlay in
 
 `android/configurator/` is a separate Bun browser app, launched explicitly with
 `bun run android:configure --device <adb-serial>`. Its Controls panel owns
-composition, surface light, control height and talk-button share; its
+trace routes and background glow, surface light, control height and talk-button share; its
 Persona panel owns connection preview, state, variant, size, position, motion
 and colors. Save profile retains both panels' design and geometry. The phone
 runs debug-only studio controls around native Halo, with synthetic voice state
@@ -67,17 +67,16 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 8 on the phone, then
+checks the observed revision, atomically stores version 9 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
-Version 1–7 phone profiles load without rewriting; retired button styles map to
-Rockers in memory. Version 1 seeds all three Halo sizes. Stored position is
+Version 1–8 phone profiles load without rewriting; retired button styles map to
+Rockers and old compositions map to baseline Traces in memory. Version 1 seeds all three Halo sizes. Stored position is
 retained, with +35 dp used when absent. Versions 1–3 use the control geometry
-baseline; versions 4–7 retain control dimensions. Versions 1–5 select Open;
-versions 6–7 keep their composition. Versions 1–4 select Original; versions 5–7
-retain their Halo settings. Version 7 keeps its spirit settings.
-Older profiles become version 8 only on explicit Save. Production still
+baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
+versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
+Older profiles become version 9 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -172,3 +171,33 @@ Current receipts require version 8 and the exact fixed-style design. Rocker
 geometry, dark active styling, PTT gates, renderer identity and all seven scoped
 resets retain their behavior. This remains a debug studio convergence;
 production adoption is still a separate decision.
+
+The subsequent queued composition round locks Traces and removes Open, Dock,
+Yoke and Socket. Protocol/profile 9 fixes `design.composition: traces` and adds
+`design.traces`: `pattern: parallel|splayed|circuit`, `stancePercent: 75..150`,
+`weightPercent: 50..250`, `offshootPercent: 0..100`, and `glowPercent: 0..100`.
+All amounts are integers. Defaults are Parallel/100/100/0/0; 100% trace weight
+is the existing 1.2 dp. Patterns change routing, while stance, weight, lighter
+side/upward offshoots and ambient light remain independently adjustable. Reset
+traces restores only pattern/stance/weight/offshoots; Reset glow affects only
+glow. Existing resets preserve these new settings.
+
+The old 56 dp route-rise cap left a gap when the selected Persona became smaller
+or moved upward. Primary contacts now come from a stable placement-derived
+lower circumference, with a soft fade into the glow. Degenerate overlap shortens
+the route instead of moving Persona or inverting its elbow. Hard routes remain
+outside the clear aperture and never sample native animation bounds. Original
+retains the conservative envelope across its three selected state sizes; exact
+contact in every unequal state would require a separate, deliberate attachment
+transition coordinated with its existing settling. In the physical-phone
+100/35/60 Original-size check, both Idle and Listening rings remain above the
+deck while the conservative envelope collapses the routes. This is an explicit
+stationary-envelope tradeoff, not successful contact. Contained shares one size.
+
+Background glow is an independent, draw-only pair of broad dim fields. It uses
+the same 14-second phase as Button light, without reading audio energy or
+changing paths, controls, or native animation identity. Zero turns it off;
+disabled motion retains a static field, while background/disconnect/pending
+states clear it. Current profile snapshots deep-copy nested trace choices and
+require an exact version 9 receipt. Native v1–8 and host v2–8 readers validate
+their historical shapes before migration; no load or preview rewrites a saved file.

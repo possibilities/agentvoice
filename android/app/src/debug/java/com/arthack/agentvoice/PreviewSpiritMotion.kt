@@ -34,7 +34,8 @@ internal fun syntheticSpiritEnergy(seconds: Float): Float {
     return breath * (.2f + .7f * syllable * syllable)
 }
 
-internal data class PreviewSpiritFrame(val light: PreviewButtonLight, val colors: CompactHaloColors)
+internal data class PreviewSpiritFrame(val light: PreviewButtonLight, val colors: CompactHaloColors,
+    val ambient: PreviewAmbientFrame = PreviewAmbientFrame())
 
 private data class SpiritColorCue(
     val palette: CompactHaloColors,
@@ -50,22 +51,28 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
     private var capture = 0f
     private var playback = 0f
     private var amount = 0f
+    private var ambientAmount = 0f
     private var colors = initialColors
     private var colorAnchor = initialColors
     private var colorCue: SpiritColorCue? = null
     private var colorStart = 0f
 
     fun step(ui: CallUi, spirit: PreviewSpirit, base: CompactHaloColors, contained: Boolean,
-        activity: String, deltaSeconds: Float, motionAllowed: Boolean): PreviewSpiritFrame {
+        activity: String, deltaSeconds: Float, motionAllowed: Boolean,
+        ambientPercent: Int = 0, foreground: Boolean = true): PreviewSpiritFrame {
         val follows = contained && spirit.persona == "follow"
-        val moving = motionAllowed && ui.connected && !ui.controlsPending
+        val visible = foreground && ui.connected && !ui.controlsPending
+        val ambientTarget = if (visible) ambientPercent.coerceIn(0, 100) / 100f else 0f
+        val moving = motionAllowed && visible
         if (!moving) {
             capture = 0f
             playback = 0f
             amount = 0f
             colors = if (follows) personaSpiritColors(base, ui, 0f, motionAllowed = false) else base
             colorCue = null
-            return PreviewSpiritFrame(PreviewButtonLight(), colors)
+            // Disabled animation retains a still backdrop; backgrounding removes it entirely.
+            ambientAmount = ambientTarget
+            return PreviewSpiritFrame(PreviewButtonLight(), colors, PreviewAmbientFrame(0f, ambientTarget))
         }
         val dt = if (deltaSeconds.isFinite()) deltaSeconds.coerceIn(0f, .1f) else 0f
         seconds += dt
@@ -79,6 +86,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
         playback = spiritEnvelope(playback, playbackTarget, dt, ui.speakerOpen)
         val targetAmount = if (spirit.surface == "soft") spirit.strengthPercent / 100f else 0f
         amount = if (targetAmount == 0f) 0f else amount + (targetAmount - amount) * (1f - exp(-dt / .35f))
+        ambientAmount = if (ambientTarget == 0f) 0f else ambientAmount + (ambientTarget - ambientAmount) * (1f - exp(-dt / .9f))
 
         if (follows) {
             val cue = SpiritColorCue(base, state, ui.micOpen, ui.speakerOpen, ui.controlsPending)
@@ -94,31 +102,40 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
             colors = base
             colorCue = null
         }
-        return PreviewSpiritFrame(PreviewButtonLight(phase, amount, capture, playback), colors)
+        return PreviewSpiritFrame(if (amount == 0f) PreviewButtonLight() else PreviewButtonLight(phase, amount, capture, playback), colors,
+            if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount))
     }
 }
 
-internal class PreviewSpiritScene(val light: State<PreviewButtonLight>, val colors: State<CompactHaloColors>)
+internal class PreviewSpiritScene(val light: State<PreviewButtonLight>, val colors: State<CompactHaloColors>,
+    val ambient: State<PreviewAmbientFrame>)
+
+@Composable
+private fun previewSpiritForeground(): Boolean {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, _ -> resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    return resumed
+}
 
 @Composable
 internal fun previewSpiritMotionAllowed(): Boolean {
     val context = LocalContext.current
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     var reduced by remember { mutableStateOf(!ValueAnimator.areAnimatorsEnabled()) }
-    DisposableEffect(lifecycle, context) {
-        val observer = LifecycleEventObserver { _, _ -> resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
+    DisposableEffect(context) {
         val motion = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) { reduced = !ValueAnimator.areAnimatorsEnabled() }
         }
-        lifecycle.addObserver(observer)
         context.contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, motion)
         onDispose {
-            lifecycle.removeObserver(observer)
             context.contentResolver.unregisterContentObserver(motion)
         }
     }
-    return resumed && !reduced
+    return !reduced
 }
 
 @Composable
@@ -128,23 +145,28 @@ internal fun rememberPreviewSpirit(
     halo: PreviewHalo,
     activity: String,
     motionAllowed: Boolean = previewSpiritMotionAllowed(),
+    ambientPercent: Int = 0,
+    foreground: Boolean = previewSpiritForeground(),
 ): PreviewSpiritScene {
     val base = halo.colors()
     val light = remember { mutableStateOf(PreviewButtonLight()) }
     val colors = remember { mutableStateOf(base) }
+    val ambient = remember { mutableStateOf(PreviewAmbientFrame()) }
     val motion = remember { PreviewSpiritMotion(base) }
     val latestUi by rememberUpdatedState(ui)
     val latestSpirit by rememberUpdatedState(spirit)
     val latestHalo by rememberUpdatedState(halo)
     val latestActivity by rememberUpdatedState(activity)
-    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow")
-    val moving = enabled && motionAllowed && ui.connected && !ui.controlsPending
+    val latestAmbient by rememberUpdatedState(ambientPercent)
+    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0
+    val moving = enabled && foreground && motionAllowed && ui.connected && !ui.controlsPending
     fun publish(frame: PreviewSpiritFrame) {
         light.value = frame.light
         colors.value = frame.colors
+        ambient.value = frame.ambient
     }
     SideEffect {
-        if (!moving) publish(motion.step(ui, spirit, base, halo.variant == "contained", activity, 0f, false))
+        if (!moving) publish(motion.step(ui, spirit, base, halo.variant == "contained", activity, 0f, false, ambientPercent, foreground))
     }
     LaunchedEffect(moving) {
         if (!moving) return@LaunchedEffect
@@ -155,8 +177,8 @@ internal fun rememberPreviewSpirit(
             if (elapsed < 1f / 30f) continue
             previous = now
             publish(motion.step(latestUi, latestSpirit, latestHalo.colors(), latestHalo.variant == "contained",
-                latestActivity, elapsed, true))
+                latestActivity, elapsed, true, latestAmbient, true))
         }
     }
-    return remember { PreviewSpiritScene(light, colors) }
+    return remember { PreviewSpiritScene(light, colors, ambient) }
 }

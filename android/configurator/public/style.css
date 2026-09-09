@@ -366,6 +366,11 @@ footer {
   padding: 0;
   border: 0;
 }
+.trace-controls {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .subpanel-title {
   padding: 0;
   margin-bottom: 16px;
@@ -374,6 +379,9 @@ footer {
 }
 .motion-control + .motion-control {
   margin-top: 20px;
+}
+.trace-controls > .reset + .motion-control {
+  margin-top: 28px;
 }
 .motion-control output {
   font-size: 16px;

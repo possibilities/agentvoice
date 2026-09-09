@@ -155,7 +155,7 @@ export async function serveConfigurator(
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = { ...phone.state.scales };
           const expectedOffset = phone.state.verticalOffsetDp;
-          const expectedDesign = { ...phone.state.design };
+          const expectedDesign = structuredClone(phone.state.design);
           const expectedHalo = structuredClone(phone.state.halo);
           const expectedSpirit = { ...phone.state.spirit };
           const reply = await phone
@@ -168,7 +168,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 8 ||
+            profile.version !== 9 ||
             !profile.design ||
             !equalDesign(profile.design, expectedDesign) ||
             !equalHalo(profile.halo, expectedHalo) ||

@@ -169,11 +169,13 @@ The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
 on-phone tuner panel. Both mute buttons and **Push to talk** use Rockers:
 press and keep the talk surface down to talk, release to mute. Active styling stays
-dark with focused lime accents. Composition selects Open (default), Dock, Yoke,
-Socket or Traces. Dock adds a shared plate fading upward behind lower Persona and
-the controls; Yoke joins the mute buttons with a quiet branching stem. Socket adds
-mechanical supports and Traces adds PCB paths. These stationary neutral
-layers change no layout, renderer, tuning or touch target and preserve full bleed.
+dark with focused lime accents. Traces is the fixed composition: Parallel,
+Splayed and Circuit routes share independent stance, weight and lighter offshoot
+controls. Routes reach the selected Persona placement, preserving its clear
+center and glow. These stationary neutral layers change no layout, renderer,
+tuning or touch target and preserve full bleed. Original retains a conservative
+shared envelope, so unequal state sizes can leave a larger gap or no visible
+routes when the envelope reaches the deck.
 Controls height spans 240–480 dp, including a fixed 16 dp join; Push-to-talk
 share spans 30–60% of the total. The baseline is 262 dp with a 116 dp talk surface
 (about 44.3%). **Reset button sizes** restores only those two dimensions,
@@ -218,16 +220,15 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains the design, all three sizes and shared position in a
-version 8 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 9 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings. Preview protocol 8 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 9 carries those
 choices plus transient connection and synthetic activity selections. Existing
-version 1–7 phone profiles load without rewriting; retired button styles map to
-Rockers in memory. Versions 1–4 initially select Original; versions 5–7 keep
+version 1–8 phone profiles load without rewriting; retired button styles map to
+Rockers and compositions to baseline Traces in memory. Versions 1–4 initially select Original; versions 5–8 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
-4–7 keep their dimensions. Versions 1–5 select Open; versions 6–7 preserve their
-composition. Version 7 retains its spirit settings. Older profiles
-become version 8 only on Save. The real client and release
+4–8 keep their dimensions. Versions 7–8 retain their spirit settings. Older profiles
+become version 9 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -235,8 +236,8 @@ icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or audio, or connect to the voice server.
 
-The studio also offers **Socket** and **Traces**, two stationary mechanical
-relatives of Yoke, plus independent **Surface light: Soft** and **Persona color:
+The studio also offers a dim breathing **Background glow**, independent of the
+trace routes, **Button light: Soft** and **Persona color:
 Follow channels** experiments. Light drifts lazily within active button faces;
 Contained colors softly reflect effective channel gates without replacing the
 user palette. Strength affects only button light. **Synthetic voice** rehearses

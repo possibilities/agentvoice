@@ -12,12 +12,19 @@ import org.junit.Test
 import java.util.UUID
 
 class PersonaPreviewLifecycleTest {
-    @Test fun restoringOldLiveChoicesKeepsTuningAndMigratesOnlyTheButtonStyles() {
-        val original = PersonaPreviewState(mode = "listening", activity = "voice", design = PreviewDesign(composition = "traces", controlsHeightDp = 387),
+    @Test fun restoringOldLiveChoicesKeepsTuningAndMigratesRetiredDesigns() {
+        val original = PersonaPreviewState(mode = "listening", activity = "voice", design = PreviewDesign(controlsHeightDp = 387),
             halo = PreviewHalo(variant = "contained", ringSpreadPercent = 52), spirit = PreviewSpirit("soft", 72, "follow"))
-        val old = original.json().put("protocol", 7).apply { getJSONObject("design").put("mute", "keycaps").put("hold", "trigger") }
-        val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
-        assertEquals(original, restored)
+        for (protocol in listOf(7, 8)) {
+            val old = original.json().put("protocol", protocol).apply {
+                getJSONObject("design").apply {
+                    remove("traces"); put("composition", "socket")
+                    if (protocol == 7) { put("mute", "keycaps"); put("hold", "trigger") }
+                }
+            }
+            val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
+            assertEquals(original, restored)
+        }
     }
 
     @Test fun backgroundReturnAndRecreationRetainBindingAndUnsavedPreview() {
@@ -41,7 +48,7 @@ class PersonaPreviewLifecycleTest {
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(composition = "yoke", controlsHeightDp = 380, holdSharePercent = 54.3).json())
+                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")

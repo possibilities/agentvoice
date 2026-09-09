@@ -1,14 +1,20 @@
-export const compositionChoices = ["open", "dock", "yoke", "socket", "traces"] as const;
-export type Design = {
+import { defaultTraces, equalTraces, parseTraces, type TraceSelection } from "./traces.ts";
+
+const legacyCompositions = ["open", "dock", "yoke", "socket", "traces"] as const;
+export type VersionEightDesign = {
   layout: "studio";
   header: "none";
   mute: "rockers";
   hold: "rocker";
-  composition: (typeof compositionChoices)[number];
+  composition: (typeof legacyCompositions)[number];
   controlsHeightDp: number;
   holdSharePercent: number;
 };
-export type VersionSevenDesign = Omit<Design, "mute" | "hold"> & {
+export type Design = Omit<VersionEightDesign, "composition"> & {
+  composition: "traces";
+  traces: TraceSelection;
+};
+export type VersionSevenDesign = Omit<VersionEightDesign, "mute" | "hold"> & {
   mute: "rockers" | "keycaps";
   hold: "trigger" | "rocker";
 };
@@ -27,7 +33,8 @@ export const defaultDesign: Design = {
   header: "none",
   mute: "rockers",
   hold: "rocker",
-  composition: "open",
+  composition: "traces",
+  traces: defaultTraces(),
   controlsHeightDp: 262,
   // Retain the exact 130 + 16 + 116 dp layout, including the fixed join.
   holdSharePercent: (116 / 262) * 100,
@@ -40,10 +47,18 @@ export function equalDesign(a: Design, b: Design) {
     a.hold === b.hold &&
     a.composition === b.composition &&
     a.controlsHeightDp === b.controlsHeightDp &&
-    Math.abs(a.holdSharePercent - b.holdSharePercent) < 1e-9
+    Math.abs(a.holdSharePercent - b.holdSharePercent) < 1e-9 &&
+    equalTraces(a.traces, b.traces)
   );
 }
 export function parseDesign(value: unknown): Design {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const { traces, ...previous } = value as Record<string, unknown>;
+  const design = parseVersionEightDesign(previous);
+  if (design.composition !== "traces") throw Error("Invalid composition");
+  return { ...design, composition: "traces", traces: parseTraces(traces) };
+}
+export function parseVersionEightDesign(value: unknown): VersionEightDesign {
   const design = parseVersionSevenDesign(value);
   if (design.mute !== "rockers" || design.hold !== "rocker") throw Error("Invalid design");
   return { ...design, mute: "rockers", hold: "rocker" };
@@ -56,7 +71,7 @@ export function parseVersionSevenDesign(value: unknown): VersionSevenDesign {
     data["layout"] !== "studio" ||
     data["header"] !== "none" ||
     !["trigger", "rocker"].includes(data["hold"] as string) ||
-    !compositionChoices.includes(data["composition"] as Design["composition"]) ||
+    !legacyCompositions.includes(data["composition"] as VersionEightDesign["composition"]) ||
     !["rockers", "keycaps"].includes(data["mute"] as string) ||
     !Number.isInteger(data["controlsHeightDp"]) ||
     typeof data["controlsHeightDp"] !== "number" ||
@@ -73,7 +88,7 @@ export function parseVersionSevenDesign(value: unknown): VersionSevenDesign {
     header: "none",
     mute: data["mute"] as VersionSevenDesign["mute"],
     hold: data["hold"] as VersionSevenDesign["hold"],
-    composition: data["composition"] as Design["composition"],
+    composition: data["composition"] as VersionEightDesign["composition"],
     controlsHeightDp: data["controlsHeightDp"],
     holdSharePercent: data["holdSharePercent"],
   };

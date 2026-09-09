@@ -13,6 +13,37 @@ import org.junit.Test
 class PreviewSpiritTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun ambientAloneRunsTheSharedClockAndReducedMotionRetainsOnlyStaticLight() {
+        compose.mainClock.autoAdvance = false
+        var allowed by mutableStateOf(true)
+        var foreground by mutableStateOf(true)
+        var glow by mutableIntStateOf(100)
+        lateinit var scene: PreviewSpiritScene
+        val halo = PreviewHalo()
+        compose.setContent {
+            scene = rememberPreviewSpirit(CallUi(connected = true), PreviewSpirit(), halo, "steady",
+                motionAllowed = allowed, ambientPercent = glow, foreground = foreground)
+        }
+        compose.mainClock.advanceTimeBy(2500)
+        compose.runOnIdle {
+            assertTrue(scene.ambient.value.amount > .9f)
+            assertTrue(scene.ambient.value.phaseTurns > 0f)
+            assertEquals(0f, scene.light.value.amount)
+            assertEquals(halo.colors(), scene.colors.value)
+            allowed = false
+        }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { assertEquals(PreviewAmbientFrame(0f, 1f), scene.ambient.value) }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.runOnIdle { assertEquals(PreviewAmbientFrame(0f, 1f), scene.ambient.value); foreground = false }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { assertEquals(PreviewAmbientFrame(), scene.ambient.value); foreground = true; allowed = true }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.runOnIdle { assertTrue(scene.ambient.value.amount > .7f); glow = 0 }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { assertEquals(PreviewAmbientFrame(), scene.ambient.value); assertEquals(PreviewButtonLight(), scene.light.value) }
+    }
+
     @Test fun sceneTicksRetainHeldPointerAndAllControlBounds() {
         var ui by mutableStateOf(CallUi(connected = true, micMuted = true, canHold = true))
         val light = mutableStateOf(PreviewButtonLight())

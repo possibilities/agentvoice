@@ -8,6 +8,42 @@ class PreviewSpiritMotionTest {
     private val base = CompactHaloColors()
     private val spirit = PreviewSpirit("soft", 35, "follow")
 
+    @Test fun ambientHasIndependentStrengthButSharesPhaseAndFencesVisibility() {
+        val motion = PreviewSpiritMotion()
+        fun step(percent: Int = 100, foreground: Boolean = true, dt: Float = 1f / 30) =
+            motion.step(listening, PreviewSpirit(), base, false, "steady", dt, true, percent, foreground)
+        val first = step()
+        assertTrue(first.ambient.amount in .03f.. .05f)
+        repeat(90) { step() }
+        val lit = step()
+        assertTrue(lit.ambient.amount > .95f)
+        assertTrue(lit.ambient.phaseTurns > 0f)
+        assertEquals(PreviewButtonLight(), lit.light)
+        assertEquals(base, lit.colors)
+        val shared = motion.step(listening, spirit, base, false, "steady", .03f, true, 100)
+        assertEquals(shared.light.phaseTurns, shared.ambient.phaseTurns)
+        assertEquals(PreviewAmbientFrame(), step(foreground = false).ambient)
+        val returned = step(dt = 0f)
+        assertEquals(PreviewButtonLight(), returned.light)
+        assertEquals(PreviewAmbientFrame(), returned.ambient)
+        step()
+        assertEquals(PreviewAmbientFrame(), step(percent = 0).ambient)
+        for (ui in listOf(listening.copy(connected = false), listening.copy(controlsPending = true))) {
+            assertEquals(PreviewAmbientFrame(), motion.step(ui, spirit, base, true, "voice", .03f, true, 100).ambient)
+        }
+    }
+
+    @Test fun reducedMotionKeepsAStillGlowWithoutEnergyOrPhase() {
+        val motion = PreviewSpiritMotion()
+        val first = motion.step(listening, PreviewSpirit(), base, false, "voice", .1f, false, 45)
+        assertEquals(PreviewAmbientFrame(0f, .45f), first.ambient)
+        repeat(60) {
+            val next = motion.step(listening.copy(inputLevel = it / 60f), PreviewSpirit(), base, false, "voice", 1f, false, 45)
+            assertEquals(first, next)
+        }
+        assertEquals(PreviewAmbientFrame(), motion.step(listening, spirit, base, true, "voice", .1f, false, 45, false).ambient)
+    }
+
     @Test fun energyArrivesLazilyButClosedGatesClearImmediately() {
         val first = spiritEnvelope(0f, 1f, 1f / 30, true)
         assertTrue(first in .1f.. .2f)

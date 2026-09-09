@@ -24,12 +24,36 @@
           <div class="studio-grid">
             <fieldset class="button-controls">
               <legend class="panel-title">Controls</legend>
-              <div class="mixing">
-                <label for="design-composition">Composition</label>
-                <select id="design-composition" aria-describedby="composition-hint"><option value="open">Open</option><option value="dock">Dock</option><option value="yoke">Yoke</option><option value="socket">Socket</option><option value="traces">Traces</option></select>
-              </div>
-              <p id="composition-hint" class="control-hint">Persona and controls float freely.</p>
-              <fieldset class="motion-controls"><legend class="subpanel-title">Surface light</legend>
+              <fieldset class="trace-controls">
+                <legend class="subpanel-title">Traces</legend>
+                <div class="mixing">
+                  <label for="trace-pattern">Route</label>
+                  <select id="trace-pattern" aria-describedby="composition-hint"><option value="parallel">Parallel</option><option value="splayed">Splayed</option><option value="circuit">Circuit</option></select>
+                </div>
+                <p id="composition-hint" class="control-hint">Traces reach the selected Persona size and position.</p>
+                <p id="original-traces-hint" class="control-hint">Original shares one connection envelope across its state sizes; smaller states can sit farther from the traces.</p>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-stancePercent">Stance</label><output id="trace-stancePercent-value" for="trace-stancePercent">100%</output></div>
+                  <input id="trace-stancePercent" type="range" min="75" max="150" step="1" value="100" />
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-weightPercent">Trace weight</label><output id="trace-weightPercent-value" for="trace-weightPercent">100%</output></div>
+                  <input id="trace-weightPercent" type="range" min="50" max="250" step="1" value="100" />
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-offshootPercent">Offshoots</label><output id="trace-offshootPercent-value" for="trace-offshootPercent">Off</output></div>
+                  <input id="trace-offshootPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="offshoot-hint" />
+                  <p id="offshoot-hint" class="control-hint">Lighter routes branch in other directions.</p>
+                </div>
+                <button type="button" id="reset-traces" data-reset="traces" class="reset value-reset">Reset traces</button>
+                <div class="motion-control">
+                  <div class="size-heading"><label for="trace-glowPercent">Background glow</label><output id="trace-glowPercent-value" for="trace-glowPercent">Off</output></div>
+                  <input id="trace-glowPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="glow-hint" />
+                  <p id="glow-hint" class="control-hint">A dim, slowly breathing glow behind the scene. Still with reduced motion.</p>
+                </div>
+                <button type="button" id="reset-glow" data-reset="glow" class="reset value-reset">Reset glow</button>
+              </fieldset>
+              <fieldset class="motion-controls"><legend class="subpanel-title">Button light</legend>
                 <div class="mixing">
                   <label for="spirit-surface">Light</label>
                   <select id="spirit-surface"><option value="still">Still</option><option value="soft">Soft</option></select>

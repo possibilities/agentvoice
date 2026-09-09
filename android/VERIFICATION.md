@@ -6,8 +6,10 @@ Earlier live-call checks used the desktop's existing waiting AgentVoice service
 and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
-Final debug APK SHA-256:
-`cb2bd8f2789297f4ba89f871a6eb0500667a56b91129501d297b57521cd8c6e3`.
+Latest debug APK SHA-256:
+`8a2eee7fb4baa98c542d68c913fedf51bc23c1cd1d5fb54119aec2f68ea2401f`.
+The latest checks are recorded under [Traces composition variations](#traces-composition-variations);
+earlier sections retain the verification history.
 
 ## Automated checks
 
@@ -494,3 +496,80 @@ Key visual evidence: `agentvoice-rockers-only-phone-restored.png`,
 `agentvoice-rockers-only-phone-rocker-live.png`,
 `agentvoice-rockers-only-studio-live.png` and
 `agentvoice-rockers-only-browser-{desktop,narrow}.png` in that directory.
+
+### Traces composition variations
+
+Protocol/profile 9 fixes Traces as the composition and removes the other debug
+bodies. Parallel, Splayed and Circuit share independent stance, weight and
+offshoot controls. A separate Background glow uses the existing slow scene
+clock; the former Surface light legend is now Button light. Defaults preserve
+the baseline route weight/stance and leave offshoots/glow off.
+
+- All 661 repository tests pass, including 32 configurator tests. A subsequent
+  audit strengthened literal wire bounds and nested-state adoption on reconnect;
+  all 32 configurator tests passed again with 1,493 assertions. Root and
+  configurator TypeScript/Biome checks pass. Android debug/test/
+  release assembly and debug lint pass; all 48 JVM tests pass.
+- All 38 instrumentation tests pass on the physical S22 in 53.212 seconds.
+  Direct Compose route changes and active ambient frames preserve both native
+  Halo instances, control bounds and a held pointer. Host preview commands retain
+  their existing intentional hold-release behavior; that path is distinct. Ambient-only operation, reduced motion,
+  background removal, exact-off button light, strict current receipts and
+  v1–8 profile migration are covered. The first run caught one stale Dock
+  assertion, two tests waiting for an intentionally continuous scene clock,
+  and a nonzero phase in the off button-light output. The corrected tests use
+  explicit clock advancement; off light now emits the exact zero frame.
+- The disposable Chrome fixture passes all three routes, slider endpoints,
+  nine scoped resets, exact profile 9 Save/reload and reconnect without replay.
+  Desktop and 390 px layouts have no overflow or browser errors. On the real
+  phone, controls and isolated Reset traces/Reset glow updates round-trip
+  correctly, a real Push-to-talk press/release works while glow is active, and
+  background/return reconnect preserves the latest settings.
+  The final ADB check observes bounded state publication rather than assuming
+  a fixed delay after input injection: hold was observed after 156 ms and
+  release within 155 ms of ADB completion. It sends one gesture, with no retry.
+- Native captures cover all routes, wide stance, thick traces and offshoots.
+  Contained at 35%/−80 dp extends toward the lower glow in both zero/full-motion
+  samples, with a soft visible separation from the bright rim. At 120%/0 and
+  +150 dp, overlapping routes collapse rather than invert. At +150 dp the
+  Persona overflows the screen edges and sits behind the Rockers; this verifies
+  foreground occlusion, not full ring visibility. The design team and
+  Persona specialist reviewed the full-screen composition and native pixels;
+  no support enters the transparent center in these samples.
+- Original deliberately uses one conservative envelope for its independently
+  sized states. At Speaking/Listening/Idle sizes 100/35/60, the smaller current
+  ring can sit above the deck while that envelope collapses the routes, making
+  no connecting routes visible in both sampled Idle and Listening states.
+  This limitation is documented in the
+  studio notes and ADR; exact contact in every unequal state needs a deliberate
+  transition hook aligned to the original renderer's settlement.
+- Glow was measured on 871,857 pixels that were exact ground color in the Off
+  capture. At 100%, average RGB lift is 6.9–7.3 code levels; two frames six
+  seconds apart differ by 2.62 levels on average (maximum 11), with 86.8% of
+  sampled pixels changing. At 45%, average lift is 3.22. Native visual review
+  finds a visible restrained backdrop, with Persona and controls still dominant.
+  These are screenshot measurements, not a claim about every display/brightness.
+- The initial glow was inside safe-area padding and exposed a straight top
+  cutoff. Only the ambient layer now covers the full viewport; foreground
+  geometry retains its original safe padding. The native top-edge comparison
+  removes the 5-level boundary step (remaining adjacent-pixel variation is at
+  most 1 level), and the restored lower control region differs by at most one
+  RGB level, with no visible placement drift. The final 38-test run includes
+  this layer change.
+- The latest operator settings are restored: Contained 78%, −22 dp,
+  387 dp / 40.9% deck, default motion/colors, Still35/Follow, Listening with
+  both channels open. New trace fields retain Parallel/100/100/0/0. Phone and
+  host saved files are byte-identical to the fresh pre-install snapshots; no
+  Save was sent. The live host page is visibly linked in headful Google Chrome.
+- Final debug APK SHA-256:
+  `8a2eee7fb4baa98c542d68c913fedf51bc23c1cd1d5fb54119aec2f68ea2401f`.
+  Release remains byte-identical:
+  `6c19aa351345146b3490f02e91464bfb395e6e97d6431e877e8eefff6af2bf16`.
+  Packaging inspection confirms retired composition helpers are absent and
+  Traces/Ambient/Studio/Contained/Spirit helpers remain debug-only. No Persona
+  asset or renderer source changed, and no media, grant or inference was opened.
+
+Evidence uses `/tmp/agentvoice-traces-*`: `instrumentation-edge.log`,
+`phone-final-check.log`, `packaging-final.log`, `glow-measurements.json`,
+`routes-review.png`, `geometry-review.png`, `original-review.png`,
+`glow-review.png`, `top-edge-review.png`, `phone-restored.png` and `studio-live.png`.

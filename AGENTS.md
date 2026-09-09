@@ -63,6 +63,11 @@ and owns their integration and delivery. Coordinate file ownership before
 overlapping edits in a shared checkout; keep device and host operations with
 green-river.
 
+New studio requests append after the current work unless the operator explicitly
+cancels or reorders it. Keep every requested design idea in the follow-up queue;
+finish verification and delivery before starting the next round. The physical
+phone is the current preview; the operator explicitly destroyed the emulator.
+
 ## Commands
 
 - `bun run test` — tests in tests/, fake protocol/media, no credentials or mic.
@@ -84,20 +89,24 @@ green-river.
   slider spans −200…+200 dp, default +35 dp. Mute and Push to talk use fixed
   Rockers with no style selectors, no header, and an overlay connection notice only
   while Connecting/Disconnected. Control height (240–480 dp) and talk share
-  (30–60%) preserve Halo diameter. Open (default), Dock, Yoke, Socket and Traces
-  use passive neutral layers behind the Persona and controls; preserve geometry,
+  (30–60%) preserve Halo diameter. Traces is the fixed composition, with Parallel,
+  Splayed and Circuit patterns, independent stance, weight and faint offshoots.
+  Its passive neutral routes meet selected Persona placement, with no fixed-height
+  reach cap or animated-bounds tracking. Preserve geometry,
   pointer ownership and native renderer identity. Original keeps per-state sizes; debug-only Contained uses a checksum-
   guarded in-memory asset patch, shared size, inward listening motion, four motion
   amounts and three opaque RGB colors. Separate resets target button dimensions,
   active size (current state for Original), shared position, four animation amounts,
   or colors. Still/Soft surface light and Fixed/Follow channels Persona colors
   remain independent, with separate resets for light and color behavior. Resets
-  preserve all other choices and never save. Protocol 8 carries control design,
+  preserve all other choices and never save. Reset traces excludes background
+  glow; Reset glow affects only its amount. Glow uses the shared slow clock,
+  pauses in background and becomes still under reduced motion. Protocol 9 carries control design,
   geometry, Halo variant/motion/colors and spirit settings; synthetic connection
-  and activity are transient. Save writes a version 8 profile excluding both.
-  Versions 1–7 load without rewriting, mapping retired button styles to Rockers
-  in memory. Preserve their other compatible choices; versions 1–5 gain Open,
-  versions 1–4 use Original, and version 7 retains spirit. Preserve the original asset
+  and activity are transient. Save writes a version 9 profile excluding both.
+  Versions 1–8 load without rewriting, mapping retired button styles to Rockers
+  and compositions to Traces in memory. Preserve their other compatible choices;
+  versions 1–4 use Original, and versions 7–8 retain spirit. Preserve the original asset
   and main PersonaHalo.kt sequencing. No on-phone tuner overlay or
   production layout/default changes; the Push to talk label also applies to the real client.
   Debug preview reconnect observes the same binding

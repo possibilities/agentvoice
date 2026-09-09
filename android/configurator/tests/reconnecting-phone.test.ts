@@ -15,7 +15,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 8,
+    protocol: 9,
     activity: "voice",
     connection: "connecting",
     revision: 0,
@@ -28,14 +28,21 @@ class Connection implements PreviewConnection {
     savedVerticalOffsetDp: 35,
     defaultVerticalOffsetDp: 35,
     design: {
-      ...defaultDesign,
+      ...structuredClone(defaultDesign),
       hold: "rocker",
-      composition: "dock",
+      composition: "traces",
+      traces: {
+        pattern: "circuit",
+        stancePercent: 140,
+        weightPercent: 180,
+        offshootPercent: 45,
+        glowPercent: 27,
+      },
       controlsHeightDp: 380,
       holdSharePercent: 54.3,
     },
-    savedDesign: { ...defaultDesign },
-    defaultDesign: { ...defaultDesign },
+    savedDesign: structuredClone(defaultDesign),
+    defaultDesign: structuredClone(defaultDesign),
     halo: { ...defaultHalo(), variant: "contained", containedSizePercent: 83 },
     savedHalo: defaultHalo(),
     defaultHalo: defaultHalo(),
@@ -71,7 +78,19 @@ async function until(predicate: () => boolean) {
 test("reconnect retains last preview, retries failed dials, then observes fresh state", async () => {
   const initial = new Connection();
   const returned = new Connection();
-  returned.state = { ...returned.state, mode: "idle", revision: 4 };
+  const returnedTraces = {
+    pattern: "splayed" as const,
+    stancePercent: 93,
+    weightPercent: 225,
+    offshootPercent: 71,
+    glowPercent: 54,
+  };
+  returned.state = {
+    ...returned.state,
+    mode: "idle",
+    revision: 4,
+    design: { ...returned.state.design, traces: returnedTraces },
+  };
   let dials = 0;
   const phone = new ReconnectingPhone(
     initial,
@@ -90,7 +109,8 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.verticalOffsetDp).toBe(-24);
   expect(phone.state.design.controlsHeightDp).toBe(380);
   expect(phone.state.design.hold).toBe("rocker");
-  expect(phone.state.design.composition).toBe("dock");
+  expect(phone.state.design.composition).toBe("traces");
+  expect(phone.state.design.traces).toEqual(initial.state.design.traces);
   expect(phone.state.design.holdSharePercent).toBe(54.3);
   expect(phone.state.connection).toBe("connecting");
   expect(phone.state.halo.containedSizePercent).toBe(83);
@@ -101,10 +121,14 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.design.traces).toEqual(returnedTraces);
+  expect(initial.state.design.traces).not.toEqual(returnedTraces);
   expect(phone.state.halo.variant).toBe("contained");
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect(phone.state.verticalOffsetDp).toBe(-24);
   await until(() => returned.calls.length > 0);
+  expect(phone.state.design.traces).toEqual(returnedTraces);
+  expect(initial.calls.every((call) => call["method"] === "get")).toBe(true);
   expect(returned.calls.every((call) => call["method"] === "get")).toBe(true);
 });
 

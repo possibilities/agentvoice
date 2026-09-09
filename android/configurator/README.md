@@ -9,17 +9,30 @@ Both mute buttons and **Push to talk** use Rockers. Press and keep the talk
 surface down to talk; release to mute. Active styling stays dark with focused
 lime accents. There are no button-style, preset or header selectors.
 
-**Composition** selects Open, Dock, Yoke, Socket or Traces. Open is the default,
-with Persona and controls floating freely. Dock adds a quiet shared plate with chamfered
-shoulders fading upward behind lower Persona and the controls. Yoke adds a
-minimal center stem that divides toward the two mute buttons. Socket gives the
-Persona a pair of chamfered mechanical supports; Traces routes paired PCB paths
-into the control deck. These are stationary neutral layers with no touch targets.
-The new supports leave a soft aperture based on selected placement and maximum
-size, never animated bounds, to keep the transparent center clear. Changing
-composition preserves layout, Halo rendering, tuning and glow bleed.
+**Traces** is the fixed composition. **Route** compares Parallel (the baseline
+paired routes), Splayed (a wider fan of routes), and Circuit (staggered mechanical
+steps). **Stance** spans 75–150% of the baseline; **Trace weight** spans 50–250%,
+with 100% equal to 1.2 dp. Both start at 100%. **Offshoots** adds much lighter
+side and upward routes, independently of the selected pattern, from 0–100%.
+It starts at zero. The other compositions and their selector are removed.
 
-**Surface light** offers Still (the unchanged default) or Soft: a broad matte
+Routes now reach the selected Persona size and position instead of ending a
+fixed distance above the deck. Their geometry and soft clear aperture follow
+settings, never animated pixels, and preserve the transparent center and native
+glow. Original uses one conservative attachment envelope across its three state
+sizes; a deliberately smaller state can sit farther from its routes. When that
+envelope reaches the deck, routes collapse and can disappear even while the
+current smaller ring remains above it. Contained's single shared size avoids
+that tradeoff. Routes add no touch targets and never
+move controls or replace the native Halo instance.
+
+**Background glow** adds two broad, dim fields behind the scene. Zero (default)
+is off; 1–100% controls strength. Its gentle breathing shares the existing
+14-second clock but is independent of Button light and Persona color following.
+Reduced motion retains a still glow; backgrounding, disconnect and pending
+controls clear it. No audio level drives the background geometry.
+
+**Button light** offers Still (the unchanged default) or Soft: a broad matte
 light drifts inside the existing button faces on one 14-second cycle. Strength
 starts at 35% and affects only button light; even at maximum, the added wash is
 capped at 3.5% opacity. Active channel energy gently deepens it with a 200 ms
@@ -106,6 +119,8 @@ settings:
 - **Reset colors** restores only the three Contained colors.
 - **Reset light** restores Still and 35% without changing Persona color behavior.
 - **Reset color behavior** restores Fixed without changing the chosen colors or light.
+- **Reset traces** restores the route, stance, weight and offshoots, preserving glow.
+- **Reset glow** restores only Background glow to zero.
 
 Each reset preserves all other choices and remains unsaved until explicit Save.
 Save profile keeps the control design,
@@ -115,9 +130,9 @@ browser observes. Reattaching to a still-open preview retains its unsaved choice
 There is no microphone, playback, grant, controller, Codex,
 WebRTC or voice-server connection in this preview.
 
-Explicit Save writes a version 8 profile atomically on the phone. Its `design`
+Explicit Save writes a version 9 profile atomically on the phone. Its `design`
 contains the fixed layout/header and Rockers, composition, controls height
-and talk-button share. Its `halo` stores variant, common Contained size, motion
+and talk-button share, plus nested `traces` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
 Persona color behavior. Only after the phone confirms that exact profile does
 the host write a matching, mode-0600
@@ -128,14 +143,14 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–7 phone profiles remain readable without rewriting.
-Every retired button style maps to Rockers in memory. Version 1 seeds all three
+until Save. Version 1–8 phone profiles remain readable without rewriting.
+Every retired button style maps to Rockers and every old composition to Traces
+with baseline trace settings in memory. Version 1 seeds all three
 Halo sizes; versions 1–3 use the control geometry baseline. Stored position
-remains intact, with +35 dp when absent. Versions 4–7 retain saved control
-dimensions; versions 1–5 select Open composition and versions 6–7 keep theirs.
-Versions 1–4 select Original, while versions 5–7 retain their Halo variant,
+remains intact, with +35 dp when absent. Versions 4–8 retain saved control
+dimensions. Versions 1–4 select Original, while versions 5–8 retain their Halo variant,
 motion and colors. Versions 1–6 start with Still light and Fixed colors;
-version 7 keeps its spirit settings. Older profiles become version 8 only on
+versions 7–8 keep their spirit settings. Older profiles become version 9 only on
 explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
@@ -173,16 +188,20 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 8 carries live/saved/default designs, sizes, vertical
+Preview protocol 9 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected` and `activity: steady|voice`.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
-`hold: rocker`, permits `composition: open|dock|yoke|socket|traces`,
+`hold: rocker`, `composition: traces`,
 and retains `controlsHeightDp` (integer 240–480)
 and `holdSharePercent` (finite 30–60). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
-Version 8 profile receipts must include the exact confirmed design, geometry,
+Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
+`stancePercent` (75–150), `weightPercent` (50–250), `offshootPercent` (0–100) and
+`glowPercent` (0–100). Defaults are Parallel, 100, 100, 0 and 0. Current and saved
+design snapshots copy these nested choices independently.
+Version 9 profile receipts must include the exact confirmed design, geometry,
 variant, motion, colors and spirit
 before the host copy is written. Connection and activity preview state are
 excluded from the profile. Use matching current host code and debug APK.

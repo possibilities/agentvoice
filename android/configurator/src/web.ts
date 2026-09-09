@@ -1,4 +1,4 @@
-import { type Design, equalDesign } from "./design.ts";
+import { equalDesign } from "./design.ts";
 import { equalHalo, haloColorStates, haloMotionFields } from "./halo.ts";
 import {
   type Activity,
@@ -16,6 +16,7 @@ import {
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
 import { equalSpirit, type SpiritSelection } from "./spirit.ts";
+import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
 type Status = {
   connected: boolean;
@@ -89,17 +90,16 @@ function render() {
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
   element("device").textContent = `Previewing on ${status.device}`;
-  element<HTMLSelectElement>("design-composition").value = draft.design.composition;
-  text(
-    element("composition-hint"),
-    {
-      open: "Persona and controls float freely.",
-      dock: "One quiet surface joins Persona and controls.",
-      yoke: "A fine fork connects Persona to both channels.",
-      socket: "A quiet socket seats Persona above the controls.",
-      traces: "Fine traces link Persona and the control deck.",
-    }[draft.design.composition],
-  );
+  element<HTMLSelectElement>("trace-pattern").value = draft.design.traces.pattern;
+  for (const field of traceAmountFields) {
+    const amount = draft.design.traces[field];
+    element<HTMLInputElement>(`trace-${field}`).value = String(amount);
+    text(element(`trace-${field}-value`), amount === 0 ? "Off" : `${amount}%`);
+    element(`trace-${field}`).setAttribute(
+      "aria-valuetext",
+      amount === 0 ? "Off" : `${amount} percent`,
+    );
+  }
   element<HTMLSelectElement>("connection-preview").value = draft.connection;
   element<HTMLSelectElement>("preview-activity").value = draft.activity;
   element<HTMLSelectElement>("spirit-surface").value = draft.spirit.surface;
@@ -117,6 +117,7 @@ function render() {
   controlHeight.setAttribute("aria-valuetext", `${draft.design.controlsHeightDp} dp`);
   holdShare.setAttribute("aria-valuetext", `${draft.design.holdSharePercent.toFixed(1)} percent`);
   const contained = draft.halo.variant === "contained";
+  element("original-traces-hint").hidden = contained;
   element<HTMLSelectElement>("halo-variant").value = draft.halo.variant;
   element("contained-controls").hidden = !contained;
   text(
@@ -229,10 +230,22 @@ function update(change: (value: Preview) => Preview) {
   void flush();
 }
 
-element<HTMLSelectElement>("design-composition").addEventListener("change", (event) => {
-  const composition = (event.currentTarget as HTMLSelectElement).value as Design["composition"];
-  update((current) => ({ ...current, design: { ...current.design, composition } }));
+element<HTMLSelectElement>("trace-pattern").addEventListener("change", (event) => {
+  const pattern = (event.currentTarget as HTMLSelectElement).value as TraceSelection["pattern"];
+  update((current) => ({
+    ...current,
+    design: { ...current.design, traces: { ...current.design.traces, pattern } },
+  }));
 });
+for (const field of traceAmountFields) {
+  element<HTMLInputElement>(`trace-${field}`).addEventListener("input", (event) => {
+    const value = (event.currentTarget as HTMLInputElement).valueAsNumber;
+    update((current) => ({
+      ...current,
+      design: { ...current.design, traces: { ...current.design.traces, [field]: value } },
+    }));
+  });
+}
 controlHeight.addEventListener("input", () => {
   const controlsHeightDp = controlHeight.valueAsNumber;
   update((current) => ({ ...current, design: { ...current.design, controlsHeightDp } }));
