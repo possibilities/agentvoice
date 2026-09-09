@@ -234,6 +234,8 @@ internal fun PreviewHoldControl(
     val latestRelease by rememberUpdatedState(onRelease)
     var ownsHold by remember { mutableStateOf(false) }
     var hasOwnedHold by remember { mutableStateOf(false) }
+    var touchingLive by remember { mutableStateOf(false) }
+    val canAcknowledgeTouch = microphoneIsLive(ui) && !ui.canHold && !ui.holding
     val releaseOwned by rememberUpdatedState({
         if (ownsHold) {
             ownsHold = false
@@ -246,14 +248,38 @@ internal fun PreviewHoldControl(
         }
     }
     LaunchedEffect(ui.canHold) { if (!ui.canHold) releaseOwned() }
+    LaunchedEffect(canAcknowledgeTouch) { if (!canAcknowledgeTouch) touchingLive = false }
     val live = ui.holding && ui.micOpen
-    val ink = if (ui.canHold || ui.holding) VoiceInk.you else VoiceInk.muted
-    val surface = if (live) VoiceInk.you.copy(alpha = .08f).over(VoiceInk.surface) else VoiceInk.surface
+    val acknowledgedTouch = touchingLive && canAcknowledgeTouch
+    val ink = when {
+        ui.canHold || ui.holding -> VoiceInk.you
+        acknowledgedTouch -> androidx.compose.ui.graphics.lerp(VoiceInk.muted, VoiceInk.you, .18f)
+        else -> VoiceInk.muted
+    }
+    val surface = when {
+        live -> VoiceInk.you.copy(alpha = .08f).over(VoiceInk.surface)
+        acknowledgedTouch -> VoiceInk.you.copy(alpha = .025f).over(VoiceInk.surface)
+        else -> VoiceInk.surface
+    }
     Box(modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown()
             down.consume()
-            if (latestUi.canHold && !ownsHold) {
+            if (microphoneIsLive(latestUi) && !latestUi.canHold && !latestUi.holding) {
+                // This finger acknowledges an already-open mic; it can never acquire a PTT hold.
+                touchingLive = true
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pointer = event.changes.firstOrNull { it.id == down.id }
+                        if (!microphoneIsLive(latestUi) || latestUi.canHold || latestUi.holding ||
+                            pointer == null || !pointer.pressed || pointer.isConsumed ||
+                            pointer.isOutOfBounds(size, extendedTouchPadding) ||
+                            event.changes.any { it.id != down.id && it.pressed }) break
+                        pointer.consume()
+                    }
+                } finally { touchingLive = false }
+            } else if (latestUi.canHold && !ownsHold) {
                 hasOwnedHold = true
                 ownsHold = true
                 try {
@@ -298,13 +324,14 @@ internal fun PreviewHoldControl(
             })
     }.testTag("hold-to-talk")) {
         val face = Modifier.fillMaxSize().clearAndSetSemantics { }
-        RockerHoldFace(ui, ink, surface, face, light)
+        RockerHoldFace(ui, ink, surface, face, light, acknowledgedTouch)
     }
 }
 
 @Composable
 private fun RockerHoldFace(
     ui: CallUi, ink: Color, surface: Color, modifier: Modifier, light: State<PreviewButtonLight>?,
+    acknowledgedTouch: Boolean,
 ) {
     val largeType = LocalDensity.current.fontScale > 1.3f
     val live = ui.holding && ui.micOpen
@@ -352,9 +379,10 @@ private fun RockerHoldFace(
             drawPreviewButtonLight(face, light, ui.connected && !ui.controlsPending && live,
                 capture = true, ink = VoiceInk.you)
             drawPath(face, VoiceInk.line, style = Stroke(1.dp.toPx()))
-            // The face rocks on pressure; illumination follows confirmed capture, never the press alone.
+            // Only PTT rocks the face; an already-open microphone gets a quieter touch acknowledgement.
             val lip = when {
                 live -> ink.copy(alpha = .65f)
+                acknowledgedTouch -> VoiceInk.you.copy(alpha = .3f)
                 ui.canHold && !ui.holding -> ink.copy(alpha = .24f)
                 else -> VoiceInk.line
             }

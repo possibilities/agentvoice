@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -21,6 +22,59 @@ class PreviewControlsTest {
     @get:Rule val compose = createComposeRule()
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
+
+    @Test fun touchingAnOpenMicGivesQuietFeedbackWithoutAcquiringOrChangingAHold() {
+        val open = ready.copy(micMuted = false, micOpen = true, canHold = false)
+        var ui by mutableStateOf(open)
+        var presses = 0
+        var releases = 0
+        compose.setContent {
+            VoiceTheme { PreviewControls(ui, {}, { presses++ }, { releases++ }, Modifier.width(312.dp)) }
+        }
+        val push = compose.onNodeWithTag("hold-to-talk")
+        val bounds = push.getUnclippedBoundsInRoot()
+        fun faceGreen(): Float {
+            val pixels = push.captureToImage().toPixelMap()
+            // Empty face area, away from glyph, text, lip and bevel.
+            return pixels[(pixels.width * .85f).toInt(), (pixels.height * .35f).toInt()].green
+        }
+        val resting = faceGreen()
+        push.performTouchInput { down(center) }
+        val touched = faceGreen()
+        assertTrue("Touch must be visible", touched > resting + .01f)
+        assertTrue("Touch stays a quiet acknowledgement", touched < resting + .05f)
+        push.assertIsNotEnabled().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Live now. Microphone open"))
+        assertEquals(bounds, push.getUnclippedBoundsInRoot())
+        compose.runOnIdle { assertEquals(open, ui); assertEquals(0, presses); assertEquals(0, releases) }
+        push.performTouchInput { up() }
+        assertEquals(resting, faceGreen(), .001f)
+        for (ending in listOf("cancel", "exit", "second")) {
+            push.performTouchInput { down(center) }
+            assertTrue(faceGreen() > resting)
+            push.performTouchInput {
+                when (ending) {
+                    "cancel" -> cancel()
+                    "exit" -> { moveTo(Offset(-50f, -50f)); moveTo(center); up() }
+                    else -> { down(1, center + Offset(10f, 0f)); up(0); up(1) }
+                }
+            }
+            assertEquals(resting, faceGreen(), .001f)
+        }
+        push.performTouchInput { down(center) }
+        compose.runOnIdle { ui = open.copy(controlsPending = true) }
+        assertEquals(resting, faceGreen(), .001f)
+        compose.runOnIdle { ui = open }
+        assertEquals("Returning gates cannot revive the old touch", resting, faceGreen(), .001f)
+        compose.runOnIdle { ui = ready }
+        push.performTouchInput { moveTo(center); up() }
+        compose.runOnIdle { assertEquals(0, presses); assertEquals(0, releases); assertFalse(ui.holding) }
+        // The same surface still owns a genuine PTT press after the old finger is lifted.
+        push.performTouchInput { down(center) }
+        compose.runOnIdle { assertEquals(1, presses); ui = ready.copy(holding = true, micOpen = true) }
+        assertTrue("Confirmed PTT is stronger than touch feedback", faceGreen() > touched + .025f)
+        push.performTouchInput { up() }
+        compose.runOnIdle { assertEquals(1, releases) }
+    }
 
     @Test fun rockerWaitsForConfirmationAndReleasesOnUpCancelExitAndSecondPointer() {
         var ui by mutableStateOf(ready)

@@ -7,8 +7,8 @@ and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
 configuration was changed. The latest configurator checks opened no voice call.
 
 Latest debug APK SHA-256:
-`5033262044143e8ff0148d6762cf9f731befbbb412af2f857a351517f8d25b96`.
-The latest checks are recorded under [Independent Traces end spacing](#independent-traces-end-spacing);
+`a9b74cd3f610c11b75af47ce2f842729fefe3328d5b2d2352e0b48ba257b7cb2`.
+The latest checks are recorded under [Live microphone touch response](#live-microphone-touch-response);
 earlier sections retain the verification history.
 
 ## Automated checks
@@ -633,3 +633,26 @@ Evidence: `/tmp/agentvoice-spacing-{build,tests,typecheck,lint}.log`,
 `/tmp/agentvoice-spacing-phone-check.log`,
 `/tmp/agentvoice-spacing-route-comparison.png`, and
 `/tmp/agentvoice-spacing-final-before-restored.json`.
+
+
+### Live microphone touch response
+
+The debug Live now surface acknowledges a finger on an already-open microphone
+with a 2.5% lime face wash, a quiet edge and a slight caption/glyph tint. It does
+not rock, acquire PTT, invoke control callbacks or change microphone state.
+Release, cancellation, leaving the target, a second pointer or loss of the live
+gate clears the response; returning gates cannot revive an old touch. It adds no
+animation clock, saved setting or protocol field.
+
+Debug/test assembly and lint pass. Nine focused phone tests pass in 33.03 seconds,
+including native pixel comparison against rest and stronger confirmed PTT,
+unchanged state/callbacks/bounds, cancellation and gate transitions, and existing
+PTT/geometry/renderer-continuity tests. A physical ADB touch/release produces the
+expected subtle response while the full preview state and revision remain equal.
+A sampled empty-face pixel changes from RGB(16,19,17) to (21,25,19), then returns
+to (16,19,17). Native rest/touch/released crops were visually reviewed.
+
+Latest choices are restored and phone/host saved profiles remain byte-identical;
+no Save or voice call was sent. Evidence: `/tmp/agentvoice-touch-build.log`,
+`/tmp/agentvoice-touch-instrumentation.log`,
+`/tmp/agentvoice-touch-phone-check.log`, `/tmp/agentvoice-touch-comparison.png`.

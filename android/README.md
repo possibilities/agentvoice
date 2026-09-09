@@ -170,7 +170,9 @@ browser and controls a full-screen native preview over ADB. It replaces the
 on-phone tuner panel. The preview labels its microphone **HUMAN** and uses
 readable on/off/live/wait captions that remain visible with larger system text.
 Both mute buttons and **Push to talk** use Rockers:
-press and keep the talk surface down to talk, release to mute. Active styling stays
+press and keep the talk surface down to talk, release to mute. When the mic is
+already open, touching Live now gives a subtle visual acknowledgement without
+changing the mic or entering PTT. Active styling stays
 dark with focused lime accents. Traces is the fixed composition: Parallel,
 Splayed and Circuit routes share independent stance, weight and lighter offshoot
 controls. Persona contact spacing and Button foot spacing (50–200%, default 100%)
