@@ -1,17 +1,14 @@
 # Android development build verification
 
-Latest synthetic UI checks: 2026-09-09 on the physical S22 and disposable API 35 ARM64 emulator
-`agentvoice_round12_checks`, 480 × 1040 at density 213. Native development package
-`com.arthack.agentvoice.dev`. The emulator round ran while the S22 was unplugged. The subsequent physical-phone
-installation and restoration are recorded at the end of this document.
-Earlier physical-phone and live-call evidence remains below. No current check
-started a voice call, microphone, speaker or inference.
+Latest synthetic UI work: **Persona center indicators**, September 9, 2026, on
+physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
+No emulator is active. No check starts a voice call, microphone, speaker or inference.
+The latest installed debug APK SHA-256 is
+`d3aed4a2e4e6962f9ea33add625dac36c97822744e0da4f1500fbeb63f964999`.
 
-Latest debug APK SHA-256:
-`8f94d5ffab5327db77b71dfbc9b830dc0f25969b68c24a71fb399c95f2f0d9e0`.
-This build is installed on the emulator; the phone retains the previous round.
-Latest checks are under [Adjustable muted presence](#adjustable-muted-presence);
-earlier sections retain their original verification history.
+Current evidence is under [Persona center indicators](#persona-center-indicators).
+Earlier sections retain the results and limitations of their original rounds;
+they are not a cumulative claim about the latest APK.
 
 ## Automated checks
 
@@ -982,3 +979,34 @@ Evidence: `/tmp/agentvoice-trace-contact-geometry-final-build.log`,
 `/tmp/agentvoice-trace-contact-final-phone/`,
 `/tmp/agentvoice-trace-contact-final-phone-before-{state,phone,host}.json`, and
 `/tmp/agentvoice-trace-contact-final-restore.log`.
+
+
+### Persona center indicators
+
+Protocol 15 adds Words, Channel icons, Icons + words and Contacts beside unchanged
+Tide/Off. Visibility is independently Both muted, Either muted (default), or Always.
+These controls and appearance remain session-only; saved profile version stays 13.
+Gate truth uses micOpen/speakerOpen, including held PTT. The layer adds no native
+renderer changes, control targets, clock, audio or inferred attention state.
+
+Build, both debug APKs and lint pass. **96 JVM tests** pass, including eight new
+indicator-model tests. **684 repository tests / 9,496 assertions** pass, including
+**55 host tests / 2,374 assertions**. Typecheck and Biome pass. A headless browser
+checked every style/scope, conditional Show visibility, retained scope and isolated
+appearance resets. Evidence: `/tmp/agentvoice-indicators-{build,tests,typecheck,lint}.log`
+and `/tmp/agentvoice-studio15-browser.zJrf64/`.
+
+Physical-phone testing is not yet complete. The user unplugged the phone during
+full instrumentation: the first **31 of 61 tests passed**, including all five new
+rendered-pixel tests (29 sp fit, four gate combinations, contact gap, immediate
+color removal, reduced motion/dimming and pointer pass-through). The run ended
+without a final suite result. The remaining integration tests and actual visual
+comparison/restoration must run after reconnection; this is not a full-suite pass.
+Log: `/tmp/agentvoice-indicators-native.log`.
+
+Before installation, revision 495's current layouts and session choices were
+captured in `/tmp/agentvoice-indicators-phone-before-state.json`, alongside exact
+phone/host saved bytes in the same prefix's `-phone.json` and `-host.json` files.
+These include 32 sp/−19 brightness/196 drift/65 breathing/13 s Float, Contained84%,
+−6 dp placement and both muted gates. No Save was issued. The host was stopped
+for tests and requires restart with protocol 15, followed by exact restoration.

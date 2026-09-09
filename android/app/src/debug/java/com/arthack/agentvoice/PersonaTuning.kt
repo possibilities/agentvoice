@@ -111,8 +111,9 @@ internal data class PersonaPreviewState(
     val theme: String = "bright",
     val mutedPresence: String = "tide",
     val mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
+    val presenceScope: String = "any-muted",
 ) {
-    init { require(theme in previewThemes && mutedPresence in previewMutedPresences) }
+    init { require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes) }
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide)
     fun rotate(next: String): PersonaPreviewState {
@@ -132,8 +133,8 @@ internal data class PersonaPreviewState(
             savedSpirit = active.spirit, savedPersonaSide = active.personaSide,
             savedOtherLayout = if (orientation == "portrait") landscape else portrait)
     }
-    fun json(): JSONObject = JSONObject().put("protocol", 14)
-        .put("theme", theme).put("mutedPresence", mutedPresence).put("mutedTuning", mutedTuning.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 15)
+        .put("theme", theme).put("mutedPresence", mutedPresence).put("mutedTuning", mutedTuning.json()).put("presenceScope", presenceScope)
         .put("orientation", orientation).put("orientationEpoch", orientationEpoch)
         .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", "left")
         .put("otherLayout", otherLayout.json()).put("savedOtherLayout", savedOtherLayout.json()).put("connection", connection).put("revision", revision)
@@ -195,7 +196,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         personaSide = data.optString("personaSide", "left").also { require(it in previewPersonaSides) },
         otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, if (protocol == 13) 12 else if (protocol >= 14) 13 else protocol) } ?: PreviewLayout(),
         theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"),
-        mutedTuning = if (protocol >= 13) decodePreviewMutedTuning(data.getJSONObject("mutedTuning")) else PreviewMutedTuning())
+        mutedTuning = if (protocol >= 13) decodePreviewMutedTuning(data.getJSONObject("mutedTuning")) else PreviewMutedTuning(),
+        presenceScope = if (protocol >= 15) data.getString("presenceScope") else "any-muted")
         .withSavedLayouts(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide), savedLandscape)
 }
 
@@ -227,7 +229,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -243,10 +245,11 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val theme = request.getString("theme").also { require(it in previewThemes) }
                     val mutedPresence = request.getString("mutedPresence").also { require(it in previewMutedPresences) }
                     val mutedTuning = decodePreviewMutedTuning(request.getJSONObject("mutedTuning"))
+                    val presenceScope = request.getString("presenceScope").also { require(it in previewPresenceScopes) }
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
                     state = next.copy(personaSide = side, placement = placement, design = design, halo = halo, spirit = spirit,
                         activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
-                        mutedTuning = mutedTuning, revision = state.revision + 1)
+                        mutedTuning = mutedTuning, presenceScope = presenceScope, revision = state.revision + 1)
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")

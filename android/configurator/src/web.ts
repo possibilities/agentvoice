@@ -8,6 +8,7 @@ import {
   type MutedPresence,
   modes,
   type PhoneState,
+  type PresenceScope,
   type Preview,
   type Profile,
   previewOf,
@@ -95,6 +96,10 @@ function render() {
     `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
+  element("presence-scope-row").hidden =
+    draft.mutedPresence === "tide" || draft.mutedPresence === "off";
+  element<HTMLSelectElement>("presence-scope").value = draft.presenceScope;
+  element("presence-contacts-hint").hidden = draft.mutedPresence !== "contacts";
   element<HTMLFieldSetElement>("muted-appearance").disabled = draft.mutedPresence === "off";
   element<HTMLSelectElement>("muted-motion").value = draft.mutedTuning.motion;
   for (const field of mutedTuningAmounts) {
@@ -269,6 +274,10 @@ element<HTMLSelectElement>("preview-theme").addEventListener("change", (event) =
 element<HTMLSelectElement>("muted-presence").addEventListener("change", (event) => {
   const mutedPresence = (event.currentTarget as HTMLSelectElement).value as MutedPresence;
   update((current) => ({ ...current, mutedPresence }));
+});
+element<HTMLSelectElement>("presence-scope").addEventListener("change", (event) => {
+  const presenceScope = (event.currentTarget as HTMLSelectElement).value as PresenceScope;
+  update((current) => ({ ...current, presenceScope }));
 });
 element<HTMLSelectElement>("muted-motion").addEventListener("change", (event) => {
   const motion = (event.currentTarget as HTMLSelectElement).value as MutedMotion;

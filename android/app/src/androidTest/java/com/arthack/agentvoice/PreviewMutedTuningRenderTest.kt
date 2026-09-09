@@ -62,6 +62,31 @@ class PreviewMutedTuningRenderTest {
         assertEquals(still, pixels())
     }
 
+    @Test fun centerChoicesKeepHaloAndHeldPttWhileReflectingTheEffectiveGate() {
+        compose.mainClock.autoAdvance = false
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle", speakerMuted = true,
+            mutedPresence = "words", presenceScope = "both-muted"))
+        compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
+        compose.mainClock.advanceTimeBy(700)
+        fun nativeView() = (compose.activity.window.decorView as ViewGroup).descendants.filterIsInstance<RiveAnimationView>().single()
+        val native = compose.runOnIdle { nativeView() }
+        val stage = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("preview-center-indicator", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(32)
+        compose.onNodeWithTag("preview-center-indicator", useUnmergedTree = true).assertDoesNotExist()
+        for (style in listOf("channels", "labeled", "contacts", "words")) {
+            compose.runOnIdle { state = state.copy(mutedPresence = style, presenceScope = "always") }
+            compose.mainClock.advanceTimeBy(32)
+            compose.onNodeWithTag("preview-center-indicator", useUnmergedTree = true).assertExists()
+            compose.runOnIdle { assertTrue(state.holding); assertTrue(state.ui().micOpen); assertSame(native, nativeView()) }
+            assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())
+        }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { assertFalse(state.holding); assertFalse(state.ui().micOpen); assertSame(native, nativeView()) }
+    }
+
     @Test fun fullSceneFitsLargeTypeAndTuningDoesNotReplaceHaloOrMovePersona() {
         compose.mainClock.autoAdvance = false
         var state by mutableStateOf(PersonaPreviewState(mode = "idle", speakerMuted = true, design = PreviewDesign()))

@@ -19,6 +19,7 @@ import {
   defaultPortraitLayout,
   equalLayout,
   layoutOf,
+  mutedPresences,
   type Phone,
   type PhoneState,
   type Profile,
@@ -26,6 +27,7 @@ import {
   parseProfile,
   parseScales,
   parseState,
+  presenceScopes,
   previewOf,
   profileDesign,
   profileHalo,
@@ -54,7 +56,8 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 14,
+  protocol: 15,
+  presenceScope: "any-muted",
   mutedTuning: defaultMutedTuning(),
   theme: "bright",
   mutedPresence: "tide",
@@ -177,6 +180,7 @@ class FakePhone implements Phone {
         ...previewOf(initial()),
         theme: command["theme"],
         mutedPresence: command["mutedPresence"],
+        presenceScope: command["presenceScope"],
         mutedTuning: command["mutedTuning"],
         orientation: command["orientation"],
         orientationEpoch: command["orientationEpoch"],
@@ -270,6 +274,7 @@ async function fixture(options: { saveTo?: string } = {}) {
           ? {
               theme: phone.state.theme,
               mutedPresence: phone.state.mutedPresence,
+              presenceScope: phone.state.presenceScope,
               mutedTuning: phone.state.mutedTuning,
               personaSide: phone.state.personaSide,
               connection: phone.state.connection,
@@ -1340,7 +1345,7 @@ test("wrong inactive layout or hidden side receipts cannot create a host copy", 
   }
 });
 
-test("protocol 14 validates independent layouts and fits bounded profile and receipt frames", async () => {
+test("protocol 15 validates independent layouts and fits bounded profile and receipt frames", async () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const invalid of [
@@ -1823,4 +1828,80 @@ test("negative muted brightness is session-only and resets to the unchanged zero
     resetPreview(negative, phone.state, "muted-brightnessPercent").mutedTuning.brightnessPercent,
   ).toBe(0);
   expect(currentProfile(phone.state)).not.toHaveProperty("mutedTuning");
+});
+
+test("center indicator styles and visibility scopes require exact valid session values", async () => {
+  const { phone, post } = await fixture();
+  expect(mutedPresences).toEqual(["off", "tide", "words", "channels", "labeled", "contacts"]);
+  expect(presenceScopes).toEqual(["both-muted", "any-muted", "always"]);
+  for (const mutedPresence of mutedPresences)
+    for (const presenceScope of presenceScopes) {
+      expect(
+        (await post("preview", { ...previewOf(phone.state), mutedPresence, presenceScope })).status,
+      ).toBe(200);
+      expect(phone.state.mutedPresence).toBe(mutedPresence);
+      expect(phone.state.presenceScope).toBe(presenceScope);
+    }
+  const count = phone.calls.length;
+  for (const invalid of [
+    { mutedPresence: "thinking" },
+    { mutedPresence: "icons" },
+    { presenceScope: "either" },
+    { presenceScope: undefined },
+    { presenceScope: null },
+    { presenceScope: 1 },
+  ]) {
+    expect(() => parseState({ ...phone.state, ...invalid })).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), ...invalid })).status).toBe(400);
+  }
+  expect(phone.calls).toHaveLength(count);
+});
+
+test("indicator style and scope persist across rotation, Off and appearance resets but never Save", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const originalProfile = currentProfile(phone.state);
+  const mutedTuning = {
+    ...defaultMutedTuning(),
+    brightnessPercent: -43,
+    textSizeSp: 27,
+    driftPercent: 235,
+  };
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        mutedPresence: "contacts",
+        presenceScope: "always",
+        mutedTuning,
+      })
+    ).status,
+  ).toBe(200);
+  phone.rotate();
+  expect(phone.state.mutedPresence).toBe("contacts");
+  expect(phone.state.presenceScope).toBe("always");
+  const reset = resetPreview(previewOf(phone.state), phone.state, "muted-appearance");
+  expect(reset.mutedTuning).toEqual(defaultMutedTuning());
+  expect(reset.mutedPresence).toBe("contacts");
+  expect(reset.presenceScope).toBe("always");
+  for (const style of ["off", "tide", "labeled"] as const) {
+    expect(
+      (await post("preview", { ...previewOf(phone.state), mutedPresence: style })).status,
+    ).toBe(200);
+    expect(phone.state.presenceScope).toBe("always");
+    expect(phone.state.mutedTuning).toEqual(mutedTuning);
+  }
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const savedText = await readFile(saveTo, "utf8");
+  const saved = parseProfile(savedText);
+  expect(saved).toEqual(originalProfile);
+  expect(saved.version).toBe(13);
+  expect(savedText).not.toContain('"presenceScope"');
+  expect(savedText).not.toContain('"mutedPresence"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, presenceScope: "always" }))).toThrow();
+  expect(() =>
+    parseState({
+      ...phone.state,
+      otherLayout: { ...phone.state.otherLayout, presenceScope: "always" },
+    }),
+  ).toThrow();
 });

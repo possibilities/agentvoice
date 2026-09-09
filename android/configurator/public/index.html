@@ -29,24 +29,29 @@
                 <select id="preview-theme" aria-describedby="session-style-hint"><option value="bright">Bright</option><option value="quiet">Quiet</option><option value="grayscale">Grayscale</option></select>
               </div>
               <div class="mixing">
-                <label for="muted-presence">Muted presence</label>
-                <select id="muted-presence" aria-describedby="session-style-hint"><option value="tide">Tide</option><option value="off">Off</option></select>
+                <label for="muted-presence">Center indicator</label>
+                <select id="muted-presence" aria-describedby="session-style-hint"><option value="off">Off</option><option value="tide">Tide (original)</option><option value="words">Words</option><option value="channels">Channel icons</option><option value="labeled">Icons + words</option><option value="contacts">Contacts</option></select>
               </div>
+              <div id="presence-scope-row" class="mixing" hidden>
+                <label for="presence-scope">Show</label>
+                <select id="presence-scope"><option value="both-muted">Both muted</option><option value="any-muted">Either muted</option><option value="always">Always</option></select>
+              </div>
+              <p id="presence-contacts-hint" class="control-hint" hidden>Human left, agent right. Joined contacts are live; a lifted contact is muted.</p>
               <fieldset id="muted-appearance" class="motion-controls">
-                <legend class="subpanel-title">Muted appearance</legend>
-                <p id="muted-fit-hint" class="control-hint">Larger text and motion may be limited to fit inside Persona. These choices last for this preview session and are not saved.</p>
+                <legend class="subpanel-title">Indicator appearance</legend>
+                <p id="muted-fit-hint" class="control-hint">Larger text, icons and motion may be limited to fit inside Persona. These choices last for this preview session and are not saved.</p>
                 <div class="mixing"><label for="muted-motion">Motion</label><select id="muted-motion"><option value="float">Float</option><option value="ripple">Ripple</option></select></div>
                 <button type="button" id="reset-muted-motion" data-reset="muted-motion" class="reset value-reset">Reset motion</button>
                 <div class="motion-control">
-                  <div class="size-heading"><label for="muted-textSizeSp">Text size</label><output id="muted-textSizeSp-value" for="muted-textSizeSp">14 sp</output></div>
+                  <div class="size-heading"><label for="muted-textSizeSp">Size</label><output id="muted-textSizeSp-value" for="muted-textSizeSp">14 sp</output></div>
                   <input id="muted-textSizeSp" type="range" min="12" max="32" step="1" value="14" aria-describedby="muted-textSizeSp-hint muted-fit-hint" />
-                  <p id="muted-textSizeSp-hint" class="control-hint">Size of the muted-presence text.</p>
-                  <button type="button" id="reset-muted-textSizeSp" data-reset="muted-textSizeSp" class="reset value-reset">Reset text size</button>
+                  <p id="muted-textSizeSp-hint" class="control-hint">Primary text or icon size for the selected indicator.</p>
+                  <button type="button" id="reset-muted-textSizeSp" data-reset="muted-textSizeSp" class="reset value-reset">Reset size</button>
                 </div>
                 <div class="motion-control">
                   <div class="size-heading"><label for="muted-brightnessPercent">Brightness</label><output id="muted-brightnessPercent-value" for="muted-brightnessPercent">0%</output></div>
                   <input id="muted-brightnessPercent" type="range" min="-100" max="100" step="1" value="0" aria-describedby="muted-brightnessPercent-hint muted-fit-hint" />
-                  <p id="muted-brightnessPercent-hint" class="control-hint">Dim below or brighten above the baseline. Zero keeps the existing brightness; −100 makes the text invisible.</p>
+                  <p id="muted-brightnessPercent-hint" class="control-hint">Dim below or brighten above the baseline. Zero keeps the existing brightness; −100 makes the indicator invisible.</p>
                   <button type="button" id="reset-muted-brightnessPercent" data-reset="muted-brightnessPercent" class="reset value-reset">Reset brightness</button>
                 </div>
                 <div class="motion-control">
@@ -67,9 +72,9 @@
                   <p id="muted-cycleSeconds-hint" class="control-hint">Time for one complete motion cycle.</p>
                   <button type="button" id="reset-muted-cycleSeconds" data-reset="muted-cycleSeconds" class="reset value-reset">Reset cycle</button>
                 </div>
-                <button type="button" id="reset-muted-appearance" data-reset="muted-appearance" class="reset value-reset">Reset muted appearance</button>
+                <button type="button" id="reset-muted-appearance" data-reset="muted-appearance" class="reset value-reset">Reset indicator appearance</button>
               </fieldset>
-              <p id="session-style-hint" class="control-hint">Theme and muted presence last for this preview session. Save profile keeps layout tuning.</p>
+              <p id="session-style-hint" class="control-hint">Theme and center indicator choices last for this preview session. Save profile keeps layout tuning.</p>
               <fieldset class="trace-controls">
                 <legend class="subpanel-title">Traces</legend>
                 <div class="mixing">

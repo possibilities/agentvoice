@@ -15,7 +15,7 @@ class PreviewOrientationSessionTest {
     private fun preview(state: PersonaPreviewState) = state.activeLayout().json()
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
-        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
+        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope)
 
     @Test fun rotationFencesOldEditsEvenAfterRoundTripAndSavesBothLayouts() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "orientation-${UUID.randomUUID()}.json")

@@ -18,7 +18,7 @@ class PreviewProfileTwelveTest {
     private fun preview(state: PersonaPreviewState) = state.activeLayout().json()
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
-        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
+        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope)
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
         .put("revision", state.revision).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
@@ -82,14 +82,15 @@ class PreviewProfileTwelveTest {
             val tuning = PreviewMutedTuning(28, 75, 230, 80, 8, "ripple")
             val staleEdit = preview(initial)
             val staleSave = save(initial)
-            session.command(preview(initial).put("theme", "quiet").put("mutedPresence", "off")
+            session.command(preview(initial).put("theme", "quiet").put("mutedPresence", "contacts").put("presenceScope", "always")
                 .put("mutedTuning", tuning.json())
                 .put("design", initial.design.copy(spacing = PreviewSpacing(200, 0, 80, 40, 48)).json()))
             withContext(Dispatchers.Main) { session.state = session.state.beginHold().rotate("landscape") }
             val landscape = withContext(Dispatchers.Main) { session.state }
             assertFalse(landscape.holding)
             assertEquals("quiet", landscape.theme)
-            assertEquals("off", landscape.mutedPresence)
+            assertEquals("contacts", landscape.mutedPresence)
+            assertEquals("always", landscape.presenceScope)
             assertEquals(tuning, landscape.mutedTuning)
             assertEquals(PreviewSpacing(paddingDp = 16), landscape.design.spacing)
             session.command(preview(landscape).put("theme", "grayscale")
@@ -108,7 +109,9 @@ class PreviewProfileTwelveTest {
             assertFalse(encoded.has("theme"))
             assertFalse(encoded.has("mutedPresence"))
             assertFalse(encoded.has("mutedTuning"))
+            assertFalse(encoded.has("presenceScope"))
             assertFalse(encoded.getJSONObject("landscape").has("mutedTuning"))
+            assertFalse(encoded.getJSONObject("landscape").has("presenceScope"))
             assertFalse(encoded.getJSONObject("landscape").has("theme"))
             assertFalse(encoded.getJSONObject("landscape").has("mutedPresence"))
             assertEquals(returned.design, decodePersonaDesign(profile))
@@ -147,7 +150,8 @@ class PreviewProfileTwelveTest {
         try {
             val before = withContext(Dispatchers.Main) { session.state }
             for (request in listOf(preview(before).put("theme", "neon"), preview(before).put("mutedPresence", "always"),
-                preview(before).apply { remove("theme") }, preview(before).apply { remove("mutedTuning") },
+                preview(before).put("presenceScope", "sometimes"), preview(before).apply { remove("presenceScope") },
+                preview(before).put("presenceScope", JSONObject.NULL), preview(before).apply { remove("theme") }, preview(before).apply { remove("mutedTuning") },
                 preview(before).put("mutedTuning", PreviewMutedTuning().json().put("cycleSeconds", 0)))) {
                 assertTrue(runCatching { session.command(request) }.isFailure)
                 assertEquals(before, withContext(Dispatchers.Main) { session.state })
@@ -155,6 +159,32 @@ class PreviewProfileTwelveTest {
             }
         } finally { file.delete() }
     }
+    @Test fun indicatorOptionsRoundTripAndProtocolFourteenAddsOnlyDefaultScope() = runBlocking {
+        val file = fixture()
+        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
+        try {
+            for (style in previewMutedPresences) for (scope in previewPresenceScopes) {
+                val before = withContext(Dispatchers.Main) { session.state }
+                session.command(preview(before).put("mutedPresence", style).put("presenceScope", scope))
+                val current = withContext(Dispatchers.Main) { session.state }
+                assertEquals(style, current.mutedPresence)
+                assertEquals(scope, current.presenceScope)
+                assertEquals(15, current.json().getInt("protocol"))
+                assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
+                    current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
+                assertFalse(file.exists())
+            }
+            val original = withContext(Dispatchers.Main) { session.state }.copy(mutedPresence = "tide",
+                theme = "quiet", mutedTuning = PreviewMutedTuning(29, -73, 166, 41, 14, "float"))
+            val legacy = original.json().put("protocol", 14).apply { remove("presenceScope") }
+            assertEquals(original.copy(presenceScope = "any-muted"), restorePersonaPreview(legacy,
+                original.saved, original.savedDesign, original.savedHalo, original.savedSpirit,
+                original.savedOtherLayout, original.savedPersonaSide))
+            assertTrue(runCatching { restorePersonaPreview(original.json().apply { remove("presenceScope") },
+                original.saved) }.isFailure)
+        } finally { file.delete() }
+    }
+
     @Test fun versionTwelveAddsCustomPaddingWithoutChangingEitherLayoutOrSavedBytes() {
         val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
             spacing = PreviewSpacing(137, 63, 19, 7, 31)))

@@ -43,10 +43,11 @@ internal fun PreviewStudioScreen(
     theme: String = "bright",
     mutedPresence: String = "tide",
     mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
+    presenceScope: String = "any-muted",
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope)
     }
 }
 
@@ -55,7 +56,7 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
@@ -69,7 +70,7 @@ private fun PreviewStudioScene(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val muted = mutedPresence == "tide" && previewMutedEligible(ui, foreground)
+    val muted = previewCenterIndicatorEligible(ui, mutedPresence, presenceScope, foreground)
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
         ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted,
         mutedCycleSeconds = mutedTuning.cycleSeconds)
@@ -146,10 +147,15 @@ private fun PreviewStudioScene(
                                 idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())))
                         }
                         val aperture = rememberMutedAperture(geometry.diameter, halo, placement, motionAllowed && foreground)
-                        PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
-                            geometry.offsetY.dp, aperture.dp,
-                            ink = theme.foreground(VoiceInk.muted, theme.palette.ground, opacity = .84f),
-                            primaryInk = theme.foreground(VoiceInk.text, theme.palette.ground), tuning = mutedTuning)
+                        if (mutedPresence == "tide") {
+                            PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
+                                geometry.offsetY.dp, aperture.dp,
+                                ink = theme.foreground(VoiceInk.muted, theme.palette.ground, opacity = .84f),
+                                primaryInk = theme.foreground(VoiceInk.text, theme.palette.ground), tuning = mutedTuning)
+                        } else {
+                            PreviewCenterIndicator(ui, mutedPresence, presenceScope, foreground, motionAllowed,
+                                scene.phaseTurns, geometry.diameter.dp, geometry.offsetY.dp, aperture.dp, mutedTuning)
+                        }
                     }
                     Box(Modifier.offset { IntOffset(geometry.deckX.dp.roundToPx(), geometry.deckY.dp.roundToPx()) }
                         .requiredSize(geometry.deckWidth.dp, geometry.deckViewportHeight.dp)

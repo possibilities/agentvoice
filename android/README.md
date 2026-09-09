@@ -230,7 +230,7 @@ bun run android:configure --device <adb-serial>
 Explicit Save retains the design, all three sizes and shared position in a
 version 13 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 14 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 15 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Their tuning is independent. The browser edits only the orientation reported
@@ -262,13 +262,19 @@ scroll to their padded bottom. The fixed square may leave extra space above the 
 Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
 current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
 all preview layers neutral and dims decorative light, while captions retain a
-contrast floor. **Muted presence** compares Tide and Off. Tide shows lowercase
+contrast floor. **Center indicator** compares Tide, Off, Words, Channel icons,
+Icons + words and Contacts. Words names the effective gate combination; paired
+icons use a strike for muted channels; Contacts is a tiny PCB switch pair with
+joined terminals for live and lifted arms for muted (human left, agent right).
+The four new styles can show always, when either channel is muted, or only when
+both are muted. No label infers listening or thinking from an open microphone.
+Tide shows lowercase
 `muted` inside the ring only while connected with both effective audio gates
 closed and no pending controls. Its Float motion follows a 14-second cycle by default, stays
 still under reduced motion and disappears immediately for PTT or an open channel.
 Measured text keeps an 8 dp clearance within a conservative inner aperture;
 if it cannot fit at a small size or large font scale, it is omitted rather than
-shrunk. **Muted appearance** adds 12–32 sp text, brightness (−100–100%),
+shrunk. **Indicator appearance** adds 12–32 sp text, brightness (−100–100%),
 drift (0–300%), breathing (0–100%) and a 6–30 second cycle, plus Float/Ripple.
 Ripple sends a quiet wave through the letters; breathing gently lifts brightness
 and scale. Each value and the whole appearance group have independent resets.
@@ -277,7 +283,7 @@ zero retains the original ink. The baseline remains 14 sp, brightness 0, drift 1
 Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
-Diffuse glow may remain behind it. These session selections survive rotation and
+Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
 activity restoration but are not saved in a profile; profile version is 13.
 
 The studio also offers a dim breathing **Background glow**, independent of the

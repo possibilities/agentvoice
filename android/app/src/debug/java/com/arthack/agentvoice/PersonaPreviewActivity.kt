@@ -115,5 +115,5 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope)
 }

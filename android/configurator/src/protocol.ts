@@ -28,7 +28,9 @@ import { defaultTraces } from "./traces.ts";
 
 export const themes = ["bright", "quiet", "grayscale"] as const;
 export type Theme = (typeof themes)[number];
-export const mutedPresences = ["tide", "off"] as const;
+export const mutedPresences = ["off", "tide", "words", "channels", "labeled", "contacts"] as const;
+export const presenceScopes = ["both-muted", "any-muted", "always"] as const;
+export type PresenceScope = (typeof presenceScopes)[number];
 export type MutedPresence = (typeof mutedPresences)[number];
 export const activities = ["steady", "voice"] as const;
 export type Activity = (typeof activities)[number];
@@ -55,13 +57,14 @@ export type Preview = Layout &
   OrientationFence & {
     theme: Theme;
     mutedPresence: MutedPresence;
+    presenceScope: PresenceScope;
     mutedTuning: MutedTuning;
     connection: Connection;
     activity: Activity;
     mode: Mode;
   };
 export type PhoneState = Preview & {
-  protocol: 14;
+  protocol: 15;
   otherLayout: Layout;
   savedOtherLayout: Layout;
   savedPersonaSide: PersonaSide;
@@ -165,6 +168,7 @@ export function parsePreview(value: unknown): Preview {
     "personaSide",
     "theme",
     "mutedPresence",
+    "presenceScope",
     "mutedTuning",
     "connection",
     "activity",
@@ -206,6 +210,7 @@ export function parseState(value: unknown): PhoneState {
     "personaSide",
     "theme",
     "mutedPresence",
+    "presenceScope",
     "mutedTuning",
     "connection",
     "activity",
@@ -231,7 +236,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 14 ||
+    data["protocol"] !== 15 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -240,7 +245,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   return {
-    protocol: 14,
+    protocol: 15,
     otherLayout: parseLayout(data["otherLayout"]),
     savedOtherLayout: parseLayout(data["savedOtherLayout"]),
     savedPersonaSide: parsePersonaSide(data["savedPersonaSide"]),
@@ -392,6 +397,7 @@ export function previewOf(state: Preview): Preview {
     personaSide: state.personaSide,
     theme: state.theme,
     mutedPresence: state.mutedPresence,
+    presenceScope: state.presenceScope,
     mutedTuning: { ...state.mutedTuning },
     connection: state.connection,
     activity: state.activity,
@@ -532,14 +538,18 @@ export function equalLayout(a: Layout, b: Layout): boolean {
 export function parseSessionModes(data: Record<string, unknown>): {
   theme: Theme;
   mutedPresence: MutedPresence;
+  presenceScope: PresenceScope;
   mutedTuning: MutedTuning;
 } {
   if (!themes.includes(data["theme"] as Theme)) throw Error("Invalid theme");
   if (!mutedPresences.includes(data["mutedPresence"] as MutedPresence))
     throw Error("Invalid muted presence");
+  if (!presenceScopes.includes(data["presenceScope"] as PresenceScope))
+    throw Error("Invalid indicator scope");
   return {
     theme: data["theme"] as Theme,
     mutedPresence: data["mutedPresence"] as MutedPresence,
+    presenceScope: data["presenceScope"] as PresenceScope,
     mutedTuning: parseMutedTuning(data["mutedTuning"]),
   };
 }

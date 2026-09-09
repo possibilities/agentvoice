@@ -78,22 +78,31 @@ with zero as its default. Each slider has its own reset. **Reset spacing** resto
 Padding to 16, section separation to zero, and the stored legacy baseline values
 for only the visible orientation. Spacing remains unsaved until Save.
 
-**Theme** offers Bright (default), Quiet and Grayscale. **Muted presence** offers
-Tide (default) and Off. These are session choices: they survive orientation
-changes, activity recreation and ordinary tuning resets, but are excluded from Save profile.
+**Theme** offers Bright (default), Quiet and Grayscale. **Center indicator**
+compares Off, Tide (original), Words, Channel icons, Icons + words and Contacts.
+Tide remains the original both-muted indicator. Words shows the live/muted
+channel truth; Channel icons pairs the microphone on the left with the speaker
+on the right; Icons + words adds compact live/muted captions. Contacts keeps
+Human left and agent right: joined contacts are live and a lifted contact is muted.
 
-**Muted appearance** adjusts the Tide text with Float or Ripple motion,
-Text size (12–32 sp), Brightness (−100–100%), Drift (0–300%), Breathing (0–100%)
-and Cycle (6–30 seconds). Defaults preserve the existing appearance: Float,
+The new styles offer **Show**: Both muted, Either muted (default), or Always.
+This selector stays hidden for Tide and Off, retaining its choice for the next
+new-style selection. Tide always keeps its existing both-muted behavior.
+Theme, indicator style and Show are session choices: they survive orientation
+changes, activity recreation and ordinary tuning resets, but are excluded from
+Save profile.
+
+**Indicator appearance** adjusts Float or Ripple motion, primary text/icon
+Size (12–32 sp), Brightness (−100–100%), Drift (0–300%), Breathing (0–100%) and
+Cycle (6–30 seconds). Defaults preserve the existing Tide appearance: Float,
 14 sp, 0% brightness adjustment, 100% drift, 0% breathing and a 14-second cycle.
-Negative brightness dims the text, reaching invisible at −100%; zero retains
-the existing brightness. Larger text and motion may be limited to fit inside
-Persona. The controls stay
-visible and are disabled while Muted presence is Off; turning Tide back on
-restores the session choices. Every field has an individual reset.
-**Reset muted appearance** restores the six tuning defaults without changing
-Tide/Off, theme, or either layout. This tuning is also session-only and never
-enters the saved profile.
+Negative brightness dims the indicator, reaching invisible at −100%; zero
+retains the existing brightness. Larger text, icons and motion may be limited
+to fit inside Persona. Appearance controls remain visible and disabled while
+Off; choosing another style restores the session tuning. Every field has an
+individual reset. **Reset indicator appearance** restores the six tuning
+defaults without changing style, Show, theme, or either layout. This tuning is
+also session-only and never enters the saved profile.
 
 In portrait, the Persona stage is a screen-width square, independent of control
 height. Extra vertical room sits between the stage and the bottom-aligned deck.
@@ -266,15 +275,17 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol 14 carries live/saved/default designs, sizes, vertical
+Preview protocol 15 carries live/saved/default designs, sizes, vertical
 offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
-`theme: bright|quiet|grayscale`, `mutedPresence: tide|off`, and required
+`theme: bright|quiet|grayscale`,
+`mutedPresence: off|tide|words|channels|labeled|contacts`, required
+`presenceScope: both-muted|any-muted|always` (default `any-muted`), and required
 `mutedTuning`. The latter has exactly integer `textSizeSp` (12–32),
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
-14/0/100/0/14/float. Theme, muted presence and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is 14;
+14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
+session-root fields on Preview/PhoneState, never Layout. Protocol is 15;
 saved profile is version 13 for unified padding; session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
@@ -295,13 +306,13 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently.
-Protocol 14's active fields describe the phone's visible orientation; it also
+Protocol 15's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
 changes orientation; the host cannot select it. Version 13 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors and spirit
-before the host copy is written. Connection, activity, theme, muted presence and
+before the host copy is written. Connection, activity, theme, indicator style, presence scope and
 muted tuning are excluded from the profile. Use matching current host code and debug APK.
 
 ```sh

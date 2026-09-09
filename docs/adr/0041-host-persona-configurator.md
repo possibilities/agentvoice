@@ -351,3 +351,31 @@ standoff. Neither variant tracks animated GPU bounds or changes the Rive asset.
 Phone samples show Contained's feeds tucked below the lower arc in baseline and
 speaking; some contracted/extreme poses still have a small gap. This is a closer
 stationary connection, not exact contour tracking in every animation frame.
+
+
+## Quiet center-indicator alternatives
+
+Protocol 15 expands the session-only `mutedPresence` choice to
+`tide|off|words|channels|labeled|contacts` and adds required `presenceScope`:
+`both-muted|any-muted|always` (default any-muted). Profile 13 stays unchanged;
+Save excludes these choices and `mutedTuning`. Protocol 14 restoration adds only
+the default scope. Tide remains the original both-closed baseline, independent of
+scope; Off hides the layer. Switching either retains appearance controls.
+
+Words names the gate combination, with two-line mixed/fully muted captions.
+Channels uses a mic/speaker pair with diagonal mute strikes. Labeled stacks
+icon/live-or-muted rows, preserving the selected text size. Contacts uses tiny
+PCB switches: joined means live, lifted means muted, human left. It deliberately
+trades immediate recognition for a quieter mechanical connection with Traces;
+the studio explains its convention. Footnote and Bookends remain creative
+follow-up concepts, not extra controls in this round.
+
+Effective micOpen/speakerOpen establish truth, including PTT opening a mic whose
+mute preference remains true. Connection, foreground and pending-control gates
+suppress uncertain assertions. Text, color and semantic switch shape update
+immediately; decorative motion cannot retain an obsolete live indication. No
+open-mic state is labeled listening or thinking. The input-transparent layer
+shares the existing clock, theme, conservative aperture and appearance settings;
+it owns no Rive changes or interaction targets. Labeled rows reserve the longer
+caption width to prevent horizontal gate-change jumps. Fitting reduces motion
+first, then omits a block that cannot fit rather than shrinking selected type.

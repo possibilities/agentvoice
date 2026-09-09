@@ -121,6 +121,9 @@ select:focus-visible {
   align-items: center;
   font-size: 12px;
 }
+.mixing[hidden] {
+  display: none;
+}
 .mixing + .mixing {
   margin-top: 14px;
 }

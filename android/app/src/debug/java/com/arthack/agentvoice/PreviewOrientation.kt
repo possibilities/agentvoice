@@ -6,7 +6,8 @@ import org.json.JSONObject
 internal val previewOrientations = setOf("portrait", "landscape")
 internal val previewPersonaSides = setOf("left", "right")
 internal val previewThemes = setOf("bright", "quiet", "grayscale")
-internal val previewMutedPresences = setOf("tide", "off")
+internal val previewPresenceScopes = setOf("both-muted", "any-muted", "always")
+internal val previewMutedPresences = setOf("tide", "off", "words", "channels", "labeled", "contacts")
 
 /** Only the activity observes orientation; a host request can never select it. */
 internal data class PreviewLayout(
