@@ -103,6 +103,16 @@ controls, with zero as its default. Hiding it in portrait retains its stored val
 Padding to 16, section separation to zero, and the stored legacy baseline values
 for only the visible orientation. Spacing remains unsaved until Save.
 
+**Switch sounds** is a shared, saved choice for both orientations, independent
+of appearance overrides. Choose **Off**, **Rocker 29** or **Rocker 13**, then set
+**Level** from 0–100%. Fresh and migrated previews start Off at 70%; **Reset
+sounds** restores both values. Off retains the selected level. Use the phone's
+actual controls to audition: both mute switches share one click, and Push to talk
+has separate press and release sounds. Playback also follows the phone's media
+volume. Selecting a family, moving Level, resetting, rotating or reconnecting
+does not audition audio. The browser contains no player or audio asset routing.
+Changes remain unsaved until explicit Save.
+
 **Theme** offers Bright (default), Quiet and Grayscale. **Center indicator**
 compares Off, Tide (original), Words, Channel icons, Icons + words and Contacts.
 Tide remains the original both-muted indicator. Words shows the live/muted
@@ -241,15 +251,17 @@ Save profile keeps the control design,
 all Halo sizes, motion, colors and both local position axes.
 Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
-There is no microphone, playback, grant, controller, Codex,
-WebRTC or voice-server connection in this preview.
+The preview has no microphone, voice playback, grant, controller, Codex,
+WebRTC or voice-server connection. Optional switch effects play locally on the
+phone only when its controls are used.
 
-Explicit Save writes a version 15 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 16 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold effective portrait values;
 `landscape` holds effective landscape values (integer-percent `scales`, both
 offsets, design, Halo, spirit and side). Root and landscape each include sorted
-`appearanceOverrides`; root `sharedAppearance` stores the shared base. Both
-layouts and the shared snapshot must match the captured save request, even if
+`appearanceOverrides`; root `sharedAppearance` stores the shared base. Root
+`sounds` stores the shared sound family and level. Both layouts, shared
+appearance and sound settings must match the captured save request, even if
 the phone rotates before its receipt arrives. Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` and `spacing` settings. Its `halo` stores variant, common Contained size, motion
@@ -263,7 +275,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–14 phone profiles remain readable without rewriting.
+until Save. Version 1–15 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -285,8 +297,9 @@ or glow, reach/fade/tip 0/12/0, Original Halo with motion35/25/25/25 and the exi
 colors, and Still35/Fixed spirit. Halo size is excluded from this comparison. An
 absent landscape uses those canonical defaults and inherits portrait appearance.
 This migration changes only in-memory effective appearance and flags; local
-geometry and saved bytes remain intact. Older profiles become version15 only on
-explicit Save. Profiles are ignored by Git.
+geometry and saved bytes remain intact. Profiles through version 15 retain their
+exact saved shape and gain Off/70 sound settings in memory. Older profiles become
+version 16 only on explicit Save. Profiles are ignored by Git.
 
 The real voice client and release APK retain their existing layout, behavior and
 compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
@@ -307,7 +320,8 @@ debug preview. Its separate random token admits one peer at a time, including
 successive peers from the same host run. Incoming debug phone replies are
 limited to less than16 KiB; browser requests and outbound command bounds remain
 8 KiB. Profile parsing allows up to8 KiB. Commands can only read preview state, select a bounded design,
-select/resize/position Halo, or save its fixed private profile. The phone exposes
+select/resize/position Halo, select shared switch sounds, or save its fixed
+private profile. The phone exposes
 no TCP listener. The bridge closes on
 activity stop and reopens on return using the same binding retained in private
 Android activity state. Host loss, invalid framing or liveness failure closes
@@ -324,7 +338,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol17 carries live/saved/default designs, sizes, vertical and
+Preview protocol18 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -334,8 +348,8 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is17;
-saved profile is version15 for shared appearance and local horizontal position;
+session-root fields on Preview/PhoneState, never Layout. Protocol is18;
+saved profile is version16 for shared switch sounds;
 session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
@@ -359,12 +373,12 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently.
-Protocol17's active fields describe the phone's visible orientation; it also
+Protocol18's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version15 profile receipts must
+changes orientation; the host cannot select it. Version16 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
-variant, motion, colors, spirit, override flags and shared snapshot before the
+variant, motion, colors, spirit, override flags, shared appearance and sounds before the
 host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
 Portrait position edits use `verticalOffsetDp`; landscape edits use
 `horizontalOffsetDp`. Landscape rendering ignores its retained historical vertical
@@ -374,8 +388,14 @@ offset. `appearanceOverrides` is a sorted, unique subset of
 contain effective values and flags, never the shared base. The phone alone returns
 `sharedAppearance`, `savedSharedAppearance`, `defaultSharedAppearance`,
 `savedAppearanceOverrides`, `savedHorizontalOffsetDp` and
-`defaultHorizontalOffsetDp`. Connection, activity, theme, indicator style, presence scope and
-muted tuning are excluded from the profile. Use matching current host code and debug APK.
+`defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
+`defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
+`volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
+never include it. Current live protocol18 is strict; Android restoration from
+protocol17 or earlier supplies Off/70. Profile16 requires root sounds, while
+profiles through version 15 forbid the new field and default only in memory.
+Connection, activity, theme, indicator style, presence scope and muted tuning
+are excluded from the profile. Use matching current host code and debug APK.
 
 ```sh
 bun run test

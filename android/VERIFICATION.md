@@ -1,12 +1,13 @@
 # Android development build verification
 
-Latest synthetic UI work: **Shared appearance and orientation layout**, September 9, 2026, on
+Latest synthetic UI work: **Coordinated switch sounds**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
-No emulator is active. No check starts a voice call, microphone, speaker or inference.
+No emulator is active. No check starts a voice call, microphone or inference.
+This round explicitly exercises debug-local switch sound playback.
 The latest installed debug APK SHA-256 is
-`6195c7afc9655fafe70b7e2e7220c23010b21228efb43af8b622a5db4492f341`.
+`167ac5e84c47f44bae548da50907912faa782da40df226f5cad72203c13bf32e`.
 
-Current evidence is under [Shared appearance and orientation layout](#shared-appearance-and-orientation-layout).
+Current evidence is under [Coordinated switch sounds](#coordinated-switch-sounds).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1161,3 +1162,45 @@ Legacy profiles migrate in memory, without an implicit Save.
   profile bytes match their pre-install snapshots exactly. No Save. Original
   accelerometer/user-rotation settings restored to 1/0.
 - No production media, transport or Persona asset/renderer changes in this round.
+
+## Coordinated switch sounds
+
+Protocol 18/profile 16 adds shared Off/Rocker29/Rocker13 and level settings,
+with Reset sounds and explicit Save. Debug-only local SoundPool playback uses
+the same mute click for both controls and distinct PTT down/normal-up cues.
+Original/Contained rendering, appearance inheritance and layout are unchanged.
+
+- **115 JVM tests passed**, debug/test builds and lint passed; release built.
+  `/tmp/agentvoice-sounds-build.log`, `/tmp/agentvoice-sounds-test-build.log`,
+  `/tmp/agentvoice-sounds-release-lint.log`.
+- **698 repository tests passed**, root TypeScript/Biome passed. The host subset
+  has **69 tests / 2854 assertions**, covering legacy Off/70 migration, strict
+  receipts, shared scope, save/dirty/reset and rotation/reconnection retention.
+  Browser evidence: `/tmp/agentvoice-studio18-browser/evidence.json`. No browser
+  audio or audio asset requests; user gestures on the phone own audition.
+- Eight focused S22 sound tests passed; final full phone suite: **77 tests /
+  140.425 seconds**, `/tmp/agentvoice-sounds-native-final.log`. Native tests load
+  all six samples and verify nonzero SoundPool stream allocation at low gain;
+  injected-output gesture tests check same mute cues, paired PTT down/up, and
+  silent cancellation/outside/second-pointer/disposal/live-mic touch. Pure tests
+  cover Off/zero/background, stale settings, unavailable samples and orphan-up
+  prevention. These checks establish decoding and dispatch, not perceived
+  loudness, speaker quality or real-call acoustic pickup.
+- The first full run had one `No compose hierarchies found` failure midway
+  through the existing composition-held-pointer test. It passed in isolation
+  (16.569 seconds) and in the subsequent complete run, without source changes.
+  That initial run is retained at `/tmp/agentvoice-sounds-native-full.log`;
+  do not count it as passing or claim an identified root cause.
+- All six APK WAVs match the specialist's cleared SHA-256 receipt. CC0 license
+  and provenance are packaged alongside them. Release contains no switch-sound
+  assets; native player source exists only in debug. Receipt:
+  `/tmp/agentvoice-sounds-asset-check.json`.
+- Physical phone taps and a 350 ms PTT press/release exercised each family,
+  then restored every prior design field, both unsaved layouts, session choices
+  and gates. Saved phone/host files remained byte-identical. Rocker29/70 is left
+  selected only as an unsaved audition. Rotation settings restored to1/0.
+  `/tmp/agentvoice-sounds-phone-check.json` records the comparisons; reviewed
+  final native screenshot: `/tmp/agentvoice-sounds-phone/ready.png`.
+- Noizey received exclusive phone use after verification/restoration through
+  `/tmp/noizey-phone-handoff.txt`. AgentVoice's transport-only reconnect loop
+  does not relaunch the app or replay settings while another app is foreground.

@@ -53,6 +53,7 @@ internal fun PreviewControls(
     light: State<PreviewButtonLight>? = null,
     spacing: PreviewSpacing = PreviewSpacing(),
     availableHeightDp: Float? = null,
+    onReleaseCompleted: () -> Unit = onRelease,
 ) {
     val inks = LocalPreviewTheme.current.palette
     val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.effectivePushGapDp)
@@ -60,6 +61,7 @@ internal fun PreviewControls(
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
+    val latestCompleted by rememberUpdatedState(onReleaseCompleted)
     Column(modifier.height(fit.extent.dp).testTag("preview-controls")) {
         PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(fit.mute.dp), light, spacing.effectiveChannelGapDp)
         Canvas(Modifier.fillMaxWidth().height(fit.gap.dp).clearAndSetSemantics { }) {
@@ -75,7 +77,7 @@ internal fun PreviewControls(
         }
         key(geometry, fit) {
             PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
-                Modifier.fillMaxWidth().height(fit.hold.dp), light)
+                Modifier.fillMaxWidth().height(fit.hold.dp), light, onReleaseCompleted = { latestCompleted() })
         }
     }
 }
@@ -240,27 +242,29 @@ internal fun PreviewHoldControl(
     onRelease: () -> Unit,
     modifier: Modifier = Modifier,
     light: State<PreviewButtonLight>? = null,
+    onReleaseCompleted: () -> Unit = onRelease,
 ) {
     val inks = LocalPreviewTheme.current.palette
     val latestUi by rememberUpdatedState(ui)
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
+    val latestCompleted by rememberUpdatedState(onReleaseCompleted)
     var ownsHold by remember { mutableStateOf(false) }
     var hasOwnedHold by remember { mutableStateOf(false) }
     var touchingLive by remember { mutableStateOf(false) }
     val canAcknowledgeTouch = microphoneIsLive(ui) && !ui.canHold && !ui.holding
-    val releaseOwned by rememberUpdatedState({
+    val releaseOwned by rememberUpdatedState({ completed: Boolean ->
         if (ownsHold) {
             ownsHold = false
-            latestRelease()
+            if (completed) latestCompleted() else latestRelease()
         }
     })
     DisposableEffect(Unit) {
         onDispose {
-            if (ownsHold) releaseOwned() else if (!hasOwnedHold && latestUi.holding) latestRelease()
+            if (ownsHold) releaseOwned(false) else if (!hasOwnedHold && latestUi.holding) latestRelease()
         }
     }
-    LaunchedEffect(ui.canHold) { if (!ui.canHold) releaseOwned() }
+    LaunchedEffect(ui.canHold) { if (!ui.canHold) releaseOwned(false) }
     LaunchedEffect(canAcknowledgeTouch) { if (!canAcknowledgeTouch) touchingLive = false }
     val live = ui.holding && ui.micOpen
     val acknowledgedTouch = touchingLive && canAcknowledgeTouch
@@ -295,17 +299,19 @@ internal fun PreviewHoldControl(
             } else if (latestUi.canHold && !ownsHold) {
                 hasOwnedHold = true
                 ownsHold = true
+                var completed = false
                 try {
                     latestHold()
                     while (true) {
                         val event = awaitPointerEvent()
                         val pointer = event.changes.firstOrNull { it.id == down.id }
-                        if (!latestUi.canHold || pointer == null || !pointer.pressed || pointer.isConsumed ||
+                        if (!latestUi.canHold || pointer == null || pointer.isConsumed ||
                             pointer.isOutOfBounds(size, extendedTouchPadding) ||
                             event.changes.any { it.id != down.id && it.pressed }) break
+                        if (!pointer.pressed) { completed = true; break }
                         pointer.consume()
                     }
-                } finally { releaseOwned() }
+                } finally { releaseOwned(completed) }
             }
         }
     }.semantics(mergeDescendants = true) {
@@ -323,7 +329,7 @@ internal fun PreviewHoldControl(
             CustomAccessibilityAction(if (ui.holding) "Stop talking" else "Start talking") {
                 when {
                     latestUi.holding || ownsHold -> {
-                        if (ownsHold) releaseOwned() else latestRelease()
+                        if (ownsHold) releaseOwned(true) else latestCompleted()
                         true
                     }
                     latestUi.canHold -> {

@@ -20,10 +20,12 @@ import {
   previewOf,
   profileLayout,
   profileSharedAppearance,
+  profileSounds,
   sameOrientation,
   type Theme,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
+import { equalSounds, type SoundFamily } from "./sounds.ts";
 import { visibleSpacingFields } from "./spacing.ts";
 import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
@@ -109,6 +111,10 @@ function render() {
     text(element(`override-${group}-label`), `Customize ${orientationLabel}`);
     text(element(`scope-${group}`), customized ? `${orientationLabel} only` : "Shared");
   }
+  element<HTMLSelectElement>("sound-family").value = draft.sounds.family;
+  element<HTMLInputElement>("sound-volume").value = String(draft.sounds.volumePercent);
+  text(element("sound-volume-value"), `${draft.sounds.volumePercent}%`);
+  element("sound-volume").setAttribute("aria-valuetext", `${draft.sounds.volumePercent} percent`);
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
   element("presence-scope-row").hidden =
@@ -230,10 +236,12 @@ function render() {
   const otherOrientation = draft.orientation === "portrait" ? "landscape" : "portrait";
   const hostMatches =
     status.hostSaved &&
+    equalSounds(profileSounds(status.hostSaved), draft.sounds) &&
     equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
     equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout) &&
     equalSharedAppearance(profileSharedAppearance(status.hostSaved), status.state.sharedAppearance);
   const phoneMatches =
+    equalSounds(draft.sounds, status.state.savedSounds) &&
     equalLayout(draft, {
       scales: status.state.savedScales,
       verticalOffsetDp: status.state.savedVerticalOffsetDp,
@@ -320,6 +328,15 @@ function update(change: (value: Preview) => Preview) {
   render();
   void flush();
 }
+
+element<HTMLSelectElement>("sound-family").addEventListener("change", (event) => {
+  const family = (event.currentTarget as HTMLSelectElement).value as SoundFamily;
+  update((current) => ({ ...current, sounds: { ...current.sounds, family } }));
+});
+element<HTMLInputElement>("sound-volume").addEventListener("input", (event) => {
+  const volumePercent = (event.currentTarget as HTMLInputElement).valueAsNumber;
+  update((current) => ({ ...current, sounds: { ...current.sounds, volumePercent } }));
+});
 
 for (const group of appearanceGroups) {
   element<HTMLInputElement>(`override-${group}`).addEventListener("change", (event) => {

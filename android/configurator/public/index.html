@@ -325,6 +325,27 @@
                 <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
               </fieldset>
               <fieldset class="shared-session">
+                <legend class="panel-title">Switch sounds</legend>
+                <p class="scope-badge">Both orientations · Saved with profile</p>
+                <p class="control-hint scope-explanation" id="sound-hint">Use the phone controls to hear your choice. Both mute switches share one click; Push to talk has separate press and release sounds. The level also follows the phone’s media volume. Changing these settings does not play a sound.</p>
+                <div class="mixing">
+                  <label for="sound-family">Sound</label>
+                  <select id="sound-family" aria-describedby="sound-hint">
+                    <option value="off">Off</option>
+                    <option value="rocker-29">Rocker 29</option>
+                    <option value="rocker-13">Rocker 13</option>
+                  </select>
+                </div>
+                <div class="motion-control">
+                  <div class="size-heading">
+                    <label for="sound-volume">Level</label>
+                    <output id="sound-volume-value" for="sound-volume">70%</output>
+                  </div>
+                  <input id="sound-volume" type="range" min="0" max="100" step="1" value="70" aria-describedby="sound-hint" />
+                </div>
+                <button type="button" id="reset-sounds" data-reset="sounds" class="reset value-reset">Reset sounds</button>
+              </fieldset>
+              <fieldset class="shared-session">
                 <legend class="panel-title">Shared session</legend>
                 <p class="scope-badge">Both orientations</p>
                 <p class="control-hint scope-explanation" id="session-style-hint">Theme, synthetic state and center indicator apply across orientations for this session. They are not saved.</p>

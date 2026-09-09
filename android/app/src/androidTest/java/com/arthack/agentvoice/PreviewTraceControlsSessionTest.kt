@@ -15,7 +15,7 @@ class PreviewTraceControlsSessionTest {
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
         .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-        .put("presenceScope", state.presenceScope)
+        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json())
 
     @Test fun legacyProfilesAndSessionsGainOnlyJoinDefaultsWithoutWriting() {
         val original = PersonaPreviewState(mutedPresence = "contacts", presenceScope = "always",
@@ -67,14 +67,14 @@ class PreviewTraceControlsSessionTest {
             val returned = withContext(Dispatchers.Main) { session.state }
             assertEquals(portrait, returned.design)
             assertEquals(landscape, returned.otherLayout.design)
-            assertEquals(17, returned.json().getInt("protocol"))
+            assertEquals(18, returned.json().getInt("protocol"))
             assertEquals(returned, restorePersonaPreview(returned.json(), returned.saved, returned.savedDesign,
                 returned.savedHalo, returned.savedSpirit, returned.savedOtherLayout, returned.savedPersonaSide, returned.savedHorizontalOffsetDp, returned.savedAppearanceOverrides, returned.savedSharedAppearance))
             assertFalse(file.exists())
             val response = session.command(JSONObject().put("id", 2).put("method", "save").put("revision", returned.revision)
                 .put("orientation", returned.orientation).put("orientationEpoch", returned.orientationEpoch))
             val saved = response.getString("profile")
-            assertEquals(15, JSONObject(saved).getInt("version"))
+            assertEquals(16, JSONObject(saved).getInt("version"))
             assertEquals(portrait, decodePersonaDesign(saved))
             assertEquals(landscape, decodeLandscapeLayout(saved).design)
             assertEquals(saved, file.readText())

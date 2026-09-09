@@ -11,7 +11,7 @@ internal fun JSONObject.withoutTraceJoinFields(): JSONObject {
 }
 
 internal fun JSONObject.withoutSharedAppearanceFields(): JSONObject {
-    for (key in listOf("horizontalOffsetDp", "appearanceOverrides", "sharedAppearance", "savedSharedAppearance",
+    for (key in listOf("sounds", "savedSounds", "defaultSounds", "horizontalOffsetDp", "appearanceOverrides", "sharedAppearance", "savedSharedAppearance",
         "defaultSharedAppearance", "savedHorizontalOffsetDp", "defaultHorizontalOffsetDp", "savedAppearanceOverrides")) remove(key)
     for (key in fields()) optJSONObject(key)?.withoutSharedAppearanceFields()
     return this

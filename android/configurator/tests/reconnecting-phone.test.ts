@@ -8,6 +8,7 @@ import {
   type PhoneState,
 } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
+import { defaultSounds } from "../src/sounds.ts";
 import { defaultSpirit } from "../src/spirit.ts";
 import { defaultTraces } from "../src/traces.ts";
 
@@ -21,7 +22,10 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 17,
+    protocol: 18,
+    sounds: defaultSounds(),
+    savedSounds: defaultSounds(),
+    defaultSounds: defaultSounds(),
     horizontalOffsetDp: 0,
     savedHorizontalOffsetDp: 0,
     defaultHorizontalOffsetDp: 0,
@@ -121,6 +125,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   };
   returned.state = {
     ...returned.state,
+    sounds: { family: "rocker-13", volumePercent: 43 },
     mode: "idle",
     mutedTuning: { ...defaultMutedTuning(), textSizeSp: 23, motion: "ripple", driftPercent: 250 },
     theme: "grayscale",
@@ -163,6 +168,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.sounds).toEqual({ family: "rocker-13", volumePercent: 43 });
   expect(phone.state.mutedTuning).toEqual({
     ...defaultMutedTuning(),
     textSizeSp: 23,

@@ -5,6 +5,7 @@ import { type SpacingField, spacingFields } from "./spacing.ts";
 import { traceTipFields } from "./traces.ts";
 
 export type ResetTarget =
+  | "sounds"
   | "muted-appearance"
   | `muted-${MutedTuningField}`
   | "spacing"
@@ -45,6 +46,9 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     return next;
   }
   switch (target) {
+    case "sounds":
+      next.sounds = { ...defaults.defaultSounds };
+      break;
     case "spacing":
       next.design.spacing = { ...defaults.defaultDesign.spacing };
       break;

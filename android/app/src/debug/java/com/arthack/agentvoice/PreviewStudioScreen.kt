@@ -45,10 +45,11 @@ internal fun PreviewStudioScreen(
     mutedTuning: PreviewMutedTuning = PreviewMutedTuning(),
     presenceScope: String = "any-muted",
     horizontalOffsetDp: Int = 0,
+    onReleaseCompleted: () -> Unit = onRelease,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted)
     }
 }
 
@@ -57,7 +58,7 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
@@ -177,7 +178,8 @@ private fun PreviewStudioScene(
                             PreviewControls(ui, { if (!latestChanging) onMute(it) }, { if (!latestChanging) onHold() }, release,
                                 Modifier.fillMaxWidth(), controlsHeightDp = design.controlsHeightDp,
                                 holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing,
-                                availableHeightDp = if (portrait) geometry.deckViewportHeight else null)
+                                availableHeightDp = if (portrait) geometry.deckViewportHeight else null,
+                                onReleaseCompleted = { if (!latestChanging) onReleaseCompleted() else release() })
                         }
                     }
                 }

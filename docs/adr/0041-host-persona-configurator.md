@@ -480,3 +480,28 @@ geometry; it introduces no renderer recreation or independent animation clock.
 Debug phone replies now have a 16 KiB bound and profile text an 8 KiB bound to
 carry the explicit common data and save receipt. Incoming preview requests remain
 8 KiB. Production transports and release code are unchanged.
+
+
+## Coordinated switch sound auditions
+
+Protocol 18/profile 16 adds one shared root `sounds` object: family `off`,
+`rocker-29` or `rocker-13`, and integer `volumePercent` 0–100. Default is Off/70.
+This setting is independent of layout/appearance overrides and saved only by
+explicit Save; legacy profiles and restored sessions migrate to Off/70 without
+rewriting files. Current/saved/default receipts are validated by both endpoints.
+
+Six cleared CC0 Kenney-derived WAVs form two matching trios. Each has a shared
+mute click, a lower PTT down cue and a shorter/quieter PTT up cue. The debug
+phone uses a preloaded native SoundPool with media volume and no focus request;
+the browser never plays or serves sound assets. Configuration changes are silent.
+Only accepted local mute gestures, accepted PTT press and ordinary release (or
+explicit accessibility Start/Stop) play cues. Cancellation, background, rotation,
+reconnect/hydration and disposal do not. A setting change invalidates an existing
+pair. Unloaded samples are dropped, never queued; an unheard down cannot produce
+an orphan up. The live-mic touch acknowledgement remains visual only.
+
+This is a debug design audition. Production media/controllers, Halo rendering and
+release behavior remain unchanged. Sound assets/attribution are in debug assets;
+source hashes, license and reproducible processing are documented under
+`android/third-party/switch-sounds`. Final subjective choice and acoustic pickup
+in a real voice call are not established by decode/gesture instrumentation.

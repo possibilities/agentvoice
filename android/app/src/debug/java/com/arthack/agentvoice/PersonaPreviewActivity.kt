@@ -41,9 +41,9 @@ class PersonaPreviewActivity : ComponentActivity() {
         val portrait = loaded.portrait
         session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
             portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
-            portrait.appearanceOverrides, loaded.shared)
+            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: PreviewSounds())
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance, session.state.savedSounds) }
         }
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
@@ -111,11 +111,21 @@ internal class PersonaPreviewBinding(val name: String, val token: String) {
 }
 
 @Composable
-internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, change: (PersonaPreviewState) -> Unit) {
+internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, soundOutput: PreviewSwitchOutput? = null, change: (PersonaPreviewState) -> Unit) {
     val currentState by rememberUpdatedState(state)
-    val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
+    val feedback = rememberPreviewSwitchFeedback(state.sounds, soundOutput)
+    val release: () -> Unit = { feedback.cancel(); if (currentState.holding) change(currentState.endHold()) }
+    val completedRelease: () -> Unit = {
+        if (currentState.holding) { change(currentState.endHold()); feedback.release() } else feedback.cancel()
+    }
     PreviewStudioScreen(state.ui(), state.design, state.placement,
-        onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
+        onMute = {
+            val next = currentState.toggle(it)
+            if (next != currentState) { change(next); feedback.toggle() }
+        }, onHold = {
+            val next = currentState.beginHold()
+            if (next.holding && !currentState.holding) { change(next); feedback.down() }
+        },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease)
 }

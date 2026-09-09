@@ -227,29 +227,30 @@ fresh host launch.
 bun run android:configure --device <adb-serial>
 ```
 
-Explicit Save retains the design, all three sizes and shared position in a
-version 15 app-private `files/persona-tuning.json` and a matching JSON copy on the
+Explicit Save retains both orientations' design, sizes and position in a
+version 16 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 17 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 18 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
 values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 15 stores portrait in the root fields and a separate `landscape` layout.
+Version 16 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–14 phone profiles load without rewriting; retired button styles map to
+version 1–15 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 15 only on Save. The real client and release
+become version 16 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
 icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
-They never load a grant, controller or audio, or connect to the voice server.
+They never load a grant, controller or voice media, or connect to the voice server.
+Optional switch cues are local debug sound effects, described below.
 
 **Padding** links the deck's outer sides, bottom clearance and every button gap
 with one 0–40 dp control. Fresh defaults and Reset padding use 16 dp. Existing
@@ -290,7 +291,7 @@ Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
-activity restoration but are not saved in a profile; profile version is 15.
+activity restoration but are not saved in a profile; profile version is 16.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
@@ -347,8 +348,31 @@ The studio labels each scope instead of assigning scope by column:
 
 Appearance resets use the common defaults and follow the displayed group scope.
 Layout resets use the current orientation's defaults. All changes require Save
-to persist. Profile 15 keeps common appearance and explicit per-orientation
+to persist. Profile 16 keeps common appearance and explicit per-orientation
 overrides. Older profiles take shared appearance from portrait; untouched legacy
 landscape appearance defaults inherit, while customized differing groups become
 overrides. Size and control geometry are retained. The app never infers a setting
 change from rotating scrcpy's display: Alt+R rotates Android itself.
+
+## Switch sound auditions
+
+The host studio offers **Off**, **Rocker 29** (longer recorded decay) and
+**Rocker 13** (compact click), plus a shared Level slider and Reset sounds.
+Selection is silent; use the phone's controls to audition. Both mute buttons use
+one click. Push to talk uses a related lower down cue and a shorter, quieter up
+cue. The phone's media volume also controls the output. Off/70 is the default;
+there is no automatic production adoption.
+
+Sounds are shared across orientations and saved only by explicit Save, at the
+profile root. Profiles through version 15 load as Off/70 without rewriting.
+Normal accepted gestures trigger local cues, while cancellation, leaving the
+app, rotation, loading/reconnection and settings changes do not. Touching Live now
+keeps its subtle visual feedback without a PTT sound. Changing the family/level
+or interrupting a hold discards its release cue; unloaded samples never queue
+late playback. Accessibility's explicit Start/Stop actions use the same pair.
+
+All six debug-only WAVs are adapted from Kenney's UI SFX Set (CC0); see
+[provenance, processing and license](third-party/switch-sounds/README.md). They
+play through a preloaded SoundPool, request no audio focus, change no system
+volume and never enter a voice track. This does not test acoustic pickup in a
+real voice call. No sound assets or player are included in release builds.

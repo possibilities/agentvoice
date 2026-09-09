@@ -14,9 +14,11 @@ import {
   parseProfile,
   profileLayout,
   profileSharedAppearance,
+  profileSounds,
   record,
   sameOrientation,
 } from "./protocol.ts";
+import { equalSounds } from "./sounds.ts";
 
 export async function serveConfigurator(
   phone: Phone,
@@ -107,6 +109,7 @@ export async function serveConfigurator(
             "orientation",
             "orientationEpoch",
             "personaSide",
+            "sounds",
             "theme",
             "mutedPresence",
             "presenceScope",
@@ -126,6 +129,7 @@ export async function serveConfigurator(
             orientation: input["orientation"],
             orientationEpoch: input["orientationEpoch"],
             personaSide: input["personaSide"],
+            sounds: input["sounds"],
             theme: input["theme"],
             mutedPresence: input["mutedPresence"],
             presenceScope: input["presenceScope"],
@@ -170,6 +174,7 @@ export async function serveConfigurator(
               orientation: input["orientation"],
               orientationEpoch: input["orientationEpoch"],
               personaSide: input["personaSide"],
+              sounds: input["sounds"],
               theme: input["theme"],
               mutedPresence: input["mutedPresence"],
               presenceScope: input["presenceScope"],
@@ -190,6 +195,7 @@ export async function serveConfigurator(
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = layoutOf(phone.state);
+          const expectedSounds = { ...phone.state.sounds };
           const expectedShared = structuredClone(phone.state.sharedAppearance);
           const expectedOther = layoutOf(phone.state.otherLayout);
           const expectedOrientation = phone.state.orientation;
@@ -208,7 +214,8 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 15 ||
+            profile.version !== 16 ||
+            !equalSounds(profileSounds(profile), expectedSounds) ||
             !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
             !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
             !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
