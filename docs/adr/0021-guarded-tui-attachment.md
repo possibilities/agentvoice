@@ -7,8 +7,8 @@ trial confirmed continued updates, typed steering and operator-heard speech.
 
 Accepted 2026-09-05 for an opt-in worktree implementation; restored 2026-09-06
 from the unmerged experiment and adapted to the current events/controller code.
-Numbered 0021 on integration to preserve the intervening default-policy ADRs. Extends ADR 0015's
-owned-child topology and ADR 0016's native text submission path. Default voice
+Numbered 0021 on integration to preserve the intervening default-policy ADRs. Extends [ADR 0015](0015-retain-controller-replace-runtime.md)'s
+owned-child topology and [ADR 0016](0016-restart-handoff.md)'s native text submission path. Default voice
 launches retain stdio; live voice plus TUI behavior requires a separate trial.
 
 The original implementation is preserved in commit
@@ -38,7 +38,7 @@ controller verifies identity/readiness on both sides of the runtime request.
 The runtime issues a one-use watcher/TUI admission ticket valid for 30 seconds,
 bound to its current exact thread by gateway lifetime and revocation.
 
-ADR 0020 makes full access optional for voice. This initial attachment path still
+[ADR 0020](0020-native-launch-defaults.md) makes full access optional for voice. This initial attachment path still
 supports only threads whose native start/resume/settings reports confirm
 dangerFullAccess/never. Restricted or missing reports refuse new tickets and
 revoke existing ones without stopping voice. The attachment-specific permission

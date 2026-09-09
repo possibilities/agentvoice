@@ -1,6 +1,6 @@
 # 0031: The selected role owns its native delegation mode
 
-Accepted September 8, 2026. Supersedes ADR 0030's server-configuration ownership:
+Accepted September 8, 2026. Supersedes [ADR 0030](0030-conversation-first-delegation.md)'s server-configuration ownership:
 the operator wants the default role to carry its own conversation-first policy,
 so selecting another role must not inherit that policy from managed config.
 

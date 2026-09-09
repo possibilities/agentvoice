@@ -1,7 +1,7 @@
 # 0022: WebSocket-only RPC and native TUI interaction
 
-Accepted 2026-09-06. Supersedes ADR 0021's opt-in transport, full-access admission
-gate and suppression of native human requests. Extends ADR 0020's native
+Accepted 2026-09-06. Supersedes [ADR 0021](0021-guarded-tui-attachment.md)'s opt-in transport, full-access admission
+gate and suppression of native human requests. Extends [ADR 0020](0020-native-launch-defaults.md)'s native
 permission defaults. The operator approved always-available stock TUI attachment,
 removal of both attachment flags, and native human interaction through the TUI.
 
@@ -47,7 +47,7 @@ still fail promptly. This does not add handlers for client-defined tools or
 account management.
 
 The private native credential, one-use watcher/TUI grants, controller identity
-checks and selected-thread operation whitelist from ADR 0021 remain. There is
+checks and selected-thread operation whitelist from [ADR 0021](0021-guarded-tui-attachment.md) remain. There is
 no arbitrary endpoint or cross-machine attachment mode. Fresh, restart, native
 loss and quit revoke attachment before teardown; redial preserves it. Watcher
 loss terminates the TUI to prevent reconnect from replaying input. An ordinary

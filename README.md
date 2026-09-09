@@ -1107,7 +1107,7 @@ The navigation request audit used upstream tag `rust-v0.153.4`
 `codex-rs/tui/src/app/agent_picker.rs`, `app/session_lifecycle.rs`,
 `app/loaded_threads.rs` and `app_server_session.rs`. The gateway admits the
 picker's ancestry-filtered list fields and verifies each result independently;
-see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
+see [ADR 0037](docs/adr/0037-descendant-tui-attachment.md).
 
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for historical ownership decisions. [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md)

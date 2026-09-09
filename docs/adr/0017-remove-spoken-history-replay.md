@@ -2,7 +2,7 @@
 
 **Partial policy update:** [ADR 0020](0020-native-launch-defaults.md) replaces the retained startup-context false default with native resolution and makes ordinary launch fresh. The replay removal remains current.
 
-2026-09-05. Supersedes the replay decisions in ADRs 0011 and 0012. The operator
+2026-09-05. Supersedes the replay decisions in ADRs [0011](0011-spoken-history-continuity.md) and [0012](0012-vanilla-voice-reconnects.md). The operator
 asked to remove the feature completely and try the product without automatic
 voice memory before adding more application policy. AgentVoice should remain
 a thin voice layer with explicit prompt and configuration customization.
@@ -25,7 +25,7 @@ a thin voice layer with explicit prompt and configuration customization.
   default of false. Explicit native startup-context overrides remain available;
   native tail-flush controls remain unset by default. This decision removes
   replay rather than changing those separately established defaults.
-- Preserve the explicit one-use restart handoff (ADR 0016). It submits a task
+- Preserve the explicit one-use restart handoff ([ADR 0016](0016-restart-handoff.md)). It submits a task
   supplied with a restart request, independently of voice-history continuity.
 
 ## Consequences and validation

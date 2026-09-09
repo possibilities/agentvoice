@@ -1,7 +1,10 @@
 # 0024: Waiting local server and pointer-only frontend
 
-Accepted 2026-09-06. Supersedes the foreground-only topology in ADRs 0009/0015
-and the animated keyboard UI. Lifecycle API controls retain ADR 0016 semantics.
+Status review 2026-09-08: partially superseded.
+[0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle and [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients. The waiting server and pointer frontend remain.
+
+Accepted 2026-09-06. Supersedes the foreground-only topology in ADRs [0009](0009-one-foreground-workspace.md)/[0015](0015-retain-controller-replace-runtime.md)
+and the animated keyboard UI. Lifecycle API controls retain [ADR 0016](0016-restart-handoff.md) semantics.
 
 `agentvoice server` stays foreground and waits on one private workspace socket;
 `agentvoice` connects as the sole frontend and starts a call whose server-owned

@@ -23,14 +23,14 @@ call. Attachments start only after this launch's call is live.
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,
-server configuration or thread leases. Both clients use frontend API v2 (ADR 0033).
+server configuration or thread leases. Both clients use frontend API v2 ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
 the page requests microphone access only after an explicit tap and owns capture,
 playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. With a private
 `--connect` profile, the bridge connects to the desktop WSS API instead of local
-Termux; browser content and credentials remain separated. See ADRs 0032/0034.
+Termux; browser content and credentials remain separated. See ADRs [0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0034](docs/adr/0034-authenticated-client-network.md).
 
 **AgentVoice controller** — The server-owned authority for one call: exact
 workspace/thread identity, thread leases, operation journal, private control and
@@ -64,7 +64,7 @@ notifications, and forwards native human questions and correlated TUI answers.
 Native Codex owns pending requests and replay; AgentVoice never races the TUI
 with a refusal. A private controller bootstrap issues a short-lived admission
 ticket; its native listener credential is never given to the TUI. The grant stays
-bound to the root while the TUI navigates subagents. See ADRs 0022/0024.
+bound to the root while the TUI navigates subagents. See ADRs [0022](docs/adr/0022-websocket-native-tui.md)/[0037](docs/adr/0037-descendant-tui-attachment.md).
 
 **Workspace** — The canonical existing root pinned for one call. Explicit
 --workspace wins over configuration; otherwise the default server selects its
@@ -131,13 +131,13 @@ into new voice calls. Ordinary reconnects add no AgentVoice instruction.
 
 **Native voice context** — Explicit voice.extra.initialItems are passed through
 unchanged, including empty and null values. Automatic spoken-history replay was
-removed (ADR 0017); voice.replay-spoken-history is retired and errors at load.
+removed ([ADR 0017](docs/adr/0017-remove-spoken-history-replay.md)); voice.replay-spoken-history is retired and errors at load.
 Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
 defaults includeStartupContext to false on every voice call, including renewal,
-matching the inspected desktop client (ADR 0029). App-server omission means true.
+matching the inspected desktop client ([ADR 0029](docs/adr/0029-desktop-startup-context.md)). App-server omission means true.
 Explicit true requests it; raw null restores server resolution. Separate
 from working-thread continuation and native global/workspace instructions.
 

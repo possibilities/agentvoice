@@ -1,9 +1,9 @@
 # 0032: A loopback browser may own phone media
 
-Accepted September 8, 2026. Extends ADR 0024 without replacing its terminal
-topology or restoring the remote console retired by ADRs 0002–0005.
+Accepted September 8, 2026. Extends [ADR 0024](0024-server-and-pointer-frontend.md) without replacing its terminal
+topology or restoring the remote console retired by [ADR 0002](0002-remote-console-attaches-to-client.md)–0005.
 
-The terminal-media asymmetry below is superseded by ADR 0033: both clients now
+The terminal-media asymmetry below is superseded by [ADR 0033](0033-client-owned-native-media.md): both clients now
 own media. This ADR still governs the same-device browser proof's security boundary.
 
 ## Decision

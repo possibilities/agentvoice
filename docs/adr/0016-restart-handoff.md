@@ -1,6 +1,6 @@
 # 0016: Submit an optional handoff after runtime restart
 
-Accepted 2026-09-05. Extends ADR 0015's runtime restart with a caller-supplied
+Accepted 2026-09-05. Extends [ADR 0015](0015-retain-controller-replace-runtime.md)'s runtime restart with a caller-supplied
 task for the resumed backing agent. The retained foreground topology, exact
 thread lease, native prompt defaults, and ordinary reconnect behavior remain.
 

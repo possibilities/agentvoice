@@ -1,4 +1,8 @@
-# Thread mailbox wake-ups
+# 0038: Thread mailbox wake-ups
+
+Identifier corrected 2026-09-08: formerly `0026-thread-mailbox-wakeups.md`. The old number
+was shared by another decision; this record retains its original rationale.
+See the [identifier history](README.md#identifier-history).
 
 AgentVoice observes terminal turns of the orchestrator's verified direct native children and immediately submits one count-only standalone tool output through `turn/start`, letting stock Codex start or steer the orchestrator while continuing to deliver child results itself. A call-controller-owned thread mailbox holds completion metadata until an idempotent opening returns and clears it; working-child counts are fresh snapshots, multiple pending wake-ups and empty openings are expected, and there are no per-message read receipts or new system/developer prompts. The control/MCP opening and read-only event snapshots/replay expose this policy to external clients; native submission ambiguity is reported without automatic retry, runtime replacement retains the mailbox, and call shutdown clears it.
 

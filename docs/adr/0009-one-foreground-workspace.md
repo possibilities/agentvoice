@@ -1,9 +1,11 @@
 # 0009: One foreground app, one workspace per launch
 
-**Historical policies:** ADR 0015 supersedes the single-process topology. [ADR 0020](0020-native-launch-defaults.md) makes ordinary launch fresh and full access optional; explicit continuation and ownership checks remain.
+Status review 2026-09-08: partially superseded.
+[0015](0015-retain-controller-replace-runtime.md) replaces the single process, [0020](0020-native-launch-defaults.md) replaces launch defaults, [0024](0024-server-and-pointer-frontend.md) replaces foreground-only ownership, and [0033](0033-client-owned-native-media.md) moves media to clients. Exact native identity and explicit continuation remain.
 
-Accepted 2026-09-04; consolidated 2026-09-05. Supersedes the topology in ADRs
-0002–0005. Former worker/account provisions are retired; their history is in Git.
+**Historical policies:** [ADR 0015](0015-retain-controller-replace-runtime.md) supersedes the single-process topology. [ADR 0020](0020-native-launch-defaults.md) makes ordinary launch fresh and full access optional; explicit continuation and ownership checks remain.
+
+Accepted 2026-09-04; consolidated 2026-09-05. Supersedes the topology in ADRs [0002](0002-remote-console-attaches-to-client.md), [0003](0003-remote-console-crosses-machines-over-the-tailnet.md), [0004](0004-a-resident-server-owns-the-coordination-runtime.md) and [0005](0005-pair-once-and-race-authenticated-routes.md). Former worker/account provisions are retired; their history is in Git.
 
 AgentVoice runs TUI, audio, WebRTC and coordination in one foreground process,
 owning an unmodified Codex app-server child over stdio. Quit stops app-owned work
