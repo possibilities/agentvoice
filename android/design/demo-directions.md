@@ -3,7 +3,7 @@
 Explore an oversized voice instrument with less writing and more tactile form.
 The existing native Persona Halo remains the expressive centerpiece. This demo
 kept the production UI and compiled placement defaults unchanged. These are the
-initial directions; [ADR 0037](../../docs/adr/0037-host-persona-configurator.md)
+initial directions; [ADR 0041](../../docs/adr/0041-host-persona-configurator.md)
 records the current narrowed controls and headerless layout.
 
 | Preset | Header | Mutes | Hold | Intent |

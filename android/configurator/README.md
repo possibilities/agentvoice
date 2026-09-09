@@ -224,7 +224,7 @@ state selection, stale-save rejection, atomic profile receipts and shutdown,
 using a unique cache file. Tests never overwrite the operator's tuning profile.
 The existing Halo animation regressions still run against the same renderer.
 
-See [ADR 0037](../../docs/adr/0037-host-persona-configurator.md).
+See [ADR 0041](../../docs/adr/0041-host-persona-configurator.md).
 
 Contained patches a checksum-verified in-memory copy of the bundled Halo. It
 never writes the original asset or accepts an asset path/URL. The changed bytes

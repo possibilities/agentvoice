@@ -1,6 +1,6 @@
 # 0034 — Authenticated WSS transports the same client API
 
-Accepted, 2026-09-08. Extends ADR 0033 and narrowly supersedes ADR 0032's
+Accepted, 2026-09-08. Extends [ADR 0033](0033-client-owned-native-media.md) and narrowly supersedes [ADR 0032](0032-loopback-browser-media-frontend.md)'s
 same-device upstream limitation; it does not widen the browser listener.
 
 The operator requested a native Android handoff and a browser proof against both

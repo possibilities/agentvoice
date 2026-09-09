@@ -2,10 +2,10 @@
 
 **Superseded for replay by [ADR 0017](0017-remove-spoken-history-replay.md):** automatic replay, its setting, reader and probe have been removed. [ADR 0020](0020-native-launch-defaults.md) also supersedes the startup-context-off and implicit continuation defaults. The decisions and probe evidence below are historical.
 
-2026-09-05. Supersedes ADR 0008's no-replay/startup-context policy and extends
-ADR 0010's quiet-only reconnect behavior. The operator approved saved-speech
+2026-09-05. Supersedes [ADR 0008](0008-keep-voice-context-controls-native.md)'s no-replay/startup-context policy and extends
+[ADR 0010](0010-quiet-voice-resume.md)'s quiet-only reconnect behavior. The operator approved saved-speech
 restoration, native Recent Work as an opt-in, and an independent replay opt-out.
-ADR 0012 the same day removed quiet resume; replay, its default and the native
+[ADR 0012](0012-vanilla-voice-reconnects.md) the same day removed quiet resume; replay, its default and the native
 history contract below are unchanged.
 
 ## Evidence

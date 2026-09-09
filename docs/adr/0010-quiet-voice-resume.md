@@ -1,11 +1,11 @@
 # 0010: Quiet voice reconnects
 
-**Historical:** ADR 0012 retired quiet resume; [ADR 0017](0017-remove-spoken-history-replay.md) later removed automatic spoken-history replay. The evidence below describes the earlier behavior.
+**Historical:** [ADR 0012](0012-vanilla-voice-reconnects.md) retired quiet resume; [ADR 0017](0017-remove-spoken-history-replay.md) later removed automatic spoken-history replay. The evidence below describes the earlier behavior.
 
-2026-09-05. Superseded by ADR 0012 the same day: the quiet-resume instruction and
+2026-09-05. Superseded by [ADR 0012](0012-vanilla-voice-reconnects.md) the same day: the quiet-resume instruction and
 its `voice.quiet-resume` key were removed. Implementation had been verified with
 fake protocol tests only; live acceptance never happened.
-This qualifies ADR 0008's baseline. ADR 0011 subsequently adds spoken-history
+This qualifies [ADR 0008](0008-keep-voice-context-controls-native.md)'s baseline. [ADR 0011](0011-spoken-history-continuity.md) subsequently adds spoken-history
 restoration and changes the startup-context default; this document records the
 earlier quiet-only change.
 

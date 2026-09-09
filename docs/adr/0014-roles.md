@@ -18,5 +18,5 @@ skills.config or plugin changes were rejected as isolation mechanisms.
 Inside a role, SYSTEM_PROMPT.md and APPEND_SYSTEM_PROMPT.md are the general
 orchestrator prompt every harness receives; the VOICE_ORCHESTRATOR pair stands
 in for the same kind for AgentVoice only, and the replace-or-append rule from
-ADR 0013 applies to the result. A role replaces the config directory as the
+[ADR 0013](0013-convention-prompt-files.md) applies to the result. A role replaces the config directory as the
 prompt source rather than merging with it.

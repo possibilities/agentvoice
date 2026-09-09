@@ -1,4 +1,4 @@
-# 0037: Configure the native phone preview from a host browser
+# 0041: Configure the native phone preview from a host browser
 
 Accepted 2026-09-08 at the operator's request to extract the existing configurator
 before expanding its scope. Supersedes the on-phone tuning overlay in

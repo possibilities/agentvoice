@@ -1,11 +1,11 @@
 # 0020: Native permissions and context, fresh ordinary launches
 
-**Startup-context update:** ADR 0029 supersedes this document only for the startup-context default: AgentVoice now sends false to match the inspected desktop client. Other decisions remain in force.
+**Startup-context update:** [ADR 0029](0029-desktop-startup-context.md) supersedes this document only for the startup-context default: AgentVoice now sends false to match the inspected desktop client. Other decisions remain in force.
 
 Accepted 2026-09-06 after the operator reviewed the defaults individually.
 Supersedes the mandatory full-access and implicit continuation policies in
-ADR 0009 and the startup-context-off policy retained in ADRs 0011, 0012 and 0017.
-The client-and-server comparison baseline in ADR 0019 remains in effect.
+[ADR 0009](0009-one-foreground-workspace.md) and the startup-context-off policy retained in ADRs [0011](0011-spoken-history-continuity.md), [0012](0012-vanilla-voice-reconnects.md) and [0017](0017-remove-spoken-history-replay.md).
+The client-and-server comparison baseline in [ADR 0019](0019-client-server-default-baseline.md) remains in effect.
 
 ## Decision
 

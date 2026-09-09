@@ -85,7 +85,7 @@ version 2 placement JSON for explicit adoption into the compiled defaults. A
 version 1 profile seeds every state from its original size and is not rewritten
 on load. The real client does not load that file or gain a settings screen.
 The on-phone tuning overlay is superseded by
-[ADR 0037's host browser configurator](0037-host-persona-configurator.md), which
+[ADR 0041's host browser configurator](0041-host-persona-configurator.md), which
 preserves this profile format and the native preview's layout and animations.
 
 Security and lifecycle stay narrow: verified WSS, exact subprotocol and private

@@ -19,13 +19,23 @@ Children waiting for native approval or user input remain in flight. Retained
 idle child threads and grandchildren are excluded. An incomplete inventory is
 explicitly qualified rather than presented as an exact count. The notification
 has no child names, task prompts, result summaries, output, or error bodies.
-No system/developer prompt is added; the new tool's description explains opening.
+The tool description explains automatic completion notices and opening. The
+default role's `APPEND_SYSTEM_PROMPT.md` explicitly tells the root to treat
+successful direct-child dispatch as fire-and-forget: stay available to the human,
+keep assignments tracked, and process notices without blocking on wait tools or
+polling for completion. This covers new children and later turns on existing
+children. It distinguishes mailbox metadata from native full results and requires
+handling reported delivery failures. The runtime adds no system/developer prompt
+of its own; other roles retain their selected prompt policy.
 
 Codex may incorporate several notices into an active turn. Submitted notices
 are snapshots and are never cancelled or coalesced. An old notice can arrive
 after another opening has cleared those completions. An empty mailbox result is
 valid and creates no further wake-up. Native Codex continues delivering full
 child results independently, potentially after the wake notice has arrived.
+The default role reconciles entries and native results by child thread and turn,
+silently ignoring already-processed completions to avoid repeating work or human
+updates, while still handling later substantive results and new child turns.
 
 ## Open and clear
 

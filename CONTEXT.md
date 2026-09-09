@@ -4,23 +4,13 @@
 listening, thinking, speaking and asleep states. Optional input/output audio
 features shape its motion; it neither infers conversation state nor owns a call.
 
-**Android configurator** — A separate host browser design studio for the native
-Halo preview over explicitly selected ADB. Rockers/Keycaps mute buttons and
-Trigger/Rocker Push to talk surfaces are independent; Trigger stays default.
-Open/Dock/Yoke composition adds optional stationary neutral structure, with
-Open default and no layout or renderer changes. Control height and talk-button
-share remain adjustable. The phone has no header; an overlay notice appears only for synthetic Connecting or
-Disconnected states. Reset button sizes, Reset size, Reset position, Reset
-animation and Reset colors affect only their named settings and remain unsaved.
-Reset size affects the active Contained shared size or current Original state.
-Its synthetic phone preview owns no call or audio.
-Original keeps its per-state Halo sizes; debug-only Contained adds a shared size,
-inward listening rings/pulse, adjustable state motion and colors. Switching variants
-retains both sets of choices. Protocol 6 carries these settings and transient
-connection selection; explicit Save stores a version 6 phone profile and exact
-host copy without the connection selection. Version 1–5 phone profiles load
-without rewriting; older compositions become Open and version 5 retains its Halo
-settings. Production layout and defaults remain compiled. See ADR 0037.
+**Android configurator** — A host browser design studio controlling a synthetic
+native Halo preview over explicitly selected ADB. Fixed Rocker controls and
+Traces routes have adjustable geometry, motion, colors and light. Preview state
+owns no call or audio. Scoped resets and live edits remain unsaved until explicit
+Save; even saved profiles do not adopt production defaults. The operator is
+still exploring the design. See the [studio contract](android/configurator/README.md)
+and [ADR 0041](docs/adr/0041-host-persona-configurator.md).
 
 **Vanilla Codex** — The Codex client-and-server experience, including the voice
 frontend and working agent. AgentVoice supplies its own frontend, so an explicit
@@ -49,14 +39,14 @@ attachment readiness is independent of media readiness. See ADR 0036.
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,
-server configuration or thread leases. Both clients use frontend API v2 (ADR 0033).
+server configuration or thread leases. Both clients use frontend API v2 ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
 the page requests microphone access only after an explicit tap and owns capture,
 playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. With a private
 `--connect` profile, the bridge connects to the desktop WSS API instead of local
-Termux; browser content and credentials remain separated. See ADRs 0032/0034.
+Termux; browser content and credentials remain separated. See ADRs [0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0034](docs/adr/0034-authenticated-client-network.md).
 
 **AgentVoice controller** — The server-owned authority for one call: exact
 workspace/thread identity, thread leases, operation journal, private control and
@@ -90,7 +80,7 @@ notifications, and forwards native human questions and correlated TUI answers.
 Native Codex owns pending requests and replay; AgentVoice never races the TUI
 with a refusal. A private controller bootstrap issues a short-lived admission
 ticket; its native listener credential is never given to the TUI. The grant stays
-bound to the root while the TUI navigates subagents. See ADRs 0022/0024.
+bound to the root while the TUI navigates subagents. See ADRs [0022](docs/adr/0022-websocket-native-tui.md)/[0037](docs/adr/0037-descendant-tui-attachment.md).
 
 **Workspace** — The canonical existing root pinned for one call. Explicit
 --workspace wins over configuration; otherwise the default server selects its
@@ -157,13 +147,13 @@ into new voice calls. Ordinary reconnects add no AgentVoice instruction.
 
 **Native voice context** — Explicit voice.extra.initialItems are passed through
 unchanged, including empty and null values. Automatic spoken-history replay was
-removed (ADR 0017); voice.replay-spoken-history is retired and errors at load.
+removed ([ADR 0017](docs/adr/0017-remove-spoken-history-replay.md)); voice.replay-spoken-history is retired and errors at load.
 Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
 history, other recent conversations and machine/workspace layout. AgentVoice
 defaults includeStartupContext to false on every voice call, including renewal,
-matching the inspected desktop client (ADR 0029). App-server omission means true.
+matching the inspected desktop client ([ADR 0029](docs/adr/0029-desktop-startup-context.md)). App-server omission means true.
 Explicit true requests it; raw null restores server resolution. Separate
 from working-thread continuation and native global/workspace instructions.
 

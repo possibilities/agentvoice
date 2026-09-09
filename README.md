@@ -232,7 +232,10 @@ count-only wake-up: accumulated completion notices and the current number of
 children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
 and clears completion metadata; native Codex supplies the full results.
 Multiple pending notices and empty openings are expected. The mailbox survives
-runtime replacement, has no per-message read receipts, and adds no system prompt.
+runtime replacement and has no per-message read receipts. The default role and
+mailbox tool description explicitly explain fire-and-forget dispatch: stay
+available to the human and process automatic notices without waiting or polling
+for completion. The runtime adds no system prompt of its own.
 Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
 for external clients. See [thread mailbox](docs/thread-mailbox.md) for scope,
 retry semantics and bounds.
@@ -810,6 +813,16 @@ later mode message. See the [audit](docs/delegation-policy-audit.md) and
 [ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
 binary stay intact.
 
+The default append includes a dated Codex model guide and requires a deliberate
+model, effort, context fork and semantic name for each child assignment. Spark
+remains reference material for a future harness; current worker routing excludes
+it because its independent capacity cannot sustain the non-Spark Codex lead
+after main quota is exhausted. Quota remains unknown without a fresh observation
+tied to the call's account. See the
+[routing research and proposed quota integration](docs/subagent-model-routing.md)
+and [ADR 0040](docs/adr/0040-deliberate-subagent-routing.md). This is role guidance;
+it adds no quota feed or account switching.
+
 | Role file | Effect in AgentVoice |
 | --- | --- |
 | `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
@@ -1133,7 +1146,7 @@ The navigation request audit used upstream tag `rust-v0.153.4`
 `codex-rs/tui/src/app/agent_picker.rs`, `app/session_lifecycle.rs`,
 `app/loaded_threads.rs` and `app_server_session.rs`. The gateway admits the
 picker's ancestry-filtered list fields and verifies each result independently;
-see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
+see [ADR 0037](docs/adr/0037-descendant-tui-attachment.md).
 
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for historical ownership decisions. [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md)

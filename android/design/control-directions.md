@@ -1,6 +1,6 @@
 # Debug control directions
 
-The Halo remains the moving, expressive element. These initial synthetic native demos explored the controls beneath it; they did not select a production design. [ADR 0037](../../docs/adr/0037-host-persona-configurator.md) records the current narrowed choices and adjustable geometry.
+The Halo remains the moving, expressive element. These initial synthetic native demos explored the controls beneath it; they did not select a production design. [ADR 0041](../../docs/adr/0041-host-persona-configurator.md) records the current narrowed choices and adjustable geometry.
 
 ## Tokens and layout
 
