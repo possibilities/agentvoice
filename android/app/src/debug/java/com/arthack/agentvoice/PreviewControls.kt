@@ -30,7 +30,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
@@ -78,7 +83,7 @@ internal fun PreviewMuteControls(
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 130f).coerceIn(.6f, 1.6f)
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PreviewMuteButton("YOU", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
+            PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
                 VoiceInk.you, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
             PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
                 VoiceInk.agent, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
@@ -110,7 +115,7 @@ private fun PreviewMuteButton(
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
         onClick = { currentOnMute(target) })
         .semantics(mergeDescendants = true) {
-            contentDescription = if (target == "speaker") "AGENT speaker" else "YOU microphone"
+            contentDescription = if (target == "speaker") "AGENT speaker" else "HUMAN microphone"
             toggleableState = if (muted) ToggleableState.Off else ToggleableState.On
             stateDescription = when {
                 muted && open -> "Talking; muted on release"
@@ -130,53 +135,90 @@ private fun PreviewMuteButton(
 }
 
 @Composable
-private fun RockerMuteFace(
+internal fun RockerMuteFace(
     name: String, speaker: Boolean, muted: Boolean, color: Color,
     status: String, pressed: Boolean, heightScale: Float, modifier: Modifier,
     light: State<PreviewButtonLight>?, lightEnabled: Boolean,
 ) {
     val sink = if (pressed) 2.dp else 0.dp
-    val statusFits = LocalDensity.current.fontScale <= 1.3f
-    Column(modifier.drawBehind {
-        val edge = 5.dp.toPx()
-        val seam = size.height * if (muted) .65f else .72f
-        val top = (if (muted) 9.dp else 4.dp).toPx() + sink.toPx()
-        drawCutPlate(VoiceInk.line, cut = 10.dp.toPx())
-        drawCutPlate(VoiceInk.ground, cut = 7.dp.toPx(), inset = 2.dp.toPx())
-        val upperFace = Path().apply {
-            moveTo(edge + 3.dp.toPx(), top)
-            lineTo(size.width - edge - 3.dp.toPx(), top)
-            lineTo(size.width - edge, top + 4.dp.toPx())
-            lineTo(size.width - edge - 3.dp.toPx(), seam)
-            lineTo(edge + 3.dp.toPx(), seam)
-            lineTo(edge, top + 4.dp.toPx()); close()
-        }
-        drawPath(upperFace, if (muted) VoiceInk.surface else color.copy(alpha = .12f))
-        drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color)
-        drawPath(Path().apply {
-            moveTo(edge + 3.dp.toPx(), seam + 2.dp.toPx())
-            lineTo(size.width - edge - 3.dp.toPx(), seam + 2.dp.toPx())
-            lineTo(size.width - edge, size.height - edge - if (muted) 4.dp.toPx() else 0f)
-            lineTo(edge, size.height - edge - if (muted) 4.dp.toPx() else 0f); close()
-        }, if (muted) VoiceInk.line else VoiceInk.surface)
-        drawLine(if (muted) VoiceInk.line else color.copy(alpha = .7f),
-            Offset(edge + 6.dp.toPx(), top), Offset(size.width - edge - 6.dp.toPx(), top), 2.dp.toPx())
-    }.padding(start = 18.dp, top = (18f * heightScale).coerceIn(10f, 28f).dp + sink,
-        end = 18.dp, bottom = (14f * heightScale).coerceIn(8f, 22f).dp - sink),
-        verticalArrangement = Arrangement.SpaceBetween) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            ChunkyChannelGlyph(speaker, muted, color,
-                if (muted) VoiceInk.surface else color.copy(alpha = .12f).over(VoiceInk.ground),
-                Modifier.size((46f * heightScale).coerceIn(30f, 72f).dp))
-            BinaryDetent(!muted, color, Modifier.width(12.dp).height((38f * heightScale).coerceIn(24f, 48f).dp))
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            ControlText(name, color, scaledType(14, heightScale, 12, 18))
-            if (statusFits) ControlText(status, if (muted) VoiceInk.text else VoiceInk.muted, 11)
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val topPadding = (18f * heightScale).coerceIn(10f, 28f).dp
+        val bottomPadding = (14f * heightScale).coerceIn(8f, 22f).dp
+        val glyphSize = (46f * heightScale).coerceIn(30f, 72f).dp
+        val caption = remember(name, maxWidth, maxHeight, heightScale, density, measurer) { with(density) {
+            rockerCaption(measurer, name, maxWidth.toPx(),
+                (maxHeight - topPadding - bottomPadding - glyphSize - 2.dp).toPx(),
+                heightScale, 1.dp.toPx())
+        } }
+        Column(Modifier.fillMaxSize().drawBehind {
+            val edge = 5.dp.toPx()
+            val seam = size.height * if (muted) .65f else .72f
+            val top = (if (muted) 9.dp else 4.dp).toPx() + sink.toPx()
+            drawCutPlate(VoiceInk.line, cut = 10.dp.toPx())
+            drawCutPlate(VoiceInk.ground, cut = 7.dp.toPx(), inset = 2.dp.toPx())
+            val upperFace = Path().apply {
+                moveTo(edge + 3.dp.toPx(), top)
+                lineTo(size.width - edge - 3.dp.toPx(), top)
+                lineTo(size.width - edge, top + 4.dp.toPx())
+                lineTo(size.width - edge - 3.dp.toPx(), seam)
+                lineTo(edge + 3.dp.toPx(), seam)
+                lineTo(edge, top + 4.dp.toPx()); close()
+            }
+            drawPath(upperFace, if (muted) VoiceInk.surface else color.copy(alpha = .12f))
+            drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color)
+            drawPath(Path().apply {
+                moveTo(edge + 3.dp.toPx(), seam + 2.dp.toPx())
+                lineTo(size.width - edge - 3.dp.toPx(), seam + 2.dp.toPx())
+                lineTo(size.width - edge, size.height - edge - if (muted) 4.dp.toPx() else 0f)
+                lineTo(edge, size.height - edge - if (muted) 4.dp.toPx() else 0f); close()
+            }, if (muted) VoiceInk.line else VoiceInk.surface)
+            drawLine(if (muted) VoiceInk.line else color.copy(alpha = .7f),
+                Offset(edge + 6.dp.toPx(), top), Offset(size.width - edge - 6.dp.toPx(), top), 2.dp.toPx())
+        }.padding(top = topPadding + sink, bottom = bottomPadding - sink),
+            verticalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                ChunkyChannelGlyph(speaker, muted, color,
+                    if (muted) VoiceInk.surface else color.copy(alpha = .12f).over(VoiceInk.ground),
+                    Modifier.size(glyphSize).testTag("rocker-channel-glyph"))
+                BinaryDetent(!muted, color, Modifier.width(12.dp).height((38f * heightScale).coerceIn(24f, 48f).dp))
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = caption.inset)) {
+                Text(name, modifier = Modifier.weight(1f).alignByBaseline().testTag("rocker-channel-caption"),
+                    color = color, style = caption.name, maxLines = 1, softWrap = false)
+                Spacer(Modifier.width(6.dp))
+                Text(status, modifier = Modifier.width(with(density) { caption.statusWidth.toDp() })
+                    .alignByBaseline().testTag("rocker-state-caption"),
+                    color = if (muted) VoiceInk.text else VoiceInk.muted, style = caption.status,
+                    textAlign = TextAlign.End, maxLines = 1, softWrap = false)
+            }
         }
     }
+}
+
+private data class RockerCaption(val name: TextStyle, val status: TextStyle, val inset: Dp, val statusWidth: Float)
+
+private fun rockerCaption(measurer: TextMeasurer, name: String, width: Float, height: Float,
+    heightScale: Float, unit: Float): RockerCaption {
+    fun candidate(nameSize: Int, statusSize: Int, inset: Dp): Pair<RockerCaption, Boolean> {
+        fun style(size: Int, weight: FontWeight) = TextStyle(fontFamily = VoiceInk.type, fontSize = size.sp,
+            fontWeight = weight, letterSpacing = 0.sp, lineHeight = (size * 1.15f).sp)
+        val nameStyle = style(nameSize, FontWeight.Normal)
+        val statusStyle = style(statusSize, FontWeight.SemiBold)
+        val nameLayout = measurer.measure(name, nameStyle, maxLines = 1, softWrap = false)
+        // Reserve the same slot in every state; a gate change cannot move or hide a caption.
+        val states = listOf("on", "off", "live", "wait").map {
+            measurer.measure(it, statusStyle, maxLines = 1, softWrap = false)
+        }
+        val statusWidth = states.maxOf { it.size.width }.toFloat()
+        val fits = nameLayout.size.width + statusWidth + (inset.value * 2f + 6f) * unit <= width &&
+            maxOf(nameLayout.size.height, states.maxOf { it.size.height }) <= height
+        return RockerCaption(nameStyle, statusStyle, inset, statusWidth) to fits
+    }
+    val normal = candidate(scaledType(14, heightScale, 12, 18), scaledType(16, heightScale, 14, 18), 18.dp)
+    return if (normal.second) normal.first else candidate(12, 14, 12.dp).first
 }
 
 @Composable

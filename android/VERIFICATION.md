@@ -573,3 +573,19 @@ Evidence uses `/tmp/agentvoice-traces-*`: `instrumentation-edge.log`,
 `phone-final-check.log`, `packaging-final.log`, `glow-measurements.json`,
 `routes-review.png`, `geometry-review.png`, `original-review.png`,
 `glow-review.png`, `top-edge-review.png`, `phone-restored.png` and `studio-live.png`.
+
+### Human label and readable Rocker status (September 9)
+
+The debug studio now labels the microphone HUMAN. Status captions use 14–18 sp
+semibold type, with measured compact footer sizing and a fixed slot for
+on/off/live/wait; system text scaling remains enabled and status is never hidden.
+The release UI is unchanged. Debug/test assembly and lint passed. Eleven focused
+phone tests passed in 35.435 seconds, including 64 actual text-layout combinations
+at 1×/1.5× system text, 137 dp button width and all minimum/maximum deck splits.
+Assertions cover overflow, caption bounds, stable state slots, preserved glyph
+sizes and existing control/PTT behavior. Minimum-height fit at 2× is not claimed.
+Native captures at current and minimum geometry were reviewed. The latest live
+choices were restored and saved phone/host profiles remained byte-identical;
+no Save was sent. Evidence: `/tmp/agentvoice-labels-final-build.log`,
+`/tmp/agentvoice-labels-instrumentation.log`, `/tmp/agentvoice-labels-phone.log`
+and `/tmp/agentvoice-labels-{restored,minimum-idle,minimum-listening}.png`.

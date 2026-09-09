@@ -167,7 +167,9 @@ See [the implementation decision](../docs/adr/0035-native-android-voice-client.m
 
 The [separate host configurator](configurator/README.md) runs in your desktop
 browser and controls a full-screen native preview over ADB. It replaces the
-on-phone tuner panel. Both mute buttons and **Push to talk** use Rockers:
+on-phone tuner panel. The preview labels its microphone **HUMAN** and uses
+readable on/off/live/wait captions that remain visible with larger system text.
+Both mute buttons and **Push to talk** use Rockers:
 press and keep the talk surface down to talk, release to mute. Active styling stays
 dark with focused lime accents. Traces is the fixed composition: Parallel,
 Splayed and Circuit routes share independent stance, weight and lighter offshoot

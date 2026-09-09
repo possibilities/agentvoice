@@ -22,7 +22,7 @@ class PreviewStudioTest {
             compose.mainClock.advanceTimeBy(1200)
             assertEquals("$pattern moved a rocker target", before,
                 targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
-            compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("YOU microphone").performClick()
+            compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("HUMAN microphone").performClick()
             compose.mainClock.advanceTimeBy(64)
             compose.runOnIdle { assertFalse(state.micMuted); assertEquals("listening", state.mode) }
             compose.onNodeWithTag("speaker-mute").assertContentDescriptionEquals("AGENT speaker").performClick()
