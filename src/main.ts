@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 /** Local voice server and independent pointer frontend. */
 import packageJson from "../package.json";
 import { discoverController, discoverMcpConnection } from "./control/discovery.ts";
@@ -19,6 +19,8 @@ Usage:
   agentvoice service status|restart|remove
                                    Manage the default macOS LaunchAgent
   agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
+  agentvoice --attach [--host <ssh-host>] [--workspace <dir>]
+                                   Desktop transcript and agent panes for another client's call
   agentvoice client [--workspace <dir>]
                                    Connect with the pointer frontend alone
   agentvoice phone [--workspace <dir>]
@@ -349,6 +351,15 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runRuntimeWorker();
       await new Promise<void>(() => {});
     }
+    if (command === "__attach-bridge" || command === "__attach-agent") {
+      const { runAttachmentBridge, runPinnedAttachment } = await import(
+        "./attachment/bridge-command.ts"
+      );
+      return await (command === "__attach-bridge" ? runAttachmentBridge : runPinnedAttachment)(
+        argv.slice(1),
+        stateDirectory(process.env, homedir()),
+      );
+    }
     if (command === "help") {
       console.log(USAGE);
       return 0;
@@ -417,11 +428,46 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     const clientArgs = command === "client" ? argv.slice(1) : argv;
     const frontendFlags = parseArgs(clientArgs, {
-      value: new Set(["--workspace", "--device", "--output-device", "--connect"]),
-      bool: new Set(["--help"]),
+      value: new Set(["--workspace", "--device", "--output-device", "--connect", "--host"]),
+      bool: new Set(command === "client" ? ["--help"] : ["--help", "--attach"]),
     });
     if (frontendFlags.help) {
       console.log(USAGE);
+      return 0;
+    }
+    const attach = clientArgs.includes("--attach");
+    const host = frontendFlags.values["host"];
+    if (host !== undefined && !attach) throw new UsageError("--host requires agentvoice --attach");
+    if (attach) {
+      for (const flag of ["device", "output-device", "connect"]) {
+        if (frontendFlags.values[flag] !== undefined)
+          throw new UsageError(
+            `--${flag} cannot be combined with --attach; this view owns no audio`,
+          );
+      }
+      const { validateSshHost } = await import("./attachment/ssh.ts");
+      if (host !== undefined) {
+        try {
+          validateSshHost(host);
+        } catch (error) {
+          throw new UsageError((error as Error).message);
+        }
+      }
+      let workspace = frontendFlags.values["workspace"];
+      if (workspace !== undefined) {
+        if (host) {
+          if (!isAbsolute(workspace) || /[\0\r\n]/.test(workspace))
+            throw new UsageError(
+              "Remote --workspace requires an absolute path on the backend host",
+            );
+        } else {
+          const selected = parseMcpConfigCommand(["--workspace", workspace]);
+          if (selected.help) return 0;
+          workspace = selected.workspace;
+        }
+      }
+      const { runComposition } = await import("./composition/launch.ts");
+      await runComposition(workspace, undefined, [], { attach: true, host });
       return 0;
     }
     const selected =

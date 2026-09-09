@@ -28,6 +28,25 @@ AgentVoice does not install them. Use `agentvoice client` for the pointer fronte
 alone. Scripts that previously used bare `agentvoice` for that frontend must now
 use `agentvoice client`.
 
+For a call owned by the Android app or phone browser, open the **desktop** view:
+
+```sh
+agentvoice --attach                 # Backend on this desktop
+agentvoice --attach --host smolbird  # Backend in Android/Termux, over SSH
+```
+
+This opens just the voice transcript and stock Codex panes. It waits for a call
+without starting one, and the agent pane becomes available as soon as the native
+backend is ready, even while voice media is negotiating. Closing either pane ends
+the view and leaves the mobile call running. Call end, backend replacement or
+connection loss ends the view; rerun explicitly to attach again.
+
+`--host` uses an existing SSH host configuration, verified host key and key-based
+authentication. Both machines need this AgentVoice CLI version; only the desktop
+needs smolmux and codex-viewer. Optional `--workspace` selects an absolute path on
+the backend host. No attachment or Codex socket is exposed through the voice WSS
+gateway. See [desktop attachment](docs/composition.md#desktop-attachment-view).
+
 The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
 implements its own frontend, matching Codex can require the same explicit values
@@ -97,6 +116,11 @@ terminal command. Without `--connect`, the desktop option is disabled.
 Hold to talk stays visible but disabled until the microphone is muted and voice
 is connected; press and hold to talk, release to mute.
 See [network setup and Android handoff](docs/android-client-handoff.md).
+
+The first [native Android app](android/README.md) implements this authenticated
+client API directly, with a Compose voice screen, private device-grant import,
+client-owned WebRTC and foreground call ownership. It is a development build;
+on-device native audio acceptance and release distribution remain pending.
 
 One server and one active frontend are allowed per canonical workspace.
 Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
@@ -220,7 +244,7 @@ bun run src/main.ts server --workspace ~/code/myapp
 bun run src/main.ts --workspace ~/code/myapp
 
 # Third terminal, for typed Codex interaction:
-bun run src/main.ts attach --workspace ~/code/myapp
+bun run src/main.ts attach agent --workspace ~/code/myapp
 ```
 
 Installed commands use the same flags with `agentvoice`. Attachment selects a

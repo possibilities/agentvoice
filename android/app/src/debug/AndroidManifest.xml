@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <activity android:name="androidx.activity.ComponentActivity"
+            android:theme="@style/Theme.AgentVoice" tools:replace="android:theme" />
+        <activity android:name=".DesignPreviewActivity" android:exported="true" />
+        <activity android:name=".PersonaTunerActivity" android:label="Halo tuner" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

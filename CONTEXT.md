@@ -20,6 +20,14 @@ three Apps use local PTYs and end with the smolmux process; there are no
 Companion-held Sessions. Any App exiting or failing ends the Composition and its
 call. Attachments start only after this launch's call is live.
 
+**Attachment view** — `agentvoice --attach`, run on desktop: two local PTYs for
+voice transcript and stock agent, observing another frontend's call. It starts
+no call/audio and closing it never stops that frontend. `--host <ssh-host>` keeps
+smolmux and codex-viewer on desktop while SSH carries bounded transcript frames
+and the backend's stock attachment TUI. Pin call, workspace, thread, controller
+and generation; disconnect/replacement ends the view without replay. Native
+attachment readiness is independent of media readiness. See ADR 0036.
+
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 starts a call; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,

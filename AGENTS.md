@@ -113,6 +113,13 @@ that server fallback. See ADR 0019 and the field guide's default comparison audi
   Preserve divider revisions. Any pane app exiting or failing ends the entire
   composition and call, including attachment revocation during runtime restart;
   never automatically relaunch attachments or open audio/inference in composition tests.
+  `--attach` is the desktop-only two-pane variant for another client's call;
+  it starts no client/audio and closing its apps never stops that call.
+  `--host` uses verified SSH for bounded transcript observation and the backend's
+  existing stock TUI. Keep smolmux/codex-viewer on desktop. Pin client, workspace,
+  thread, controller instance and generation; loss or replacement ends the view.
+  Never expose these transports through the voice WSS gateway. Temporary desktop
+  transcript copies are private, bounded and removed after pane cleanup (ADR 0036).
 - src/browser/: same-device phone page, loopback HTTP/WebSocket gateway and
   bounded browser-media protocol. Bind only `127.0.0.1`; retain the random token
   path, exact Host/Origin checks, one-owner reservation, browser security headers,
@@ -495,6 +502,9 @@ lives in two siblings, and some changes here must cascade:
 `agentvoice attach agent` joins native Codex; `agentvoice attach voice` launches
 `codex-viewer --voice-jsonl <saved-file> --follow`. `--list` lists workspace
 recordings and `--thread` selects one. Bare attach is an actionable error.
+`agentvoice --attach [--host <ssh-host>]` opens the desktop two-pane view.
+Attachment admission follows verified native thread/control readiness, independent
+of media readiness; runtime replacement still revokes the previous generation.
 Implicit selection probes the default frontend endpoint read-only, preserving an
 active call's pinned workspace; idle/offline selection uses the configured/current
 workspace without creating a generation. Explicit workspace always wins.

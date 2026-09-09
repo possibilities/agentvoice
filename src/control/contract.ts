@@ -84,6 +84,7 @@ export const controlStatusSchema = z
         buildId: z.string().optional(),
         phase: z.string(),
         voicePhase: z.string().optional(),
+        attachmentReady: z.boolean().optional(),
       })
       .strict(),
     currentOperation: controlOperationSchema.optional(),
