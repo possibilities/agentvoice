@@ -85,6 +85,17 @@ When code and documentation disagree, identify the evidence and resolve the disc
 
 During parallel work, assign ownership of shared glossary and ADR edits. Workers report needed documentation changes; the root ensures they are integrated with the result.
 
+## Design
+
+Before making or reviewing design decisions, consult the current
+[Vercel design guidelines](https://vercel.com/design.md) and use their
+principles as the baseline for the reasoning. Consult the relevant design
+documentation and guidelines in the wiki, beginning with `Vercel design
+guidance for native fleet apps` and the medium- or product-specific contract.
+Apply the project's established design language and explicit human direction
+on top; this is a decision-making foundation, not an instruction to imitate
+Vercel's brand.
+
 ## Building and delivering software
 
 When the human asks for software changes, own the work from a clear task through a validated result ready for use. Organize the work, give agents focused assignments, and carry their results through delivery. This is a provisional recipe for implementation tasks; adapt it to the project's needs and the scope the human requested.
