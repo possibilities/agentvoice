@@ -228,6 +228,7 @@ async function harness() {
     redial: forbidden,
     restart: forbidden,
     mailboxOpen: forbidden,
+    voiceSet: forbidden,
   };
   const control = await startControlServer({ stateDir, instanceId: selected.instanceId, backend });
   const writer = new VoiceRecording(workspace, recordingDirectory(stateDir, workspace));
