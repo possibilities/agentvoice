@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { AttachmentGateway } from "../src/attachment/gateway.ts";
 import { startControlServer } from "../src/control/index.ts";
-import type { ControlStatus } from "../src/control/types.ts";
+import { CONTROL_PROTOCOL_VERSION, type ControlStatus } from "../src/control/types.ts";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
 
 if (process.platform !== "darwin")
@@ -241,7 +241,7 @@ try {
     (method, result) => console.log(`TUI ${method}: ${result}`),
   );
   const status: ControlStatus = {
-    protocolVersion: 2,
+    protocolVersion: CONTROL_PROTOCOL_VERSION,
     instanceId: `probe-${process.pid}`,
     generation: 1,
     workspace,

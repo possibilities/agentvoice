@@ -7,13 +7,8 @@ import {
 } from "../attachment/session.ts";
 import { attachmentSshArgv } from "../attachment/ssh.ts";
 import { voiceViewerArgv } from "../attachment/voice-launcher.ts";
+import { appFailure, appSchema } from "./app-exit.ts";
 import { attachmentLayout, layoutSchema, type MuxControl, replacePane } from "./layout.ts";
-
-const appSchema = z.object({
-  name: z.string(),
-  state: z.string(),
-  error: z.string().nullable().optional(),
-});
 
 /** Desktop PTYs observing another client's call; this mode creates no voice client. */
 export class AttachmentComposition {
@@ -91,16 +86,18 @@ export class AttachmentComposition {
         rows: Math.max(1, pane?.rows ?? 24),
       }),
     );
-    if (app.state !== "running") throw new Error(`${name}: ${app.error ?? app.state}`);
+    if (app.state !== "running")
+      throw appFailure(app) ?? new Error(`${name}: ${app.error ?? app.state}`);
     if (!this.stopped)
       await replacePane(this.mux, index, { app: name }, name === "agent" ? "agent" : undefined);
   }
   event(frame: Record<string, unknown>) {
+    if (this.stopped) return;
     if (frame["type"] !== "event") throw new Error("Unexpected smolmux frame");
     if (frame["event"] !== "app.state") return;
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (["voice", "agent"].includes(app.name) && ["exited", "failed"].includes(app.state))
-      this.stop(app.state === "failed" ? new Error(app.error ?? `${app.name} failed`) : undefined);
+      this.stop(appFailure(app));
   }
   stop(error?: Error) {
     this.failure ??= error;

@@ -1,12 +1,7 @@
 import { z } from "zod";
 import type { FrontendObservation } from "../frontend/protocol.ts";
+import { appFailure, appSchema } from "./app-exit.ts";
 import { initialLayout, layoutSchema, type MuxControl, names, replacePane } from "./layout.ts";
-
-const appSchema = z.object({
-  name: z.string(),
-  state: z.string(),
-  error: z.string().nullable().optional(),
-});
 
 export class Composition {
   private stopped = false;
@@ -52,14 +47,13 @@ export class Composition {
     if (this.started) this.enqueue(() => this.reconcile());
   }
   event(frame: Record<string, unknown>) {
+    if (this.stopped) return;
     if (frame["type"] !== "event") throw new Error("Unexpected smolmux frame");
     if (frame["event"] !== "app.state") return;
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (!["exited", "failed"].includes(app.state)) return;
     if (!names.includes(app.name as (typeof names)[number])) return;
-    this.stop(
-      app.state === "failed" ? new Error(app.error ?? `${app.name} app failed`) : undefined,
-    );
+    this.stop(appFailure(app));
   }
   private async create(index: number, args: string[], env: Record<string, string> = {}) {
     if (this.stopped) return;
@@ -78,7 +72,8 @@ export class Composition {
         rows: Math.max(1, pane?.rows ?? 24),
       }),
     );
-    if (app.state !== "running") throw new Error(`${names[index]}: ${app.error ?? app.state}`);
+    if (app.state !== "running")
+      throw appFailure(app) ?? new Error(`${names[index]}: ${app.error ?? app.state}`);
   }
   private async reconcile() {
     const state = this.state;

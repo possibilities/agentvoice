@@ -159,6 +159,41 @@ test.each([
   expect(mux.created()).toHaveLength(3);
 });
 
+test.each([
+  { code: 1, signal: null, expected: "code 1" },
+  { code: null, signal: 11, expected: "signal 11" },
+  { code: null, signal: null, expected: "unknown status" },
+  { code: 0, signal: null, expected: undefined },
+])("pane exit status survives composition shutdown: %j", async ({ code, signal, expected }) => {
+  for (const mode of ["call", "attachment"] as const) {
+    const mux = new FakeMux();
+    const composition =
+      mode === "call"
+        ? new Composition(mux, randomUUID(), ["agentvoice"])
+        : new AttachmentComposition(mux, ["agentvoice"]);
+    await composition.start();
+    composition.event({
+      type: "event",
+      event: "app.state",
+      data: { app: { name: "agent", state: "exited", lastExit: { code, signal } } },
+    });
+    await composition.done;
+    expect(composition.error()?.message).toBe(
+      expected ? `agent app exited with ${expected}` : undefined,
+    );
+    // Teardown of another pane must not replace the original outcome.
+    composition.event({
+      type: "event",
+      event: "app.state",
+      data: { app: { name: "voice", state: "failed", error: "secondary failure" } },
+    });
+    expect(composition.error()?.message).toBe(
+      expected ? `agent app exited with ${expected}` : undefined,
+    );
+    await composition.drained();
+  }
+});
+
 test("attachment exit during startup stops the composition before creating the next app", async () => {
   const mux = new FakeMux();
   const request = mux.request.bind(mux);
