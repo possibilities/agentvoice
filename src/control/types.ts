@@ -1,9 +1,10 @@
 import type { MailboxCaller, MailboxOpenParams, MailboxOpenResult } from "../mailbox/contract.ts";
+import type { RoleRef, VoiceEdit } from "../roles/store.ts";
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 4;
+export const CONTROL_PROTOCOL_VERSION = 5;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -12,6 +13,7 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_redial",
   "agentvoice_restart_runtime",
   "agentvoice_thread_mailbox_open",
+  "agentvoice_voice_set",
 ] as const;
 
 export type ControlOperationPhase =
@@ -42,8 +44,12 @@ export type ControlHandoff = {
 };
 
 export type ControlOperation = {
+  voiceEdit?: VoiceEdit & {
+    saved: RoleRef;
+    application: "pending" | "applied" | "deferred" | "failed" | "unknown";
+  };
   operationId: string;
-  kind: "redial" | "restart";
+  kind: "redial" | "restart" | "voice-set";
   scope: "voice" | "runtime";
   expectedGeneration: number;
   expectedInstanceId: string;
@@ -63,6 +69,14 @@ export type ControlOperation = {
 };
 
 export type ControlStatus = {
+  role?: {
+    loaded: RoleRef;
+    desired?: RoleRef;
+    desiredVoice?: string | null;
+    voiceRevision: number;
+    voice: string | null;
+    error?: string;
+  };
   protocolVersion: number;
   instanceId: string;
   workspace: string;
@@ -77,6 +91,7 @@ type MaybePromise<T> = T | Promise<T>;
 
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
+  voiceSet(request: VoiceEdit): Promise<ControlOperation>;
   status(): MaybePromise<ControlStatus>;
   mailboxOpen(request: MailboxOpenParams, caller?: MailboxCaller): Promise<MailboxOpenResult>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;

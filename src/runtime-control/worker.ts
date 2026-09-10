@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
@@ -36,6 +37,9 @@ export function runRuntimeWorker(
   let receiveMedia: ((message: ClientMediaMessage) => void) | undefined;
   let runHost: typeof import("../console/host.ts").runConsoleHost;
   let host: (VoiceHost & { redial(): Promise<void> }) | undefined;
+  let voiceSettings:
+    | Parameters<NonNullable<ConsoleHostOptions["onVoiceSettingsReady"]>>[0]
+    | undefined;
   let mailboxRuntime: MailboxRuntime | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let revokeAttachment: (() => void) | undefined;
@@ -149,7 +153,13 @@ export function runRuntimeWorker(
       throw new Error(
         "Runtime code/native artifact changed during preflight; retry after the build finishes",
       );
-    return { workspace: config.orchestrator.workspace, pid: process.pid, buildId: after };
+    return {
+      workspace: config.orchestrator.workspace,
+      pid: process.pid,
+      buildId: after,
+      role: config.roleDatabase?.snapshot.ref,
+      voice: config.voice.name ?? null,
+    };
   }
   let lastState = "";
   function publish() {
@@ -187,6 +197,9 @@ export function runRuntimeWorker(
       bootReady = () => finish();
       bootFailed = finish;
       hostRun = runHost(config!, currentLaunch.version, {
+        onVoiceSettingsReady: (controls) => {
+          voiceSettings = controls;
+        },
         onHandoffReady: (submit) => {
           submitHandoff = submit;
         },
@@ -280,6 +293,7 @@ export function runRuntimeWorker(
     await host?.shutdown();
     endHost?.();
     await hostRun?.catch(() => {});
+    snapshot?.dispose?.();
     try {
       await sender.drain();
     } catch {
@@ -333,6 +347,28 @@ export function runRuntimeWorker(
           throw new Error("Voice redial is unavailable");
         await host.redial();
         return null;
+      case "voice-validate":
+      case "voice-apply": {
+        const name = z
+          .string()
+          .min(1)
+          .max(128)
+          .refine((value) => value.trim().length > 0)
+          .nullable()
+          .parse(params);
+        if (terminalFailure || stopping || !mediaEnabled || !voiceSettings)
+          throw new Error("Voice settings are unavailable");
+        voiceSettings.validate(name);
+        if (method === "voice-apply") {
+          try {
+            await voiceSettings.apply(name);
+            return { applied: true };
+          } catch {
+            return { applied: false };
+          }
+        }
+        return null;
+      }
       case "mailbox-wake":
         if (terminalFailure || stopping || !mailboxRuntime) return { status: "unavailable" };
         return mailboxRuntime.wake(wakeRequestSchema.parse(params));

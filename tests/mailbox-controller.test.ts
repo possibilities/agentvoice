@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createConnection } from "node:net";
-import { startControlServer } from "../src/control/index.ts";
+import { CONTROL_PROTOCOL_VERSION, startControlServer } from "../src/control/index.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
 import { EventSocketServer, eventSocketPath } from "../src/events/socket.ts";
 import { type InFlight, type WakeRequest, wakeNotice } from "../src/mailbox/contract.ts";
@@ -286,7 +286,7 @@ test("read-only event inspection never clears; MCP opening and Unix control shar
       server.socketPath,
       "agentvoice.thread_mailbox_open",
       open,
-      4,
+      CONTROL_PROTOCOL_VERSION,
     );
     expect(retried["result"]).toEqual(accepted.result.structuredContent);
     expect(h.c.lifecycle.mailboxSnapshot().state.completed).toBe(1);

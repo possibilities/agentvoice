@@ -6,7 +6,7 @@ import { attachmentTargetSchema } from "../attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
 import { MuteGate } from "../console/audio-control.ts";
 import type { VoiceState } from "../console/state.ts";
-import { startControlServer } from "../control/index.ts";
+import { startControlServer, voiceEditSchema } from "../control/index.ts";
 import {
   CONTROL_MCP_SERVER_NAME,
   CONTROL_MCP_TOOLS,
@@ -59,8 +59,16 @@ import {
   wakeOutcomeSchema,
 } from "../mailbox/contract.ts";
 import { ThreadMailbox } from "../mailbox/state.ts";
-import { stateDirectory } from "../paths.ts";
+import { dataDirectory, stateDirectory } from "../paths.ts";
 import { recordCall } from "../recording/call.ts";
+import {
+  type RoleRef,
+  readRoleHead,
+  rolePath,
+  roleRefSchema,
+  type VoiceEdit,
+  writeVoice,
+} from "../roles/store.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
 import type { CandidateInfo, LaunchProvenance, RuntimeLaunch } from "./protocol.ts";
@@ -91,6 +99,9 @@ export class RuntimeController implements ControlBackend {
   private workspace = "";
   private threadId = "";
   private buildId: string | undefined;
+  private loadedRole: RoleRef | undefined;
+  private voiceRevision = 1;
+  private loadedVoice: string | null = null;
   private phase = "starting";
   private operation: ControlOperation | undefined;
   private busy = false;
@@ -119,7 +130,24 @@ export class RuntimeController implements ControlBackend {
     );
   }
   status(): ControlStatus {
+    let role: ControlStatus["role"];
+    if (this.loadedRole) {
+      role = {
+        loaded: this.loadedRole,
+        voiceRevision: this.voiceRevision,
+        voice: this.loadedVoice,
+      };
+      try {
+        const desired = readRoleHead(this.roleDatabasePath());
+        if (desired.ref.id !== this.loadedRole.id) throw new Error("Role identity changed");
+        role.desired = desired.ref;
+        role.desiredVoice = desired.voice;
+      } catch {
+        role.error = "Workspace role database is unavailable or its identity changed";
+      }
+    }
     return {
+      ...(role ? { role } : {}),
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: this.options.instanceId,
       workspace: this.workspace,
@@ -350,6 +378,9 @@ export class RuntimeController implements ControlBackend {
       this.assertOpen();
       if (this.workspace && info.workspace !== this.workspace)
         throw new Error("Candidate changed pinned workspace");
+      if (info.role) roleRefSchema.parse(info.role);
+      if (this.loadedRole && info.role?.id !== this.loadedRole.id)
+        throw new Error("Candidate changed the bound workspace role");
       this.workspace = info.workspace;
       if (operation) this.stage(operation, "quiescing");
       // Only successful preflight may touch the current call, mute holds, or incarnation.
@@ -397,6 +428,9 @@ export class RuntimeController implements ControlBackend {
       if (this.phase === "failed")
         throw new Error(this.voice.notice ?? "Runtime failed during activation");
       this.phase = "ready";
+      this.loadedRole = info.role;
+      this.voiceRevision = info.role?.revision ?? 1;
+      this.loadedVoice = info.voice ?? null;
       this.syncMute();
       if (operation) this.stage(operation, "ready");
       this.changed();
@@ -438,6 +472,134 @@ export class RuntimeController implements ControlBackend {
         ),
       );
     return this.accept("restart", request);
+  }
+  private roleDatabasePath(): string {
+    return rolePath(dataDirectory(process.env, homedir()), this.workspace);
+  }
+
+  async voiceSet(input: VoiceEdit): Promise<ControlOperation> {
+    const checked = voiceEditSchema.safeParse(input);
+    if (!checked.success) throw new ControlError("invalid_params", "Invalid voice edit");
+    const request = checked.data;
+    if (request.expectedInstanceId !== this.options.instanceId)
+      throw new ControlError("instance_mismatch", "Control request targets another controller");
+    const prior = this.journal.get(request.operationId);
+    if (prior) {
+      const edit = prior.voiceEdit;
+      if (
+        !edit ||
+        Object.entries(request).some(
+          ([key, value]) => (edit as unknown as Record<string, unknown>)[key] !== value,
+        )
+      )
+        throw new ControlError(
+          "operation_conflict",
+          "Operation ID already names a different immutable request",
+        );
+      return publicOperation(prior);
+    }
+    if (request.expectedGeneration !== this.generation)
+      throw new ControlError(
+        "stale_generation",
+        "Read status before mutating the current runtime generation",
+      );
+    if (!this.loadedRole || !this.active || this.closed || this.busy || this.phase !== "ready")
+      throw new ControlError(
+        "unavailable",
+        "Voice editing requires a ready call with an ejected workspace role",
+      );
+    if (this.journal.all().length >= 256)
+      throw new ControlError(
+        "unavailable",
+        "Controller operation limit reached; start another call",
+      );
+    this.busy = true;
+    const active = this.active;
+    let operation: JournalOperation;
+    try {
+      if (request.apply === "voice") await active.request("voice-validate", request.voice, 5000);
+      this.assertOpen();
+      if (active !== this.active) throw new Error("Voice runtime changed before save");
+      const saved = writeVoice(this.roleDatabasePath(), this.loadedRole.id, request);
+      const now = new Date().toISOString();
+      operation = {
+        operationId: request.operationId,
+        expectedInstanceId: request.expectedInstanceId,
+        expectedGeneration: request.expectedGeneration,
+        kind: "voice-set",
+        scope: "voice",
+        phase: "accepted",
+        acceptedAt: now,
+        updatedAt: now,
+        voiceEdit: {
+          ...request,
+          saved,
+          application: request.apply === "voice" ? "pending" : "deferred",
+        },
+      };
+      try {
+        this.journal.save(operation);
+      } catch {
+        throw new Error(
+          `Voice saved at revision ${saved.revision}, but application was not started because journaling failed`,
+        );
+      }
+      this.operation = publicOperation(operation);
+    } catch (error) {
+      this.busy = false;
+      this.changed();
+      throw new ControlError("invalid_request", String(error));
+    }
+    this.background = new Promise<void>((resolve) => setTimeout(resolve, 50)).then(async () => {
+      let dispatched = false;
+      let rejected = false;
+      try {
+        this.assertOpen();
+        if (request.apply === "voice") {
+          this.cancelHolds();
+          this.syncMute();
+          this.stage(operation, "starting");
+          dispatched = true;
+          const result = await active.request<{ applied?: boolean }>(
+            "voice-apply",
+            request.voice,
+            35_000,
+          );
+          rejected = result?.applied === false;
+          if (result?.applied !== true) throw new Error("Voice application was not confirmed");
+          this.assertOpen();
+          if (this.active !== active) throw new Error("Voice runtime changed during application");
+          this.loadedVoice = request.voice;
+          this.voiceRevision = operation.voiceEdit!.saved.revision;
+          operation.voiceEdit!.application = "applied";
+        }
+        this.stage(operation, "ready");
+      } catch (error) {
+        const applied = operation.voiceEdit!.application === "applied";
+        if (!applied)
+          operation.voiceEdit!.application =
+            request.apply !== "voice" ? "deferred" : dispatched && !rejected ? "unknown" : "failed";
+        operation.error = {
+          code: applied ? "journal_failed" : "voice_apply_failed",
+          message: String(error),
+        };
+        try {
+          this.stage(operation, "failed");
+        } catch {
+          this.notice("Voice edit saved; application journal update failed");
+        }
+        this.notice(
+          applied
+            ? "Voice changed, but recording its application outcome failed"
+            : "Voice selection saved but application did not complete; inspect status and retry explicitly",
+        );
+      } finally {
+        this.busy = false;
+        this.changed();
+      }
+    });
+    this.changed();
+    return publicOperation(operation);
   }
   redial(request: ControlMutationRequest) {
     return this.accept("redial", request);
@@ -799,6 +961,7 @@ export async function createCall(
         mailboxOpen: (params, caller) => current().mailboxOpen(params, caller),
         redial: (request) => current().redial(request),
         restart: (request) => current().restart(request),
+        voiceSet: (request) => current().voiceSet(request),
       },
       stateDir,
       instanceId,

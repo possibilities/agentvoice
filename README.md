@@ -511,6 +511,14 @@ have happened.
 
 ## Configuration and prompts
 
+Workspace-owned SQLite roles are available through explicit
+[`agentvoice role eject`](docs/workspace-roles.md). Ejection captures settings,
+prompts, MCP definitions and skill assets. Bound workspaces load database
+revisions instead of the source files below. `role export` / `import` create
+independent copies; `role voice` saves a voice, and MCP/API `agentvoice_voice_set`
+can save and reconnect voice while preserving the working agent and attachment.
+Unbound workspaces retain the file behavior below.
+
 Keep `~/.config/agentvoice/server.json` (or
 `$XDG_CONFIG_HOME/agentvoice/server.json`). Its legacy filename does **not**
 imply a background server. Use `--config <path>` for another file.

@@ -254,6 +254,9 @@ try {
     instanceId: status.instanceId,
     backend: {
       status: () => status,
+      voiceSet: async () => {
+        throw new Error("not used");
+      },
       mailboxOpen: async () => {
         throw new Error("not used");
       },

@@ -6,6 +6,7 @@ import {
   mailboxOpenParams,
   mailboxOpenResultSchema,
 } from "../mailbox/contract.ts";
+import { roleRefSchema, type VoiceEdit } from "../roles/store.ts";
 import {
   CONTROL_PROTOCOL_VERSION,
   type ControlBackend,
@@ -27,10 +28,29 @@ const mutation = z
   })
   .strict();
 
+export const voiceEditSchema = mutation
+  .extend({
+    expectedRoleRevision: z.number().int().positive(),
+    voice: z
+      .string()
+      .min(1)
+      .max(128)
+      .refine((value) => value.trim().length > 0)
+      .nullable(),
+    apply: z.enum(["voice", "next-session"]),
+  })
+  .strict();
+
 export const controlOperationSchema = z
   .object({
     operationId,
-    kind: z.enum(["redial", "restart"]),
+    kind: z.enum(["redial", "restart", "voice-set"]),
+    voiceEdit: voiceEditSchema
+      .extend({
+        saved: roleRefSchema,
+        application: z.enum(["pending", "applied", "deferred", "failed", "unknown"]),
+      })
+      .optional(),
     scope: z.enum(["voice", "runtime"]),
     expectedGeneration: z.number().int().nonnegative(),
     expectedInstanceId: z.string().min(1),
@@ -86,6 +106,17 @@ export const controlStatusSchema = z
         voicePhase: z.string().optional(),
       })
       .strict(),
+    role: z
+      .object({
+        loaded: roleRefSchema,
+        desired: roleRefSchema.optional(),
+        desiredVoice: z.string().nullable().optional(),
+        voiceRevision: z.number().int().positive(),
+        voice: z.string().nullable(),
+        error: z.string().optional(),
+      })
+      .strict()
+      .optional(),
     currentOperation: controlOperationSchema.optional(),
     recentOperations: z.array(controlOperationSchema).max(100),
   })
@@ -96,6 +127,7 @@ const restart = mutation
   .strict();
 
 export type ControlMethod =
+  | "agentvoice.voice_set"
   | "agentvoice.status"
   | "agentvoice.redial"
   | "agentvoice.restart"
@@ -111,6 +143,15 @@ export type ControlMethodEntry = {
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
+  "agentvoice.voice_set": {
+    tool: "agentvoice_voice_set",
+    description:
+      "Save this workspace role's voice selection. apply=voice reconnects only voice, preserving the working agent; next-session saves without reconnecting. Null clears the managed selection. Read status for controller/generation/desired role revision and application outcome. Acceptance is not audible confirmation. Requires an ejected workspace role.",
+    params: voiceEditSchema,
+    result: controlOperationSchema,
+    readOnly: false,
+    invoke: (backend, params) => backend.voiceSet(params as VoiceEdit),
+  },
   "agentvoice.thread_mailbox_open": {
     tool: "agentvoice_thread_mailbox_open",
     description:

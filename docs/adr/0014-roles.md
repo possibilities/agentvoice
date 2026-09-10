@@ -1,5 +1,9 @@
 # 0014: Roles are directories delivered to the owned child
 
+For explicitly ejected workspaces, [ADR 0035](0035-workspace-role-databases.md)
+supersedes live directory loading with database snapshots. This format remains
+an ejection input and the behavior for unejected workspaces.
+
 Accepted 2026-09-05. Extends [ADR 0013](0013-convention-prompt-files.md) and
 settles the skill-isolation question left open by [ADR 0007](0007-defer-skill-policy-to-codex.md).
 

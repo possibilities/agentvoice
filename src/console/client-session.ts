@@ -72,6 +72,7 @@ export class ClientMediaSession {
   #rapidFailures = 0;
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #stopping = false;
+  #changingVoice = false;
   readonly #redialWaiters = new Map<string, RedialWaiter>();
 
   constructor(options: ClientSessionOptions) {
@@ -88,6 +89,7 @@ export class ClientMediaSession {
 
   redial(reason: string): void {
     if (this.#stopping) return;
+    if (this.#changingVoice && reason !== "voice-change") return;
     this.#rapidFailures = 0;
     this.#options.onInfo(`redial (${reason})`);
     this.#clearRetry();
@@ -98,12 +100,22 @@ export class ClientMediaSession {
   async redialAndWait(reason: string): Promise<void> {
     if (this.#stopping || !this.#ready)
       throw new Error("Browser voice transport is not ready for redial");
-    this.redial(reason);
-    const session = this.#pending;
-    if (!session) throw new Error("Browser voice redial could not prepare a successor");
-    await new Promise<void>((resolve, reject) => {
-      this.#redialWaiters.set(session.id, { resolve, reject });
-    });
+    if (this.#changingVoice) throw new Error("Voice change already in progress");
+    this.#changingVoice = reason === "voice-change";
+    if (this.#changingVoice && this.#live) {
+      for (const timer of this.#live.timers) clearTimeout(timer);
+      this.#live.timers = [];
+    }
+    try {
+      this.redial(reason);
+      const session = this.#pending;
+      if (!session) throw new Error("Browser voice redial could not prepare a successor");
+      await new Promise<void>((resolve, reject) => {
+        this.#redialWaiters.set(session.id, { resolve, reject });
+      });
+    } finally {
+      this.#changingVoice = false;
+    }
   }
 
   async stop(): Promise<void> {
@@ -121,7 +133,7 @@ export class ClientMediaSession {
     this.#ready = info;
     this.#options.onReady(info);
     this.#debug(`ready: thread ${info.threadId}`);
-    if (!this.#live && !this.#pending && !this.#retryTimer) {
+    if (!this.#changingVoice && !this.#live && !this.#pending && !this.#retryTimer) {
       if (this.#rapidFailures >= MAX_RAPID_FAILURES) this.#setPhase("failed");
       else this.#negotiate();
     }
@@ -278,6 +290,12 @@ export class ClientMediaSession {
 
   #afterFailure(reason: string): void {
     this.#clearRetry();
+    if (this.#changingVoice) {
+      this.#rapidFailures = MAX_RAPID_FAILURES;
+      this.#options.onError(`${reason} — voice change failed; retry explicitly`);
+      if (!this.#live) this.#setPhase("failed");
+      return;
+    }
     if (this.#rapidFailures >= MAX_RAPID_FAILURES) {
       this.#options.onError(`${reason} — retries paused; use the control API to redial`);
       this.#dropSessions("Browser voice retries paused");

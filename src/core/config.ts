@@ -22,6 +22,7 @@ import { lstat, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { z } from "zod";
 import { defaultConfigPath, type Environ, expandTilde } from "../paths.ts";
+import type { RoleSnapshot } from "../roles/store.ts";
 import { validateCodexConfig } from "./codex-config.ts";
 import { ConfigError } from "./config-error.ts";
 import {
@@ -112,6 +113,7 @@ export interface VoiceConfig {
 }
 
 export interface ServerConfig {
+  roleDatabase?: { path: string; snapshot: RoleSnapshot };
   /** Launch-only permission opt-in; native managed requirements remain authoritative. */
   allowFullAccess?: boolean;
   codex: string;
@@ -292,7 +294,7 @@ export async function readPrompts(
     config.role ?? config.configDir,
     config.role !== undefined,
   );
-  if (config.role !== undefined) {
+  if (config.role !== undefined && config.role !== config.configDir) {
     for (const filename of Object.values(PROMPT_FILES)) {
       const path = join(config.configDir, filename);
       if (await present(path))
