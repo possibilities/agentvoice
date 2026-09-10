@@ -22,10 +22,12 @@ judgment and acceptance, with task, model and context all sized to a verifiable
 deliverable. The model choices are recommendations synthesized from
 the sources below, not benchmark results for this fleet.
 
-The role retains its approved conversation-first behavior, including delegation
-of quick tasks. The wiki's ordinary-work option of zero children does not undo
-that product decision. Related lookups can share one assignment, and workers
-remain execution agents rather than compulsory managers.
+[ADR 0043](adr/0043-adaptive-conversation-first-delegation.md) updates the
+conversation-first policy: the root chooses direct or delegated read-only work
+and thinking based on correctness, latency and useful parallelism. Implementation
+remains delegated; routine live call controls stay local. The model/effort/context
+selection procedure applies when a worker is chosen. Related lookups can share
+one assignment, and workers remain execution agents rather than compulsory managers.
 
 ## Current Codex catalog evidence
 

@@ -828,13 +828,18 @@ Select the repository's `roles/default` role with
 It is not automatically selected when `--role` and the config's `role` key
 are absent.
 
-The default role carries its conversation-first policy in
+The default role carries its conversation-first collaboration policy in
 `roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`. Selecting that role is
 sufficient; no server-config policy is needed. Another role without that file
 keeps native delegation policy. The role append alone cannot replace Codex's
 later mode message. See the [audit](docs/delegation-policy-audit.md) and
-[ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
-binary stay intact.
+[ADR 0031](docs/adr/0031-role-owned-delegation.md). The root chooses direct or
+delegated read-only work and thinking based on speed, correctness and useful
+parallelism, while implementation remains delegated and routine live call
+controls stay local. Handoffs are announced briefly, and paused work is
+distinguished from work actually running in the background
+([ADR 0043](docs/adr/0043-adaptive-conversation-first-delegation.md)). The stock
+base prompt and binary stay intact.
 
 The default append includes a dated Codex model guide and requires a deliberate
 model, effort, context fork and semantic name for each child assignment. Spark

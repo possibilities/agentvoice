@@ -1,5 +1,10 @@
 # Default-role delegation audit
 
+Historical September 8 audit. [ADR 0043](adr/0043-adaptive-conversation-first-delegation.md)
+supersedes the mandatory read-only/thinking delegation described below; the
+current default role chooses based on correctness, latency and parallelism.
+
+
 Investigated September 8, 2026 against stock Codex CLI/app-server 0.153.4,
 tag `rust-v0.153.4` (`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`).
 The operator approved the conversation-first configuration and role alignment

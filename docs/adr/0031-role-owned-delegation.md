@@ -1,5 +1,9 @@
 # 0031: The selected role owns its native delegation mode
 
+Partially superseded September 10, 2026 by
+[ADR 0043](0043-adaptive-conversation-first-delegation.md): read-only work and
+thinking use adaptive delegation, and routine live call controls stay local.
+
 Accepted September 8, 2026. Supersedes [ADR 0030](0030-conversation-first-delegation.md)'s server-configuration ownership:
 the operator wants the default role to carry its own conversation-first policy,
 so selecting another role must not inherit that policy from managed config.

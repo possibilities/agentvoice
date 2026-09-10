@@ -42,7 +42,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0028: Bare command composes local terminal apps](0028-foreground-composition.md) | Accepted | — |
 | [0029: Desktop startup-context default](0029-desktop-startup-context.md) | Recorded | — |
 | [0030: Conversation-first delegation through native operator configuration](0030-conversation-first-delegation.md) | Superseded for configuration ownership | [0031](0031-role-owned-delegation.md) moves delegation mode to the selected role. |
-| [0031: The selected role owns its native delegation mode](0031-role-owned-delegation.md) | Accepted | — |
+| [0031: The selected role owns its native delegation mode](0031-role-owned-delegation.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) replaces mandatory read-only/thinking delegation; role ownership remains. |
 | [0032: A loopback browser may own phone media](0032-loopback-browser-media-frontend.md) | Partially superseded | [0033](0033-client-owned-native-media.md) makes both clients media owners; [0034](0034-authenticated-client-network.md) adds authenticated network transport. |
 | [0033: All call clients own audio and WebRTC](0033-client-owned-native-media.md) | Accepted | — |
 | [0034: Authenticated WSS transports the same client API](0034-authenticated-client-network.md) | Accepted | — |
@@ -51,9 +51,10 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0037: Native descendant navigation through TUI attachment](0037-descendant-tui-attachment.md) | Accepted | — |
 | [0038: Thread mailbox wake-ups](0038-thread-mailbox-wakeups.md) | Recorded | — |
 | [0039: Project memory is part of the default role](0039-project-memory-in-default-role.md) | Accepted | — |
-| [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Accepted | — |
+| [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) changes when to delegate; model/effort/context guidance remains. |
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
 | [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
+| [0043: Adapt delegation to the conversation and the work](0043-adaptive-conversation-first-delegation.md) | Accepted | Direct or delegated read-only work/thinking, useful parallelism, explicit handoffs and direct call controls. |
 
 ## Identifier history
 
