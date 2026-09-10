@@ -46,6 +46,14 @@ running. Copy its printed client command into terminal 2 and run it. The explici
 workspace connects that client to this foreground server. Reuse the same printed
 command whenever the instructions say to reopen the client.
 
+Run the client directly in terminal 2. Do not wrap it in macOS `/usr/bin/script`:
+our trial and an isolated fake-call reproduction both retained the original
+82×26 inner PTY after the outer terminal grew to 137×40. The live controls also
+became unreliable; synchronizing the inner size restored normal interaction.
+The direct launch resized correctly in the isolated test. Use the saved voice
+and native transcripts for the audit; terminal recording must not break resize
+propagation.
+
 ## 2. Try ordinary voice requests
 
 Say each line separately and wait for the response before continuing. Use your
