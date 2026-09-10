@@ -6,6 +6,7 @@ import subprocess
 import os
 import re
 import sys
+import struct
 import zipfile
 from pathlib import Path
 
@@ -14,6 +15,24 @@ apk = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'app/build/outputs/apk/
 selected = json.loads((root / 'design/shipping-profile.json').read_text())
 family = selected['sounds']['family']
 expected_audio = set() if family == 'off' else {f'assets/switch-sounds/{family}-{cue}.wav' for cue in ('toggle-on', 'toggle-off', 'ptt-down', 'ptt-up')}
+def dex_classes(data):
+    """Read defined class descriptors, rather than incidental string references."""
+    def word(offset):
+        return struct.unpack_from('<I', data, offset)[0]
+    strings = word(60)
+    types = word(68)
+    classes = word(100)
+    result = set()
+    for index in range(word(96)):
+        class_index = word(classes + index * 32)
+        string_index = word(types + class_index * 4)
+        offset = word(strings + string_index * 4)
+        while data[offset] & 0x80:
+            offset += 1
+        offset += 1
+        result.add(data[offset:data.index(b'\0', offset)].decode('utf-8'))
+    return result
+
 with zipfile.ZipFile(apk) as bundle:
     names = set(bundle.namelist())
     actual_audio = {name for name in names if name.endswith('.wav')}
@@ -27,6 +46,10 @@ with zipfile.ZipFile(apk) as bundle:
         if source.exists():
             assert bundle.read('assets/notices/' + filename) == source.read_bytes(), filename
     dex = b''.join(bundle.read(name) for name in names if name.endswith('.dex'))
+    classes = set().union(*(dex_classes(bundle.read(name)) for name in names if name.endswith('.dex')))
+    for descriptor in ('Lorg/jni_zero/JniZero;', 'Lorg/jni_zero/CommonApis;', 'Lorg/webrtc/PeerConnectionFactory;'):
+        assert descriptor in classes, f'WebRTC JNI class removed or renamed: {descriptor}'
+
     for symbol in (b'PersonaPreviewActivity', b'PersonaPreviewBridge', b'PersonaPreviewSession', b'DesignPreviewActivity', b'StudioDraft', b'StudioProduction'):
         assert symbol not in dex, symbol
     sdk = Path(os.environ['ANDROID_HOME'])

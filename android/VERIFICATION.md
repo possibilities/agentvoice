@@ -1992,3 +1992,51 @@ owned ADB forward. Removed that exact orphan forward and restarted Studio on an
 automatically allocated loopback port, preserving the unrelated application now
 using4317. The linked host remains running for the operator. Phone access was
 released with AgentNotify; no emulator or Gradle task remains running.
+
+
+## Production WebRTC JNI initialization repair — 2026-09-10
+
+The operator reported a crash while the real app connected and handed over the
+phone. The crash log identifies `ClassNotFoundException: org.jni_zero.JniZero`
+during WebRTC `JNI_OnLoad`, followed by `GetStaticMethodID` with a null class and
+SIGABRT. Existing release rules kept `org.webrtc`, but the pinned WebRTC
+150.7871.01 AAR also contains JNI Zero callbacks outside that package and carries
+no consumer ProGuard rules. R8 removed them. This is a native packaging failure,
+not evidence of a revoked or malformed grant. No lease was deleted or replaced.
+
+The release rules now retain JNI Zero classes with `@CalledByNative` methods and
+the annotated methods/descriptors. This preserves `JniZero.init`, its diagnostic
+callback and `CommonApis` without retaining the unused class-loader setter that
+references an absent generated `JniZeroJni` helper. A broad all-member keep
+correctly failed R8's missing-class check; no warning suppression was added.
+
+The shipping APK audit now reads DEX class definitions and requires the original
+JNI Zero and PeerConnectionFactory class descriptors. The previously installed
+APK fails this regression check with the exact missing `JniZero` descriptor.
+This avoids mistaking incidental DEX strings for a retained class. Studio's
+synthetic capture checks did not initialize production WebRTC and could not
+establish this path; production native-load acceptance is required below.
+
+Rebuilt production APK and production lint passed in **2m33s**. The repaired APK
+passes the full packaging audit, including actual retained DEX definitions.
+R8 mapping also confirms original `JniZero.init`, diagnostic callback, and
+`CommonApis` callback names. Installed with `install -r`; device hash matches
+`b370d5a17a79cb88a891a3cb4d34bebf02f5293f08151c44dff5751566116683`.
+APK size remains48,436,985 bytes at ZIP alignment granularity.
+
+The real production app loaded `libjingle_peerconnection_so.so` successfully,
+created WebRTC media/offer state, and retained the same live PID13965 instead of
+SIGABRT. The operator reported accidental interaction during the initial attempt;
+a clean subsequent attempt was made after their renewed handoff. Voice startup
+then failed visibly without an app crash. The default server reports the native
+Codex account usage limit, with reset September14,2026 at9:26PM. This prevents
+completed live audio acceptance; replacing enrollment cannot solve that quota.
+No credential/account/profile changes or server restarts were attempted.
+
+Ended the test attempt and reopened Studio. Its draft/checkpoint/binding hashes
+and phone font/rotation settings match the beginning of this handoff. Grant
+data was not deleted, read out or rewritten. Phone released with AgentNotify.
+The retained grant admitted the attempted connection, so no QR enrollment reset
+was needed. Local private evidence is `/tmp/agentvoice-jni-crash/`; the exact
+regression failure is `/tmp/agentvoice-jni-before-audit.log` and build log is
+`/tmp/agentvoice-jni-production-build.log`.
