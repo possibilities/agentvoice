@@ -2116,7 +2116,15 @@ Only the output category changes: WAV bytes, rate1, configured gain, cue trigger
 VoicePeer, microphone selection, focus and call processing stay unchanged.
 Production cues now follow call-volume policy. This is a routing-policy
 comparison, not a claim of restored Bluetooth bandwidth or verified better sound.
-Phone installation, runtime category inspection and operator listening are pending.
+Installed on the authorized S22 with an exact on-device APK hash match. Android's
+AudioPlaybackConfiguration for the new production PID8805 reports SoundPool
+USAGE_VOICE_COMMUNICATION and CONTENT_TYPE_SONIFICATION. The connecting overlay
+cleared, a brief speaker toggle pair was exercised, and Back ended the test call.
+SCO remained the headset route during the call; afterward MODE_NORMAL and inactive
+SCO were verified. Studio draft/checkpoint/binding were byte-identical, rotation/font
+unchanged and the previous VNC activity restored. Phone release was notified.
+Private runtime evidence is under `/tmp/agentvoice-call-cue-comparison/phone`.
+Operator listening comparison remains pending; perceived improvement is unverified.
 All 138 Studio JVM tests, production/Studio assembly and both lint checks passed
 with a full Kotlin compilation (3m 28s). The initial incremental compilation
 reported unresolved existing top-level functions; disabling incremental compilation
