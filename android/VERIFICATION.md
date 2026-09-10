@@ -1879,3 +1879,55 @@ The AgentNotify request is saved; optional macOS banners are off. No approval
 has been inferred from delivery or lack of response. The phone, existing host,
 latest draft and protected saved JSON are untouched. No VM or Gradle process
 remains running from this task.
+
+
+## S22 four-layout acceptance and draft balancing — 2026-09-10
+
+The operator explicitly handed over R5CT91TW4RP. Installed the Studio APK with
+SHA-256 `cdfc9d945420746b9229fc26b5a1e074e3ada63a1229d9c13b32c022531ee622`
+and its test APK using `install -r`. The focused binding, viewport, four-layout
+session and draft instrumentation passed: **16 tests / 0.933s**. This is the new
+focused execution, not a rerun of every prior native test. No production install,
+grant operation, voice call, microphone or emulator was used.
+
+The replacement host starts without a serial, discovers the foreground Studio,
+links, releases and relinks successfully. A stale selection receives HTTP409.
+The existing binding remains byte-identical; linking does not recreate it.
+Four sequential native captures succeed and return matching viewport dimensions:
+1080×2340 portraits and 2340×1080 landscapes. The cutout bounds rotate from
+(512,0)–(568,81) to the left, bottom and right edges as expected. Visible system
+bar insets are zero in this immersive scene. These are Android-reported bounds,
+not an optical measurement of the camera hole.
+
+The live Chrome gallery was visually inspected: both portraits and both stacked
+landscapes fit together at one scale, with captions outside the images and guides
+on all four. The first screenshots included an unrelated YouTube picture-in-picture
+window. It was dismissed through the system gesture and clean captures were
+repeated; the covered shots are not evidence of unobscured controls. The final
+balanced contact sheet uses native PNGs arranged by ImageMagick; it is not a
+browser screenshot. No claim of a tested browser download is made here.
+
+The user then requested draft-only balancing. Exactly seven existing layout values
+changed: both landscape control widths 365→396dp and PTT shares 42.2→36.4%;
+landscape horizontal offset −16→−44dp, reverse landscape −16→−17dp, and reverse
+portrait vertical offset −30→−3dp. The widths/shares reproduce portrait's rotated
+control proportions. Opposite-edge offsets compensate for the S22's 27dp cutout
+safe-area displacement; cutout-side controls retain their safe padding, so the
+reverse trace corridor is shorter. Persona size, animation, colors, shared
+appearance/padding and independent hidden-PTT extents remain unchanged. Normal
+portrait remains the reference. Captures sample live animation at different times;
+small differences in instantaneous Halo shape are expected.
+
+The revised draft is durably stored as draft3. The explicit phone checkpoint and
+protected host JSON remain byte-identical (SHA-256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`);
+no Save, promotion or production-default change occurred. Capture restored free
+rotation; acceptance also restored the original stored user-rotation value1,
+auto-rotation1 and font-scale1.0. Studio remains foreground with the linked host
+running. Phone access was released with an AgentNotify completion notification.
+
+Private local evidence: `/tmp/agentvoice-phone-four-layouts-acceptance/`, including
+`instrumentation.log`, `clean-before/`, `balanced-final/`, `final-state.json`, and
+the original/final draft backups. The directory also contains a private Studio
+binding backup and must not be published wholesale. No active Gradle or VM
+resource remains from this work.
