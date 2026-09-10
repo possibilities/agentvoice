@@ -46,7 +46,7 @@ class PreviewOrientationSessionTest {
             val profile = reply.getString("profile")
             assertEquals((-22).dp, decodePersonaTuning(profile).offsetY)
             assertEquals(returned.otherLayout, decodeLandscapeLayout(profile))
-            assertTrue("A maximal state + profile reply fits the bounded socket frame", reply.toString().toByteArray().size < 16384)
+            assertTrue("A maximal state + profile reply fits the bounded socket frame", reply.toString().toByteArray().size < 65536)
             assertTrue(profile.length <= 8192)
             val saved = withContext(Dispatchers.Main) { session.state }
             val restored = restorePersonaPreview(saved.rotate("landscape").json(), saved.saved, saved.savedDesign,

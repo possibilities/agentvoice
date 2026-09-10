@@ -5,7 +5,7 @@
             android:theme="@style/Theme.AgentVoice" tools:replace="android:theme" />
         <activity android:name=".DesignPreviewActivity" android:exported="true" />
         <activity android:name=".PersonaPreviewActivity" android:label="Halo preview" android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize"
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|smallestScreenSize"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -4,6 +4,7 @@ import { defaultHalo } from "../src/halo.ts";
 import { defaultMutedTuning } from "../src/muted-presence.ts";
 import {
   defaultLandscapeLayout,
+  defaultPortraitLayout,
   defaultSharedAppearance,
   defaultVisualSettings,
   type PhoneState,
@@ -23,7 +24,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 26,
+    protocol: 27,
     connectionPreview: "off",
     launcher: "current",
     savedAppearance: defaultVisualSettings(),
@@ -52,6 +53,14 @@ class Connection implements PreviewConnection {
     defaultPersonaSide: "left",
     otherLayout: defaultLandscapeLayout(),
     savedOtherLayout: defaultLandscapeLayout(),
+    remainingLayouts: {
+      portraitReverse: defaultPortraitLayout(),
+      landscapeReverse: defaultLandscapeLayout(),
+    },
+    savedRemainingLayouts: {
+      portraitReverse: defaultPortraitLayout(),
+      landscapeReverse: defaultLandscapeLayout(),
+    },
     activity: "voice",
     connection: "connecting",
     revision: 0,

@@ -9,7 +9,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -45,8 +44,7 @@ internal fun VoiceScreen(
     mute: (String) -> Unit, hold: () -> Unit, release: () -> Unit,
     soundOutput: PreviewSwitchOutput? = null,
 ) {
-    val portrait = LocalConfiguration.current.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    val layout = if (portrait) ShippingDesign.portrait else ShippingDesign.landscape
+    val layout = shippingLayoutForOrientation(currentPreviewOrientation())
     val latestUi by rememberUpdatedState(ui)
     val feedback = rememberPreviewSwitchFeedback(ShippingDesign.sounds, soundOutput)
     var pendingMute by remember { mutableStateOf<Pair<String, Boolean>?>(null) }

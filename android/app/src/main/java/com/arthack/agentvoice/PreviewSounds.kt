@@ -4,7 +4,7 @@ import org.json.JSONObject
 
 internal val previewSoundFamilies = setOf("off", "rocker-29", "rocker-13")
 
-/** Sound selection is shared by both orientations and persisted only by explicit Save. */
+/** Sound selection is shared by every orientation and persisted only by explicit Save. */
 internal data class PreviewSounds(
     val family: String = "off",
     val volumePercent: Int = 70,
@@ -30,7 +30,7 @@ internal fun decodePersonaSounds(json: String): PreviewSounds {
     val data = JSONObject(json)
     return when (data.getInt("version")) {
         in 1..15 -> PreviewSounds()
-        16, 17, 18, 19, 20 -> decodePreviewSounds(data.getJSONObject("sounds"))
+        16, 17, 18, 19, 20, 21 -> decodePreviewSounds(data.getJSONObject("sounds"))
         else -> error("Unsupported Persona tuning version")
     }
 }

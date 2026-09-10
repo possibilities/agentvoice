@@ -57,7 +57,7 @@ class PersonaPreviewLifecycleTest {
         }
         fun state(socket: LocalSocket): JSONObject {
             socket.outputStream.write("{\"id\":2,\"method\":\"get\"}\n".toByteArray())
-            return JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
+            return JSONObject(readFrame(socket.inputStream, 65536)!!).getJSONObject("state")
         }
         val drafts = listOf("persona-studio-draft.json", "persona-studio-draft.json.bak", "persona-studio-draft.json.previous", "persona-studio-binding.json", "persona-studio-binding.json.bak").map { File(context.filesDir, it) }
         val preserved = drafts.associateWith { if (it.exists()) it.readBytes() else null }
@@ -72,7 +72,7 @@ class PersonaPreviewLifecycleTest {
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 55, 75, 175)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
-                before = JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
+                before = JSONObject(readFrame(socket.inputStream, 65536)!!).getJSONObject("state")
                 scenario.moveToState(Lifecycle.State.CREATED)
                 assertEquals(-1, socket.inputStream.read())
             }

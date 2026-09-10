@@ -98,7 +98,7 @@ class PreviewSoundsSessionTest {
             val response = session.command(save(selected))
             val text = response.getString("profile")
             val profile = JSONObject(text)
-            assertEquals(20, profile.getInt("version"))
+            assertEquals(21, profile.getInt("version"))
             assertEquals(chosen, decodePersonaSounds(text))
             assertEquals(text, file.readText())
             assertFalse(profile.getJSONObject("landscape").has("sounds"))
@@ -108,10 +108,10 @@ class PreviewSoundsSessionTest {
             assertEquals(chosen, saved.savedSounds)
             assertEquals(saved, restore(saved.json(), saved))
             val stateJson = saved.json()
-            assertEquals(26, stateJson.getInt("protocol"))
+            assertEquals(27, stateJson.getInt("protocol"))
             assertEquals(ShippingDesign.sounds, decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
             assertFalse(stateJson.getJSONObject("otherLayout").has("sounds"))
-            assertTrue(response.toString().toByteArray().size < 16384)
+            assertTrue(response.toString().toByteArray().size < 65536)
         } finally { file.delete() }
     }
 

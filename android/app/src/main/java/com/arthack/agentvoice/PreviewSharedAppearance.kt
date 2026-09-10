@@ -75,8 +75,20 @@ internal fun legacyLandscapeOverrides(layout: PreviewLayout, shared: PreviewShar
     }
 }
 
-internal data class PreviewProfileLayouts(val portrait: PreviewLayout, val landscape: PreviewLayout,
-    val shared: PreviewSharedAppearance)
+internal data class PreviewProfileLayouts(
+    val portrait: PreviewLayout,
+    val landscape: PreviewLayout,
+    val shared: PreviewSharedAppearance,
+    val portraitReverse: PreviewLayout = portrait,
+    val landscapeReverse: PreviewLayout = landscape,
+) {
+    fun asMap(): Map<String, PreviewLayout> = mapOf(
+        previewPortrait to portrait,
+        previewLandscape to landscape,
+        previewPortraitReverse to portraitReverse,
+        previewLandscapeReverse to landscapeReverse,
+    )
+}
 
 internal fun decodePreviewProfileLayouts(json: String): PreviewProfileLayouts {
     val data = JSONObject(json)
@@ -86,14 +98,19 @@ internal fun decodePreviewProfileLayouts(json: String): PreviewProfileLayouts {
         if (version >= 15) decodePreviewOffset(data.get("horizontalOffsetDp")) else 0,
         if (version >= 15) decodeAppearanceOverrides(data.getJSONArray("appearanceOverrides")) else emptySet())
     val decodedLandscape = decodeStoredLandscapeLayout(json)
-    if (version >= 17) require(portrait.design.spacing == decodedLandscape.design.spacing)
+    val decodedPortraitReverse = if (version >= 21) decodePreviewLayout(data.getJSONObject("portraitReverse"), version) else null
+    val decodedLandscapeReverse = if (version >= 21) decodePreviewLayout(data.getJSONObject("landscapeReverse"), version) else null
+    if (version >= 17) require(listOfNotNull(portrait, decodedLandscape, decodedPortraitReverse, decodedLandscapeReverse)
+        .all { it.design.spacing == portrait.design.spacing })
     val storedLandscape = if (version >= 17) decodedLandscape else decodedLandscape.copy(design = decodedLandscape.design.copy(spacing = portrait.design.spacing))
     val shared = if (version >= 15) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = version <= 16)
         else PreviewSharedAppearance.from(portrait)
     val landscape = if (version >= 15) storedLandscape else storedLandscape.copy(
         appearanceOverrides = legacyLandscapeOverrides(storedLandscape, shared))
-    if (version >= 15) {
-        require(shared.applyTo(portrait) == portrait && shared.applyTo(landscape) == landscape)
-    }
-    return PreviewProfileLayouts(shared.applyTo(portrait), shared.applyTo(landscape), shared)
+    // Old profiles gain reverse slots from their effective matching axis only in memory.
+    val portraitReverse = decodedPortraitReverse ?: portrait
+    val landscapeReverse = decodedLandscapeReverse ?: landscape
+    if (version >= 15) require(listOf(portrait, landscape, portraitReverse, landscapeReverse).all { shared.applyTo(it) == it })
+    return PreviewProfileLayouts(shared.applyTo(portrait), shared.applyTo(landscape), shared,
+        shared.applyTo(portraitReverse), shared.applyTo(landscapeReverse))
 }

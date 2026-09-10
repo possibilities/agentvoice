@@ -1766,3 +1766,51 @@ No Save/reset or phone draft read was used during this round.
 Physical installation and real QR enrollment await a phone handoff. Next queued
 work: enrich Persona state from real playback/capture, effective channel/PTT gates
 and available server activity; Speaking must not mean merely speaker-unmuted.
+
+
+## Four physical layouts and comparison capture — 2026-09-10
+
+Protocol27/profile21/draft3 retain independent Portrait, Landscape, Reverse
+portrait and Reverse landscape slots. Shared spacing and inherited appearance
+stay shared. Legacy reverse slots clone their matching axis only in memory;
+explicit Save exports all four. The adopted profile20 and provenance1 are unchanged.
+Production and Studio both select layouts from display rotation, including 180°.
+
+Evidence is under `/tmp/agentvoice-four-layouts/`. The native artifacts were built
+and tested before the operator retired emulator use; no emulator was started
+again afterward. `build.log`: Studio/production assembly, Studio test APK, JVM
+suite and both lints passed (5m46s). JVM results: 136 tests, zero failures/errors.
+`instrumentation.log`: 27 tests / 94.933s, including four-slot persistence,
+legacy migration, shared spacing/appearance and existing pointer/draft ownership.
+
+The native capture endpoint returned four PNGs and restored rotation lock0;
+`capture-response.json` records success. The samples are 720×1560 portrait and
+1560×720 landscape, with a synthetic cutout on a natural-portrait target.
+The browser gallery and comparison download were exercised against a static
+fixture serving these native PNGs, with no device connection. Capture rejects
+held pointers, setup overlays, changed settings and reconnects; failure/cancellation
+restores rotation and publishes no partial result. Screenshots sample successive
+animation frames and do not prove every-frame geometry or physical OLED quality.
+
+Package audits passed. Production SHA-256:
+`b6fc17882bccfbfd65d21c56f0fb281958e79692a607f529cf5677efa1b23e07`
+(48,436,985 bytes); Studio:
+`eb3197e3ac2af4698e46bd06766ea1e3bd7d5dc1bb1e1a92c9fd812c9fab4c50`
+(96,934,415 bytes). Production contains only selected audition resources and no
+Studio entrypoints/profile JSON; packaged notices are exact.
+
+The owned `agentvoice_four_layouts_20260910` AVD and emulator were stopped/deleted.
+The physical phone, its running Studio host, saved design, grants and rotation
+were untouched. Installation and physical cutout/reverse-rotation acceptance
+remain pending an AgentNotify request and explicit operator handoff. Natural-
+landscape tablets are not covered by this phone orientation mapping.
+
+Host checks: configurator-local TypeScript passes, as does the root typecheck.
+The combined configurator/shipping/reconnect/capture suite passed 111 tests;
+the subsequent free-rotation restoration regression passed with all eight capture
+tests (39 assertions). Scoped Biome and diff checks pass; shipping generation is
+current. The protected S22 profile retains SHA-256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+The comparison export gained labels and narrower columns after the initial
+browser download review; that final presentation refinement awaits browser/phone
+acceptance, while original PNGs remain unchanged.

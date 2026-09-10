@@ -65,7 +65,12 @@ export type Mode = (typeof modes)[number];
 export type Scales = Record<Mode, number>;
 export const connections = ["connected", "connecting", "disconnected"] as const;
 export type Connection = (typeof connections)[number];
-export const orientations = ["portrait", "landscape"] as const;
+export const orientations = [
+  "portrait",
+  "landscape",
+  "portrait-reverse",
+  "landscape-reverse",
+] as const;
 export type Orientation = (typeof orientations)[number];
 export type PersonaSide = "left" | "right";
 export type OrientationFence = { orientation: Orientation; orientationEpoch: number };
@@ -79,6 +84,11 @@ export type Layout = {
   spirit: SpiritSelection;
   personaSide: PersonaSide;
 };
+export type Layouts = Record<Orientation, Layout>;
+export type RemainingLayouts =
+  | { portraitReverse: Layout; landscapeReverse: Layout }
+  | { portrait: Layout; landscape: Layout };
+type RemainingLayoutKey = "portraitReverse" | "landscapeReverse" | "portrait" | "landscape";
 export type VersionSeventeenLayout = Omit<Layout, "design"> & { design: VersionSeventeenDesign };
 export type VersionSixteenLayout = Omit<Layout, "design"> & { design: VersionSixteenDesign };
 export type VersionFourteenLayout = Omit<
@@ -147,7 +157,7 @@ export const connectionPreviews = [
 ] as const;
 export type ConnectionPreview = (typeof connectionPreviews)[number];
 export type PhoneState = Preview & {
-  protocol: 26;
+  protocol: 27;
   connectionPreview: ConnectionPreview;
   savedAppearance: VisualSettings;
   defaultAppearance: VisualSettings;
@@ -161,6 +171,8 @@ export type PhoneState = Preview & {
   defaultHorizontalOffsetDp: number;
   otherLayout: Layout;
   savedOtherLayout: Layout;
+  remainingLayouts: RemainingLayouts;
+  savedRemainingLayouts: RemainingLayouts;
   savedPersonaSide: PersonaSide;
   defaultPersonaSide: PersonaSide;
   revision: number;
@@ -310,6 +322,27 @@ export type Profile = {
       sharedAppearance: SharedAppearance;
       landscape: Layout;
     }
+  | {
+      version: 21;
+      launcher: LauncherStyle;
+      icons: Icons;
+      theme: Theme;
+      mutedPresence: MutedPresence;
+      presenceScope: PresenceScope;
+      mutedTuning: MutedTuning;
+      showPushToTalk: boolean;
+      sounds: Sounds;
+      design: Design;
+      halo: HaloSelection;
+      spirit: SpiritSelection;
+      personaSide: PersonaSide;
+      horizontalOffsetDp: number;
+      appearanceOverrides: AppearanceGroup[];
+      sharedAppearance: SharedAppearance;
+      landscape: Layout;
+      portraitReverse: Layout;
+      landscapeReverse: Layout;
+    }
 );
 
 export function record(value: unknown): Record<string, unknown> {
@@ -417,6 +450,8 @@ export function parseState(value: unknown): PhoneState {
     "defaultHorizontalOffsetDp",
     "otherLayout",
     "savedOtherLayout",
+    "remainingLayouts",
+    "savedRemainingLayouts",
     "savedPersonaSide",
     "defaultPersonaSide",
     "orientation",
@@ -456,7 +491,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 26 ||
+    data["protocol"] !== 27 ||
     !connectionPreviews.includes(data["connectionPreview"] as ConnectionPreview) ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
@@ -466,7 +501,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 26,
+    protocol: 27,
     connectionPreview: data["connectionPreview"] as ConnectionPreview,
     savedAppearance: parseVisualSettings(data["savedAppearance"]),
     defaultAppearance: parseVisualSettings(data["defaultAppearance"]),
@@ -480,6 +515,14 @@ export function parseState(value: unknown): PhoneState {
     defaultHorizontalOffsetDp: integer(data["defaultHorizontalOffsetDp"], -200, 200),
     otherLayout: parseLayout(data["otherLayout"]),
     savedOtherLayout: parseLayout(data["savedOtherLayout"]),
+    remainingLayouts: parseRemainingLayouts(
+      data["remainingLayouts"],
+      parseOrientationFence(data).orientation,
+    ),
+    savedRemainingLayouts: parseRemainingLayouts(
+      data["savedRemainingLayouts"],
+      parseOrientationFence(data).orientation,
+    ),
     savedPersonaSide: parsePersonaSide(data["savedPersonaSide"]),
     defaultPersonaSide: parsePersonaSide(data["defaultPersonaSide"]),
     ...parseOrientationFence(data),
@@ -515,8 +558,12 @@ export function parseState(value: unknown): PhoneState {
     speakerMuted: data["speakerMuted"],
   };
   if (
-    !equalSpacing(state.design.spacing, state.otherLayout.design.spacing) ||
-    !equalSpacing(state.savedDesign.spacing, state.savedOtherLayout.design.spacing)
+    !Object.values(stateLayouts(state)).every((layout) =>
+      equalSpacing(state.design.spacing, layout.design.spacing),
+    ) ||
+    !Object.values(savedStateLayouts(state)).every((layout) =>
+      equalSpacing(state.savedDesign.spacing, layout.design.spacing),
+    )
   )
     throw Error("Mismatched shared spacing");
   return state;
@@ -527,7 +574,7 @@ export function parseProfile(text: string): Profile {
   const data = record(JSON.parse(text));
   exact(data, [
     "version",
-    ...(data["version"] === 20
+    ...(data["version"] === 20 || data["version"] === 21
       ? visualSettingsFields
       : data["version"] === 19
         ? visualSettingsFields.filter((field) => field !== "launcher")
@@ -536,7 +583,8 @@ export function parseProfile(text: string): Profile {
     data["version"] === 17 ||
     data["version"] === 18 ||
     data["version"] === 19 ||
-    data["version"] === 20
+    data["version"] === 20 ||
+    data["version"] === 21
       ? ["sounds"]
       : []),
     "scaleMultipliers",
@@ -549,28 +597,35 @@ export function parseProfile(text: string): Profile {
     data["version"] === 17 ||
     data["version"] === 18 ||
     data["version"] === 19 ||
-    data["version"] === 20
+    data["version"] === 20 ||
+    data["version"] === 21
       ? ["horizontalOffsetDp", "appearanceOverrides", "sharedAppearance"]
       : []),
-    ...([11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(data["version"] as number)
-      ? ["personaSide", "landscape"]
+    ...([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(data["version"] as number)
+      ? [
+          "personaSide",
+          "landscape",
+          ...(data["version"] === 21 ? ["portraitReverse", "landscapeReverse"] : []),
+        ]
       : []),
-    ...([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(
+    ...([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(
       data["version"] as number,
     )
       ? ["design"]
       : []),
-    ...([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(
+    ...([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(
       data["version"] as number,
     )
       ? ["halo"]
       : []),
-    ...([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(data["version"] as number)
+    ...([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(
+      data["version"] as number,
+    )
       ? ["spirit"]
       : []),
   ]);
   if (
-    ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(
+    ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(
       data["version"] as number,
     ) ||
     data["connectedArtboardScale"] !== 1.9 ||
@@ -578,7 +633,7 @@ export function parseProfile(text: string): Profile {
   ) {
     throw Error("Unsupported profile");
   }
-  if (data["version"] === 20) visualSettingsOf(data);
+  if (data["version"] === 20 || data["version"] === 21) visualSettingsOf(data);
   else if (data["version"] === 19) visualSettingsOf({ ...data, launcher: "current" });
   const scales = record(data["scaleMultipliers"]);
   const percentages = Object.fromEntries(
@@ -597,7 +652,8 @@ export function parseProfile(text: string): Profile {
     data["version"] === 17 ||
     data["version"] === 18 ||
     data["version"] === 19 ||
-    data["version"] === 20
+    data["version"] === 20 ||
+    data["version"] === 21
   )
     parseSounds(data["sounds"]);
   if (data["version"] === 3) parseLegacyDesign(data["design"]);
@@ -609,7 +665,12 @@ export function parseProfile(text: string): Profile {
   if (data["version"] === 10 || data["version"] === 11) parseVersionTenDesign(data["design"]);
   if (data["version"] === 12) parseVersionTwelveDesign(data["design"]);
   if (data["version"] === 13) parseVersionThirteenDesign(data["design"]);
-  if (data["version"] === 18 || data["version"] === 19 || data["version"] === 20)
+  if (
+    data["version"] === 18 ||
+    data["version"] === 19 ||
+    data["version"] === 20 ||
+    data["version"] === 21
+  )
     parseDesign(data["design"]);
   if (data["version"] === 17) parseVersionSeventeenDesign(data["design"]);
   if (data["version"] === 14 || data["version"] === 15 || data["version"] === 16)
@@ -620,7 +681,8 @@ export function parseProfile(text: string): Profile {
     data["version"] === 17 ||
     data["version"] === 18 ||
     data["version"] === 19 ||
-    data["version"] === 20
+    data["version"] === 20 ||
+    data["version"] === 21
   ) {
     integer(data["horizontalOffsetDp"], -200, 200);
     parseAppearanceOverrides(data["appearanceOverrides"]);
@@ -628,12 +690,13 @@ export function parseProfile(text: string): Profile {
       data["version"] === 17 ||
       data["version"] === 18 ||
       data["version"] === 19 ||
-      data["version"] === 20
+      data["version"] === 20 ||
+      data["version"] === 21
     )
       parseSharedAppearance(data["sharedAppearance"]);
     else parseVersionSixteenSharedAppearance(data["sharedAppearance"]);
   }
-  if ([11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(data["version"] as number)) {
+  if ([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(data["version"] as number)) {
     parsePersonaSide(data["personaSide"]);
     if (data["version"] === 11) parseVersionElevenLayout(data["landscape"]);
     else if (data["version"] === 12) parseVersionTwelveLayout(data["landscape"]);
@@ -643,28 +706,50 @@ export function parseProfile(text: string): Profile {
       parseVersionSixteenLayout(data["landscape"]);
     else if (data["version"] === 17) parseVersionSeventeenLayout(data["landscape"]);
     else data["landscape"] = parseLayout(data["landscape"]);
+    if (data["version"] === 21) {
+      data["portraitReverse"] = parseLayout(data["portraitReverse"]);
+      data["landscapeReverse"] = parseLayout(data["landscapeReverse"]);
+    }
   }
-  if ([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(data["version"] as number)) {
+  if (
+    [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(data["version"] as number)
+  ) {
     parseSpirit(data["spirit"]);
   }
   if (
-    [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(data["version"] as number)
+    [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(
+      data["version"] as number,
+    )
   )
     data["halo"] = parseHalo(data["halo"]);
   if (
     (data["version"] === 17 ||
       data["version"] === 18 ||
       data["version"] === 19 ||
-      data["version"] === 20) &&
+      data["version"] === 20 ||
+      data["version"] === 21) &&
     !equalSpacing(
-      (data["version"] === 18 || data["version"] === 19 || data["version"] === 20
+      (data["version"] === 18 ||
+      data["version"] === 19 ||
+      data["version"] === 20 ||
+      data["version"] === 21
         ? parseDesign(data["design"])
         : parseVersionSeventeenDesign(data["design"])
       ).spacing,
-      (data["version"] === 18 || data["version"] === 19 || data["version"] === 20
+      (data["version"] === 18 ||
+      data["version"] === 19 ||
+      data["version"] === 20 ||
+      data["version"] === 21
         ? parseLayout(data["landscape"])
         : parseVersionSeventeenLayout(data["landscape"])
       ).design.spacing,
+    )
+  )
+    throw Error("Mismatched shared spacing");
+  if (
+    data["version"] === 21 &&
+    ![data["portraitReverse"], data["landscapeReverse"]].every((layout) =>
+      equalSpacing(parseDesign(data["design"]).spacing, parseLayout(layout).design.spacing),
     )
   )
     throw Error("Mismatched shared spacing");
@@ -672,7 +757,12 @@ export function parseProfile(text: string): Profile {
 }
 
 export function profileDesign(profile: Profile): Design {
-  if (profile.version === 18 || profile.version === 19 || profile.version === 20)
+  if (
+    profile.version === 18 ||
+    profile.version === 19 ||
+    profile.version === 20 ||
+    profile.version === 21
+  )
     return structuredClone(profile.design);
   const previous = profileLegacyDesign(profile);
   return { ...previous, controlsWithoutPttDp: previous.controlsHeightDp };
@@ -682,7 +772,8 @@ function profileLegacyDesign(profile: Profile): VersionSeventeenDesign {
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
   )
     return structuredClone(profile.design);
   if (profile.version === 14 || profile.version === 15 || profile.version === 16)
@@ -738,7 +829,8 @@ export function profileHalo(profile: Profile): HaloSelection {
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
     ? profile.halo
     : defaultHalo();
 }
@@ -757,7 +849,8 @@ export function profileSpirit(profile: Profile): SpiritSelection {
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
     ? profile.spirit
     : defaultSpirit();
 }
@@ -812,6 +905,80 @@ export function parseOrientationFence(data: Record<string, unknown>): Orientatio
 
 export function sameOrientation(a: OrientationFence, b: OrientationFence): boolean {
   return a.orientation === b.orientation && a.orientationEpoch === b.orientationEpoch;
+}
+
+export function otherOrientation(orientation: Orientation): Orientation {
+  switch (orientation) {
+    case "portrait":
+      return "landscape";
+    case "landscape":
+      return "portrait";
+    case "portrait-reverse":
+      return "landscape-reverse";
+    case "landscape-reverse":
+      return "portrait-reverse";
+  }
+}
+
+export function remainingLayoutKeys(
+  orientation: Orientation,
+): readonly ["portraitReverse", "landscapeReverse"] | readonly ["portrait", "landscape"] {
+  return orientation === "portrait" || orientation === "landscape"
+    ? ["portraitReverse", "landscapeReverse"]
+    : ["portrait", "landscape"];
+}
+
+function orientationForRemainingKey(key: RemainingLayoutKey): Orientation {
+  return key === "portraitReverse"
+    ? "portrait-reverse"
+    : key === "landscapeReverse"
+      ? "landscape-reverse"
+      : key;
+}
+
+export function parseRemainingLayouts(value: unknown, orientation: Orientation): RemainingLayouts {
+  const data = record(value);
+  const keys = remainingLayoutKeys(orientation);
+  exact(data, [...keys]);
+  return Object.fromEntries(keys.map((key) => [key, parseLayout(data[key])])) as RemainingLayouts;
+}
+
+export function stateLayouts(state: PhoneState): Layouts {
+  const active = layoutOf(state);
+  const other = layoutOf(state.otherLayout);
+  const remaining = state.remainingLayouts;
+  return Object.fromEntries([
+    [state.orientation, active],
+    [otherOrientation(state.orientation), other],
+    ...Object.entries(remaining).map(([key, layout]) => [
+      orientationForRemainingKey(key as RemainingLayoutKey),
+      layoutOf(layout),
+    ]),
+  ]) as Layouts;
+}
+
+export function savedStateLayouts(state: PhoneState): Layouts {
+  const active = layoutOf({
+    ...state,
+    scales: state.savedScales,
+    verticalOffsetDp: state.savedVerticalOffsetDp,
+    horizontalOffsetDp: state.savedHorizontalOffsetDp,
+    appearanceOverrides: state.savedAppearanceOverrides,
+    design: state.savedDesign,
+    halo: state.savedHalo,
+    spirit: state.savedSpirit,
+    personaSide: state.savedPersonaSide,
+  });
+  const other = layoutOf(state.savedOtherLayout);
+  const remaining = state.savedRemainingLayouts;
+  return Object.fromEntries([
+    [state.orientation, active],
+    [otherOrientation(state.orientation), other],
+    ...Object.entries(remaining).map(([key, layout]) => [
+      orientationForRemainingKey(key as RemainingLayoutKey),
+      layoutOf(layout),
+    ]),
+  ]) as Layouts;
 }
 
 export function parsePersonaSide(value: unknown): PersonaSide {
@@ -909,19 +1076,31 @@ function profileLegacyLayout(profile: Profile, orientation: Orientation): Layout
     design: {
       ...previous.design,
       controlsWithoutPttDp:
-        profile.version === 18 || profile.version === 19 || profile.version === 20
+        profile.version === 18 ||
+        profile.version === 19 ||
+        profile.version === 20 ||
+        profile.version === 21
           ? (previous.design as Design).controlsWithoutPttDp
           : previous.design.controlsHeightDp,
     },
   };
 }
 function profileSourceLayout(profile: Profile, orientation: Orientation): VersionSeventeenLayout {
+  if (orientation === "portrait-reverse")
+    return profile.version === 21
+      ? structuredClone(profile.portraitReverse)
+      : profileSourceLayout(profile, "portrait");
+  if (orientation === "landscape-reverse")
+    return profile.version === 21
+      ? structuredClone(profile.landscapeReverse)
+      : profileSourceLayout(profile, "landscape");
   if (orientation === "landscape") {
     if (
       profile.version === 17 ||
       profile.version === 18 ||
       profile.version === 19 ||
-      profile.version === 20
+      profile.version === 20 ||
+      profile.version === 21
     )
       return structuredClone(profile.landscape);
     if (profile.version === 15 || profile.version === 16)
@@ -990,7 +1169,8 @@ function profileSourceLayout(profile: Profile, orientation: Orientation): Versio
       profile.version === 17 ||
       profile.version === 18 ||
       profile.version === 19 ||
-      profile.version === 20
+      profile.version === 20 ||
+      profile.version === 21
         ? profile.horizontalOffsetDp
         : 0,
     appearanceOverrides:
@@ -999,7 +1179,8 @@ function profileSourceLayout(profile: Profile, orientation: Orientation): Versio
       profile.version === 17 ||
       profile.version === 18 ||
       profile.version === 19 ||
-      profile.version === 20
+      profile.version === 20 ||
+      profile.version === 21
         ? [...profile.appearanceOverrides]
         : [],
     design: profileDesign(profile),
@@ -1015,7 +1196,8 @@ function profileSourceLayout(profile: Profile, orientation: Orientation): Versio
       profile.version === 17 ||
       profile.version === 18 ||
       profile.version === 19 ||
-      profile.version === 20
+      profile.version === 20 ||
+      profile.version === 21
         ? profile.personaSide
         : "left",
   };
@@ -1086,7 +1268,8 @@ export function profileSharedAppearance(profile: Profile): SharedAppearance {
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
   )
     return structuredClone(profile.sharedAppearance);
   if (profile.version === 15 || profile.version === 16) {
@@ -1102,7 +1285,8 @@ export function profileLayout(profile: Profile, orientation: Orientation): Layou
     profile.version !== 18 &&
     profile.version !== 19 &&
     profile.version !== 20 &&
-    orientation === "landscape"
+    profile.version !== 21 &&
+    (orientation === "landscape" || orientation === "landscape-reverse")
   )
     local.design.spacing = { ...profileDesign(profile).spacing };
   // Current receipts already contain effective values; do not mask a mismatched snapshot.
@@ -1112,11 +1296,12 @@ export function profileLayout(profile: Profile, orientation: Orientation): Layou
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
   )
     return local;
   const shared = profileSharedAppearance(profile);
-  if (orientation === "landscape") {
+  if (orientation === "landscape" || orientation === "landscape-reverse") {
     const legacy = appearanceOf(local);
     const canonical = appearanceOf(canonicalLandscapeLayout());
     local.appearanceOverrides = appearanceGroups.filter(
@@ -1133,7 +1318,8 @@ export function profileSounds(profile: Profile): Sounds {
     profile.version === 17 ||
     profile.version === 18 ||
     profile.version === 19 ||
-    profile.version === 20
+    profile.version === 20 ||
+    profile.version === 21
     ? { ...profile.sounds }
     : defaultSounds();
 }
@@ -1166,7 +1352,7 @@ export function defaultVisualSettings(): VisualSettings {
   };
 }
 export function profileVisualSettings(profile: Profile): VisualSettings {
-  return profile.version === 20
+  return profile.version === 20 || profile.version === 21
     ? visualSettingsOf(profile)
     : profile.version === 19
       ? visualSettingsOf({ ...profile, launcher: "current" })

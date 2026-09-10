@@ -2,6 +2,9 @@ package com.arthack.agentvoice
 
 import android.content.Intent
 import android.content.res.Configuration
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.util.AtomicFile
 import android.view.WindowManager
@@ -24,6 +27,14 @@ class PersonaPreviewActivity : ComponentActivity() {
     private var draftReady = false
     private var bridge: PersonaPreviewBridge? = null
     private var binding: PersonaPreviewBinding? = null
+    private val displays by lazy { getSystemService(DisplayManager::class.java) }
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            if (display?.displayId == displayId) observeOrientation(resources.configuration)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,7 +48,8 @@ class PersonaPreviewActivity : ComponentActivity() {
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
         val loaded = runCatching { decodePreviewProfileLayouts(saved!!) }.getOrElse {
             val portrait = defaultPortraitLayout()
-            PreviewProfileLayouts(portrait, defaultLandscapeLayout(), PreviewSharedAppearance.from(portrait))
+            PreviewProfileLayouts(portrait, defaultLandscapeLayout(), PreviewSharedAppearance.from(portrait),
+                defaultPreviewLayout("portrait-reverse"), defaultPreviewLayout("landscape-reverse"))
         }
         val draft = StudioDraft(File(filesDir, "persona-studio-draft.json"))
         val working = runCatching { draft.open() }
@@ -45,7 +57,8 @@ class PersonaPreviewActivity : ComponentActivity() {
         val portrait = loaded.portrait
         session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
             portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
-            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: ShippingDesign.sounds)
+            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: ShippingDesign.sounds,
+            initialPortraitReverse = loaded.portraitReverse, initialLandscapeReverse = loaded.landscapeReverse)
         val appearance = saved?.let { runCatching { decodeDesignAppearanceProfile(it) }.getOrNull() } ?: shippingAppearance()
         session.state = session.state.withAppearance(appearance).copy(savedAppearance = appearance)
         // Rehearsal continuity is activity-local; durable design always wins over an older Bundle.
@@ -115,7 +128,12 @@ class PersonaPreviewActivity : ComponentActivity() {
         binding = next
     }
 
-    override fun onStart() { super.onStart(); startBridge() }
+    override fun onStart() {
+        super.onStart()
+        displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+        observeOrientation(resources.configuration)
+        startBridge()
+    }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -123,7 +141,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     private fun observeOrientation(config: Configuration) {
-        session.state = session.state.rotate(if (config.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait")
+        session.state = session.state.rotate(previewOrientation(config.orientation, display?.rotation ?: android.view.Surface.ROTATION_0))
     }
 
     private fun startBridge() {
@@ -143,6 +161,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        displays.unregisterDisplayListener(displayListener)
         bridge?.close()
         bridge = null
         session.state = session.state.endHold()

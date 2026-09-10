@@ -49,7 +49,7 @@ internal class PersonaPreviewBridge(
                                     JSONObject().put("error", "Phone rejected the change or could not save. Refresh and try again.")
                                 }
                                 val frame = result.put("id", id).toString().toByteArray(Charsets.UTF_8)
-                                require(frame.size < 16384)
+                                require(frame.size < 65536)
                                 output.write(frame)
                                 output.write(10)
                                 output.flush()

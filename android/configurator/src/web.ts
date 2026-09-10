@@ -12,9 +12,11 @@ import {
   type Connection,
   equalLayout,
   equalVisualSettings,
+  layoutOf,
   type Mode,
   type MutedPresence,
   modes,
+  orientations,
   type PhoneState,
   type PresenceScope,
   type Preview,
@@ -25,6 +27,8 @@ import {
   profileSounds,
   profileVisualSettings,
   sameOrientation,
+  savedStateLayouts,
+  stateLayouts,
   type Theme,
 } from "./protocol.ts";
 import { type ResetTarget, resetPreview } from "./resets.ts";
@@ -34,6 +38,7 @@ import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
 type Status = {
+  captureAvailable: boolean;
   connected: boolean;
   reconnecting: boolean;
   generation: number;
@@ -43,6 +48,18 @@ type Status = {
   savePath: string;
   hostSaved: Profile | null;
 };
+type Capture = {
+  id: string;
+  createdAt: string;
+  restored: boolean;
+  frames: {
+    orientation: "portrait" | "landscape" | "portrait-reverse" | "landscape-reverse";
+    width: number;
+    height: number;
+    url: string;
+  }[];
+};
+type CaptureResponse = Status & { capture: Capture };
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
   if (!found) throw Error(`Missing element: ${id}`);
@@ -63,6 +80,8 @@ let inFlight = false;
 let saving = false;
 let openingCredits = false;
 let openingConnection = false;
+let capturing = false;
+let capture: Capture | null = null;
 let changed = false;
 let edit = 0;
 let resetting = false;
@@ -70,11 +89,91 @@ let draftFailure: string | null = null;
 let saveFailure: string | null = null;
 let transientFailure: string | null = null;
 
+function orientationLabel(orientation: Preview["orientation"]): string {
+  return (
+    {
+      portrait: "Portrait",
+      landscape: "Landscape",
+      "portrait-reverse": "Reverse portrait",
+      "landscape-reverse": "Reverse landscape",
+    } as const
+  )[orientation];
+}
+
+function isLandscape(orientation: Preview["orientation"]): boolean {
+  return orientation === "landscape" || orientation === "landscape-reverse";
+}
+
 function text(node: HTMLElement, value: string) {
   if (node.textContent !== value) node.textContent = value;
 }
 
-async function api(path: string, body?: unknown): Promise<Status> {
+function renderCapture() {
+  const gallery = element("capture-gallery");
+  gallery.hidden = !capture;
+  const frames = element("capture-frames");
+  frames.replaceChildren();
+  if (!capture) return;
+  for (const frame of capture.frames) {
+    const card = document.createElement("figure");
+    const image = document.createElement("img");
+    image.src = frame.url;
+    image.alt = `${orientationLabel(frame.orientation)} capture`;
+    const original = document.createElement("a");
+    original.href = frame.url;
+    original.textContent = "Original PNG";
+    original.download = `agentvoice-${frame.orientation}.png`;
+    const caption = document.createElement("figcaption");
+    caption.textContent = `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`;
+    card.append(image, caption, original);
+    frames.append(card);
+  }
+}
+
+async function downloadComparison() {
+  if (!capture) return;
+  const frames = await Promise.all(
+    capture.frames.map(async (frame) => {
+      const image = new Image();
+      image.src = frame.url;
+      await image.decode();
+      return { ...frame, image };
+    }),
+  );
+  const gutter = 32,
+    labelHeight = 64;
+  const columnWidths = [0, 1].map((column) =>
+    Math.max(...frames.filter((_, index) => index % 2 === column).map((frame) => frame.width)),
+  );
+  const rowHeights = [0, 1].map((row) =>
+    Math.max(...frames.slice(row * 2, row * 2 + 2).map((frame) => frame.height)),
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = columnWidths[0]! + columnWidths[1]! + gutter * 3;
+  canvas.height = rowHeights[0]! + rowHeights[1]! + labelHeight * 2 + gutter * 3;
+  const context = canvas.getContext("2d");
+  if (!context) throw Error("Could not compose the capture comparison.");
+  context.fillStyle = "#17191d";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.font = "28px sans-serif";
+  context.fillStyle = "#f0f2f5";
+  for (const [index, frame] of frames.entries()) {
+    const x = gutter + (index % 2 === 0 ? 0 : columnWidths[0]! + gutter);
+    const y = gutter + (index < 2 ? 0 : rowHeights[0]! + labelHeight + gutter);
+    context.fillText(
+      `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`,
+      x,
+      y + 36,
+    );
+    context.drawImage(frame.image, x, y + labelHeight);
+  }
+  const link = document.createElement("a");
+  link.href = canvas.toDataURL("image/png");
+  link.download = `agentvoice-layouts-${capture.id}.png`;
+  link.click();
+}
+
+async function api<T = Status>(path: string, body?: unknown, timeout = 6000): Promise<T> {
   const response = await fetch(
     `./${path}`,
     body === undefined
@@ -83,12 +182,12 @@ async function api(path: string, body?: unknown): Promise<Status> {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(timeout),
         },
   );
   const result = await response.json();
   if (!response.ok) throw Error(result.error || "The host configurator did not answer.");
-  return result;
+  return result as T;
 }
 
 function report(failure: unknown, isSave = false) {
@@ -104,27 +203,38 @@ function render() {
   text(error, saveFailure || draftFailure || transientFailure || "");
   element("connection").dataset["connected"] = String(connected);
   element("connection-text").textContent = connected ? "Phone linked" : "Waiting for phone";
-  controls.disabled = !connected || saving || openingCredits;
+  controls.disabled = !connected || saving || openingCredits || capturing;
   element<HTMLButtonElement>("icon-credits").disabled =
-    !connected || inFlight || changed || saving || openingCredits;
+    !connected || inFlight || changed || saving || openingCredits || capturing;
   text(
     element("icon-credits"),
     openingCredits && !openingConnection ? "Opening credits…" : "Credits on phone",
   );
-  save.disabled = !connected || inFlight || changed || saving || openingCredits;
+  save.disabled = !connected || inFlight || changed || saving || openingCredits || capturing;
   save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save complete design";
   element<HTMLButtonElement>("reset-production").disabled = save.disabled;
-  renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits);
+  renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits || capturing);
+  const captureButton = element<HTMLButtonElement>("capture-layouts");
+  captureButton.disabled =
+    !connected ||
+    !status?.captureAvailable ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    capturing;
+  captureButton.textContent = capturing ? "Capturing all 4 layouts…" : "Capture all 4 layouts";
+  renderCapture();
   if (!status || !draft) return;
   element("device").textContent =
-    `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
-  const orientationLabel = draft.orientation === "portrait" ? "Portrait" : "Landscape";
-  text(element("local-layout-scope"), `${orientationLabel} only`);
+    `Previewing on ${status.device} · ${orientationLabel(draft.orientation)}`;
+  const currentOrientationLabel = orientationLabel(draft.orientation);
+  text(element("local-layout-scope"), `${currentOrientationLabel} only`);
   for (const group of appearanceGroups) {
     const customized = draft.appearanceOverrides.includes(group);
     element<HTMLInputElement>(`override-${group}`).checked = customized;
-    text(element(`override-${group}-label`), `Customize ${orientationLabel}`);
-    text(element(`scope-${group}`), customized ? `${orientationLabel} only` : "Shared");
+    text(element(`override-${group}-label`), `Customize ${currentOrientationLabel}`);
+    text(element(`scope-${group}`), customized ? `${currentOrientationLabel} only` : "Shared");
   }
   element<HTMLSelectElement>("setup-preview").value = status.state.connectionPreview;
   element<HTMLSelectElement>("setup-preview").disabled =
@@ -153,7 +263,7 @@ function render() {
     );
   }
   element("section-separation-row").hidden = true;
-  element("portrait-spacing-hint").hidden = draft.orientation !== "portrait";
+  element("portrait-spacing-hint").hidden = isLandscape(draft.orientation);
   for (const field of visibleSpacingFields) {
     const amount = draft.design.spacing[field];
     const custom = field === "paddingDp" && amount === -1;
@@ -188,7 +298,7 @@ function render() {
   );
   text(
     element("controls-extent-label"),
-    draft.orientation === "landscape" ? "Controls width" : "Controls height",
+    isLandscape(draft.orientation) ? "Controls width" : "Controls height",
   );
   const activeExtent = draft.showPushToTalk
     ? draft.design.controlsHeightDp
@@ -201,18 +311,18 @@ function render() {
   holdShare.value = String(draft.design.holdSharePercent);
   text(
     element("hold-share-hint"),
-    draft.orientation === "landscape" ? "Of controls width" : "Of controls height",
+    isLandscape(draft.orientation) ? "Of controls width" : "Of controls height",
   );
   text(
     element("push-to-talk-hidden-hint"),
-    draft.orientation === "landscape"
+    isLandscape(draft.orientation)
       ? "Push to talk is hidden. The stacked mute column uses its own saved deck width; the width share is kept for when you show it again."
       : "Push to talk is hidden. The mute buttons use their own saved controls height; the height share is kept for when you show it again.",
   );
   holdShare.disabled = !draft.showPushToTalk;
   text(
     element("controls-height-hint"),
-    draft.orientation === "landscape"
+    isLandscape(draft.orientation)
       ? "Deck width is limited only by the viewport and Shared padding. Controls can overlap Persona; height fills the padded viewport."
       : draft.showPushToTalk
         ? "All three buttons"
@@ -263,19 +373,17 @@ function render() {
     document.createTextNode(String(size)),
     Object.assign(document.createElement("span"), { textContent: "%" }),
   );
-  const axisValue =
-    draft.orientation === "landscape" ? draft.horizontalOffsetDp : draft.verticalOffsetDp;
+  const axisValue = isLandscape(draft.orientation)
+    ? draft.horizontalOffsetDp
+    : draft.verticalOffsetDp;
   text(
     element("position-label"),
-    draft.orientation === "landscape" ? "Horizontal position" : "Vertical position",
+    isLandscape(draft.orientation) ? "Horizontal position" : "Vertical position",
   );
-  text(
-    element("position-min-label"),
-    draft.orientation === "landscape" ? "−200 (left)" : "−200 (up)",
-  );
+  text(element("position-min-label"), isLandscape(draft.orientation) ? "−200 (left)" : "−200 (up)");
   text(
     element("position-max-label"),
-    draft.orientation === "landscape" ? "+200 (right)" : "+200 (down)",
+    isLandscape(draft.orientation) ? "+200 (right)" : "+200 (down)",
   );
   position.value = String(axisValue);
   const offset = `${axisValue > 0 ? "+" : ""}${axisValue}`;
@@ -284,30 +392,25 @@ function render() {
     document.createTextNode(offset),
     Object.assign(document.createElement("span"), { textContent: "dp" }),
   );
-  const otherOrientation = draft.orientation === "portrait" ? "landscape" : "portrait";
+  const phoneState = status.state;
+  const savedProfile = status.hostSaved;
+  const liveLayouts = { ...stateLayouts(phoneState), [draft.orientation]: layoutOf(draft) };
   const hostMatches =
-    status.hostSaved &&
-    status.hostSaved.version === 20 &&
-    equalVisualSettings(profileVisualSettings(status.hostSaved), draft) &&
-    equalSounds(profileSounds(status.hostSaved), draft.sounds) &&
-    equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
-    equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout) &&
-    equalSharedAppearance(profileSharedAppearance(status.hostSaved), status.state.sharedAppearance);
+    savedProfile !== null &&
+    savedProfile.version === 21 &&
+    equalVisualSettings(profileVisualSettings(savedProfile), draft) &&
+    equalSounds(profileSounds(savedProfile), draft.sounds) &&
+    orientations.every((orientation) =>
+      equalLayout(profileLayout(savedProfile, orientation), liveLayouts[orientation]),
+    ) &&
+    equalSharedAppearance(profileSharedAppearance(savedProfile), phoneState.sharedAppearance);
   const phoneMatches =
-    equalVisualSettings(draft, status.state.savedAppearance) &&
-    equalSounds(draft.sounds, status.state.savedSounds) &&
-    equalLayout(draft, {
-      scales: status.state.savedScales,
-      verticalOffsetDp: status.state.savedVerticalOffsetDp,
-      horizontalOffsetDp: status.state.savedHorizontalOffsetDp,
-      appearanceOverrides: status.state.savedAppearanceOverrides,
-      design: status.state.savedDesign,
-      halo: status.state.savedHalo,
-      spirit: status.state.savedSpirit,
-      personaSide: status.state.savedPersonaSide,
-    }) &&
-    equalLayout(status.state.otherLayout, status.state.savedOtherLayout) &&
-    equalSharedAppearance(status.state.sharedAppearance, status.state.savedSharedAppearance);
+    equalVisualSettings(draft, phoneState.savedAppearance) &&
+    equalSounds(draft.sounds, phoneState.savedSounds) &&
+    orientations.every((orientation) =>
+      equalLayout(liveLayouts[orientation], savedStateLayouts(phoneState)[orientation]),
+    ) &&
+    equalSharedAppearance(phoneState.sharedAppearance, phoneState.savedSharedAppearance);
   text(
     feedback,
     !connected
@@ -333,12 +436,14 @@ function render() {
 
 async function flush() {
   if (inFlight || saving || !changed || !draft || !status?.connected) return;
+  const currentStatus = status;
+  const currentDraft = draft;
   inFlight = true;
   changed = false;
   const requestEdit = edit;
-  const requestGeneration = status.generation;
-  let selection = structuredClone(draft);
-  const currentAppearance = appearanceOf(status.state);
+  const requestGeneration = currentStatus.generation;
+  let selection = structuredClone(currentDraft);
+  const currentAppearance = appearanceOf(currentStatus.state);
   for (const group of appearanceGroups) {
     if (
       selection.appearanceOverrides.includes(group) &&
@@ -347,23 +452,24 @@ async function flush() {
       selection = applyAppearanceGroup(selection, currentAppearance, group);
     else if (
       !selection.appearanceOverrides.includes(group) &&
-      status.state.appearanceOverrides.includes(group)
+      currentStatus.state.appearanceOverrides.includes(group)
     )
-      selection = applyAppearanceGroup(selection, status.state.sharedAppearance, group);
+      selection = applyAppearanceGroup(selection, currentStatus.state.sharedAppearance, group);
   }
   // Scope changes settle first; retain queued appearance edits for the next request.
-  const stagedAppearance = !equalLayout(selection, draft);
+  const stagedAppearance = !equalLayout(selection, currentDraft);
   if (stagedAppearance) changed = true;
   render();
   try {
-    status = await api("preview", { ...selection, generation: requestGeneration });
+    const next = await api("preview", { ...selection, generation: requestGeneration });
+    status = next;
     if (
-      !status.connected ||
-      status.generation !== requestGeneration ||
-      !sameOrientation(selection, status.state)
+      !next.connected ||
+      next.generation !== requestGeneration ||
+      !sameOrientation(selection, next.state)
     )
       changed = false;
-    if ((edit === requestEdit && !stagedAppearance) || !changed) draft = previewOf(status.state);
+    if ((edit === requestEdit && !stagedAppearance) || !changed) draft = previewOf(next.state);
     transientFailure = null;
     draftFailure = null;
   } catch (failure) {
@@ -543,7 +649,7 @@ slider.addEventListener("input", () => {
 position.addEventListener("input", () => {
   const offsetDp = position.valueAsNumber;
   update((current) =>
-    current.orientation === "landscape"
+    isLandscape(current.orientation)
       ? { ...current, horizontalOffsetDp: offsetDp }
       : { ...current, verticalOffsetDp: offsetDp },
   );
@@ -556,13 +662,14 @@ element("setup-preview").addEventListener("change", async () => {
   openingCredits = true;
   render();
   try {
-    status = await api("connection-preview", {
+    const next = await api("connection-preview", {
       scene,
       generation: status.generation,
       orientation: status.state.orientation,
       orientationEpoch: status.state.orientationEpoch,
     });
-    draft = previewOf(status.state);
+    status = next;
+    draft = previewOf(next.state);
     transientFailure = null;
   } catch (failure) {
     report(failure);
@@ -579,12 +686,13 @@ element("icon-credits").addEventListener("click", async () => {
   openingCredits = true;
   render();
   try {
-    status = await api("icon-credits", {
+    const next = await api("icon-credits", {
       generation: status.generation,
       orientation: status.state.orientation,
       orientationEpoch: status.state.orientationEpoch,
     });
-    draft = previewOf(status.state);
+    status = next;
+    draft = previewOf(next.state);
     transientFailure = null;
   } catch (failure) {
     report(failure);
@@ -594,6 +702,49 @@ element("icon-credits").addEventListener("click", async () => {
   }
 });
 
+element("capture-layouts").addEventListener("click", async () => {
+  if (
+    !status?.connected ||
+    !status.captureAvailable ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    capturing
+  )
+    return;
+  capturing = true;
+  render();
+  try {
+    const result = await api<CaptureResponse>(
+      "capture-layouts",
+      {
+        generation: status.generation,
+        revision: status.state.revision,
+        orientation: status.state.orientation,
+        orientationEpoch: status.state.orientationEpoch,
+      },
+      120000,
+    );
+    status = result;
+    draft = previewOf(result.state);
+    capture = result.capture;
+    transientFailure = null;
+  } catch (failure) {
+    report(failure);
+  } finally {
+    capturing = false;
+    render();
+  }
+});
+
+element("download-comparison").addEventListener("click", () => {
+  void downloadComparison().catch((failure) => {
+    report(failure);
+    render();
+  });
+});
+
 element("reset-production").addEventListener("click", async () => {
   if (!status?.connected || inFlight || changed || saving || openingCredits) return;
   edit++;
@@ -601,13 +752,14 @@ element("reset-production").addEventListener("click", async () => {
   resetting = true;
   render();
   try {
-    status = await api("reset-production", {
+    const next = await api("reset-production", {
       revision: status.state.revision,
       generation: status.generation,
       orientation: status.state.orientation,
       orientationEpoch: status.state.orientationEpoch,
     });
-    draft = previewOf(status.state);
+    status = next;
+    draft = previewOf(next.state);
     transientFailure = null;
     draftFailure = null;
   } catch (failure) {
@@ -626,13 +778,14 @@ save.addEventListener("click", async () => {
   saving = true;
   render();
   try {
-    status = await api("save", {
+    const next = await api("save", {
       revision: status.state.revision,
       generation: status.generation,
       orientation: status.state.orientation,
       orientationEpoch: status.state.orientationEpoch,
     });
-    draft = previewOf(status.state);
+    status = next;
+    draft = previewOf(next.state);
     saveFailure = null;
     transientFailure = null;
   } catch (failure) {

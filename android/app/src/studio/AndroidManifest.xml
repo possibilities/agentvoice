@@ -9,7 +9,7 @@
         <activity android:name=".MainActivity" tools:node="remove" />
         <activity android:name="androidx.activity.ComponentActivity" android:theme="@style/Theme.AgentVoice" tools:replace="android:theme" />
         <activity android:name=".PersonaPreviewActivity" android:label="AgentVoice Studio" android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize" android:launchMode="singleTop">
+            android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|smallestScreenSize" android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

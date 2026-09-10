@@ -27,7 +27,7 @@
           <div class="studio-grid">
             <fieldset class="appearance-panel">
               <legend class="panel-title">Appearance</legend>
-              <p class="control-hint scope-explanation">Shared choices follow both orientations. Customize an orientation to keep its own appearance; unchecking returns it to the shared choice.</p>
+              <p class="control-hint scope-explanation">Shared choices follow all four physical orientations: Portrait, Landscape, Reverse portrait and Reverse landscape. Customize an orientation to keep its own appearance; unchecking returns it to the shared choice.</p>
               <fieldset class="scope-group">
                 <legend class="subpanel-title">Traces</legend>
                 <div class="scope-row">
@@ -299,8 +299,8 @@
               </fieldset>
                 <fieldset class="shared-session" id="shared-spacing">
                   <legend class="panel-title">Shared spacing</legend>
-                  <p class="scope-badge">Both orientations · Saved with profile</p>
-                  <p class="control-hint scope-explanation">Padding and button gaps stay the same across orientations. Changes and resets apply to both layouts.</p>
+                  <p class="scope-badge">All 4 physical orientations · Saved with profile</p>
+                  <p class="control-hint scope-explanation">Padding and button gaps stay the same across Portrait, Landscape, Reverse portrait and Reverse landscape. Changes and resets apply to all four layouts.</p>
                   <div class="motion-control">
                     <div class="size-heading">
                       <label for="spacing-paddingDp">Padding</label>
@@ -347,7 +347,7 @@
               </fieldset>
               <fieldset class="shared-session">
                 <legend class="panel-title">Switch sounds</legend>
-                <p class="scope-badge">Both orientations · Saved with profile</p>
+                <p class="scope-badge">All 4 physical orientations · Saved with profile</p>
                 <p class="control-hint scope-explanation" id="sound-hint">Use the phone controls to hear your choice. Both mute switches share the same on/off sound pair; Push to talk has its own press and release pair. The level also follows the phone’s media volume. Changing these settings does not play a sound.</p>
                 <div class="mixing">
                   <label for="sound-family">Sound</label>
@@ -369,7 +369,7 @@
               <fieldset class="shared-session">
                 <legend class="panel-title">Shared appearance</legend>
                 <button type="button" id="reset-visual-settings" data-reset="visual-settings" class="reset panel-reset">Reset shared choices</button>
-                <p class="scope-badge">Both orientations</p>
+                <p class="scope-badge">All 4 physical orientations</p>
                 <p class="control-hint scope-explanation" id="session-style-hint">Icons, push-to-talk visibility, theme and center indicators are shared and saved. Connection and activity controls only simulate a preview.</p>
                 <div class="mixing">
                   <label class="scope-customize">
@@ -377,10 +377,10 @@
                     <span>Show push to talk</span>
                   </label>
                 </div>
-                <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations and is saved with the profile. Hiding Push to talk also removes its connector and uses the separately saved extent for the mute buttons.</p>
+                <p id="push-to-talk-visibility-hint" class="control-hint">Applies to all four orientations and is saved with the profile. Hiding Push to talk also removes its connector and uses the separately saved extent for the mute buttons.</p>
                 <fieldset class="icon-audition" aria-describedby="icon-session-hint">
                   <legend>Icon auditions</legend>
-                  <p id="icon-session-hint" class="control-hint">Shared by both orientations. Save complete design keeps these choices.</p>
+                  <p id="icon-session-hint" class="control-hint">Shared by all four orientations. Save complete design keeps these choices.</p>
                   <button type="button" id="icon-credits" class="reset value-reset" aria-describedby="icon-credits-hint">Credits on phone</button>
                   <p id="icon-credits-hint" class="control-hint">Open the icon authors and licenses on the phone.</p>
                   <label for="channel-icons">Channel pair</label>
@@ -522,11 +522,18 @@
             <div id="launcher-gallery" class="launcher-gallery"></div>
             <p id="launcher-selection" class="control-hint" role="status" aria-live="polite">Current waveform selected. Save complete design keeps this choice.</p>
           </section>
-          <p class="control-hint">Tweaks are kept on this phone across Studio restarts. Reset to production restores the full shipped design in both orientations. Save complete design exports both layouts, launcher and shared choices together for the next release.</p>
+          <p class="control-hint">Tweaks are kept on this phone across Studio restarts. Reset to production restores the full shipped design in all four physical orientations. Save complete design exports all four layouts, launcher and shared choices together for the next release.</p>
+          <section id="capture-gallery" class="capture-gallery" aria-labelledby="capture-heading" hidden>
+            <div class="capture-heading"><h2 id="capture-heading">Four-layout comparison</h2><button type="button" id="download-comparison" class="reset value-reset">Download comparison</button></div>
+            <p class="control-hint">Captured sequentially; animation frames may differ. Capture preserves design and rehearsal choices, but does not freeze the native timeline or Save.</p>
+            <div id="capture-frames" class="capture-frames"></div>
+          </section>
           <div class="actions">
             <button type="button" id="reset-production" class="reset">Reset to production</button>
+            <button type="button" id="capture-layouts" class="reset">Capture all 4 layouts</button>
             <button type="button" id="save" class="save">Save complete design</button>
           </div>
+          <p class="control-hint capture-hint">Capture temporarily rotates the selected device through Portrait, Landscape, Reverse portrait and Reverse landscape, then restores it. It does not Save.</p>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>

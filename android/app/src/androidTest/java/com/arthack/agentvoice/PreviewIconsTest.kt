@@ -74,10 +74,10 @@ class PreviewIconsTest {
                 .put("revision", selected.revision).put("orientation", selected.orientation)
                 .put("orientationEpoch", selected.orientationEpoch))
             val profile = JSONObject(reply.getString("profile"))
-            assertEquals(20, profile.getInt("version"))
+            assertEquals(21, profile.getInt("version"))
             assertEquals(selected.icons, decodePreviewIcons(profile.getJSONObject("icons")))
             assertEquals(selected.icons, state().icons)
-            assertEquals(26, reply.getJSONObject("state").getInt("protocol"))
+            assertEquals(27, reply.getJSONObject("state").getInt("protocol"))
         } finally { file.delete() }
     }
 

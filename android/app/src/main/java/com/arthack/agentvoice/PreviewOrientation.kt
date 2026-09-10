@@ -1,9 +1,21 @@
 package com.arthack.agentvoice
 
+import android.content.Context
+import android.content.res.Configuration
+import android.hardware.display.DisplayManager
+import android.view.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 
-internal val previewOrientations = setOf("portrait", "landscape")
+internal const val previewPortrait = "portrait"
+internal const val previewLandscape = "landscape"
+internal const val previewPortraitReverse = "portrait-reverse"
+internal const val previewLandscapeReverse = "landscape-reverse"
+internal val previewOrientations = setOf(previewPortrait, previewLandscape, previewPortraitReverse, previewLandscapeReverse)
 internal val previewPersonaSides = setOf("left", "right")
 internal val previewThemes = setOf("bright", "quiet", "grayscale")
 internal val previewPresenceScopes = setOf("both-muted", "any-muted", "always")
@@ -28,13 +40,73 @@ internal data class PreviewLayout(
 }
 
 /** Studio reset baseline follows the explicitly promoted shipping snapshot. */
-internal fun defaultPortraitLayout() = ShippingDesign.portrait.previewLayout()
-internal fun defaultLandscapeLayout() = ShippingDesign.landscape.previewLayout()
+internal fun shippingLayoutForOrientation(orientation: String): ShippingLayout = when (orientation) {
+    previewPortrait -> ShippingDesign.portrait
+    previewLandscape -> ShippingDesign.landscape
+    previewPortraitReverse -> ShippingDesign.portraitReverse
+    previewLandscapeReverse -> ShippingDesign.landscapeReverse
+    else -> error("Unknown preview orientation")
+}
+internal fun defaultPortraitLayout() = shippingLayoutForOrientation(previewPortrait).previewLayout()
+internal fun defaultLandscapeLayout() = shippingLayoutForOrientation(previewLandscape).previewLayout()
+internal fun defaultPortraitReverseLayout() = shippingLayoutForOrientation(previewPortraitReverse).previewLayout()
+internal fun defaultLandscapeReverseLayout() = shippingLayoutForOrientation(previewLandscapeReverse).previewLayout()
 internal fun ShippingLayout.previewLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp)
 
 internal fun defaultPreviewLayout(orientation: String): PreviewLayout {
     require(orientation in previewOrientations)
-    return if (orientation == "portrait") defaultPortraitLayout() else defaultLandscapeLayout()
+    return shippingLayoutForOrientation(orientation).previewLayout()
+}
+
+internal fun facingPreviewOrientation(orientation: String): String = when (orientation) {
+    previewPortrait -> previewLandscape
+    previewLandscape -> previewPortrait
+    previewPortraitReverse -> previewLandscapeReverse
+    previewLandscapeReverse -> previewPortraitReverse
+    else -> error("Unknown preview orientation")
+}
+
+internal fun oppositePreviewOrientations(orientation: String): Set<String> {
+    require(orientation in previewOrientations)
+    return if (orientation == previewPortrait || orientation == previewLandscape)
+        setOf(previewPortraitReverse, previewLandscapeReverse)
+    else setOf(previewPortrait, previewLandscape)
+}
+
+internal fun previewOrientation(configurationOrientation: Int, rotation: Int): String = when (configurationOrientation) {
+    Configuration.ORIENTATION_PORTRAIT ->
+        if (rotation == Surface.ROTATION_180) previewPortraitReverse else previewPortrait
+    Configuration.ORIENTATION_LANDSCAPE ->
+        if (rotation == Surface.ROTATION_270) previewLandscapeReverse else previewLandscape
+    else -> when (rotation) {
+        Surface.ROTATION_90 -> previewLandscape
+        Surface.ROTATION_180 -> previewPortraitReverse
+        Surface.ROTATION_270 -> previewLandscapeReverse
+        else -> previewPortrait
+    }
+}
+
+/** Observes display rotation because 180-degree turns need not change Configuration.orientation. */
+@Composable
+internal fun currentPreviewOrientation(): String {
+    val configuration = LocalConfiguration.current
+    val context = LocalContext.current
+    val view = LocalView.current
+    val displayManager = remember(context) { context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager }
+    val displayId = view.display?.displayId
+    var rotation by remember(displayId) { mutableIntStateOf(view.display?.rotation ?: Surface.ROTATION_0) }
+    DisposableEffect(displayManager, displayId) {
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(id: Int) = Unit
+            override fun onDisplayRemoved(id: Int) = Unit
+            override fun onDisplayChanged(id: Int) {
+                if (displayId == null || id == displayId) rotation = view.display?.rotation ?: rotation
+            }
+        }
+        displayManager.registerDisplayListener(listener, null)
+        onDispose { displayManager.unregisterDisplayListener(listener) }
+    }
+    return previewOrientation(configuration.orientation, rotation)
 }
 
 internal fun decodePreviewLayout(data: JSONObject, version: Int = 18): PreviewLayout {
@@ -54,14 +126,14 @@ internal fun decodeLandscapeLayout(json: String): PreviewLayout = decodePreviewP
 internal fun decodeStoredLandscapeLayout(json: String): PreviewLayout {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..20)
+    require(version in 1..21)
     return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else PreviewLayout()
 }
 
 internal fun decodePortraitSide(json: String): String {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..20)
+    require(version in 1..21)
     return (if (version >= 11) data.getString("personaSide") else "left")
         .also { require(it in previewPersonaSides) }
 }

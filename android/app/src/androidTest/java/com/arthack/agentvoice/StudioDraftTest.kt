@@ -123,4 +123,30 @@ class StudioDraftTest {
             assertEquals("broken draft", file.readText())
         } finally { dir.deleteRecursively() }
     }
+
+    @Test fun versionTwoDraftMigratesReverseSlotsOnlyAfterTheNextEdit() {
+        val dir = directory()
+        try {
+            val file = File(dir, "draft.json")
+            val current = JSONObject(edited().designProfile())
+            val legacy = JSONObject(current.toString()).put("version", 20).apply {
+                remove("portraitReverse")
+                remove("landscapeReverse")
+            }
+            file.writeText(JSONObject().put("version", 2).put("profile", legacy).toString())
+            val original = file.readText()
+            val store = StudioDraft(file)
+            val opened = store.open()
+            assertEquals(original, file.readText())
+            val migrated = PersonaPreviewState().withDesignProfile(opened)
+            assertEquals(migrated.layouts().getValue(previewPortrait), migrated.layouts().getValue(previewPortraitReverse))
+            assertEquals(migrated.layouts().getValue(previewLandscape), migrated.layouts().getValue(previewLandscapeReverse))
+            store.write(migrated.copy(horizontalOffsetDp = 17).designProfile())
+            val saved = JSONObject(file.readText())
+            assertEquals(3, saved.getInt("version"))
+            assertEquals(21, saved.getJSONObject("profile").getInt("version"))
+            assertTrue(saved.getJSONObject("profile").has("portraitReverse"))
+            assertTrue(saved.getJSONObject("profile").has("landscapeReverse"))
+        } finally { dir.deleteRecursively() }
+    }
 }

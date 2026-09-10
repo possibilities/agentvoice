@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { adbCaptureDevice, captureLayouts } from "./capture.ts";
 import { connectPhone } from "./device.ts";
 import { serveConfigurator } from "./server.ts";
 
@@ -49,7 +50,7 @@ if (import.meta.main) {
   async function stop() {
     if (stopping) return;
     stopping = true;
-    await web?.server.stop(true);
+    await web?.close();
     await connection
       ?.close()
       .catch(() => console.error("Could not remove the preview's ADB forward."));
@@ -69,9 +70,15 @@ if (import.meta.main) {
       if (stopping) {
         await connection.close();
       } else {
-        web = await serveConfigurator(connection.phone, { ...options, device: connection.label });
+        const selected = connection.phone;
+        const captureDevice = adbCaptureDevice(options.device);
+        web = await serveConfigurator(selected, {
+          ...options,
+          device: connection.label,
+          capture: (signal) => captureLayouts(selected, captureDevice, signal),
+        });
         if (stopping) {
-          await web.server.stop(true);
+          await web.close();
           await connection.close();
         } else
           console.log(

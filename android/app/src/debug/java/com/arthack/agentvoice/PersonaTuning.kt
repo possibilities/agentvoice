@@ -40,8 +40,14 @@ internal data class PersonaPreviewState(
     val savedHorizontalOffsetDp: Int = horizontalOffsetDp,
     val appearanceOverrides: Set<String> = emptySet(),
     val savedAppearanceOverrides: Set<String> = appearanceOverrides,
+    val remainingLayouts: Map<String, PreviewLayout> = if (orientation in setOf(previewPortrait, previewLandscape)) {
+        val shared = PreviewSharedAppearance.from(PreviewLayout(placement, design, halo, spirit, personaSide))
+        mapOf(previewPortraitReverse to shared.applyTo(defaultPortraitReverseLayout()).let { it.copy(design = it.design.copy(spacing = design.spacing)) },
+            previewLandscapeReverse to shared.applyTo(defaultLandscapeReverseLayout()).let { it.copy(design = it.design.copy(spacing = design.spacing)) })
+    } else mapOf(previewPortrait to defaultPortraitLayout(), previewLandscape to defaultLandscapeLayout()),
+    val savedRemainingLayouts: Map<String, PreviewLayout> = remainingLayouts,
     val sharedAppearance: PreviewSharedAppearance = PreviewSharedAppearance.from(
-        if (orientation == "portrait") PreviewLayout(placement, design, halo, spirit, personaSide) else otherLayout),
+        PreviewLayout(placement, design, halo, spirit, personaSide)),
     val savedSharedAppearance: PreviewSharedAppearance = sharedAppearance,
     val showPushToTalk: Boolean = true,
     val icons: PreviewIcons = PreviewIcons(),
@@ -53,34 +59,52 @@ internal data class PersonaPreviewState(
     init { require(launcher in previewLaunchers)
         require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
         require(horizontalOffsetDp in -200..200 && savedHorizontalOffsetDp in -200..200)
-        require(appearanceOverrides.all { it in previewAppearanceGroups } && savedAppearanceOverrides.all { it in previewAppearanceGroups }) }
+        require(appearanceOverrides.all { it in previewAppearanceGroups } && savedAppearanceOverrides.all { it in previewAppearanceGroups })
+        require(orientation in previewOrientations)
+        require(remainingLayouts.keys == oppositePreviewOrientations(orientation))
+        require(savedRemainingLayouts.keys == oppositePreviewOrientations(orientation)) }
     fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher)
     fun withAppearance(value: DesignAppearance) = copy(theme = value.theme, mutedPresence = value.mutedPresence,
         mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk, icons = value.icons, launcher = value.launcher)
 
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp, appearanceOverrides)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide, savedHorizontalOffsetDp, savedAppearanceOverrides)
+    fun layouts(): Map<String, PreviewLayout> = remainingLayouts + mapOf(
+        orientation to activeLayout(), facingPreviewOrientation(orientation) to otherLayout)
+    fun savedLayouts(): Map<String, PreviewLayout> = savedRemainingLayouts + mapOf(
+        orientation to savedLayout(), facingPreviewOrientation(orientation) to savedOtherLayout)
+
+    internal fun withLayoutMaps(current: Map<String, PreviewLayout>, savedValues: Map<String, PreviewLayout>, next: String = orientation): PersonaPreviewState {
+        require(current.keys == previewOrientations && savedValues.keys == previewOrientations && next in previewOrientations)
+        val active = current.getValue(next)
+        val savedActive = savedValues.getValue(next)
+        return copy(orientation = next,
+            placement = active.placement, design = active.design, halo = active.halo, spirit = active.spirit,
+            personaSide = active.personaSide, horizontalOffsetDp = active.horizontalOffsetDp, appearanceOverrides = active.appearanceOverrides,
+            saved = savedActive.placement, savedDesign = savedActive.design, savedHalo = savedActive.halo,
+            savedSpirit = savedActive.spirit, savedPersonaSide = savedActive.personaSide,
+            savedHorizontalOffsetDp = savedActive.horizontalOffsetDp, savedAppearanceOverrides = savedActive.appearanceOverrides,
+            otherLayout = current.getValue(facingPreviewOrientation(next)),
+            savedOtherLayout = savedValues.getValue(facingPreviewOrientation(next)),
+            remainingLayouts = current.filterKeys { it in oppositePreviewOrientations(next) },
+            savedRemainingLayouts = savedValues.filterKeys { it in oppositePreviewOrientations(next) })
+    }
+
     fun rotate(next: String): PersonaPreviewState {
         require(next in previewOrientations)
         if (next == orientation) return this
         val released = endHold()
-        return released.copy(orientation = next, orientationEpoch = orientationEpoch + 1,
-            placement = otherLayout.placement, design = otherLayout.design, halo = otherLayout.halo,
-            spirit = otherLayout.spirit, personaSide = otherLayout.personaSide,
-            horizontalOffsetDp = otherLayout.horizontalOffsetDp, appearanceOverrides = otherLayout.appearanceOverrides,
-            saved = savedOtherLayout.placement, savedDesign = savedOtherLayout.design, savedHalo = savedOtherLayout.halo,
-            savedSpirit = savedOtherLayout.spirit, savedPersonaSide = savedOtherLayout.personaSide,
-            savedHorizontalOffsetDp = savedOtherLayout.horizontalOffsetDp, savedAppearanceOverrides = savedOtherLayout.appearanceOverrides,
-            otherLayout = activeLayout(), savedOtherLayout = savedLayout(), revision = released.revision + 1)
+        return released.withLayoutMaps(released.layouts(), released.savedLayouts(), next)
+            .copy(orientationEpoch = orientationEpoch + 1, revision = released.revision + 1)
     }
-    fun withSavedLayouts(portrait: PreviewLayout, landscape: PreviewLayout, shared: PreviewSharedAppearance = sharedAppearance): PersonaPreviewState {
-        val effectivePortrait = shared.applyTo(portrait)
-        val effectiveLandscape = shared.applyTo(landscape).let { it.copy(design = it.design.copy(spacing = portrait.design.spacing)) }
-        val active = if (orientation == "portrait") effectivePortrait else effectiveLandscape
-        return copy(saved = active.placement, savedDesign = active.design, savedHalo = active.halo,
-            savedSpirit = active.spirit, savedPersonaSide = active.personaSide,
-            savedHorizontalOffsetDp = active.horizontalOffsetDp, savedAppearanceOverrides = active.appearanceOverrides, savedSharedAppearance = shared,
-            savedOtherLayout = if (orientation == "portrait") effectiveLandscape else effectivePortrait)
+    fun withSavedLayouts(portrait: PreviewLayout, landscape: PreviewLayout, shared: PreviewSharedAppearance = sharedAppearance,
+        portraitReverse: PreviewLayout = portrait, landscapeReverse: PreviewLayout = landscape): PersonaPreviewState {
+        val spacing = portrait.design.spacing
+        val values = mapOf(previewPortrait to portrait, previewLandscape to landscape,
+            previewPortraitReverse to portraitReverse, previewLandscapeReverse to landscapeReverse).mapValues { (_, layout) ->
+            shared.applyTo(layout.copy(design = layout.design.copy(spacing = spacing)))
+        }
+        return withLayoutMaps(layouts(), values).copy(savedSharedAppearance = shared)
     }
     fun withEffectiveLayout(active: PreviewLayout) = copy(placement = active.placement, design = active.design,
         halo = active.halo, spirit = active.spirit, personaSide = active.personaSide,
@@ -95,11 +119,13 @@ internal data class PersonaPreviewState(
             halo = if ("halo" in added) previous.halo.copy(containedSizePercent = requested.halo.containedSizePercent) else requested.halo,
             spirit = if ("spirit" in added) previous.spirit else requested.spirit)
         val shared = sharedAppearance.editedBy(previous, snapshot)
-        return withEffectiveLayout(shared.applyTo(snapshot)).copy(sharedAppearance = shared,
-            otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
+        val effective = (layouts() + (orientation to snapshot)).mapValues { (_, layout) ->
+            shared.applyTo(layout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) }
+        }
+        return withLayoutMaps(effective, savedLayouts()).copy(sharedAppearance = shared)
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 26).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 27).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -108,8 +134,10 @@ internal data class PersonaPreviewState(
         .put("defaultSharedAppearance", PreviewSharedAppearance.from(defaultPortraitLayout()).json())
         .put("theme", theme).put("mutedPresence", mutedPresence).put("mutedTuning", mutedTuning.json()).put("presenceScope", presenceScope)
         .put("orientation", orientation).put("orientationEpoch", orientationEpoch)
-        .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", "left")
-        .put("otherLayout", otherLayout.json()).put("savedOtherLayout", savedOtherLayout.json()).put("connection", connection).put("revision", revision)
+        .put("personaSide", personaSide).put("savedPersonaSide", savedPersonaSide).put("defaultPersonaSide", defaultPreviewLayout(orientation).personaSide)
+        .put("otherLayout", otherLayout.json()).put("savedOtherLayout", savedOtherLayout.json())
+        .put("remainingLayouts", remainingLayouts.previewLayoutsJson()).put("savedRemainingLayouts", savedRemainingLayouts.previewLayoutsJson())
+        .put("connection", connection).put("revision", revision)
         .put("mode", mode).put("activity", activity).put("holding", holding).put("scales", placement.scalesJson())
         .put("savedScales", saved.scalesJson()).put("defaults", defaultPreviewLayout(orientation).placement.scalesJson())
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
@@ -143,6 +171,34 @@ internal data class PersonaPreviewState(
     }
 }
 
+private fun String.previewOrientationJsonKey(): String = when (this) {
+    previewPortrait -> "portrait"
+    previewLandscape -> "landscape"
+    previewPortraitReverse -> "portraitReverse"
+    previewLandscapeReverse -> "landscapeReverse"
+    else -> error("Unknown preview orientation")
+}
+
+private fun Map<String, PreviewLayout>.previewLayoutsJson(): JSONObject = JSONObject().also { data ->
+    for ((orientation, layout) in this) data.put(orientation.previewOrientationJsonKey(), layout.json())
+}
+
+private fun decodeRemainingLayouts(data: JSONObject, orientation: String): Map<String, PreviewLayout> {
+    val expected = oppositePreviewOrientations(orientation)
+    require(data.fields() == expected.map { it.previewOrientationJsonKey() }.toSet())
+    return expected.associateWith { decodePreviewLayout(data.getJSONObject(it.previewOrientationJsonKey())) }
+}
+
+private fun decodeSavedActiveLayout(data: JSONObject): PreviewLayout = PreviewLayout(
+    decodePreviewScales(data.getJSONObject("savedScales")).copy(offsetY = decodePreviewOffset(data.get("savedVerticalOffsetDp")).dp),
+    decodePreviewDesign(data.getJSONObject("savedDesign")),
+    decodePreviewHalo(data.getJSONObject("savedHalo")),
+    decodePreviewSpirit(data.getJSONObject("savedSpirit")),
+    data.getString("savedPersonaSide"),
+    decodePreviewOffset(data.get("savedHorizontalOffsetDp")),
+    decodeAppearanceOverrides(data.getJSONArray("savedAppearanceOverrides")),
+)
+
 internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, savedDesign: PreviewDesign = PreviewDesign(), savedHalo: PreviewHalo = PreviewHalo(), savedSpirit: PreviewSpirit = PreviewSpirit(), savedLandscape: PreviewLayout = PreviewLayout(), savedPortraitSide: String = "left", savedHorizontalOffsetDp: Int = 0, savedOverrides: Set<String> = emptySet(),
     savedShared: PreviewSharedAppearance = PreviewSharedAppearance.from(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide)),
     savedSounds: PreviewSounds = PreviewSounds(), savedAppearance: DesignAppearance = DesignAppearance()): PersonaPreviewState {
@@ -157,7 +213,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..26)
+    require(protocol in 1..27)
+    if (protocol <= 26) require(orientation in setOf(previewPortrait, previewLandscape))
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
         decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22)
@@ -166,7 +223,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         decodePreviewSounds(data.getJSONObject("savedSounds"))
         decodePreviewSounds(data.getJSONObject("defaultSounds"))
     }
-    val restored = PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
+    val base = PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
         mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let {
             if (protocol in 3..11) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
@@ -192,32 +249,65 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         showPushToTalk = if (protocol >= 19) decodePreviewBoolean(data.get("showPushToTalk")) else true,
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
         savedSounds = savedSounds, savedAppearance = savedAppearance)
-    val portrait = if (orientation == "portrait") restored.activeLayout() else restored.otherLayout
-    val landscape = if (orientation == "landscape") restored.activeLayout() else restored.otherLayout
+    val restored = if (protocol >= 27) base.copy(
+        remainingLayouts = decodeRemainingLayouts(data.getJSONObject("remainingLayouts"), orientation),
+        savedRemainingLayouts = decodeRemainingLayouts(data.getJSONObject("savedRemainingLayouts"), orientation),
+    ) else base
+    val currentValues = if (protocol >= 27) restored.layouts() else {
+        val portrait = if (orientation == previewPortrait) restored.activeLayout() else restored.otherLayout
+        val landscape = if (orientation == previewLandscape) restored.activeLayout() else restored.otherLayout
+        mapOf(previewPortrait to portrait, previewLandscape to landscape,
+            previewPortraitReverse to portrait, previewLandscapeReverse to landscape)
+    }
+    val portrait = currentValues.getValue(previewPortrait)
+    val landscape = currentValues.getValue(previewLandscape)
     val shared = if (protocol >= 17) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = protocol <= 18) else PreviewSharedAppearance.from(portrait)
     val scopedLandscape = if (protocol >= 17) landscape else landscape.copy(appearanceOverrides = legacyLandscapeOverrides(landscape, shared))
-    if (protocol >= 19) require(portrait.design.spacing == landscape.design.spacing)
+    if (protocol >= 19) require(currentValues.values.all { it.design.spacing == portrait.design.spacing })
     val migratedLandscape = if (protocol >= 19) scopedLandscape else scopedLandscape.copy(design = scopedLandscape.design.copy(spacing = portrait.design.spacing))
-    val active = shared.applyTo(if (orientation == "portrait") portrait else migratedLandscape)
-    val other = shared.applyTo(if (orientation == "portrait") migratedLandscape else portrait)
+    val migratedValues = currentValues + (previewLandscape to migratedLandscape) +
+        (previewLandscapeReverse to if (protocol >= 27) currentValues.getValue(previewLandscapeReverse) else migratedLandscape)
+    val effectiveValues = migratedValues.mapValues { (_, layout) -> shared.applyTo(layout) }
     if (protocol >= 17) {
         fun expected(layout: PreviewLayout) = if (protocol >= 19) layout else layout.copy(design = layout.design.copy(spacing = portrait.design.spacing))
-        require(active == expected(restored.activeLayout()) && other == expected(restored.otherLayout))
+        require(effectiveValues.all { (slot, layout) -> layout == expected(migratedValues.getValue(slot)) })
     }
-    return restored.withEffectiveLayout(active).copy(sharedAppearance = shared, otherLayout = other)
-        .withSavedLayouts(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide, savedHorizontalOffsetDp, savedOverrides), savedLandscape, savedShared)
+    val savedValues = if (protocol >= 27) {
+        val savedActive = decodeSavedActiveLayout(data)
+        val savedCurrent = restored.savedRemainingLayouts + mapOf(orientation to savedActive,
+            facingPreviewOrientation(orientation) to decodePreviewLayout(data.getJSONObject("savedOtherLayout")))
+        val savedBase = decodeSharedAppearance(data.getJSONObject("savedSharedAppearance"))
+        require(savedCurrent.values.all { it.design.spacing == savedCurrent.getValue(previewPortrait).design.spacing })
+        require(savedCurrent.values.all { savedBase.applyTo(it) == it })
+        savedCurrent
+    } else mapOf(
+        previewPortrait to PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide, savedHorizontalOffsetDp, savedOverrides),
+        previewLandscape to savedLandscape,
+        previewPortraitReverse to PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide, savedHorizontalOffsetDp, savedOverrides),
+        previewLandscapeReverse to savedLandscape,
+    ).mapValues { (_, layout) -> savedShared.applyTo(layout.copy(design = layout.design.copy(spacing = savedDesign.spacing))) }
+    return restored.withLayoutMaps(effectiveValues, savedValues).copy(sharedAppearance = shared,
+        savedSharedAppearance = if (protocol >= 27) decodeSharedAppearance(data.getJSONObject("savedSharedAppearance")) else savedShared,
+        savedSounds = if (protocol >= 27) decodePreviewSounds(data.getJSONObject("savedSounds")) else savedSounds,
+        savedAppearance = if (protocol >= 27) decodeDesignAppearance(data.getJSONObject("savedAppearance")) else savedAppearance)
 }
 
 internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = defaultPortraitLayout().design, initialHalo: PreviewHalo = defaultPortraitLayout().halo, initialSpirit: PreviewSpirit = defaultPortraitLayout().spirit, initialLandscape: PreviewLayout = defaultLandscapeLayout(), initialPortraitSide: String = "left", initialHorizontalOffsetDp: Int = 0,
     initialOverrides: Set<String> = emptySet(), initialShared: PreviewSharedAppearance? = null,
-    initialSounds: PreviewSounds = PreviewSounds(), persistDesign: ((String) -> Unit)? = null) {
+    initialSounds: PreviewSounds = PreviewSounds(), persistDesign: ((String) -> Unit)? = null,
+    initialPortraitReverse: PreviewLayout = defaultPortraitReverseLayout(),
+    initialLandscapeReverse: PreviewLayout = defaultLandscapeReverseLayout()) {
     private val shared = initialShared ?: PreviewSharedAppearance.from(PreviewLayout(initial, initialDesign, initialHalo, initialSpirit))
     private val spacedLandscape = initialLandscape.copy(design = initialLandscape.design.copy(spacing = initialDesign.spacing))
     private val landscape = shared.applyTo(if (initialShared == null) spacedLandscape.copy(
         appearanceOverrides = spacedLandscape.appearanceOverrides + legacyLandscapeOverrides(spacedLandscape, shared)) else spacedLandscape)
+    private val portraitReverse = shared.applyTo(initialPortraitReverse.copy(design = initialPortraitReverse.design.copy(spacing = initialDesign.spacing)))
+    private val landscapeReverse = shared.applyTo(initialLandscapeReverse.copy(design = initialLandscapeReverse.design.copy(spacing = initialDesign.spacing)))
     private var currentState by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo,
         spirit = initialSpirit, otherLayout = landscape, personaSide = initialPortraitSide,
         horizontalOffsetDp = initialHorizontalOffsetDp, appearanceOverrides = initialOverrides, sharedAppearance = shared,
+        remainingLayouts = mapOf(previewPortraitReverse to portraitReverse, previewLandscapeReverse to landscapeReverse),
+        savedRemainingLayouts = mapOf(previewPortraitReverse to portraitReverse, previewLandscapeReverse to landscapeReverse),
         sounds = initialSounds))
 
     var persistWorkingDesign: ((String) -> Unit)? = persistDesign
@@ -245,11 +335,17 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                 check(request.get("revision") == state.revision) { "Preview changed. Review it before saving." }
                 state
             }
-            val portrait = if (selected.orientation == "portrait") selected.activeLayout() else selected.otherLayout
-            val landscape = if (selected.orientation == "landscape") selected.activeLayout() else selected.otherLayout
-            profile = encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit, landscape, portrait.personaSide, portrait.horizontalOffsetDp, portrait.appearanceOverrides, selected.sharedAppearance, selected.sounds, selected.appearance())
+            val layouts = selected.layouts()
+            val portrait = layouts.getValue(previewPortrait)
+            val landscape = layouts.getValue(previewLandscape)
+            val portraitReverse = layouts.getValue(previewPortraitReverse)
+            val landscapeReverse = layouts.getValue(previewLandscapeReverse)
+            profile = encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit, landscape,
+                portrait.personaSide, portrait.horizontalOffsetDp, portrait.appearanceOverrides, selected.sharedAppearance,
+                selected.sounds, selected.appearance(), portraitReverse, landscapeReverse)
             savePersonaTuning(selection, profile)
-            withContext(Dispatchers.Main) { state = state.withSavedLayouts(portrait, landscape, selected.sharedAppearance).copy(savedSounds = selected.sounds, savedAppearance = selected.appearance()) }
+            withContext(Dispatchers.Main) { state = state.withSavedLayouts(portrait, landscape, selected.sharedAppearance,
+                portraitReverse, landscapeReverse).copy(savedSounds = selected.sounds, savedAppearance = selected.appearance()) }
         }
         return withContext(Dispatchers.Main) {
             when (method) {

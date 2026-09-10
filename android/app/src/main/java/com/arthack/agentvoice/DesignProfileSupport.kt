@@ -20,7 +20,7 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
     val placement = when (data.getInt("version")) {
         // Loading never rewrites the original choice; migration happens only on Save.
         1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 -> data.getJSONObject("scaleMultipliers").let {
+        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 -> data.getJSONObject("scaleMultipliers").let {
             PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
         }
         else -> error("Unsupported Persona tuning version")
@@ -31,13 +31,17 @@ internal fun decodePersonaTuning(json: String): PersonaPlacement {
 
 internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit(), landscape: PreviewLayout = PreviewLayout(), personaSide: String = "left", horizontalOffsetDp: Int = 0, appearanceOverrides: Set<String> = emptySet(),
     sharedAppearance: PreviewSharedAppearance = PreviewSharedAppearance.from(PreviewLayout(placement, design, halo, spirit, personaSide)),
-    sounds: PreviewSounds = PreviewSounds(), appearance: DesignAppearance = DesignAppearance()): String {
+    sounds: PreviewSounds = PreviewSounds(), appearance: DesignAppearance = DesignAppearance(),
+    portraitReverse: PreviewLayout = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp, appearanceOverrides),
+    landscapeReverse: PreviewLayout = landscape): String {
     fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
     return JSONObject()
-        .put("version", 20).put("sounds", sounds.json())
+        .put("version", 21).put("sounds", sounds.json())
         .also { root -> appearance.json().let { values -> values.keys().forEach { key -> root.put(key, values.get(key)) } } }
         .put("horizontalOffsetDp", horizontalOffsetDp).put("appearanceOverrides", appearanceOverrides.appearanceJson())
         .put("sharedAppearance", sharedAppearance.json())
+        .put("portraitReverse", portraitReverse.copy(design = portraitReverse.design.copy(spacing = design.spacing)).json())
+        .put("landscapeReverse", landscapeReverse.copy(design = landscapeReverse.design.copy(spacing = design.spacing)).json())
         .put("landscape", landscape.copy(design = landscape.design.copy(spacing = design.spacing)).json()).put("personaSide", personaSide)
         .put("spirit", spirit.json())
         .put("halo", halo.json())

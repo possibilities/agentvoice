@@ -15,11 +15,13 @@ import {
   type Profile,
   parseLayout,
   parseProfile,
+  parseState,
   parseVisualSettings,
   profileLayout,
   profileSounds,
   profileVisualSettings,
   record,
+  stateLayouts,
   type VisualSettings,
   visualSettingsOf,
 } from "./protocol.ts";
@@ -34,7 +36,7 @@ const manifestPath = "android/design/shipping-generated-files.json";
 const releaseRoot = "android/app/src/release/";
 const noticesRoot = "android/app/src/main/assets/notices/Shipping-";
 export type ShippingSnapshot = {
-  version: 1;
+  version: 2;
   source: {
     profile: { path: string; sha256: string; text: string };
     session: {
@@ -46,6 +48,8 @@ export type ShippingSnapshot = {
   };
   portrait: Layout;
   landscape: Layout;
+  portraitReverse: Layout;
+  landscapeReverse: Layout;
   sounds: Sounds;
   appearance: VisualSettings;
 };
@@ -84,49 +88,68 @@ export function createShippingSnapshot(
     | { kind: "profile" },
 ): ShippingSnapshot {
   const profile = parseProfile(profileText);
-  if (profile.version !== 18 && profile.version !== 19 && profile.version !== 20)
-    throw Error("Promotion requires profile18, profile19 or profile20");
+  if (
+    profile.version !== 18 &&
+    profile.version !== 19 &&
+    profile.version !== 20 &&
+    profile.version !== 21
+  )
+    throw Error("Promotion requires profile18 through profile21");
   const portrait = profileLayout(profile, "portrait");
   const landscape = profileLayout(profile, "landscape");
+  const portraitReverse = profileLayout(profile, "portrait-reverse");
+  const landscapeReverse = profileLayout(profile, "landscape-reverse");
   const sounds = profileSounds(profile);
   let appearance: VisualSettings;
   if (choice.kind === "defaults") appearance = defaultVisualSettings();
   else if (choice.kind === "profile") {
-    if (profile.version !== 19 && profile.version !== 20)
+    if (profile.version !== 19 && profile.version !== 20 && profile.version !== 21)
       throw Error("Profile18 needs --session, --live-state or --default-session");
     appearance = profileVisualSettings(profile);
   } else if (choice.kind === "file") appearance = parseVisualSettings(JSON.parse(choice.text));
   else {
     const wrapper = record(JSON.parse(choice.text));
     const state = record(wrapper["state"] ?? wrapper);
-    if (
-      state["protocol"] !== 21 &&
-      state["protocol"] !== 22 &&
-      state["protocol"] !== 23 &&
-      state["protocol"] !== 24
-    )
+    if (![21, 22, 23, 24, 25, 26, 27].includes(state["protocol"] as number))
       throw Error("Unsupported captured studio protocol");
     integer(state["revision"]);
-    if (state["orientation"] !== "portrait" && state["orientation"] !== "landscape")
-      throw Error("Invalid captured orientation");
-    const active = parseLayout(layoutOf(state as unknown as Layout));
-    const other = parseLayout(state["otherLayout"]);
     if (
-      !equalLayout(portrait, state["orientation"] === "portrait" ? active : other) ||
-      !equalLayout(landscape, state["orientation"] === "landscape" ? active : other) ||
+      state["orientation"] !== "portrait" &&
+      state["orientation"] !== "landscape" &&
+      state["orientation"] !== "portrait-reverse" &&
+      state["orientation"] !== "landscape-reverse"
+    )
+      throw Error("Invalid captured orientation");
+    const capturedLayouts = state["protocol"] === 27 ? stateLayouts(parseState(state)) : null;
+    const layouts = capturedLayouts ?? {
+      portrait:
+        state["orientation"] === "portrait"
+          ? parseLayout(layoutOf(state as unknown as Layout))
+          : parseLayout(state["otherLayout"]),
+      landscape:
+        state["orientation"] === "landscape"
+          ? parseLayout(layoutOf(state as unknown as Layout))
+          : parseLayout(state["otherLayout"]),
+    };
+    if (
+      !equalLayout(portrait, layouts.portrait) ||
+      !equalLayout(landscape, layouts.landscape) ||
+      (capturedLayouts !== null &&
+        (!equalLayout(portraitReverse, capturedLayouts["portrait-reverse"]) ||
+          !equalLayout(landscapeReverse, capturedLayouts["landscape-reverse"]))) ||
       !equalSounds(sounds, parseSounds(state["sounds"]))
     )
       throw Error(
         "Captured live design or sounds differ from the saved profile; review before promotion",
       );
     appearance = visualSettingsOf(
-      state["protocol"] === 23 || state["protocol"] === 24
+      state["protocol"] === 23 || state["protocol"] === 24 || state["protocol"] === 27
         ? state
         : { ...state, launcher: "current" },
     );
   }
   return {
-    version: 1,
+    version: 2,
     source: {
       profile: { path: sourceName(profilePath), sha256: sha256(profileText), text: profileText },
       session: {
@@ -138,6 +161,8 @@ export function createShippingSnapshot(
     },
     portrait,
     landscape,
+    portraitReverse,
+    landscapeReverse,
     sounds,
     appearance,
   };
@@ -145,8 +170,23 @@ export function createShippingSnapshot(
 export function parseShippingSnapshot(text: string): ShippingSnapshot {
   if (text.length > 65536) throw Error("Shipping snapshot too large");
   const value = record(JSON.parse(text));
-  exact(value, ["version", "source", "portrait", "landscape", "sounds", "appearance"]);
-  if (value["version"] !== 1) throw Error("Unsupported shipping snapshot");
+  const version = value["version"];
+  if (version !== 1 && version !== 2) throw Error("Unsupported shipping snapshot");
+  exact(
+    value,
+    version === 1
+      ? ["version", "source", "portrait", "landscape", "sounds", "appearance"]
+      : [
+          "version",
+          "source",
+          "portrait",
+          "landscape",
+          "portraitReverse",
+          "landscapeReverse",
+          "sounds",
+          "appearance",
+        ],
+  );
   const source = record(value["source"]);
   exact(source, ["profile", "session"]);
   const profile = record(source["profile"]);
@@ -180,10 +220,21 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   });
   const portrait = parseLayout(value["portrait"]);
   const landscape = parseLayout(value["landscape"]);
+  const sourceProfile = parseProfile(profile["text"]);
+  const portraitReverse =
+    version === 2
+      ? parseLayout(value["portraitReverse"])
+      : profileLayout(sourceProfile, "portrait-reverse");
+  const landscapeReverse =
+    version === 2
+      ? parseLayout(value["landscapeReverse"])
+      : profileLayout(sourceProfile, "landscape-reverse");
   const sounds = parseSounds(value["sounds"]);
   if (
     !equalLayout(portrait, original.portrait) ||
     !equalLayout(landscape, original.landscape) ||
+    !equalLayout(portraitReverse, original.portraitReverse) ||
+    !equalLayout(landscapeReverse, original.landscapeReverse) ||
     !equalSounds(sounds, original.sounds)
   )
     throw Error("Shipping snapshot differs from source profile");
@@ -193,27 +244,42 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   )
     throw Error("Shipping appearance differs from declared source");
   return {
-    version: 1,
+    version: 2,
     source: source as ShippingSnapshot["source"],
     portrait,
     landscape,
+    portraitReverse,
+    landscapeReverse,
     sounds,
     appearance,
   };
 }
 export function completeShippingProfile(
   snapshot: ShippingSnapshot,
-): Extract<Profile, { version: 20 }> {
+): Extract<Profile, { version: 21 }> {
   const source = parseProfile(snapshot.source.profile.text);
-  if (source.version !== 18 && source.version !== 19 && source.version !== 20)
+  if (
+    source.version !== 18 &&
+    source.version !== 19 &&
+    source.version !== 20 &&
+    source.version !== 21
+  )
     throw Error("Unsupported shipping profile source");
-  return { ...source, version: 20, ...snapshot.appearance };
+  return {
+    ...source,
+    version: 21,
+    portraitReverse: snapshot.portraitReverse,
+    landscapeReverse: snapshot.landscapeReverse,
+    ...snapshot.appearance,
+  } as Extract<Profile, { version: 21 }>;
 }
 function validateShippingProfile(profile: Profile, snapshot: ShippingSnapshot): void {
   if (
-    (profile.version !== 19 && profile.version !== 20) ||
+    (profile.version !== 20 && profile.version !== 21) ||
     !equalLayout(profileLayout(profile, "portrait"), snapshot.portrait) ||
     !equalLayout(profileLayout(profile, "landscape"), snapshot.landscape) ||
+    !equalLayout(profileLayout(profile, "portrait-reverse"), snapshot.portraitReverse) ||
+    !equalLayout(profileLayout(profile, "landscape-reverse"), snapshot.landscapeReverse) ||
     !equalSounds(profileSounds(profile), snapshot.sounds) ||
     !equalVisualSettings(profileVisualSettings(profile), snapshot.appearance)
   )
@@ -253,7 +319,40 @@ function layoutKotlin(layout: Layout): string {
 }
 export function generateKotlin(snapshot: ShippingSnapshot): string {
   const { appearance } = snapshot;
-  return `// Generated by android/configurator/src/shipping.ts. Regenerate; do not edit.\npackage com.arthack.agentvoice\n\nimport androidx.compose.ui.unit.dp\n\ninternal data class ShippingLayout(\n    val placement: PersonaPlacement,\n    val design: PreviewDesign,\n    val halo: PreviewHalo,\n    val spirit: PreviewSpirit,\n    val personaSide: String,\n    val horizontalOffsetDp: Int,\n)\n\ninternal object ShippingDesign {\n    const val profileSource = ${kotlinString(snapshot.source.profile.path)}\n    const val profileSha256 = ${kotlinString(snapshot.source.profile.sha256)}\n    const val sessionSha256 = ${kotlinString(snapshot.source.session.valuesSha256)}\n    val portrait = ${layoutKotlin(snapshot.portrait)}\n    val landscape = ${layoutKotlin(snapshot.landscape)}\n    val sounds = ${kotlinConstructor("PreviewSounds", snapshot.sounds)}\n    val icons = ${kotlinConstructor("PreviewIcons", appearance.icons)}\n    const val launcher = ${kotlinString(appearance.launcher)}\n    const val theme = ${kotlinString(appearance.theme)}\n    const val mutedPresence = ${kotlinString(appearance.mutedPresence)}\n    const val presenceScope = ${kotlinString(appearance.presenceScope)}\n    val mutedTuning = ${kotlinConstructor("PreviewMutedTuning", appearance.mutedTuning)}\n    const val showPushToTalk = ${appearance.showPushToTalk}\n}\n`;
+  return [
+    "// Generated by android/configurator/src/shipping.ts. Regenerate; do not edit.",
+    "package com.arthack.agentvoice",
+    "",
+    "import androidx.compose.ui.unit.dp",
+    "",
+    "internal data class ShippingLayout(",
+    "    val placement: PersonaPlacement,",
+    "    val design: PreviewDesign,",
+    "    val halo: PreviewHalo,",
+    "    val spirit: PreviewSpirit,",
+    "    val personaSide: String,",
+    "    val horizontalOffsetDp: Int,",
+    ")",
+    "",
+    "internal object ShippingDesign {",
+    `    const val profileSource = ${kotlinString(snapshot.source.profile.path)}`,
+    `    const val profileSha256 = ${kotlinString(snapshot.source.profile.sha256)}`,
+    `    const val sessionSha256 = ${kotlinString(snapshot.source.session.valuesSha256)}`,
+    `    val portrait = ${layoutKotlin(snapshot.portrait)}`,
+    `    val landscape = ${layoutKotlin(snapshot.landscape)}`,
+    `    val portraitReverse = ${layoutKotlin(snapshot.portraitReverse)}`,
+    `    val landscapeReverse = ${layoutKotlin(snapshot.landscapeReverse)}`,
+    `    val sounds = ${kotlinConstructor("PreviewSounds", snapshot.sounds)}`,
+    `    val icons = ${kotlinConstructor("PreviewIcons", appearance.icons)}`,
+    `    const val launcher = ${kotlinString(appearance.launcher)}`,
+    `    const val theme = ${kotlinString(appearance.theme)}`,
+    `    const val mutedPresence = ${kotlinString(appearance.mutedPresence)}`,
+    `    const val presenceScope = ${kotlinString(appearance.presenceScope)}`,
+    `    val mutedTuning = ${kotlinConstructor("PreviewMutedTuning", appearance.mutedTuning)}`,
+    `    const val showPushToTalk = ${appearance.showPushToTalk}`,
+    "}",
+    "",
+  ].join("\n");
 }
 function iconResources(family: string): string[] {
   if (family === "current") return [];

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { equalSharedAppearance } from "./appearance.ts";
+import type { LayoutCapture } from "./capture.ts";
 import { iconPreviewFiles } from "./icons.ts";
 import { saveProfile } from "./profile.ts";
 import {
@@ -10,7 +11,7 @@ import {
   equalVisualSettings,
   exact,
   integer,
-  layoutOf,
+  orientations,
   type Phone,
   type Profile,
   parseOrientationFence,
@@ -22,13 +23,19 @@ import {
   profileVisualSettings,
   record,
   sameOrientation,
+  stateLayouts,
   visualSettingsOf,
 } from "./protocol.ts";
 import { equalSounds } from "./sounds.ts";
 
 export async function serveConfigurator(
   phone: Phone,
-  options: { port: number; device: string; saveTo: string },
+  options: {
+    port: number;
+    device: string;
+    saveTo: string;
+    capture?: (signal: AbortSignal) => Promise<LayoutCapture>;
+  },
 ) {
   const token = randomBytes(24).toString("hex");
   const prefix = `/${token}/`;
@@ -41,6 +48,9 @@ export async function serveConfigurator(
   const script = await bundle.outputs[0].text();
   let saved: Profile | null = null;
   let mutating = false;
+  let latestCapture: LayoutCapture | undefined;
+  let captureTask: Promise<LayoutCapture> | undefined;
+  const captureAbort = new AbortController();
   const previewFiles = new Set(iconPreviewFiles());
   const headers = {
     "Cache-Control": "no-store",
@@ -50,6 +60,7 @@ export async function serveConfigurator(
       "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
   };
   const status = () => ({
+    captureAvailable: options.capture !== undefined,
     connected: phone.connected,
     reconnecting: phone.reconnecting ?? false,
     generation: phone.generation ?? 1,
@@ -64,6 +75,7 @@ export async function serveConfigurator(
     hostname: "127.0.0.1",
     port: options.port,
     maxRequestBodySize: 8192,
+    idleTimeout: 120,
     async fetch(request) {
       const origin = `http://127.0.0.1:${server.port}`;
       const url = new URL(request.url);
@@ -110,6 +122,17 @@ export async function serveConfigurator(
           );
         }
         if (path === "state") return json(status());
+        const framePath =
+          /^capture\/([a-f0-9]{24})\/(portrait|landscape|portrait-reverse|landscape-reverse)\.png$/.exec(
+            path,
+          );
+        if (framePath && latestCapture && latestCapture.id === framePath[1]) {
+          const frame = latestCapture.frames.find((item) => item.orientation === framePath[2]);
+          if (frame)
+            return new Response(new Uint8Array(frame.png), {
+              headers: { ...headers, "Content-Type": "image/png" },
+            });
+        }
         return json({ error: "Not found" }, 404);
       }
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -123,7 +146,8 @@ export async function serveConfigurator(
         path !== "save" &&
         path !== "icon-credits" &&
         path !== "connection-preview" &&
-        path !== "reset-production"
+        path !== "reset-production" &&
+        path !== "capture-layouts"
       )
         return json({ error: "Not found" }, 404);
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
@@ -209,6 +233,28 @@ export async function serveConfigurator(
         );
       mutating = true;
       try {
+        if (path === "capture-layouts") {
+          if (!options.capture)
+            return json({ error: "Capture is unavailable for this target." }, 409);
+          if (input["revision"] !== phone.state.revision)
+            return json({ error: "Preview changed. Review it before capturing." }, 409);
+          captureTask = options.capture(captureAbort.signal);
+          latestCapture = await captureTask;
+          return json({
+            ...status(),
+            capture: {
+              id: latestCapture.id,
+              createdAt: latestCapture.createdAt,
+              restored: latestCapture.restored,
+              frames: latestCapture.frames.map(({ orientation, width, height }) => ({
+                orientation,
+                width,
+                height,
+                url: `${prefix}capture/${latestCapture!.id}/${orientation}.png`,
+              })),
+            },
+          });
+        }
         if (path === "preview")
           await phone.request({
             method: "preview",
@@ -254,13 +300,10 @@ export async function serveConfigurator(
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
-          const expected = layoutOf(phone.state);
+          const expectedLayouts = stateLayouts(phone.state);
           const expectedSounds = { ...phone.state.sounds };
           const expectedAppearance = visualSettingsOf(phone.state);
           const expectedShared = structuredClone(phone.state.sharedAppearance);
-          const expectedOther = layoutOf(phone.state.otherLayout);
-          const expectedOrientation = phone.state.orientation;
-          const otherOrientation = expectedOrientation === "portrait" ? "landscape" : "portrait";
           const reply = await phone
             .request({
               method: "save",
@@ -275,12 +318,14 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 20 ||
+            profile.version !== 21 ||
             !equalVisualSettings(profileVisualSettings(profile), expectedAppearance) ||
             !equalSounds(profileSounds(profile), expectedSounds) ||
             !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
-            !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
-            !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
+            orientations.some(
+              (orientation) =>
+                !equalLayout(profileLayout(profile, orientation), expectedLayouts[orientation]),
+            )
           )
             throw Error("Phone saved different settings. Review the preview.");
           try {
@@ -310,5 +355,13 @@ export async function serveConfigurator(
       return json({ error: "Configurator request failed" }, 500);
     },
   });
-  return { server, url: `http://127.0.0.1:${server.port}${prefix}` };
+  return {
+    server,
+    url: `http://127.0.0.1:${server.port}${prefix}`,
+    async close() {
+      captureAbort.abort();
+      await captureTask?.catch(() => undefined);
+      await server.stop(true);
+    },
+  };
 }
