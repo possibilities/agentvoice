@@ -5,6 +5,7 @@ import { defaultMutedTuning } from "../src/muted-presence.ts";
 import {
   defaultLandscapeLayout,
   defaultSharedAppearance,
+  defaultVisualSettings,
   type PhoneState,
 } from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
@@ -22,7 +23,9 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 21,
+    protocol: 22,
+    savedAppearance: defaultVisualSettings(),
+    defaultAppearance: defaultVisualSettings(),
     icons: { channels: "current", push: "current" },
     showPushToTalk: true,
     sounds: defaultSounds(),

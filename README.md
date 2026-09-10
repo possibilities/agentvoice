@@ -121,7 +121,9 @@ The first [native Android app](android/README.md) implements this authenticated
 client API directly, with a Compose voice screen, private device-grant import,
 client-owned WebRTC and foreground call ownership. It is a development build;
 on-device native audio acceptance and release distribution remain pending.
-The debug studio also auditions [Kenney CC0 switch sound families](android/third-party/switch-sounds/README.md).
+The [adopted design profile](android/design/shipping-profile.json) supplies shipping defaults;
+the retained debug studio can audition and promote future designs, including
+[Kenney CC0 switch sound families](android/third-party/switch-sounds/README.md).
 See [Design Studio icon credits](android/third-party/icons/README.md) and
 [Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
 for creator notices, code/runtime licenses and the external animation's license evidence.

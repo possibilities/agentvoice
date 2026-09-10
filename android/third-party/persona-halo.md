@@ -52,12 +52,12 @@ one-second effective duration. Rive 11.12 adds the metadata instance to the
 artboard's owned dependencies; artboard teardown releases it.
 The transform scales the whole native view, including the outer rings.
 
-AgentVoice modification, 2026-09-09: the **Contained Halo** debug variant derives
+AgentVoice modification, 2026-09-09: the **Contained Halo** variant derives
 modified runtime bytes in memory from the verified original asset. It adjusts
 listening rings and their pulse inward, replaces elastic easing with cubic
 easing, and adds adjustable speaking/idle motion and per-state colors. These
 are AgentVoice modifications, not an upstream asset release. The bundled
-original `.riv` and production `PersonaHalo.kt` remain unchanged; this variant
+original `.riv` and Original renderer remain unchanged; this variant
 does not supply or claim to be the original editable `.rev` source.
 
 ## Runtime and packaged notices
@@ -75,5 +75,6 @@ also acquires Rive's audio engine; this visual uses the native view API instead.
 The original AI Elements notice, full Apache-2.0 text and full Rive MIT license
 remain in `app/src/main/assets/notices` and are packaged in both APKs.
 `Persona-Halo-NOTICE.txt` separately records asset provenance, the dated
-AgentVoice modification and the asset-license evidence boundary. Including
-that notice in the release APK does not include the debug-only variant there.
+AgentVoice modification and the asset-license evidence boundary. The adopted
+shipping profile now uses Contained in the release app, with its selected tuning
+applied in memory. The studio retains the Original comparison.

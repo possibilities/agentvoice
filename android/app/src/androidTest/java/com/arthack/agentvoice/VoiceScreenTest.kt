@@ -11,6 +11,16 @@ import org.junit.Test
 
 class VoiceScreenTest {
     @get:Rule val compose = createComposeRule()
+    private val cues = mutableListOf<PreviewSwitchCue>()
+    private val output = object : PreviewSwitchOutput {
+        override fun play(family: String, cue: PreviewSwitchCue, gain: Float): Boolean {
+            assertEquals(ShippingDesign.sounds.family, family)
+            assertEquals(ShippingDesign.sounds.volumePercent / 100f, gain)
+            cues.add(cue)
+            return true
+        }
+        override fun stop() { }
+    }
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
 
@@ -18,8 +28,8 @@ class VoiceScreenTest {
         var presses = 0
         var releases = 0
         compose.setContent {
-            VoiceTheme { VoiceScreen(ready, true, start = {}, stop = {}, importGrant = {}, mute = {},
-                hold = { presses++ }, release = { releases++ }, preview = true) }
+            VoiceTheme { VoiceScreen(ready, true, soundOutput = output, start = {}, stop = {}, importGrant = {}, mute = {},
+                hold = { presses++ }, release = { releases++ }) }
         }
         compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
         compose.runOnIdle { assertEquals(1, presses); assertEquals(0, releases) }
@@ -36,8 +46,8 @@ class VoiceScreenTest {
         var ui by mutableStateOf(ready)
         var presses = 0
         compose.setContent {
-            VoiceTheme { VoiceScreen(ui, true, start = {}, stop = {}, importGrant = {}, mute = {},
-                hold = { presses++ }, release = {}, preview = true) }
+            VoiceTheme { VoiceScreen(ui, true, soundOutput = output, start = {}, stop = {}, importGrant = {}, mute = {},
+                hold = { presses++ }, release = {}) }
         }
         val before = compose.onNodeWithTag("hold-to-talk").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle { ui = ready.copy(canHold = false, micMuted = false, micOpen = true) }
@@ -49,16 +59,51 @@ class VoiceScreenTest {
         var target: String? = null
         var ended = false
         compose.setContent {
-            VoiceTheme { VoiceScreen(ready, true, start = {}, stop = { ended = true }, importGrant = {},
-                mute = { target = it }, hold = {}, release = {}, preview = true) }
+            VoiceTheme { VoiceScreen(ready, true, soundOutput = output, start = {}, stop = { ended = true }, importGrant = {},
+                mute = { target = it }, hold = {}, release = {}) }
         }
-        compose.onNodeWithTag("connection-status").assertContentDescriptionEquals("Connection")
+        compose.onNodeWithTag("voice-screen")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Connected"))
-        compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("YOU microphone").performTouchInput { click() }
+        compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("HUMAN microphone").performTouchInput { click() }
         compose.runOnIdle { assertEquals("mic", target) }
         compose.onNodeWithTag("speaker-mute").assertContentDescriptionEquals("AGENT speaker").performTouchInput { click() }
         compose.runOnIdle { assertEquals("speaker", target) }
-        compose.onNodeWithTag("end-call").assertContentDescriptionEquals("End call").performTouchInput { click() }
+        val end = compose.onNodeWithTag("voice-screen").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].single { it.label == "End call" }
+        compose.runOnIdle { end.action() }
         compose.runOnIdle { assertTrue(ended) }
+    }
+    @Test fun shippingFeedbackWaitsForAcknowledgedMuteAndPairsRealHoldRelease() {
+        var ui by mutableStateOf(ready)
+        compose.setContent {
+            VoiceTheme { VoiceScreen(ui, true, soundOutput = output, start = {}, stop = {}, importGrant = {},
+                mute = { ui = ui.copy(controlsPending = true) },
+                hold = { ui = ui.copy(holding = true, micOpen = true) },
+                release = { ui = ui.copy(holding = false, micOpen = false) }) }
+        }
+        compose.onNodeWithTag("mic-mute").performClick()
+        compose.runOnIdle { assertTrue(cues.isEmpty()); ui = ui.copy(controlsPending = false, micMuted = false, micOpen = true, canHold = false) }
+        compose.waitUntil { cues.size == 1 }
+        compose.runOnIdle { assertEquals(listOf(PreviewSwitchCue.ToggleOn), cues); ui = ready }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, cues.size) }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
+        compose.runOnIdle { assertEquals(PreviewSwitchCue.Down, cues.last()) }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { up() }
+        compose.runOnIdle { assertEquals(PreviewSwitchCue.Up, cues.last()) }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center); cancel() }
+        compose.runOnIdle { assertEquals(PreviewSwitchCue.Down, cues.last()) }
+    }
+
+    @Test fun setupRetainsExplicitStartImportAndSelectedCredits() {
+        var starts = 0
+        compose.setContent {
+            VoiceTheme { VoiceScreen(CallUi(), true, soundOutput = output,
+                start = { starts++ }, stop = {}, importGrant = {}, mute = {}, hold = {}, release = {}) }
+        }
+        compose.onNodeWithTag("start-voice").performClick()
+        compose.runOnIdle { assertEquals(1, starts); assertTrue(cues.isEmpty()) }
+        compose.onNodeWithTag("shipping-credits").performClick()
+        compose.onNodeWithText("Microphone and Volume by i cons", substring = true).assertExists()
+        compose.onNodeWithText("Done").performClick()
     }
 }

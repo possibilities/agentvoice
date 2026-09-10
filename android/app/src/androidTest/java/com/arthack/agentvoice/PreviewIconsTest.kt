@@ -37,7 +37,7 @@ class PreviewIconsTest {
         .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope)
         .put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json())
 
-    @Test fun auditionsSurviveRotationAndRestoreWithoutEnteringTheSavedProfile() = runBlocking {
+    @Test fun iconChoicesSurviveRotationAndPersistOnlyOnExplicitSave() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "icons-${UUID.randomUUID()}.json")
         val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
         suspend fun state() = withContext(Dispatchers.Main) { session.state }
@@ -74,10 +74,10 @@ class PreviewIconsTest {
                 .put("revision", selected.revision).put("orientation", selected.orientation)
                 .put("orientationEpoch", selected.orientationEpoch))
             val profile = JSONObject(reply.getString("profile"))
-            assertEquals(18, profile.getInt("version"))
-            assertFalse(profile.has("icons"))
+            assertEquals(19, profile.getInt("version"))
+            assertEquals(selected.icons, decodePreviewIcons(profile.getJSONObject("icons")))
             assertEquals(selected.icons, state().icons)
-            assertEquals(21, reply.getJSONObject("state").getInt("protocol"))
+            assertEquals(22, reply.getJSONObject("state").getInt("protocol"))
         } finally { file.delete() }
     }
 

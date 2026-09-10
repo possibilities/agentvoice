@@ -214,6 +214,12 @@ read [the Android implementation boundaries](../android/README.md#implementation
 before changing it. The debug-only host [design studio](../android/configurator/README.md)
 owns synthetic preview controls and profiles. Its saved design choices are
 exploratory and must not silently become production layout or defaults.
+The explicitly adopted baseline lives in `android/design/shipping-profile.json`;
+`shipping.ts promote` generates constants and selected release assets from a complete
+profile. Gradle checks drift. Reusable renderers live in main and consume real
+`CallUi` in production; the bridge, synthetic session and alternative asset library
+remain debug/host only. Save includes every visual choice, while runtime rehearsal
+state stays outside profiles. See the Android README for promotion and APK audits.
 
 ## Voice recording and attachment
 

@@ -1,6 +1,8 @@
 # Design Studio icon auditions
 
-These assets are debug-only comparisons, not adopted production defaults. The
+The complete library remains available to the debug studio. The locked shipping
+profile selects i cons Microphone 856601 / Volume 974802, with the original PTT
+symbol. Release bundles only the selected pair and its live/muted adaptations. The
 channel pair changes together across Rockers and center indicators; PTT can keep
 the current symbol, use the original Contact, or follow the selected microphone.
 The installed launcher remains unchanged; its original alternatives appear only
@@ -24,7 +26,8 @@ in the browser gallery.
 
 The studio exposes source/license links and **Credits on phone**. That action
 opens accessible, selectable linked credits without adding a permanent header.
-Notices are packaged in the debug APK. Moving credit text out of an icon is not
+The selected source/license/modification credits and full terms are also
+packaged in release and reachable from the app’s Credits action. Moving credit text out of an icon is not
 removing attribution: it remains in those credits and beside the source files.
 No payment, attribution waiver or exclusive trademark right is claimed.
 

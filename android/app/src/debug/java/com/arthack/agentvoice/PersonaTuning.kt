@@ -9,87 +9,6 @@ import org.json.JSONObject
 import java.io.File
 import kotlin.math.roundToInt
 
-internal val previewConnections = setOf("connected", "connecting", "disconnected")
-internal val previewModes = setOf("speaking", "listening", "idle")
-internal fun JSONObject.fields(): Set<String> = keys().asSequence().toSet()
-
-internal fun decodePersonaTuning(json: String): PersonaPlacement {
-    val data = JSONObject(json)
-    fun scale(values: JSONObject, key: String): Float {
-        val value = values.getDouble(key).toFloat()
-        require(value.isFinite())
-        return value.coerceIn(.35f, 1.2f)
-    }
-    val placement = when (data.getInt("version")) {
-        // Loading never rewrites the original choice; migration happens only on Save.
-        1 -> scale(data, "scaleMultiplier").let { PersonaPlacement(it, it, it) }
-        2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 -> data.getJSONObject("scaleMultipliers").let {
-            PersonaPlacement(scale(it, "speaking"), scale(it, "listening"), scale(it, "idle"))
-        }
-        else -> error("Unsupported Persona tuning version")
-    }
-    return if (data.has("verticalOffsetDp")) placement.copy(offsetY = decodePreviewOffset(data.get("verticalOffsetDp")).dp)
-        else placement
-}
-
-internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDesign = PreviewDesign(), halo: PreviewHalo = PreviewHalo(), spirit: PreviewSpirit = PreviewSpirit(), landscape: PreviewLayout = PreviewLayout(), personaSide: String = "left", horizontalOffsetDp: Int = 0, appearanceOverrides: Set<String> = emptySet(),
-    sharedAppearance: PreviewSharedAppearance = PreviewSharedAppearance.from(PreviewLayout(placement, design, halo, spirit, personaSide)),
-    sounds: PreviewSounds = PreviewSounds()): String {
-    fun percent(scale: Float) = (scale * 100).roundToInt() / 100.0
-    return JSONObject()
-        .put("version", 18).put("sounds", sounds.json())
-        .put("horizontalOffsetDp", horizontalOffsetDp).put("appearanceOverrides", appearanceOverrides.appearanceJson())
-        .put("sharedAppearance", sharedAppearance.json())
-        .put("landscape", landscape.copy(design = landscape.design.copy(spacing = design.spacing)).json()).put("personaSide", personaSide)
-        .put("spirit", spirit.json())
-        .put("halo", halo.json())
-        .put("design", design.json())
-        .put("scaleMultipliers", JSONObject()
-            .put("speaking", percent(placement.speakingScale))
-            .put("listening", percent(placement.listeningScale))
-            .put("idle", percent(placement.idleScale)))
-        .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
-        .put("connectedArtboardScale", 1.9)
-        .put("disconnectedArtboardScale", 1.5)
-        .put("savedAtEpochMs", System.currentTimeMillis())
-        .toString(2)
-}
-
-internal fun savePersonaTuning(file: File, profile: String) {
-    val target = AtomicFile(file)
-    val stream = target.startWrite()
-    try {
-        stream.write(profile.toByteArray(Charsets.UTF_8))
-        target.finishWrite(stream)
-    } catch (failure: Throwable) {
-        target.failWrite(stream)
-        throw failure
-    }
-}
-
-internal fun PersonaPlacement.scalesJson() = JSONObject()
-    .put("speaking", (speakingScale * 100).roundToInt())
-    .put("listening", (listeningScale * 100).roundToInt())
-    .put("idle", (idleScale * 100).roundToInt())
-
-internal fun decodePreviewScales(data: JSONObject): PersonaPlacement {
-    require(data.fields() == previewModes)
-    fun scale(key: String): Float {
-        val number = data.get(key)
-        require(number is Number && number.toDouble() % 1.0 == 0.0 && number.toDouble() in 35.0..120.0)
-        return number.toFloat() / 100f
-    }
-    return PersonaPlacement(scale("speaking"), scale("listening"), scale("idle"))
-}
-
-internal fun decodePreviewOffset(value: Any): Int {
-    require(value is Number && value.toDouble() % 1.0 == 0.0 && value.toDouble() in -200.0..200.0)
-    return value.toInt()
-}
-
-internal fun decodePreviewPlacement(data: JSONObject): PersonaPlacement =
-    decodePreviewScales(data.getJSONObject("scales")).copy(offsetY = decodePreviewOffset(data.get("verticalOffsetDp")).dp)
-
 internal data class PersonaPreviewState(
     val placement: PersonaPlacement = defaultPortraitLayout().placement,
     val saved: PersonaPlacement = placement,
@@ -127,10 +46,15 @@ internal data class PersonaPreviewState(
     val icons: PreviewIcons = PreviewIcons(),
     val sounds: PreviewSounds = PreviewSounds(),
     val savedSounds: PreviewSounds = sounds,
+    val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons),
 ) {
     init { require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
         require(horizontalOffsetDp in -200..200 && savedHorizontalOffsetDp in -200..200)
         require(appearanceOverrides.all { it in previewAppearanceGroups } && savedAppearanceOverrides.all { it in previewAppearanceGroups }) }
+    fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons)
+    fun withAppearance(value: DesignAppearance) = copy(theme = value.theme, mutedPresence = value.mutedPresence,
+        mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk, icons = value.icons)
+
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp, appearanceOverrides)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide, savedHorizontalOffsetDp, savedAppearanceOverrides)
     fun rotate(next: String): PersonaPreviewState {
@@ -172,9 +96,10 @@ internal data class PersonaPreviewState(
             otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 21).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
-        .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", PreviewSounds().json())
-        .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", 0)
+    fun json(): JSONObject = JSONObject().put("protocol", 22).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+        .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
+        .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
+        .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
         .put("appearanceOverrides", appearanceOverrides.appearanceJson()).put("savedAppearanceOverrides", savedAppearanceOverrides.appearanceJson())
         .put("sharedAppearance", sharedAppearance.json()).put("savedSharedAppearance", savedSharedAppearance.json())
         .put("defaultSharedAppearance", PreviewSharedAppearance.from(defaultPortraitLayout()).json())
@@ -217,7 +142,7 @@ internal data class PersonaPreviewState(
 
 internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, savedDesign: PreviewDesign = PreviewDesign(), savedHalo: PreviewHalo = PreviewHalo(), savedSpirit: PreviewSpirit = PreviewSpirit(), savedLandscape: PreviewLayout = PreviewLayout(), savedPortraitSide: String = "left", savedHorizontalOffsetDp: Int = 0, savedOverrides: Set<String> = emptySet(),
     savedShared: PreviewSharedAppearance = PreviewSharedAppearance.from(PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPortraitSide)),
-    savedSounds: PreviewSounds = PreviewSounds()): PersonaPreviewState {
+    savedSounds: PreviewSounds = PreviewSounds(), savedAppearance: DesignAppearance = DesignAppearance()): PersonaPreviewState {
     val mode = data.getString("mode")
     val revision = data.get("revision")
     require(mode in previewModes && revision is Int && revision >= 0)
@@ -229,10 +154,14 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..21)
+    require(protocol in 1..22)
+    if (protocol >= 22) {
+        decodeDesignAppearance(data.getJSONObject("savedAppearance"))
+        decodeDesignAppearance(data.getJSONObject("defaultAppearance"))
+    }
     if (protocol >= 18) {
         decodePreviewSounds(data.getJSONObject("savedSounds"))
-        require(decodePreviewSounds(data.getJSONObject("defaultSounds")) == PreviewSounds())
+        decodePreviewSounds(data.getJSONObject("defaultSounds"))
     }
     val restored = PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
         mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
@@ -258,7 +187,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         icons = if (protocol >= 21) decodePreviewIcons(data.getJSONObject("icons")) else PreviewIcons(),
         showPushToTalk = if (protocol >= 19) decodePreviewBoolean(data.get("showPushToTalk")) else true,
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
-        savedSounds = savedSounds)
+        savedSounds = savedSounds, savedAppearance = savedAppearance)
     val portrait = if (orientation == "portrait") restored.activeLayout() else restored.otherLayout
     val landscape = if (orientation == "landscape") restored.activeLayout() else restored.otherLayout
     val shared = if (protocol >= 17) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = protocol <= 18) else PreviewSharedAppearance.from(portrait)
@@ -306,9 +235,9 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             }
             val portrait = if (selected.orientation == "portrait") selected.activeLayout() else selected.otherLayout
             val landscape = if (selected.orientation == "landscape") selected.activeLayout() else selected.otherLayout
-            profile = encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit, landscape, portrait.personaSide, portrait.horizontalOffsetDp, portrait.appearanceOverrides, selected.sharedAppearance, selected.sounds)
+            profile = encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit, landscape, portrait.personaSide, portrait.horizontalOffsetDp, portrait.appearanceOverrides, selected.sharedAppearance, selected.sounds, selected.appearance())
             savePersonaTuning(selection, profile)
-            withContext(Dispatchers.Main) { state = state.withSavedLayouts(portrait, landscape, selected.sharedAppearance).copy(savedSounds = selected.sounds) }
+            withContext(Dispatchers.Main) { state = state.withSavedLayouts(portrait, landscape, selected.sharedAppearance).copy(savedSounds = selected.sounds, savedAppearance = selected.appearance()) }
         }
         return withContext(Dispatchers.Main) {
             when (method) {

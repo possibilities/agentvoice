@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val verifyShippingDesign by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("bun", "android/configurator/src/shipping.ts", "generate", "--check")
+}
+tasks.named("preBuild") { dependsOn(verifyShippingDesign) }
+
 android {
     namespace = "com.arthack.agentvoice"
     compileSdk = 36

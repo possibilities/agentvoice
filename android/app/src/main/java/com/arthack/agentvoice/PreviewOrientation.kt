@@ -27,17 +27,10 @@ internal data class PreviewLayout(
         .put("horizontalOffsetDp", horizontalOffsetDp).put("appearanceOverrides", appearanceOverrides.appearanceJson())
 }
 
-/** Provisional studio defaults never change production PersonaPlacement or legacy profile omissions. */
-internal fun defaultPortraitLayout() = PreviewLayout(
-    placement = PersonaPlacement(.78f, .56f, .78f, (-22).dp),
-    design = PreviewDesign(controlsHeightDp = 387, holdSharePercent = 40.9,
-        traces = PreviewTraces("parallel", 130, 175, 0), spacing = PreviewSpacing(paddingDp = 16)),
-    halo = PreviewHalo(variant = "contained"),
-    spirit = PreviewSpirit(persona = "follow"),
-)
-
-internal fun defaultLandscapeLayout() = PreviewSharedAppearance.from(defaultPortraitLayout()).applyTo(
-    PreviewLayout(design = PreviewDesign(spacing = PreviewSpacing(paddingDp = 16))))
+/** Studio reset baseline follows the explicitly promoted shipping snapshot. */
+internal fun defaultPortraitLayout() = ShippingDesign.portrait.previewLayout()
+internal fun defaultLandscapeLayout() = ShippingDesign.landscape.previewLayout()
+internal fun ShippingLayout.previewLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp)
 
 internal fun defaultPreviewLayout(orientation: String): PreviewLayout {
     require(orientation in previewOrientations)
@@ -61,14 +54,14 @@ internal fun decodeLandscapeLayout(json: String): PreviewLayout = decodePreviewP
 internal fun decodeStoredLandscapeLayout(json: String): PreviewLayout {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..18)
+    require(version in 1..19)
     return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else PreviewLayout()
 }
 
 internal fun decodePortraitSide(json: String): String {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..18)
+    require(version in 1..19)
     return (if (version >= 11) data.getString("personaSide") else "left")
         .also { require(it in previewPersonaSides) }
 }

@@ -46,10 +46,11 @@ internal fun PreviewStudioScreen(
     onReleaseCompleted: () -> Unit = onRelease,
     showPushToTalk: Boolean = true,
     icons: PreviewIcons = PreviewIcons(),
+    handleBack: Boolean = true,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack)
     }
 }
 
@@ -58,10 +59,10 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, handleBack: Boolean,
 ) {
     val theme = LocalPreviewTheme.current
-    androidx.activity.compose.BackHandler(onBack = onExit)
+    androidx.activity.compose.BackHandler(enabled = handleBack, onBack = onExit)
     val currentRelease by rememberUpdatedState(onRelease)
     DisposableEffect(Unit) { onDispose { currentRelease() } }
     val motionAllowed = previewSpiritMotionAllowed()

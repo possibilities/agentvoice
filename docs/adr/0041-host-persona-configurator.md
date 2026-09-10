@@ -563,3 +563,36 @@ and pointers. Only viewport/shared-padding bounds cap rendered extent. The
 old section gap no longer limits either orientation and its control is hidden;
 retain its stored value for compatibility. Narrow faces stack captions and
 short faces reduce glyph height, preserving ordinary-sized styling.
+
+### Adopted shipping profile and complete Save
+
+The operator subsequently locked the saved S22 design and explicitly requested
+that every Studio choice survive Save and become the shipped baseline. This
+supersedes earlier session-only treatment of icon choices, theme, center indicator
+tuning/scope, and push-to-talk visibility. Protocol 22 carries current, saved and
+adopted defaults; profile 19 persists all those visual choices alongside both
+layouts, common/override appearance and switch sounds. Connection, live gates,
+held pointers and synthetic activity remain runtime state, never preferences.
+
+The canonical `android/design/shipping-profile.json` is complete and independently
+loadable. Its provenance receipt preserves original saved bytes and the separately
+captured choices that older Save omitted. An explicit promotion command validates
+and emits typed shipping constants plus selected release assets. Ordinary builds
+check deterministic regeneration instead of reading an ignored device file. A
+future Studio profile can be adopted through the same reviewable process.
+
+`VoiceScreen` now uses the shared Studio rendering components with real `CallUi`
+and audio levels. Main contains the reusable geometry, controls and Contained
+renderer; debug alone owns the bridge, synthetic session/activity and icon gallery
+providers. Release gets only selected icon variants and sound cues; shrinker
+output is checked for removal of profile/migration helpers and the APK is audited
+for absence of Studio entrypoints, alternate resources and profile JSON. Some
+small shared presentation branches remain to avoid a separate renderer fork.
+Selected creator/source/license/modification notices are packaged and linked from
+production Credits. Original Persona bytes and renderer behavior remain intact.
+
+Rotation now retains MainActivity while the shared relocation policy cancels any
+owned hold. Other recreation/background/transport teardown rules stay in force.
+Production UI verification uses controlled `CallUi` fixtures and acknowledged
+mute/hold semantics; it is not proof of spoken-call acoustic quality or a change
+to release-signing/distribution scope.

@@ -41,9 +41,11 @@ class PersonaPreviewActivity : ComponentActivity() {
         val portrait = loaded.portrait
         session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
             portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
-            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: PreviewSounds())
+            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: ShippingDesign.sounds)
+        val appearance = saved?.let { runCatching { decodeDesignAppearanceProfile(it) }.getOrNull() } ?: shippingAppearance()
+        session.state = session.state.withAppearance(appearance).copy(savedAppearance = appearance)
         savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance, session.state.savedSounds) }
+            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance, session.state.savedSounds, session.state.savedAppearance) }
         }
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))

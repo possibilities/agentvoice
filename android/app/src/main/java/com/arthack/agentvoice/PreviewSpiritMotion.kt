@@ -83,7 +83,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
         val phase = (seconds / 14f) % 1f
         val state = personaState(ui)
         fun normalized(level: Float) = if (level.isFinite()) sqrt((level / .3f).coerceIn(0f, 1f)) else 0f
-        val demo = syntheticSpiritEnergy(seconds)
+        val demo = if (activity == "voice") syntheticSpiritEnergy(seconds) else 0f
         val captureTarget = if (activity == "voice") { if (state == PersonaState.Listening) demo else 0f } else normalized(ui.inputLevel)
         val playbackTarget = if (activity == "voice") { if (state == PersonaState.Speaking) demo else 0f } else normalized(ui.outputLevel)
         capture = spiritEnvelope(capture, captureTarget, dt, ui.micOpen)

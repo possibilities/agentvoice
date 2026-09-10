@@ -1,11 +1,11 @@
 import { haloMotionFields } from "./halo.ts";
-import { defaultIcons } from "./icons.ts";
-import { type MutedTuningField, mutedTuningFields, resetMutedTuning } from "./muted-presence.ts";
-import { type PhoneState, type Preview, previewOf } from "./protocol.ts";
+import { type MutedTuningField, mutedTuningFields } from "./muted-presence.ts";
+import { type PhoneState, type Preview, previewOf, visualSettingsOf } from "./protocol.ts";
 import { type SpacingField, spacingFields } from "./spacing.ts";
 import { traceTipFields } from "./traces.ts";
 
 export type ResetTarget =
+  | "visual-settings"
   | "channel-icons"
   | "push-icon"
   | "sounds"
@@ -27,13 +27,16 @@ export type ResetTarget =
 export function resetPreview(current: Preview, defaults: PhoneState, target: ResetTarget): Preview {
   const next = previewOf(current);
   if (target === "muted-appearance") {
-    next.mutedTuning = resetMutedTuning(next.mutedTuning);
+    next.mutedTuning = { ...defaults.defaultAppearance.mutedTuning };
     return next;
   }
   if (target.startsWith("muted-")) {
     const field = target.slice("muted-".length) as MutedTuningField;
     if (mutedTuningFields.includes(field))
-      next.mutedTuning = resetMutedTuning(next.mutedTuning, field);
+      next.mutedTuning = {
+        ...next.mutedTuning,
+        [field]: defaults.defaultAppearance.mutedTuning[field],
+      };
     return next;
   }
   if (target.startsWith("trace-")) {
@@ -49,11 +52,13 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     return next;
   }
   switch (target) {
+    case "visual-settings":
+      return { ...next, ...visualSettingsOf(defaults.defaultAppearance) };
     case "channel-icons":
-      next.icons.channels = defaultIcons().channels;
+      next.icons.channels = defaults.defaultAppearance.icons.channels;
       break;
     case "push-icon":
-      next.icons.push = defaultIcons().push;
+      next.icons.push = defaults.defaultAppearance.icons.push;
       break;
     case "sounds":
       next.sounds = { ...defaults.defaultSounds };

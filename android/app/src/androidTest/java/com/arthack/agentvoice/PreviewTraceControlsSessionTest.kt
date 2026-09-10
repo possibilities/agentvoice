@@ -19,8 +19,9 @@ class PreviewTraceControlsSessionTest {
 
     @Test fun legacyProfilesAndSessionsGainJoinDefaultsAndSharedSpacingWithoutWriting() {
         val original = PersonaPreviewState(mutedPresence = "contacts", presenceScope = "always",
-            design = defaultPortraitLayout().design.copy(traces = PreviewTraces("splayed", 143, 230, 55, 72, 183)),
-            otherLayout = defaultLandscapeLayout().copy(appearanceOverrides = setOf("glow", "traces"), design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 60, 183, 61))))
+            placement = historicalPortraitLayout().placement, halo = historicalPortraitLayout().halo, spirit = historicalPortraitLayout().spirit,
+            design = historicalPortraitLayout().design.copy(traces = PreviewTraces("splayed", 143, 230, 55, 72, 183)),
+            otherLayout = historicalLandscapeLayout().copy(appearanceOverrides = setOf("glow", "traces"), design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 60, 183, 61))))
         val migratedOther = original.otherLayout.copy(design = original.otherLayout.design.copy(spacing = original.design.spacing))
         val migrated = original.copy(otherLayout = migratedOther, savedOtherLayout = migratedOther)
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "trace-legacy-${UUID.randomUUID()}.json")
@@ -33,7 +34,7 @@ class PreviewTraceControlsSessionTest {
             assertEquals(old, file.readText())
             val oldSession = original.json().withoutTraceJoinFields().put("protocol", 15)
             assertEquals(migrated, restorePersonaPreview(oldSession, original.saved, original.savedDesign,
-                original.savedHalo, original.savedSpirit, original.savedOtherLayout, original.savedPersonaSide, original.savedHorizontalOffsetDp, original.savedAppearanceOverrides, original.savedSharedAppearance))
+                original.savedHalo, original.savedSpirit, original.savedOtherLayout, original.savedPersonaSide, original.savedHorizontalOffsetDp, original.savedAppearanceOverrides, original.savedSharedAppearance, savedAppearance = original.savedAppearance))
             assertTrue(runCatching { decodePersonaDesign(JSONObject(old).put("version", 14).toString()) }.isFailure)
         } finally { file.delete() }
     }
@@ -69,14 +70,14 @@ class PreviewTraceControlsSessionTest {
             val returned = withContext(Dispatchers.Main) { session.state }
             assertEquals(portrait, returned.design)
             assertEquals(landscape, returned.otherLayout.design)
-            assertEquals(21, returned.json().getInt("protocol"))
+            assertEquals(22, returned.json().getInt("protocol"))
             assertEquals(returned, restorePersonaPreview(returned.json(), returned.saved, returned.savedDesign,
                 returned.savedHalo, returned.savedSpirit, returned.savedOtherLayout, returned.savedPersonaSide, returned.savedHorizontalOffsetDp, returned.savedAppearanceOverrides, returned.savedSharedAppearance))
             assertFalse(file.exists())
             val response = session.command(JSONObject().put("id", 2).put("method", "save").put("revision", returned.revision)
                 .put("orientation", returned.orientation).put("orientationEpoch", returned.orientationEpoch))
             val saved = response.getString("profile")
-            assertEquals(18, JSONObject(saved).getInt("version"))
+            assertEquals(19, JSONObject(saved).getInt("version"))
             assertEquals(portrait, decodePersonaDesign(saved))
             assertEquals(landscape, decodeLandscapeLayout(saved).design)
             assertEquals(saved, file.readText())

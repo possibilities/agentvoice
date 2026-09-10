@@ -82,7 +82,7 @@ internal fun CompactPersonaHalo(
     val bytes = source.getOrNull()
     if (bytes == null) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text("Contained Halo unavailable. Choose Original.", color = LocalPreviewTheme.current.palette.text, fontFamily = VoiceInk.type)
+            Text("Persona unavailable.", color = LocalPreviewTheme.current.palette.text, fontFamily = VoiceInk.type)
         }
         return
     }
@@ -116,7 +116,7 @@ internal fun CompactPersonaHalo(
     }
 }
 
-/** Debug-only Rive host; source loading and pointer behavior are fixed by its local XML. */
+/** Native Contained Rive host; source loading and pointer behavior are fixed by its local XML. */
 class CompactHaloAnimationView(context: Context, attrs: AttributeSet? = null) : RiveAnimationView(context, attrs) {
     private val revision = AtomicInteger(0)
     @Volatile private var motion = false

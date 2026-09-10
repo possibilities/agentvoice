@@ -1,0 +1,17 @@
+[
+  "android/app/src/main/assets/notices/Shipping-Icons-LICENSE.txt",
+  "android/app/src/main/assets/notices/Shipping-Icons-NOTICE.txt",
+  "android/app/src/main/assets/notices/Shipping-Sounds-LICENSE.txt",
+  "android/app/src/main/assets/notices/Shipping-Sounds-NOTICE.txt",
+  "android/app/src/main/java/com/arthack/agentvoice/ShippingDesign.kt",
+  "android/app/src/release/assets/switch-sounds/rocker-13-ptt-down.wav",
+  "android/app/src/release/assets/switch-sounds/rocker-13-ptt-up.wav",
+  "android/app/src/release/assets/switch-sounds/rocker-13-toggle-off.wav",
+  "android/app/src/release/assets/switch-sounds/rocker-13-toggle-on.wav",
+  "android/app/src/release/java/com/arthack/agentvoice/PreviewIcons.kt",
+  "android/app/src/release/java/com/arthack/agentvoice/SwitchSoundFamilies.kt",
+  "android/app/src/release/res/drawable/shipping_channel_mic.xml",
+  "android/app/src/release/res/drawable/shipping_channel_mic_muted.xml",
+  "android/app/src/release/res/drawable/shipping_channel_speaker.xml",
+  "android/app/src/release/res/drawable/shipping_channel_speaker_muted.xml"
+]

@@ -67,7 +67,7 @@ class PreviewSharedAppearanceSessionTest {
                 .put("orientation", joined.orientation).put("orientationEpoch", joined.orientationEpoch))
             val profile = reply.getString("profile")
             val decoded = decodePreviewProfileLayouts(profile)
-            assertEquals(18, JSONObject(profile).getInt("version"))
+            assertEquals(19, JSONObject(profile).getInt("version"))
             assertEquals(joined.activeLayout(), decoded.landscape)
             assertEquals(joined.otherLayout, decoded.portrait)
             assertEquals(joined.sharedAppearance, decoded.shared)

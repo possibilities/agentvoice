@@ -34,7 +34,9 @@ import {
   defaultLandscapeLayout,
   defaultPortraitLayout,
   defaultSharedAppearance,
+  defaultVisualSettings,
   equalLayout,
+  equalVisualSettings,
   layoutOf,
   mutedPresences,
   type Phone,
@@ -52,7 +54,9 @@ import {
   profileSharedAppearance,
   profileSounds,
   profileSpirit,
+  profileVisualSettings,
   sameOrientation,
+  visualSettingsOf,
 } from "../src/protocol.ts";
 import { resetPreview } from "../src/resets.ts";
 import { serveConfigurator } from "../src/server.ts";
@@ -78,7 +82,9 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 21,
+  protocol: 22,
+  savedAppearance: defaultVisualSettings(),
+  defaultAppearance: defaultVisualSettings(),
   icons: { channels: "current", push: "current" },
   showPushToTalk: true,
   sounds: defaultSounds(),
@@ -275,6 +281,7 @@ class FakePhone implements Phone {
       this.state = {
         ...this.state,
         savedSounds: { ...this.state.sounds },
+        savedAppearance: visualSettingsOf(this.state),
         savedHorizontalOffsetDp: this.state.horizontalOffsetDp,
         savedAppearanceOverrides: [...this.state.appearanceOverrides],
         savedSharedAppearance: structuredClone(this.state.sharedAppearance),
@@ -286,7 +293,11 @@ class FakePhone implements Phone {
         savedHalo: structuredClone(this.state.halo),
         savedSpirit: { ...this.state.spirit },
       };
-      const receipt = currentProfile(this.state);
+      const receipt = {
+        ...currentProfile(this.state),
+        version: 19 as const,
+        ...visualSettingsOf(this.state),
+      };
       if (this.wrongHiddenExtentReceipt) receipt.landscape.design.controlsWithoutPttDp++;
       if (this.wrongSoundsReceipt === "family") receipt.sounds.family = "rocker-13";
       if (this.wrongSoundsReceipt === "volumePercent") receipt.sounds.volumePercent++;
@@ -830,7 +841,7 @@ test("trace edits remain unsaved and exact version 18 Save snapshots the reviewe
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
@@ -964,7 +975,13 @@ test("browser updates one state and saves the exact phone receipt privately on h
   const saved = await response.json();
   expect(saved.hostSaved.scaleMultipliers.listening).toBe(0.52);
   expect(saved.hostSaved.verticalOffsetDp).toBe(-24);
-  expect(await readFile(saveTo, "utf8")).toBe(JSON.stringify(currentProfile(phone.state), null, 2));
+  expect(await readFile(saveTo, "utf8")).toBe(
+    JSON.stringify(
+      { ...currentProfile(phone.state), version: 19, ...visualSettingsOf(phone.state) },
+      null,
+      2,
+    ),
+  );
   expect((await stat(saveTo)).mode & 0o777).toBe(0o600);
   expect(phone.state.savedScales).toEqual(phone.state.scales);
   expect(phone.state.savedVerticalOffsetDp).toBe(-24);
@@ -1143,7 +1160,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -1325,7 +1342,7 @@ test("spirit is unsaved until exact version 18 Save and activity never enters th
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
@@ -1413,7 +1430,7 @@ test("independent layouts retain portrait choices and save both layouts from lan
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileLayout(saved, "portrait")).toEqual(layoutOf(portrait));
   expect(profileLayout(saved, "landscape")).toEqual(layoutOf(landscape));
   phone.rotate();
@@ -1582,7 +1599,7 @@ test("version 11 preserves both layouts and seeds only baseline spacing without 
   expect(() => parseProfile(JSON.stringify({ ...old, landscape: current.landscape }))).toThrow();
 });
 
-test("theme and muted presence are transient across layout switches, resets and explicit Save", async () => {
+test("theme and muted presence survive layout switches, resets and explicit Save", async () => {
   const { phone, post, saveTo } = await fixture();
   for (const theme of ["bright", "quiet", "grayscale"] as const)
     for (const mutedPresence of ["tide", "off"] as const) {
@@ -1601,10 +1618,10 @@ test("theme and muted presence are transient across layout switches, resets and 
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
-  expect(savedText).not.toContain('"theme"');
-  expect(savedText).not.toContain('"mutedPresence"');
-  expect(() => parseProfile(JSON.stringify({ ...saved, theme: "quiet" }))).toThrow();
-  expect(() => parseProfile(JSON.stringify({ ...saved, mutedPresence: "off" }))).toThrow();
+  expect(savedText).toContain('"theme"');
+  expect(savedText).toContain('"mutedPresence"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, theme: "quiet" }))).not.toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...saved, mutedPresence: "off" }))).not.toThrow();
   for (const invalid of [
     { theme: "dark" },
     { theme: undefined },
@@ -1759,7 +1776,7 @@ test("muted appearance requires exact bounded session fields before phone dispat
   expect(phone.calls).toHaveLength(0);
 });
 
-test("muted appearance survives rotation and Off while Save remains exactly profile 18", async () => {
+test("muted appearance survives rotation and Off and saves in profile19", async () => {
   const { phone, post, saveTo } = await fixture();
   const before = currentProfile(phone.state);
   const mutedTuning = {
@@ -1784,10 +1801,10 @@ test("muted appearance survives rotation and Off while Save remains exactly prof
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
-  expect(saved).toEqual(before);
-  expect(saved.version).toBe(18);
-  expect(savedText).not.toContain('"mutedTuning"');
-  expect(() => parseProfile(JSON.stringify({ ...saved, mutedTuning }))).toThrow();
+  expect(saved).toEqual({ ...before, version: 19, ...visualSettingsOf(phone.state) });
+  expect(saved.version).toBe(19);
+  expect(savedText).toContain('"mutedTuning"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, mutedTuning }))).not.toThrow();
   expect(() =>
     parseState({ ...phone.state, otherLayout: { ...phone.state.otherLayout, mutedTuning } }),
   ).toThrow();
@@ -1941,7 +1958,7 @@ test("shared unified padding and its reset preserve hidden legacy values and oth
   });
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileLayout(saved, "portrait").design.spacing).toEqual(phone.state.design.spacing);
   expect(profileLayout(saved, "landscape")).toEqual(phone.state.otherLayout);
   for (const spacing of [
@@ -2011,7 +2028,7 @@ test("center indicator styles and visibility scopes require exact valid session 
   expect(phone.calls).toHaveLength(count);
 });
 
-test("indicator style and scope persist across rotation, Off and appearance resets but never Save", async () => {
+test("indicator style and scope persist across rotation, Off, appearance resets and Save", async () => {
   const { phone, post, saveTo } = await fixture();
   const originalProfile = currentProfile(phone.state);
   const mutedTuning = {
@@ -2047,11 +2064,11 @@ test("indicator style and scope persist across rotation, Off and appearance rese
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
-  expect(saved).toEqual(originalProfile);
-  expect(saved.version).toBe(18);
-  expect(savedText).not.toContain('"presenceScope"');
-  expect(savedText).not.toContain('"mutedPresence"');
-  expect(() => parseProfile(JSON.stringify({ ...saved, presenceScope: "always" }))).toThrow();
+  expect(saved).toEqual({ ...originalProfile, version: 19, ...visualSettingsOf(phone.state) });
+  expect(saved.version).toBe(19);
+  expect(savedText).toContain('"presenceScope"');
+  expect(savedText).toContain('"mutedPresence"');
+  expect(() => parseProfile(JSON.stringify({ ...saved, presenceScope: "always" }))).not.toThrow();
   expect(() =>
     parseState({
       ...phone.state,
@@ -2206,7 +2223,7 @@ test("trace reach and fade save independently by orientation including hard ends
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileLayout(saved, "portrait").design.traces).toEqual(portrait);
   expect(profileLayout(saved, "landscape").design.traces).toEqual(landscape);
 });
@@ -2442,7 +2459,7 @@ test("debug reply framing accepts16383 bytes and rejects16384 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(16383 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(21);
+  expect((await pending).state.protocol).toBe(22);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });
@@ -2582,14 +2599,14 @@ test("only exact sound receipts write the host profile and captured sound choice
   phone.changeSoundsDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileSounds(saved)).toEqual(captured);
   expect(phone.state.sounds).toEqual({ family: "off", volumePercent: 0 });
   expect(phone.state.savedSounds).toEqual(captured);
   expect(phone.state.orientation).toBe("landscape");
 });
 
-test("push-to-talk visibility is a strict shared session boolean without saved or layout fields", async () => {
+test("push-to-talk visibility is a strict saved shared boolean without layout fields", async () => {
   const { phone, post, saveTo } = await fixture();
   for (const showPushToTalk of [undefined, null, 0, 1, "false", [], {}]) {
     expect(() => parsePreview({ ...previewOf(phone.state), showPushToTalk })).toThrow();
@@ -2624,8 +2641,8 @@ test("push-to-talk visibility is a strict shared session boolean without saved o
     expect(resetPreview(previewOf(phone.state), phone.state, target).showPushToTalk).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
-  expect(saved).not.toHaveProperty("showPushToTalk");
+  expect(saved.version).toBe(19);
+  expect(profileVisualSettings(saved).showPushToTalk).toBe(phone.state.showPushToTalk);
   expect(profileLayout(saved, "portrait")).toEqual(portrait);
   expect(profileLayout(saved, "landscape")).toEqual(landscape);
   expect(profileSounds(saved)).toEqual(selected.sounds);
@@ -2633,7 +2650,7 @@ test("push-to-talk visibility is a strict shared session boolean without saved o
     200,
   );
   expect(phone.state.design.holdSharePercent).toBe(landscape.design.holdSharePercent);
-  expect(() => parseProfile(JSON.stringify({ ...saved, showPushToTalk: false }))).toThrow();
+  expect(() => parseProfile(JSON.stringify({ ...saved, showPushToTalk: false }))).not.toThrow();
   for (const field of ["savedShowPushToTalk", "defaultShowPushToTalk"])
     expect(() => parseState({ ...phone.state, [field]: true })).toThrow();
 });
@@ -2996,12 +3013,12 @@ test("four saved extents remain independent across visibility changes and rotati
   phone.rotateDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
+  expect(saved.version).toBe(19);
   expect(profileLayout(saved, "portrait").design.controlsHeightDp).toBe(940);
   expect(profileLayout(saved, "portrait").design.controlsWithoutPttDp).toBe(570);
   expect(profileLayout(saved, "landscape").design.controlsHeightDp).toBe(1300);
   expect(profileLayout(saved, "landscape").design.controlsWithoutPttDp).toBe(780);
-  expect(saved).not.toHaveProperty("showPushToTalk");
+  expect(profileVisualSettings(saved).showPushToTalk).toBe(phone.state.showPushToTalk);
 });
 
 test("a mismatched inactive hidden extent receipt cannot overwrite the host profile", async () => {
@@ -3054,7 +3071,7 @@ test("icon auditions validate exact independent session selections before dispat
     expect(() => parseState({ ...phone.state, [field]: defaultIcons() })).toThrow();
 });
 
-test("icon auditions persist across rotation and hiding but resets isolate and Save excludes them", async () => {
+test("icon choices persist across rotation, hiding and Save with independent resets", async () => {
   const { phone, post, saveTo } = await fixture();
   const portrait = layoutOf(phone.state);
   const landscape = structuredClone(phone.state.otherLayout);
@@ -3101,14 +3118,14 @@ test("icon auditions persist across rotation and hiding but resets isolate and S
     expect(resetPreview(previewOf(phone.state), phone.state, target).icons).toEqual(icons);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(18);
-  expect(saved).not.toHaveProperty("icons");
+  expect(saved.version).toBe(19);
+  expect(profileVisualSettings(saved).icons).toEqual(icons);
   expect(saved).not.toHaveProperty("launcher");
   expect(phone.state.icons).toEqual(icons);
   expect(profileLayout(saved, "portrait")).toEqual(portrait);
   expect(profileLayout(saved, "landscape")).toEqual(landscape);
-  if (saved.version !== 18) throw Error("Expected current profile");
-  expect(() => parseProfile(JSON.stringify({ ...saved, icons }))).toThrow();
+  if (saved.version !== 19) throw Error("Expected current profile");
+  expect(() => parseProfile(JSON.stringify({ ...saved, icons }))).not.toThrow();
   expect(() =>
     parseProfile(JSON.stringify({ ...saved, landscape: { ...saved.landscape, icons } })),
   ).toThrow();
@@ -3266,4 +3283,105 @@ test("preview asset directory contains only catalog artwork and Phosphor differs
       expect(removeAccessibility(preview)).toBe(removeAccessibility(original));
     }
   }
+});
+
+test("profile19 and protocol22 require every saved appearance field while legacy18 retains exact bytes", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const legacy = JSON.stringify(currentProfile(phone.state));
+  const selected = {
+    ...defaultVisualSettings(),
+    icons: { channels: "noun-icons" as const, push: "contact" as const },
+    theme: "quiet" as const,
+    mutedPresence: "contacts" as const,
+    presenceScope: "always" as const,
+    mutedTuning: {
+      ...defaultVisualSettings().mutedTuning,
+      textSizeSp: 32,
+      brightnessPercent: -19,
+      driftPercent: 196,
+      breathPercent: 100,
+      cycleSeconds: 13,
+      motion: "ripple" as const,
+    },
+    showPushToTalk: false,
+  };
+  for (const [field, value] of Object.entries(selected)) {
+    expect(() => parseProfile(JSON.stringify({ ...JSON.parse(legacy), [field]: value }))).toThrow();
+    for (const appearanceField of ["savedAppearance", "defaultAppearance"]) {
+      const missing = { ...selected } as Record<string, unknown>;
+      delete missing[field];
+      expect(() => parseState({ ...phone.state, [appearanceField]: missing })).toThrow();
+    }
+  }
+  expect(parseProfile(legacy)).toEqual(JSON.parse(legacy));
+  expect((await post("preview", { ...previewOf(phone.state), ...selected })).status).toBe(200);
+  expect(equalVisualSettings(phone.state, phone.state.savedAppearance)).toBe(false);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const bytes = await readFile(saveTo, "utf8");
+  const saved = parseProfile(bytes);
+  expect(saved.version).toBe(19);
+  expect(profileVisualSettings(saved)).toEqual(selected);
+  expect(phone.state.savedAppearance).toEqual(selected);
+  for (const field of Object.keys(selected)) {
+    const incomplete = JSON.parse(bytes);
+    delete incomplete[field];
+    expect(() => parseProfile(JSON.stringify(incomplete))).toThrow();
+  }
+  for (const field of [
+    "mode",
+    "connection",
+    "activity",
+    "holding",
+    "micMuted",
+    "speakerMuted",
+    "launcher",
+  ])
+    expect(() => parseProfile(JSON.stringify({ ...saved, [field]: "runtime" }))).toThrow();
+});
+
+test("Save validates every adopted appearance value before replacing a host profile", async () => {
+  const variants = [
+    { icons: { channels: "noun-icons", push: "contact" } },
+    { theme: "quiet" },
+    { mutedPresence: "off" },
+    { presenceScope: "always" },
+    { showPushToTalk: false },
+    { mutedTuning: { ...defaultVisualSettings().mutedTuning, brightnessPercent: -19 } },
+  ];
+  for (const patch of variants) {
+    const { phone, post, saveTo } = await fixture();
+    expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+    const before = await readFile(saveTo, "utf8");
+    const request = phone.request.bind(phone);
+    phone.request = async (command) => {
+      const reply = await request(command);
+      return reply.profile
+        ? { ...reply, profile: JSON.stringify({ ...JSON.parse(reply.profile), ...patch }) }
+        : reply;
+    };
+    expect((await post("save", { revision: phone.state.revision })).status).toBe(502);
+    expect(await readFile(saveTo, "utf8")).toBe(before);
+  }
+});
+
+test("appearance resets use promoted defaults and preserve geometry and sounds", () => {
+  const state = initial();
+  state.defaultAppearance = {
+    ...defaultVisualSettings(),
+    icons: { channels: "noun-icons", push: "microphone" },
+    mutedTuning: {
+      ...defaultVisualSettings().mutedTuning,
+      textSizeSp: 32,
+      brightnessPercent: -19,
+      motion: "ripple",
+    },
+  };
+  const original = previewOf(state);
+  expect(resetPreview(original, state, "channel-icons").icons.channels).toBe("noun-icons");
+  expect(resetPreview(original, state, "push-icon").icons.push).toBe("microphone");
+  expect(resetPreview(original, state, "muted-textSizeSp").mutedTuning.textSizeSp).toBe(32);
+  const reset = resetPreview(original, state, "visual-settings");
+  expect(visualSettingsOf(reset)).toEqual(state.defaultAppearance);
+  expect(layoutOf(reset)).toEqual(layoutOf(original));
+  expect(reset.sounds).toEqual(original.sounds);
 });

@@ -154,7 +154,7 @@ class PreviewDeckOptionsTest {
             session.command(JSONObject().put("id", 2).put("method", "save").put("revision", state.revision)
                 .put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch))
             val current = JSONObject(file.readText())
-            assertEquals(18, current.getInt("version")); assertFalse(current.has("showPushToTalk"))
+            assertEquals(19, current.getInt("version")); assertFalse(current.getBoolean("showPushToTalk"))
             assertFalse(current.toString().contains("offshootPercent"))
             val old = JSONObject(current.toString()).withLegacyOffshootFields().put("version", 16)
             old.getJSONObject("design").getJSONObject("traces").put("offshootPercent", 81)

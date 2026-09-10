@@ -1,7 +1,7 @@
 # AgentVoice for Android
 
 A native, foreground voice client for the existing AgentVoice server. One screen:
-YOU and AGENT mute controls, a fixed push-to-talk surface, and Vercel AI Elements'
+HUMAN and AGENT Rocker mute controls, a push-to-talk surface, and Vercel AI Elements'
 Persona Halo. Kotlin/Compose and native Rive draw the interface; native WebRTC owns audio. Android
 12 / API 31 or newer, ARM64 phones and x86-64 emulators.
 
@@ -14,9 +14,48 @@ See [verification evidence](VERIFICATION.md). A preview's Connected label is syn
 
 ![AgentVoice Android design preview: agent audio and push to talk](design/voice-preview.png)
 
+## Adopted shipping design
+
+The locked design is [shipping-profile.json](design/shipping-profile.json), a complete
+version 19 Studio profile. Its [provenance receipt](design/shipping-provenance.json)
+preserves the original saved bytes and the explicitly captured visual choices
+that older Save versions omitted. It selects the i cons pair, current PTT symbol,
+Contained Halo, Splayed traces, Bright theme, tuned Tide/Ripple, and Rocker 13 at
+60%, with both orientation layouts preserved.
+
+The production `VoiceScreen` now consumes generated `ShippingDesign` constants and
+the same rendering components as the Studio, using actual `CallUi` gates and
+measured levels. It never loads a private Studio profile or a rehearsal state.
+Back (or the accessible End call action) ends a call. Explicit grant import/Start,
+errors and linked Credits remain available. Rotation preserves the call and uses
+the configured landscape layout; relocation still cancels a held pointer.
+
+The debug Studio remains intact. Profile 19 Save/reload includes icon pair/PTT,
+theme, center form/scope/type/motion, and PTT visibility as well as both layouts,
+shared appearance and sound settings. Rehearsal connection/state/gates/activity
+are not preferences. Reset uses the adopted baseline. Legacy profiles remain
+readable; loading never silently rewrites them.
+
+To deliberately adopt a later complete profile from the repository root:
+
+```sh
+bun android/configurator/src/shipping.ts promote --profile /absolute/path/to/saved.json
+bun android/configurator/src/shipping.ts generate --check
+```
+
+Review the canonical JSON, receipt, generated Kotlin and selected assets together.
+Normal builds check generation drift and never read the operator's ignored profile.
+Release sources contain only the selected icon variants and sound quartet; the
+Studio bridge, alternate icon/sound assets and browser gallery remain debug/host
+only. R8 removes unreachable profile/migration helpers. The shared renderers retain
+some small presentation branches to avoid maintaining a separate visual fork;
+there is no runtime design-JSON parsing or synthetic-energy work on the shipping path.
+Audit the built artifact with `python3 android/scripts/verify-shipping-apk.py`.
+Release signing/distribution and full real-call audio acceptance remain separate.
+
 ## Build and verify
 
-Use JDK 17 and Android SDK platform/build-tools 36. The Gradle 8.13 wrapper is
+Use Bun, JDK 17 and Android SDK platform/build-tools 36. The Gradle 8.13 wrapper is
 checksum-pinned. Set `ANDROID_HOME` to your installed SDK or configure an untracked
 `local.properties` file.
 
@@ -66,8 +105,8 @@ Tap **Start voice** to request microphone and optional nearby-device permission
 and start one call. Tailscale and upstream Internet access must be available.
 The server controls conversation selection and persistent mute defaults.
 
-YOU toggles the persistent microphone mute; AGENT toggles playback mute. While
-YOU is muted and media is connected, hold the bottom surface to talk. Release,
+HUMAN toggles the persistent microphone mute; AGENT toggles playback mute. While
+HUMAN is muted and media is connected, hold the bottom surface to talk. Release,
 pointer cancellation, a second pointer or focus loss closes the local hold
 immediately. A delayed acknowledgement cannot reopen it. TalkBack exposes explicit
 Start talking / Stop talking actions with the same gates.
@@ -75,13 +114,10 @@ Start talking / Stop talking actions with the same gates.
 The screen stays awake during a call. System bars can be revealed by swiping.
 End call, Back, backgrounding, lock, transport loss, failed heartbeat, audio focus
 loss or removal of the selected audio device tears down locally. Reopening the
-app requires an explicit Start. Activity recreation, including a configuration
-change that recreates it, also ends the call in this version. This can interrupt
-server-owned agent work; it is the existing frontend ownership contract.
-Portrait is the primary layout; shallow landscape screens scroll to keep every
-control reachable. Connection is a small filled green indicator beside the name;
-disconnected is an outlined indicator. TalkBack announces the actual phase, and
-connecting phases remain readable in the header. Errors appear only when needed.
+app requires an explicit Start. Activity recreation still ends the call, while ordinary orientation changes now
+retain the activity and release any owned hold. Portrait and landscape use their
+adopted visible-viewport layouts without page scrolling. A quiet sliding notice
+appears while connecting or disconnected; connected presentation has no header.
 
 Expired/revoked grants require explicit replacement. The app has no enrollment,
 refresh-secret, server configuration, account, approval or transcript interface.
@@ -204,7 +240,7 @@ The preview has no header. **Preview connection** selects synthetic Connected,
 Connecting or Disconnected. A notice with a static glyph slides down from the
 top and stays while Connecting or Disconnected, then slides away on Connected
 without a success toast. Its 240 ms transition reserves no space and shifts
-neither Halo nor the controls. This selection is not saved in the profile and
+neither Halo nor the controls. Rehearsal connection selection is not saved in the profile and
 does not change the actual ADB connection.
 
 Choose Speaking, Listening or Idle and adjust that state's
@@ -230,32 +266,34 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains both orientations' design, sizes and position in a
-version 18 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 19 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 21 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 22 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
 values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 18 stores portrait in the root fields and a separate `landscape` layout.
+Version 19 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–17 phone profiles load without rewriting; retired button styles map to
+version 1–18 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 18 only on Save. The real client and release
-APK keep their existing layout, behavior and compiled defaults until the operator
-chooses a design for explicit adoption in code; their labels now also say Push to talk.
+become version 19 only on Save. Icons, theme, center indicator form/scope/tuning
+and PTT visibility are also saved. The real client uses the explicitly adopted
+shipping profile described above; later Studio saves do not change production
+until another promotion.
 Debug builds include a **Halo preview** launcher
 icon; the former `PersonaTunerActivity` is replaced by `PersonaPreviewActivity`.
 The preview and its narrowly scoped ADB bridge are absent from release builds.
 They never load a grant, controller or voice media, or connect to the voice server.
-Optional switch cues are local debug sound effects, described below.
+Optional Studio switch cues are local sound effects, described below; production
+uses the adopted family and level.
 
 **Padding** links the deck's outer sides, bottom clearance and every button gap
-with one 0–40 dp control. Fresh defaults and Reset padding use 16 dp. Existing
+with one 0–40 dp control. Adopted defaults and Reset padding use 17 dp. Existing
 profiles preserve their different margins/gaps as Custom until Padding is moved;
 loading never rewrites them. Portrait anchors the deck and bottom padding inside
 the visible safe area without page scrolling. A requested deck larger than that
@@ -268,7 +306,7 @@ Individual resets and Reset spacing update both orientations. All six spacing
 fields are shared, with no orientation override; legacy landscape spacing adopts
 portrait spacing in memory without rewriting saved bytes.
 
-Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
+**Theme** compares Bright, Quiet and Grayscale. Bright preserves the
 current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
 all preview layers neutral and dims decorative light, while captions retain a
 contrast floor. **Center indicator** compares Tide, Off, Words, Channel icons,
@@ -295,7 +333,7 @@ Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
-activity restoration but are not saved in a profile; profile version is 16.
+activity restoration and are saved in profile 19.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
@@ -337,8 +375,8 @@ inside the ring and, when the join radius reaches zero, at its center.
 
 The studio labels each scope instead of assigning scope by column:
 
-- Theme, center indicator and its tuning apply to both orientations for this
-  preview session. They still do not enter saved design profiles.
+- Theme, center indicator and its tuning apply to both orientations and are
+  included in complete version 19 design profiles.
 - Persona appearance (variant, animation, colors), Traces (including endpoint
   geometry and fade), Background glow, and Button lighting/color response each
   share a common value by default. **Customize this orientation** snapshots that
@@ -367,8 +405,8 @@ The host studio offers **Off**, **Rocker 29** (longer recorded decay) and
 Selection is silent; use the phone's controls to audition. Both mute buttons use
 the same distinct on/off pair, selected from the new persistent mute state.
 Push to talk uses a related lower down cue and a shorter, quieter up
-cue. The phone's media volume also controls the output. Off/70 is the default;
-there is no automatic production adoption.
+cue. The phone's media volume also controls the output. The adopted default is
+Rocker 13/60; changing or saving an audition does not automatically promote it.
 
 Sounds are shared across orientations and saved only by explicit Save, at the
 profile root. Profiles through version 15 load as Off/70 without rewriting.
@@ -378,11 +416,12 @@ keeps its subtle visual feedback without a PTT sound. Changing the family/level
 or interrupting a hold discards its release cue; unloaded samples never queue
 late playback. Accessibility's explicit Start/Stop actions use the same pair.
 
-All eight debug-only WAVs are adapted from Kenney's UI SFX Set (CC0); see
+All eight audition WAVs are adapted from Kenney's UI SFX Set (CC0); see
 [provenance, processing and license](third-party/switch-sounds/README.md). They
 play through a preloaded SoundPool, request no audio focus, change no system
 volume and never enter a voice track. This does not test acoustic pickup in a
-real voice call. No sound assets or player are included in release builds.
+real voice call. Release includes only the adopted four-file quartet and player;
+the other family remains debug-only.
 
 ## Landscape columns and optional PTT
 
@@ -394,16 +433,16 @@ and manual Persona placement remain orientation-local. Landscape routes reuse
 the portrait trace engine with transposed axes, preserving stance, foot/contact
 spacing, reach and fade.
 
-Shared session control **Show push to talk** hides the button and its connector.
+Shared design control **Show push to talk** hides the button and its connector.
 The mutes fill the selected deck height in portrait and full deck width in
 landscape. Hiding cancels an active hold without playing a release sound;
 reappearing never reacquires its pointer. The share value is retained while its
 slider is disabled. With-PTT and without-PTT layouts retain independent deck
-extents within each orientation. Visibility survives rotation/activity restoration but is not
-saved to a profile or adopted by production.
+extents within each orientation. Visibility survives rotation/activity restoration and is saved in profile 19.
+The shipping profile currently shows PTT.
 
-Protocol 20 requires consistent current/other and saved/other spacing; profile 18
-requires equal root/landscape spacing. Older effective layouts adopt portrait
+Protocol 22 requires consistent current/other and saved/other spacing; profiles
+18–19 require equal root/landscape spacing. Older effective layouts adopt portrait
 spacing, and validated historical offshoot values are discarded. Neither
 migration rewrites the operator's saved files before Save.
 
@@ -421,8 +460,8 @@ portrait without PTT, landscape with PTT, or landscape without PTT. The visible
 mode is labeled. Switching visibility retains both sizes. Reset button sizes
 resets only the active extent, and resets share only when PTT is shown. Existing
 profiles seed the new hidden extent from each orientation's existing extent in
-memory; loading never rewrites the saved file. Profile 18 stores the additional
-`controlsWithoutPttDp` field and protocol 20 carries both sizes.
+memory; loading never rewrites the saved file. Profiles 18–19 store the additional
+`controlsWithoutPttDp` field and protocol 22 carries both sizes.
 
 Both extent fields span 160–1600 dp. Landscape has no reserved half-screen lane: a
 large deck may overlap the independently positioned Persona in the foreground.
@@ -436,7 +475,7 @@ state captions; short faces reduce their glyph height to keep captions inside.
 
 The studio compares matched HUMAN/AGENT pairs, with an independent PTT symbol.
 Selections are shared session choices, preserved through rotation and reconnect;
-they do not alter profile 18, Save state, or production defaults. Current remains
+they now participate in profile 19 Save/dirty state. The adopted shipping choice is i cons; Current remains
 the baseline. The center uses effective open/closed channel state while Rockers
 use persistent mute state; a PTT microphone always remains unslashed.
 

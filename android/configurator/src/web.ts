@@ -11,6 +11,7 @@ import {
   type Activity,
   type Connection,
   equalLayout,
+  equalVisualSettings,
   type Mode,
   type MutedPresence,
   modes,
@@ -22,6 +23,7 @@ import {
   profileLayout,
   profileSharedAppearance,
   profileSounds,
+  profileVisualSettings,
   sameOrientation,
   type Theme,
 } from "./protocol.ts";
@@ -274,11 +276,14 @@ function render() {
   const otherOrientation = draft.orientation === "portrait" ? "landscape" : "portrait";
   const hostMatches =
     status.hostSaved &&
+    status.hostSaved.version === 19 &&
+    equalVisualSettings(profileVisualSettings(status.hostSaved), draft) &&
     equalSounds(profileSounds(status.hostSaved), draft.sounds) &&
     equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
     equalLayout(profileLayout(status.hostSaved, otherOrientation), status.state.otherLayout) &&
     equalSharedAppearance(profileSharedAppearance(status.hostSaved), status.state.sharedAppearance);
   const phoneMatches =
+    equalVisualSettings(draft, status.state.savedAppearance) &&
     equalSounds(draft.sounds, status.state.savedSounds) &&
     equalLayout(draft, {
       scales: status.state.savedScales,

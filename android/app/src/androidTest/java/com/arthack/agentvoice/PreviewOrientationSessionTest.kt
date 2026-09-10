@@ -29,7 +29,7 @@ class PreviewOrientationSessionTest {
             withContext(Dispatchers.Main) { session.state = session.state.beginHold().rotate("landscape") }
             val landscape = withContext(Dispatchers.Main) { session.state }
             assertFalse(landscape.holding)
-            assertEquals(0.dp, landscape.placement.offsetY)
+            assertEquals(defaultLandscapeLayout().placement.offsetY, landscape.placement.offsetY)
             assertEquals(portrait.activeLayout(), landscape.otherLayout)
             for (request in listOf(oldEdit, oldSave, preview(landscape).apply { remove("orientationEpoch") })) {
                 assertTrue(runCatching { session.command(request) }.isFailure)

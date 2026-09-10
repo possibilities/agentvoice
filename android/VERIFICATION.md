@@ -1,17 +1,13 @@
 # Android development build verification
 
-Latest synthetic UI work: **Icon auditions**, September 10, 2026 UTC.
-The final candidate is installed on physical S22 `R5CT91TW4RP`; all 88 native
-instrumentation tests passed in 173.906 seconds, including the final Boatman
-mute cleanup. The temporary API 35 emulator was stopped and its AVD/data and
-registration deleted. The interrupted USB/keyguard runs are excluded from these
-results; no implementation assertions were weakened.
-
-The current debug APK SHA-256 is
-`4aee8577e9f4fd7157e1826bb5f150b99d12fd80dda329cc7d78e059a4121579`.
-Current evidence is under [Icon auditions](#icon-auditions). Earlier sections
-retain their original results and limitations, not a cumulative claim about the
-candidate. No check starts a voice call, microphone or inference.
+Latest work: **Adopted shipping design and complete Studio Save**, September 10, 2026 UTC.
+The user-locked S22 profile is now complete version 19 and supplies generated
+production defaults. Studio protocol 22 persists all visual choices and retains
+its full editing range. See [Shipping adoption](#shipping-adoption) for the current
+build, tests, saved-copy/cold-reload checks and release packaging evidence. Earlier
+sections retain their original results and limitations; they are not cumulative
+verification of the current candidate. No verification started a voice call or
+opened microphone/inference.
 
 ## Automated checks
 
@@ -1419,3 +1415,68 @@ restored to accelerometer_rotation 0 / user_rotation 0, and stay-awake to its
 original value 7. `/tmp/agentvoice-icons-phone-check.log` records the exercise and
 restoration. The temporary emulator is destroyed; the physical preview and live
 studio remain available, and phone access is released.
+
+
+## Shipping adoption
+
+The complete canonical profile is `design/shipping-profile.json` (SHA-256
+`aade6ae0df2e336dd618512efd62c6477dae1ae3c49c3779793ad97581fe6c1d`).
+`design/shipping-provenance.json` preserves the original version 18 source bytes
+and captured visual-choice provenance. Effective portrait/landscape layouts and
+sounds matched that original saved source before promotion. Icons, theme, center
+form/scope/tuning and PTT visibility were added from the user's explicitly adopted
+live session, rather than falling back to the earlier unsaved defaults.
+
+- Combined debug/release builds, 122 JVM tests and Android lint passed in
+  `/tmp/agentvoice-shipping-final-build.log`. A subsequent notice-only APK rebuild
+  corrected Contained's shipping attribution (`/tmp/agentvoice-shipping-notice-build.log`).
+- The 95-case phone run in `/tmp/agentvoice-shipping-phone-final.log` passed 92.
+  Three historical fixture expectations still mixed newly adopted defaults or
+  omitted the newly file-owned savedAppearance argument. Fixed historical fixtures
+  now pin their original values. The final 18-test run in
+  `/tmp/agentvoice-shipping-phone-verified.log` passed in 9.246 seconds and includes
+  all three previously failing cases, complete-profile persistence/reload/reset,
+  and production setup, Credits, acknowledged mute sounds and PTT ownership.
+  No failing product assertion was removed. The preceding initial run also
+  exposed old hardcoded defaults and an aperture test that needed its original
+  explicit motion fixture; those checks passed in the 95-case rerun.
+- Final installed debug APK SHA-256:
+  `e254372d729448b88ae4472cff9b00988300e19741b4d190069d299fc9d499f5`.
+  Its DEX files are byte-identical to the APK used by the 95-case run
+  (`c9c5863023118ac7a845744862884892ec50de27fa1c4fcac865eb76b38a6646`);
+  the final 18-test run used the notice-corrected installed APK.
+- 727 root tests, 98 studio tests / 3,694 assertions, root/studio typechecks and
+  Biome passed. Root logs: `/tmp/agentvoice-shipping-root-tests.log`,
+  `/tmp/agentvoice-shipping-root-typecheck.log`, `/tmp/agentvoice-shipping-final-lint.log`.
+  Browser Save/dirty/adopted-default/reconnect checks passed at
+  `/tmp/agentvoice-profile19-browser/evidence.json`.
+- Deterministic promotion and `generate --check` passed. Gradle now checks this
+  before builds. `scripts/verify-shipping-apk.py` found only the selected four
+  Rocker 13 WAVs, selected four channel glyph resources, and exact selected
+  notices/licenses; no Studio bridge/session/activity, profile JSON or alternate
+  icon resources. R8 usage confirms removal of DesignProfileSupportKt,
+  PreviewOrientationKt and PreviewSharedAppearanceKt. Small shared presentation
+  branches remain; universal elimination of every unselected code branch is not claimed.
+- Release APK is 47,350,973 bytes (both supported ABIs), SHA-256
+  `97e6cfcb1a872bf993f6542a1424af99dc3f87bac4955b24e34e92e2adea060d`.
+  Receipt: `/tmp/agentvoice-shipping-apk-audit.json`. It remains unsigned; no
+  release-signing or distribution configuration was changed.
+
+Actual native+host Save upgraded the user's requested profile and phone copy to
+version 19. Both copies are byte-identical, SHA-256
+`0bc3410da7e931c0e90867b3c199b0e4e43e4436f8ff8eb4a28b30f26455c53c`.
+Every effective layout, sound and visual field matches the canonical shipping
+profile; only Save metadata/serialization differs. The app was then force-stopped
+with no call active and reopened through a fresh Studio binding. All choices
+reloaded from disk before any restoration command. Logs:
+`/tmp/agentvoice-shipping-save-check.log` and `/tmp/agentvoice-shipping-cold-reload.log`.
+
+Physical production-composable fixtures were inspected in portrait and landscape
+at `/tmp/agentvoice-shipping-captures/production-{portrait,landscape}.png`.
+The real protected MainActivity exposes explicit Start/import and Credits, verified
+through UI semantics without bypassing screenshot protection or starting a call.
+`restored.png` records the retained Studio with adopted values and original
+synthetic gate choices. Original system rotation (user_rotation 1,
+accelerometer_rotation 0) and stay-awake 7 were restored. No emulator was created.
+Phone access is released. Real spoken-call/audio routing acceptance remains a
+separate pre-existing limitation; rendered fixtures do not establish acoustic quality.

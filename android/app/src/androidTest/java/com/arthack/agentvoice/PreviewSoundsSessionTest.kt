@@ -98,7 +98,7 @@ class PreviewSoundsSessionTest {
             val response = session.command(save(selected))
             val text = response.getString("profile")
             val profile = JSONObject(text)
-            assertEquals(18, profile.getInt("version"))
+            assertEquals(19, profile.getInt("version"))
             assertEquals(chosen, decodePersonaSounds(text))
             assertEquals(text, file.readText())
             assertFalse(profile.getJSONObject("landscape").has("sounds"))
@@ -108,8 +108,8 @@ class PreviewSoundsSessionTest {
             assertEquals(chosen, saved.savedSounds)
             assertEquals(saved, restore(saved.json(), saved))
             val stateJson = saved.json()
-            assertEquals(21, stateJson.getInt("protocol"))
-            assertEquals(PreviewSounds(), decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
+            assertEquals(22, stateJson.getInt("protocol"))
+            assertEquals(ShippingDesign.sounds, decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
             assertFalse(stateJson.getJSONObject("otherLayout").has("sounds"))
             assertTrue(response.toString().toByteArray().size < 16384)
         } finally { file.delete() }
@@ -149,7 +149,8 @@ class PreviewSoundsSessionTest {
             assertTrue(runCatching { restore(state.json().apply { remove(field) }, state) }.isFailure)
             assertTrue(runCatching { restore(state.json().put(field, PreviewSounds().json().put("volumePercent", "70")), state) }.isFailure)
         }
-        assertTrue(runCatching { restore(state.json().put("defaultSounds", state.sounds.json()), state) }.isFailure)
+        // Old advertised defaults can differ after promotion; they never override current or saved sound choices.
+        assertEquals(state, restore(state.json().put("defaultSounds", state.sounds.json()), state))
         assertEquals(state, restore(state.json(), state))
         val savedProfileBaseline = PreviewSounds("rocker-29", 10)
         val restored = restore(state.json(), state.copy(savedSounds = savedProfileBaseline))

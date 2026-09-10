@@ -5,6 +5,7 @@ import { iconPreviewFiles } from "./icons.ts";
 import { saveProfile } from "./profile.ts";
 import {
   equalLayout,
+  equalVisualSettings,
   exact,
   integer,
   layoutOf,
@@ -16,8 +17,10 @@ import {
   profileLayout,
   profileSharedAppearance,
   profileSounds,
+  profileVisualSettings,
   record,
   sameOrientation,
+  visualSettingsOf,
 } from "./protocol.ts";
 import { equalSounds } from "./sounds.ts";
 
@@ -224,6 +227,7 @@ export async function serveConfigurator(
             return json({ error: "Preview changed. Review it before saving." }, 409);
           const expected = layoutOf(phone.state);
           const expectedSounds = { ...phone.state.sounds };
+          const expectedAppearance = visualSettingsOf(phone.state);
           const expectedShared = structuredClone(phone.state.sharedAppearance);
           const expectedOther = layoutOf(phone.state.otherLayout);
           const expectedOrientation = phone.state.orientation;
@@ -242,7 +246,8 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 18 ||
+            profile.version !== 19 ||
+            !equalVisualSettings(profileVisualSettings(profile), expectedAppearance) ||
             !equalSounds(profileSounds(profile), expectedSounds) ||
             !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
             !equalLayout(profileLayout(profile, expectedOrientation), expected) ||

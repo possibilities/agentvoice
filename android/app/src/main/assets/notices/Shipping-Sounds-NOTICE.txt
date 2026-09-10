@@ -1,0 +1,6 @@
+AgentVoice shipping switch sounds: rocker-13.
+Interface sounds adapted from Kenney Vleugels’ UI SFX Set (CC0).
+https://kenney.nl/assets/ui-audio
+https://github.com/Calinou/kenney-ui-audio/tree/8c3d81b9159d058c444f89d12d518276b0b09345
+Selected toggle on/off and push-to-talk down/up recordings; trimmed, downmixed, resampled and pitch/level adjusted.
+See Shipping-Sounds-LICENSE.txt for the bundled license.

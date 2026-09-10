@@ -47,7 +47,7 @@ internal class PreviewSwitchFeedback(private val output: PreviewSwitchOutput) {
     fun cancel() { held = null; output.stop() }
 }
 
-/** Debug-local media output. Never requests focus, changes volume or feeds a voice track. */
+/** Local interaction output. Never requests focus, changes volume or feeds a voice track. */
 internal class PreviewSwitchPool(context: Context) : PreviewSwitchOutput, AutoCloseable {
     private val pool = SoundPool.Builder().setMaxStreams(3).setAudioAttributes(
         AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
@@ -60,7 +60,7 @@ internal class PreviewSwitchPool(context: Context) : PreviewSwitchOutput, AutoCl
 
     init {
         pool.setOnLoadCompleteListener { _, id, status -> if (status == 0 && !closed) ready.add(id) }
-        for (family in listOf("rocker-29", "rocker-13")) for (cue in PreviewSwitchCue.entries) {
+        for (family in bundledSwitchFamilies()) for (cue in PreviewSwitchCue.entries) {
             val id = context.assets.openFd("switch-sounds/$family-${cue.file}.wav").use { pool.load(it, 1) }
             samples[family to cue] = id
         }

@@ -74,9 +74,9 @@ class PreviewProfileTwelveTest {
         }
     }
 
-    @Test fun presentationIsRestoredAcrossRotationButNeverSavedAndOldRequestsRemainFenced() = runBlocking {
+    @Test fun presentationIsRestoredAndSavedAtRootWhileOldRequestsRemainFenced() = runBlocking {
         val file = fixture()
-        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
+        val session = historicalPreviewSession(file)
         try {
             val initial = withContext(Dispatchers.Main) { session.state }
             val tuning = PreviewMutedTuning(28, 75, 230, 80, 8, "ripple")
@@ -105,11 +105,11 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(18, encoded.getInt("version"))
-            assertFalse(encoded.has("theme"))
-            assertFalse(encoded.has("mutedPresence"))
-            assertFalse(encoded.has("mutedTuning"))
-            assertFalse(encoded.has("presenceScope"))
+            assertEquals(19, encoded.getInt("version"))
+            assertTrue(encoded.has("theme"))
+            assertTrue(encoded.has("mutedPresence"))
+            assertTrue(encoded.has("mutedTuning"))
+            assertTrue(encoded.has("presenceScope"))
             assertFalse(encoded.getJSONObject("landscape").has("mutedTuning"))
             assertFalse(encoded.getJSONObject("landscape").has("presenceScope"))
             assertFalse(encoded.getJSONObject("landscape").has("theme"))
@@ -120,7 +120,8 @@ class PreviewProfileTwelveTest {
             assertTrue(reply.toString().toByteArray().size < 16384)
             val saved = withContext(Dispatchers.Main) { session.state }
             val restored = restorePersonaPreview(saved.rotate("landscape").json(), saved.saved, saved.savedDesign,
-                saved.savedHalo, saved.savedSpirit, saved.savedOtherLayout, saved.savedPersonaSide)
+                saved.savedHalo, saved.savedSpirit, saved.savedOtherLayout, saved.savedPersonaSide,
+                savedAppearance = saved.savedAppearance)
             assertEquals(saved.rotate("landscape"), restored)
             val oldState = saved.json().apply {
                 withoutTraceJoinFields(); put("protocol", 11); remove("theme"); remove("mutedPresence")
@@ -146,7 +147,7 @@ class PreviewProfileTwelveTest {
         }
         assertTrue(runCatching { decodePreviewSpacing(PreviewSpacing().json().put("extra", 1)) }.isFailure)
         val file = fixture()
-        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
+        val session = historicalPreviewSession(file)
         try {
             val before = withContext(Dispatchers.Main) { session.state }
             for (request in listOf(preview(before).put("theme", "neon"), preview(before).put("mutedPresence", "always"),
@@ -161,7 +162,7 @@ class PreviewProfileTwelveTest {
     }
     @Test fun indicatorOptionsRoundTripAndProtocolFourteenAddsOnlyDefaultScope() = runBlocking {
         val file = fixture()
-        val session = PersonaPreviewSession(defaultPortraitLayout().placement, file)
+        val session = historicalPreviewSession(file)
         try {
             for (style in previewMutedPresences) for (scope in previewPresenceScopes) {
                 val before = withContext(Dispatchers.Main) { session.state }
@@ -169,7 +170,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(21, current.json().getInt("protocol"))
+                assertEquals(22, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())
@@ -186,9 +187,9 @@ class PreviewProfileTwelveTest {
     }
 
     @Test fun versionTwelveAdoptsPortraitSpacingWithoutChangingGeometryOrSavedBytes() {
-        val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
+        val portrait = historicalPortraitLayout().copy(design = historicalPortraitLayout().design.copy(
             spacing = PreviewSpacing(137, 63, 19, 7, 31)))
-        val landscape = defaultLandscapeLayout().copy(design = defaultLandscapeLayout().design.copy(
+        val landscape = historicalLandscapeLayout().copy(design = historicalLandscapeLayout().design.copy(
             spacing = PreviewSpacing(42, 178, 23, 29, 9)))
         val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo,
             portrait.spirit, landscape, portrait.personaSide)).apply {
@@ -204,7 +205,8 @@ class PreviewProfileTwelveTest {
             assertEquals(portrait.design, decodePersonaDesign(file.readText()))
             assertEquals(landscape.copy(design = landscape.design.copy(spacing = portrait.design.spacing)), decodeLandscapeLayout(file.readText()))
             assertArrayEquals(bytes, file.readBytes())
-            val oldSession = PersonaPreviewState(design = portrait.design, otherLayout = landscape,
+            val oldSession = PersonaPreviewState(placement = portrait.placement, design = portrait.design,
+                halo = portrait.halo, spirit = portrait.spirit, otherLayout = landscape,
                 mutedTuning = PreviewMutedTuning(24, 65, 200, 70, 10, "ripple")).json().apply {
                 withoutTraceJoinFields(); put("protocol", 13)
                 getJSONObject("design").getJSONObject("spacing").remove("paddingDp")

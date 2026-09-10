@@ -89,7 +89,8 @@ class PreviewMutedTuningRenderTest {
 
     @Test fun fullSceneFitsLargeTypeAndTuningDoesNotReplaceHaloOrMovePersona() {
         compose.mainClock.autoAdvance = false
-        var state by mutableStateOf(PersonaPreviewState(mode = "idle", speakerMuted = true, design = PreviewDesign()))
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle", speakerMuted = true, design = PreviewDesign(),
+            placement = historicalPortraitLayout().placement, halo = PreviewHalo(variant = "contained")))
         compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
         compose.mainClock.advanceTimeBy(700)
         fun nativeView() = (compose.activity.window.decorView as ViewGroup).descendants.filterIsInstance<RiveAnimationView>().single()

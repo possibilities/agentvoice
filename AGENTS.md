@@ -66,8 +66,19 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  No audio, grants, voice calls or automatic edit/Save replay. Keep the physical
+  Save captures every visual choice in profile 19; protocol 22 carries current,
+  saved and adopted defaults. Only connection/gates/held pointers and synthetic
+  activity are transient. No microphone, grants, voice calls or automatic edit/Save
+  replay; explicitly selected interaction sounds are supported. Keep the physical
   phone preview and renderer instance stable; do not recreate the destroyed VM.
+- `bun android/configurator/src/shipping.ts promote --profile <file>` — explicit
+  design adoption. The complete canonical profile and provenance live in
+  `android/design/shipping-{profile,provenance}.json`; generated constants and
+  selected release resources follow it. Normal Gradle builds run `generate --check`
+  and never import a mutable private device file. Shared renderers live in main;
+  bridge, sessions, alternate icon/sound assets and gallery stay debug/host-only.
+  Audit release with `python3 android/scripts/verify-shipping-apk.py`. Keep Studio
+  intact for future promotion; never hand-edit generated files or ship its controller.
 - `scripts/install-android --install --host <ssh-target>` — explicitly build and
   atomically converge that standalone on an already prepared Termux phone. It is
   never part of the desktop installer or an unattended update and starts no call.

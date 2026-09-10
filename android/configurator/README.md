@@ -23,8 +23,8 @@ shared choice. Editing a Shared group updates both inheriting orientations; an
 overridden orientation keeps its own choice. All trace properties, including
 reach, fade and contact/foot spacing, belong to the Traces group; glow is separate.
 Persona sizes, scales, positions, button dimensions and side stay local to their
-orientation. All scene spacing is shared, without an override option. Theme and synthetic session controls apply to both
-orientations but are never saved.
+orientation. All scene spacing is shared, without an override option. Theme applies to both orientations and is saved. Synthetic session controls
+also apply to both orientations but remain transient.
 
 Both mute buttons and **Push to talk** use Rockers. Press and keep the talk
 surface down to talk; release to mute. Active styling stays dark with focused
@@ -152,7 +152,9 @@ to fit inside Persona. Appearance controls remain visible and disabled while
 Off; choosing another style restores the session tuning. Every field has an
 individual reset. **Reset indicator appearance** restores the six tuning
 defaults without changing style, Show, theme, or either layout. This tuning is
-also session-only and never enters the saved profile.
+saved in profile 19 alongside style, scope, theme and visibility. The adopted
+reset baseline is generated from the shipping profile; the values above describe
+the original pre-adoption tuning baseline.
 
 In portrait, controls are bottom-aligned inside the visible safe area with the
 selected padding; the portrait page does not scroll. The Persona stage remains
@@ -275,13 +277,15 @@ The preview has no microphone, voice playback, grant, controller, Codex,
 WebRTC or voice-server connection. Optional switch effects play locally on the
 phone only when its controls are used.
 
-Explicit Save writes a version 18 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 19 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold effective portrait values;
 `landscape` holds effective landscape values (integer-percent `scales`, both
 offsets, design, Halo, spirit and side). Root and landscape each include sorted
 `appearanceOverrides`; root `sharedAppearance` stores the shared base. Root
-`sounds` stores the shared sound family and level. Both layouts, shared
-appearance and sound settings must match the captured save request, even if
+`sounds` stores the shared sound family and level. Root `icons`, `theme`,
+`mutedPresence`, `presenceScope`, `mutedTuning` and `showPushToTalk` capture the
+remaining visual choices. Both layouts and every shared visual and sound
+setting must match the captured save request, even if
 the phone rotates before its receipt arrives. Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` and `spacing` settings. Its `halo` stores variant, common Contained size, motion
@@ -295,7 +299,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–17 phone profiles remain readable without rewriting.
+until Save. Version 1–18 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -319,16 +323,15 @@ absent landscape uses those canonical defaults and inherits portrait appearance.
 This migration changes only in-memory effective appearance and flags; local
 geometry and saved bytes remain intact. Profiles through version 15 retain their
 exact saved shape and gain Off/70 sound settings in memory. Older profiles become
-version 18 only on explicit Save. Legacy profiles through16 use portrait spacing
+version 19 only on explicit Save. Legacy profiles through16 use portrait spacing
 for both effective layouts; the previous landscape spacing stays in the untouched
 raw file until Save. Profiles are ignored by Git.
 
-The real voice client and release APK retain their existing layout, behavior and
-compiled `PersonaPlacement` defaults; their labels now also say Push to talk.
-Saving a demo choice does not adopt it into the
-product; adoption remains an explicit code change after the operator selects
-the final design. Original's native Halo adapter retains its rendering and
-state-transition timing; Contained has a separate debug renderer.
+The real voice client and release APK use the adopted shipping profile through
+generated constants and shared renderers. Saving a later Studio choice does not
+adopt it into the product; promotion remains explicit. Original's native Halo
+adapter retains its rendering and state-transition timing; Contained has a
+separate shared renderer.
 
 ## Boundary
 
@@ -358,9 +361,10 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `src/reconnecting-phone.ts` handles bounded retries and shutdown;
 `src/protocol.ts` validates the preview contract. Android's debug
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
-renders debug-only `PreviewStudioScreen` with synthetic state. The studio
+renders shared `PreviewStudioScreen` with synthetic state; production supplies
+actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol21 carries live/saved/default designs, sizes, vertical and
+Preview protocol22 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -368,11 +372,11 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `presenceScope: both-muted|any-muted|always` (default `any-muted`), and required
 `mutedTuning`. The latter has exactly integer `textSizeSp` (12–32),
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
-`cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
-14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is21;
-saved profile is version18 with separately saved shown/hidden extents;
-session tuning stays excluded.
+`cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
+32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
+session-root fields on Preview/PhoneState, never Layout. Protocol is22;
+saved profile is version19 with separately saved shown/hidden extents and all
+shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
@@ -384,7 +388,7 @@ Nested `design.traces` has exactly `pattern: parallel|splayed|circuit`, integer
 `stancePercent` (75–150), `personaSpacingPercent` and `footSpacingPercent`
 (each 50–200), `weightPercent` (50–250) and
 `glowPercent` (0–100), `reachDp` (−40–120), `fadeLengthDp` (0–80) and
-`tipOpacityPercent` (0–100). The last three default to 0/12/0. Profiles through13
+`tipOpacityPercent` (0–100). The adopted last three defaults are −9/80/0. Profiles through13
 retain their exact previous trace shapes and gain these defaults in memory.
 The old canonical baseline uses Parallel, 100%
 stance/contact/foot/weight, zero offshoot and glow; fresh shared defaults are
@@ -402,10 +406,10 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol21's active fields describe the phone's visible orientation; it also
+Protocol22's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version18 profile receipts must
+changes orientation; the host cannot select it. Version19 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors, spirit, override flags, shared appearance and sounds before the
 host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
@@ -420,18 +424,19 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol21 is strict; Android restoration from
+never include it. Current live protocol22 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
-Protocol21 requires the shared session-root boolean `showPushToTalk`; it has no
-saved/default counterpart and never appears in Layout or profiles. Native
+The shared root boolean `showPushToTalk` appears in profile19 and in the
+`savedAppearance`/`defaultAppearance` snapshots; it never appears in Layout. Native
 restoration from protocol18 or earlier starts with Push to talk shown.
 Profiles17–18 and current traces reject `offshootPercent` everywhere. Legacy
 profiles that contain offshoots retain and validate their original field, then
 strip it from effective root, landscape and shared appearance in memory. Other tuning, sounds,
 explicit override flags and the original saved files stay intact until Save.
-Push-to-talk visibility, connection, activity, theme, indicator style, presence
-scope and muted tuning are excluded from the profile. Use matching current host code and debug APK.
+Connection, activity, synthetic mode and live call gates remain excluded from
+the profile. Profile19 saves push-to-talk visibility, icons, theme, indicator
+style, presence scope and muted tuning. Use matching current host code and debug APK.
 
 ```sh
 bun run test
@@ -447,8 +452,8 @@ The existing Halo animation regressions still run against the same renderer.
 See [ADR 0041](../../docs/adr/0041-host-persona-configurator.md).
 
 Contained patches a checksum-verified in-memory copy of the bundled Halo. It
-never writes the original asset or accepts an asset path/URL. The changed bytes
-and renderer stay in debug builds. See [Persona provenance and notices](../third-party/persona-halo.md)
+never writes the original asset or accepts an asset path/URL. The selected Contained renderer also ships; the patch remains in memory and
+the bundled source asset stays unchanged. See [Persona provenance and notices](../third-party/persona-halo.md)
 for creator attribution, code/runtime licenses, and the external asset's published
 license evidence.
 
@@ -458,28 +463,30 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol21 and profile18 require both extent fields. Legacy profiles
+Current protocol22 and profiles18–19 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
 restoration from protocol19 or earlier does the same. Only explicit Save writes
-profile18.
+profile19.
 
 
 ## Icon auditions and launcher studies
 
-The Shared session controls offer a coherent channel pair (Current, Engraved,
+The Shared appearance controls offer a coherent channel pair (Current, Engraved,
 Phosphor Bold, Phosphor Fill, Boatman or i cons) and an independent push-to-talk icon (Current
 press, Contact or Matching microphone). Matching microphone follows the live
-microphone from the selected pair. Each selector resets independently to Current.
+microphone from the selected pair. Each selector resets independently to its adopted default (i cons channels,
+Current push symbol).
 Selection remains while muted indicators are Off or Push to talk is hidden.
 “Credits on phone” opens native icon credits through a one-shot, generation- and
 orientation-fenced request. It changes no preview settings, profile or dirty state;
 the button is disabled while disconnected or another request is pending.
-Protocol21 requires exactly `icons: { channels, push }` at the session root;
+Protocol22 requires exactly `icons: { channels, push }` at the shared root;
 rotation, reconnect and activity restoration retain it. Restoration from
-protocol20 or earlier supplies `current/current`. These choices do not enter
-profile18, affect profile dirty comparison, or change production defaults.
+protocol20 or earlier supplies `current/current`. Profile19 saves these choices and includes them in dirty comparison. Production
+defaults change only through explicit promotion. Legacy profiles through18
+remain strict and preserve their original bytes until an explicit Save.
 
 Launcher studies are a browser-only gallery: Current waveform plus Duplex Halo,
 Relay Aperture and Voice Carrier. Card selection only focuses a comparison; it
@@ -494,3 +501,44 @@ not a claim of CC0 licensing. Boatman and i cons use acquired Noun Project
 artwork under CC BY3.0; the panel names both source assets, their creator and
 license, and describes the modifications. Matching microphone credits only
 its source mic. See [icon preview provenance](public/icon-previews/README.md).
+
+
+## Complete saves and shipping promotion
+
+Profile19 adds six required shared appearance fields at the root: `icons`,
+`theme`, `mutedPresence`, `presenceScope`, `mutedTuning`, and `showPushToTalk`.
+The existing layouts, appearance overrides, shared base and sounds retain their
+contracts. Protocol22 adds required `savedAppearance` and `defaultAppearance`
+objects, each containing exactly those six fields. Dirty comparison checks every
+saved appearance value. Icon and muted-tuning resets use adopted defaults;
+Reset shared choices restores all six together without changing geometry or
+sounds. Runtime connection, activity, synthetic mode, gates and launcher-gallery
+selection are never part of Save.
+
+Shipping is explicit and leaves Studio available for a later promotion:
+
+```sh
+bun android/configurator/src/shipping.ts promote --profile saved-profile.json --live-state captured-studio-state.json
+bun android/configurator/src/shipping.ts generate
+bun android/configurator/src/shipping.ts generate --check
+```
+
+Promotion accepts strict profiles18–19. Profile19 can supply its own complete
+appearance without another flag. A legacy profile requires an explicit
+`--session <six-field-json>`, `--live-state <captured-state-json>`, or
+`--default-session`. A live capture must match both saved layouts and sounds;
+a mismatch stops promotion for review. Promotion never writes either input.
+
+`android/design/shipping-profile.json` is a complete, independently parseable
+profile19. The separate `shipping-provenance.json` retains the exact source
+profile text/SHA and source-capture SHA, plus the adopted appearance snapshot.
+The source's original Save timestamp is retained; a later Save timestamp alone
+does not count as a shipping design change. Regeneration checks the canonical
+profile against its promotion receipt before producing typed Kotlin defaults.
+The generated file inventory allows later promotion to remove only previously
+generated resources. Release includes only the adopted channel family, selected
+sound quartet and applicable notices; Studio keeps all audition assets.
+
+`--check` compares deterministic generated bytes and reports missing/stale
+outputs without writing. Tests use disposable output roots and preserve source
+profiles. The generator does not install an APK, contact a phone or start audio.
