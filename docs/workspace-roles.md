@@ -1,5 +1,10 @@
 # Workspace-owned roles
 
+For remaining implementation slices, dependencies and everyday-use observations,
+see the [workspace-role roadmap](role-database-roadmap.md) and its linked
+AgentBoard program.
+
+
 Explicitly ejected workspaces own SQLite databases containing their AgentVoice
 settings and captured role files: prompts, MCP definitions, skills, scripts and
 references. Later calls and runtime restarts read database revisions; editing or

@@ -1,5 +1,10 @@
 # Workspace-owned role databases
 
+For remaining implementation slices, dependencies and everyday-use observations,
+see the [workspace-role roadmap](role-database-roadmap.md) and its linked
+AgentBoard program.
+
+
 Broader proposal, September 8, 2026. The first implementation slice is recorded
 in [ADR 0042](adr/0042-workspace-role-databases.md) and documented in
 [workspace roles](workspace-roles.md). It uses explicit ejection, direct
