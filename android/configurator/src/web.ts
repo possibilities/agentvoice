@@ -112,7 +112,7 @@ function render() {
     openingCredits && !openingConnection ? "Opening credits…" : "Credits on phone",
   );
   save.disabled = !connected || inFlight || changed || saving || openingCredits;
-  save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save profile";
+  save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save complete design";
   element<HTMLButtonElement>("reset-production").disabled = save.disabled;
   renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits);
   if (!status || !draft) return;
