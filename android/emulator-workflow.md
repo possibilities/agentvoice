@@ -6,6 +6,30 @@ the physical phone available for the human's Studio use. A plugged-in phone is
 not an exclusive handoff. This supersedes older guidance to use the phone as the
 primary agent preview or not recreate a previously destroyed emulator.
 
+## Check host capacity before starting
+
+Before boot or build, inspect free space on both the system and AVD volumes,
+physical RAM, current swap/memory pressure and active VM/build owners. Hardware
+acceleration does not make an emulator free: continuous Persona rendering can
+consume a core, and guest memory competes with builds and browser processes.
+On this 16GB host, do not overlap an emulator with a substantial Gradle build when
+memory pressure or heavy swapping is present. Pause the owned emulator, build,
+then resume verification; start with fewer cores and modest guest memory when
+headroom permits. Do not trade away necessary rendering correctness.
+
+Use the roomy Scratch volume for task AVD userdata and snapshots, never assume
+`/tmp` lives there. Stop allocation-heavy work when the system volume is nearly
+full; first inventory and clean only owned disposable artifacts. Do not delete
+macOS swap, another service's VM images, another agent's caches or user data.
+Quick Boot can write a guest-sized snapshot during shutdown, so budget that space
+or use `-no-snapshot-save` for a task whose AVD will be deleted anyway.
+
+September10 incident: the system volume had about4GB free and the 16GB Mac had
+about12GB swap in use. The owned 3GB/4-core ARM64 emulator was observed at123%CPU
+and stopped; its Scratch AVD was deleted. This does not establish the crash cause.
+Avoid repeating that combination; emulator-first means optimizing within measured
+host capacity, not keeping a VM running regardless of pressure.
+
 ## Choose and own a target
 
 Use the official Android Emulator directly on macOS. On Apple Silicon choose an
