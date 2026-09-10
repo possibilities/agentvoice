@@ -55,11 +55,11 @@ Release signing/distribution and full real-call audio acceptance remain separate
 
 ## Build and verify
 
-Use an optimized local emulator for routine design and verification; leave the
-physical phone available for the operator. Follow the [emulator-first workflow](emulator-workflow.md)
-for native architecture/VM/GPU acceleration, warm iteration, isolated Studio
-hosts, snapshots, capture fidelity and task-end destruction. Hardware acceptance
-uses a separately coordinated phone handoff; a connected cable is not one.
+Use the physical phone in explicitly coordinated turns. Send an AgentNotify
+request when device work is ready, wait for the human's handoff, preserve their
+current Studio/settings, and notify when access is released. Do source/build
+work independently while waiting. Emulator use is retired; the [older workflow](emulator-workflow.md)
+records historical experiments only. A connected cable is not a handoff.
 
 Use Bun, JDK 17 and Android SDK platform/build-tools 36. The Gradle 8.13 wrapper is
 checksum-pinned. Set `ANDROID_HOME` to your installed SDK or configure an untracked

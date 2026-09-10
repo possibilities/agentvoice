@@ -1,4 +1,12 @@
-# Emulator-first Android design and verification
+# Historical emulator workflow — superseded
+
+The operator retired emulator use on September 10, 2026 after host disk/memory
+pressure. Do not start a VM from this runbook. Use the physical phone in explicit
+turns: notify when requesting it, wait for handoff, preserve current Studio and
+system settings, and notify when finished. See [current project policy](../AGENTS.md#android-collaboration).
+The material below records prior experiments and does not authorize emulators.
+
+# Prior emulator-first Android design and verification
 
 The operator's September 10, 2026 policy is to optimize local emulators and use
 them for as much design, iteration and automated verification as possible. Keep
