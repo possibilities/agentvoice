@@ -48,9 +48,10 @@ internal class PreviewSwitchFeedback(private val output: PreviewSwitchOutput) {
 }
 
 /** Local interaction output. Never requests focus, changes volume or feeds a voice track. */
-internal class PreviewSwitchPool(context: Context) : PreviewSwitchOutput, AutoCloseable {
+internal class PreviewSwitchPool(context: Context, communicationAudio: Boolean = false) : PreviewSwitchOutput, AutoCloseable {
     private val pool = SoundPool.Builder().setMaxStreams(3).setAudioAttributes(
-        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+        // In-call feedback follows call routing/volume policy rather than competing as media.
+        AudioAttributes.Builder().setUsage(if (communicationAudio) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build()
     private val ready = ConcurrentHashMap.newKeySet<Int>()
     private val samples = mutableMapOf<Pair<String, PreviewSwitchCue>, Int>()
@@ -80,10 +81,11 @@ internal class PreviewSwitchPool(context: Context) : PreviewSwitchOutput, AutoCl
 }
 
 @Composable
-internal fun rememberPreviewSwitchFeedback(settings: PreviewSounds, output: PreviewSwitchOutput? = null): PreviewSwitchFeedback {
+internal fun rememberPreviewSwitchFeedback(settings: PreviewSounds, output: PreviewSwitchOutput? = null,
+    communicationAudio: Boolean = false): PreviewSwitchFeedback {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val player = remember(output) { output ?: PreviewSwitchPool(context.applicationContext) }
+    val player = remember(output, communicationAudio) { output ?: PreviewSwitchPool(context.applicationContext, communicationAudio) }
     val feedback = remember(player) { PreviewSwitchFeedback(player) }
     val latestSettings by rememberUpdatedState(settings)
     SideEffect { feedback.update(settings, lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }

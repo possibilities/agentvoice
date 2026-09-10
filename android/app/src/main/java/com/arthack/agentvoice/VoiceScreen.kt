@@ -46,7 +46,7 @@ internal fun VoiceScreen(
 ) {
     val layout = shippingLayoutForOrientation(currentPreviewOrientation())
     val latestUi by rememberUpdatedState(ui)
-    val feedback = rememberPreviewSwitchFeedback(ShippingDesign.sounds, soundOutput)
+    val feedback = rememberPreviewSwitchFeedback(ShippingDesign.sounds, soundOutput, communicationAudio = true)
     var pendingMute by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     // A directional cue belongs to this gesture's confirmed mute change, never hydration/reconnect.
     LaunchedEffect(ui.connected, ui.controlsPending, ui.micMuted, ui.speakerMuted) {

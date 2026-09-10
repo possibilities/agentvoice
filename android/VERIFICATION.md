@@ -2101,3 +2101,29 @@ notified. No grant, system-volume, service or production-code changes were made.
 The remaining product choice is a realistic Studio call-route audition and/or
 sound tuning that works through the call channel; no audio-routing workaround or
 replacement sound was silently adopted.
+
+### Communication-category comparison
+
+The operator reports that ChatGPT's internal search cue remains clear through the
+same headset. This is a useful counterexample to the earlier hardware-only
+interpretation: the measured route change does not prove that all perceived
+degradation is unavoidable. The captured Android dumps show different call/media
+volume paths and no ducked players; they do not reveal ChatGPT's implementation.
+
+The comparison build assigns production SoundPool output
+USAGE_VOICE_COMMUNICATION/CONTENT_TYPE_SONIFICATION; Studio retains USAGE_MEDIA.
+Only the output category changes: WAV bytes, rate1, configured gain, cue triggers,
+VoicePeer, microphone selection, focus and call processing stay unchanged.
+Production cues now follow call-volume policy. This is a routing-policy
+comparison, not a claim of restored Bluetooth bandwidth or verified better sound.
+Phone installation, runtime category inspection and operator listening are pending.
+All 138 Studio JVM tests, production/Studio assembly and both lint checks passed
+with a full Kotlin compilation (3m 28s). The initial incremental compilation
+reported unresolved existing top-level functions; disabling incremental compilation
+resolved it without unrelated source changes.
+
+Production comparison APK SHA256:
+`212ef542238940723b80230cf03e483fd77b7767fec9843835c5cb3e6fcd3b4f`.
+The selected-resource/JNI audit passes with the exact quartet and no Studio
+entrypoints/profile payload. The original installed APK is retained privately in
+`/tmp/agentvoice-call-cue-comparison/original-production.apk` for rollback.

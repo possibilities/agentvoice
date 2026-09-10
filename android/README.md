@@ -431,7 +431,8 @@ The host studio offers **Off**, **Rocker 29** (longer recorded decay) and
 Selection is silent; use the phone's controls to audition. Both mute buttons use
 the same distinct on/off pair, selected from the new persistent mute state.
 Push to talk uses a related lower down cue and a shorter, quieter up
-cue. The phone's media volume also controls the output. The adopted default is
+cue. Studio follows the phone's media volume; production feedback follows call
+volume through voice-communication audio attributes. The adopted default is
 Rocker 13/60; changing or saving an audition does not automatically promote it.
 
 Sounds are shared across orientations and saved only by explicit Save, at the
@@ -450,12 +451,16 @@ real voice call. Release includes only the adopted four-file quartet and player;
 the other family remains debug-only.
 
 Bluetooth auditions can sound different from a real call despite identical WAVs
-and gain. Studio uses normal media playback. Production enters Android communication
+and gain. Studio uses normal media playback; production classifies its local
+feedback as USAGE_VOICE_COMMUNICATION with sonification content. It stays outside
+the transmitted voice track and requests no additional focus. Production enters Android communication
 mode and selects an available headset microphone/output (LE audio when exposed,
 otherwise classic Bluetooth SCO). On the tested S22/headset, Android moves the
 media stream from A2DP to SCO too, then restores A2DP when the call ends. The call
 path changes playback bandwidth/processing; its mixer sample rate does not prove
-the Bluetooth codec bandwidth. Studio currently has no call-route audition, so
+the Bluetooth codec bandwidth. A route change alone does not establish that all
+perceived degradation is unavoidable: media and communication streams can have
+different volume and processing policies even on the same output device. Studio currently has no call-route audition, so
 evaluate a proposed sound on the intended voice hardware before adopting it.
 Do not switch audio mode or microphone route on mute/PTT gestures just to improve
 cue fidelity; that changes the call's capture/output path.
