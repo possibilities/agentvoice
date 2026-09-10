@@ -183,7 +183,11 @@ private fun PreviewStudioScene(
                     }
                 }
             }
-            PreviewConnectionNotice(connection, Modifier.align(Alignment.TopCenter).fillMaxWidth())
+            val noticeWidth = minOf(maxWidth, 312.dp)
+            val noticeLeft = (geometry.stageX + geometry.diameter / 2f - noticeWidth.value / 2f)
+                .coerceIn(0f, (maxWidth - noticeWidth).value.coerceAtLeast(0f))
+            PreviewConnectionNotice(connection, Modifier.align(Alignment.TopStart)
+                .offset { IntOffset(noticeLeft.dp.roundToPx(), 0) }.width(noticeWidth))
         }
     }
 }

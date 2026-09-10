@@ -1,9 +1,9 @@
 # Android development build verification
 
-Latest work: **Relay Aperture launcher adoption and startup failure handling**, September 10, 2026 UTC.
+Latest work: **Stable PTT labels and Persona-aligned connection notice**, September 10, 2026 UTC.
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
-its full editing range. See [Relay Aperture follow-up](#relay-aperture-follow-up) for the current
+its full editing range. See [Status polish](#status-polish) for the current
 build, tests, saved-copy/cold-reload checks and release packaging evidence. Earlier
 sections retain their original results and limitations; they are not cumulative
 verification of the current candidate. No verification started a voice call or
@@ -1533,3 +1533,30 @@ checkout as `6759151`, and the idle default service was restarted successfully.
 No config, role or grant changes were made. A successful subsequent real voice call
 was not established by these automated/installation checks; user retry remains
 the end-to-end confirmation.
+
+
+## Status polish
+
+The PTT face no longer substitutes Updating controls/Updating during a mute
+acknowledgement. It retains Push/to talk while the microphone is closed and
+Live now while the effective microphone gate is open. Gesture acceptance,
+acknowledged gate ownership, cancellation and held-PTT feedback are unchanged.
+The top notice follows the displayed Persona stage center, including landscape
+side, horizontal tuning and existing geometry interpolation; its container is
+clamped to the visible safe viewport. Portrait stays centered.
+
+Debug/release builds and Android lint passed (`/tmp/agentvoice-status-polish-build-final.log`).
+All 15 targeted physical S22 tests passed in 20.52 seconds, covering both text layouts
+with pending acknowledgements, both landscape sides and offsets, touch/hold
+ownership, notice lifecycle and production controls. Test log:
+`/tmp/agentvoice-status-polish-phone.log`. Native portrait/landscape connecting
+captures were visually inspected at `/tmp/agentvoice-status-{portrait,landscape}.png`.
+These screenshots use Studio simulation; no new real call was started.
+
+Installed debug APK was read back and matched SHA-256
+`5b0e632b8b9b67e9d2f7325f4131dc3f693e799eb21db4c5b0c410a7abab1b8e`.
+Release SHA-256 is `3ccdf980748c2bd35cd7e229639993b5b241331216e646856e739494be7946cb`;
+selected-only resource/notice audit passed (`/tmp/agentvoice-status-polish-apk.json`).
+The phone and host saved profiles remain byte-identical to their pretest copies;
+no Save occurred. Studio state and rotation 1 / auto 0 / stay-awake 7 were restored,
+and real MainActivity reopened ready for an explicit call. No emulator was used.

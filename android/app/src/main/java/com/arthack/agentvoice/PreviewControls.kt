@@ -398,7 +398,7 @@ internal fun PreviewHoldControl(
         role = Role.Button
         contentDescription = "Push to talk"
         stateDescription = when {
-            microphoneIsLive(ui) -> if (ui.holding) "Live now. Release to mute" else "Live now. Microphone open"
+            ui.connected && ui.micOpen -> if (ui.holding) "Live now. Release to mute" else "Live now. Microphone open"
             ui.holding -> "Opening microphone"
             ui.canHold -> "Ready"
             else -> "Unavailable. ${holdUnavailableReason(ui)}"
@@ -436,7 +436,7 @@ internal fun RockerHoldFace(
     val inks = theme.palette
     val largeType = LocalDensity.current.fontScale > 1.3f
     val live = ui.holding && ui.micOpen
-    val microphoneLive = microphoneIsLive(ui)
+    val microphoneLive = ui.connected && ui.micOpen
     BoxWithConstraints(modifier) {
         val verticalFace = maxHeight > maxWidth * 1.15f
         val shortFace = maxHeight < 70.dp
@@ -507,14 +507,14 @@ internal fun RockerHoldFace(
                 ControlText(when {
                     microphoneLive -> "Live\nnow"
                     ui.holding -> "Wait"
-                    ui.canHold -> "Push"
+                    ui.connected -> "Push"
                     else -> "Off"
                 }, ink, mainSize, bold = true, maxLines = 2, align = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release\nto mute" else "mic open"
                     ui.holding -> "for mic"
-                    ui.canHold -> "to talk"
+                    ui.connected -> "to talk"
                     else -> holdUnavailableReason(ui, concise = true)
                 }, ink, detailSize, maxLines = 4, align = TextAlign.Center)
             }
@@ -526,18 +526,18 @@ internal fun RockerHoldFace(
                 ControlText(when {
                     microphoneLive -> "Live now"
                     ui.holding -> if (concise) "Wait" else "Opening"
-                    ui.canHold -> "Push"
+                    ui.connected -> "Push"
                     else -> if (concise) "Off" else "Unavailable"
                 }, ink, if (shortFace) shortTitle else when {
                     microphoneLive -> scaledType(24, heightScale, 19, liveTypeMaximum)
-                    !ui.canHold && !ui.holding -> scaledType(22, heightScale, 18, 26)
+                    !ui.connected && !ui.holding -> scaledType(22, heightScale, 18, 26)
                     else -> scaledType(32, heightScale, 23, 42)
                 }, bold = true)
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.holding -> if (concise) "for microphone" else "microphone"
-                    ui.canHold -> "to talk"
+                    ui.connected -> "to talk"
                     else -> holdUnavailableReason(ui, concise = concise)
                 }, ink, if (shortFace) shortDetail else scaledType(11, heightScale, 10, 14), maxLines = if (shortFace) 1 else 2)
             }
@@ -552,7 +552,6 @@ private fun microphoneIsLive(ui: CallUi): Boolean = ui.connected && !ui.controls
 
 private fun holdUnavailableReason(ui: CallUi, concise: Boolean = false): String = when {
     !ui.connected -> if (concise) "Not connected" else "Voice not connected"
-    ui.controlsPending -> if (concise) "Updating" else "Updating controls"
     !ui.micMuted -> "Opening microphone"
     else -> if (concise) "Waiting for mic" else "Waiting for microphone"
 }
