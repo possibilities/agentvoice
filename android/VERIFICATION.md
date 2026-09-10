@@ -1261,3 +1261,40 @@ Evidence: `/tmp/agentvoice-columns-final-build.log`,
 `/tmp/agentvoice-columns-phone-check.log`, and the native PNG/JSON pairs under
 `/tmp/agentvoice-columns-phone/`. The live host was restarted on the new protocol
 and its current URL opened in Chrome; saved URL handoff files were refreshed.
+
+### Landscape width with automatic height
+
+Landscape now interprets the orientation-local deck extent as width; portrait
+continues to use height. Landscape fills the safe vertical viewport inside
+shared padding, anchors at its outer edge, and fits requested width within the
+existing lane/section separation. Persona placement is unchanged. The studio
+labels the dimension on rotation; stored numbers and protocol/profile stay intact.
+
+Debug APK SHA256:
+`baabe2c210602c3a6520b4dc0c86d18131c4a0bae14effd382ea32f5f901ff48`.
+
+- Debug/test builds and lint pass; 120 JVM tests pass. Two old geometry fixtures
+  assumed a fixed 262 dp height or a hard-coded overlap offset; they now use the
+  actual fitted deck bounds/contact position. A new test checks widths 240/320,
+  padding 0/16/40, both sides, fixed Persona and equal vertical/outer clearances.
+- 13 targeted physical S22 tests pass in 46.394 seconds: visibility, controls,
+  orientation/native-instance continuity, composition, sound gestures and trace
+  join painting. The landscape controls test deliberately requests 240 while
+  providing 300 vertical dp and verifies the height fills all 300 dp.
+- Configurator: 75 tests/2,939 assertions, typecheck and Biome pass. Browser
+  fixture confirms Controls width plus padding help in landscape, Controls
+  height in portrait, and existing scope/rotation/reset/visibility behavior.
+- Native captures reviewed at requested widths 240, 300 and 480 (the latter
+  fitted to the available lane), padding32, mirrored landscape and portrait.
+  Top/bottom padding controls height independently of width; visible captions,
+  PTT and traces remain coherent in these samples.
+- Both latest layouts, session values and mute gates restored exactly. Phone
+  and host saved files remain byte-identical; no Save. Original system rotation
+  values restored (accelerometer_rotation1/user_rotation1). Phone released.
+
+Evidence: `/tmp/agentvoice-width-build-final.log`,
+`/tmp/agentvoice-width-instrumentation.log`,
+`/tmp/agentvoice-width-host-tests.log`, `/tmp/agentvoice-width-browser/`,
+`/tmp/agentvoice-width-phone-check.log`, and PNG/JSON pairs under
+`/tmp/agentvoice-width-phone/`. Current studio URL handoffs were refreshed and
+opened in Chrome.

@@ -61,7 +61,6 @@ internal fun previewOrientationGeometry(
     // Manual screen-coordinate movement never reallocates the control lane or changes handedness.
     val positioned = baseline.copy(stageX = baseline.stageX + horizontalOffsetDp,
         horizontalOffsetDp = horizontalOffsetDp)
-    if (spacing == PreviewSpacing() && actualDeckHeight == controlsHeight) return positioned
     val leftPersona = personaSide == "left"
     val baselineInner = if (leftPersona) baseline.deckX else width - baseline.deckX - baseline.deckWidth
     val baselineOuterMargin = width - baselineInner - baseline.deckWidth
@@ -72,11 +71,12 @@ internal fun previewOrientationGeometry(
         .coerceIn(baselineInner + minimumWidth, width)
     // Constrained controls consume their own spare width; the fixed Persona lane is never borrowed.
     val inner = minOf(baselineInner + spacing.sectionGapDp, outer - minimumWidth)
-    val deckWidth = (outer - inner).coerceAtLeast(1f)
+    // The retained profile field is the primary deck extent: height in portrait, width here.
+    val deckWidth = minOf(controlsHeight, (outer - inner).coerceAtLeast(1f))
     val clearance = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else 16f * spacing.edgeClearancePercent / 100f
-    val viewport = minOf(actualDeckHeight, (height - clearance * 2f).coerceAtLeast(1f))
-    return positioned.copy(deckX = if (leftPersona) inner else width - outer, deckY = (height - viewport) / 2f,
+    val viewport = (height - clearance * 2f).coerceAtLeast(1f)
+    return positioned.copy(deckX = if (leftPersona) outer - deckWidth else width - outer, deckY = (height - viewport) / 2f,
         deckWidth = deckWidth, deckViewportHeight = viewport)
 }
 

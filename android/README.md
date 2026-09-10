@@ -182,7 +182,9 @@ center and glow. These stationary neutral layers change no layout, renderer,
 tuning or touch target and preserve full bleed. Original retains a conservative
 shared envelope, so unequal state sizes can leave a larger gap or no visible
 routes when the envelope reaches the deck.
-Controls size spans 240–480 dp, including the baseline 16 dp join; Push-to-talk
+The portrait height/landscape width slider spans 240–480 dp. Landscape height
+fills shared top/bottom padding; width fits its lane from the outer edge inward.
+Portrait height includes the baseline 16 dp join. Push-to-talk
 share spans 30–60% of that size basis. Extra join space changes total deck height
 while preserving both button-face heights. Provisional portrait defaults use
 387 dp and a 40.9% talk share; landscape retains 262 dp and `116 / 262 × 100`. **Reset button sizes** restores only those two dimensions,
@@ -403,3 +405,10 @@ Protocol 19 requires consistent current/other and saved/other spacing; profile 1
 requires equal root/landscape spacing. Older effective layouts adopt portrait
 spacing, and validated historical offshoot values are discarded. Neither
 migration rewrites the operator's saved files before Save.
+
+Landscape's **Controls width** slider uses the existing orientation-local extent
+value; **Controls height** remains the portrait label. Landscape height is
+automatic from the visible safe area minus shared padding at both ends. Width
+changes preserve Persona placement and the far edge of the deck. Width fits
+the available lane and section separation; tuning values are never rewritten
+to fit. Existing saved numbers remain intact and become widths in landscape.

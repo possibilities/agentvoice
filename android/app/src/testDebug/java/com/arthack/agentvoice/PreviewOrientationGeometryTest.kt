@@ -18,7 +18,26 @@ class PreviewOrientationGeometryTest {
         }
     }
 
-    @Test fun landscapeFitsBothLanesAndOnlyTheDeckScrollsAtLargeSizes() {
+    @Test fun landscapeWidthIsIndependentFromItsPaddingDrivenHeight() {
+        for (side in listOf("left", "right")) for (padding in listOf(0, 16, 40)) {
+            val spacing = PreviewSpacing(paddingDp = padding)
+            val narrow = previewOrientationGeometry(900f, 420f, 900f, false, 240f, 0f, side, spacing)
+            val wide = previewOrientationGeometry(900f, 420f, 900f, false, 320f, 0f, side, spacing)
+            assertEquals(240f, narrow.deckWidth, 0f)
+            assertEquals(320f, wide.deckWidth, 0f)
+            for (geometry in listOf(narrow, wide)) {
+                assertEquals(padding.toFloat(), geometry.deckY, 0f)
+                assertEquals(420f - 2 * padding, geometry.deckViewportHeight, 0f)
+                val outer = if (side == "left") 900f - geometry.deckX - geometry.deckWidth else geometry.deckX
+                assertEquals(padding.toFloat(), outer, 0f)
+            }
+            assertEquals(narrow.stageX, wide.stageX, 0f)
+            assertEquals(narrow.stageY, wide.stageY, 0f)
+            assertEquals(narrow.diameter, wide.diameter, 0f)
+        }
+    }
+
+    @Test fun landscapeFitsBothLanesWithoutScrollingAtLargeWidths() {
         for ((width, height) in listOf(780f to 360f, 900f to 420f, 352f to 320f)) {
             val small = previewOrientationGeometry(width, height, width, false, 240f, 0f)
             val large = previewOrientationGeometry(width, height, width, false, 480f, 0f)

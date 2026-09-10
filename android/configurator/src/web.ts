@@ -167,6 +167,10 @@ function render() {
     "aria-valuetext",
     `${draft.spirit.strengthPercent} percent`,
   );
+  text(
+    element("controls-extent-label"),
+    draft.orientation === "landscape" ? "Controls width" : "Controls height",
+  );
   controlHeight.value = String(draft.design.controlsHeightDp);
   holdShare.value = String(draft.design.holdSharePercent);
   text(
@@ -182,7 +186,11 @@ function render() {
   holdShare.disabled = !draft.showPushToTalk;
   text(
     element("controls-height-hint"),
-    draft.showPushToTalk ? "All three buttons" : "Both mute buttons",
+    draft.orientation === "landscape"
+      ? "Deck width, fitted to its lane. Height fills the space inside Shared padding."
+      : draft.showPushToTalk
+        ? "All three buttons"
+        : "Both mute buttons",
   );
   element<HTMLInputElement>("show-push-to-talk").checked = draft.showPushToTalk;
   element("push-to-talk-hidden-hint").hidden = draft.showPushToTalk;

@@ -536,3 +536,14 @@ byte-for-byte; PTT files are unchanged. New quieter/shorter off derivatives have
 complete source/hash/processing receipts. No cues on configuration, hydrate,
 reconnect, cancellation or relocation. Final sound preference remains the
 operator's audition choice.
+
+### Primary deck extent follows orientation
+
+After stacking landscape mute controls, a height slider no longer matched the
+portrait mental model. The studio now calls it Controls width in landscape and
+Controls height in portrait. Landscape height fills the safe viewport minus
+shared top/bottom padding; width is end-aligned and fitted within its lane and
+section separation. Persona's existing square/position remain independent.
+The retained `controlsHeightDp` wire/profile field stores this primary extent;
+no schema migration or saved-file write is needed for the requested semantic
+change. Reset retains each orientation's existing numeric defaults.

@@ -43,7 +43,7 @@ class PreviewLandscapeTraceGeometryTest {
                 for ((p, q) in a.points.zip(b.points)) {
                     assertEquals(780f - p.x, q.x, .001f)
                     assertEquals(p.y, q.y, .001f)
-                    assertTrue(p.y in 49f..311f)
+                    assertTrue(p.y in layout("left").deckY..(layout("left").deckY + layout("left").deckViewportHeight))
                 }
                 for ((p, q) in a.points.zipWithNext()) assertTrue(q.x >= p.x)
                 for ((p, q) in b.points.zipWithNext()) assertTrue(q.x <= p.x)

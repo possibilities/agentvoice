@@ -82,12 +82,14 @@ immediately. PTT still requires a muted mic; when the mic is already open its
 label reads **Live now / microphone open**. Holding confirmed PTT reads
 **Live now / release to mute**. Button shapes and hit targets do not animate.
 
-Controls height spans 240–480 dp and sets the overall deck height, fitted within
-the available viewport in landscape. **Push-to-talk share** spans 30–60%: it is
+**Controls height** in portrait becomes **Controls width** in landscape
+(240–480 dp). Landscape width fits the available control lane and anchors to its
+outer edge; height fills the visible safe area inside shared top/bottom padding.
+Persona size and manual position do not move when deck width changes. **Push-to-talk share** spans 30–60%: it is
 height share in portrait and width share in landscape. Portrait gives the mute
 row the remaining height after its join; landscape gives the stacked mute column
 the remaining width after its join. Landscape retains its independent 262 dp
-height and approximately44.3% share baseline (`116 / 262 × 100`). **Reset button
+width and approximately 44.3% share baseline (`116 / 262 × 100`). **Reset button
 sizes** restores only these two sliders to the visible orientation's defaults,
 keeping spacing, composition, light and Persona tuning.
 
@@ -116,8 +118,8 @@ does not audition audio. The browser contains no player or audio asset routing.
 Changes remain unsaved until explicit Save.
 
 **Show push to talk** is a shared session choice, initially on. Turning it off
-hides Push to talk and its connector; the mute buttons fill the same selected
-controls height. In landscape the stacked mute column fills the full deck. The
+hides Push to talk and its connector; the mute buttons fill the selected deck. In landscape the stacked mute column
+fills its width and the height inside shared padding. The
 Push-to-talk share slider becomes disabled while its value
 is retained for when the button returns. This choice survives rotation and
 reconnection, but is excluded from Save. It changes only the design preview.
@@ -445,3 +447,8 @@ never writes the original asset or accepts an asset path/URL. The changed bytes
 and renderer stay in debug builds. See [Persona provenance and notices](../third-party/persona-halo.md)
 for creator attribution, code/runtime licenses, and the external asset's published
 license evidence.
+
+The retained wire/profile name `controlsHeightDp` stores the orientation's primary
+deck extent: portrait height or landscape width. Values, saved files and profile
+version stay unchanged; the studio labels the dimension for the visible
+orientation. Reset button sizes restores its respective extent/share defaults.

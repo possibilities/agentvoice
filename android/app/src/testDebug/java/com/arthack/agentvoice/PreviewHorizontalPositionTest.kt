@@ -37,7 +37,9 @@ class PreviewHorizontalPositionTest {
                 assertEquals(baseline.routes.map { it.landing }, moved.routes.map { it.landing })
                 assertEquals(baseline.center.x + offset, moved.center.x, .001f)
             }
-            val overlap = landscape(side, offset = if (side == "left") 200f else -200f)
+            val frame = landscape(side)
+            val edge = frame.deckX + if (side == "right") frame.deckWidth else 0f
+            val overlap = landscape(side, offset = edge - frame.stageX - frame.diameter / 2f)
             assertTrue(previewLandscapeTraceGeometry(overlap, 780f, 1f, 30f)!!.routes.isEmpty())
         }
     }

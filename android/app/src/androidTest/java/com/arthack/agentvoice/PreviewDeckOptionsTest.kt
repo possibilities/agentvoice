@@ -53,7 +53,7 @@ class PreviewDeckOptionsTest {
         var mirrored by mutableStateOf(false)
         compose.setContent {
             VoiceTheme { PreviewControls(PersonaPreviewState().ui(), {}, {}, {}, Modifier.width(312.dp),
-                controlsHeightDp = 480, holdSharePercent = share, availableHeightDp = 300f,
+                controlsHeightDp = 240, holdSharePercent = share, availableHeightDp = 300f,
                 spacing = PreviewSpacing(paddingDp = 16), showPushToTalk = shown, landscape = true, mirror = mirrored) }
         }
         for (side in listOf(false, true)) for (ratio in listOf(30.0, 60.0)) {

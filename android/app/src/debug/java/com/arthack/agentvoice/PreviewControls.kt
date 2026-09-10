@@ -100,7 +100,7 @@ private fun PreviewLandscapeControls(
     onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, mirror: Boolean,
 ) {
     val inks = LocalPreviewTheme.current.palette
-    val height = minOf(controlsHeightDp.toFloat(), availableHeightDp ?: controlsHeightDp.toFloat())
+    val height = availableHeightDp ?: controlsHeightDp.toFloat()
     BoxWithConstraints(modifier.height(height.dp).testTag("preview-controls")) {
         val gap = if (showPushToTalk) minOf(spacing.effectivePushGapDp.toFloat(), maxWidth.value / 4f) else 0f
         val holdWidth = if (showPushToTalk) maxWidth.value * holdSharePercent.toFloat() / 100f else 0f
