@@ -52,8 +52,22 @@ green-river.
 
 New studio requests append after the current work unless the operator explicitly
 cancels or reorders it. Keep every requested design idea in the follow-up queue;
-finish verification and delivery before starting the next round. The physical
-phone is the current preview; the operator explicitly destroyed the emulator.
+finish verification and delivery before starting the next round.
+
+Use an optimized local Android emulator first for design, iteration, screenshots,
+UI interaction and instrumentation. Leave the physical phone available for the
+human, including their independent Studio session. Being plugged in is not a
+handoff: coordinate exclusive access only for hardware-specific acceptance or an
+explicit installation. Do not disturb the operator's host, drafts or saved profile.
+Read [emulator workflow](android/emulator-workflow.md) before creating a target.
+Use host-native architecture and verified VM acceleration; try accelerated GPU
+rendering before a measured software fallback. Keep one owned emulator warm
+through a task, use incremental builds and targeted tests, and isolate its Studio
+host/port/export path. Retain normal animation for design review. Destroy every
+AVD/emulator created for the task when done, as requested; retain SDK/build caches.
+A persistent shared device pool is a future policy change, not implied permission.
+Record ownership, renderer, viewport and verification limits; emulator evidence
+cannot establish physical OLED appearance, touch feel or real audio quality.
 
 ## Commands
 
@@ -80,8 +94,10 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   Reset to production resets both layouts without writing the explicit checkpoint.
   Only connection/gates/held pointers and synthetic
   activity are transient. No microphone, grants, voice calls or automatic edit/Save
-  replay; explicitly selected interaction sounds are supported. Keep the physical
-  phone preview and renderer instance stable; do not recreate the destroyed VM.
+  replay; explicitly selected interaction sounds are supported. Keep the operator's
+  physical Studio session stable; use an isolated emulator host with `--port 0`
+  and a scratch `--save-to` for automated work. Preserve renderer instances during
+  ordinary tuning. Follow the emulator-first lifecycle above.
 - `bun android/configurator/src/shipping.ts promote --profile <file>` — explicit
   design adoption. The complete canonical profile and provenance live in
   `android/design/shipping-{profile,provenance}.json`; generated constants and

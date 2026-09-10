@@ -1,10 +1,18 @@
 # AgentVoice design studio
 
 A separate host browser app for comparing native Android voice controls and
-tuning the existing Persona Halo. The phone renders the interactive demo;
+tuning the existing Persona Halo. The Android target renders the interactive demo;
 the browser separates Appearance, orientation-local Layout, Shared spacing and
 Shared session controls, plus **Save complete design**.
-No tuning panel obscures the phone.
+No tuning panel obscures the preview.
+
+For agent-driven design and iteration, use an optimized emulator by default;
+leave the phone and its Studio host for the human. The [emulator workflow](../emulator-workflow.md)
+covers acceleration, warm reuse, snapshots and mandatory task-end cleanup.
+Run a separate host with `--device <emulator-serial> --port 0 --save-to <scratch-file>`.
+Never reuse the phone host port or its profile path for emulator experiments.
+Draft/checkpoint behavior below applies independently to each Android target;
+reconnecting an emulator must never import or reset the operator's phone draft.
 
 ## Continue from production
 

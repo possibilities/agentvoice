@@ -3,7 +3,7 @@
 A native, foreground voice client for the existing AgentVoice server. One screen:
 HUMAN and AGENT Rocker mute controls, a push-to-talk surface, and Vercel AI Elements'
 Persona Halo. Kotlin/Compose and native Rive draw the interface; native WebRTC owns audio. Android
-12 / API 31 or newer, ARM64 phones and x86-64 emulators.
+12 / API 31 or newer, ARM64 phones and ARM64/x86-64 emulators.
 
 This development build is installed on a Samsung Galaxy S22 running Android 16.
 Native WSS/WebRTC connected to the desktop over Tailscale. Real-device checks
@@ -54,6 +54,12 @@ Audit the built artifact with `python3 android/scripts/verify-shipping-apk.py`.
 Release signing/distribution and full real-call audio acceptance remain separate.
 
 ## Build and verify
+
+Use an optimized local emulator for routine design and verification; leave the
+physical phone available for the operator. Follow the [emulator-first workflow](emulator-workflow.md)
+for native architecture/VM/GPU acceleration, warm iteration, isolated Studio
+hosts, snapshots, capture fidelity and task-end destruction. Hardware acceptance
+uses a separately coordinated phone handoff; a connected cable is not one.
 
 Use Bun, JDK 17 and Android SDK platform/build-tools 36. The Gradle 8.13 wrapper is
 checksum-pinned. Set `ANDROID_HOME` to your installed SDK or configure an untracked
