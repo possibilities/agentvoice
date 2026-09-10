@@ -91,8 +91,10 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
       else next.scales[next.mode] = defaults.defaults[next.mode];
       break;
     case "position":
-      if (next.orientation === "landscape")
-        next.horizontalOffsetDp = defaults.defaultHorizontalOffsetDp;
+      if (next.orientation === "landscape" || next.orientation === "landscape-reverse")
+        next.horizontalOffsetDp =
+          defaults.defaultHorizontalOffsetDp *
+            (next.personaSide === defaults.defaultPersonaSide ? 1 : -1) || 0;
       else next.verticalOffsetDp = defaults.defaultVerticalOffsetDp;
       break;
     case "animation":

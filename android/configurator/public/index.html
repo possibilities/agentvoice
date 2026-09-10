@@ -265,7 +265,17 @@
               <fieldset class="local-layout">
                 <legend class="panel-title">Layout</legend>
                 <p class="scope-badge" id="local-layout-scope">Current orientation only</p>
-                <p class="control-hint scope-explanation">Persona size, position, controls height and Push-to-talk share apply only to the orientation shown on the phone.</p>
+                <p class="control-hint scope-explanation">Persona size, position, controls size, side and Push-to-talk share apply only to the orientation shown on the phone.</p>
+                <div id="landscape-handedness" hidden>
+                  <div class="mixing">
+                    <label for="controls-side">Controls side</label>
+                    <select id="controls-side" aria-describedby="controls-side-hint">
+                      <option value="right">Right — right-handed</option>
+                      <option value="left">Left — left-handed</option>
+                    </select>
+                  </div>
+                  <p id="controls-side-hint" class="control-hint">Swaps Persona and controls, mirroring Persona position. Saved for this landscape rotation. Padding and appearance stay shared.</p>
+                </div>
                 <div class="size-control">
                   <div class="size-heading">
                     <label id="size-label" for="size">Speaking size</label>

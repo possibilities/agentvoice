@@ -266,7 +266,7 @@ size preserves that center, Halo diameter and saved tuning values.
 
 Landscape places a square Persona beside a two-column Rocker deck. The mute
 buttons stack top/bottom in the column nearest Persona, with full-height Push to
-talk in the far-right column. A future opposite Persona side mirrors the column
+talk in the outside column. The opposite Persona side mirrors the column
 placement while retaining the mute order. The full deck fits the viewport and
 does not scroll. Hiding Push to talk removes its column and connector, leaving
 the stacked mute column to fill the deck. Portrait and landscape have independent
@@ -283,8 +283,17 @@ back to the same orientation. Queued browser drafts are dropped on rotation.
 All four effective layouts, their override flags and the shared base are stored on
 Save. Legacy portrait appearance seeds that base; untouched landscape appearance
 inherits it while explicit landscape differences stay local.
-The model supports swapping Persona and deck sides without mirroring icons or
-reordering HUMAN/AGENT. Its `personaSide` control is deliberately hidden for now.
+**Controls side** appears in Layout for both landscape rotations: Right
+(right-handed) puts the controls to the right of Persona; Left (left-handed)
+puts them to its left. Switching also negates the horizontal Persona offset,
+preserving its relative placement; switching back restores it exactly if there
+were no intervening edits. Icons are never mirrored and HUMAN stays above AGENT.
+The selection is local to the visible physical rotation and persists in the
+working draft and complete Save through the existing `personaSide` field.
+There is one layout per physical rotation, not separate tuning banks per hand.
+Both hands share its sizes, traces, padding and appearance. Position reset uses
+the adopted default mirrored to the currently selected side in either landscape.
+The four-view capture shows each rotation's selected side.
 
 The phone has no header while connected. **Preview connection** selects a
 synthetic Connected, Connecting or Disconnected state. A notice with a static glyph

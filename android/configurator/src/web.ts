@@ -11,6 +11,7 @@ import {
   usableViewport,
 } from "./capture-layout.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
+import { withPersonaSide } from "./handedness.ts";
 import { initializeIconControls, renderIcons, renderLauncher } from "./icons-ui.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
@@ -495,6 +496,9 @@ function render() {
     `Previewing on ${status.device} · ${orientationLabel(draft.orientation)}`;
   const currentOrientationLabel = orientationLabel(draft.orientation);
   text(element("local-layout-scope"), `${currentOrientationLabel} only`);
+  element("landscape-handedness").hidden = !isLandscape(draft.orientation);
+  element<HTMLSelectElement>("controls-side").value =
+    draft.personaSide === "right" ? "left" : "right";
   for (const group of appearanceGroups) {
     const customized = draft.appearanceOverrides.includes(group);
     element<HTMLInputElement>(`override-${group}`).checked = customized;
@@ -925,6 +929,10 @@ position.addEventListener("input", () => {
       ? { ...current, horizontalOffsetDp: offsetDp }
       : { ...current, verticalOffsetDp: offsetDp },
   );
+});
+element<HTMLSelectElement>("controls-side").addEventListener("change", (event) => {
+  const side = (event.currentTarget as HTMLSelectElement).value;
+  update((current) => withPersonaSide(current, side === "left" ? "right" : "left"));
 });
 refreshTargets.addEventListener("click", async () => {
   const current = status;

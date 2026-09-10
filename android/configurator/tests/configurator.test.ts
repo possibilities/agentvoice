@@ -12,6 +12,7 @@ import {
 import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
+import { withPersonaSide } from "../src/handedness.ts";
 import {
   defaultIcons,
   iconCatalog,
@@ -1458,6 +1459,27 @@ test("independent layouts retain portrait choices and save both layouts from lan
   phone.rotate();
   expect(layoutOf(phone.state)).toEqual(layoutOf(portrait));
   expect(phone.state.otherLayout).toEqual(layoutOf(landscape));
+});
+
+test("handedness mirrors manual position in either landscape and preserves all other choices", () => {
+  for (const orientation of ["landscape", "landscape-reverse"] as const) {
+    const current = { ...previewOf(initial()), orientation, horizontalOffsetDp: -44 };
+    const mirrored = withPersonaSide(current, "right");
+    expect(mirrored).toEqual({ ...current, personaSide: "right", horizontalOffsetDp: 44 });
+    expect(withPersonaSide(mirrored, "right")).toBe(mirrored);
+    expect(withPersonaSide(mirrored, "left")).toEqual(current);
+    const defaults = {
+      ...initial(),
+      defaultPersonaSide: "left" as const,
+      defaultHorizontalOffsetDp: -42,
+    };
+    expect(resetPreview(mirrored, defaults, "position").horizontalOffsetDp).toBe(42);
+    expect(resetPreview(current, defaults, "position").horizontalOffsetDp).toBe(-42);
+  }
+  for (const orientation of ["portrait", "portrait-reverse"] as const) {
+    const current = { ...previewOf(initial()), orientation };
+    expect(withPersonaSide(current, "right")).toBe(current);
+  }
 });
 
 test("version 10 preserves portrait bytes and seeds inherited landscape appearance in memory", () => {
