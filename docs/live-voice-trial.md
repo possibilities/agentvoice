@@ -15,12 +15,19 @@ hooks cannot interrupt setup when strict variable checking is enabled.
 Generated role files use a private cache inside the trial workspace. This keeps
 the trial independent of shared or symlinked cache locations such as an external
 Scratch volume; it does not change your global cache configuration.
+The server uses the resolved stock Codex binary installed at `~/.local/bin/codex`.
+Bare `codex` can resolve to an AgentLaunch shim on an interactive shell's PATH;
+that shim treats attachment `resume --remote` as a new managed launch and injects
+its own settings. Both the owned app-server and attached TUI must use stock Codex.
 
 ```sh
 env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   set -eu
   cd /Users/arthack/code/agentvoice
   bun -e 'import { CONTROL_PROTOCOL_VERSION as v } from "./src/control/types.ts"; if (v !== 5) throw new Error(`Expected control API 5, found ${v}`); console.log("Checkout control API: 5");'
+  trial_codex="$(bun -e 'import { realpathSync } from "node:fs"; import { homedir } from "node:os"; console.log(realpathSync(`${homedir()}/.local/bin/codex`));')"
+  printf 'Stock Codex: %s\n' "$trial_codex"
+  "$trial_codex" --version
   trial_parent="${XDG_STATE_HOME:-$HOME/.local/state}/agentvoice"
   mkdir -p "$trial_parent"
   trial_workspace="$(mktemp -d "$trial_parent/voice-trial.XXXXXX")"
@@ -30,7 +37,7 @@ env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   bun run src/main.ts role status --workspace "$trial_workspace"
   printf '\nWORKSPACE: %s\n\nRun this exact command in terminal 2:\n' "$trial_workspace"
   printf 'bun run %q --workspace %q\n\n' "$PWD/src/main.ts" "$trial_workspace"
-  exec bun run src/main.ts server --workspace "$trial_workspace"
+  exec bun run src/main.ts server --workspace "$trial_workspace" --codex "$trial_codex"
 AGENTVOICE_TRIAL
 ```
 

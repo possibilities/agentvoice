@@ -161,9 +161,11 @@ test.each([
 
 test.each([
   { code: 1, signal: null, expected: "code 1" },
+  { code: 1, signal: 0, expected: "code 1" },
   { code: null, signal: 11, expected: "signal 11" },
   { code: null, signal: null, expected: "unknown status" },
   { code: 0, signal: null, expected: undefined },
+  { code: 0, signal: 0, expected: undefined },
 ])("pane exit status survives composition shutdown: %j", async ({ code, signal, expected }) => {
   for (const mode of ["call", "attachment"] as const) {
     const mux = new FakeMux();
