@@ -1,15 +1,13 @@
 # Android development build verification
 
-Latest synthetic UI checks: 2026-09-09. Samsung Galaxy S22 (SM-S901U), Android 16 / API 36,
-1080 × 2340 at density 480. Native development package `com.arthack.agentvoice.dev`.
-Earlier live-call checks used the desktop's existing waiting AgentVoice service
-and Tailscale TLS route, with an owned stock Codex 0.153.4 child. No service
-configuration was changed. The latest configurator checks opened no voice call.
-
-Latest debug APK SHA-256:
-`a9b74cd3f610c11b75af47ce2f842729fefe3328d5b2d2352e0b48ba257b7cb2`.
-The latest checks are recorded under [Live microphone touch response](#live-microphone-touch-response);
-earlier sections retain the verification history.
+Latest work: **Separate Studio app; manual-only production reset — September 10, 2026** (receipt at the end).
+The user-locked S22 profile is now complete version 20 and supplies generated
+production defaults. Studio protocol 23 persists all visual choices and retains
+its full editing range. See [Status polish](#status-polish) for the current
+build, tests, saved-copy/cold-reload checks and release packaging evidence. Earlier
+sections retain their original results and limitations; they are not cumulative
+verification of the current candidate. No verification started a voice call or
+opened microphone/inference.
 
 ## Automated checks
 
@@ -656,3 +654,1058 @@ Latest choices are restored and phone/host saved profiles remain byte-identical;
 no Save or voice call was sent. Evidence: `/tmp/agentvoice-touch-build.log`,
 `/tmp/agentvoice-touch-instrumentation.log`,
 `/tmp/agentvoice-touch-phone-check.log`, `/tmp/agentvoice-touch-comparison.png`.
+
+### Square portrait stage
+
+Portrait reserves a screen-width square for Persona regardless of control height.
+The deck stays bottom-aligned when there is room; overflow scrolls instead of
+shrinking the square. Trace geometry uses the square center and actual deck top.
+Landscape composition is deferred. Profiles, protocol and renderers are unchanged.
+
+Debug/test APK assembly and lint passed. Eight focused physical-phone tests
+passed in 28.087 seconds: a 320 × 600 dp portrait fixture retains a 320 × 320 dp
+stage across 240/380/480 dp decks, scrolls to a working PTT hold/release, and
+preserves placement settings. Existing connection, channel, native-view continuity
+and Rocker touch/cancellation tests passed in the same run.
+
+The restored native capture was visually reviewed at the operator's Contained
+78%, −22 dp offset and 387 dp deck. This geometry has slight scroll overflow;
+the Persona remains above the controls with traces between them. Installed APK
+bytes match the local hash above. Latest live choices and both saved profile
+files match fresh pre-install snapshots; no Save or call was sent.
+
+Evidence: `/tmp/agentvoice-square-build.log`,
+`/tmp/agentvoice-square-instrumentation.log`,
+`/tmp/agentvoice-square-phone-check.log`,
+`/tmp/agentvoice-square-phone-restored.png`.
+
+### Independent landscape studio
+
+Landscape places Persona beside the Rocker deck; a hidden side selection swaps
+the lanes without mirroring icons or HUMAN/AGENT ordering. Portrait remains a
+screen-width square. Geometry relocates over 320 ms, with gesture cancellation,
+reduced-motion snapping and traces fading into the destination arrangement.
+The native renderer remains the same instance when its selected variant remains
+the same. Different per-orientation Halo variants intentionally select different
+renderers. Portrait and landscape settings are independent under protocol/profile
+11; device-observed orientation epochs fence edits and Save on both host and phone.
+
+- Debug/test assembly and lint passed; 54 JVM tests passed.
+- 669 repository tests / 8,840 assertions passed, including 40 configurator tests /
+  1,718 assertions. Root/configurator typechecking and scoped Biome passed.
+- The final complete physical-phone instrumentation run passed all 43 tests in
+  86.949 seconds. A prior paused-clock scrolling test was corrected to use a
+  nonoverflowing fixture; overflow remains separately tested. A subsequent run
+  had three initial-touch failures and one missing-hierarchy failure. The affected
+  group then passed unchanged (7 tests), followed by the complete passing run.
+  The intermittent run is retained in the evidence rather than counted as passing.
+- Headless Chrome against an isolated fake phone verified that two queued portrait
+  edits are discarded when the first response returns a new landscape epoch.
+  Active controls/reset follow landscape while the inactive portrait stays exact.
+  No orientation or handedness selector is rendered; no Save was sent.
+- Actual phone rotations report the visible orientation. A portrait request with
+  its old epoch is refused after a portrait/landscape/portrait round trip without
+  changing the phone revision. Temporary landscape settings and side comparisons
+  were restored exactly. Both Contained landscape arrangements and the restored
+  portrait were visually reviewed. A recorded portrait-to-landscape transition
+  was sampled; Android also applies its own window-rotation animation. These
+  samples do not establish every-frame visibility at all settings.
+- Installed APK bytes match the hash above. Latest observed portrait choices,
+  fully muted channel state, free system rotation mode and both exact saved files
+  were restored. The host was rebound and the existing Chrome tab reconnected.
+  No profile Save, voice call, production layout or Persona asset change occurred.
+
+The existing conservative Original attachment envelope remains a limitation:
+unequal state sizes can leave routes absent. This round does not solve it.
+
+Evidence: `/tmp/agentvoice-orientation-{build,rebuild,tests,typecheck,lint}.log`,
+`/tmp/agentvoice-orientation-instrumentation-confirm.log` (final complete run),
+`/tmp/agentvoice-orientation-instrumentation-final.log` (earlier intermittent run),
+`/tmp/agentvoice-orientation-focused.log`,
+`/tmp/agentvoice-orientation-phone-check.log`,
+`/tmp/agentvoice-orientation-browser.lYdHOv/evidence.json`,
+`/tmp/agentvoice-orientation-landscape-{baseline,left,right}.png`,
+`/tmp/agentvoice-orientation-transition.mp4`, and
+`/tmp/agentvoice-orientation-restored.png`.
+
+
+### Tide, themes and independent spacing
+
+Protocol/profile 12 adds five independently resettable spacing values per
+orientation. Only the deck and connecting routes use them; Persona's square,
+size and manual offset retain their baseline geometry. PTT join spacing adds to
+the deck's extent without rescaling its button faces. Impossible margins are
+bounded by usable control width without rewriting requested values.
+
+Tide places a measured lowercase `muted` inside a conservative clear aperture,
+with a shared 14-second clock, 450 ms entrance and immediate removal when either
+effective audio gate opens. Reduced motion is static; background/pending state
+suppresses it. At sizes or font scales that cannot fit the word plus clearance,
+the optional layer is omitted. Bright, Quiet and Grayscale theme both native Halo
+variants and scene colors after channel following. Theme and Tide are session-only
+experiments, shared across rotation and excluded from saved layout profiles.
+Portrait reset/factory defaults adopt the operator's explicitly captured choices;
+landscape keeps its independent baseline and existing profiles keep their values.
+
+- 675 repository tests / 9,140 assertions passed, including 46 configurator tests /
+  2,018 assertions. Root/configurator TypeScript and scoped Biome passed.
+- 75 JVM tests passed with zero failures, errors or skips. Debug/test APK assembly,
+  Android lint and unsigned release assembly passed. The release manifest excludes
+  the preview activities; the theme/presence selectors remain debug-only. Original's
+  optional color input keeps its production default palette unchanged.
+- Final complete emulator instrumentation: **51 tests passed in 92.5 seconds**.
+  Coverage includes native Original recoloring with unchanged paused silhouette,
+  held pointer and native-view continuity, Tide motion/removal/reduced motion,
+  background clock fencing, independent orientation profiles and stale-epoch
+  rejection, reset/migration boundaries, geometry, real gestures and overflow scroll.
+- Earlier failures are retained: the initial theme test used an incorrect 8-bit
+  rounding tolerance; Tide's test tag was hidden by semantics clearing; a resumed
+  clock frame could overwrite background reset. Those were corrected. Continuous
+  animation also prevented automatic-clock tests reaching idle; the shared clock
+  now uses Compose's infinite-animation API, while motion tests explicitly use a
+  manual clock. A subsequent full run completed 51 tests with one fixture failure:
+  changing traces also replaced the new tall default deck. The fixture now keeps
+  its explicit fitting deck and changes only traces. The final complete run above
+  uses that correction; aborted and failing runs are not counted as passing.
+- Headless Chrome against an isolated phone fixture verified all five sliders,
+  individual/group resets, session-only appearance across rotation, preservation
+  of the inactive layout and rejection of queued stale-orientation edits. No Save.
+- Actual native emulator screenshots were reviewed by the integration owner and
+  three design reviewers. Bright retains lime/violet hierarchy; Quiet softens it;
+  Grayscale keeps glyphs and captions stronger than Halo. Every RGB pixel in the
+  Grayscale listening, speaking and muted captures has equal channel values,
+  including maximum ambient glow. These captures do not establish OLED brightness
+  or subjective comfort on the physical phone.
+- At Contained 78%, Tide is readable with ample clear-center space; at 35%, it is
+  omitted. Stills verify this sampled composition, not universal animation bounds.
+  Maximum spacing/Splayed stance/foot spread keeps feet on their button tops in
+  portrait and both landscape sides. Zero join adds no connector over the faces.
+  The tall portrait deck intentionally scrolls below the screenshots; separate
+  native gesture tests verify reachability. The conservative Original attachment
+  limitation recorded above remains unresolved.
+- Emulator comparisons were returned to provisional portrait and baseline landscape
+  choices. No profile Save or phone operation occurred. The standalone emulator
+  studio uses port 4318 and a disposable /tmp profile destination, separate from
+  the disconnected physical-phone studio on port 4317. Physical-phone installation,
+  fresh state preservation and final display review remain the delivery follow-up.
+
+Evidence: `/tmp/agentvoice-round12-final-build.log`,
+`/tmp/agentvoice-round12-fixture-build.log`,
+`/tmp/agentvoice-round12-build-final.log` (release build),
+`/tmp/agentvoice-round12-native-confirm.log` (final complete run),
+`/tmp/agentvoice-round12-native-final.log` (one fixture failure),
+`/tmp/agentvoice-round12-{tests,typecheck,lint}.log`,
+`/tmp/agentvoice-studio12-browser.Kx52d9/evidence.json`,
+`/tmp/agentvoice-round12-install-receipt.txt`, and
+`/tmp/agentvoice-round12-visuals/` (native PNGs with state JSON, theme sheet and
+Grayscale pixel measurements).
+
+
+### S22 delivery of Tide, themes and spacing
+
+After reconnection, the existing preview was brought forward without replacing
+its session. Fresh snapshots captured both live orientation layouts, channel gates
+and exact native/host saved bytes before installation. The installed S22 APK
+matches SHA-256 `7ce2f79adae68f8b72b997267165ecb60fc94d0558f1167bc7fc017f4c5e4a8e`.
+That phone host uses protocol 12.
+
+Eleven focused physical-phone tests passed in 12.995 seconds: Tide/theme native
+rendering and lifecycle, profile 12 migration and orientation fences, plus studio
+trace/control independence, connection notices and square-stage overflow scrolling.
+Actual S22 captures of all three themes in Listening and fully muted Idle were
+reviewed, together with a Splayed spacing comparison. The word remains subordinate
+and readable; spacing changes preserve manual Persona placement. These screenshots
+establish rendered composition, not a user's subjective OLED brightness preference.
+
+The original live mode and both open channel preferences were restored, together
+with the exact portrait/landscape selections, adding only baseline spacing.
+Bright/Tide are the new transient defaults. Native and host saved files remained
+byte-identical; no Save or call occurred. System rotation settings were unchanged.
+The new studio URL was opened in Chrome and the phone was left on its restored
+native preview, ready for continued configuration.
+
+Evidence: `/tmp/agentvoice-round12-phone-native.log`,
+`/tmp/agentvoice-round12-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-round12-phone-restore.log`,
+`/tmp/agentvoice-round12-phone-installed-sha.txt`, and
+`/tmp/agentvoice-round12-phone/` (native captures and exact state JSON).
+
+
+### Adjustable muted presence
+
+Protocol 13 adds session-only text size, brightness, drift, breathing, cycle and
+Float/Ripple controls. Saved profiles remain version 12. Defaults reproduce the
+previous 14 sp Float treatment; individual and group resets preserve unrelated
+choices. Contained's nominal aperture now follows its selected motion parameters,
+with separate retained size/shape minima during deferred native updates. A geometry
+review checked the bound against the pinned asset's hard strokes, including its
+four-second listening loop and exits. Diffuse feathered glow can remain underneath.
+
+- Debug/test assembly and lint passed. 86 JVM tests passed with no failures,
+  errors or skips. 679 repository tests / 9,330 assertions passed, including
+  50 configurator tests / 2,208 assertions; TypeScript and Biome passed.
+- Complete API 35 emulator instrumentation passed **53 tests in 97.112 seconds**.
+  New rendered-pixel checks establish that larger text draws more glyph pixels,
+  brightness visibly increases, Ripple changes the word and reduced motion stays
+  still. Full-scene edits retain the native Halo and manual stage bounds, while
+  PTT removes the word immediately. Native protocol fixtures verify session
+  restoration across rotation, profile exclusion and strict invalid-request refusal.
+- A pure clock check verifies that changing the cycle preserves current phase and
+  affects only future muted-motion increments, leaving other scene speeds alone.
+  Geometry checks reserve combined drift, glyph wave and breathing before reducing
+  motion, and never shrink the selected text size.
+- An isolated browser fixture verified all five sliders, Float/Ripple, all six
+  individual resets, group reset, disabled-but-retained controls when Off, and
+  unchanged theme/layout/save state. The live Chrome accessibility tree also
+  confirmed the emulator's acknowledged Ripple/24/65/200/70/10 selection.
+- Native emulator comparisons cover baseline, larger Float, two Ripple phases,
+  maximum 32 sp/brightness 100/drift 300/breathing 100/cycle 6, Quiet/Grayscale,
+  and small/compressed placements where the optional text is omitted. The component
+  designer reviewed the actual captures: complete glyphs, no observed slice seams
+  or truncated strokes, readable wave and generous hard-ring clearance in these
+  samples. Stills do not establish every possible transition frame.
+- The isolated emulator is visible through scrcpy, with a temporary 24 sp Ripple
+  example in the host studio on port 4318. Reset muted appearance returns the old
+  baseline. No Save or phone operation occurred in this round; the phone was
+  disconnected. Its protocol 12 studio remains separate on port 4317. Fresh phone
+  state capture, protocol 13 installation and physical display review remain a
+  follow-up when it reconnects. Bundled Rive bytes and production sources are unchanged.
+
+Evidence: `/tmp/agentvoice-muted-tuning-{build,tests,typecheck,lint,native}.log`,
+`/tmp/agentvoice-studio13-browser.2kvOs3/evidence.json`,
+`/tmp/agentvoice-muted-tuning-visuals/` (raw captures, state JSON and comparison),
+and `/tmp/agentvoice-muted-tuning-scrcpy.log`.
+
+
+### S22 delivery of adjustable muted presence
+
+On September 9 the operator reconnected and unlocked the S22. The owned
+`agentvoice_round12_checks` emulator, its scrcpy window and port 4318 studio
+were stopped at the operator's request; only the physical phone remained in ADB.
+Fresh protocol 12 revision 502 captured both live layouts and exact saved files
+before installing the protocol 13 debug APK, SHA-256
+`8f94d5ffab5327db77b71dfbc9b830dc0f25969b68c24a71fb399c95f2f0d9e0`.
+
+Ten focused physical-phone tests passed in **10.539 seconds**: muted typography
+and motion rendering, profile 12/session restoration, Tide/theme lifecycle and
+native-instance/manual-placement preservation. This is separate from the earlier
+53-test emulator run. Native baseline and larger/brighter Ripple screenshots show
+complete readable glyphs within the ring at the operator's geometry. A pre-existing
+picture-in-picture window covers part of PTT in these captures; these images do
+not establish unobstructed full-deck appearance. The unrelated overlay was left alone.
+
+Restoration checks passed for both layouts, Splayed routing and its unsaved trace
+values, theme, Tide, manual placement, motion/colors, and both muted channel gates.
+Only the new muted-appearance defaults were added. Native and host saved files
+remained byte-identical; no Save or voice call occurred. System rotation settings
+were unchanged. The updated physical-phone studio was opened in Chrome.
+
+Evidence: `/tmp/agentvoice-muted-tuning-phone-native.log`,
+`/tmp/agentvoice-muted-tuning-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-muted-tuning-phone-restore.log`,
+`/tmp/agentvoice-muted-tuning-phone/` (native captures and state JSON), and
+`/tmp/agentvoice-muted-tuning-phone-studio.log`.
+
+
+### Linked padding and muted-text dimming
+
+Protocol 14/profile 13 was built and installed on the S22, debug APK SHA-256
+`d162a1d13c19a3dc32d419b2676845efa2766ba59390ed15f5d4043fe7976b18`.
+88 JVM tests and 682 repository tests / 9,404 assertions passed, including
+53 configurator tests / 2,282 assertions. Debug/test assembly, Android lint,
+TypeScript and Biome passed. An isolated browser fixture verified Custom without
+an unsolicited edit, linked Padding/reset, unchanged section separation,
+orientation fencing and negative brightness/reset.
+
+The complete physical-phone run executed 54 tests: 53 passed and one historical
+session fixture failed because it constructed a fresh landscape with linked padding
+while simulating a pre-landscape session. The fixture now explicitly uses the
+historical layout; all three lifecycle tests passed on rerun in 2.822 seconds.
+The app APK did not change for this test-only correction. The complete run also
+passed native negative-brightness pixel checks, profile 12 migration of unequal
+layouts without file changes, protocol 13 live restoration, renderer identity,
+manual stage and pointer/lifecycle checks.
+
+Actual S22 captures compared Padding 8/16/32 and muted brightness 0/−50/−85.
+The 16 dp scene shows consistent side and button-join spacing; the more negative
+brightness visibly dims the word while retaining its complete glyphs. The Persona
+stage and tuned values remain fixed; tall scenes retain scroll access to the padded
+bottom. Section separation keeps its original range and semantics.
+
+Fresh revision 1153 was captured before installation. Both layouts, custom
+48% side / 200% edge / 18 dp button gaps, −6 dp Persona position, 29 sp muted
+text with 166% drift, theme, mode and channel gates were restored. Both saved
+files remained byte-identical; no Save, call or emulator operation occurred.
+Trace fade behavior is unchanged in this round; its stronger-continuation request
+is separately queued.
+
+Evidence: `/tmp/agentvoice-padding-build-final.log`,
+`/tmp/agentvoice-padding-{tests,typecheck,lint,native}.log`,
+`/tmp/agentvoice-padding-lifecycle-confirm.log`,
+`/tmp/agentvoice-studio14-browser.QHVKfY/evidence.json`,
+`/tmp/agentvoice-padding-phone-before-{state,phone,host}.json`,
+`/tmp/agentvoice-padding-restore.log`, and `/tmp/agentvoice-padding-phone/`.
+
+
+### Stronger feeds and closer Contained body contact
+
+Final installed debug APK SHA-256:
+`82b0c06620034322f534f5e6c6647240b59654aa705447ff0547edf746469122`.
+Debug/test assembly and lint passed. The preceding geometry build also passed
+88 JVM tests; the final source change retained maxima unconditionally to cover
+reduced-motion source debounce. The physical composition test passed in 13.459
+seconds, exercising both variants, all route patterns and endpoint spacing extremes,
+native-view identity, held controls, fixed stage and target bounds. Its first attempt
+lost the Compose activity; the operator confirmed accidentally closing the app,
+and the unchanged test passed on rerun.
+
+The design reviewer inspected baseline, Idle, Listening, Speaking, speaking motion
+0/100 with full idle motion, and shared size 35/120 native captures. Baseline and
+Speaking now read as traces tucked under the lower arc; no trace intrusion into
+the center was observed in these samples. Idle/Listening and some extremes retain
+small standoff. Size 120 overlaps the control deck and its routes disappear rather
+than painting through the center or buttons. No claim of every-frame contour
+contact or universal Original attachment is made. Bundled asset and native
+renderer sources remain unchanged.
+
+Fresh live choices were captured again before the final install and restored after
+comparison, including transient muted appearance and both orientation layouts.
+Native and host saved profile bytes are unchanged. No Save, voice call or emulator
+operation occurred.
+
+Evidence: `/tmp/agentvoice-trace-contact-geometry-final-build.log`,
+`/tmp/agentvoice-trace-contact-geometry-native-confirm.log`,
+`/tmp/agentvoice-trace-contact-final-phone/`,
+`/tmp/agentvoice-trace-contact-final-phone-before-{state,phone,host}.json`, and
+`/tmp/agentvoice-trace-contact-final-restore.log`.
+
+
+### Persona center indicators
+
+Protocol 15 adds Words, Channel icons, Icons + words and Contacts beside unchanged
+Tide/Off. Visibility is independently Both muted, Either muted (default), or Always.
+These controls and appearance remain session-only; saved profile version stays 13.
+Gate truth uses micOpen/speakerOpen, including held PTT. The layer adds no native
+renderer changes, control targets, clock, audio or inferred attention state.
+
+Build, both debug APKs and lint pass. **96 JVM tests** pass, including eight new
+indicator-model tests. **684 repository tests / 9,496 assertions** pass, including
+**55 host tests / 2,374 assertions**. Typecheck and Biome pass. A headless browser
+checked every style/scope, conditional Show visibility, retained scope and isolated
+appearance resets. Evidence: `/tmp/agentvoice-indicators-{build,tests,typecheck,lint}.log`
+and `/tmp/agentvoice-studio15-browser.zJrf64/`.
+
+The complete physical-phone suite now passes: **61 tests in 106.808 seconds**,
+including actual glyph/contact pixels, scopes/PTT, retained Halo identity and held
+pointer, strict session validation, lifecycle restoration and Save exclusion. The
+first attempt was interrupted by the user's unplug; a second ADB output stream
+also ended early after one Halo settling timeout. The clean run stored its output
+on the phone and passed unchanged. This final result is
+`/tmp/agentvoice-indicators-native-durable.log`; incomplete host streams remain
+as diagnostic history rather than passing evidence.
+
+Before installation, revision 495's current layouts and session choices were
+captured in `/tmp/agentvoice-indicators-phone-before-state.json`, alongside exact
+phone/host saved bytes in the same prefix's `-phone.json` and `-host.json` files.
+These include 32 sp/−19 brightness/196 drift/65 breathing/13 s Float, Contained84%,
+−6 dp placement and both muted gates. No Save was issued. The protocol 15 host is running again. Both visible and
+inactive layouts, manual placement, palette/motion, Tide, session appearance and
+both muted gates were restored exactly; phone and host saved files are byte-identical.
+Restoration evidence: `/tmp/agentvoice-indicators-phone-check.log` and
+`/tmp/agentvoice-indicators-phone/restored.{png,json}`.
+
+The actual phone comparison covers all four styles and all four effective-gate
+combinations, after rerunning captures interrupted by user interaction and checking
+intended gates before every capture. At the operator's 32 sp/Contained84%, the
+Words and Labeled blocks fit without clipping; Labeled also fits 29 sp/78% and is
+omitted at35%. The sampled Original at14 sp fits. Quiet/Grayscale Labeled and a
+mixed-gate Grayscale Contacts comparison retain shape differences. The native
+renderer designer found no visual blockers in those samples. The independent
+Contacts designer confirmed joined/lifted gaps remain legible in Grayscale and
+recommended Channels for immediate clarity or Contacts for quiet character. Static captures
+establish the sampled composition and readability, not every animation frame.
+Screenshots and matching state JSON are in `/tmp/agentvoice-indicators-phone/`;
+`full-options-sheet.png` and `center-options-sheet.png` assemble the comparison.
+
+
+### Visible portrait layout and trace underlap
+
+Portrait now anchors the deck and padding inside the safe viewport, with no page
+scrolling. Requested deck dimensions fit proportionally only if the deck itself
+exceeds that viewport; Persona's square/manual placement is unchanged. The square
+may overlap foreground controls at large settings. Section separation is hidden
+for portrait and stored unchanged. The Contained trace join uses a soft peripheral
+underlap instead of reserving maximum speaking expansion; Persona-side end tabs
+are gone. This is nominal attachment, not exact per-frame occlusion; short feeds
+can remain visible just inside an expanding outer ring, while the core stays clear.
+Original's prior unequal-state attachment limitation remains unchanged.
+
+Build, both debug APKs and lint pass; **99 JVM tests** and the entire **61-test
+phone suite in113.173seconds** pass. Native checks exercise full visible PTT,
+max-height/padding, unchanged square bounds after swipe, native/gesture retention,
+all existing indicator contracts and lifecycle behavior. **55 host tests /2,374
+assertions**, typecheck and Biome pass. The isolated browser verified portrait
+section hiding, landscape restoration and unchanged stored separation.
+
+Actual phone captures at the operator's85%/M68/I69 and motion0/100 compare Idle,
+Listening and Speaking. The lower-arc sheet shows the feeds meeting the peripheral
+ring area instead of the earlier17–23dp standoff. At480dp controls, padding0/16/40
+all leave PTT's full face/bottom border within the visible safe area. The layout
+reviewer confirmed the expected foreground overlap with the lower ring at those
+extremes; that is not scrolling or top-edge clipping. Manual placement and settings
+remain unchanged. No native Persona assets or renderer code changed.
+
+The fresh preinstall snapshot, including373dp controls, offset−17, selected Words,
+85% size,80/68/68/69 motion and both open gates, was restored exactly. Both layouts
+and session settings match; host/phone saved files are byte-identical. No Save,
+voice call or audio. Evidence: `/tmp/agentvoice-visible-layout-{build,native}.log`,
+`/tmp/agentvoice-visible-layout-phone-check.log`, snapshot prefix
+`/tmp/agentvoice-visible-layout-before-`, captures/state JSON in
+`/tmp/agentvoice-visible-layout-phone/`, and browser evidence
+`/tmp/agentvoice-portrait-safe-browser.1C6hFv/`.
+
+
+## Trace reach and fade controls
+
+Protocol 16/profile 14 adds orientation-local reach −40..120 dp, fade length
+0..80 dp and tip opacity 0..100%, baseline 0/12/0. Historical schema fixtures
+validate the original shapes before adding only these defaults in memory.
+
+- 105 JVM tests pass; debug app/test builds and lint pass. Root checks report
+  687 tests, 0 failures, plus TypeScript and Biome. Included host tests report
+  58 tests / 2,589 assertions. No production/main/release source changed.
+- The complete corrected S22 instrumentation suite passes **65 tests / 108.152 s**
+  against APK `b60ee4fe3fca55bbd08b65a735f6f05448219cc1272732522928391d8fd7e6b4`. Initial run had one test
+  expectation at a duplicate gradient stop; the corrected test samples one pixel
+  outside it. Renderer unchanged. New native tests verify byte-exact default
+  brush pixels, partial/full tip opacity, hard edges and untouched underlying
+  pixels inside a positive-radius disk. At radius zero, ink deliberately reaches
+  the center. Existing gesture coverage now changes reach/fade/tip while PTT is
+  held, retaining the native Halo instance and scene geometry.
+- Native profile/session tests cover strict rejection, no partial mutation,
+  independent portrait/landscape values, historical profile/session migration,
+  restoration, explicit Save receipt and the 8 KiB reply bound. Save tests use
+  isolated cache files; the operator's profiles are not their fixtures.
+- Headless host UI evidence verifies all three controls/units, per-field and
+  group reset, retained ambient glow, inactive layout and unrelated tuning,
+  with no Save. Evidence: `/tmp/agentvoice-studio16-browser.PmTlTv/evidence.json`.
+- Actual S22 captures compare reach −40/0/40/120, fade 0/80 and tip 0/50/100,
+  plus offshoots and listening/speaking samples. One-variable pairs retain
+  identical Persona/deck settings. Visual review confirms distinct route reach
+  and opacity effects with stable button placement. Animated Halo frames differ;
+  these stills do not establish exact moving-ellipse occlusion. Positive reach
+  intentionally exposes more interior traces.
+
+Evidence: `/tmp/agentvoice-trace-controls-{build,recheck-build,root-test,native-final}.log`,
+`/tmp/agentvoice-trace-controls-phone/`, and
+`/tmp/agentvoice-trace-controls-comparison.png`.
+
+The actual phone was also rotated to landscape: baseline routes were absent
+under that retained Original envelope, while reach80/fade32/tip70 exposed routes
+and offshoots toward the ring. This verifies the landscape control path, not
+automatic baseline attachment. Both orientation layouts, session appearance,
+mode, mute gates and phone rotation lock were restored. Fresh operator choices
+(78/56/78 sizes, −30 dp offset, 396 dp deck, 36.4% PTT, 17 dp padding and
+Splayed/101 stance/250 weight/89 contact/200 feet) were retained. Phone and host
+saved profile bytes compare exactly with the pre-install snapshot; no Save.
+Final restoration receipt: `/tmp/agentvoice-trace-controls-phone-check.log`.
+
+
+## Center status text fitting
+
+Words was eligible under the operator's any-muted scope, but its selected 32 sp
+block did not fit the conservative aperture at Contained 79 / spread 80 / pulse 68 /
+speaking 68 / idle 69. Status indicators now fit down to a 12 sp minimum, preserving
+the selected preferred size and 8 dp clearance. Words reserves the longest
+two-line label to avoid enlargement when switching to “live”. Tide unchanged.
+
+The installed APK at the top passes debug/test builds, Android lint and 105 JVM
+tests. Targeted S22 instrumentation reports **7 tests / 27.036 s**: all center
+indicator tests plus held-control/native-instance composition coverage. The new
+pixel regression uses the operator’s 32 sp / −19 brightness / 196 drift / 65 breathing
+values, tests tight aperture rendering at Android font scales 1 and 1.5, checks
+all sampled motion phases stay inside the aperture, and retains the preferred
+size. This round did not rerun the full phone suite. Root Biome passes.
+
+Actual restored-phone capture shows “human muted” inside the ring, where the
+previous build showed no text. Both layouts, latest live choices and gates are
+restored; host/phone saved files compare byte-identical, no Save. Evidence:
+`/tmp/agentvoice-words-fit-{build,native,phone-check}.log` and
+`/tmp/agentvoice-words-fit-phone/restored.png`.
+
+## Shared appearance and orientation layout
+
+Protocol 17/profile 15 separates shared appearance from local geometry. Traces,
+glow, Halo appearance and lighting each support explicit orientation overrides;
+Persona size/position and control spacing/dimensions stay orientation-local.
+Landscape uses a horizontal position control; portrait retains vertical position.
+Legacy profiles migrate in memory, without an implicit Save.
+
+- 111 JVM tests, Android debug/test builds and lint passed.
+- 694 repository tests passed; repository and configurator typecheck/Biome passed.
+  Host-specific coverage: 65 tests / 2706 assertions, including scope toggles
+  followed by queued edits, migration, reset and stale-orientation handling.
+- Corrected full physical S22 instrumentation: **69 tests / 119.802 seconds**,
+  `/tmp/agentvoice-shared-native-final.log`. Three new session tests exercise
+  shared/local edits, override snapshots/rejoining, strict receipts and migration.
+- Actual phone comparisons at horizontal offsets -55/+55 dp show the Persona,
+  indicator and trace contact moving together while the control deck stays fixed.
+  Shared glow edits reached portrait; a landscape-only override left portrait
+  unchanged; removing it rejoined the common value. Native stills are under
+  `/tmp/agentvoice-shared-phone/`; browser scope/axis/narrow evidence is under
+  `/tmp/agentvoice-studio17-browser/`. These are sampled synthetic compositions,
+  not proof of every transition or universal trace contact.
+- Restored both orientations' pre-install unsaved tuning, shared session choices
+  and mute gates, including the inactive landscape geometry. Phone and host saved
+  profile bytes match their pre-install snapshots exactly. No Save. Original
+  accelerometer/user-rotation settings restored to 1/0.
+- No production media, transport or Persona asset/renderer changes in this round.
+
+## Coordinated switch sounds
+
+Protocol 18/profile 16 adds shared Off/Rocker29/Rocker13 and level settings,
+with Reset sounds and explicit Save. Debug-only local SoundPool playback uses
+the same mute click for both controls and distinct PTT down/normal-up cues.
+Original/Contained rendering, appearance inheritance and layout are unchanged.
+
+- **115 JVM tests passed**, debug/test builds and lint passed; release built.
+  `/tmp/agentvoice-sounds-build.log`, `/tmp/agentvoice-sounds-test-build.log`,
+  `/tmp/agentvoice-sounds-release-lint.log`.
+- **698 repository tests passed**, root TypeScript/Biome passed. The host subset
+  has **69 tests / 2854 assertions**, covering legacy Off/70 migration, strict
+  receipts, shared scope, save/dirty/reset and rotation/reconnection retention.
+  Browser evidence: `/tmp/agentvoice-studio18-browser/evidence.json`. No browser
+  audio or audio asset requests; user gestures on the phone own audition.
+- Eight focused S22 sound tests passed; final full phone suite: **77 tests /
+  140.425 seconds**, `/tmp/agentvoice-sounds-native-final.log`. Native tests load
+  all six samples and verify nonzero SoundPool stream allocation at low gain;
+  injected-output gesture tests check same mute cues, paired PTT down/up, and
+  silent cancellation/outside/second-pointer/disposal/live-mic touch. Pure tests
+  cover Off/zero/background, stale settings, unavailable samples and orphan-up
+  prevention. These checks establish decoding and dispatch, not perceived
+  loudness, speaker quality or real-call acoustic pickup.
+- The first full run had one `No compose hierarchies found` failure midway
+  through the existing composition-held-pointer test. It passed in isolation
+  (16.569 seconds) and in the subsequent complete run, without source changes.
+  That initial run is retained at `/tmp/agentvoice-sounds-native-full.log`;
+  do not count it as passing or claim an identified root cause.
+- All six APK WAVs match the specialist's cleared SHA-256 receipt. CC0 license
+  and provenance are packaged alongside them. Release contains no switch-sound
+  assets; native player source exists only in debug. Receipt:
+  `/tmp/agentvoice-sounds-asset-check.json`.
+- Physical phone taps and a 350 ms PTT press/release exercised each family,
+  then restored every prior design field, both unsaved layouts, session choices
+  and gates. Saved phone/host files remained byte-identical. Rocker29/70 is left
+  selected only as an unsaved audition. Rotation settings restored to1/0.
+  `/tmp/agentvoice-sounds-phone-check.json` records the comparisons; reviewed
+  final native screenshot: `/tmp/agentvoice-sounds-phone/ready.png`.
+- Noizey received exclusive phone use after verification/restoration through
+  `/tmp/noizey-phone-handoff.txt`. AgentVoice's transport-only reconnect loop
+  does not relaunch the app or replay settings while another app is foreground.
+
+### Shared spacing, landscape columns, optional PTT and directional sounds
+
+Protocol 19/profile 17 implements shared spacing without orientation overrides,
+removes offshoots, adds session-only PTT visibility, and uses mute on/off plus
+PTT down/up for both cleared sound families. Landscape stacks HUMAN/AGENT in
+the near column with full-height PTT at the outer edge; routing transposes the
+portrait engine. These remain debug studio experiments.
+
+Final debug APK SHA256:
+`5ce5dd8871026dfedcce44c2e9b4ac5f104d7aa1d72ecbaff2e3dc02333bdb80`.
+
+- Android debug/test APKs build, lint passes; 119 JVM tests pass. Release builds.
+- Final physical S22 instrumentation: **80 tests pass**, 144.191 seconds. The
+  initial targeted run found a portrait fixture running in landscape, a
+  subpixel width tolerance and old independent-spacing expectations. Fixtures
+  now explicitly cover their intended layout/normalized spacing. An initial
+  full run also lost a Compose hierarchy during operator interaction (causation
+  not established), plus one more stale migration expectation. After fixture
+  correction and an undisturbed rerun, the full suite is green.
+- Root: 704 tests / 10,061 assertions, typecheck and lint pass. Configurator:
+  75 tests / 2,939 assertions; host typecheck/Biome pass. Browser fixture covers
+  shared edits/resets both directions, local geometry, rotation fences,
+  reconnect without replay, visibility retention and disabled share controls,
+  no offshoot UI/requests, and no Save/audio/overflow/page errors.
+- Native screenshots reviewed at operator geometry: portrait shown/hidden,
+  landscape shown/hidden, mirrored landscape and shared padding after rotation.
+  Stacked mutes stay nearest Persona and the PTT column stays at the far edge.
+  Captured routes meet the side of the ring without crossing its clear center;
+  this is evidence for sampled poses, not every possible animated setting.
+  Hidden portrait intentionally uses the full selected deck height for mutes.
+- Real phone taps exercised both directions on both mute switches for each
+  family, followed by ordinary PTT press/release. Instrumentation verifies cue
+  direction/order, cancellation and all eight native streams. No subjective
+  phone-speaker or voice-call acoustic-pickup claim.
+- All eight debug WAVs match the specialist receipt and APK bytes. Previous
+  PTT bytes and the renamed on cues are unchanged. Release APK contains neither
+  switch-sound assets nor checked preview classes.
+- Fresh pre-install snapshot restored in both orientations, including sizes,
+  manual offsets, appearance overrides, center indicator, theme, mute gates,
+  Rocker29/70 and activity. Only retired offshoots are dropped and landscape
+  spacing adopts portrait's exact object (linked Padding 17). PTT is left shown;
+  the checkbox is available for experimentation. Phone and host saved files
+  remain byte-identical. No Save. Original rotation settings restored
+  (`accelerometer_rotation=1`, `user_rotation=0`). Phone access released and
+  completion notice saved to AgentNotify; optional system banners were off.
+
+Evidence: `/tmp/agentvoice-columns-final-build.log`,
+`/tmp/agentvoice-columns-test-rebuild2.log`,
+`/tmp/agentvoice-columns-instrumentation-final.log`,
+`/tmp/agentvoice-columns-release.log`, `/tmp/agentvoice-columns-assets.log`,
+`/tmp/agentvoice-columns-root-tests.log`,
+`/tmp/agentvoice-columns-configurator-tests.log`,
+`/tmp/agentvoice-studio19-spacing-browser/evidence.json`,
+`/tmp/agentvoice-columns-phone-check.log`, and the native PNG/JSON pairs under
+`/tmp/agentvoice-columns-phone/`. The live host was restarted on the new protocol
+and its current URL opened in Chrome; saved URL handoff files were refreshed.
+
+### Landscape width with automatic height
+
+Landscape now interprets the orientation-local deck extent as width; portrait
+continues to use height. Landscape fills the safe vertical viewport inside
+shared padding, anchors at its outer edge, and fits requested width within the
+existing lane/section separation. Persona placement is unchanged. The studio
+labels the dimension on rotation; stored numbers and protocol/profile stay intact.
+
+Debug APK SHA256:
+`baabe2c210602c3a6520b4dc0c86d18131c4a0bae14effd382ea32f5f901ff48`.
+
+- Debug/test builds and lint pass; 120 JVM tests pass. Two old geometry fixtures
+  assumed a fixed 262 dp height or a hard-coded overlap offset; they now use the
+  actual fitted deck bounds/contact position. A new test checks widths 240/320,
+  padding 0/16/40, both sides, fixed Persona and equal vertical/outer clearances.
+- 13 targeted physical S22 tests pass in 46.394 seconds: visibility, controls,
+  orientation/native-instance continuity, composition, sound gestures and trace
+  join painting. The landscape controls test deliberately requests 240 while
+  providing 300 vertical dp and verifies the height fills all 300 dp.
+- Configurator: 75 tests/2,939 assertions, typecheck and Biome pass. Browser
+  fixture confirms Controls width plus padding help in landscape, Controls
+  height in portrait, and existing scope/rotation/reset/visibility behavior.
+- Native captures reviewed at requested widths 240, 300 and 480 (the latter
+  fitted to the available lane), padding32, mirrored landscape and portrait.
+  Top/bottom padding controls height independently of width; visible captions,
+  PTT and traces remain coherent in these samples.
+- Both latest layouts, session values and mute gates restored exactly. Phone
+  and host saved files remain byte-identical; no Save. Original system rotation
+  values restored (accelerometer_rotation1/user_rotation1). Phone released.
+
+Evidence: `/tmp/agentvoice-width-build-final.log`,
+`/tmp/agentvoice-width-instrumentation.log`,
+`/tmp/agentvoice-width-host-tests.log`, `/tmp/agentvoice-width-browser/`,
+`/tmp/agentvoice-width-phone-check.log`, and PNG/JSON pairs under
+`/tmp/agentvoice-width-phone/`. Current studio URL handoffs were refreshed and
+opened in Chrome.
+
+## Independent control extents
+
+Protocol 20/profile 18 retain separate shown/hidden PTT deck extents within each
+orientation. Legacy profiles seed the added field from their own orientation's
+existing size in memory. Current fields accept 160–1600 dp; historical profiles
+retain strict 240–480 validation. The active slider and reset affect only the
+visible mode. Hidden reset preserves PTT share. Shared padding stays common.
+
+Landscape no longer reserves a half-screen lane. The deck can overlap Persona
+in the foreground and is fitted only to the viewport minus shared padding.
+Persona's square and manual placement remain unchanged. Narrow mute faces stack
+labels; shallow mute/PTT faces reduce type and glyph size. Ordinary-size caption
+checks remain in the regression suite.
+
+Validation:
+
+- Debug/test APK assembly and lint passed; latest build log:
+  `/tmp/agentvoice-independent-caption-build.log`. 122 JVM tests passed with no
+  failures (`/tmp/agentvoice-independent-delivery-build.log`). Later changes
+  affected only Compose caption layout and its instrumentation tests.
+- The final installed APK passed all **84 phone tests in 141.13 seconds**:
+  `/tmp/agentvoice-independent-delivery-instrumentation.log`. Tests include four
+  retained extents, strict profile migration, legacy live-state restoration,
+  width beyond the midpoint in both handedness settings, fixed Persona bounds,
+  hold cancellation/reentry, native instance continuity and 1.5× text at narrow
+  and shallow extremes.
+- **80 studio tests / 3051 assertions**, TypeScript and Biome checks passed.
+  Browser fixture evidence in `/tmp/agentvoice-studio20-extents-browser/` records
+  47 preview requests, no Save, four extents, active-only resets, orientation
+  fences, reconnect behavior and no page overflow/errors.
+- Earlier runs exposed a historical fixture leaking the new field and compact
+  caption layout/fit problems; these were corrected before the final suite.
+  Transient missing Compose hierarchy/presence failures from an earlier run
+  did not recur in the final suite; no Persona renderer change was made.
+
+The extent range permits intentional overlap and very small text at extreme
+settings; these checks do not establish optimal readability for every combination
+of padding, split, device size and system text scale. Live-call behavior and
+subjective switch-sound quality are outside this synthetic layout round.
+
+Live exercise/restoration passed (`/tmp/agentvoice-independent-phone-check.log`).
+Native captures in `/tmp/agentvoice-independent-phone/` were reviewed for shown/
+hidden portrait and landscape, 600 dp width, mirrored width, 160 dp minimums
+at both split endpoints and the 1600 dp viewport limit. Wide controls correctly
+occlude Persona; compact captions remain inside their sampled faces. Both
+orientation layouts, unsaved session values and mute gates were restored, followed
+by exact original rotation settings. Phone and host saved files remained byte-for-byte
+unchanged. Host profile SHA-256:
+`f6a1d6fd6ee0cca1b319a176327b81beb4e7fe6d30d5b14a4ba34c2ddf97a951`.
+No Save was issued.
+
+
+## Icon auditions
+
+Protocol 21 adds session-only channel and PTT icon choices; saved profile 18 is
+unchanged. The pair choices are Current, Engraved, Phosphor Bold/Fill, Boatman and
+i cons. PTT independently selects Current press, Contact or Matching microphone.
+The central indicator follows the same family using effective channel gates;
+Rockers retain persistent mute truth. The renderer instance, geometry, input
+semantics, labels, Halo assets and production source are unchanged. Launcher
+studies remain browser-only; the installed launcher is unchanged.
+
+- Combined debug build, Android lint and 122 JVM tests passed. Log:
+  `/tmp/agentvoice-icons-polish-build.log`.
+- Before the final one-asset Boatman mute cleanup, all 88 instrumentation tests passed on the temporary 540×960 / 240 dpi API 35
+  ARM64 emulator in 144.361 seconds. Log:
+  `/tmp/agentvoice-icons-emulator-full.log`. The four focused icon tests separately
+  passed in 23.632 seconds. They verify strict session/rotation/restore and Save
+  exclusion, real Compose transparency under uniform tint on a nonblack surface,
+  readable/dismissible credits, and native Persona/pointer/bounds continuity while
+  changing every family/PTT combination during a local held gesture. Remote
+  preview commands retain their existing intentional hold cancellation.
+- 715 repository tests passed; the subsequent final studio suite passed 87 tests
+  / 3,581 assertions after SVG accessibility metadata was added. Root and studio
+  TypeScript checks and full root Biome passed. Logs:
+  `/tmp/agentvoice-icons-root-tests.log`, `/tmp/agentvoice-icons-final-studio-tests.log`,
+  `/tmp/agentvoice-icons-root-typecheck.log`, `/tmp/agentvoice-icons-final-studio-typecheck.log`,
+  `/tmp/agentvoice-icons-root-lint.log`.
+- Browser fixture checks cover all six families, PTT independence, named previews,
+  source/license links, rotation/reconnect/hidden retention, scoped resets,
+  one-shot Credits guards, no Save dirty effect, no remote image/audio requests,
+  narrow layout and browser-only launcher isolation. Evidence:
+  `/tmp/agentvoice-studio21-icons-browser/evidence.json`.
+- All original Phosphor and Noun assets are preserved with hashes/licenses.
+  The portable Noun normalization helper regenerated all 16 SVG/XML files
+  byte-for-byte. Its 40 size comparisons and 20 clipping comparisons verify
+  vector conversion, not display quality. The debug APK contains byte-exact
+  packaged icon notices and full license texts. Host Phosphor/Engraved SVG copies
+  have additional accessible metadata; parity tests confirm unchanged geometry
+  and paint. Noun host copies match the final revision 3 normalized receipt exactly.
+
+The initial phone release was honored and a separate emulator controller was used.
+After the phone returned, a fresh live snapshot and both saved byte copies were
+captured at `/tmp/agentvoice-icons-phone-before-{state,host,phone,rotation}.json`.
+The host profile and phone saved profile both retain SHA-256
+`f6a1d6fd6ee0cca1b319a176327b81beb4e7fe6d30d5b14a4ba34c2ddf97a951`.
+Current focused physical-phone evidence is `/tmp/agentvoice-icons-phone-focused.log`.
+The incomplete run in `/tmp/agentvoice-icons-phone-full.log` lost its ADB transport;
+its on-device log has missing Compose hierarchies after the interruption. The
+subsequent keyguard-blocked attempt is also excluded. No implementation assertions
+were weakened; the subsequent unlocked run passed all 88 tests in 173.906 seconds
+(`/tmp/agentvoice-icons-phone-unlocked-full.log`).
+No icon choice has been adopted as a production default or written by Save.
+
+Final physical-phone captures in `/tmp/agentvoice-icons-phone/` cover all six
+families live/muted, Contact, quiet/grayscale themes and landscape/mirrored/hidden
+layouts. Two designers reviewed the supplied S22 screenshots without finding a
+fit blocker. Revision 3 removes Boatman's detached muted wave fragments; i cons
+offers simpler silhouettes and Engraved the closest mechanical styling match.
+These are screenshot reviews, not an operator preference or direct display judgment.
+The actual host Credits command opened the native linked dialog, and Android Back
+dismissed it. The final `restored.png` was inspected after both layouts, unsaved
+session choices, gates and Current/current icons were restored exactly. The phone
+and host saved bytes remained identical; no Save occurred. Rotation values were
+restored to accelerometer_rotation 0 / user_rotation 0, and stay-awake to its
+original value 7. `/tmp/agentvoice-icons-phone-check.log` records the exercise and
+restoration. The temporary emulator is destroyed; the physical preview and live
+studio remain available, and phone access is released.
+
+
+## Shipping adoption
+
+The complete canonical profile is `design/shipping-profile.json` (SHA-256
+`aade6ae0df2e336dd618512efd62c6477dae1ae3c49c3779793ad97581fe6c1d`).
+`design/shipping-provenance.json` preserves the original version 18 source bytes
+and captured visual-choice provenance. Effective portrait/landscape layouts and
+sounds matched that original saved source before promotion. Icons, theme, center
+form/scope/tuning and PTT visibility were added from the user's explicitly adopted
+live session, rather than falling back to the earlier unsaved defaults.
+
+- Combined debug/release builds, 122 JVM tests and Android lint passed in
+  `/tmp/agentvoice-shipping-final-build.log`. A subsequent notice-only APK rebuild
+  corrected Contained's shipping attribution (`/tmp/agentvoice-shipping-notice-build.log`).
+- The 95-case phone run in `/tmp/agentvoice-shipping-phone-final.log` passed 92.
+  Three historical fixture expectations still mixed newly adopted defaults or
+  omitted the newly file-owned savedAppearance argument. Fixed historical fixtures
+  now pin their original values. The final 18-test run in
+  `/tmp/agentvoice-shipping-phone-verified.log` passed in 9.246 seconds and includes
+  all three previously failing cases, complete-profile persistence/reload/reset,
+  and production setup, Credits, acknowledged mute sounds and PTT ownership.
+  No failing product assertion was removed. The preceding initial run also
+  exposed old hardcoded defaults and an aperture test that needed its original
+  explicit motion fixture; those checks passed in the 95-case rerun.
+- Final installed debug APK SHA-256:
+  `e254372d729448b88ae4472cff9b00988300e19741b4d190069d299fc9d499f5`.
+  Its DEX files are byte-identical to the APK used by the 95-case run
+  (`c9c5863023118ac7a845744862884892ec50de27fa1c4fcac865eb76b38a6646`);
+  the final 18-test run used the notice-corrected installed APK.
+- 727 root tests, 98 studio tests / 3,694 assertions, root/studio typechecks and
+  Biome passed. Root logs: `/tmp/agentvoice-shipping-root-tests.log`,
+  `/tmp/agentvoice-shipping-root-typecheck.log`, `/tmp/agentvoice-shipping-final-lint.log`.
+  Browser Save/dirty/adopted-default/reconnect checks passed at
+  `/tmp/agentvoice-profile19-browser/evidence.json`.
+- Deterministic promotion and `generate --check` passed. Gradle now checks this
+  before builds. `scripts/verify-shipping-apk.py` found only the selected four
+  Rocker 13 WAVs, selected four channel glyph resources, and exact selected
+  notices/licenses; no Studio bridge/session/activity, profile JSON or alternate
+  icon resources. R8 usage confirms removal of DesignProfileSupportKt,
+  PreviewOrientationKt and PreviewSharedAppearanceKt. Small shared presentation
+  branches remain; universal elimination of every unselected code branch is not claimed.
+- Release APK is 47,350,973 bytes (both supported ABIs), SHA-256
+  `97e6cfcb1a872bf993f6542a1424af99dc3f87bac4955b24e34e92e2adea060d`.
+  Receipt: `/tmp/agentvoice-shipping-apk-audit.json`. It remains unsigned; no
+  release-signing or distribution configuration was changed.
+
+Actual native+host Save upgraded the user's requested profile and phone copy to
+version 19. Both copies are byte-identical, SHA-256
+`0bc3410da7e931c0e90867b3c199b0e4e43e4436f8ff8eb4a28b30f26455c53c`.
+Every effective layout, sound and visual field matches the canonical shipping
+profile; only Save metadata/serialization differs. The app was then force-stopped
+with no call active and reopened through a fresh Studio binding. All choices
+reloaded from disk before any restoration command. Logs:
+`/tmp/agentvoice-shipping-save-check.log` and `/tmp/agentvoice-shipping-cold-reload.log`.
+
+Physical production-composable fixtures were inspected in portrait and landscape
+at `/tmp/agentvoice-shipping-captures/production-{portrait,landscape}.png`.
+The real protected MainActivity exposes explicit Start/import and Credits, verified
+through UI semantics without bypassing screenshot protection or starting a call.
+`restored.png` records the retained Studio with adopted values and original
+synthetic gate choices. Original system rotation (user_rotation 1,
+accelerometer_rotation 0) and stay-awake 7 were restored. No emulator was created.
+Phone access is released. Real spoken-call/audio routing acceptance remains a
+separate pre-existing limitation; rendered fixtures do not establish acoustic quality.
+
+
+## Relay Aperture follow-up
+
+The operator selected Relay Aperture explicitly. Protocol 23 / profile 20 now
+captures launcher selection in Save/dirty/reset/reload and generates only the
+selected adaptive foreground, Android themed monochrome layer and legacy fallback.
+The previous waveform drawable was removed. All existing design tuning is retained.
+The failure presentation also shows an explicit End attempt action when the server
+reports failed/stopped, instead of displaying Connecting indefinitely.
+
+- Combined debug/release builds, 122 JVM tests and Android lint passed. A subsequent
+  packaging rebuild removed the obsolete waveform resource. Logs are under
+  `/tmp/agentvoice-relay-adoption/{build,package-final}.log`.
+- The first targeted phone run lost its Compose foreground hierarchy; inspection
+  found Recents foregrounded. It was stopped, not counted as passing. The clean
+  rerun passed all 47 selected tests in 43.759 seconds, including native launcher
+  pixels/themed layer, full profile Save/reload/legacy19 handling, failure UI,
+  icons, orientation, sounds, extents and lifecycle checks. See `phone-tests-rerun.log`.
+  A final test-only refinement allows future launcher promotion without requiring
+  Relay forever; its Relay pixel assertions are unchanged, and compilation passed.
+- 102 Studio tests / 3,823 assertions, root/studio typechecks and Biome passed.
+  Browser Save/dirty/reset/reconnect evidence is
+  `/tmp/agentvoice-launcher-profile20-browser/evidence.json`.
+- Installed debug APK SHA-256 is
+  `94c003fad4d1f3f64909e020189e0bf0877de8a0ce34637819105fb33f38ad01`.
+  Release audit passed: SHA-256
+  `a164422020618df58bbdb8514bba0707e4cddf3663af8da45079d035bc495e1d`,
+  47,352,673 bytes, selected launcher/resources and sound quartet, no Studio
+  entrypoints/profile JSON/alternate icon assets. Audit: `apk-audit.json`.
+- The native package-manager launcher drawable was rendered and visually inspected
+  in `/tmp/agentvoice-relay-adoption/launcher.png`; this is installed resource
+  evidence, not a screenshot of the Samsung home-screen icon cache.
+- Real native+host Save upgraded both copies byte-identically to profile20, SHA-256
+  `fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+  A structural comparison with the preserved operator profile19 found changes only
+  to version, launcher and Save timestamp. Both layouts and all seven shared
+  visual fields match the canonical shipping profile. See `save-check.log`.
+  Rotation1/auto0/stay-awake7 were restored. Studio remains available; the real
+  MainActivity was reopened at Start voice, with its existing device grant retained.
+
+The user's failed attempt reached the tailnet backend; server discovery reported
+failed with no loaded threads. Sanitized startup observations showed mandatory
+AgentVoice control ready before `mcpServerStatus/list`, but the catalog RPC exceeded
+its five-second deadline while other MCP startup remained outstanding. The separate
+server commit `74ec414` increases the total bounded readiness allowance to60 seconds,
+keeping exact auth/catalog checks and the enclosing90-second activation cap.
+Focused server/runtime/frontend tests passed29 cases/245 assertions; typecheck and
+scoped lint passed. Only that fix was cherry-picked to the clean installed main
+checkout as `6759151`, and the idle default service was restarted successfully.
+No config, role or grant changes were made. A successful subsequent real voice call
+was not established by these automated/installation checks; user retry remains
+the end-to-end confirmation.
+
+
+## Status polish
+
+The PTT face no longer substitutes Updating controls/Updating during a mute
+acknowledgement. It retains Push/to talk while the microphone is closed and
+Live now while the effective microphone gate is open. Gesture acceptance,
+acknowledged gate ownership, cancellation and held-PTT feedback are unchanged.
+The top notice follows the displayed Persona stage center, including landscape
+side, horizontal tuning and existing geometry interpolation; its container is
+clamped to the visible safe viewport. Portrait stays centered.
+
+Debug/release builds and Android lint passed (`/tmp/agentvoice-status-polish-build-final.log`).
+All 15 targeted physical S22 tests passed in 20.52 seconds, covering both text layouts
+with pending acknowledgements, both landscape sides and offsets, touch/hold
+ownership, notice lifecycle and production controls. Test log:
+`/tmp/agentvoice-status-polish-phone.log`. Native portrait/landscape connecting
+captures were visually inspected at `/tmp/agentvoice-status-{portrait,landscape}.png`.
+These screenshots use Studio simulation; no new real call was started.
+
+Installed debug APK was read back and matched SHA-256
+`5b0e632b8b9b67e9d2f7325f4131dc3f693e799eb21db4c5b0c410a7abab1b8e`.
+Release SHA-256 is `3ccdf980748c2bd35cd7e229639993b5b241331216e646856e739494be7946cb`;
+selected-only resource/notice audit passed (`/tmp/agentvoice-status-polish-apk.json`).
+The phone and host saved profiles remain byte-identical to their pretest copies;
+no Save occurred. Studio state and rotation 1 / auto 0 / stay-awake 7 were restored,
+and real MainActivity reopened ready for an explicit call. No emulator was used.
+
+## Durable Studio drafts and Reset to production — September 10, 2026
+
+Protocol24/profile20: every acknowledged design edit persists atomically in a
+separate debug working draft. Full production reset covers both layouts, shared
+appearance, exact override flags, all seven visual choices and sounds. Explicit
+phone/host Save checkpoints remain independent. Explicit promotion and the new
+code-only `shipping.ts release` advance the Studio generation; ordinary builds
+and same-generation reinstall preserve it. The preceding-generation draft is
+retained separately for recovery.
+
+Verification:
+
+- Debug/release/test APK builds, 122 JVM tests (zero failures/errors/skips), and
+  Android lint passed: `/tmp/agentvoice-studio-draft-build-final.log`.
+- 105 host tests / 3,844 assertions passed, including promotion versus regeneration,
+  code-only release isolation and fenced reset/checkpoint preservation:
+  `/tmp/agentvoice-studio-draft-host-final.log`. Root/host TypeScript checks and
+  scoped Biome checks passed.
+- Physical S22 instrumentation: 20 tests passed in 3.242 seconds, including six new
+  draft tests plus Save, activity lifecycle, orientation and shared appearance:
+  `/tmp/agentvoice-studio-draft-instrumentation.log`. Tests isolate their files;
+  the activity fixture preserves/restores the operator draft.
+- Actual phone bridge checks exercised different portrait/landscape sizes, a local
+  Halo override, side/offset, hidden PTT extents, theme/indicator/icons/launcher and
+  sounds. Force-stop/relaunch and same-production APK reinstall retained them;
+  full reset and another force-stop/relaunch restored production exactly:
+  `/tmp/agentvoice-studio-draft-phone.log`. The initial scratch harness used the
+  wrong connection-wrapper accessor and exited before edits; the corrected run
+  above passed. New-generation behavior was tested with isolated draft-store and
+  promotion fixtures, not by changing the operator's production receipt.
+- A local isolated Chrome/Playwright check verified actual checkbox edit, draft
+  feedback, browser reload and Reset to production. Desktop/narrow screenshots
+  and zero page errors: `/tmp/agentvoice-studio-draft-browser.log` and
+  `/tmp/agentvoice-studio-draft-evidence/browser-{desktop,narrow}.png`.
+  The remote browser provider could not reach this host's loopback service; its
+  disposable session was closed before the local browser check.
+
+Installed debug build SHA-256:
+`2361b13cedaea87ff84200ac1326d4955fea5eb40649fc80c0ee951754a5790b`.
+Release remains byte-identical to the prior artifact:
+`3ccdf980748c2bd35cd7e229639993b5b241331216e646856e739494be7946cb`.
+Selected-resource/license audit passed and now also checks `StudioDraft` and
+`StudioProduction` absent from release:
+`/tmp/agentvoice-studio-draft-apk-audit.json`.
+
+Both exported checkpoint copies remain unchanged at SHA-256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+Final phone capture was inspected at
+`/tmp/agentvoice-studio-draft-evidence/phone-final.png`. Studio was left open at
+production settings, system user rotation0/auto1 restored to the values observed
+before testing, and desktop Studio opened for the operator. No real call or
+emulator was used. Phone access was released and a completion notification stored
+in AgentNotify (optional macOS banners disabled).
+
+## Separate Studio app; manual-only production reset — September 10, 2026
+
+The operator superseded automatic refresh on production promotion. Existing
+Studio drafts now always win; only an explicit Reset to production changes them
+to the bundled production design. Draft2 removes the generation marker; draft1
+ignores its old marker without rewriting the file on load. The release-reset
+command and generated generation constant are removed. New installations still
+need an initial seed; they use production only when no draft exists.
+
+Two apps are installed on the S22:
+
+- **AgentVoice**: local signed, optimized `production` APK, package
+  `com.arthack.agentvoice.dev`. Existing application identity, Android Keystore
+  and permissions are retained. Its only launcher is MainActivity. A cold launch
+  displayed **Start voice**, confirming the encrypted grant still loads; no call
+  was started.
+- **AgentVoice Studio**: `studio` APK, package `com.arthack.agentvoice.studio`,
+  separate private data and a tuning-ring launcher. Its only launcher opens
+  PersonaPreviewActivity. Packaged manifest has no Internet, network-state,
+  microphone or Bluetooth-connect permissions and no real MainActivity.
+
+The latest old-app draft and explicit checkpoint were copied byte-for-byte into
+Studio before replacing the combined .dev build. No grant was copied. Old draft
+values were verified against the migrated profile, including both layouts,
+overrides, sounds, launcher and visual settings. Both launcher activities were
+resolved independently through PackageManager.
+
+Studio persists its private, synthetic-only browser binding separately from the
+design profile. Actual phone checks edited the draft, force-stopped Studio and
+opened its launcher without extras: the same running host reconnected and kept
+the edit. Reinstalling Studio did the same. The exact original design was then
+restored; host and Studio exported checkpoints remained unchanged. No Reset or
+Save was used on the operator's design during these checks. Evidence:
+`/tmp/agentvoice-separate-studio-phone.log`; final native capture inspected at
+`/tmp/agentvoice-separate-studio/studio-phone-final.png`.
+
+Checks passed:
+
+- Studio/production/release/test APK builds, lintStudio/lintProduction and all
+  122 Studio JVM tests: `/tmp/agentvoice-separate-studio-build.log`.
+- 20 targeted Studio-package native tests / 3.766 seconds, including retained
+  drafts across different production defaults, historical draft markers, full
+  reset, Save, lifecycle, shared appearance and orientation:
+  `/tmp/agentvoice-separate-studio-instrumentation.log`.
+- 105 host tests / 3,840 assertions, host typecheck and scoped Biome checks:
+  `/tmp/agentvoice-separate-studio-host-final.log`.
+- New `verify-design-apps.py` checks distinct app labels/identities, one launcher
+  each and Studio capability isolation. Existing selected-only release audits
+  passed for production and distribution release:
+  `/tmp/agentvoice-separate-studio-{packaging,production-audit,release-audit}.json`.
+
+Installed production SHA-256:
+`2655dd7d52c9f39e8e850e7b4d645ccd91f6ba6d2a37645575d19347ab12161b`.
+Installed Studio SHA-256:
+`ee43ad0d87b532283af0fd5760eac94a8e552752f05deaca0a6424a950a59ae8`.
+System rotation settings were restored to their observed values; Studio/browser
+were left open with the exact migrated design. Phone access was released and a
+notification stored in AgentNotify. No emulator or new real voice call was used.
+
+
+## Paid icon UI and scanner rehearsals — September 10, 2026
+
+Two one-time i cons icon purchases were verified from paid invoices. The local
+license-holder opt-in removes the app's Credits action; default public builds
+retain attribution and Studio keeps its complete icon credits. No invoice or
+billing data is committed. Packaged/source CC BY notices remain intact.
+
+The Relay Aperture scanner prototype is available in Studio's Connection setup
+section. Only Live camera opens hardware; other scenes are deterministic. No
+QR decoding, granting or server calls are implemented in this prototype. Closing
+or backgrounding releases the camera; a native camera-service read observed no
+Studio client after backgrounding. Browser generation/orientation fences apply.
+The full design draft and explicit profile retained their exact pre-test hashes.
+Portrait and landscape captures were reviewed; the final close action stays
+outside scrolling copy and scanning status clears the lower brackets.
+
+Validation: 738 root tests, 122 Studio JVM tests, 106 host tests passed; root/host
+TypeScript checks passed. Initial native checks passed 21 tests, then final overlay
+and paid-license checks passed 9 tests in 13.857s after the UI refinements.
+Studio/production builds and lints passed. Production APK inventory and the two
+app identity/permission audits passed; production was installed and its startup
+Credits action was absent. No real call was started for this slice.
+
+Production APK SHA256: `3aff0af785e6c64e12a7ec60fe4af068630ad9f9334465ded5e30a34c957261a`.
+Final Studio APK SHA256: `f9b35b6e21ff12aa72e530ff1020b2b9af1073853d2682d63869a0299f37c406`.
+Evidence: `/tmp/agentvoice-qr-flow/`; retained Studio draft SHA256
+`ae14523168bcae482e8315ddabd75739c091835758b3592b3eba7492588ee0a5`;
+explicit host profile SHA256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+System orientation restored to accelerometer_rotation1/user_rotation0.
+
+Next authorized slice: implement `agentvoice network qr --name <device>` and
+real scan/validate/encrypted-save/auto-connect, preserving one stored grant and
+manual removal/replacement for now. Multi-server management remains later work.

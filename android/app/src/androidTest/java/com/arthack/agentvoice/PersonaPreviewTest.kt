@@ -19,6 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger
 class PersonaPreviewTest {
     @get:Rule val compose = createComposeRule()
 
+    private fun legacyProfile(profile: String, version: Int) = JSONObject(profile).withoutTraceJoinFields().put("version", version).apply {
+        remove("landscape"); remove("personaSide")
+        getJSONObject("design").remove("spacing")
+    }
+
     @Test fun profileMigrationAndAtomicSaveKeepAllThreeSizes() {
         val legacy = """{"version":1,"scaleMultiplier":0.78,"verticalOffsetDp":35}"""
         val initial = decodePersonaTuning(legacy)
@@ -30,7 +35,7 @@ class PersonaPreviewTest {
             assertEquals(legacy, fixture.readText())
             assertEquals(35.dp, initial.offsetY)
             val tuned = initial.copy(listeningScale = .52f, offsetY = (-24).dp)
-            val design = PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 62, 41, 65, 185))
+            val design = PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 41, 65, 185))
             val halo = PreviewHalo(variant = "contained", containedSizePercent = 82, ringSpreadPercent = 45,
                 listeningPulsePercent = 15, speakingMotionPercent = 80, idleBreathingPercent = 0,
                 speakingColor = "#ff82dd", listeningColor = "#44efbb", idleColor = "#eeedcc")
@@ -40,15 +45,14 @@ class PersonaPreviewTest {
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(10, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(20, JSONObject(fixture.readText()).getInt("version"))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))
             assertEquals(PreviewHalo(), decodePersonaHalo(legacy))
             assertEquals(design, decodePersonaDesign(fixture.readText()))
             assertEquals(PreviewDesign(), decodePersonaDesign(legacy))
-            val v9 = JSONObject(encodePersonaTuning(tuned, design, halo, PreviewSpirit("soft", 72, "follow"))).apply {
-                put("version", 9)
+            val v9 = legacyProfile(encodePersonaTuning(tuned, design, halo, PreviewSpirit("soft", 72, "follow")), 9).apply {
                 getJSONObject("design").getJSONObject("traces").apply {
                     remove("personaSpacingPercent"); remove("footSpacingPercent")
                 }
@@ -61,9 +65,9 @@ class PersonaPreviewTest {
             assertEquals(v9, fixture.readText())
             assertThrows(IllegalArgumentException::class.java) { decodePersonaDesign(JSONObject(v9).put("version", 10).toString()) }
             assertThrows(IllegalArgumentException::class.java) {
-                decodePersonaDesign(JSONObject(encodePersonaTuning(tuned, design, halo)).put("version", 9).toString())
+                decodePersonaDesign(legacyProfile(encodePersonaTuning(tuned, design, halo), 9).toString())
             }
-            val v3 = JSONObject(encodePersonaTuning(tuned, design)).put("version", 3)
+            val v3 = legacyProfile(encodePersonaTuning(tuned, design), 3)
                 .put("design", JSONObject().put("layout", "studio").put("header", "drawer")
                     .put("mute", "rockers").put("hold", "trigger")).toString()
             fixture.writeText(v3)
@@ -72,16 +76,16 @@ class PersonaPreviewTest {
             assertEquals(v3, fixture.readText())
             assertEquals(PreviewHalo(), decodePersonaHalo(v3))
             val previous = design.copy(traces = PreviewTraces())
-            val oldDesign = previous.json().apply { remove("composition"); remove("traces"); put("hold", "trigger"); put("mute", "keycaps") }
-            val v4 = JSONObject(encodePersonaTuning(tuned, previous)).apply {
-                put("version", 4); remove("halo"); put("design", oldDesign)
+            val oldDesign = previous.json().withoutIndependentExtents().apply { remove("composition"); remove("traces"); remove("spacing"); put("hold", "trigger"); put("mute", "keycaps") }
+            val v4 = legacyProfile(encodePersonaTuning(tuned, previous), 4).apply {
+                remove("halo"); put("design", oldDesign)
             }.toString()
             assertEquals(PreviewHalo(), decodePersonaHalo(v4))
             assertEquals(previous, decodePersonaDesign(v4))
             val v5 = JSONObject(v4).put("version", 5).put("halo", halo.json()).toString()
             assertEquals(previous, decodePersonaDesign(v5))
             assertEquals(halo, decodePersonaHalo(v5))
-            val v6 = JSONObject(encodePersonaTuning(tuned, design, halo)).apply { put("version", 6); remove("spirit"); getJSONObject("design").apply { remove("traces"); put("composition", "dock") } }.toString()
+            val v6 = legacyProfile(encodePersonaTuning(tuned, design, halo), 6).apply { remove("spirit"); getJSONObject("design").apply { remove("traces"); put("composition", "dock") } }.toString()
             assertEquals(PreviewSpirit(), decodePersonaSpirit(v6))
             assertEquals(previous, decodePersonaDesign(v6))
             assertEquals(halo, decodePersonaHalo(v6))
@@ -95,8 +99,7 @@ class PersonaPreviewTest {
             for (version in listOf(6, 7, 8)) {
                 val bodies = if (version == 6) listOf("open", "dock", "yoke") else listOf("open", "dock", "yoke", "socket", "traces")
                 for (body in bodies) {
-                    val older = JSONObject(encodePersonaTuning(tuned, design, halo, PreviewSpirit("soft", 72, "follow"))).apply {
-                        put("version", version)
+                    val older = legacyProfile(encodePersonaTuning(tuned, design, halo, PreviewSpirit("soft", 72, "follow")), version).apply {
                         if (version == 6) remove("spirit")
                         getJSONObject("design").apply {
                             remove("traces"); put("composition", body)
@@ -171,27 +174,28 @@ class PersonaPreviewTest {
             connect().use { socket ->
                 val writer = socket.outputStream
                 writer.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
-                val request = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connected").put("mode", "listening")
+                val request = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connected").put("mode", "listening")
+                    .put("theme", "bright").put("mutedPresence", "tide").put("mutedTuning", PreviewMutedTuning().json()).put("presenceScope", "any-muted").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json()).put("launcher", "current")
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 62, 41, 65, 185)).json())
+                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 41, 65, 185)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 writer.write((request.toString() + "\n").toByteArray())
-                val response = JSONObject(readFrame(socket.inputStream)!!)
+                val response = JSONObject(readFrame(socket.inputStream, 16384)!!)
                 assertEquals(1, response.getInt("id"))
                 assertEquals(52, response.getJSONObject("state").getJSONObject("scales").getInt("listening"))
                 assertEquals(-24, response.getJSONObject("state").getInt("verticalOffsetDp"))
                 writer.write((request.put("id", 2).put("scales", JSONObject().put("speaking", 78).put("listening", 999).put("idle", 78)).toString() + "\n").toByteArray())
-                assertTrue(JSONObject(readFrame(socket.inputStream)!!).has("error"))
+                assertTrue(JSONObject(readFrame(socket.inputStream, 16384)!!).has("error"))
                 assertFalse(fixture.exists())
                 writer.write((request.put("id", 5).put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", 201).toString() + "\n").toByteArray())
-                assertTrue(JSONObject(readFrame(socket.inputStream)!!).has("error"))
-                writer.write("{\"id\":3,\"method\":\"save\",\"revision\":0}\n".toByteArray())
-                assertTrue(JSONObject(readFrame(socket.inputStream)!!).has("error"))
+                assertTrue(JSONObject(readFrame(socket.inputStream, 16384)!!).has("error"))
+                writer.write("{\"id\":3,\"method\":\"save\",\"orientation\":\"portrait\",\"orientationEpoch\":0,\"revision\":0}\n".toByteArray())
+                assertTrue(JSONObject(readFrame(socket.inputStream, 16384)!!).has("error"))
                 assertFalse(fixture.exists())
-                writer.write("{\"id\":4,\"method\":\"save\",\"revision\":1}\n".toByteArray())
-                val saved = JSONObject(readFrame(socket.inputStream)!!)
+                writer.write("{\"id\":4,\"method\":\"save\",\"orientation\":\"portrait\",\"orientationEpoch\":0,\"revision\":1}\n".toByteArray())
+                val saved = JSONObject(readFrame(socket.inputStream, 16384)!!)
                 assertEquals(fixture.readText(), saved.getString("profile"))
                 assertEquals(.52f, decodePersonaTuning(fixture.readText()).listeningScale)
                 assertEquals((-24).dp, decodePersonaTuning(fixture.readText()).offsetY)
@@ -200,7 +204,7 @@ class PersonaPreviewTest {
                 assertEquals(380, decodePersonaDesign(fixture.readText()).controlsHeightDp)
                 assertEquals("rocker", decodePersonaDesign(fixture.readText()).hold)
                 assertEquals("traces", decodePersonaDesign(fixture.readText()).composition)
-                assertEquals(PreviewTraces("circuit", 135, 180, 62, 41, 65, 185), decodePersonaDesign(fixture.readText()).traces)
+                assertEquals(PreviewTraces("circuit", 135, 180, 41, 65, 185), decodePersonaDesign(fixture.readText()).traces)
                 assertEquals(PreviewSpirit("soft", 42, "follow"), decodePersonaSpirit(fixture.readText()))
                 assertFalse(JSONObject(fixture.readText()).has("activity"))
                 assertEquals(54.3, decodePersonaDesign(fixture.readText()).holdSharePercent, 0.00001)
@@ -213,7 +217,7 @@ class PersonaPreviewTest {
             connect().use { socket ->
                 socket.outputStream.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
                 socket.outputStream.write("{\"id\":1,\"method\":\"get\"}\n".toByteArray())
-                val returned = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
+                val returned = JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
                 assertEquals(1, returned.getInt("revision"))
                 assertEquals(52, returned.getJSONObject("scales").getInt("listening"))
                 assertEquals(-24, returned.getInt("verticalOffsetDp"))

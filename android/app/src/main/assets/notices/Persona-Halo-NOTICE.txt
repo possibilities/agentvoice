@@ -27,12 +27,13 @@ open with no comments about the asset license and editable source:
 https://github.com/vercel/ai-elements/issues/471
 
 AgentVoice modification, 2026-09-09:
-The Contained Halo debug variant modifies verified original runtime bytes
+The Contained Halo variant modifies verified original runtime bytes
 in memory for inward listening rings and pulse, cubic rather than elastic
 easing, adjustable speaking/idle motion, and per-state colors. These are
 AgentVoice changes, not an upstream asset release. The bundled original
-.riv and production renderer remain unchanged. No original editable .rev
-source is supplied. The modified variant is debug-only.
+.riv and Original renderer remain unchanged. No original editable .rev
+source is supplied. The operator-adopted shipping profile now selects Contained;
+the debug Design Studio also retains Original for comparison.
 
 AI Elements component code: Copyright 2023 Vercel, Inc.; Apache-2.0.
 See AI-Elements-LICENSE.txt and the full Apache-2.0.txt in this directory.

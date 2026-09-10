@@ -1,0 +1,171 @@
+{
+  "appearanceOverrides": [],
+  "connectedArtboardScale": 1.9,
+  "design": {
+    "composition": "traces",
+    "controlsHeightDp": 396,
+    "controlsWithoutPttDp": 396,
+    "header": "none",
+    "hold": "rocker",
+    "holdSharePercent": 36.4,
+    "layout": "studio",
+    "mute": "rockers",
+    "spacing": {
+      "channelGapDp": 18,
+      "edgeClearancePercent": 200,
+      "paddingDp": 17,
+      "pushGapDp": 18,
+      "sectionGapDp": 4,
+      "sideMarginPercent": 48
+    },
+    "traces": {
+      "fadeLengthDp": 80,
+      "footSpacingPercent": 200,
+      "glowPercent": 67,
+      "pattern": "splayed",
+      "personaSpacingPercent": 98,
+      "reachDp": -9,
+      "stancePercent": 101,
+      "tipOpacityPercent": 0,
+      "weightPercent": 250
+    }
+  },
+  "disconnectedArtboardScale": 1.5,
+  "halo": {
+    "colors": {
+      "idle": "#f0f2e9",
+      "listening": "#d4ff72",
+      "speaking": "#bbaaff"
+    },
+    "containedSizePercent": 77,
+    "idleBreathingPercent": 95,
+    "listeningPulsePercent": 68,
+    "ringSpreadPercent": 80,
+    "speakingMotionPercent": 68,
+    "variant": "contained"
+  },
+  "horizontalOffsetDp": 0,
+  "icons": {
+    "channels": "noun-icons",
+    "push": "current"
+  },
+  "landscape": {
+    "appearanceOverrides": [],
+    "design": {
+      "composition": "traces",
+      "controlsHeightDp": 365,
+      "controlsWithoutPttDp": 365,
+      "header": "none",
+      "hold": "rocker",
+      "holdSharePercent": 42.2,
+      "layout": "studio",
+      "mute": "rockers",
+      "spacing": {
+        "channelGapDp": 18,
+        "edgeClearancePercent": 200,
+        "paddingDp": 17,
+        "pushGapDp": 18,
+        "sectionGapDp": 4,
+        "sideMarginPercent": 48
+      },
+      "traces": {
+        "fadeLengthDp": 80,
+        "footSpacingPercent": 200,
+        "glowPercent": 67,
+        "pattern": "splayed",
+        "personaSpacingPercent": 98,
+        "reachDp": -9,
+        "stancePercent": 101,
+        "tipOpacityPercent": 0,
+        "weightPercent": 250
+      }
+    },
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "containedSizePercent": 81,
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "horizontalOffsetDp": -16,
+    "personaSide": "left",
+    "scales": {
+      "idle": 78,
+      "listening": 56,
+      "speaking": 78
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "verticalOffsetDp": 8
+  },
+  "launcher": "relay-aperture",
+  "mutedPresence": "tide",
+  "mutedTuning": {
+    "breathPercent": 100,
+    "brightnessPercent": -19,
+    "cycleSeconds": 13,
+    "driftPercent": 196,
+    "motion": "ripple",
+    "textSizeSp": 32
+  },
+  "personaSide": "left",
+  "presenceScope": "any-muted",
+  "savedAtEpochMs": 1789009536017,
+  "scaleMultipliers": {
+    "idle": 0.78,
+    "listening": 0.56,
+    "speaking": 0.78
+  },
+  "sharedAppearance": {
+    "glowPercent": 67,
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "traces": {
+      "fadeLengthDp": 80,
+      "footSpacingPercent": 200,
+      "pattern": "splayed",
+      "personaSpacingPercent": 98,
+      "reachDp": -9,
+      "stancePercent": 101,
+      "tipOpacityPercent": 0,
+      "weightPercent": 250
+    }
+  },
+  "showPushToTalk": true,
+  "sounds": {
+    "family": "rocker-13",
+    "volumePercent": 60
+  },
+  "spirit": {
+    "persona": "follow",
+    "strengthPercent": 51,
+    "surface": "soft"
+  },
+  "theme": "bright",
+  "version": 20,
+  "verticalOffsetDp": -30
+}

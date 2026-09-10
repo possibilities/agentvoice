@@ -40,7 +40,7 @@ class DesignPreviewActivity : ComponentActivity() {
                     mute = { target -> ui = if (target == "mic") ui.copy(micMuted = !ui.micMuted, canHold = !ui.canHold)
                         else ui.copy(speakerMuted = !ui.speakerMuted, speakerOpen = !ui.speakerOpen) },
                     hold = { ui = ui.copy(holding = true, micOpen = true, inputLevel = .2f, outputLevel = 0f) },
-                    release = { ui = ui.copy(holding = false, micOpen = false, inputLevel = 0f) }, preview = true)
+                    release = { ui = ui.copy(holding = false, micOpen = false, inputLevel = 0f) })
             }
         }
     }

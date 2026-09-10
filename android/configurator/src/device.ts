@@ -13,7 +13,7 @@ import {
 import { ReconnectingPhone } from "./reconnecting-phone.ts";
 
 const execute = promisify(execFile);
-const activity = "com.arthack.agentvoice.dev/com.arthack.agentvoice.PersonaPreviewActivity";
+const activity = "com.arthack.agentvoice.studio/com.arthack.agentvoice.PersonaPreviewActivity";
 
 async function adb(device: string, args: string[], signal?: AbortSignal): Promise<string> {
   try {
@@ -72,10 +72,10 @@ export class PhoneConnection implements Phone {
       while (true) {
         const end = this.buffer.indexOf(10);
         if (end === -1) {
-          if (this.buffer.length >= 8192) throw Error("Oversized frame");
+          if (this.buffer.length >= 16384) throw Error("Oversized frame");
           return;
         }
-        if (end >= 8192) throw Error("Oversized frame");
+        if (end >= 16384) throw Error("Oversized frame");
         const message = record(JSON.parse(this.buffer.subarray(0, end).toString("utf8")));
         this.buffer = this.buffer.subarray(end + 1);
         const id = integer(message["id"], 1);
@@ -142,7 +142,7 @@ export async function connectPhone(device: string) {
     token,
   ]);
   if (/Error|Exception/.test(launch))
-    throw Error("Install the current Android debug APK before opening the configurator.");
+    throw Error("Install the current AgentVoice Studio APK before opening the configurator.");
   let phone: ReconnectingPhone | undefined;
   let closed = false;
   const ownedForward = (line: string) => {

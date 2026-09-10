@@ -31,7 +31,9 @@ class PreviewCompositionTest {
                 compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
                 compose.mainClock.advanceTimeBy(64)
                 compose.runOnIdle { assertTrue(state.holding) }
-                compose.runOnIdle { state = state.copy(design = state.design.copy(traces = PreviewTraces(pattern, 150, 250, 100, 100, spacing, 250 - spacing))) }
+                compose.runOnIdle { state = state.copy(design = state.design.copy(traces = PreviewTraces(pattern, 150, 250, 100, spacing, 250 - spacing,
+                    reachDp = if (spacing == 50) -40 else 120, fadeLengthDp = if (spacing == 50) 0 else 80,
+                    tipOpacityPercent = if (spacing == 50) 100 else 0))) }
                 compose.mainClock.advanceTimeBy(64)
                 compose.runOnIdle { assertSame("Composition must not replay the native entry animation", view, nativeView()) }
                 assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())

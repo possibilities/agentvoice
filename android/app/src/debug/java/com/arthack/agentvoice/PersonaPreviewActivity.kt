@@ -1,6 +1,7 @@
 package com.arthack.agentvoice
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.AtomicFile
 import android.view.WindowManager
@@ -20,6 +21,7 @@ import java.io.File
 class PersonaPreviewActivity : ComponentActivity() {
     private val selection get() = File(filesDir, "persona-tuning.json")
     private lateinit var session: PersonaPreviewSession
+    private var draftReady = false
     private var bridge: PersonaPreviewBridge? = null
     private var binding: PersonaPreviewBinding? = null
 
@@ -33,15 +35,61 @@ class PersonaPreviewActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
         val saved = runCatching { AtomicFile(selection).readFully().toString(Charsets.UTF_8) }.getOrNull()
-        session = PersonaPreviewSession(runCatching { decodePersonaTuning(saved!!) }.getOrDefault(PersonaPlacement()),
-            selection, runCatching { decodePersonaDesign(saved!!) }.getOrDefault(PreviewDesign()), runCatching { decodePersonaHalo(saved!!) }.getOrDefault(PreviewHalo()),
-            runCatching { decodePersonaSpirit(saved!!) }.getOrDefault(PreviewSpirit()))
-        savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit) }
+        val loaded = runCatching { decodePreviewProfileLayouts(saved!!) }.getOrElse {
+            val portrait = defaultPortraitLayout()
+            PreviewProfileLayouts(portrait, defaultLandscapeLayout(), PreviewSharedAppearance.from(portrait))
         }
+        val draft = StudioDraft(File(filesDir, "persona-studio-draft.json"))
+        val working = runCatching { draft.open() }
+        draftReady = working.isSuccess
+        val portrait = loaded.portrait
+        session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
+            portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
+            portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: ShippingDesign.sounds)
+        val appearance = saved?.let { runCatching { decodeDesignAppearanceProfile(it) }.getOrNull() } ?: shippingAppearance()
+        session.state = session.state.withAppearance(appearance).copy(savedAppearance = appearance)
+        // Rehearsal continuity is activity-local; durable design always wins over an older Bundle.
+        if (working.isSuccess && savedInstanceState != null) {
+            savedInstanceState.getString("previewState")?.let { json ->
+                runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign,
+                    session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide,
+                    session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance,
+                    session.state.savedSounds, session.state.savedAppearance) }
+            }
+        }
+        working.getOrNull()?.let { session.state = session.state.withDesignProfile(it).copy(revision = session.state.revision) }
+        if (working.isFailure) {
+            android.app.AlertDialog.Builder(this).setTitle("Studio draft could not be loaded")
+                .setMessage("Your draft and saved profile are retained. Close Studio to recover the file, or reset the working draft to production.")
+                .setCancelable(false).setNegativeButton("Close") { _, _ -> finish() }
+                .setPositiveButton("Reset to production") { _, _ ->
+                    runCatching { draft.write(StudioProduction.profile); session.state = session.state.withDesignProfile(StudioProduction.profile); draftReady = true; startBridge() }
+                        .onFailure { finish() }
+                }.show()
+        }
+        session.persistWorkingDesign = draft::write
+        observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
+            ?: runCatching { JSONObject(AtomicFile(File(filesDir, "persona-studio-binding.json")).readFully().toString(Charsets.UTF_8)) }
+                .getOrNull()?.let { PersonaPreviewBinding.parse(it.optString("socket"), it.optString("token")) }
         configure(intent)
-        setContent { VoiceTheme { PersonaPreview(session.state, onExit = ::finish) { session.state = it } } }
+        setContent { VoiceTheme {
+            PersonaPreview(session.state, onExit = ::finish) { session.state = it }
+            val rehearsal = session.state.connectionPreview
+            LaunchedEffect(rehearsal != "off") {
+                if (rehearsal != "off") android.widget.Toast.makeText(this@PersonaPreviewActivity,
+                    "Connection preview · no server access", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            val close = { session.state = session.state.copy(connectionPreview = "off") }
+            if (rehearsal == "camera") ConnectionCamera { cameraState, action, surface ->
+                ConnectionOverlay(ConnectionScene.camera(cameraState), close, action, studio = true,
+                    theme = session.state.theme, personaSide = session.state.personaSide, camera = surface)
+            } else ConnectionScene.entries.firstOrNull { it.key == rehearsal }?.let { scene ->
+                ConnectionOverlay(scene, close, action = { session.state = session.state.copy(connectionPreview = "scanning") },
+                    studio = true, theme = session.state.theme, personaSide = session.state.personaSide)
+            }
+            if (session.showIconCredits) PreviewIconCredits { session.showIconCredits = false }
+        } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -55,6 +103,8 @@ class PersonaPreviewActivity : ComponentActivity() {
         intent.removeExtra("previewSocket")
         intent.removeExtra("previewToken")
         if (binding?.name == next.name && binding?.token == next.token) return
+        // This private capability reaches only the synthetic Studio bridge, never a real call.
+        savePersonaTuning(File(filesDir, "persona-studio-binding.json"), JSONObject().put("socket", next.name).put("token", next.token).toString())
         bridge?.close()
         bridge = null
         binding = next
@@ -62,7 +112,17 @@ class PersonaPreviewActivity : ComponentActivity() {
 
     override fun onStart() { super.onStart(); startBridge() }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        observeOrientation(newConfig)
+    }
+
+    private fun observeOrientation(config: Configuration) {
+        session.state = session.state.rotate(if (config.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait")
+    }
+
     private fun startBridge() {
+        if (!draftReady) return
         val selected = binding ?: return
         if (bridge == null) bridge = PersonaPreviewBridge(selected.name, selected.token, session::command)
     }
@@ -95,10 +155,21 @@ internal class PersonaPreviewBinding(val name: String, val token: String) {
 }
 
 @Composable
-internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, change: (PersonaPreviewState) -> Unit) {
+internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, soundOutput: PreviewSwitchOutput? = null, change: (PersonaPreviewState) -> Unit) {
     val currentState by rememberUpdatedState(state)
-    val release: () -> Unit = { if (currentState.holding) change(currentState.endHold()) }
+    val feedback = rememberPreviewSwitchFeedback(state.sounds, soundOutput)
+    val release: () -> Unit = { feedback.cancel(); if (currentState.holding) change(currentState.endHold()) }
+    val completedRelease: () -> Unit = {
+        if (currentState.holding) { change(currentState.endHold()); feedback.release() } else feedback.cancel()
+    }
     PreviewStudioScreen(state.ui(), state.design, state.placement,
-        onMute = { change(currentState.toggle(it)) }, onHold = { change(currentState.beginHold()) },
-        onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity)
+        onMute = {
+            val next = currentState.toggle(it)
+            if (next != currentState) { change(next); feedback.toggle(if (it == "mic") !next.micMuted else !next.speakerMuted) }
+        }, onHold = {
+            val next = currentState.beginHold()
+            if (next.holding && !currentState.holding) { change(next); feedback.down() }
+        },
+        onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk, icons = state.icons)
 }

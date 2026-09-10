@@ -3,6 +3,7 @@ package com.arthack.agentvoice
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -22,6 +23,28 @@ class PreviewControlsTest {
     @get:Rule val compose = createComposeRule()
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
+
+    @Test fun pendingMuteAcknowledgementsKeepThePushLabelStable() {
+        var ui by mutableStateOf(ready)
+        var vertical by mutableStateOf(false)
+        compose.setContent {
+            VoiceTheme { RockerHoldFace(ui, VoiceInk.you, VoiceInk.surface,
+                if (vertical) Modifier.requiredSize(180.dp, 340.dp) else Modifier.requiredSize(320.dp, 130.dp),
+                light = null, acknowledgedTouch = false) }
+        }
+        for (landscape in listOf(false, true)) {
+            compose.runOnIdle { vertical = landscape }
+            for (pending in listOf(false, true)) {
+                compose.runOnIdle { ui = ready.copy(controlsPending = pending, canHold = !pending) }
+                compose.onNodeWithText("Push").assertExists()
+                compose.onNodeWithText("to talk").assertExists()
+                compose.onNodeWithText("Updating controls").assertDoesNotExist()
+                compose.onNodeWithText("Updating").assertDoesNotExist()
+                compose.runOnIdle { ui = ready.copy(micMuted = false, micOpen = true, canHold = false, controlsPending = pending) }
+                compose.onNodeWithText(if (landscape) "Live\nnow" else "Live now").assertExists()
+            }
+        }
+    }
 
     @Test fun touchingAnOpenMicGivesQuietFeedbackWithoutAcquiringOrChangingAHold() {
         val open = ready.copy(micMuted = false, micOpen = true, canHold = false)

@@ -10,26 +10,38 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
+import java.io.File
 
 class PersonaPreviewLifecycleTest {
+    private fun legacySession(state: PersonaPreviewState, protocol: Int) = state.json().withoutTraceJoinFields().put("protocol", protocol).apply {
+        remove("theme"); remove("mutedPresence"); remove("otherLayout"); remove("savedOtherLayout")
+        for (field in listOf("orientation", "orientationEpoch", "personaSide", "savedPersonaSide", "defaultPersonaSide")) remove(field)
+        for (field in listOf("design", "savedDesign", "defaultDesign")) getJSONObject(field).remove("spacing")
+    }
+
     @Test fun restoringOldLiveChoicesKeepsTuningAndMigratesRetiredDesigns() {
-        val original = PersonaPreviewState(mode = "listening", activity = "voice", design = PreviewDesign(controlsHeightDp = 387),
+        val original = PersonaPreviewState(mode = "listening", activity = "voice", otherLayout = PreviewLayout(), design = PreviewDesign(controlsHeightDp = 387),
             halo = PreviewHalo(variant = "contained", ringSpreadPercent = 52), spirit = PreviewSpirit("soft", 72, "follow"))
+        fun migrated(state: PersonaPreviewState): PersonaPreviewState {
+            val shared = PreviewSharedAppearance.from(state.activeLayout())
+            return state.copy(sharedAppearance = shared, otherLayout = shared.applyTo(state.otherLayout),
+                savedOtherLayout = state.savedSharedAppearance.applyTo(state.savedOtherLayout))
+        }
         for (protocol in listOf(7, 8)) {
-            val old = original.json().put("protocol", protocol).apply {
+            val old = legacySession(original, protocol).apply {
                 getJSONObject("design").apply {
                     remove("traces"); put("composition", "socket")
                     if (protocol == 7) { put("mute", "keycaps"); put("hold", "trigger") }
                 }
             }
             val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
-            assertEquals(original, restored)
+            assertEquals(migrated(original), restored)
         }
-        val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 72, 41)))
-        val v9 = v9State.json().put("protocol", 9).apply {
+        val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 41)))
+        val v9 = legacySession(v9State, 9).apply {
             getJSONObject("design").getJSONObject("traces").apply { remove("personaSpacingPercent"); remove("footSpacingPercent") }
         }
-        assertEquals(v9State, restorePersonaPreview(v9, v9State.saved, v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
+        assertEquals(migrated(v9State), restorePersonaPreview(v9, v9State.saved, v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
     }
 
     @Test fun backgroundReturnAndRecreationRetainBindingAndUnsavedPreview() {
@@ -45,18 +57,22 @@ class PersonaPreviewLifecycleTest {
         }
         fun state(socket: LocalSocket): JSONObject {
             socket.outputStream.write("{\"id\":2,\"method\":\"get\"}\n".toByteArray())
-            return JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
+            return JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
         }
+        val drafts = listOf("persona-studio-draft.json", "persona-studio-draft.json.bak", "persona-studio-draft.json.previous", "persona-studio-binding.json", "persona-studio-binding.json.bak").map { File(context.filesDir, it) }
+        val preserved = drafts.associateWith { if (it.exists()) it.readBytes() else null }
+        try {
         ActivityScenario.launch<PersonaPreviewActivity>(intent).use { scenario ->
             var before: JSONObject
             connect().use { socket ->
-                val preview = JSONObject().put("id", 1).put("method", "preview").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
+                val preview = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
+                    .put("theme", "bright").put("mutedPresence", "labeled").put("mutedTuning", PreviewMutedTuning(29, -30, 166, 42, 14, "ripple").json()).put("presenceScope", "always").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json()).put("launcher", "current")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55, 75, 175)).json())
+                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 55, 75, 175)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
-                before = JSONObject(readFrame(socket.inputStream)!!).getJSONObject("state")
+                before = JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
                 scenario.moveToState(Lifecycle.State.CREATED)
                 assertEquals(-1, socket.inputStream.read())
             }
@@ -67,6 +83,9 @@ class PersonaPreviewLifecycleTest {
             connect().use { socket -> assertEquals(before.toString(), state(socket).toString()) }
             scenario.recreate()
             connect().use { socket -> assertEquals(before.toString(), state(socket).toString()) }
+        }
+        } finally {
+            for ((file, bytes) in preserved) { if (bytes == null) file.delete() else file.writeBytes(bytes) }
         }
     }
 

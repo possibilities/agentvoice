@@ -1,8 +1,13 @@
 package com.arthack.agentvoice
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -12,13 +17,13 @@ class PreviewStudioTest {
 
     @Test fun tracePatternsKeepRockerTargetsFixedAndChannelsIndependent() {
         compose.mainClock.autoAdvance = false
-        var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle", design = PreviewDesign()))
         compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
         compose.mainClock.advanceTimeBy(64)
         val targets = listOf("mic-mute", "speaker-mute", "hold-to-talk")
         val before = targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
         for (pattern in listOf("parallel", "splayed", "circuit")) {
-            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(traces = PreviewTraces(pattern, 135, 190, 75, 60))) }
+            compose.runOnIdle { state = state.select("idle").copy(design = state.design.copy(traces = PreviewTraces(pattern, 135, 190, 60))) }
             compose.mainClock.advanceTimeBy(1200)
             assertEquals("$pattern moved a rocker target", before,
                 targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
@@ -58,16 +63,36 @@ class PreviewStudioTest {
         }
     }
 
-    @Test fun tallerControlsMoveThePersonaCenterWithoutChangingItsDiameter() {
+    @Test fun portraitKeepsSquareAndAllControlsInsideVisibleSpaceWithoutScrolling() {
         var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
-        compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
-        val initial = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val button = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
-        compose.runOnIdle { state = state.copy(design = state.design.copy(controlsHeightDp = 380)) }
-        val after = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertEquals((initial.right - initial.left).value, (after.right - after.left).value, .5f)
-        assertEquals((initial.bottom - initial.top).value, (after.bottom - after.top).value, .5f)
-        assertTrue(after.top < initial.top)
-        assertEquals(button.bottom, compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot().bottom)
+        compose.setContent {
+            VoiceTheme {
+                Box(Modifier.requiredSize(320.dp, 600.dp).testTag("portrait-viewport")) {
+                    PersonaPreview(state) { state = it }
+                }
+            }
+        }
+        val stage = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true)
+        val initial = stage.getUnclippedBoundsInRoot()
+        stage.assertWidthIsEqualTo(320.dp).assertHeightIsEqualTo(320.dp)
+        for (height in listOf(240, 380, 480)) for (padding in listOf(0, 16, 40)) {
+            compose.runOnIdle { state = state.copy(design = state.design.copy(controlsHeightDp = height, spacing = PreviewSpacing(paddingDp = padding))) }
+            assertEquals("Deck size cannot resize or move the square stage", initial, stage.getUnclippedBoundsInRoot())
+            val mute = compose.onNodeWithTag("mic-mute").getUnclippedBoundsInRoot()
+            val viewport = compose.onNodeWithTag("portrait-viewport").getUnclippedBoundsInRoot()
+            val ptt = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
+            assertTrue("Mute controls stay inside the visible viewport", mute.top >= viewport.top)
+            assertTrue("PTT and bottom padding stay visible", ptt.bottom <= viewport.bottom - padding.dp)
+            compose.onNodeWithTag("hold-to-talk").assertIsDisplayed()
+        }
+        val before = state.placement
+        compose.onNodeWithTag("portrait-viewport").performTouchInput { swipeUp() }
+        assertEquals("Portrait swipes cannot scroll Persona offscreen", initial, stage.getUnclippedBoundsInRoot())
+        compose.onNodeWithTag("hold-to-talk").assertIsDisplayed()
+        stage.assertWidthIsEqualTo(320.dp).assertHeightIsEqualTo(320.dp)
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
+        compose.runOnIdle { assertTrue(state.holding); assertEquals(before, state.placement) }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { up() }
+        compose.runOnIdle { assertFalse(state.holding) }
     }
 }

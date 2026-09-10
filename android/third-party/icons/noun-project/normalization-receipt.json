@@ -1,0 +1,702 @@
+{
+  "revision": 3,
+  "license": "CC BY 3.0",
+  "license_url": "https://creativecommons.org/licenses/by/3.0/",
+  "specialist_final_license_receipt": "/tmp/agentvoice-noun-assets/README.md",
+  "modifications": [
+    "Removed the separate visual attribution footer from the glyph canvas; preserved exact footer text in this receipt and accessible CREDITS.md, with creator/source/license retained in SVG descriptions.",
+    "Resized and positioned original artwork uniformly in a 24-unit square; no source path redrawing or distortion.",
+    "Changed inherited paint to currentColor for runtime channel tint.",
+    "Converted SVG polygon and rounded rect primitives to equivalent Android path geometry.",
+    "Added a common diagonal mute slash with transparent clearance; the original artwork remains beneath it.",
+    "Cutout hole winds opposite outer rectangle and works with NonZero, including Compose 1.9.5 which ignores XML clip-path fillType.",
+    "Boatman muted speaker only: clipped its three wave paths to the upper-right side of the mute diagonal with a transparent NonZero triangle, removing isolated lower wave fragments. Horn keeps the original shared knockout; source paths, upper arcs, live speaker and all other variants are unchanged."
+  ],
+  "optical_balance": "Boatman artwork uses a common 20-unit height and optical center; painted areas are closely balanced. i cons microphone uses a 20-unit square source frame; its speaker is uniformly reduced 5% to a centered 19-unit square source frame because its broad horn has greater painted area. Individual source proportions and all paths remain unchanged.",
+  "scope": "Scratch assets only. SVG/XML reconstruction comparison verifies normalization geometry, not actual Android native rendering or release adoption.",
+  "assets": [
+    {
+      "family": "noun-boatman",
+      "role": "mic",
+      "file": "boatman-microphone-171.svg",
+      "id": "171",
+      "title": "Microphone",
+      "creator": "Edward Boatman",
+      "creator_url": "https://thenounproject.com/creator/edward/",
+      "source": "https://thenounproject.com/icon/microphone-171/",
+      "frame": [
+        0,
+        0,
+        60,
+        100
+      ],
+      "scale": 0.2,
+      "tx": 6,
+      "ty": 2,
+      "original": "/tmp/agentvoice-noun-assets/originals/boatman-microphone-171.svg",
+      "original_viewBox": "0 0 60 125",
+      "original_sha256": "dc612abee5d0cf9df7e40f2a1620bb9d443f120a2ee8e578c6c063f395363b62",
+      "acquired_at": "Thu, 10 Sep 2026 01:22:38 GMT",
+      "original_attribution_footer": [
+        "Created by Edward Boatman",
+        "from the Noun Project"
+      ],
+      "normalized_viewBox": "0 0 24 24",
+      "transform": "matrix(0.2 0 0 0.2 6 2)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-boatman-mic.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_boatman_mic.xml",
+          "sha256_svg": "014f05b93930f6836d7d7edbcc86f852c63fbb8176d543bc4f8eadf97dbf8c4e",
+          "sha256_native": "e5a025632a2c1e30de808374be06845564e4eeed1afd0a1128e2c67233ea8a0b",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)"
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-boatman-mic-muted.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_boatman_mic_muted.xml",
+          "sha256_svg": "325dacc4d8ba413bdf64d5c7b8ce732b7ab6d1fbed0186467d424259dd331f88",
+          "sha256_native": "07db38277f7be2e793f9cb30d9884452574422b89597d73f8c9cee77bc0c5e75",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family": "noun-boatman",
+      "role": "speaker",
+      "file": "boatman-speaker-100.svg",
+      "id": "100",
+      "title": "Speaker",
+      "creator": "Edward Boatman",
+      "creator_url": "https://thenounproject.com/creator/edward/",
+      "source": "https://thenounproject.com/icon/speaker-100/",
+      "frame": [
+        0,
+        0,
+        93.32,
+        100
+      ],
+      "scale": 0.2,
+      "tx": 2.668,
+      "ty": 2,
+      "original": "/tmp/agentvoice-noun-assets/originals/boatman-speaker-100.svg",
+      "original_viewBox": "0 0 93.32 125",
+      "original_sha256": "7447d13c6fdece5b8678e68a819bb97a21382876d53e2a5dc4ecc355c7cfc5c4",
+      "acquired_at": "Thu, 10 Sep 2026 01:25:59 GMT",
+      "original_attribution_footer": [
+        "Created by Edward Boatman",
+        "from the Noun Project"
+      ],
+      "normalized_viewBox": "0 0 24 24",
+      "transform": "matrix(0.2 0 0 0.2 2.668 2)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-boatman-speaker.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_boatman_speaker.xml",
+          "sha256_svg": "e02bb4c9523d9b616c1561e8049a0e51b0b3a3581bb6f05c7de2b05834d9351b",
+          "sha256_native": "fbef75697ea23c6650a55b9d0b179ff7d29dbdbfa3a7ff6fabcda35c7adc3c8e",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)"
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-boatman-speaker-muted.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_boatman_speaker_muted.xml",
+          "sha256_svg": "0962966451922bbba15a6061e7d533d0116b4ce992147989c1722d75664e357f",
+          "sha256_native": "0f66b794a14909166ad1f2c2a4251e13587122b7d4a656cbe8c6524a49ee71bd",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family": "noun-icons",
+      "role": "mic",
+      "file": "icons-microphone-856601.svg",
+      "id": "856601",
+      "title": "Microphone",
+      "creator": "i cons",
+      "creator_url": "https://thenounproject.com/creator/iconsguru/",
+      "source": "https://thenounproject.com/icon/microphone-856601/",
+      "frame": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "scale": 0.0390625,
+      "tx": 2,
+      "ty": 2,
+      "original": "/tmp/agentvoice-noun-assets/originals/icons-microphone-856601.svg",
+      "original_viewBox": "0 0 512 640",
+      "original_sha256": "58f3cb6eedc2c620d59da664fef7ecdece9c260900a6ebcb901feb91eae5fdc7",
+      "acquired_at": "Thu, 10 Sep 2026 01:26:50 GMT",
+      "original_attribution_footer": [
+        "Created by i cons",
+        "from the Noun Project"
+      ],
+      "normalized_viewBox": "0 0 24 24",
+      "transform": "matrix(0.0390625 0 0 0.0390625 2 2)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-icons-mic.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_icons_mic.xml",
+          "sha256_svg": "e666d66e0a9490008652622a1b6e33a573fc25f6feddb76d3ab99149bc8200d2",
+          "sha256_native": "ed8b2976cb85cad7ca2cdcdbecf21d1f696f259013c582215d5ed98d97e8c8e3",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)"
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-icons-mic-muted.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_icons_mic_muted.xml",
+          "sha256_svg": "c544363410ffe8392885e1adb56e7dbd14c78fe359a45dc131d2e787ea0058b8",
+          "sha256_native": "2a55854d19ed70e89325b7d49d1ba00a6dcad4e02b4580f00dc5319f55284e4e",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family": "noun-icons",
+      "role": "speaker",
+      "file": "icons-volume-974802.svg",
+      "id": "974802",
+      "title": "Volume",
+      "creator": "i cons",
+      "creator_url": "https://thenounproject.com/creator/iconsguru/",
+      "source": "https://thenounproject.com/icon/volume-974802/",
+      "frame": [
+        0,
+        0,
+        100,
+        100
+      ],
+      "scale": 0.19,
+      "tx": 2.5,
+      "ty": 2.5,
+      "original": "/tmp/agentvoice-noun-assets/originals/icons-volume-974802.svg",
+      "original_viewBox": "0 0 100 125",
+      "original_sha256": "f2a6d452bbb6c2d65cceb85867adbe5f96139a0da9e1c2564a739b69c76be0db",
+      "acquired_at": "Thu, 10 Sep 2026 01:27:39 GMT",
+      "original_attribution_footer": [
+        "Created by i cons",
+        "from the Noun Project"
+      ],
+      "normalized_viewBox": "0 0 24 24",
+      "transform": "matrix(0.19 0 0 0.19 2.5 2.5)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-icons-speaker.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_icons_speaker.xml",
+          "sha256_svg": "d2041a7932bc11725cf48e68a96d9720d0d99c3dd7ec490702e8d62262665e0e",
+          "sha256_native": "eaac02a4a59440bb1095857fc9526199f5ea18af0ad1c50795bc364605f0e8b4",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)"
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "/tmp/agentvoice-noun-normalized/noun-icons-speaker-muted.svg",
+          "native": "/tmp/agentvoice-noun-normalized/preview_noun_icons_speaker_muted.xml",
+          "sha256_svg": "ba4fe409b3b061801b53066593a3109261858c6a861093a9df2c6ac1cb745d10",
+          "sha256_native": "18b50cc2de9b8beee74bee13789099b61f39bf1710f8e6354f94736460125ded",
+          "checks": [
+            {
+              "dp": 12,
+              "pixels": 36,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 16,
+              "pixels": 48,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 24,
+              "pixels": 72,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 32,
+              "pixels": 96,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            },
+            {
+              "dp": 48,
+              "pixels": 144,
+              "svg_native_difference_pixels": "0 (0)",
+              "nonzero_evenodd_difference_pixels": "0 (0)"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "native_knockout_samples": [
+    {
+      "family": "noun-boatman",
+      "image_pixels": [
+        240,
+        240
+      ],
+      "scale_pixels_per_viewBox_unit": 10,
+      "tint": "#FFFFFF",
+      "points": [
+        {
+          "name": "knockout",
+          "pixel_xy": [
+            105,
+            82
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            8.25
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "retained",
+          "pixel_xy": [
+            105,
+            55
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            5.55
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        {
+          "name": "slash",
+          "pixel_xy": [
+            105,
+            105
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            10.55
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        }
+      ]
+    },
+    {
+      "family": "noun-icons",
+      "image_pixels": [
+        240,
+        240
+      ],
+      "scale_pixels_per_viewBox_unit": 10,
+      "tint": "#FFFFFF",
+      "points": [
+        {
+          "name": "knockout",
+          "pixel_xy": [
+            105,
+            82
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            8.25
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "retained",
+          "pixel_xy": [
+            105,
+            55
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            5.55
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        {
+          "name": "slash",
+          "pixel_xy": [
+            105,
+            105
+          ],
+          "viewBox_pixel_center_xy": [
+            10.55,
+            10.55
+          ],
+          "live_rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "muted_rgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        }
+      ]
+    }
+  ],
+  "generated_at_utc": "2026-09-10T01:52:20.447458+00:00",
+  "acquisition_status": "Complete: all four originals acquired through the authorized attribution download route; CC BY 3.0 confirmed by the specialist final receipt.",
+  "revision_3_preservation": {
+    "changed_variant": "noun-boatman-speaker-muted",
+    "unchanged_svg_xml_files": [
+      "/tmp/agentvoice-noun-normalized/noun-boatman-mic.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_boatman_mic.xml",
+      "/tmp/agentvoice-noun-normalized/noun-boatman-mic-muted.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_boatman_mic_muted.xml",
+      "/tmp/agentvoice-noun-normalized/noun-boatman-speaker.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_boatman_speaker.xml",
+      "/tmp/agentvoice-noun-normalized/noun-icons-mic.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_icons_mic.xml",
+      "/tmp/agentvoice-noun-normalized/noun-icons-mic-muted.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_icons_mic_muted.xml",
+      "/tmp/agentvoice-noun-normalized/noun-icons-speaker.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_icons_speaker.xml",
+      "/tmp/agentvoice-noun-normalized/noun-icons-speaker-muted.svg",
+      "/tmp/agentvoice-noun-normalized/preview_noun_icons_speaker_muted.xml"
+    ],
+    "all_other_seven_variants_byte_identical": true
+  },
+  "boatman_muted_speaker_polish_samples": {
+    "image_pixels": [
+      240,
+      240
+    ],
+    "scale_pixels_per_viewBox_unit": 10,
+    "tint": "#FFFFFF",
+    "changed_pixel_count": 617,
+    "changed_component_pixel_counts": [
+      216,
+      207,
+      194
+    ],
+    "changed_pixel_bounds": [
+      120,
+      160,
+      179,
+      219
+    ],
+    "all_changes_remove_ink_only": true,
+    "upper_right_pixels_unchanged": true,
+    "horn_pixels_unchanged": true,
+    "points": [
+      {
+        "name": "removed_fragment",
+        "pixel_xy": [
+          128,
+          170
+        ],
+        "viewBox_pixel_center_xy": [
+          12.85,
+          17.05
+        ],
+        "previous_rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "muted_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "live_rgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "name": "retained_upper_wave",
+        "pixel_xy": [
+          209,
+          115
+        ],
+        "viewBox_pixel_center_xy": [
+          20.95,
+          11.55
+        ],
+        "previous_rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "muted_rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "live_rgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    ]
+  }
+}

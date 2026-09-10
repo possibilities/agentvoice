@@ -1,19 +1,30 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { equalDesign } from "./design.ts";
-import { equalHalo } from "./halo.ts";
+import { equalSharedAppearance } from "./appearance.ts";
+import { iconPreviewFiles } from "./icons.ts";
 import { saveProfile } from "./profile.ts";
 import {
-  equalScales,
+  type ConnectionPreview,
+  connectionPreviews,
+  equalLayout,
+  equalVisualSettings,
   exact,
   integer,
+  layoutOf,
   type Phone,
   type Profile,
+  parseOrientationFence,
   parsePreview,
   parseProfile,
+  profileLayout,
+  profileSharedAppearance,
+  profileSounds,
+  profileVisualSettings,
   record,
+  sameOrientation,
+  visualSettingsOf,
 } from "./protocol.ts";
-import { equalSpirit } from "./spirit.ts";
+import { equalSounds } from "./sounds.ts";
 
 export async function serveConfigurator(
   phone: Phone,
@@ -30,12 +41,13 @@ export async function serveConfigurator(
   const script = await bundle.outputs[0].text();
   let saved: Profile | null = null;
   let mutating = false;
+  const previewFiles = new Set(iconPreviewFiles());
   const headers = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy":
-      "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
   };
   const status = () => ({
     connected: phone.connected,
@@ -81,6 +93,22 @@ export async function serveConfigurator(
             ),
             { headers: { ...headers, "Content-Type": "font/ttf" } },
           );
+        if (path.startsWith("icon-previews/")) {
+          const filename = path.slice("icon-previews/".length);
+          if (!previewFiles.has(filename) && filename !== "PHOSPHOR-LICENSE.txt")
+            return json({ error: "Not found" }, 404);
+          return new Response(
+            Bun.file(new URL(`../public/icon-previews/${filename}`, import.meta.url)),
+            {
+              headers: {
+                ...headers,
+                "Content-Type": filename.endsWith(".svg")
+                  ? "image/svg+xml"
+                  : "text/plain; charset=utf-8",
+              },
+            },
+          );
+        }
         if (path === "state") return json(status());
         return json({ error: "Not found" }, 404);
       }
@@ -90,37 +118,77 @@ export async function serveConfigurator(
         request.headers.get("content-type") !== "application/json"
       )
         return json({ error: "Invalid request origin or content type" }, 403);
-      if (path !== "preview" && path !== "save") return json({ error: "Not found" }, 404);
+      if (
+        path !== "preview" &&
+        path !== "save" &&
+        path !== "icon-credits" &&
+        path !== "connection-preview" &&
+        path !== "reset-production"
+      )
+        return json({ error: "Not found" }, 404);
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
       let input: Record<string, unknown>;
       try {
         input = record(await request.json());
         integer(input["generation"], 1);
+        parseOrientationFence(input);
         if (path === "preview") {
           exact(input, [
             "generation",
+            "orientation",
+            "orientationEpoch",
+            "personaSide",
+            "icons",
+            "launcher",
+            "showPushToTalk",
+            "sounds",
+            "theme",
+            "mutedPresence",
+            "presenceScope",
+            "mutedTuning",
             "connection",
             "activity",
             "mode",
             "scales",
             "verticalOffsetDp",
+            "horizontalOffsetDp",
+            "appearanceOverrides",
             "design",
             "halo",
             "spirit",
           ]);
           parsePreview({
+            orientation: input["orientation"],
+            orientationEpoch: input["orientationEpoch"],
+            personaSide: input["personaSide"],
+            icons: input["icons"],
+            launcher: input["launcher"],
+            showPushToTalk: input["showPushToTalk"],
+            sounds: input["sounds"],
+            theme: input["theme"],
+            mutedPresence: input["mutedPresence"],
+            presenceScope: input["presenceScope"],
+            mutedTuning: input["mutedTuning"],
             connection: input["connection"],
             activity: input["activity"],
             mode: input["mode"],
             scales: input["scales"],
             verticalOffsetDp: input["verticalOffsetDp"],
+            horizontalOffsetDp: input["horizontalOffsetDp"],
+            appearanceOverrides: input["appearanceOverrides"],
             design: input["design"],
             halo: input["halo"],
             spirit: input["spirit"],
           });
+        } else if (path === "connection-preview") {
+          exact(input, ["generation", "orientation", "orientationEpoch", "scene"]);
+          if (!connectionPreviews.includes(input["scene"] as ConnectionPreview))
+            throw Error("Invalid connection scene");
+        } else if (path === "icon-credits") {
+          exact(input, ["generation", "orientation", "orientationEpoch"]);
         } else {
-          exact(input, ["generation", "revision"]);
+          exact(input, ["generation", "revision", "orientation", "orientationEpoch"]);
           integer(input["revision"]);
         }
       } catch {
@@ -134,32 +202,71 @@ export async function serveConfigurator(
           409,
         );
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
+      if (!sameOrientation(parseOrientationFence(input), phone.state))
+        return json(
+          { error: "Phone rotated. Review its current layout before making another change." },
+          409,
+        );
       mutating = true;
       try {
         if (path === "preview")
           await phone.request({
             method: "preview",
             ...parsePreview({
+              orientation: input["orientation"],
+              orientationEpoch: input["orientationEpoch"],
+              personaSide: input["personaSide"],
+              icons: input["icons"],
+              launcher: input["launcher"],
+              showPushToTalk: input["showPushToTalk"],
+              sounds: input["sounds"],
+              theme: input["theme"],
+              mutedPresence: input["mutedPresence"],
+              presenceScope: input["presenceScope"],
+              mutedTuning: input["mutedTuning"],
               connection: input["connection"],
               activity: input["activity"],
               mode: input["mode"],
               scales: input["scales"],
               verticalOffsetDp: input["verticalOffsetDp"],
+              horizontalOffsetDp: input["horizontalOffsetDp"],
+              appearanceOverrides: input["appearanceOverrides"],
               design: input["design"],
               halo: input["halo"],
               spirit: input["spirit"],
             }),
           });
+        else if (path === "reset-production") {
+          if (input["revision"] !== phone.state.revision)
+            return json({ error: "Preview changed. Review it before resetting." }, 409);
+          await phone.request({
+            method: "resetProduction",
+            revision: input["revision"],
+            ...parseOrientationFence(input),
+          });
+        } else if (path === "connection-preview")
+          await phone.request({
+            method: "connectionPreview",
+            scene: input["scene"],
+            ...parseOrientationFence(input),
+          });
+        else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);
-          const expected = { ...phone.state.scales };
-          const expectedOffset = phone.state.verticalOffsetDp;
-          const expectedDesign = structuredClone(phone.state.design);
-          const expectedHalo = structuredClone(phone.state.halo);
-          const expectedSpirit = { ...phone.state.spirit };
+          const expected = layoutOf(phone.state);
+          const expectedSounds = { ...phone.state.sounds };
+          const expectedAppearance = visualSettingsOf(phone.state);
+          const expectedShared = structuredClone(phone.state.sharedAppearance);
+          const expectedOther = layoutOf(phone.state.otherLayout);
+          const expectedOrientation = phone.state.orientation;
+          const otherOrientation = expectedOrientation === "portrait" ? "landscape" : "portrait";
           const reply = await phone
-            .request({ method: "save", revision: input["revision"] })
+            .request({
+              method: "save",
+              revision: input["revision"],
+              ...parseOrientationFence(input),
+            })
             .catch(() => {
               throw Error(
                 "Save was not confirmed. It may have reached the phone. Review the preview before saving again.",
@@ -168,17 +275,12 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 10 ||
-            !profile.design ||
-            !equalDesign(profile.design, expectedDesign) ||
-            !equalHalo(profile.halo, expectedHalo) ||
-            !equalSpirit(profile.spirit, expectedSpirit) ||
-            profile.verticalOffsetDp !== expectedOffset ||
-            !equalScales(expected, {
-              speaking: Math.round(profile.scaleMultipliers.speaking * 100),
-              listening: Math.round(profile.scaleMultipliers.listening * 100),
-              idle: Math.round(profile.scaleMultipliers.idle * 100),
-            })
+            profile.version !== 20 ||
+            !equalVisualSettings(profileVisualSettings(profile), expectedAppearance) ||
+            !equalSounds(profileSounds(profile), expectedSounds) ||
+            !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
+            !equalLayout(profileLayout(profile, expectedOrientation), expected) ||
+            !equalLayout(profileLayout(profile, otherOrientation), expectedOther)
           )
             throw Error("Phone saved different settings. Review the preview.");
           try {

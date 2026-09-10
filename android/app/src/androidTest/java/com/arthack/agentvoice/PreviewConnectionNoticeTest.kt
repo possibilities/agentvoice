@@ -99,6 +99,27 @@ class PreviewConnectionNoticeTest {
         compose.onNodeWithText("Connected").assertDoesNotExist()
     }
 
+    @Test fun landscapeNoticeFollowsPersonaSideAndHorizontalTuning() {
+        var side by mutableStateOf("left")
+        var offset by mutableStateOf(0)
+        compose.setContent {
+            VoiceTheme {
+                Box(Modifier.requiredSize(800.dp, 360.dp)) {
+                    PreviewStudioScreen(CallUi(), defaultLandscapeLayout().design,
+                        defaultLandscapeLayout().placement, {}, {}, {}, {}, connection = "disconnected",
+                        halo = PreviewHalo(variant = "contained"), personaSide = side,
+                        horizontalOffsetDp = offset, mutedPresence = "off")
+                }
+            }
+        }
+        for (selectedSide in listOf("left", "right")) for (shift in listOf(-30, 0, 30)) {
+            compose.runOnIdle { side = selectedSide; offset = shift }
+            val persona = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val notice = compose.onNodeWithTag("preview-connection-notice").getUnclippedBoundsInRoot()
+            assertEquals("$selectedSide/$shift notice center", (persona.left.value + persona.right.value) / 2f, (notice.left.value + notice.right.value) / 2f, 1f)
+        }
+    }
+
     private fun assertNotice(label: String) {
         compose.onNodeWithTag("preview-connection-notice").assertIsDisplayed().assertTextEquals(label)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))

@@ -1,0 +1,154 @@
+{
+  "version": 18,
+  "sounds": {
+    "family": "rocker-13",
+    "volumePercent": 60
+  },
+  "horizontalOffsetDp": 0,
+  "appearanceOverrides": [],
+  "sharedAppearance": {
+    "traces": {
+      "pattern": "splayed",
+      "stancePercent": 101,
+      "weightPercent": 250,
+      "personaSpacingPercent": 98,
+      "footSpacingPercent": 200,
+      "reachDp": -9,
+      "fadeLengthDp": 80,
+      "tipOpacityPercent": 0
+    },
+    "glowPercent": 67,
+    "halo": {
+      "variant": "contained",
+      "ringSpreadPercent": 80,
+      "listeningPulsePercent": 68,
+      "speakingMotionPercent": 68,
+      "idleBreathingPercent": 95,
+      "colors": {
+        "speaking": "#bbaaff",
+        "listening": "#d4ff72",
+        "idle": "#f0f2e9"
+      }
+    },
+    "spirit": {
+      "surface": "soft",
+      "strengthPercent": 51,
+      "persona": "follow"
+    }
+  },
+  "landscape": {
+    "scales": {
+      "speaking": 78,
+      "listening": 56,
+      "idle": 78
+    },
+    "verticalOffsetDp": 8,
+    "design": {
+      "layout": "studio",
+      "header": "none",
+      "mute": "rockers",
+      "hold": "rocker",
+      "composition": "traces",
+      "controlsHeightDp": 365,
+      "holdSharePercent": 42.2,
+      "traces": {
+        "pattern": "splayed",
+        "stancePercent": 101,
+        "weightPercent": 250,
+        "glowPercent": 67,
+        "personaSpacingPercent": 98,
+        "footSpacingPercent": 200,
+        "reachDp": -9,
+        "fadeLengthDp": 80,
+        "tipOpacityPercent": 0
+      },
+      "spacing": {
+        "sideMarginPercent": 48,
+        "edgeClearancePercent": 200,
+        "sectionGapDp": 4,
+        "channelGapDp": 18,
+        "pushGapDp": 18,
+        "paddingDp": 17
+      },
+      "controlsWithoutPttDp": 365
+    },
+    "halo": {
+      "variant": "contained",
+      "containedSizePercent": 81,
+      "ringSpreadPercent": 80,
+      "listeningPulsePercent": 68,
+      "speakingMotionPercent": 68,
+      "idleBreathingPercent": 95,
+      "colors": {
+        "speaking": "#bbaaff",
+        "listening": "#d4ff72",
+        "idle": "#f0f2e9"
+      }
+    },
+    "spirit": {
+      "surface": "soft",
+      "strengthPercent": 51,
+      "persona": "follow"
+    },
+    "personaSide": "left",
+    "horizontalOffsetDp": -16,
+    "appearanceOverrides": []
+  },
+  "personaSide": "left",
+  "spirit": {
+    "surface": "soft",
+    "strengthPercent": 51,
+    "persona": "follow"
+  },
+  "halo": {
+    "variant": "contained",
+    "containedSizePercent": 77,
+    "ringSpreadPercent": 80,
+    "listeningPulsePercent": 68,
+    "speakingMotionPercent": 68,
+    "idleBreathingPercent": 95,
+    "colors": {
+      "speaking": "#bbaaff",
+      "listening": "#d4ff72",
+      "idle": "#f0f2e9"
+    }
+  },
+  "design": {
+    "layout": "studio",
+    "header": "none",
+    "mute": "rockers",
+    "hold": "rocker",
+    "composition": "traces",
+    "controlsHeightDp": 396,
+    "holdSharePercent": 36.4,
+    "traces": {
+      "pattern": "splayed",
+      "stancePercent": 101,
+      "weightPercent": 250,
+      "glowPercent": 67,
+      "personaSpacingPercent": 98,
+      "footSpacingPercent": 200,
+      "reachDp": -9,
+      "fadeLengthDp": 80,
+      "tipOpacityPercent": 0
+    },
+    "spacing": {
+      "sideMarginPercent": 48,
+      "edgeClearancePercent": 200,
+      "sectionGapDp": 4,
+      "channelGapDp": 18,
+      "pushGapDp": 18,
+      "paddingDp": 17
+    },
+    "controlsWithoutPttDp": 396
+  },
+  "scaleMultipliers": {
+    "speaking": 0.78,
+    "listening": 0.56,
+    "idle": 0.78
+  },
+  "verticalOffsetDp": -30,
+  "connectedArtboardScale": 1.9,
+  "disconnectedArtboardScale": 1.5,
+  "savedAtEpochMs": 1789009536017
+}

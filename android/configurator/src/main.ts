@@ -7,7 +7,7 @@ const usage = `AgentVoice configurator — browser controls, native phone previe
 
 bun run android:configure --device <adb-serial>
 
---device SERIAL  Required: the authorized ADB phone with the current debug APK.
+--device SERIAL  Required: the authorized ADB phone with the AgentVoice Studio APK.
 --port NUMBER    Host loopback port (default 4317; 0 selects an available port).
 --save-to PATH   Host JSON copy (default android/configurator/profiles/SERIAL.json).
 
@@ -64,7 +64,7 @@ if (import.meta.main) {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) console.log(usage);
     else {
-      console.log("Opening the native Halo preview…");
+      console.log("Opening AgentVoice Studio…");
       connection = await connectPhone(options.device);
       if (stopping) {
         await connection.close();

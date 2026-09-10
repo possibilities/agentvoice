@@ -67,18 +67,12 @@ class PreviewTraceGeometryTest {
         }
     }
 
-    @Test fun offshootOpacityAndAmbientGlowDoNotMoveAnyRoutes() {
+    @Test fun ambientGlowDoesNotMoveAnyRoutes() {
         for (pattern in patterns) {
             val settings = PreviewTraces(pattern = pattern)
             val still = geometry(settings = settings)!!
-            val lit = geometry(settings = settings.copy(offshootPercent = 100, glowPercent = 100))!!
-            assertTrue("Each pattern has independent side and upward branches", still.offshoots.isNotEmpty())
+            val lit = geometry(settings = settings.copy(glowPercent = 100))!!
             assertEquals(still, lit)
-            for (point in still.offshoots.flatten()) {
-                assertTrue(point.x.isFinite() && point.y.isFinite())
-                assertTrue(point.x in 0f..392f && point.y in 0f..still.deckTop)
-                assertTrue(distance(point, 196f, 280f) + .001f >= 55f)
-            }
         }
     }
 

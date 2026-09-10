@@ -48,7 +48,10 @@ internal class PersonaPreviewBridge(
                                 } catch (_: Exception) {
                                     JSONObject().put("error", "Phone rejected the change or could not save. Refresh and try again.")
                                 }
-                                output.write((result.put("id", id).toString() + "\n").toByteArray(Charsets.UTF_8))
+                                val frame = result.put("id", id).toString().toByteArray(Charsets.UTF_8)
+                                require(frame.size < 16384)
+                                output.write(frame)
+                                output.write(10)
                                 output.flush()
                             }
                         } catch (_: Exception) { /* Closing, invalid authentication, or malformed input ends this peer. */ }
@@ -72,9 +75,9 @@ internal class PersonaPreviewBridge(
     }
 }
 
-internal fun readFrame(input: InputStream): String? {
+internal fun readFrame(input: InputStream, maxBytes: Int = 8192): String? {
     val bytes = ByteArrayOutputStream()
-    while (bytes.size() < 8192) {
+    while (bytes.size() < maxBytes) {
         val next = input.read()
         if (next == -1) { require(bytes.size() == 0); return null }
         if (next == 10) return bytes.toString(Charsets.UTF_8.name())

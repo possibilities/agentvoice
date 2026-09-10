@@ -28,8 +28,12 @@ share spans 30–60% of the total; the mute row uses the remaining height after
 the join. Baseline geometry is 130 + 16 + 116 = 262 dp, so the exact talk share
 is `116 / 262 × 100` (about 44.3%). Reset button sizes restores only these
 two dimensions, keeping composition, light and Persona tuning. The granular
-Persona resets below replace the former Reset Persona. Increasing control height moves
-the available center without changing Halo's diameter or its tuning values.
+Persona resets below replace the former Reset Persona. Portrait now reserves a
+screen-width square for Persona, independent of control height. Surplus room
+separates that square from the bottom-aligned deck; overflow scrolls instead of
+shrinking the stage. Traces follow the actual deck position and square's center.
+Control resizing leaves Persona's layout center, diameter and tuning unchanged.
+Landscape needs a later dedicated composition and is outside this refinement.
 
 The operator then removed the header entirely. A top overlay with a static
 glyph remains visible only while Connecting or Disconnected; it slides down
@@ -67,16 +71,17 @@ an ambiguous Save stays visible even after the connection recovers. Closing the
 host cancels retries, closes late peers and removes only this run's forwards.
 
 The phone's private tuning profile remains the initial source. Explicit Save
-checks the observed revision, atomically stores version 10 on the phone, then
+checks the observed revision, atomically stores version 15 on the phone, then
 copies the exact confirmed bytes to a private host JSON file. The host checks
 design, geometry, Halo and spirit settings in the receipt before writing that
 copy. Partial save failure is visible. Live edits and all resets are unsaved changes.
-Version 1–8 phone profiles load without rewriting; retired button styles map to
+Version 1–11 phone profiles load without rewriting; retired button styles map to
 Rockers and old compositions map to baseline Traces in memory. Version 1 seeds all three Halo sizes. Stored position is
 retained, with +35 dp used when absent. Versions 1–3 use the control geometry
 baseline; versions 4–8 retain control dimensions. Versions 1–4 select Original;
 versions 5–8 retain their Halo settings. Versions 7–8 keep their spirit settings.
-Older profiles become version 10 only on explicit Save. Production still
+Versions 9–11 retain their compatible layout settings; all earlier versions gain
+only baseline scene spacing in memory. Older profiles become version 15 only on explicit Save. Production still
 uses its existing screen and compiled defaults; adoption remains explicit in code.
 
 The vertical position extension replaced the initial fixed offset with one
@@ -217,3 +222,420 @@ default spacing in memory. Older readers keep their prior migrations. Version 10
 Save receipts include both fields; Reset traces includes both and still excludes
 glow. All other scoped resets preserve the spacing choices. No saved file is
 rewritten until explicit Save.
+
+## Independent orientation experiments
+
+Protocol/profile 11 separates portrait and landscape choices. Portrait retains
+the screen-width square; landscape places the square beside the existing Rocker
+deck, scrolling only the deck when it is taller than its available lane. The
+hidden `personaSide` choice swaps lanes without mirroring artwork or HUMAN/AGENT
+ordering. Each orientation owns placement, control dimensions, traces, Halo
+variant/motion/colors and spirit. Transient synthetic call state remains shared.
+
+The debug activity observes configuration changes and switches layouts itself.
+Host edits cannot choose orientation. Each preview/Save request must carry the
+observed orientation and monotonically advancing rotation epoch, in addition to
+the host connection generation. Host and device both check the fence; a return
+to the same orientation does not make an old request valid. Browser drafts are
+discarded on a changed epoch. PTT is released when orientation changes.
+
+Version 11 keeps portrait in the existing root profile fields and adds its side
+plus an independent landscape layout. Older profiles preserve portrait settings
+and seed baseline landscape with zero offset. Save validates both captured
+layouts even if the phone rotates before the response arrives. Loading and
+rotation never rewrite either saved file. This remains a synthetic debug studio;
+Live/Design integration and production preferences are separate work.
+
+
+## Muted presence, themes and spacing experiments
+
+Protocol/profile 12 adds five per-orientation `design.spacing` values:
+`sideMarginPercent` and `edgeClearancePercent` (0–200, default 100),
+`sectionGapDp` (0–80, default 0), `channelGapDp` (0–40, default 10), and
+`pushGapDp` (0–48, default 16). Each has an individual reset and the group has
+an atomic reset. Defaults retain the prior 2 dp spacing rhythm. The Persona
+stage is calculated from the existing baseline before spacing is resolved;
+only the deck changes. Increasing the PTT join preserves both face heights and
+adds the difference from 16 dp to deck extent. The size/share controls keep their
+original denominator. Trace feet and the capture conduit use the actual channel
+gap. Impossible margins are bounded to usable width without rewriting settings.
+
+`theme: bright|quiet|grayscale` and `mutedPresence: tide|off` are transient preview
+conditions shared across orientations, not fields of the saved visual profile.
+Theme transformations read the original chosen colors after Spirit blending;
+Bright is an exact bypass. Quiet/Grayscale use linear-light Halo gains .45/.2 and
+chroma retention .25/0. Decorative opacity is .5/.2; captions and glyphs use a
+separate contrast floor. Native color properties cover Original, Contained and
+Asleep; a palette-only update redraws a paused pose without re-running settlement.
+The bundled asset is unchanged. Production callers retain their original palette.
+
+Tide is a separate input-transparent layer: lowercase muted in measured 14 sp Plex,
+84% muted ink, at most 1 dp horizontal / 3 dp vertical drift on the shared 14-second
+clock, and a 450 ms entrance. Effective gates own eligibility; PTT, pending controls,
+disconnect or background removes it immediately. Reduced motion draws a static
+word. Its measured rectangle plus 8 dp radial clearance must fit a conservative
+inner aperture; drift decreases before the word is omitted at impossible sizes.
+This is deliberately distinct from the outer trace-attachment envelope.
+
+The operator's captured portrait choices become provisional studio defaults:
+Contained 78% / offset −22 dp, controls 387 dp / share 40.9%, Parallel traces 130/175/88/0 with both
+endpoint spacings 100, motion 35/25/25/25, existing base colors, Still 35 / Follow,
+and Original 78/56/78. Landscape keeps its independent baseline. Existing profiles
+preserve their values and gain only baseline spacing. No load, reset or preview
+publishes a profile. Future Live/Design integration and product preferences remain
+separate; these are adjustable design experiments.
+
+
+## Adjustable muted typography and motion
+
+Protocol 13 adds required session-root `mutedTuning`; saved profiles remain version
+12. The exact object contains integer textSizeSp 12–32 (14), brightnessPercent
+0–100 (0), driftPercent 0–300 (100), breathPercent 0–100 (0), cycleSeconds 6–30
+(14), and motion float|ripple (float). Each reset changes only its value; group
+reset leaves Tide/Off, theme, geometry and saved layouts untouched. Brightness
+interpolates theme-appropriate secondary and primary ink. Ripple moves shaped
+letter slices through a slow wave without changing text, layout or native Halo.
+Reduced motion removes drift, ripple and breathing immediately.
+
+The existing scene clock integrates the selected cycle speed without resetting
+phase or changing the other scene animations. Typography edits keep the native
+Halo instance; fitting reserves maximum breathing and letter movement before
+reducing motion, then omits the optional word if readable text still cannot fit.
+
+The prior universal Contained inner-radius coefficient .07 unnecessarily limited
+larger type at ordinary motion settings. Its replacement is the conservative
+product .20*(1-.6S)*(1-10P/128)*(1-.06I)*(1-.071875M), with normalized spread,
+pulse, idle and speaking amounts from the checksum-pinned asset. Multiplying by
+stage diameter, 1.9 and shared size places the aperture inside all hard strokes,
+including transitions; diffuse feathered glow may enter it. Independent historical
+minimum size and coefficient cover crossed slider changes, tightening immediately
+and relaxing after 600 ms unchanged to cover source debounce and scale handover.
+This does not switch to an Idle-only bound: Listening can finish its current
+four-second loop before exiting. Original retains its earlier conservative bound.
+No Persona asset, production palette or audio behavior changes.
+
+
+## Linked padding and dimmer muted text
+
+Protocol 14/profile 13 adds required `design.spacing.paddingDp` (integer −1..40).
+−1 preserves the five historical spacing values without changing geometry. Strict
+profile 12 readers add only this sentinel, in both orientations; older omissions
+retain their prior spacing. Fresh layouts and scoped padding reset select 16 dp.
+The studio displays Custom for the sentinel, then one Padding slider links deck
+side/bottom clearance and both button gaps. The existing section separation stays
+0–80 dp; the operator withdrew the proposed negative range in favor of manual
+Persona positioning. Persona stage/size/offset and safe system insets stay fixed.
+Extra separation and constrained viewports can require additional room or scrolling.
+Legacy fields remain in the model for lossless restoration and are overridden only
+when linked padding is selected. Nothing is saved until explicit Save.
+
+Muted brightness now spans −100..100. Negative values multiply the entire original
+opacity cycle toward zero, preserving its phase, scale and hue. Zero and positive
+values retain the previous behavior; the reduced-motion pose uses the same dimming.
+This remains session-only and does not change the saved profile.
+
+
+## Closer Contained trace contact
+
+The trace-only radial fade now reaches 72% ink strength 2 dp outside its protected
+boundary, then full strength at 12 dp. It never paints a disk over the Rive layer.
+Contained's route and zero-alpha radius use D ×1.9×size×.25×(1+.155M)+1 dp,
+where M is normalized speaking motion. This bounds the nominal centered frame:
+the mapped speaking maximum is 1.15468752384, idle never exceeds 1, listening
+contracts inward, and the relevant cubic is monotone. It is not an outer-glow
+bound. Size and expansion retain independent historical maxima for 600 ms before
+tightening; this also applies without animation because source debounce remains.
+Original keeps its prior .4×maximum-selected-state envelope and known unequal-state
+standoff. Neither variant tracks animated GPU bounds or changes the Rive asset.
+
+Phone samples show Contained's feeds tucked below the lower arc in baseline and
+speaking; some contracted/extreme poses still have a small gap. This is a closer
+stationary connection, not exact contour tracking in every animation frame.
+
+
+## Quiet center-indicator alternatives
+
+Protocol 15 expands the session-only `mutedPresence` choice to
+`tide|off|words|channels|labeled|contacts` and adds required `presenceScope`:
+`both-muted|any-muted|always` (default any-muted). Profile 13 stays unchanged;
+Save excludes these choices and `mutedTuning`. Protocol 14 restoration adds only
+the default scope. Tide remains the original both-closed baseline, independent of
+scope; Off hides the layer. Switching either retains appearance controls.
+
+Words names the gate combination, with two-line mixed/fully muted captions.
+Channels uses a mic/speaker pair with diagonal mute strikes. Labeled stacks
+icon/live-or-muted rows, preserving the selected text size. Contacts uses tiny
+PCB switches: joined means live, lifted means muted, human left. It deliberately
+trades immediate recognition for a quieter mechanical connection with Traces;
+the studio explains its convention. Footnote and Bookends remain creative
+follow-up concepts, not extra controls in this round.
+
+Effective micOpen/speakerOpen establish truth, including PTT opening a mic whose
+mute preference remains true. Connection, foreground and pending-control gates
+suppress uncertain assertions. Text, color and semantic switch shape update
+immediately; decorative motion cannot retain an obsolete live indication. No
+open-mic state is labeled listening or thinking. The input-transparent layer
+shares the existing clock, theme, conservative aperture and appearance settings;
+it owns no Rive changes or interaction targets. Labeled rows reserve the longer
+caption width to prevent horizontal gate-change jumps. Fitting reduces motion
+first, then omits a block that cannot fit rather than shrinking selected type.
+
+
+## Visible portrait footprint and soft trace underlap
+
+Portrait no longer uses page scrolling or treats the screen-width Persona square
+as a minimum flow height above the deck. The square defines renderer coordinates;
+controls are bottom-anchored inside the safe viewport and visible padding. If the
+requested deck itself exceeds that budget, its faces fit proportionally and its
+join is bounded; stored controls-height/share/padding values are unchanged. The
+foreground deck may overlap the square's lower area. Manual Persona placement,
+size and native instance remain independent. Landscape retains its existing deck
+scroll behavior. Section separation is hidden in portrait and preserved in profiles;
+manual Persona offset controls separation there.
+
+The Contained trace mask formerly used the maximum speaking expansion even in
+contracted idle poses, producing a17–23dp standoff at the operator's85%/M68/I69
+settings. The new static join uses92% of the nominal frame radius, retaining the
+previous size briefly during source debounce, and removes bright Persona-side
+contact tabs. The existing trace-only fade extends from that peripheral join;
+Rive remains above it. This is an intentional soft underlap, not exact occlusion
+following every animated ellipse. High expansion can reveal short peripheral
+feeds inside the outer ring; the central disk remains clear. Original's conservative
+max-state envelope and unequal-size limitation remain. The pinned Rive11.12.0 API
+has no component world-transform getter; exact pose-derived masking would require
+a separate runtime integration, not another scalar promoted as universal contact.
+
+
+## Independent trace join controls
+
+Protocol 16 / profile 14 adds orientation-local `design.traces.reachDp`
+(−40..120, default 0), `fadeLengthDp` (0..80, default 12), and
+`tipOpacityPercent` (0..100, default 0). Historical profile schemas stay strict;
+profiles through 13 and activity sessions through protocol 15 gain only baseline
+join fields in memory. Explicit Save is still the only profile write.
+
+Both orientations derive the join radius as `max(0, previousRadius − reachDp)`,
+with dp converted to scene pixels once. Routes, offshoots and radial trace ink
+share that radius. The fade retains the old 72% shoulder at one sixth of its
+length; selected tip opacity interpolates that shoulder toward full ink. A
+zero fade is a hard edge. A positive radius still protects its inner disk, but
+zero radius deliberately permits full center reach. No mask paints over native
+Persona pixels. Per-field reset and Reset traces restore 0/12/0 without changing
+other layout, Halo, indicator, spirit or glow choices.
+
+This is the requested adjustable fallback, not exact animation-derived occlusion.
+Pinned Rive Android 11.12.0 lacks a component/world-transform getter; artboard
+bounds are canvas bounds and this asset exposes only a color binding. Following
+the moving ellipse requires a separately scoped native runtime bridge. This round
+changes neither the asset nor its renderer, and claims no universal clear-center
+protection when the operator explicitly extends traces into that region.
+
+
+## Fit status text before omitting it
+
+The operator's Words/32 sp selection with strong Contained motion produced a
+small conservative inner aperture. The indicator was eligible for “human muted”
+but the measured two-line block failed the fit check and disappeared. Status
+indicators now try the preferred size down to 12 sp, reducing motion within each
+candidate before choosing smaller type. Words reserves the longest two-line
+status when choosing size, so changing gates cannot enlarge a short “live” label.
+The existing aperture and 8 dp clearance stay unchanged; impossibly small spaces
+still omit the optional indicator. Tide keeps its previous behavior. Stored size,
+brightness, motion, scope and geometry are untouched, and this needs no protocol
+or profile migration.
+
+
+## Shared appearance with explicit orientation overrides
+
+Protocol 17/profile 15 separates appearance scope from local geometry. Four
+shared groups contain trace settings except glow, glow, Halo appearance except
+size, and spirit lighting/color response. Each layout stores a sorted unique
+override-group list. Root state reports the effective current layout, other
+layout, common appearance and their saved/default counterparts. The browser
+submits effective current fields plus scope flags; it never writes arbitrary
+common-base metadata or selects an unseen orientation.
+
+A shared-to-shared edit updates the common base and every inheriting layout.
+Turning an override on snapshots the preceding effective group, ignoring
+proposed group values in that toggle request. Turning it off adopts the existing
+common base, also ignoring stale local values. Subsequent local edits cannot
+change the common base or the other orientation. Common appearance can remain
+stored even when both layouts override it. Save captures both effective layouts,
+common data and scopes atomically under the existing revision/orientation fences.
+
+Appearance resets use common defaults in their current scope; sizes, axes, deck
+and spacing use orientation defaults. Theme/indicator remain shared session-only
+choices. Default/new layouts share portrait's provisional appearance. Legacy
+profiles derive common appearance from portrait; each old landscape group
+inherits if equal to the canonical legacy defaults or common values, otherwise
+its values survive as an explicit override. Loading never rewrites saved files.
+
+Each layout also gains horizontalOffsetDp (−200..200, default 0). Portrait uses
+its existing vertical offset; landscape uses horizontal offset and retains its
+old vertical value without rendering it. The stage, Persona and center indicator
+move together; traces use the actual center while retaining a stable routing
+lane. Controls do not move. The scalar interpolates with the existing rotation
+geometry; it introduces no renderer recreation or independent animation clock.
+
+Debug phone replies now have a 16 KiB bound and profile text an 8 KiB bound to
+carry the explicit common data and save receipt. Incoming preview requests remain
+8 KiB. Production transports and release code are unchanged.
+
+
+## Coordinated switch sound auditions
+
+Protocol 18/profile 16 adds one shared root `sounds` object: family `off`,
+`rocker-29` or `rocker-13`, and integer `volumePercent` 0–100. Default is Off/70.
+This setting is independent of layout/appearance overrides and saved only by
+explicit Save; legacy profiles and restored sessions migrate to Off/70 without
+rewriting files. Current/saved/default receipts are validated by both endpoints.
+
+Six cleared CC0 Kenney-derived WAVs form two matching trios. Each has a shared
+mute click, a lower PTT down cue and a shorter/quieter PTT up cue. The debug
+phone uses a preloaded native SoundPool with media volume and no focus request;
+the browser never plays or serves sound assets. Configuration changes are silent.
+Only accepted local mute gestures, accepted PTT press and ordinary release (or
+explicit accessibility Start/Stop) play cues. Cancellation, background, rotation,
+reconnect/hydration and disposal do not. A setting change invalidates an existing
+pair. Unloaded samples are dropped, never queued; an unheard down cannot produce
+an orphan up. The live-mic touch acknowledgement remains visual only.
+
+This is a debug design audition. Production media/controllers, Halo rendering and
+release behavior remain unchanged. Sound assets/attribution are in debug assets;
+source hashes, license and reproducible processing are documented under
+`android/third-party/switch-sounds`. Final subjective choice and acoustic pickup
+in a real voice call are not established by decode/gesture instrumentation.
+
+## Shared spacing, landscape columns and directional rockers
+
+Protocol 19/profile 17 supersedes the separate-spacing, offshoot and three-cue
+experiments above. Enforce equal spacing objects across both effective and saved
+layouts, without an orientation override. All six spacing fields move/reset
+together across orientations. Legacy landscape spacing adopts portrait values
+in memory; original files remain untouched until explicit Save. Persona sizing,
+placement and deck height/share remain local because their geometry differs.
+
+Landscape stacks HUMAN/AGENT in the column nearest Persona, with a full-height
+PTT column at the outer edge. Mirror columns, never channel order, for opposite
+handedness. PTT share is width here, height in portrait. Use the portrait trace
+engine with transposed axes instead of maintaining a second routing aesthetic.
+Decks fit the visible viewport without scroll; transient center misalignment
+during relocation suppresses traces rather than attaching to an invented center.
+Offshoot rendering, controls and current schema fields are removed. Historical
+readers validate then discard the old field.
+
+Show push to talk is a strict shared session boolean, default true, excluded
+from saved profiles and dirty comparisons. Hide removes the target/connector,
+releases any held pointer silently, and gives the mute controls the spare room.
+Retain PTT share while disabled. Rotation/restoration retains this experiment.
+
+The two CC0 sound families now contain four cues each: shared mute on/off,
+plus separate PTT down/up. Choose mute direction from the accepted persistent
+state, never the effective PTT gate. Existing toggle recordings become on
+byte-for-byte; PTT files are unchanged. New quieter/shorter off derivatives have
+complete source/hash/processing receipts. No cues on configuration, hydrate,
+reconnect, cancellation or relocation. Final sound preference remains the
+operator's audition choice.
+
+### Primary deck extent follows orientation
+
+After stacking landscape mute controls, a height slider no longer matched the
+portrait mental model. The studio now calls it Controls width in landscape and
+Controls height in portrait. Landscape height fills the safe viewport minus
+shared top/bottom padding; width is end-aligned and fitted within its lane and
+section separation. Persona's existing square/position remain independent.
+The retained `controlsHeightDp` wire/profile field stores this primary extent;
+no schema migration or saved-file write is needed for the requested semantic
+change. Reset retains each orientation's existing numeric defaults.
+
+### Independent visibility-mode extents and full landscape width
+
+Protocol 20/profile 18 adds `controlsWithoutPttDp` to each orientation's design,
+independent of the existing shown extent. Both are integer 160–1600 dp. Legacy
+profiles through 17 retain their exact schema/range 240–480 and seed the hidden
+extent from the corresponding shown extent only in their effective model.
+Visibility itself remains a shared session choice. Editing/resetting one mode
+must never overwrite the other; hidden reset also preserves PTT share.
+
+The reserved landscape lane is removed. As in portrait, control geometry may
+overlap the independently placed Persona, with controls owning the foreground
+and pointers. Only viewport/shared-padding bounds cap rendered extent. The
+old section gap no longer limits either orientation and its control is hidden;
+retain its stored value for compatibility. Narrow faces stack captions and
+short faces reduce glyph height, preserving ordinary-sized styling.
+
+### Adopted shipping profile and complete Save
+
+The operator subsequently locked the saved S22 design and explicitly requested
+that every Studio choice survive Save and become the shipped baseline. This
+supersedes earlier session-only treatment of icon choices, theme, center indicator
+tuning/scope, and push-to-talk visibility. Protocol 22 carries current, saved and
+adopted defaults; profile 19 persists all those visual choices alongside both
+layouts, common/override appearance and switch sounds. Connection, live gates,
+held pointers and synthetic activity remain runtime state, never preferences.
+
+The canonical `android/design/shipping-profile.json` is complete and independently
+loadable. Its provenance receipt preserves original saved bytes and the separately
+captured choices that older Save omitted. An explicit promotion command validates
+and emits typed shipping constants plus selected release assets. Ordinary builds
+check deterministic regeneration instead of reading an ignored device file. A
+future Studio profile can be adopted through the same reviewable process.
+
+`VoiceScreen` now uses the shared Studio rendering components with real `CallUi`
+and audio levels. Main contains the reusable geometry, controls and Contained
+renderer; debug alone owns the bridge, synthetic session/activity and icon gallery
+providers. Release gets only selected icon variants and sound cues; shrinker
+output is checked for removal of profile/migration helpers and the APK is audited
+for absence of Studio entrypoints, alternate resources and profile JSON. Some
+small shared presentation branches remain to avoid a separate renderer fork.
+Selected creator/source/license/modification notices are packaged and linked from
+production Credits. Original Persona bytes and renderer behavior remain intact.
+
+Rotation now retains MainActivity while the shared relocation policy cancels any
+owned hold. Other recreation/background/transport teardown rules stay in force.
+Production UI verification uses controlled `CallUi` fixtures and acknowledged
+mute/hold semantics; it is not proof of spoken-call acoustic quality or a change
+to release-signing/distribution scope.
+
+
+## Production baseline and durable Studio drafts — September 10, 2026
+
+Protocol24 supersedes the earlier live-only persistence statements above while
+retaining profile20. The debug phone atomically stores every accepted design
+edit in a separate `persona-studio-draft.json`, with complete shared data,
+explicit overrides, both orientations and inactive PTT extents. Runtime rehearsal
+and transport state are excluded. Saved activity state is generation-fenced and
+cannot override the durable design. Explicit Save remains the only writer of the
+phone/host exported checkpoint.
+
+Reset to production is a single revision-, orientation- and connection-fenced
+command restoring the full shipped profile without exporting it. Promotion emits
+an exact complete Studio snapshot and a production generation. First launch of a
+new generation archives the previous draft and seeds production once; subsequent
+launches and same-generation reinstalls retain the working draft. Normal builds
+never advance generation. `shipping.ts release` advances it explicitly using the
+validated existing production design, for code-only releases. Studio snapshot and
+draft code remain debug-only; release packaging audits their absence.
+
+
+## Separate app and manual-only production refresh — September 10, 2026
+
+This supersedes the automatic generation refresh in the preceding section.
+The operator requires Studio to retain the last configured draft across every
+production release. Production is a first-install seed and an explicit Reset
+button target only. Draft2 removes the marker; draft1's marker is ignored without
+rewriting existing values. Promotion no longer emits a reset generation, and the
+extra code-only release-reset command is removed.
+
+Local production and Studio now coexist as separate applications: .dev retains
+the real client's identity/Keystore while .studio owns only the synthetic preview,
+independent draft/checkpoint and private ADB bridge. Production uses optimized
+selected-only release sources; Studio retains experimental options, has its own
+launcher, and removes network/microphone/Bluetooth permissions and MainActivity.
+The prior combined debug variant remains an internal fixture. Instrumentation
+now targets Studio so it need not replace the real client.
+
+Studio remembers the synthetic browser binding outside the exported design. An
+ordinary launcher open after process death reconnects an existing host without
+replaying mutations. Host restart establishes a new binding and local URL; both
+observe the retained draft. Real device grants are never copied or exposed.

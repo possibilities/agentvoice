@@ -1,0 +1,27 @@
+{
+  "iconId": "171",
+  "title": "microphone",
+  "creator": "Edward Boatman",
+  "requestId": "965.212",
+  "httpStatus": 200,
+  "responseDate": "Thu, 10 Sep 2026 01:22:38 GMT",
+  "downloadOk": true,
+  "downloadErrors": "",
+  "variables": {
+    "clientApp": "WEB",
+    "iconId": "171",
+    "imageFormat": "SVG",
+    "exportSize": 700,
+    "foregroundColor": "#000000",
+    "backgroundShapeColor": "#000000",
+    "backgroundShapeOpacity": 0,
+    "backgroundShape": "SQUARE",
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false
+  },
+  "file": "/tmp/agentvoice-noun-assets/originals/boatman-microphone-171.svg",
+  "bytes": 1085,
+  "sha256": "dc612abee5d0cf9df7e40f2a1620bb9d443f120a2ee8e578c6c063f395363b62",
+  "recovery": "Exact base64Stream from the response to the UI Download SVG action; no reconstructed or preview asset."
+}

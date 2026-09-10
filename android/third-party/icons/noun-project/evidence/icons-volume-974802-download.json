@@ -1,0 +1,27 @@
+{
+  "iconId": "974802",
+  "title": "volume",
+  "creator": "i cons",
+  "requestId": "965.892",
+  "httpStatus": 200,
+  "responseDate": "Thu, 10 Sep 2026 01:27:39 GMT",
+  "downloadOk": true,
+  "downloadErrors": "",
+  "variables": {
+    "clientApp": "WEB",
+    "iconId": "974802",
+    "imageFormat": "SVG",
+    "exportSize": 700,
+    "foregroundColor": "#000000",
+    "backgroundShapeColor": "#000000",
+    "backgroundShapeOpacity": 0,
+    "backgroundShape": "SQUARE",
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false
+  },
+  "file": "/tmp/agentvoice-noun-assets/originals/icons-volume-974802.svg",
+  "bytes": 914,
+  "sha256": "f2a6d452bbb6c2d65cceb85867adbe5f96139a0da9e1c2564a739b69c76be0db",
+  "recovery": "Exact base64Stream from the response to the UI Download SVG action; no reconstructed or preview asset."
+}

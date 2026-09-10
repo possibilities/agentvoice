@@ -1,9 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
 import { defaultDesign } from "../src/design.ts";
 import { defaultHalo } from "../src/halo.ts";
-import type { PhoneState } from "../src/protocol.ts";
+import { defaultMutedTuning } from "../src/muted-presence.ts";
+import {
+  defaultLandscapeLayout,
+  defaultSharedAppearance,
+  defaultVisualSettings,
+  type PhoneState,
+} from "../src/protocol.ts";
 import { type PreviewConnection, ReconnectingPhone } from "../src/reconnecting-phone.ts";
+import { defaultSounds } from "../src/sounds.ts";
 import { defaultSpirit } from "../src/spirit.ts";
+import { defaultTraces } from "../src/traces.ts";
 
 const scales = { speaking: 78, listening: 58, idle: 78 };
 const timing = { poll: 5, retry: 10, maxRetry: 20 };
@@ -15,7 +23,35 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 10,
+    protocol: 25,
+    connectionPreview: "off",
+    launcher: "current",
+    savedAppearance: defaultVisualSettings(),
+    defaultAppearance: defaultVisualSettings(),
+    icons: { channels: "current", push: "current" },
+    showPushToTalk: true,
+    sounds: defaultSounds(),
+    savedSounds: defaultSounds(),
+    defaultSounds: defaultSounds(),
+    horizontalOffsetDp: 0,
+    savedHorizontalOffsetDp: 0,
+    defaultHorizontalOffsetDp: 0,
+    appearanceOverrides: ["glow", "halo", "spirit", "traces"],
+    savedAppearanceOverrides: [],
+    sharedAppearance: defaultSharedAppearance(),
+    savedSharedAppearance: defaultSharedAppearance(),
+    defaultSharedAppearance: defaultSharedAppearance(),
+    presenceScope: "any-muted",
+    mutedTuning: defaultMutedTuning(),
+    theme: "bright",
+    mutedPresence: "tide",
+    orientation: "portrait",
+    orientationEpoch: 0,
+    personaSide: "left",
+    savedPersonaSide: "left",
+    defaultPersonaSide: "left",
+    otherLayout: defaultLandscapeLayout(),
+    savedOtherLayout: defaultLandscapeLayout(),
     activity: "voice",
     connection: "connecting",
     revision: 0,
@@ -32,12 +68,12 @@ class Connection implements PreviewConnection {
       hold: "rocker",
       composition: "traces",
       traces: {
+        ...defaultTraces(),
         pattern: "circuit",
         personaSpacingPercent: 75,
         footSpacingPercent: 155,
         stancePercent: 140,
         weightPercent: 180,
-        offshootPercent: 45,
         glowPercent: 27,
       },
       controlsHeightDp: 380,
@@ -81,17 +117,31 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   const initial = new Connection();
   const returned = new Connection();
   const returnedTraces = {
+    ...defaultTraces(),
+    reachDp: 36,
+    fadeLengthDp: 41,
+    tipOpacityPercent: 57,
     pattern: "splayed" as const,
     personaSpacingPercent: 185,
     footSpacingPercent: 65,
     stancePercent: 93,
     weightPercent: 225,
-    offshootPercent: 71,
     glowPercent: 54,
   };
   returned.state = {
     ...returned.state,
+    icons: { channels: "engraved", push: "contact" },
+    showPushToTalk: false,
+    sounds: { family: "rocker-13", volumePercent: 43 },
     mode: "idle",
+    mutedTuning: { ...defaultMutedTuning(), textSizeSp: 23, motion: "ripple", driftPercent: 250 },
+    theme: "grayscale",
+    mutedPresence: "contacts",
+    presenceScope: "always",
+    orientation: "landscape",
+    orientationEpoch: 3,
+    personaSide: "right",
+    otherLayout: { ...defaultLandscapeLayout(), verticalOffsetDp: -96 },
     revision: 4,
     design: { ...returned.state.design, traces: returnedTraces },
   };
@@ -125,6 +175,22 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.generation).toBe(2);
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
+  expect(phone.state.sounds).toEqual({ family: "rocker-13", volumePercent: 43 });
+  expect(phone.state.showPushToTalk).toBe(false);
+  expect(phone.state.icons).toEqual({ channels: "engraved", push: "contact" });
+  expect(phone.state.mutedTuning).toEqual({
+    ...defaultMutedTuning(),
+    textSizeSp: 23,
+    motion: "ripple",
+    driftPercent: 250,
+  });
+  expect(phone.state.theme).toBe("grayscale");
+  expect(phone.state.mutedPresence).toBe("contacts");
+  expect(phone.state.presenceScope).toBe("always");
+  expect(phone.state.orientation).toBe("landscape");
+  expect(phone.state.orientationEpoch).toBe(3);
+  expect(phone.state.personaSide).toBe("right");
+  expect(phone.state.otherLayout.verticalOffsetDp).toBe(-96);
   expect(phone.state.design.traces).toEqual(returnedTraces);
   expect(initial.state.design.traces).not.toEqual(returnedTraces);
   expect(phone.state.halo.variant).toBe("contained");
