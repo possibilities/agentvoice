@@ -39,7 +39,10 @@ export async function requireControlMcpReady(
   request: <T = unknown>(method: string, params: unknown, timeout?: number) => Promise<T>,
   threadId: string,
   registration: ControlMcpRegistration,
-  timeoutMs = 5_000,
+  // Stock 0.153.4 snapshots a separate MCP connection set, including other servers
+  // with a 30s default startup timeout. Keep one budget across polling and pages,
+  // inside the controller's 90s activation deadline.
+  timeoutMs = 60_000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
