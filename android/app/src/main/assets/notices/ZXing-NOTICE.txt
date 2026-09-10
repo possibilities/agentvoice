@@ -1,0 +1,28 @@
+ZXing ("Zebra Crossing") core 3.5.3
+Source tag: https://github.com/zxing/zxing/tree/zxing-3.5.3
+Upstream notice retrieved 2026-09-10:
+https://raw.githubusercontent.com/zxing/zxing/zxing-3.5.3/NOTICE
+
+Copyright 2007 ZXing authors
+Licensed under the Apache License, Version 2.0.
+See Apache-2.0.txt in this directory.
+
+The upstream ZXing NOTICE file contains:
+
+--------------------------------------------------------------------------------
+NOTICES FOR BARCODE4J
+--------------------------------------------------------------------------------
+
+Barcode4J
+Copyright 2002-2010 Jeremias Märki
+Copyright 2005-2006 Dietmar Bürkle
+
+Portions of this software were contributed under section 5 of the
+Apache License. Contributors are listed under:
+http://barcode4j.sourceforge.net/contributors.html
+
+--------------------------------------------------------------------------------
+NOTICES FOR JCOMMANDER
+--------------------------------------------------------------------------------
+
+Copyright 2010 Cedric Beust cedric@beust.com

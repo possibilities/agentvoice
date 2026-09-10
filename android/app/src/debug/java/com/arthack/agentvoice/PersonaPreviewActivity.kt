@@ -85,7 +85,12 @@ class PersonaPreviewActivity : ComponentActivity() {
                 ConnectionOverlay(ConnectionScene.camera(cameraState), close, action, studio = true,
                     theme = session.state.theme, personaSide = session.state.personaSide, camera = surface)
             } else ConnectionScene.entries.firstOrNull { it.key == rehearsal }?.let { scene ->
-                ConnectionOverlay(scene, close, action = { session.state = session.state.copy(connectionPreview = "scanning") },
+                val next = when (scene.key) {
+                    "microphone", "microphone-denied" -> "connecting"
+                    "storage-failed" -> "off"
+                    else -> "scanning"
+                }
+                ConnectionOverlay(scene, close, action = { session.state = session.state.copy(connectionPreview = next) },
                     studio = true, theme = session.state.theme, personaSide = session.state.personaSide)
             }
             if (session.showIconCredits) PreviewIconCredits { session.showIconCredits = false }

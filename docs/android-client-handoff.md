@@ -42,6 +42,9 @@ Manual/Termux servers use `agentvoice server` in a foreground terminal. On deskt
 # Explicit first enable: requires a connected Tailscale device and unused ports.
 bun ~/code/agentstart/scripts/agentvoice-network.ts --enable
 agentvoice network status
+# Native Android app:
+agentvoice network qr --name phone
+# Termux/native desktop client profile:
 agentvoice network grant --name Android --out /absolute/private/android.json
 agentvoice network list
 ```
@@ -62,15 +65,21 @@ Grant output is create-new only, mode 0600, and contains
 `{version:1,endpoint:"wss://…/v2/client",token:"<id>.<secret>"}`. Transfer only this
 file through a trusted encrypted channel, never chat, clipboard logs, URLs or
 browser storage. On Termux use a private app-owned directory and mode 0600.
-For native Android, import explicitly into app-private encrypted storage backed
-by Android Keystore; exclude it from backups, telemetry and screenshots. No Codex
+For the native Android app, scan the separate `network qr` output instead. It
+encodes `agentvoice-grant:v1:` followed by the exact compact profile JSON, capped
+at 2048 UTF-8 bytes. This is a reusable bearer credential, not one-use pairing;
+keep the terminal and its scrollback private. The app checks the authenticated
+verified-TLS upgrade without starting a call, then saves the grant encrypted
+with Android Keystore in no-backup storage before starting voice. No Codex
 credential is transferred. Endpoint validation forbids ws:, URL credentials,
 queries, fragments and paths other than `/v2/client`.
 
 Grants expire after 30 days. Revoke with `agentvoice network revoke <device-id>`;
-active connections close within 10 seconds, or on their next frame. Import a new
-grant to renew; there is no refresh secret or automatic enrollment API. Revoke
-the old grant after replacement. `network disable` retains settings under a
+active connections close within 10 seconds, or on their next frame. File-based
+clients need a new profile to renew. The native Android app currently retains
+its single grant even when rejected or unreadable; it has no deletion/replacement
+UI. Recovery requires manual app-data repair, then scanning a new QR. There is
+no refresh secret. Revoke the old grant when replacing it. `network disable` retains settings under a
 disabled filename; restart the default server to immediately stop network access.
 Remove only its dedicated Serve route with `tailscale serve --https=48414 off`.
 Changing settings requires explicit disable/configure and proxy reconciliation;

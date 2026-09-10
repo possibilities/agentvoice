@@ -3,6 +3,7 @@ package com.arthack.agentvoice
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -38,7 +39,10 @@ class ConnectionOverlayTest {
         for (next in ConnectionScene.entries) {
             compose.runOnIdle { scene = next }
             compose.onNodeWithTag("connection-title").assertTextEquals(next.title).assertIsDisplayed()
-            next.action?.let { compose.onNodeWithTag("connection-action").assertIsDisplayed() }
+            next.action?.let {
+                compose.onNodeWithTag("connection-action").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+                compose.onNodeWithText(it).assertIsDisplayed()
+            }
             compose.onNodeWithTag("connection-close").performClick()
             compose.onNodeWithTag("connection-overlay").assertDoesNotExist()
         }

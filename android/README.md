@@ -26,7 +26,7 @@ Contained Halo, Splayed traces, Bright theme, tuned Tide/Ripple, and Rocker 13 a
 The production `VoiceScreen` now consumes generated `ShippingDesign` constants and
 the same rendering components as the Studio, using actual `CallUi` gates and
 measured levels. It never loads a private Studio profile or a rehearsal state.
-Back (or the accessible End call action) ends a call. Explicit grant import/Start,
+Back (or the accessible End call action) ends a call. QR enrollment, connection
 errors and linked Credits remain available. Rotation preserves the call and uses
 the configured landscape layout; relocation still cancels a held pointer.
 
@@ -104,20 +104,26 @@ phone. Installation on a personal phone is a separate explicit step.
 
 ## Connect
 
-Follow [the Android handoff](../docs/android-client-handoff.md) to explicitly
-enable the server's dedicated Tailscale WSS route and issue a device grant.
-Transfer only the private JSON file through a trusted encrypted channel.
+Configure the server's dedicated private Tailscale WSS route, then run:
 
-Open the app, choose **Import device grant**, and select that file using Android's
-file picker. The app validates its exact shape and WSS endpoint, then encrypts
-it with an Android Keystore AES-256-GCM key in app-private, no-backup storage.
-No URL, grant, SDP, audio, or transcript is logged. The production activity
-blocks screenshots and recents capture. Imports do not create a call. The source
-file remains yours; the app does not delete or retain a URI permission for it.
+```sh
+agentvoice network qr --name phone
+```
 
-Tap **Start voice** to request microphone and optional nearby-device permission
-and start one call. Tailscale and upstream Internet access must be available.
-The server controls conversation selection and persistent mute defaults.
+The command prints an exact reusable bearer credential QR valid for 30 days.
+It contains the configured `wss://…/v2/client` endpoint and secret, so treat it
+as private; it is reusable access, not one-use pairing. In the native app, allow
+camera access and scan it from Connection setup. The scanner parses the exact
+payload, performs an auth-only verified-TLS WSS upgrade, and creates no call.
+After that succeeds, the app encrypts the grant with Android Keystore AES-256-GCM
+and saves it with `saveNew` in app-private no-backup storage. No URL, grant, SDP,
+audio or transcript is logged.
+
+Microphone permission is a separate voice gate. Once a grant is saved, the app
+attempts one connection automatically per foreground visit; a failed attempt
+does not loop and requires an explicit retry. Tailscale and upstream Internet
+access must be available. The server controls conversation selection and
+persistent mute defaults.
 
 HUMAN toggles the persistent microphone mute; AGENT toggles playback mute. While
 HUMAN is muted and media is connected, hold the bottom surface to talk. Release,
@@ -133,8 +139,10 @@ retain the activity and release any owned hold. Portrait and landscape use their
 adopted visible-viewport layouts without page scrolling. A quiet sliding notice
 appears while connecting or disconnected; connected presentation has no header.
 
-Expired/revoked grants require explicit replacement. The app has no enrollment,
-refresh-secret, server configuration, account, approval or transcript interface.
+Expired or revoked grants stay stored and are never auto-replaced. An unreadable
+stored grant is also retained. The app has no refresh-secret, server
+configuration, account, approval or transcript interface, and currently has no
+delete or replacement UI; manual app-data repair is the recovery scope.
 The desktop's `agentvoice --attach` opens voice and orchestrator panes for the
 phone's call; `agentvoice --attach --host smolbird` uses verified SSH when the
 backend runs on that phone. The new CLI version must be installed on both ends
@@ -282,7 +290,7 @@ bun run android:configure --device <adb-serial>
 Explicit Save retains both orientations' design, sizes and position in a
 version 20 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 24 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 26 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
@@ -473,7 +481,7 @@ mode is labeled. Switching visibility retains both sizes. Reset button sizes
 resets only the active extent, and resets share only when PTT is shown. Existing
 profiles seed the new hidden extent from each orientation's existing extent in
 memory; loading never rewrites the saved file. Profiles 18–20 store the additional
-`controlsWithoutPttDp` field and protocol 24 carries both sizes.
+`controlsWithoutPttDp` field and current protocol 26 carries both sizes.
 
 Both extent fields span 160–1600 dp. Landscape has no reserved half-screen lane: a
 large deck may overlap the independently positioned Persona in the foreground.
@@ -492,7 +500,8 @@ the baseline. The center uses effective open/closed channel state while Rockers
 use persistent mute state; a PTT microphone always remains unslashed.
 
 The launcher gallery saves its selection in profile 20. Selection changes the
-Studio preview and dirty state; promotion generates the installed adaptive icon,
+Studio preview and dirty state; **Save complete design** captures it with both
+layouts and shared choices. Promotion generates the installed adaptive icon,
 monochrome themed layer and legacy fallback. The adopted launcher is Relay
 Aperture. A Studio selection alone does not change the installed package icon.
 See [icon provenance and licenses](third-party/icons/README.md). **Credits on phone**
@@ -508,25 +517,29 @@ production changes. Production seeds only a genuinely new Studio installation.
 **Reset to production** is the only way to replace an existing draft with the
 bundled shipped design, covering both layouts and all shared choices.
 
-**Save profile** exports a checkpoint; `shipping.ts promote --profile <file>`
+**Save complete design** exports a checkpoint; `shipping.ts promote --profile <file>`
 adopts that complete profile for a future release. Build/install both apps when
 releasing a new design so Studio's reset target stays current, but preserve its
 working draft. There is no automatic release-time refresh. See the
 [working-draft contract](configurator/README.md#continue-from-production).
 
 
-## Paid icon distribution and connection prototype — September 10, 2026
+## Paid icon distribution and QR enrollment — September 10, 2026
 
 The selected i cons microphone/speaker were purchased individually with verified
 attribution waivers. This license holder's local build opts in through
 `agentvoice.paidNounIcons=856601,974802` in gitignored `android/local.properties`.
-Public builds default to attribution; the opt-in does not license downstream forks.
-Public CC BY sources/notices and Studio's all-library credits remain.
+Public builds retain accessible attribution; the opt-in removes only the selected
+paid pair's Credits action for the license holder and does not add icon UI or
+license downstream forks. Public CC BY sources/notices and Studio's all-library
+credits remain.
 See [purchase scope](third-party/icons/noun-project/paid-license.md).
 
-Studio now rehearses the upcoming QR setup in **Connection setup → App view**.
-Only Live camera opens hardware. All other states are mock scenes; neither saves
-or reads a grant nor calls a server. The camera stops in the background and on
-closing. Drafts and profiles do not include this transient rehearsal. Protocol25
-adds its state/command; saved profile20 and working draft2 are unchanged.
-The CLI instruction is a prototype for the next slice, not an implemented command.
+Studio rehearses the QR setup in **Connection setup → App view**. Only Live
+camera opens hardware and shows a preview; all other states, including rejected,
+storage and microphone scenes, are mocks. Studio has no QR analyzer, grant
+storage, network or microphone path. The camera stops in the background and on
+closing. Drafts and profiles do not include this transient rehearsal. Protocol26
+carries the transient state and command; saved profile20 and working draft2 are
+unchanged. Production QR enrollment is documented above; this section makes no
+claim of live phone enrollment validation or installation.

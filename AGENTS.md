@@ -18,6 +18,15 @@ browser content stays loopback-only and never receives that grant. Never expose
 native Codex, MCP, attachment or event sockets through this gateway. Read [README.md](README.md), [CONTEXT.md](CONTEXT.md), the [decision index](docs/adr/README.md) and ADRs [0033](docs/adr/0033-client-owned-native-media.md)/[0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0024](docs/adr/0024-server-and-pointer-frontend.md)/[0022](docs/adr/0022-websocket-native-tui.md) for the active topologies; ADRs [0015](docs/adr/0015-retain-controller-replace-runtime.md)/[0016](docs/adr/0016-restart-handoff.md) describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
+For the native Android client, configure the private Tailscale WSS endpoint and
+run `agentvoice network qr --name phone`. The exact QR is a reusable 30-day
+bearer credential, not one-use pairing. The scanner parses it, performs an
+auth-only verified-TLS upgrade with no call, then encrypts and `saveNew`s it in
+no-backup storage. Microphone permission is separate. The app attempts one
+connection per foreground, requires explicit retry after failure, and never
+auto-replaces a stored revoked or unreadable grant. There is no delete/replace
+UI yet; recovery is manual app-data repair.
+
 ## What vanilla Codex means
 
 The baseline includes both the Codex client and server. Read
@@ -66,7 +75,7 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  Save captures every visual choice in profile 20; protocol 25 carries current,
+  Save captures every visual choice in profile 20; protocol 26 carries current,
   saved and adopted defaults. A debug-only durable working draft autosaves edits;
   Reset to production resets both layouts without writing the explicit checkpoint.
   Only connection/gates/held pointers and synthetic

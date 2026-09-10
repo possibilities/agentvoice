@@ -47,6 +47,7 @@
     "@modelcontextprotocol/sdk": "1.30.0",
     "@opentui/core": "0.5.3",
     "opusscript": "^0.1.1",
+    "qrcode-generator": "1.4.4",
     "werift": "^0.24.3",
     "zod": "^4.4.3"
   }

@@ -3,7 +3,7 @@
 A separate host browser app for comparing native Android voice controls and
 tuning the existing Persona Halo. The phone renders the interactive demo;
 the browser separates Appearance, orientation-local Layout, Shared spacing and
-Shared session controls, plus Save profile.
+Shared session controls, plus **Save complete design**.
 No tuning panel obscures the phone.
 
 ## Continue from production
@@ -26,7 +26,7 @@ cannot replace the durable design even after production changes.
 **Reset to production** restores the entire shipped design in both orientations
 as one revision- and orientation-fenced command. It preserves the phone's current
 orientation and the explicit saved checkpoint. Granular reset controls remain.
-**Save profile** exports the complete working design to the phone checkpoint
+**Save complete design** exports the complete working design to the phone checkpoint
 `files/persona-tuning.json` and the host JSON; only Save writes those files.
 “Draft kept on phone · not exported” distinguishes autosave from that checkpoint.
 A failed draft write does not apply/acknowledge the edit; a failed load stays
@@ -180,7 +180,7 @@ The new styles offer **Show**: Both muted, Either muted (default), or Always.
 This selector stays hidden for Tide and Off, retaining its choice for the next
 new-style selection. Tide always keeps its existing both-muted behavior.
 Theme, indicator style and Show are shared visual choices: they survive orientation
-changes, process restart and ordinary tuning resets, and are included in Save profile.
+changes, process restart and ordinary tuning resets, and are included in Save complete design.
 
 **Indicator appearance** adjusts Float or Ripple motion, primary text/icon
 Size (12–32 sp), Brightness (−100–100%), Drift (0–300%), Breathing (0–100%) and
@@ -309,7 +309,7 @@ Appearance resets use the shared default group, including when the group has an
 orientation override. Spacing resets use the shared defaults reported in
 `defaultDesign.spacing` in either orientation. Size, axis and button-size resets
 use the active orientation defaults. Each reset preserves all other choices and remains kept in the working draft; explicit Save updates the exported checkpoint.
-Save profile keeps the control design,
+Save complete design keeps the control design,
 all Halo sizes, motion, colors and both local position axes.
 Phone channel buttons and Push to talk also select synthetic states, which the
 browser observes. Reattaching to a still-open preview retains its unsaved choices.
@@ -404,7 +404,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol25 carries live/saved/default designs, sizes, vertical and
+Preview protocol26 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -414,7 +414,7 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
 32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is25;
+session-root fields on Preview/PhoneState, never Layout. Protocol is26;
 saved profile is version20 with separately saved shown/hidden extents and all
 shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -446,7 +446,7 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol25's active fields describe the phone's visible orientation; it also
+Protocol26's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
 changes orientation; the host cannot select it. Version20 profile receipts must
@@ -464,7 +464,7 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol25 is strict; Android restoration from
+never include it. Current live protocol26 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
 The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
@@ -503,7 +503,7 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol25 and profiles18–20 require both extent fields. Legacy profiles
+Current protocol26 and profiles18–20 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
@@ -522,7 +522,7 @@ Selection remains while muted indicators are Off or Push to talk is hidden.
 “Credits on phone” opens native icon credits through a one-shot, generation- and
 orientation-fenced request. It changes no preview settings, profile or dirty state;
 the button is disabled while disconnected or another request is pending.
-Protocol25 requires exactly `icons: { channels, push }` at the shared root;
+Protocol26 requires exactly `icons: { channels, push }` at the shared root;
 rotation, reconnect and activity restoration retain it. Restoration from
 protocol20 or earlier supplies `current/current`. Profile19 saves these choices and includes them in dirty comparison. Production
 defaults change only through explicit promotion. Legacy profiles through18
@@ -530,7 +530,8 @@ remain strict and preserve their original bytes until an explicit Save.
 
 The Launcher gallery offers Current waveform, Duplex Halo, Relay Aperture and
 Voice Carrier. Its selected card updates the shared launcher setting and becomes
-dirty until Save. Reload, rotation and reconnect observe the retained selection;
+dirty until **Save complete design**. The complete save includes the gallery
+choice with both layouts and shared choices. Reload, rotation and reconnect observe the retained selection;
 disconnected cards are disabled and no selection is replayed automatically.
 Reset launcher uses the adopted shipping default. Choosing a card does not
 install an APK; explicit promotion generates the selected launcher resources.
@@ -606,17 +607,18 @@ in generated `ShippingDesign.launcher` and the owned generated-file inventory.
 
 ## Connection setup rehearsals
 
-Protocol25 adds the transient `connectionPreview` state and an orientation-fenced
+Protocol26 carries the transient `connectionPreview` state and an orientation-fenced
 `connectionPreview` command (`scene`, `orientation`, `orientationEpoch`). The host
 also checks connection generation. **Connection setup → App view** opens the
 shared Relay Aperture overlay on the phone. Camera explanation, denied/unavailable,
-invalid/found, securing, connecting and failure scenes are deterministic rehearsals.
-Only **Live camera · Prototype** requests camera permission and binds the rear
-camera. Closing the overlay or backgrounding releases it. No QR analyzer,
-credential read/write, server request or microphone is used by Studio.
+invalid/found, securing, connecting, rejected, storage, microphone and failure
+scenes are deterministic mock rehearsals. Only **Live camera** requests
+camera permission and binds the rear camera for a preview; it has no analyzer.
+Closing the overlay or backgrounding releases it. No QR parsing, credential
+read/write, server request or microphone is used by Studio.
 
 This rehearsal is excluded from draft/profile/dirty comparison and resets on a
 new activity instance. All configured design values and saved bytes remain intact.
 CameraX is shared app code; Studio continues to remove network and microphone
-permissions. The command shown in this prototype is the next implementation slice;
-it is not yet a working QR-grant command.
+permissions. Production enrollment uses the native app's QR flow; Studio's
+connection scenes are preview-only and never enroll a device.

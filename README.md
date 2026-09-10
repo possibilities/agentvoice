@@ -118,9 +118,20 @@ is connected; press and hold to talk, release to mute.
 See [network setup and Android handoff](docs/android-client-handoff.md).
 
 The first [native Android app](android/README.md) implements this authenticated
-client API directly, with a Compose voice screen, private device-grant import,
-client-owned WebRTC and foreground call ownership. It is a development build;
-on-device native audio acceptance and release distribution remain pending.
+client API directly, with a Compose voice screen, QR enrollment, client-owned
+WebRTC and foreground call ownership. It is a development build; on-device
+native audio acceptance and release distribution remain pending.
+
+To enroll it, configure the dedicated private Tailscale WSS endpoint and run
+`agentvoice network qr --name phone`. The command prints an exact reusable
+bearer credential QR valid for 30 days; it is a secret, not one-use pairing.
+The native scanner parses the QR, performs an auth-only verified-TLS WSS
+upgrade (which creates no call), then encrypts the credential into app-private
+no-backup storage with `saveNew`. Microphone permission is requested separately
+for voice. A saved grant makes one automatic connection attempt per foreground;
+failures need an explicit retry and never loop. Revoked or unreadable stored
+grants are retained and never replaced automatically. There is no delete or
+replacement control in the app yet; repair is a manual app-data operation.
 The [adopted design profile](android/design/shipping-profile.json) supplies shipping defaults;
 the retained debug studio can audition and promote future designs, including
 [Kenney CC0 switch sound families](android/third-party/switch-sounds/README.md).

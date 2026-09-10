@@ -1,12 +1,12 @@
 package com.arthack.agentvoice
 
 import android.content.Context
-import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import java.io.File
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.KeyStore
@@ -14,10 +14,13 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
-internal class GrantStore(private val context: Context) {
-    private val file = AtomicFile(File(context.noBackupFilesDir, "device-grant.v1"))
-    private val alias = "agentvoice.device-grant.v1"
+internal class GrantStore(context: Context, directory: File = context.noBackupFilesDir,
+    private val alias: String = "agentvoice.device-grant.v1") {
+    private val file = AtomicFile(File(directory, "device-grant.v1"))
+    private val lockFile = File(directory, "device-grant.lock")
     private val aad = "agentvoice-device-grant-v1".toByteArray(Charsets.UTF_8)
 
     private fun key(): SecretKey {
@@ -34,23 +37,31 @@ internal class GrantStore(private val context: Context) {
         .onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
         .decode(ByteBuffer.wrap(bytes)).toString()
 
-    fun load(): DeviceGrant? {
-        if (!file.baseFile.exists()) return null
+    private fun exists() = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
+    private fun <T> locked(block: () -> T): T = synchronized(GrantStore::class.java) {
+        RandomAccessFile(lockFile, "rw").use { lock -> lock.channel.lock().use { block() } }
+    }
+
+    fun load(): DeviceGrant? = locked {
+        if (!exists()) return@locked null
         val bytes = file.openRead().use { boundedRead(it, 16_385) }
         requireWire(bytes.size in 30..16_384 && bytes[0] == 1.toByte())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
         cipher.updateAAD(aad)
         val plain = cipher.doFinal(bytes, 13, bytes.size - 13)
-        return try { DeviceGrant.parse(decode(plain)) } finally { plain.fill(0); bytes.fill(0) }
+        try { DeviceGrant.parse(decode(plain)) } finally { plain.fill(0); bytes.fill(0) }
     }
 
-    fun import(uri: Uri): DeviceGrant {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { boundedRead(it, 8193) }
-            ?: throw ProtocolFailure()
+    /** Enrollment cannot replace an existing grant, even through two activity instances. */
+    fun saveNew(grant: DeviceGrant) = locked {
+        check(!exists()) { "Device access already exists" }
+        val bytes = buildJsonObject {
+            put("version", 1); put("endpoint", grant.endpoint); put("token", grant.token)
+        }.toString().toByteArray(Charsets.UTF_8)
         try {
             requireWire(bytes.size in 1..8192)
-            val grant = DeviceGrant.parse(decode(bytes))
+            DeviceGrant.parse(decode(bytes))
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key())
             cipher.updateAAD(aad)
@@ -58,7 +69,6 @@ internal class GrantStore(private val context: Context) {
             val stream = file.startWrite()
             try { stream.write(encrypted); file.finishWrite(stream) }
             catch (error: Exception) { file.failWrite(stream); throw error }
-            return grant
         } finally { bytes.fill(0) }
     }
     private fun boundedRead(input: InputStream, maximum: Int): ByteArray {

@@ -53,7 +53,7 @@ internal class SecureTransport(
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = finish(closeMessage(code))
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             finish(when (response?.code) {
-                401 -> "Device access expired or was revoked. Import a new grant."
+                401, 403 -> "Device access expired or was revoked. Ask the server owner to repair this phone’s access."
                 429 -> "Server is busy. Try again when it is available."
                 404, 421, 426 -> "Server configuration mismatch. Check your device grant."
                 else -> "Could not connect securely. Check Tailscale and your server."
@@ -66,7 +66,7 @@ internal class SecureTransport(
         socket.queueSize() + value.toByteArray(Charsets.UTF_8).size <= MAX_FRAME_BYTES && socket.send(value)
     override fun cancel() { ended.set(true); socket.cancel() }
     private fun closeMessage(code: Int) = when (code) {
-        4403 -> "Device access expired or was revoked. Import a new grant."
+        4403 -> "Device access expired or was revoked. Ask the server owner to repair this phone’s access."
         4408 -> "Connection timed out. Check Tailscale, then start again."
         1013 -> "Server is unavailable. Start again when it is ready."
         1000, 1001 -> "Call ended."

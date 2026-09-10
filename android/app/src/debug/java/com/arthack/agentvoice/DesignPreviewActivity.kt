@@ -35,8 +35,7 @@ class DesignPreviewActivity : ComponentActivity() {
                     speakerMuted = false, speakerOpen = true, canHold = true, outputLevel = .14f)
             }) }
             VoiceTheme {
-                VoiceScreen(ui, scenario != "setup", start = { ui = ui.copy(running = true, connected = true, canHold = true, phase = "Connected") },
-                    stop = { ui = CallUi() }, importGrant = {},
+                VoiceScreen(ui, stop = { ui = CallUi() },
                     mute = { target -> ui = if (target == "mic") ui.copy(micMuted = !ui.micMuted, canHold = !ui.canHold)
                         else ui.copy(speakerMuted = !ui.speakerMuted, speakerOpen = !ui.speakerOpen) },
                     hold = { ui = ui.copy(holding = true, micOpen = true, inputLevel = .2f, outputLevel = 0f) },

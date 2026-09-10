@@ -28,7 +28,7 @@ class VoiceScreenTest {
         var presses = 0
         var releases = 0
         compose.setContent {
-            VoiceTheme { VoiceScreen(ready, true, soundOutput = output, start = {}, stop = {}, importGrant = {}, mute = {},
+            VoiceTheme { VoiceScreen(ready, soundOutput = output, stop = {}, mute = {},
                 hold = { presses++ }, release = { releases++ }) }
         }
         compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
@@ -46,7 +46,7 @@ class VoiceScreenTest {
         var ui by mutableStateOf(ready)
         var presses = 0
         compose.setContent {
-            VoiceTheme { VoiceScreen(ui, true, soundOutput = output, start = {}, stop = {}, importGrant = {}, mute = {},
+            VoiceTheme { VoiceScreen(ui, soundOutput = output, stop = {}, mute = {},
                 hold = { presses++ }, release = {}) }
         }
         val before = compose.onNodeWithTag("hold-to-talk").fetchSemanticsNode().boundsInRoot
@@ -59,7 +59,7 @@ class VoiceScreenTest {
         var target: String? = null
         var ended = false
         compose.setContent {
-            VoiceTheme { VoiceScreen(ready, true, soundOutput = output, start = {}, stop = { ended = true }, importGrant = {},
+            VoiceTheme { VoiceScreen(ready, soundOutput = output, stop = { ended = true },
                 mute = { target = it }, hold = {}, release = {}) }
         }
         compose.onNodeWithTag("voice-screen")
@@ -75,7 +75,7 @@ class VoiceScreenTest {
     @Test fun shippingFeedbackWaitsForAcknowledgedMuteAndPairsRealHoldRelease() {
         var ui by mutableStateOf(ready)
         compose.setContent {
-            VoiceTheme { VoiceScreen(ui, true, soundOutput = output, start = {}, stop = {}, importGrant = {},
+            VoiceTheme { VoiceScreen(ui, soundOutput = output, stop = {},
                 mute = { ui = ui.copy(controlsPending = true) },
                 hold = { ui = ui.copy(holding = true, micOpen = true) },
                 release = { ui = ui.copy(holding = false, micOpen = false) }) }
@@ -94,14 +94,17 @@ class VoiceScreenTest {
         compose.runOnIdle { assertEquals(PreviewSwitchCue.Down, cues.last()) }
     }
 
-    @Test fun setupRespectsTheDistributorsIconLicense() {
-        var starts = 0
+    @Test fun idleScreenHasNoEnrollmentActionsAndRespectsTheDistributorsIconLicense() {
         compose.setContent {
-            VoiceTheme { VoiceScreen(CallUi(), true, soundOutput = output,
-                start = { starts++ }, stop = {}, importGrant = {}, mute = {}, hold = {}, release = {}) }
+            VoiceTheme { VoiceScreen(CallUi(message = "Connection setup"), soundOutput = output,
+                stop = {}, mute = {}, hold = {}, release = {}) }
         }
-        compose.onNodeWithTag("start-voice").performClick()
-        compose.runOnIdle { assertEquals(1, starts); assertTrue(cues.isEmpty()) }
+        compose.onNodeWithTag("start-voice").assertDoesNotExist()
+        compose.onNodeWithText("Start voice").assertDoesNotExist()
+        compose.onNodeWithText("Import device grant").assertDoesNotExist()
+        compose.onNodeWithText("Replace device grant").assertDoesNotExist()
+        compose.onNodeWithText("Connection setup").assertExists()
+        compose.runOnIdle { assertTrue(cues.isEmpty()) }
         if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS)) {
             compose.onNodeWithTag("shipping-credits").performClick()
             compose.onNodeWithText("Microphone and Volume by i cons", substring = true).assertExists()
@@ -114,8 +117,8 @@ class VoiceScreenTest {
     @Test fun failedStartupDoesNotPretendToKeepConnectingAndOffersAnExit() {
         var stopped = false
         compose.setContent {
-            VoiceTheme { VoiceScreen(CallUi(running = true, phase = "Voice unavailable"), true,
-                soundOutput = output, start = {}, stop = { stopped = true }, importGrant = {},
+            VoiceTheme { VoiceScreen(CallUi(running = true, phase = "Voice unavailable"),
+                soundOutput = output, stop = { stopped = true },
                 mute = {}, hold = {}, release = {}) }
         }
         compose.onNodeWithTag("voice-failure").assertExists()

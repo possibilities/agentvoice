@@ -140,10 +140,14 @@ export const connectionPreviews = [
   "saving",
   "connecting",
   "failed",
+  "rejected",
+  "storage-failed",
+  "microphone",
+  "microphone-denied",
 ] as const;
 export type ConnectionPreview = (typeof connectionPreviews)[number];
 export type PhoneState = Preview & {
-  protocol: 25;
+  protocol: 26;
   connectionPreview: ConnectionPreview;
   savedAppearance: VisualSettings;
   defaultAppearance: VisualSettings;
@@ -452,7 +456,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 25 ||
+    data["protocol"] !== 26 ||
     !connectionPreviews.includes(data["connectionPreview"] as ConnectionPreview) ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
@@ -462,7 +466,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 25,
+    protocol: 26,
     connectionPreview: data["connectionPreview"] as ConnectionPreview,
     savedAppearance: parseVisualSettings(data["savedAppearance"]),
     defaultAppearance: parseVisualSettings(data["defaultAppearance"]),

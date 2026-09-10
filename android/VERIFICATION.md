@@ -1709,3 +1709,60 @@ System orientation restored to accelerometer_rotation1/user_rotation0.
 Next authorized slice: implement `agentvoice network qr --name <device>` and
 real scan/validate/encrypted-save/auto-connect, preserving one stored grant and
 manual removal/replacement for now. Multi-server management remains later work.
+
+
+## QR enrollment and complete Studio setup rehearsals — September 10, 2026
+
+Production now scans `agentvoice network qr --name phone`, validates the strict
+bounded profile, checks authenticated WSS without starting a call, and saves new
+access with Keystore encryption before ordinary voice startup. Existing stored
+access auto-connects once per foreground visit; invalid existing access is retained
+for manual repair. The old Start/import/replace popup is removed. Studio remains
+preview-only, with protocol 26 setup scenes and unchanged profile 20/draft 2.
+
+Evidence root: `/tmp/agentvoice-qr-enrollment/`.
+
+- Root suite: 763 tests / 11,179 assertions (`root-tests.log`). Two later QR
+  output-boundary cases are included in the final focused 15-test / 148-assertion
+  run. Root typecheck and scoped lint passed.
+- Studio host: 106 tests / 3,854 assertions; host typecheck passed.
+- Android JVM: 134 tests, no failures, including CLI fixture decoding and
+  authenticated-upgrade/lifecycle policy cases. Studio/production builds and
+  lints passed; final UI build is `build-actions.log` (5m 47s).
+- Emulator native: 34 tests / 113.682s before the final permission-button layout
+  fix (`instrumentation.log`). After the fix, all three overlay tests passed in
+  portrait (11.655s) and explicitly fixed landscape (16.408s). This is a targeted
+  post-fix rerun, not a claim of a new full 34-test run.
+- Native landscape review found the permission action clipped by scrolling copy.
+  The action now stays outside that copy; tests require readable text and at
+  least 48dp height. `landscape-permission-fixed.png` is the final landscape shot.
+- Final real CameraX-to-decoder emulator check used the CLI-generated,
+  explicitly noncredential `fixture.invalid` QR. After calibrating the emulator's
+  image-camera crop, all three finder corners were visible in
+  `calibrated-studio-camera.png`. Production decoded it and reached the expected
+  “Couldn’t reach the server” screen (`production-camera-check.xml`). Camera
+  service then reported no active clients (`camera-after-decode.txt`). This proves
+  the camera/decoder/error path; no real server grant or successful enrollment,
+  persistence-to-live-call sequence, microphone or audio was exercised.
+- APK audits passed: production excludes Studio entrypoints, profile JSON and
+  unselected audition assets; Studio has no Internet, microphone or Bluetooth
+  permissions. Selected assets and packaged notices are byte-exact.
+
+Final production APK: 48,436,957 bytes, SHA-256
+`14f95be3cdbf80d605e30dcf0f3eaa8522b361ec39bcab1e2452a57e4620e597`.
+Final Studio APK: 96,934,415 bytes, SHA-256
+`440d4b2fb8155a8589f9bfcd175c5338901b8cd0460a12fbcccca76716709ee9`.
+Both were installed only on the disposable emulator. The S22 was reserved for
+operator Studio use: no phone operations or installation occurred in this slice.
+Its existing Studio host stayed running. No default/trial service was restarted.
+
+The temporary Studio host was stopped; emulator `emulator-5580` was shut down
+and owned AVD `agentvoice_qr_enrollment_20260910` deleted, with its process and
+AVD files verified absent. No other emulator was removed. Protected saved design
+`configurator/profiles/R5CT91TW4RP.json` remains SHA-256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+No Save/reset or phone draft read was used during this round.
+
+Physical installation and real QR enrollment await a phone handoff. Next queued
+work: enrich Persona state from real playback/capture, effective channel/PTT gates
+and available server activity; Speaking must not mean merely speaker-unmuted.

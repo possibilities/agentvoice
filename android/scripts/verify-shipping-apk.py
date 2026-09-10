@@ -22,7 +22,7 @@ with zipfile.ZipFile(apk) as bundle:
         original = root / 'app/src/debug' / name
         assert bundle.read(name) == original.read_bytes(), name
     assert not any('configurator' in name or 'shipping-profile' in name or 'persona-tuning.json' in name for name in names)
-    for filename in ('Shipping-Icons-NOTICE.txt', 'Shipping-Icons-LICENSE.txt', 'Shipping-Sounds-NOTICE.txt', 'Shipping-Sounds-LICENSE.txt', 'Persona-Halo-NOTICE.txt'):
+    for filename in ('Shipping-Icons-NOTICE.txt', 'Shipping-Icons-LICENSE.txt', 'Shipping-Sounds-NOTICE.txt', 'Shipping-Sounds-LICENSE.txt', 'Persona-Halo-NOTICE.txt', 'ZXing-NOTICE.txt', 'Apache-2.0.txt'):
         source = root / 'app/src/main/assets/notices' / filename
         if source.exists():
             assert bundle.read('assets/notices/' + filename) == source.read_bytes(), filename

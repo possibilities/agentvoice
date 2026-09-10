@@ -41,8 +41,7 @@ internal fun requiresShippingIconCredit(family: String, paidNounIcons: Boolean):
 /** The adopted scene consumes real controller state; only the debug studio synthesizes it. */
 @Composable
 internal fun VoiceScreen(
-    ui: CallUi, hasGrant: Boolean, importing: Boolean = false, setupMessage: String? = null,
-    start: () -> Unit, stop: () -> Unit, importGrant: () -> Unit,
+    ui: CallUi, stop: () -> Unit,
     mute: (String) -> Unit, hold: () -> Unit, release: () -> Unit,
     soundOutput: PreviewSwitchOutput? = null,
 ) {
@@ -82,24 +81,7 @@ internal fun VoiceScreen(
             mutedTuning = ShippingDesign.mutedTuning, presenceScope = ShippingDesign.presenceScope,
             horizontalOffsetDp = layout.horizontalOffsetDp, showPushToTalk = ShippingDesign.showPushToTalk,
             icons = ShippingDesign.icons, handleBack = ui.running)
-        if (!ui.running) {
-            Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding(),
-                color = VoiceInk.ground.copy(alpha = .97f)) {
-                Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("AgentVoice", color = VoiceInk.text, fontFamily = VoiceInk.type, fontSize = 22.sp)
-                    (setupMessage ?: ui.message)?.let { Text(it, color = VoiceInk.text, fontFamily = VoiceInk.type,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-                    Button(onClick = if (hasGrant) start else importGrant, enabled = !importing,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("start-voice")) {
-                        Text(if (importing) "Importing…" else if (hasGrant) "Start voice" else "Import device grant", fontFamily = VoiceInk.type)
-                    }
-                    if (hasGrant) TextButton(onClick = importGrant, enabled = !importing) { Text("Replace device grant") }
-                    if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS))
-                        TextButton(onClick = { credits = true }, modifier = Modifier.testTag("shipping-credits")) { Text("Credits") }
-                }
-            }
-        } else if (ui.phase in setOf("Voice unavailable", "Voice stopped")) {
+        if (ui.running && ui.phase in setOf("Voice unavailable", "Voice stopped")) {
             Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding(), color = VoiceInk.ground) {
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Voice could not start. Check the server, then end this attempt and try again.",
@@ -108,17 +90,21 @@ internal fun VoiceScreen(
                     TextButton(onClick = stop, modifier = Modifier.testTag("end-failed-call")) { Text("End attempt") }
                 }
             }
-        } else (setupMessage ?: ui.message)?.let {
+        }
+        ui.message?.let {
             Text(it, color = VoiceInk.text, fontFamily = VoiceInk.type, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().background(VoiceInk.surface)
                     .padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite })
         }
+        if (!ui.running && requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS))
+            TextButton(onClick = { credits = true }, modifier = Modifier.align(Alignment.BottomEnd)
+                .safeDrawingPadding().testTag("shipping-credits")) { Text("Credits") }
     }
     if (credits) ShippingCredits { credits = false }
 }
 
 @Composable
-private fun ShippingCredits(dismiss: () -> Unit) {
+internal fun ShippingCredits(dismiss: () -> Unit) {
     val context = LocalContext.current
     val notice = remember(context) {
         val text = listOf("Shipping-Icons-NOTICE.txt", "Shipping-Sounds-NOTICE.txt", "Persona-Halo-NOTICE.txt")

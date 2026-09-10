@@ -27,6 +27,25 @@ in `client.schema.json`. See [Android handoff](android-client-handoff.md) for TL
 heartbeat, limits, revocation and the complete deployment/import lifecycle.
 The prototype loopback URL is never remote authentication.
 
+## Android device enrollment
+
+After configuring the dedicated private Tailscale WSS route, issue the native
+client's credential with:
+
+```sh
+agentvoice network qr --name phone
+```
+
+The printed QR is an exact reusable bearer credential valid for 30 days. It is
+private access, not one-use pairing. The Android scanner parses it and performs
+an auth-only verified-TLS WSS upgrade before saving; that check creates no call.
+On success the app encrypts the profile and uses `saveNew` in app-private
+no-backup storage. Microphone permission is requested separately. A saved grant
+gets one automatic connection attempt per foreground; failures require an
+explicit retry and never loop. Revoked or unreadable stored grants are kept and
+are never replaced automatically. Current app recovery has no delete or replace
+control; manual app-data repair is required.
+
 ## Methods
 
 | Method | Parameters | Authority / effect |

@@ -45,23 +45,34 @@ export const connectionProfileSchema = z
   })
   .strict();
 export type ConnectionProfile = z.infer<typeof connectionProfileSchema>;
+const deviceLabelSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .refine(
+    (value) => [...value].every((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
+    "Device label must not contain control characters",
+  );
 const recordSchema = z
   .object({
     id: z.string().regex(/^[a-f0-9]{32}$/),
-    label: z
-      .string()
-      .min(1)
-      .max(80)
-      .refine(
-        (value) =>
-          [...value].every((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
-        "Device label must not contain control characters",
-      ),
+    label: deviceLabelSchema,
     hash: z.string().regex(/^[a-f0-9]{64}$/),
     expiresAt: z.number().int().positive(),
   })
   .strict();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+
+type DeviceRecord = z.infer<typeof recordSchema>;
+export interface PendingDeviceGrant {
+  readonly id: string;
+  readonly profile: ConnectionProfile;
+  readonly expiresAt: number;
+}
+const pendingRecords = new WeakMap<
+  PendingDeviceGrant,
+  { directory: string; record: DeviceRecord }
+>();
 
 export function readPrivateJson(path: string): unknown {
   if (!isAbsolute(path)) throw new Error("Private file path must be absolute");
@@ -131,24 +142,47 @@ export class DeviceCredentials {
     this.directory = join(networkDirectory(stateDir), "devices");
     ownedDirectory(this.directory);
   }
-  grant(label: string, endpoint: string, output: string, now = Date.now()): string {
+  prepareGrant(label: string, endpoint: string, now = Date.now()): PendingDeviceGrant {
     if (readdirSync(this.directory).length >= 1024)
       throw new Error(
         "Device record limit reached; archive expired or revoked records before granting more",
       );
+    const parsedLabel = deviceLabelSchema.parse(label);
+    const parsedEndpoint = endpointSchema.parse(endpoint);
     const id = randomBytes(16).toString("hex");
     const token = `${id}.${randomBytes(32).toString("hex")}`;
     const record = recordSchema.parse({
       id,
-      label,
+      label: parsedLabel,
       hash: hash(token),
       expiresAt: now + 30 * 86400_000,
     });
-    const profile = connectionProfileSchema.parse({ version: 1, endpoint, token });
+    const profile = connectionProfileSchema.parse({ version: 1, endpoint: parsedEndpoint, token });
+    const pending = Object.freeze({
+      id,
+      profile: Object.freeze(profile),
+      expiresAt: record.expiresAt,
+    });
+    pendingRecords.set(pending, { directory: this.directory, record });
+    return pending;
+  }
+  activateGrant(pending: PendingDeviceGrant): string {
+    const prepared = pendingRecords.get(pending);
+    if (!prepared || prepared.directory !== this.directory)
+      throw new Error("Pending device grant is invalid or already activated");
+    if (readdirSync(this.directory).length >= 1024)
+      throw new Error(
+        "Device record limit reached; archive expired or revoked records before granting more",
+      );
+    createPrivateJson(join(this.directory, `${prepared.record.id}.json`), prepared.record);
+    pendingRecords.delete(pending);
+    return prepared.record.id;
+  }
+  grant(label: string, endpoint: string, output: string, now = Date.now()): string {
+    const pending = this.prepareGrant(label, endpoint, now);
     // Publish profile first: an interrupted grant cannot leave an undisclosed active credential.
-    createPrivateJson(output, profile);
-    createPrivateJson(join(this.directory, `${id}.json`), record);
-    return id;
+    createPrivateJson(output, pending.profile);
+    return this.activateGrant(pending);
   }
   authenticate(token: string, now = Date.now()): string | undefined {
     if (!/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(token)) return;
