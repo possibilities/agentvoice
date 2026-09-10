@@ -46,96 +46,70 @@ running. Copy its printed client command into terminal 2 and run it. The explici
 workspace connects that client to this foreground server. Reuse the same printed
 command whenever the instructions say to reopen the client.
 
-## 2. Establish the live baseline
+## 2. Try ordinary voice requests
 
-Say:
+Say each line separately and wait for the response before continuing. Use your
+own wording if you prefer. Do not name tools, supply API arguments, or coach the
+agent through a failed request: choosing how to do it is part of the test.
 
-> This is a voice-setting test. Use the AgentVoice MCP tools, starting with
-> agentvoice_status. Discover the actual tool if necessary. Do not substitute a
-> CLI command or guess an HTTP endpoint. Show the exact status fields in the
-> working-agent pane and give me a short spoken summary. Check protocolVersion
-> is 5, role.loaded and role.desired exist, role.error is absent, and the voice
-> session is live. Record workspace, instanceId, threadId, runtime.pid,
-> generation, role.loaded.revision, role.desired.revision, role.voiceRevision,
-> role.voice, and role.desiredVoice. The two voice names should be cove. Verify
-> agentvoice_voice_set is available. Stop the test if any check fails. Live is
-> a connection phase, not a voice name. Do not read the UUIDs aloud.
+> Hi. Say something so I can hear your voice.
 
-Expect the printed workspace, revision `1` in all three revision fields, and
-Cove in both voice-name fields. An absent value is unknown, never a reason to
-invent a value. Do not continue without this baseline.
+> Change your voice to maple.
 
-Say:
+> Tell me a short joke.
 
-> Say exactly: The sunlight falls across the quiet garden.
+> Change your voice to cove.
 
-Listen to the baseline voice before proceeding.
+> Tell me another short joke.
 
-## 3. Apply Maple now
+Listen for the changes. The working-agent pane should stay connected, and the
+conversation should continue normally. A spoken claim that the voice changed
+is not enough; note what you actually heard. This setup starts with Cove, so
+switching to Maple first makes the later Cove request a real change.
 
-Say:
-
-> Use fresh agentvoice_status, then agentvoice_voice_set to set voice maple with
-> apply voice. Use a new operationId and copy expectedInstanceId,
-> expectedGeneration, and expectedRoleRevision from that status; the revision
-> comes from role.desired.revision. Submit the change once. Check that operation
-> in status until its voiceEdit.application is applied, or stop on failed,
-> unknown, or a thirty-second timeout. Acceptance alone is not completion.
-> Verify role.voice and role.desiredVoice are maple and role.voiceRevision
-> equals the saved revision. Verify the workspace, instanceId, threadId,
-> runtime.pid, and generation match the baseline. Show the result in the pane.
-
-Expect `role.loaded.revision` to remain `1`; the saved and voice revisions
-advance together. The working-agent attachment should remain connected.
-
-After it reports applied, say:
-
-> Say exactly: The sunlight falls across the quiet garden.
-
-Confirm whether Maple sounds different. Application status confirms live media;
-only your listening check establishes what you heard.
-
-## 4. Save Sol for the next call
-
-Say:
-
-> Use fresh status and a new operationId to set voice sol with apply next-session.
-> Use the current instance, generation, and desired role revision. Submit once.
-> Verify voiceEdit.application is deferred, role.desiredVoice is sol, and
-> role.voice remains maple. The saved revision should advance, while
-> role.voiceRevision and role.loaded.revision stay unchanged. Verify the baseline
-> workspace, instance, thread, runtime PID, and generation are unchanged.
-
-Then ask for the same garden sentence. It should still sound like Maple, with
-no voice reconnect caused by this save.
-
-## 5. Verify persistence across calls
+## 3. Check that it remembers the choice
 
 Close terminal 2's client/composition, leaving terminal 1's server running.
-Run the exact same printed client command again. It opens a new call in the
-same trial workspace.
+Run the same client command again to open a new call in the same workspace.
 
-Say:
+> What voice are you using? Tell me a short joke.
 
-> Use agentvoice_status and report the database role's saved and loaded
-> revisions and voice names. Check protocolVersion is 5, the workspace is the
-> same trial workspace, and role.voice and role.desiredVoice are sol. The loaded,
-> desired, and voice revisions should now agree. Show the exact values in the
-> working-agent pane, then say: The sunlight falls across the quiet garden.
+It should still use Cove. This is a new conversation; it does not need to
+remember the previous jokes.
 
-A new instance, thread, and PID are expected for this new call. Its generation
-can start at `1` again. Confirm that you hear Sol.
+## 4. Optional: save a choice for later
 
-## Stop and preserve evidence
+If the basic trial worked, say:
 
-On the first failure, say:
+> Use sol next time we talk, but keep your current voice for now.
 
-> Stop the trial. Do not change settings, retry the mutation, redial, restart,
-> export MCP credentials, or guess endpoints. Read agentvoice_status once if
-> available, show the exact result and operationId in the pane, and distinguish
-> saved state, applied state, and anything unknown.
+> Tell me another short joke.
 
-Record what you heard and the approximate time. Close the client when finished,
-then press Ctrl-C in terminal 1 to stop the trial server. Keep the trial workspace
-and database for the audit. Report the printed workspace and the failed step;
-AgentVoice's saved voice transcript and native tool transcript provide the rest.
+It should still sound like Cove. Close and reopen the client as above, then say:
+
+> What voice are you using? Tell me a short joke.
+
+It should now use Sol.
+
+## If something goes wrong
+
+Stop at the first failure and note the step, approximate time, and what you
+heard or saw. Avoid repairing the request with tool names or detailed technical
+instructions; preserve the initial failure for review. Close the client if
+needed. When finished, stop the trial server with Ctrl-C in terminal 1. Keep the
+workspace and database for the audit.
+
+## Audit afterward (not spoken instructions)
+
+Review the saved voice conversation and native tool transcript to establish
+whether ordinary requests reached the correct operation without coaching.
+Check protocol 5 and the bound workspace; successful voice-only changes should
+advance saved/applied voice revisions while preserving the working child,
+thread, runtime generation and attachment. A deferred change should advance
+only saved state until the next call loads it. Distinguish acceptance, completed
+application, unknown outcomes and the operator's listening observations.
+
+Also review unnecessary delegation, latency, repeated confirmations, guessed
+commands/endpoints, credential exposure, and claims unsupported by tool results.
+Keep these checks out of the spoken trial so they do not supply the behavior
+being tested. This trial does not change the role's system prompt.
