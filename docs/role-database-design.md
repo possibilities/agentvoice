@@ -1,7 +1,7 @@
 # Workspace-owned role databases
 
 Broader proposal, September 8, 2026. The first implementation slice is recorded
-in [ADR 0035](adr/0035-workspace-role-databases.md) and documented in
+in [ADR 0042](adr/0042-workspace-role-databases.md) and documented in
 [workspace roles](workspace-roles.md). It uses explicit ejection, direct
 workspace-hash bindings and voice-only typed editing. Catalogs, general editors
 and platform restarters remain future work. Setting impacts are classified
@@ -296,7 +296,7 @@ semantics. Run repository typecheck, lint and appropriate tests. Verify Bun SQLi
 in the Android standalone build as well as desktop before claiming support.
 Live voice quality and audible selection require a separately scoped live trial.
 
-The original proposal made no runtime or live-state changes. See ADR 0035 for
+The original proposal made no runtime or live-state changes. See ADR 0042 for
 the subsequent implementation scope. Findings come from the repository implementation and
 its documented native contract; no new upstream/default or live-media probe was
 performed.

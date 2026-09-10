@@ -200,7 +200,7 @@ identity, account, or workspace. _Avoid_: capability, overlay, profile.
 **Workspace role** — An explicitly ejected, independently owned SQLite snapshot
 of role settings and authored assets, bound to a canonical workspace. Source files
 cease to be runtime inputs. Export/import creates reusable independent copies;
-native authentication and history stay outside. See ADR 0035.
+native authentication and history stay outside. See ADR 0042.
 
 **Role revision** — An immutable saved settings/asset snapshot loaded at call
 startup or runtime restart. Voice-only application records its own revision,

@@ -1,6 +1,6 @@
 # 0014: Roles are directories delivered to the owned child
 
-For explicitly ejected workspaces, [ADR 0035](0035-workspace-role-databases.md)
+For explicitly ejected workspaces, [ADR 0042](0042-workspace-role-databases.md)
 supersedes live directory loading with database snapshots. This format remains
 an ejection input and the behavior for unejected workspaces.
 

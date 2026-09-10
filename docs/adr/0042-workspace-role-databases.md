@@ -1,4 +1,4 @@
-# 0035: Workspace-owned role snapshots and explicit voice application
+# 0042: Workspace-owned role snapshots and explicit voice application
 
 Accepted September 8, 2026 for the operator-requested first slice. For explicitly
 ejected workspaces, supersedes ADR 0014's live directory inputs and skill-watcher

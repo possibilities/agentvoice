@@ -87,7 +87,7 @@ phone is the current preview; the operator explicitly destroyed the emulator.
 Read [architecture and source ownership](docs/architecture.md) before editing a
 subsystem. It includes the recording and attachment lifecycle.
 
-## Workspace role databases (ADR 0035)
+## Workspace role databases (ADR 0042)
 
 - `src/roles/`: explicit `role eject` captures complete settings/assets into a
   private workspace-bound SQLite database. Bound launches/restarts never reread

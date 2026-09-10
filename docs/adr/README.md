@@ -25,7 +25,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0011: Continue the spoken conversation](0011-spoken-history-continuity.md) | Superseded for replay/defaults | [0017](0017-remove-spoken-history-replay.md), [0020](0020-native-launch-defaults.md), and [0029](0029-desktop-startup-context.md). Historical probes remain evidence. |
 | [0012: Reconnect voice calls without AgentVoice instructions](0012-vanilla-voice-reconnects.md) | Partially superseded | [0017](0017-remove-spoken-history-replay.md) removes the replay exception; [0019](0019-client-server-default-baseline.md) clarifies the native client/server baseline. |
 | [0013: Convention prompt files, one native control each](0013-convention-prompt-files.md) | Accepted | — |
-| [0014: Roles are directories delivered to the owned child](0014-roles.md) | Accepted | — |
+| [0014: Roles are directories delivered to the owned child](0014-roles.md) | Partially superseded | [0042](0042-workspace-role-databases.md) captures explicitly ejected workspace roles in SQLite; unbound roles retain directory behavior. |
 | [0015: Retain the foreground controller, replace the voice runtime](0015-retain-controller-replace-runtime.md) | Partially superseded | [0024](0024-server-and-pointer-frontend.md) moves the retained controller/runtime under the waiting server; [0033](0033-client-owned-native-media.md) moves native media to clients. Runtime replacement, owned Codex cleanup and journaled operations remain. |
 | [0016: Submit an optional handoff after runtime restart](0016-restart-handoff.md) | Accepted | — |
 | [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Recorded | — |
@@ -53,6 +53,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0039: Project memory is part of the default role](0039-project-memory-in-default-role.md) | Accepted | — |
 | [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Accepted | — |
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
+| [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
 
 ## Identifier history
 
