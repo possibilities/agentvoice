@@ -1931,3 +1931,64 @@ Private local evidence: `/tmp/agentvoice-phone-four-layouts-acceptance/`, includ
 the original/final draft backups. The directory also contains a private Studio
 binding backup and must not be published wholesale. No active Gradle or VM
 resource remains from this work.
+
+
+## Cutout-aware padding and adopted four-layout spacing — 2026-09-10
+
+The operator approved another phone pass and explicitly requested adoption and
+installation of production plus Studio. The shared scene now credits a display
+cutout toward outer button padding after `safeDrawingPadding` reserves it. Extra
+space on that edge is `max(0, padding - cutoutInset)`. Button gaps retain the full
+padding; no Persona size, pose, renderer, manual placement rule or saved schema
+is changed by this geometry fix. Both landscape handedness choices and portrait
+bottom cutouts use the same rule.
+
+The adopted profile is the complete profile21 exported from live Studio draft3, including all four
+physical layouts, hidden-PTT extents, override flags, launcher, icons, sounds,
+colors and motion. Shared padding changes 17→21 dp. With PTT visible the tuned
+control extents are 415/409/421/427 dp for portrait/landscape/reverse portrait/reverse
+landscape; all retain 36.4% PTT share. Portrait offsets are −43/−28 dp and landscape
+horizontal offsets are −44/−42 dp. The normal landscape Persona stays where the
+operator liked it. Its reverse counterpart uses the free left margin; portrait
+moves toward the camera and reverse portrait uses the free top margin.
+
+At the S22's measured viewport, a nominal circular body radius of
+`diameter × 1.9 × containedSize × 0.25` gives approximately 42–43 dp between body and
+deck in all four orientations, versus about 57 dp in the prior portrait reference.
+This is a calibration for the layout comparison, not a runtime renderer bound or
+an assertion that every animated edge has an identical gap. The existing trace
+reach/fade and native animation remain unchanged. Clean native four-up captures
+were inspected at `/tmp/agentvoice-cutout-spacing/candidate/`; no camera mask was
+painted over Persona. Reverse-landscape PTT reaches the cutout-safe boundary
+without additional padding.
+
+The code build before adoption passed 138 JVM tests (including two new cutout
+geometry cases) and Studio APK/test APK/lint in 3m24s. Ten shipping promotion tests
+pass with 62 assertions. The original explicit phone checkpoint, host profile and
+private binding are preserved; adoption uses a complete private draft export and
+commits its canonical shipping snapshot/provenance. It does not press Save over
+the operator's earlier checkpoint. Final build/install results follow below.
+
+Final adoption build passed in **5m05s**: production and Studio APKs, both lint
+checks, and **138 JVM tests / zero failures**. Generated shipping drift and diff
+checks pass. Release package audit confirms the selected Rocker13 quartet and
+Relay Aperture launcher, byte-exact notices, no Studio entrypoints and no profile
+JSON. Installed both APKs with `install -r` and verified device APK hashes:
+
+- Production: `dc8d0302e57c7e32ccea5ecc5aef6e30755cabfd5bc64a5cdd23e8a9cf9631e5` (48,436,985 bytes).
+- Studio: `18eb90cbd15e78e092fafa941db8e840cf2fae0491ee8e8703ba08d64606ab70`.
+
+The final installed Studio completed another four-layout capture; its contact
+sheet is `/tmp/agentvoice-cutout-spacing/installed-final/sheet.png`. Draft, explicit
+checkpoint and binding remain byte-exact across both installations. This handoff's
+original rotation settings (user_rotation0, accelerometer_rotation0) and font
+scale1.0 were restored exactly. Production was installed without launching a new
+voice call; physical visual evidence is from the shared renderer in Studio, not
+a claim of live production audio validation. Production grants/data were not
+cleared or rewritten.
+
+The previous browser host had exited during the session transition, leaving its
+owned ADB forward. Removed that exact orphan forward and restarted Studio on an
+automatically allocated loopback port, preserving the unrelated application now
+using4317. The linked host remains running for the operator. Phone access was
+released with AgentNotify; no emulator or Gradle task remains running.

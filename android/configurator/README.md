@@ -45,6 +45,13 @@ its dimensions differ from the PNG. Missing measurements are not zero insets.
 A cutout rectangle describes Android's bounds, not the exact rounded hardware
 shape. A physical-device check remains necessary for camera-hole alignment.
 
+Outer button padding counts the space already reserved for a display cutout.
+For example, 21dp padding beside a 27dp cutout adds no extra gap after the
+cutout-safe boundary; beside an 8dp cutout it adds 13dp. Interior button gaps
+keep the full chosen padding. This applies per physical edge and on either
+landscape side, without moving the manually positioned Persona or changing
+saved tuning values.
+
 Capture sends only state reads to Studio: no edit, reset or Save. It refuses
 changed design/session state, reconnection and stale orientation/revision requests,
 restores the prior rotation mode on success/failure/cancellation, and publishes

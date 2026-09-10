@@ -26,6 +26,16 @@ internal data class PreviewOrientationGeometry(
     }
 }
 
+internal data class PreviewCutoutPadding(
+    val left: Float = 0f,
+    val top: Float = 0f,
+    val right: Float = 0f,
+    val bottom: Float = 0f,
+) {
+    init { require(listOf(left, top, right, bottom).all { it.isFinite() && it >= 0f }) }
+    fun remaining(padding: Float, inset: Float) = (padding - inset).coerceAtLeast(0f)
+}
+
 /** Dimensions are dp; tuning values are never rewritten to fit a smaller viewport. */
 internal fun previewOrientationGeometry(
     width: Float,
@@ -38,6 +48,7 @@ internal fun previewOrientationGeometry(
     spacing: PreviewSpacing = PreviewSpacing(),
     actualDeckHeight: Float = controlsHeight,
     horizontalOffsetDp: Float = 0f,
+    cutoutPadding: PreviewCutoutPadding = PreviewCutoutPadding(),
 ): PreviewOrientationGeometry {
     require(actualDeckHeight.isFinite() && actualDeckHeight > 0f)
     require(horizontalOffsetDp.isFinite())
@@ -50,11 +61,13 @@ internal fun previewOrientationGeometry(
             minOf(desiredSide, (width - minOf(240f, width)) / 2f)
         val requestedBottom = if (spacing.paddingDp >= 0) side
             else (if (height < 660f) 20f else 28f) * spacing.edgeClearancePercent / 100f
-        val bottom = minOf(requestedBottom, (height - 1f).coerceAtLeast(0f))
+        val bottom = minOf(cutoutPadding.remaining(requestedBottom, cutoutPadding.bottom), (height - 1f).coerceAtLeast(0f))
+        val left = cutoutPadding.remaining(side, cutoutPadding.left)
+        val right = cutoutPadding.remaining(side, cutoutPadding.right)
         val viewport = minOf(actualDeckHeight, height - bottom)
         // Persona placement belongs to its square. The bottom-aligned deck cannot extend the visible scene.
         val deckTop = (height - bottom - viewport).coerceAtLeast(0f)
-        return baseline.copy(deckX = side, deckY = deckTop, deckWidth = (width - side * 2f).coerceAtLeast(1f),
+        return baseline.copy(deckX = left, deckY = deckTop, deckWidth = (width - left - right).coerceAtLeast(1f),
             deckViewportHeight = viewport, contentHeight = height)
     }
     // Manual screen-coordinate movement never reallocates the control lane or changes handedness.
@@ -65,13 +78,18 @@ internal fun previewOrientationGeometry(
     val outerMargin = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else baselineOuterMargin * spacing.sideMarginPercent / 100f
     val margin = outerMargin.coerceIn(0f, ((width - 1f) / 2f).coerceAtLeast(0f))
-    val outer = width - margin
+    // safeDrawingPadding already reserves the cutout; it contributes to the requested outer space.
+    val leftMargin = cutoutPadding.remaining(margin, cutoutPadding.left)
+    val rightMargin = cutoutPadding.remaining(margin, cutoutPadding.right)
+    val outer = width - rightMargin
     // Match portrait: the deck can overlap the manually placed Persona, but stays inside the viewport.
-    val deckWidth = minOf(controlsHeight, (width - 2f * margin).coerceAtLeast(1f))
+    val deckWidth = minOf(controlsHeight, (width - leftMargin - rightMargin).coerceAtLeast(1f))
     val clearance = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else 16f * spacing.edgeClearancePercent / 100f
-    val viewport = (height - clearance * 2f).coerceAtLeast(1f)
-    return positioned.copy(deckX = if (leftPersona) outer - deckWidth else width - outer, deckY = (height - viewport) / 2f,
+    val top = cutoutPadding.remaining(clearance, cutoutPadding.top).coerceAtMost((height - 1f).coerceAtLeast(0f))
+    val bottom = cutoutPadding.remaining(clearance, cutoutPadding.bottom)
+    val viewport = (height - top - bottom).coerceAtLeast(1f)
+    return positioned.copy(deckX = if (leftPersona) outer - deckWidth else leftMargin, deckY = top,
         deckWidth = deckWidth, deckViewportHeight = viewport)
 }
 

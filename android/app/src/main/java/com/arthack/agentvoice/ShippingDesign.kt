@@ -13,14 +13,14 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "android/configurator/profiles/R5CT91TW4RP.json"
-    const val profileSha256 = "9253c921457a015c7b50c092ff94be4777b4db256304af73e44fe5f1398176a5"
+    const val profileSource = "../../../../../../tmp/agentvoice-cutout-spacing/s22-cutout-balanced-profile.json"
+    const val profileSha256 = "b3a1819af5b3508aacaca67ab8f74fadabe031dedf0b6d1932357c6343ecee12"
     const val sessionSha256 = "b9f5a583b4387cda4a9f7e1af6749ce3d3a190bcb08af76882c438b15b391dcc"
     val portrait = ShippingLayout(
-        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -30.dp),
+        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -43.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 396, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
+            controlsHeightDp = 415, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -35,7 +35,7 @@ internal object ShippingDesign {
             spacing = PreviewSpacing(
                 channelGapDp = 18,
                 edgeClearancePercent = 200,
-                paddingDp = 17,
+                paddingDp = 21,
                 pushGapDp = 18,
                 sectionGapDp = 4,
                 sideMarginPercent = 48,
@@ -63,7 +63,7 @@ internal object ShippingDesign {
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = 8.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 365, controlsWithoutPttDp = 365, holdSharePercent = 42.2,
+            controlsHeightDp = 409, controlsWithoutPttDp = 365, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -78,7 +78,7 @@ internal object ShippingDesign {
             spacing = PreviewSpacing(
                 channelGapDp = 18,
                 edgeClearancePercent = 200,
-                paddingDp = 17,
+                paddingDp = 21,
                 pushGapDp = 18,
                 sectionGapDp = 4,
                 sideMarginPercent = 48,
@@ -100,13 +100,13 @@ internal object ShippingDesign {
             strengthPercent = 51,
             surface = "soft",
         ),
-        personaSide = "left", horizontalOffsetDp = -16,
+        personaSide = "left", horizontalOffsetDp = -44,
     )
     val portraitReverse = ShippingLayout(
-        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -30.dp),
+        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -28.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 396, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
+            controlsHeightDp = 421, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -121,7 +121,7 @@ internal object ShippingDesign {
             spacing = PreviewSpacing(
                 channelGapDp = 18,
                 edgeClearancePercent = 200,
-                paddingDp = 17,
+                paddingDp = 21,
                 pushGapDp = 18,
                 sectionGapDp = 4,
                 sideMarginPercent = 48,
@@ -149,7 +149,7 @@ internal object ShippingDesign {
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = 8.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 365, controlsWithoutPttDp = 365, holdSharePercent = 42.2,
+            controlsHeightDp = 427, controlsWithoutPttDp = 365, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -164,7 +164,7 @@ internal object ShippingDesign {
             spacing = PreviewSpacing(
                 channelGapDp = 18,
                 edgeClearancePercent = 200,
-                paddingDp = 17,
+                paddingDp = 21,
                 pushGapDp = 18,
                 sectionGapDp = 4,
                 sideMarginPercent = 48,
@@ -186,7 +186,7 @@ internal object ShippingDesign {
             strengthPercent = 51,
             surface = "soft",
         ),
-        personaSide = "left", horizontalOffsetDp = -16,
+        personaSide = "left", horizontalOffsetDp = -42,
     )
     val sounds = PreviewSounds(
         family = "rocker-13",

@@ -160,4 +160,42 @@ class PreviewOrientationGeometryTest {
         }
     }
 
+    @Test fun cutoutContributesToOuterPaddingWithoutMovingPersonaOrChangingButtonGaps() {
+        for (padding in listOf(0, 17, 40)) for (inset in listOf(8f, 27f)) {
+            val spacing = PreviewSpacing(paddingDp = padding)
+            val remaining = (padding - inset).coerceAtLeast(0f)
+            for (side in listOf("left", "right")) {
+                val cutout = if (side == "left") PreviewCutoutPadding(right = inset)
+                    else PreviewCutoutPadding(left = inset)
+                val baseline = previewOrientationGeometry(753f, 360f, 780f, false, 396f, 0f, side, spacing)
+                val actual = previewOrientationGeometry(753f, 360f, 780f, false, 396f, 0f, side, spacing,
+                    cutoutPadding = cutout)
+                val outer = if (side == "left") 753f - actual.deckX - actual.deckWidth else actual.deckX
+                assertEquals(remaining, outer, .001f)
+                assertEquals(maxOf(padding.toFloat(), inset), inset + outer, .001f)
+                assertEquals(baseline.stageX, actual.stageX, 0f)
+                assertEquals(baseline.diameter, actual.diameter, 0f)
+                assertEquals(396f, actual.deckWidth, 0f)
+                assertEquals(padding.toFloat(), actual.deckY, 0f)
+            }
+            val portrait = previewOrientationGeometry(360f, 753f, 360f, true, 396f, -30f,
+                spacing = spacing, cutoutPadding = PreviewCutoutPadding(bottom = inset))
+            assertEquals(remaining, 753f - portrait.deckY - portrait.deckViewportHeight, .001f)
+            assertEquals(padding.toFloat(), portrait.deckX, 0f)
+            assertEquals(-30f, portrait.offsetY, 0f)
+            assertEquals(padding, spacing.effectivePushGapDp)
+            assertEquals(padding, spacing.effectiveChannelGapDp)
+        }
+    }
+
+    @Test fun cutoutPaddingHandlesVerticalEdgesAndVeryWideLandscapeDecks() {
+        val g = previewOrientationGeometry(753f, 360f, 780f, false, 1600f, 0f,
+            spacing = PreviewSpacing(paddingDp = 17),
+            cutoutPadding = PreviewCutoutPadding(left = 27f, top = 8f, right = 8f, bottom = 27f))
+        assertEquals(0f, g.deckX, .001f)
+        assertEquals(744f, g.deckWidth, .001f)
+        assertEquals(9f, g.deckY, .001f)
+        assertEquals(351f, g.deckViewportHeight, .001f)
+    }
+
 }

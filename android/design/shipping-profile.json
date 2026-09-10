@@ -3,7 +3,7 @@
   "connectedArtboardScale": 1.9,
   "design": {
     "composition": "traces",
-    "controlsHeightDp": 396,
+    "controlsHeightDp": 415,
     "controlsWithoutPttDp": 396,
     "header": "none",
     "hold": "rocker",
@@ -13,7 +13,7 @@
     "spacing": {
       "channelGapDp": 18,
       "edgeClearancePercent": 200,
-      "paddingDp": 17,
+      "paddingDp": 21,
       "pushGapDp": 18,
       "sectionGapDp": 4,
       "sideMarginPercent": 48
@@ -53,17 +53,17 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 365,
+      "controlsHeightDp": 409,
       "controlsWithoutPttDp": 365,
       "header": "none",
       "hold": "rocker",
-      "holdSharePercent": 42.2,
+      "holdSharePercent": 36.4,
       "layout": "studio",
       "mute": "rockers",
       "spacing": {
         "channelGapDp": 18,
         "edgeClearancePercent": 200,
-        "paddingDp": 17,
+        "paddingDp": 21,
         "pushGapDp": 18,
         "sectionGapDp": 4,
         "sideMarginPercent": 48
@@ -93,7 +93,65 @@
       "speakingMotionPercent": 68,
       "variant": "contained"
     },
-    "horizontalOffsetDp": -16,
+    "horizontalOffsetDp": -44,
+    "personaSide": "left",
+    "scales": {
+      "idle": 78,
+      "listening": 56,
+      "speaking": 78
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "verticalOffsetDp": 8
+  },
+  "landscapeReverse": {
+    "appearanceOverrides": [],
+    "design": {
+      "composition": "traces",
+      "controlsHeightDp": 427,
+      "controlsWithoutPttDp": 365,
+      "header": "none",
+      "hold": "rocker",
+      "holdSharePercent": 36.4,
+      "layout": "studio",
+      "mute": "rockers",
+      "spacing": {
+        "channelGapDp": 18,
+        "edgeClearancePercent": 200,
+        "paddingDp": 21,
+        "pushGapDp": 18,
+        "sectionGapDp": 4,
+        "sideMarginPercent": 48
+      },
+      "traces": {
+        "fadeLengthDp": 80,
+        "footSpacingPercent": 200,
+        "glowPercent": 67,
+        "pattern": "splayed",
+        "personaSpacingPercent": 98,
+        "reachDp": -9,
+        "stancePercent": 101,
+        "tipOpacityPercent": 0,
+        "weightPercent": 250
+      }
+    },
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "containedSizePercent": 81,
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "horizontalOffsetDp": -42,
     "personaSide": "left",
     "scales": {
       "idle": 78,
@@ -118,8 +176,66 @@
     "textSizeSp": 32
   },
   "personaSide": "left",
+  "portraitReverse": {
+    "appearanceOverrides": [],
+    "design": {
+      "composition": "traces",
+      "controlsHeightDp": 421,
+      "controlsWithoutPttDp": 396,
+      "header": "none",
+      "hold": "rocker",
+      "holdSharePercent": 36.4,
+      "layout": "studio",
+      "mute": "rockers",
+      "spacing": {
+        "channelGapDp": 18,
+        "edgeClearancePercent": 200,
+        "paddingDp": 21,
+        "pushGapDp": 18,
+        "sectionGapDp": 4,
+        "sideMarginPercent": 48
+      },
+      "traces": {
+        "fadeLengthDp": 80,
+        "footSpacingPercent": 200,
+        "glowPercent": 67,
+        "pattern": "splayed",
+        "personaSpacingPercent": 98,
+        "reachDp": -9,
+        "stancePercent": 101,
+        "tipOpacityPercent": 0,
+        "weightPercent": 250
+      }
+    },
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "containedSizePercent": 77,
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "horizontalOffsetDp": 0,
+    "personaSide": "left",
+    "scales": {
+      "idle": 78,
+      "listening": 56,
+      "speaking": 78
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "verticalOffsetDp": -28
+  },
   "presenceScope": "any-muted",
-  "savedAtEpochMs": 1789009536017,
+  "savedAtEpochMs": 1,
   "scaleMultipliers": {
     "idle": 0.78,
     "listening": 0.56,
@@ -166,6 +282,6 @@
     "surface": "soft"
   },
   "theme": "bright",
-  "version": 20,
-  "verticalOffsetDp": -30
+  "version": 21,
+  "verticalOffsetDp": -43
 }

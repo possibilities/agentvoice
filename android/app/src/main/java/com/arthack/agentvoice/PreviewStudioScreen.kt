@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.unit.dp
@@ -83,10 +84,21 @@ private fun PreviewStudioScene(
         val screenWidth = maxWidth
         val portrait = maxHeight >= maxWidth
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
+        val density = LocalDensity.current
+        val cutouts = WindowInsets.displayCutout
+        val safe = WindowInsets.safeDrawing
+        val cutoutPadding = with(density) {
+            PreviewCutoutPadding(
+                minOf(cutouts.getLeft(this, androidx.compose.ui.unit.LayoutDirection.Ltr), safe.getLeft(this, androidx.compose.ui.unit.LayoutDirection.Ltr)).toDp().value,
+                minOf(cutouts.getTop(this), safe.getTop(this)).toDp().value,
+                minOf(cutouts.getRight(this, androidx.compose.ui.unit.LayoutDirection.Ltr), safe.getRight(this, androidx.compose.ui.unit.LayoutDirection.Ltr)).toDp().value,
+                minOf(cutouts.getBottom(this), safe.getBottom(this)).toDp().value,
+            )
+        }
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
                 portrait, controlsExtent.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
-                spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else controlsExtent.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat())
+                spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else controlsExtent.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat(), cutoutPadding = cutoutPadding)
             var source by remember { mutableStateOf(target) }
             var destination by remember { mutableStateOf(target) }
             val progress = remember { Animatable(1f) }
