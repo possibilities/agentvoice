@@ -28,6 +28,7 @@ Usage:
   agentvoice client|phone --connect <private-profile.json>
                                    Connect to an authenticated WSS server
   agentvoice network --help        Configure network access and device grants
+  agentvoice role --help           Eject, copy and edit workspace SQLite roles
   agentvoice attach agent [--workspace <dir>] [--thread <id>]
                                    Attach stock Codex to an active call
   agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
@@ -363,6 +364,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "help") {
       console.log(USAGE);
       return 0;
+    }
+    if (command === "role") {
+      const { runRoleCommand } = await import("./roles/cli.ts");
+      return await runRoleCommand(argv.slice(1));
     }
     if (command === "event-socket") return await runEventSocketCommand(argv.slice(1));
     if (command === "threads") {

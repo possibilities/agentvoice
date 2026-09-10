@@ -60,6 +60,7 @@ if (process.argv[2] === "__attach-agent") {
       redial: forbidden,
       restart: forbidden,
       mailboxOpen: forbidden,
+      voiceSet: forbidden,
     },
   });
   let closed = false;

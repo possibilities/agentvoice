@@ -72,6 +72,15 @@ function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
       runtime: { pid: 42, buildId: "build-a", phase: "ready" },
       recentOperations,
     }),
+    voiceSet: async (request) => {
+      const result = accept("voice-set", "voice", request);
+      result.voiceEdit = {
+        ...request,
+        saved: { id: "11111111-1111-4111-8111-111111111111", revision: 2 },
+        application: "deferred",
+      };
+      return result;
+    },
     mailboxOpen: async () => {
       throw new Error("not used");
     },
@@ -151,6 +160,7 @@ describe("controller control transports", () => {
           "agentvoice_redial",
           "agentvoice_restart_runtime",
           "agentvoice_thread_mailbox_open",
+          "agentvoice_voice_set",
         ],
       });
       const status = await socketRequest(server.socketPath, {
@@ -302,6 +312,37 @@ describe("controller control transports", () => {
       );
       expect(await redialMcp.text()).toContain('"operationId":"redial-1"');
       expect(requests.at(-1)).toEqual(requests.at(-2));
+      const voiceArgs = {
+        ...redialArgs,
+        operationId: "voice-change",
+        expectedRoleRevision: 1,
+        voice: null,
+        apply: "next-session",
+      };
+      const voiceSocket = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "voice",
+        method: "agentvoice.voice_set",
+        params: voiceArgs,
+      });
+      expect(voiceSocket).toMatchObject({
+        ok: true,
+        result: { voiceEdit: { voice: null, application: "deferred", saved: { revision: 2 } } },
+      });
+      const voiceMcp = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: badRequestId++,
+          method: "tools/call",
+          params: { name: "agentvoice_voice_set", arguments: voiceArgs },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await voiceMcp.text()).toContain('"application":"deferred"');
+      expect(requests.at(-1)).toEqual(requests.at(-2));
       expect(toolText).not.toContain("agentvoice_fresh");
       expect(
         await socketRequest(server.socketPath, {
@@ -312,7 +353,7 @@ describe("controller control transports", () => {
           params: {},
         }),
       ).toMatchObject({ ok: false, error: { code: "unknown_method" } });
-      for (const version of [1, 2, 3]) {
+      for (const version of [1, 2, 3, 4]) {
         const legacy = await socketRequest(server.socketPath, {
           v: version,
           type: "request",

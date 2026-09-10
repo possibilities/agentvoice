@@ -59,6 +59,29 @@ function harness() {
 }
 
 describe("browser-owned voice transport", () => {
+  test("voice changes fence renewal and do not automatically retry rejected settings", async () => {
+    const h = harness();
+    try {
+      h.transport.handleReady(ready);
+      h.transport.handleClientOffer("session-1", "first");
+      h.transport.handleClientConnected("session-1");
+      const changing = h.transport.redialAndWait("voice-change");
+      const rejected = changing.catch((error: Error) => error.message);
+      h.transport.redial("renewal");
+      expect(h.prepares()).toHaveLength(2);
+      h.transport.handleClientFailed("session-2", "rejected voice");
+      h.transport.handleClosed("error");
+      h.transport.handleReady(ready);
+      expect(await rejected).toContain("rejected voice");
+      h.transport.handleReady(ready);
+      await delay(50);
+      expect(h.prepares()).toHaveLength(2);
+      expect(h.transport.handleClientConnected("session-2")).toBe(false);
+      expect(h.errors.join(" ")).toContain("retry explicitly");
+    } finally {
+      await h.transport.stop();
+    }
+  });
   test("relays only the exact pending peer's offer and returns its answer", async () => {
     const h = harness();
     try {

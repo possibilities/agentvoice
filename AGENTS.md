@@ -106,6 +106,25 @@ phone is the current preview; the operator explicitly destroyed the emulator.
 Read [architecture and source ownership](docs/architecture.md) before editing a
 subsystem. It includes the recording and attachment lifecycle.
 
+## Workspace role databases (ADR 0042)
+
+- `src/roles/`: explicit `role eject` captures complete settings/assets into a
+  private workspace-bound SQLite database. Bound launches/restarts never reread
+  source role/config files; reject masking role-setting launch flags. Unbound
+  workspaces retain directory behavior. No automatic global migration.
+- Immutable revisions and CAS protect edits. `role export/import` creates a
+  standalone independent copy, never a live database-file copy or shared parent.
+  Native credentials/history and machine workspace bindings stay outside.
+- Per-load generated role trees are disposable; normal runtime shutdown removes
+  them. Never mutate a live skill tree to apply an edit. `impact.ts` exhaustively
+  classifies schema settings; unknown native passthrough is conservative.
+- Control protocol 5 adds `voice_set`: save plus optional voice-only application.
+  Keep working child/thread/attachment, session fences and mute preferences.
+  Saved and applied revisions differ; lost replies are unknown, never automatic
+  retries. Redial/renewal use loaded settings. Full restart loads the saved role.
+- CLI database commands and tests never open audio, start inference, install or
+  restart a live service. See docs/workspace-roles.md for first-slice limits.
+
 ## Ownership and state invariants
 
 Public voice launches support native/configured permissions without a flag.

@@ -3,6 +3,16 @@ import { isAbsolute, join } from "node:path";
 
 export type Environ = Record<string, string | undefined>;
 
+export function dataDirectory(env: Environ, home: string): string {
+  const xdg = env["XDG_DATA_HOME"];
+  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "agentvoice");
+}
+
+export function cacheDirectory(env: Environ, home: string): string {
+  const xdg = env["XDG_CACHE_HOME"];
+  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".cache"), "agentvoice");
+}
+
 export function stateDirectory(env: Environ, home: string): string {
   const xdg = env["XDG_STATE_HOME"];
   const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "state");

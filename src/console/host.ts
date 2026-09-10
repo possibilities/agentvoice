@@ -50,6 +50,10 @@ export interface ConsoleHostOptions {
   media?: MediaOptions;
   observe: (host: VoiceHost & { redial(): Promise<void> }) => Promise<VoiceView>;
   onStarted?: () => void;
+  onVoiceSettingsReady?: (controls: {
+    validate(name: string | null): void;
+    apply(name: string | null): Promise<void>;
+  }) => void;
   onHandoffReady?: (submit: (request: HandoffRequest) => Promise<HandoffResult>) => void;
   onObservationReady?: (
     read: (
@@ -179,6 +183,22 @@ export async function runConsoleHost(
     if (closed || fatal || !audioReady || phase !== "live" || !runtime)
       return handoffFailure("not_ready");
     return runtime.submitHandoff(request);
+  });
+  options.onVoiceSettingsReady?.({
+    validate: (name) => {
+      if (closed || fatal || !runtime) throw new Error("Voice runtime is unavailable");
+      runtime.validateVoice(name);
+    },
+    apply: async (name) => {
+      if (closed || fatal || !runtime) throw new Error("Voice runtime is unavailable");
+      const previous = runtime.setVoice(name);
+      try {
+        await transport.redialAndWait("voice-change");
+      } catch (error) {
+        runtime.setVoice(previous);
+        throw error;
+      }
+    },
   });
   options.onObservationReady?.((method, params) => runtime!.readConversation(method, params));
 

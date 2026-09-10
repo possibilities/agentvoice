@@ -22,6 +22,7 @@ import {
 } from "../mailbox/contract.ts";
 import { SubagentObserver } from "../mailbox/observer.ts";
 import { stateDirectory } from "../paths.ts";
+import { projectRole } from "../roles/runtime.ts";
 import {
   AppServerConnection,
   AppServerError,
@@ -119,6 +120,7 @@ export interface RuntimeOptions extends SessionSelection {
 }
 
 export interface RuntimeSnapshot {
+  dispose?: () => void;
   prompts: Prompts;
   foundPrompts: string[];
   role: RoleAssets | null;
@@ -130,31 +132,37 @@ export async function prepareRuntime(
   config: ServerConfig,
   control?: ControlMcpRegistration,
 ): Promise<RuntimeSnapshot> {
-  const workspace = config.orchestrator.workspace;
-  if (!statSync(workspace).isDirectory() || realpathSync(workspace) !== workspace)
-    throw new Error("Workspace must be an existing canonical absolute directory");
-  const warnings: string[] = [];
-  const loaded = await readPrompts(config, (message) => warnings.push(message));
-  const role = config.role === undefined ? null : await readRoleAssets(config.role);
-  if (role) warnings.push(`role: ${role.dir}`);
-  realtimeParams(config, loaded.prompts, "", "", "");
-  warnings.push(...passthroughWarnings(config, loaded.prompts));
-  for (const kind of ["start", "resume"] as const) {
-    const params = threadParams(config, loaded.prompts, kind, role ?? {});
-    if (control) {
-      // Reject hidden reserved entries even when raw config would discard them.
-      for (const servers of [config.orchestrator.config?.["mcp_servers"], role?.mcpServers]) {
-        if (servers && typeof servers === "object" && Object.hasOwn(servers, control.name))
-          throw new Error(`MCP server name "${control.name}" is reserved for AgentVoice control`);
+  const dispose = projectRole(config);
+  try {
+    const workspace = config.orchestrator.workspace;
+    if (!statSync(workspace).isDirectory() || realpathSync(workspace) !== workspace)
+      throw new Error("Workspace must be an existing canonical absolute directory");
+    const warnings: string[] = [];
+    const loaded = await readPrompts(config, (message) => warnings.push(message));
+    const role = config.role === undefined ? null : await readRoleAssets(config.role);
+    if (role) warnings.push(`role: ${role.dir}`);
+    realtimeParams(config, loaded.prompts, "", "", "");
+    warnings.push(...passthroughWarnings(config, loaded.prompts));
+    for (const kind of ["start", "resume"] as const) {
+      const params = threadParams(config, loaded.prompts, kind, role ?? {});
+      if (control) {
+        // Reject hidden reserved entries even when raw config would discard them.
+        for (const servers of [config.orchestrator.config?.["mcp_servers"], role?.mcpServers]) {
+          if (servers && typeof servers === "object" && Object.hasOwn(servers, control.name))
+            throw new Error(`MCP server name "${control.name}" is reserved for AgentVoice control`);
+        }
+        injectControlMcp(params, control);
       }
-      injectControlMcp(params, control);
+      if (kind === "start" && params["baseInstructions"] != null)
+        warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
     }
-    if (kind === "start" && params["baseInstructions"] != null)
-      warnings.push("warning: explicit baseInstructions replaces Codex's entire base prompt");
+    // Validate startup -c invariants before replacing a live generation.
+    appServerArgv(config.codex, config.codexConfig);
+    return { prompts: loaded.prompts, foundPrompts: loaded.paths, role, warnings, dispose };
+  } catch (error) {
+    dispose?.();
+    throw error;
   }
-  // Validate startup -c invariants before replacing a live generation.
-  appServerArgv(config.codex, config.codexConfig);
-  return { prompts: loaded.prompts, foundPrompts: loaded.paths, role, warnings };
 }
 
 export class VoiceRuntime {
@@ -164,6 +172,7 @@ export class VoiceRuntime {
   private prompts: Prompts = {};
   private foundPrompts: string[] = [];
   private role: RoleAssets | null = null;
+  private disposeRole: (() => void) | undefined;
   private effort: string | null = null;
   private conversationMode: "started" | "continued" = "started";
   private shuttingDown = false;
@@ -238,6 +247,25 @@ export class VoiceRuntime {
     };
   }
 
+  validateVoice(name: string | null): void {
+    if (Object.hasOwn(this.config.voice.extra ?? {}, "voice"))
+      throw new Error("Raw voice.extra.voice masks the managed voice selection");
+    realtimeParams(
+      { ...this.config, voice: { ...this.config.voice, name: name ?? undefined } },
+      this.prompts,
+      "",
+      "",
+      "",
+    );
+  }
+
+  setVoice(name: string | null): string | null {
+    this.validateVoice(name);
+    const previous = this.config.voice.name ?? null;
+    this.config.voice.name = name ?? undefined;
+    return previous;
+  }
+
   async start(): Promise<void> {
     try {
       const workspace = this.config.orchestrator.workspace;
@@ -245,6 +273,7 @@ export class VoiceRuntime {
         throw new Error("Workspace changed after runtime preflight");
       const snapshot =
         this.options.snapshot ?? (await prepareRuntime(this.config, this.options.controlMcp));
+      this.disposeRole = snapshot.dispose;
       this.prompts = snapshot.prompts;
       this.foundPrompts = snapshot.foundPrompts;
       this.role = snapshot.role;
@@ -440,6 +469,7 @@ export class VoiceRuntime {
         this.sessions.reset();
         for (const release of this.locks.values()) release();
         this.locks.clear();
+        this.disposeRole?.();
       }
     })();
     return this.shutdownPromise;

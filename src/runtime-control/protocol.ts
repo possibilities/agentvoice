@@ -4,6 +4,7 @@ import type { VoiceState } from "../console/state.ts";
 import type { ControlMcpRegistration } from "../core/control-mcp.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import type { ParsedArgs, ServerOptions } from "../main.ts";
+import type { RoleRef } from "../roles/store.ts";
 
 export const IPC_VERSION = 1;
 export const MAX_IPC_BYTES = 1024 * 1024;
@@ -13,6 +14,8 @@ export interface LaunchProvenance {
   launchCwd: string;
 }
 export interface CandidateInfo {
+  role?: RoleRef;
+  voice?: string | null;
   workspace: string;
   buildId: string;
   pid: number;
