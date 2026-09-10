@@ -15,7 +15,7 @@ class PreviewSoundsSessionTest {
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
         .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
+        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json())
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
         .put("revision", state.revision).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
@@ -108,7 +108,7 @@ class PreviewSoundsSessionTest {
             assertEquals(chosen, saved.savedSounds)
             assertEquals(saved, restore(saved.json(), saved))
             val stateJson = saved.json()
-            assertEquals(20, stateJson.getInt("protocol"))
+            assertEquals(21, stateJson.getInt("protocol"))
             assertEquals(PreviewSounds(), decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
             assertFalse(stateJson.getJSONObject("otherLayout").has("sounds"))
             assertTrue(response.toString().toByteArray().size < 16384)

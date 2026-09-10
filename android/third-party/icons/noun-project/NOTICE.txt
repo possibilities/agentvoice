@@ -1,0 +1,23 @@
+Noun Project icon auditions — CC BY 3.0
+
+Microphone by Edward Boatman from Noun Project (CC BY 3.0).
+https://thenounproject.com/icon/microphone-171/
+https://thenounproject.com/browse/icons/term/microphone/
+
+Speaker by Edward Boatman from Noun Project (CC BY 3.0).
+https://thenounproject.com/icon/speaker-100/
+https://thenounproject.com/browse/icons/term/speaker/
+
+Microphone by i cons from Noun Project (CC BY 3.0).
+https://thenounproject.com/icon/microphone-856601/
+https://thenounproject.com/browse/icons/term/microphone/
+
+Volume by i cons from Noun Project (CC BY 3.0).
+https://thenounproject.com/icon/volume-974802/
+https://thenounproject.com/browse/icons/term/volume/
+
+License: https://creativecommons.org/licenses/by/3.0/
+Full terms: https://creativecommons.org/licenses/by/3.0/legalcode
+
+AgentVoice changes: attribution text moved from glyphs to these credits; normalized and optically resized the artwork, converted paths to Android vectors, applied channel colors, and added diagonal mute slashes with transparent clearance. These icons remain CC BY 3.0, separately from the application code license. The Boatman muted speaker also removes three isolated lower wave fragments with a transparent clip; its live artwork, horn and upper arcs remain unchanged. No creator endorsement is implied.
+

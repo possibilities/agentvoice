@@ -1,14 +1,17 @@
 # Android development build verification
 
-Latest synthetic UI work: **Independent control extents**, September 9, 2026, on
-physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
-No emulator is active. No check starts a voice call, microphone or inference.
-The latest installed debug APK SHA-256 is
-`0c043c284bba80436b9556b2714228ecc604b24c86cfcefabcf516f14f16f471`.
+Latest synthetic UI work: **Icon auditions**, September 10, 2026 UTC.
+The final candidate is installed on physical S22 `R5CT91TW4RP`; all 88 native
+instrumentation tests passed in 173.906 seconds, including the final Boatman
+mute cleanup. The temporary API 35 emulator was stopped and its AVD/data and
+registration deleted. The interrupted USB/keyguard runs are excluded from these
+results; no implementation assertions were weakened.
 
-Current evidence is under [Independent control extents](#independent-control-extents).
-Earlier sections retain the results and limitations of their original rounds;
-they are not a cumulative claim about the latest APK.
+The current debug APK SHA-256 is
+`4aee8577e9f4fd7157e1826bb5f150b99d12fd80dda329cc7d78e059a4121579`.
+Current evidence is under [Icon auditions](#icon-auditions). Earlier sections
+retain their original results and limitations, not a cumulative claim about the
+candidate. No check starts a voice call, microphone or inference.
 
 ## Automated checks
 
@@ -1348,3 +1351,71 @@ by exact original rotation settings. Phone and host saved files remained byte-fo
 unchanged. Host profile SHA-256:
 `f6a1d6fd6ee0cca1b319a176327b81beb4e7fe6d30d5b14a4ba34c2ddf97a951`.
 No Save was issued.
+
+
+## Icon auditions
+
+Protocol 21 adds session-only channel and PTT icon choices; saved profile 18 is
+unchanged. The pair choices are Current, Engraved, Phosphor Bold/Fill, Boatman and
+i cons. PTT independently selects Current press, Contact or Matching microphone.
+The central indicator follows the same family using effective channel gates;
+Rockers retain persistent mute truth. The renderer instance, geometry, input
+semantics, labels, Halo assets and production source are unchanged. Launcher
+studies remain browser-only; the installed launcher is unchanged.
+
+- Combined debug build, Android lint and 122 JVM tests passed. Log:
+  `/tmp/agentvoice-icons-polish-build.log`.
+- Before the final one-asset Boatman mute cleanup, all 88 instrumentation tests passed on the temporary 540×960 / 240 dpi API 35
+  ARM64 emulator in 144.361 seconds. Log:
+  `/tmp/agentvoice-icons-emulator-full.log`. The four focused icon tests separately
+  passed in 23.632 seconds. They verify strict session/rotation/restore and Save
+  exclusion, real Compose transparency under uniform tint on a nonblack surface,
+  readable/dismissible credits, and native Persona/pointer/bounds continuity while
+  changing every family/PTT combination during a local held gesture. Remote
+  preview commands retain their existing intentional hold cancellation.
+- 715 repository tests passed; the subsequent final studio suite passed 87 tests
+  / 3,581 assertions after SVG accessibility metadata was added. Root and studio
+  TypeScript checks and full root Biome passed. Logs:
+  `/tmp/agentvoice-icons-root-tests.log`, `/tmp/agentvoice-icons-final-studio-tests.log`,
+  `/tmp/agentvoice-icons-root-typecheck.log`, `/tmp/agentvoice-icons-final-studio-typecheck.log`,
+  `/tmp/agentvoice-icons-root-lint.log`.
+- Browser fixture checks cover all six families, PTT independence, named previews,
+  source/license links, rotation/reconnect/hidden retention, scoped resets,
+  one-shot Credits guards, no Save dirty effect, no remote image/audio requests,
+  narrow layout and browser-only launcher isolation. Evidence:
+  `/tmp/agentvoice-studio21-icons-browser/evidence.json`.
+- All original Phosphor and Noun assets are preserved with hashes/licenses.
+  The portable Noun normalization helper regenerated all 16 SVG/XML files
+  byte-for-byte. Its 40 size comparisons and 20 clipping comparisons verify
+  vector conversion, not display quality. The debug APK contains byte-exact
+  packaged icon notices and full license texts. Host Phosphor/Engraved SVG copies
+  have additional accessible metadata; parity tests confirm unchanged geometry
+  and paint. Noun host copies match the final revision 3 normalized receipt exactly.
+
+The initial phone release was honored and a separate emulator controller was used.
+After the phone returned, a fresh live snapshot and both saved byte copies were
+captured at `/tmp/agentvoice-icons-phone-before-{state,host,phone,rotation}.json`.
+The host profile and phone saved profile both retain SHA-256
+`f6a1d6fd6ee0cca1b319a176327b81beb4e7fe6d30d5b14a4ba34c2ddf97a951`.
+Current focused physical-phone evidence is `/tmp/agentvoice-icons-phone-focused.log`.
+The incomplete run in `/tmp/agentvoice-icons-phone-full.log` lost its ADB transport;
+its on-device log has missing Compose hierarchies after the interruption. The
+subsequent keyguard-blocked attempt is also excluded. No implementation assertions
+were weakened; the subsequent unlocked run passed all 88 tests in 173.906 seconds
+(`/tmp/agentvoice-icons-phone-unlocked-full.log`).
+No icon choice has been adopted as a production default or written by Save.
+
+Final physical-phone captures in `/tmp/agentvoice-icons-phone/` cover all six
+families live/muted, Contact, quiet/grayscale themes and landscape/mirrored/hidden
+layouts. Two designers reviewed the supplied S22 screenshots without finding a
+fit blocker. Revision 3 removes Boatman's detached muted wave fragments; i cons
+offers simpler silhouettes and Engraved the closest mechanical styling match.
+These are screenshot reviews, not an operator preference or direct display judgment.
+The actual host Credits command opened the native linked dialog, and Android Back
+dismissed it. The final `restored.png` was inspected after both layouts, unsaved
+session choices, gates and Current/current icons were restored exactly. The phone
+and host saved bytes remained identical; no Save occurred. Rotation values were
+restored to accelerometer_rotation 0 / user_rotation 0, and stay-awake to its
+original value 7. `/tmp/agentvoice-icons-phone-check.log` records the exercise and
+restoration. The temporary emulator is destroyed; the physical preview and live
+studio remain available, and phone access is released.

@@ -16,7 +16,7 @@ class PreviewSharedAppearanceSessionTest {
         .put("method", "preview").put("id", 1).put("orientation", state.orientation)
         .put("orientationEpoch", state.orientationEpoch).put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("theme", state.theme).put("mutedPresence", state.mutedPresence)
-        .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
+        .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json())
 
     @Test fun sharedAppearanceEditsEitherOrientationWhileOverridesAndGeometryStayLocal() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "appearance-${UUID.randomUUID()}.json")

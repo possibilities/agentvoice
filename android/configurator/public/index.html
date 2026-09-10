@@ -354,6 +354,23 @@
                   </label>
                 </div>
                 <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations for this session. Hiding Push to talk also removes its connector and uses the separately saved extent for the mute buttons.</p>
+                <fieldset class="icon-audition" aria-describedby="icon-session-hint">
+                  <legend>Icon auditions</legend>
+                  <p id="icon-session-hint" class="control-hint">Shared by both orientations for this session. These choices are not saved in a profile.</p>
+                  <button type="button" id="icon-credits" class="reset value-reset" aria-describedby="icon-credits-hint">Credits on phone</button>
+                  <p id="icon-credits-hint" class="control-hint">Open the icon authors and licenses on the phone.</p>
+                  <label for="channel-icons">Channel pair</label>
+                  <select id="channel-icons" aria-describedby="channel-icon-credit"></select>
+                  <div id="channel-icon-preview" class="channel-icon-preview"></div>
+                  <p id="channel-icon-credit" class="icon-credit"></p>
+                  <button type="button" id="reset-channel-icons" data-reset="channel-icons" class="reset value-reset">Reset channel pair</button>
+                  <label for="push-icon">Push-to-talk icon</label>
+                  <select id="push-icon" aria-describedby="push-icon-hint push-icon-credit"></select>
+                  <p id="push-icon-hint" class="control-hint">Matching microphone follows the channel pair. Your choice is kept while Push to talk is hidden.</p>
+                  <div id="push-icon-preview" class="push-icon-preview"></div>
+                  <p id="push-icon-credit" class="icon-credit"></p>
+                  <button type="button" id="reset-push-icon" data-reset="push-icon" class="reset value-reset">Reset push-to-talk icon</button>
+                </fieldset>
                 <div class="mixing">
                   <label for="preview-theme">Theme</label>
                   <select id="preview-theme" aria-describedby="session-style-hint">
@@ -478,6 +495,12 @@
             <button type="button" id="save" class="save">Save profile</button>
           </div>
         </fieldset>
+        <section class="launcher-studies" aria-labelledby="launcher-heading">
+          <div class="launcher-heading"><h2 id="launcher-heading">Launcher studies</h2><span class="scope-badge">Browser only</span></div>
+          <p class="control-hint">Compare circle, squircle and themed treatments. Selecting a card does not change the phone or saved profile. Masks and tints are illustrative.</p>
+          <div id="launcher-gallery" class="launcher-gallery"></div>
+          <p id="launcher-selection" class="control-hint" role="status" aria-live="polite">Comparing Current waveform. Browser preview only.</p>
+        </section>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>
           <p id="error" role="alert" hidden></p>

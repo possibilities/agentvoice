@@ -1,10 +1,13 @@
 import { haloMotionFields } from "./halo.ts";
+import { defaultIcons } from "./icons.ts";
 import { type MutedTuningField, mutedTuningFields, resetMutedTuning } from "./muted-presence.ts";
 import { type PhoneState, type Preview, previewOf } from "./protocol.ts";
 import { type SpacingField, spacingFields } from "./spacing.ts";
 import { traceTipFields } from "./traces.ts";
 
 export type ResetTarget =
+  | "channel-icons"
+  | "push-icon"
   | "sounds"
   | "muted-appearance"
   | `muted-${MutedTuningField}`
@@ -46,6 +49,12 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     return next;
   }
   switch (target) {
+    case "channel-icons":
+      next.icons.channels = defaultIcons().channels;
+      break;
+    case "push-icon":
+      next.icons.push = defaultIcons().push;
+      break;
     case "sounds":
       next.sounds = { ...defaults.defaultSounds };
       break;

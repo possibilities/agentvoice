@@ -1,6 +1,7 @@
 package com.arthack.agentvoice
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -17,6 +18,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -574,6 +577,11 @@ private fun BinaryDetent(on: Boolean, ink: Color, modifier: Modifier) {
 
 @Composable
 private fun ChunkyChannelGlyph(speaker: Boolean, muted: Boolean, ink: Color, ground: Color, modifier: Modifier) {
+    val painter = previewChannelPainter(speaker, muted)
+    if (painter != null) {
+        Image(painter, contentDescription = null, modifier = modifier, colorFilter = ColorFilter.tint(ink))
+        return
+    }
     Canvas(modifier) {
         val unit = size.minDimension / 64f
         translate((size.width - 64 * unit) / 2f, (size.height - 64 * unit) / 2f) {
@@ -609,6 +617,23 @@ private fun ChunkyChannelGlyph(speaker: Boolean, muted: Boolean, ink: Color, gro
 
 @Composable
 private fun RockerPressGlyph(ink: Color, pressed: Boolean, modifier: Modifier) {
+    if (LocalPreviewIcons.current.push == "microphone") {
+        ChunkyChannelGlyph(false, false, ink, LocalPreviewTheme.current.palette.surface,
+            modifier.graphicsLayer { translationY = if (pressed) 1.dp.toPx() else 0f })
+        return
+    }
+    if (LocalPreviewIcons.current.push == "contact") {
+        Canvas(modifier) {
+            val unit = size.minDimension / 48f
+            scale(unit, unit, Offset.Zero) {
+                val drop = if (pressed) 3f else 0f
+                drawRect(ink, Offset(10f, 8f + drop), Size(28f, 6f))
+                drawRect(ink, Offset(20f, 14f + drop), Size(8f, 16f))
+                drawRect(ink, Offset(8f, 39f), Size(32f, 5f))
+            }
+        }
+        return
+    }
     Canvas(modifier) {
         val unit = size.minDimension / 48f
         scale(unit, unit, Offset.Zero) {

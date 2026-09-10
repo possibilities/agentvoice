@@ -22,7 +22,8 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 20,
+    protocol: 21,
+    icons: { channels: "current", push: "current" },
     showPushToTalk: true,
     sounds: defaultSounds(),
     savedSounds: defaultSounds(),
@@ -124,6 +125,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   };
   returned.state = {
     ...returned.state,
+    icons: { channels: "engraved", push: "contact" },
     showPushToTalk: false,
     sounds: { family: "rocker-13", volumePercent: 43 },
     mode: "idle",
@@ -170,6 +172,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.state.mode).toBe("idle");
   expect(phone.state.sounds).toEqual({ family: "rocker-13", volumePercent: 43 });
   expect(phone.state.showPushToTalk).toBe(false);
+  expect(phone.state.icons).toEqual({ channels: "engraved", push: "contact" });
   expect(phone.state.mutedTuning).toEqual({
     ...defaultMutedTuning(),
     textSizeSp: 23,

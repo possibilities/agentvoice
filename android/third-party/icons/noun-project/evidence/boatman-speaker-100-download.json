@@ -1,0 +1,27 @@
+{
+  "iconId": "100",
+  "title": "speaker",
+  "creator": "Edward Boatman",
+  "requestId": "965.418",
+  "httpStatus": 200,
+  "responseDate": "Thu, 10 Sep 2026 01:25:59 GMT",
+  "downloadOk": true,
+  "downloadErrors": "",
+  "variables": {
+    "clientApp": "WEB",
+    "iconId": "100",
+    "imageFormat": "SVG",
+    "exportSize": 700,
+    "foregroundColor": "#000000",
+    "backgroundShapeColor": "#000000",
+    "backgroundShapeOpacity": 0,
+    "backgroundShape": "SQUARE",
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false
+  },
+  "file": "/tmp/agentvoice-noun-assets/originals/boatman-speaker-100.svg",
+  "bytes": 1839,
+  "sha256": "7447d13c6fdece5b8678e68a819bb97a21382876d53e2a5dc4ecc355c7cfc5c4",
+  "recovery": "Exact base64Stream from the response to the UI Download SVG action; no reconstructed or preview asset."
+}

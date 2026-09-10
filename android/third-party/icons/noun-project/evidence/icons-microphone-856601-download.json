@@ -1,0 +1,27 @@
+{
+  "iconId": "856601",
+  "title": "microphone",
+  "creator": "i cons",
+  "requestId": "965.656",
+  "httpStatus": 200,
+  "responseDate": "Thu, 10 Sep 2026 01:26:50 GMT",
+  "downloadOk": true,
+  "downloadErrors": "",
+  "variables": {
+    "clientApp": "WEB",
+    "iconId": "856601",
+    "imageFormat": "SVG",
+    "exportSize": 700,
+    "foregroundColor": "#000000",
+    "backgroundShapeColor": "#000000",
+    "backgroundShapeOpacity": 0,
+    "backgroundShape": "SQUARE",
+    "rotation": 0,
+    "flipX": false,
+    "flipY": false
+  },
+  "file": "/tmp/agentvoice-noun-assets/originals/icons-microphone-856601.svg",
+  "bytes": 874,
+  "sha256": "58f3cb6eedc2c620d59da664fef7ecdece9c260900a6ebcb901feb91eae5fdc7",
+  "recovery": "Exact base64Stream from the response to the UI Download SVG action; no reconstructed or preview asset."
+}

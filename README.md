@@ -122,7 +122,8 @@ client API directly, with a Compose voice screen, private device-grant import,
 client-owned WebRTC and foreground call ownership. It is a development build;
 on-device native audio acceptance and release distribution remain pending.
 The debug studio also auditions [Kenney CC0 switch sound families](android/third-party/switch-sounds/README.md).
-See [Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
+See [Design Studio icon credits](android/third-party/icons/README.md) and
+[Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
 for creator notices, code/runtime licenses and the external animation's license evidence.
 The shared Agentwiki playbook explains this live design workflow for Android, web
 and native desktop apps. Retrieve it with

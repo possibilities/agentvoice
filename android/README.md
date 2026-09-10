@@ -232,7 +232,7 @@ bun run android:configure --device <adb-serial>
 Explicit Save retains both orientations' design, sizes and position in a
 version 18 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 20 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 21 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
@@ -430,3 +430,16 @@ Only the visible viewport and shared padding constrain its rendered bounds.
 Section separation is hidden and retained solely for older-profile compatibility;
 manual Persona placement owns that gap. Very narrow faces stack their channel and
 state captions; short faces reduce their glyph height to keep captions inside.
+
+
+### Icon auditions
+
+The studio compares matched HUMAN/AGENT pairs, with an independent PTT symbol.
+Selections are shared session choices, preserved through rotation and reconnect;
+they do not alter profile 18, Save state, or production defaults. Current remains
+the baseline. The center uses effective open/closed channel state while Rockers
+use persistent mute state; a PTT microphone always remains unslashed.
+
+The launcher gallery is browser-only and leaves the installed launcher unchanged.
+See [icon provenance and licenses](third-party/icons/README.md). **Credits on phone**
+opens the authors, sources and license links in a dismissible native dialog.

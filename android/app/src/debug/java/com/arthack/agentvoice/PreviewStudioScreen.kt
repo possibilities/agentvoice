@@ -45,8 +45,9 @@ internal fun PreviewStudioScreen(
     horizontalOffsetDp: Int = 0,
     onReleaseCompleted: () -> Unit = onRelease,
     showPushToTalk: Boolean = true,
+    icons: PreviewIcons = PreviewIcons(),
 ) {
-    CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
+    CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
             connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk)
     }

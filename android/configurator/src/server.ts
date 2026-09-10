@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { equalSharedAppearance } from "./appearance.ts";
+import { iconPreviewFiles } from "./icons.ts";
 import { saveProfile } from "./profile.ts";
 import {
   equalLayout,
@@ -35,12 +36,13 @@ export async function serveConfigurator(
   const script = await bundle.outputs[0].text();
   let saved: Profile | null = null;
   let mutating = false;
+  const previewFiles = new Set(iconPreviewFiles());
   const headers = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy":
-      "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
   };
   const status = () => ({
     connected: phone.connected,
@@ -86,6 +88,22 @@ export async function serveConfigurator(
             ),
             { headers: { ...headers, "Content-Type": "font/ttf" } },
           );
+        if (path.startsWith("icon-previews/")) {
+          const filename = path.slice("icon-previews/".length);
+          if (!previewFiles.has(filename) && filename !== "PHOSPHOR-LICENSE.txt")
+            return json({ error: "Not found" }, 404);
+          return new Response(
+            Bun.file(new URL(`../public/icon-previews/${filename}`, import.meta.url)),
+            {
+              headers: {
+                ...headers,
+                "Content-Type": filename.endsWith(".svg")
+                  ? "image/svg+xml"
+                  : "text/plain; charset=utf-8",
+              },
+            },
+          );
+        }
         if (path === "state") return json(status());
         return json({ error: "Not found" }, 404);
       }
@@ -95,7 +113,8 @@ export async function serveConfigurator(
         request.headers.get("content-type") !== "application/json"
       )
         return json({ error: "Invalid request origin or content type" }, 403);
-      if (path !== "preview" && path !== "save") return json({ error: "Not found" }, 404);
+      if (path !== "preview" && path !== "save" && path !== "icon-credits")
+        return json({ error: "Not found" }, 404);
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
       let input: Record<string, unknown>;
@@ -109,6 +128,7 @@ export async function serveConfigurator(
             "orientation",
             "orientationEpoch",
             "personaSide",
+            "icons",
             "showPushToTalk",
             "sounds",
             "theme",
@@ -130,6 +150,7 @@ export async function serveConfigurator(
             orientation: input["orientation"],
             orientationEpoch: input["orientationEpoch"],
             personaSide: input["personaSide"],
+            icons: input["icons"],
             showPushToTalk: input["showPushToTalk"],
             sounds: input["sounds"],
             theme: input["theme"],
@@ -147,6 +168,8 @@ export async function serveConfigurator(
             halo: input["halo"],
             spirit: input["spirit"],
           });
+        } else if (path === "icon-credits") {
+          exact(input, ["generation", "orientation", "orientationEpoch"]);
         } else {
           exact(input, ["generation", "revision", "orientation", "orientationEpoch"]);
           integer(input["revision"]);
@@ -176,6 +199,7 @@ export async function serveConfigurator(
               orientation: input["orientation"],
               orientationEpoch: input["orientationEpoch"],
               personaSide: input["personaSide"],
+              icons: input["icons"],
               showPushToTalk: input["showPushToTalk"],
               sounds: input["sounds"],
               theme: input["theme"],
@@ -194,6 +218,7 @@ export async function serveConfigurator(
               spirit: input["spirit"],
             }),
           });
+        else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);

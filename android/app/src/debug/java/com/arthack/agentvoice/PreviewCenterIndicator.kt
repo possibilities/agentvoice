@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -73,6 +74,8 @@ internal fun PreviewCenterIndicator(
 ) {
     val model = previewCenterIndicatorModel(ui, style, scope, foreground) ?: return
     if (!stageDiameter.value.isFinite() || stageDiameter <= 0.dp || !offsetY.value.isFinite()) return
+    val channelPainters = listOf(previewChannelPainter(false, false), previewChannelPainter(false, true),
+        previewChannelPainter(true, false), previewChannelPainter(true, true))
     val density = LocalDensity.current
     val theme = LocalPreviewTheme.current
     val measurer = rememberTextMeasurer()
@@ -134,7 +137,12 @@ internal fun PreviewCenterIndicator(
                 if (model.style == "contacts") {
                     drawCenterContact(glyph.channel.open, position, glyph.sizePx, ink(glyph.channel))
                 } else {
-                    drawCenterChannel(glyph.channel, position, glyph.sizePx, ink(glyph.channel))
+                    val painter = channelPainters[(if (glyph.channel.kind == PreviewCenterChannelKind.Agent) 2 else 0) +
+                        if (glyph.channel.open) 0 else 1]
+                    if (painter == null) drawCenterChannel(glyph.channel, position, glyph.sizePx, ink(glyph.channel))
+                    else translate(position.x, position.y) {
+                        with(painter) { draw(Size(glyph.sizePx, glyph.sizePx), colorFilter = ColorFilter.tint(ink(glyph.channel))) }
+                    }
                 }
             }
         }

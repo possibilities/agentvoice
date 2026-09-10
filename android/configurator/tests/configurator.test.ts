@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,16 @@ import {
 import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
+import {
+  defaultIcons,
+  iconCatalog,
+  iconPreviewFiles,
+  iconStyles,
+  launcherConcepts,
+  pushIconPreview,
+  pushIconStyles,
+  safeCreditLink,
+} from "../src/icons.ts";
 import { parseArgs } from "../src/main.ts";
 import {
   defaultMutedTuning,
@@ -68,7 +78,8 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 20,
+  protocol: 21,
+  icons: { channels: "current", push: "current" },
   showPushToTalk: true,
   sounds: defaultSounds(),
   savedSounds: defaultSounds(),
@@ -220,6 +231,7 @@ class FakePhone implements Phone {
         throw Error("Stale orientation");
       const preview = parsePreview({
         ...previewOf(initial()),
+        icons: command["icons"],
         showPushToTalk: command["showPushToTalk"],
         sounds: command["sounds"],
         theme: command["theme"],
@@ -342,6 +354,7 @@ async function fixture(options: { saveTo?: string } = {}) {
         orientationEpoch: phone.state.orientationEpoch,
         ...(path === "preview"
           ? {
+              icons: phone.state.icons,
               showPushToTalk: phone.state.showPushToTalk,
               sounds: phone.state.sounds,
               theme: phone.state.theme,
@@ -1464,7 +1477,7 @@ test("wrong inactive layout or hidden side receipts cannot create a host copy", 
   }
 });
 
-test("protocol 20 validates independent layouts and fits bounded profile and receipt frames", async () => {
+test("protocol 21 validates independent layouts and fits bounded profile and receipt frames", async () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const invalid of [
@@ -2368,7 +2381,7 @@ test("profile14 migration distinguishes canonical, portrait-equal and explicitly
   ).toThrow();
 });
 
-test("protocol20 strictly validates axes and override groups and accepts shared metadata only from the phone", async () => {
+test("protocol21 strictly validates axes and override groups and accepts shared metadata only from the phone", async () => {
   const { phone, post } = await fixture();
   const saved = currentProfile(phone.state);
   for (const value of [
@@ -2429,7 +2442,7 @@ test("debug reply framing accepts16383 bytes and rejects16384 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(16383 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(20);
+  expect((await pending).state.protocol).toBe(21);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });
@@ -2753,7 +2766,7 @@ test("legacy profile16 validates offshoots then removes them only from effective
   expect(JSON.stringify(loaded, null, 2)).toBe(bytes);
 });
 
-test("protocol20 and profile18 reject divergent current or saved spacing for every field", () => {
+test("protocol21 and profile18 reject divergent current or saved spacing for every field", () => {
   const state = initial();
   const profile = currentProfile(state);
   for (const field of spacingFields) {
@@ -2998,4 +3011,259 @@ test("a mismatched inactive hidden extent receipt cannot overwrite the host prof
   phone.wrongHiddenExtentReceipt = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(502);
   expect(await readFile(saveTo, "utf8")).toBe(bytes);
+});
+
+test("icon auditions validate exact independent session selections before dispatch", async () => {
+  const { phone, post } = await fixture();
+  for (const icons of [
+    undefined,
+    null,
+    [],
+    {},
+    "current",
+    { channels: "current" },
+    { push: "current" },
+    { channels: "current", push: "phosphor-bold" },
+    { channels: "contact", push: "current" },
+    { channels: "current", push: "contact", launcher: "duplex-halo" },
+  ]) {
+    expect(() => parsePreview({ ...previewOf(phone.state), icons })).toThrow();
+    expect(() => parseState({ ...phone.state, icons })).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), icons })).status).toBe(400);
+  }
+  expect(phone.calls).toHaveLength(0);
+  for (const channels of iconStyles)
+    for (const push of pushIconStyles) {
+      const icons = { channels, push };
+      expect((await post("preview", { ...previewOf(phone.state), icons })).status).toBe(200);
+      expect(phone.state.icons).toEqual(icons);
+      expect(pushIconPreview(icons).file).toBe(
+        push === "microphone"
+          ? iconCatalog[channels].channels[0]
+          : push === "contact"
+            ? "ptt-contact-monochrome.svg"
+            : "current-push.svg",
+      );
+    }
+  const count = phone.calls.length;
+  expect(
+    (await post("preview", { ...previewOf(phone.state), launcher: "duplex-halo" })).status,
+  ).toBe(400);
+  expect(phone.calls).toHaveLength(count);
+  for (const field of ["savedIcons", "defaultIcons", "launcher"])
+    expect(() => parseState({ ...phone.state, [field]: defaultIcons() })).toThrow();
+});
+
+test("icon auditions persist across rotation and hiding but resets isolate and Save excludes them", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const portrait = layoutOf(phone.state);
+  const landscape = structuredClone(phone.state.otherLayout);
+  const icons = { channels: "phosphor-bold", push: "microphone" } as const;
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        icons,
+        showPushToTalk: false,
+        mutedPresence: "off",
+      })
+    ).status,
+  ).toBe(200);
+  expect(layoutOf(phone.state)).toEqual(portrait);
+  expect(phone.state.otherLayout).toEqual(landscape);
+  phone.rotate();
+  expect(phone.state.icons).toEqual(icons);
+  const copied = previewOf(phone.state);
+  copied.icons.channels = "engraved";
+  expect(phone.state.icons).toEqual(icons);
+  expect(resetPreview(previewOf(phone.state), phone.state, "channel-icons").icons).toEqual({
+    channels: "current",
+    push: "microphone",
+  });
+  expect(resetPreview(previewOf(phone.state), phone.state, "push-icon").icons).toEqual({
+    channels: "phosphor-bold",
+    push: "current",
+  });
+  for (const target of [
+    "controls",
+    "size",
+    "position",
+    "sounds",
+    "spacing",
+    "traces",
+    "glow",
+    "muted-appearance",
+    "animation",
+    "colors",
+    "light",
+    "spirit-colors",
+  ] as const)
+    expect(resetPreview(previewOf(phone.state), phone.state, target).icons).toEqual(icons);
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(saved.version).toBe(18);
+  expect(saved).not.toHaveProperty("icons");
+  expect(saved).not.toHaveProperty("launcher");
+  expect(phone.state.icons).toEqual(icons);
+  expect(profileLayout(saved, "portrait")).toEqual(portrait);
+  expect(profileLayout(saved, "landscape")).toEqual(landscape);
+  if (saved.version !== 18) throw Error("Expected current profile");
+  expect(() => parseProfile(JSON.stringify({ ...saved, icons }))).toThrow();
+  expect(() =>
+    parseProfile(JSON.stringify({ ...saved, landscape: { ...saved.landscape, icons } })),
+  ).toThrow();
+  expect(() =>
+    parseProfile(
+      JSON.stringify({ ...saved, sharedAppearance: { ...saved.sharedAppearance, icons } }),
+    ),
+  ).toThrow();
+});
+
+test("icon and launcher previews serve only catalog assets with fixed safe credits and self-only images", async () => {
+  const { phone, url } = await fixture();
+  for (const file of iconPreviewFiles()) {
+    expect(file).toMatch(/^[a-z0-9-]+\.svg$/);
+    const response = await fetch(new URL(`icon-previews/${file}`, url));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/svg+xml");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("content-security-policy")).toContain("img-src 'self'");
+    const svg = await response.text();
+    expect(svg).toContain("<svg");
+    expect(svg).toMatch(/<title(?:\s[^>]*)?>[^<]+<\/title>/);
+    const root = svg.match(/<svg\b[^>]*>/)?.[0] ?? "";
+    expect(root).toContain('role="img"');
+    expect(root).toMatch(/aria-label(?:ledby)?="[^"]+"/);
+    expect(svg).not.toMatch(
+      /<script|<foreignObject|\bon\w+=|(?:href|src)=["'](?:https?:|data:|javascript:)/i,
+    );
+  }
+  for (const path of [
+    "icon-previews/nope.svg",
+    "icon-previews/../README.md",
+    "icon-previews/%2e%2e%2fREADME.md",
+    "icon-previews/hand-tap-bold.svg",
+    "icon-previews/PHOSPHOR-LICENSE.txt/nope",
+  ])
+    expect((await fetch(new URL(path, url))).status).toBe(404);
+  const license = await fetch(new URL("icon-previews/PHOSPHOR-LICENSE.txt", url));
+  expect(license.status).toBe(200);
+  expect(await license.text()).toContain("MIT License");
+  for (const entry of Object.values(iconCatalog)) {
+    for (const value of [entry.credit.source, entry.credit.license])
+      if (value) expect(safeCreditLink(value)).toBe(value);
+  }
+  for (const value of [
+    "javascript:alert(1)",
+    "https://example.com",
+    "//github.com/phosphor-icons",
+    "https://github.com.evil.test/",
+    "/state",
+  ])
+    expect(() => safeCreditLink(value)).toThrow();
+  expect(launcherConcepts.map((entry) => entry.id)).toEqual([
+    "current",
+    "duplex-halo",
+    "relay-aperture",
+    "voice-carrier",
+  ]);
+  expect(phone.calls).toHaveLength(0);
+});
+
+test("credits on phone is a fenced one-shot command without preview or profile mutation", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const before = structuredClone(phone.state);
+  expect((await post("icon-credits", {})).status).toBe(200);
+  expect(phone.calls).toEqual([{ method: "iconCredits" }]);
+  expect(phone.state).toEqual(before);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  for (const body of [
+    { revision: 0 },
+    { icons: defaultIcons() },
+    { generation: null },
+    { orientationEpoch: -1 },
+  ])
+    expect((await post("icon-credits", body)).status).toBe(400);
+  expect((await post("icon-credits", {}, { Origin: "https://example.com" })).status).toBe(403);
+  expect((await post("icon-credits", { generation: phone.generation + 1 })).status).toBe(409);
+  expect(
+    (await post("icon-credits", { orientationEpoch: phone.state.orientationEpoch + 1 })).status,
+  ).toBe(409);
+  phone.connected = false;
+  expect((await post("icon-credits", {})).status).toBe(503);
+  expect(phone.calls).toEqual([{ method: "iconCredits" }]);
+});
+
+test("unconfirmed phone credits fail once without Save or automatic replay", async () => {
+  const { phone, post, saveTo } = await fixture();
+  phone.request = async (command) => {
+    phone.calls.push(command);
+    throw Error("Disconnected before credits confirmation");
+  };
+  expect((await post("icon-credits", {})).status).toBe(502);
+  expect(phone.calls).toEqual([{ method: "iconCredits" }]);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+});
+
+test("cleared Noun pairs expose exact attribution and matching-mic credits without widening safe links", () => {
+  for (const [id, author, mic, speaker, name] of [
+    ["noun-boatman", "Edward Boatman", "microphone-171", "speaker-100", "Speaker"],
+    ["noun-icons", "i cons", "microphone-856601", "volume-974802", "Volume"],
+  ] as const) {
+    const pair = iconCatalog[id];
+    expect(pair.credit.author).toBe(`Microphone and ${name} by ${author} from Noun Project`);
+    expect(pair.credit.tag).toBe("CC BY 3.0");
+    expect(pair.credit.license).toBe("https://creativecommons.org/licenses/by/3.0/");
+    expect(pair.credit.sources?.map((source) => safeCreditLink(source.url))).toEqual([
+      `https://thenounproject.com/icon/${mic}/`,
+      `https://thenounproject.com/icon/${speaker}/`,
+      "https://thenounproject.com/browse/icons/term/microphone/",
+      `https://thenounproject.com/browse/icons/term/${name === "Speaker" ? "speaker" : "volume"}/`,
+    ]);
+    expect(pair.credit.changes).toContain("mute slashes added");
+    expect(pair.credit.changes?.includes("Three isolated lower wave fragments removed")).toBe(
+      id === "noun-boatman",
+    );
+    const push = pushIconPreview({ channels: id, push: "microphone" });
+    expect(push.credit.author).toBe(`Microphone by ${author} from Noun Project`);
+    expect(push.credit.sources).toEqual([
+      { label: "Microphone source", url: `https://thenounproject.com/icon/${mic}/` },
+      {
+        label: "Noun Project · Microphone",
+        url: "https://thenounproject.com/browse/icons/term/microphone/",
+      },
+    ]);
+    expect(push.credit.tag).toBe("CC BY 3.0");
+    expect(push.credit.changes).not.toContain("mute slashes");
+    expect(push.file).toBe(pair.channels[0]);
+  }
+  for (const source of [
+    "https://thenounproject.com/icon/microphone-172/",
+    "https://thenounproject.com.evil.test/icon/microphone-171/",
+    "https://creativecommons.org/licenses/by/4.0/",
+  ])
+    expect(() => safeCreditLink(source)).toThrow();
+});
+
+test("preview asset directory contains only catalog artwork and Phosphor differs only in accessibility metadata", async () => {
+  const directory = new URL("../public/icon-previews/", import.meta.url);
+  expect((await readdir(directory)).filter((file) => file.endsWith(".svg")).sort()).toEqual(
+    iconPreviewFiles().sort(),
+  );
+  const removeAccessibility = (svg: string) =>
+    svg
+      .replace(/<title(?:\s[^>]*)?>[\s\S]*?<\/title>/g, "")
+      .replace(/<svg\b[^>]*>/, (root) =>
+        root.replace(/ (?:role|aria-label|aria-labelledby)="[^"]*"/g, ""),
+      );
+  for (const family of ["phosphor-bold", "phosphor-fill"] as const) {
+    for (const filename of iconCatalog[family].channels) {
+      const preview = await readFile(new URL(filename, directory), "utf8");
+      const original = await readFile(
+        new URL(`../../third-party/icons/phosphor/${filename}`, import.meta.url),
+        "utf8",
+      );
+      expect(removeAccessibility(preview)).toBe(removeAccessibility(original));
+    }
+  }
 });

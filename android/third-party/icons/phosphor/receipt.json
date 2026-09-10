@@ -1,0 +1,39 @@
+{
+  "source": "https://github.com/phosphor-icons/core",
+  "commit": "2b75f3ad12b420c9504ef05df8d2564a28f8500e",
+  "license": "MIT",
+  "files": [
+    {
+      "file": "microphone-bold.svg",
+      "sha256": "129f28eb3ba66fd180d860b3e46f0e794af24700d05e7cc025aac560a9469f64"
+    },
+    {
+      "file": "microphone-fill.svg",
+      "sha256": "cd8446012357f05a70679ecc792402aa6e49f1fdc820b04035a97b213a2f17a6"
+    },
+    {
+      "file": "microphone-slash-bold.svg",
+      "sha256": "6a5eda3a51e3d2abfa198f6487248ad8dd54122fc0cb700cc53e4469322abb41"
+    },
+    {
+      "file": "microphone-slash-fill.svg",
+      "sha256": "6970ccb81d74ffe2165904bc4ed09e0dc738c5d4930192426afd24a5457a2202"
+    },
+    {
+      "file": "speaker-high-bold.svg",
+      "sha256": "f0fc825cb96958238882b98aea55afdb63da92c4c5c8b499c0e1068e9abb299e"
+    },
+    {
+      "file": "speaker-high-fill.svg",
+      "sha256": "c266c407915382db3866570f816934b804c1b84bd47d971fad0e95ac5107dd6b"
+    },
+    {
+      "file": "speaker-slash-bold.svg",
+      "sha256": "19f3d5a5a4b3012c43dbc712b9a48a81fb458ec4ba3f3a9a9565a0c6526ff315"
+    },
+    {
+      "file": "speaker-slash-fill.svg",
+      "sha256": "029fae09171e356142aef7db03006e84e6bd1534960e2f9cc4a2b73e8325004c"
+    }
+  ]
+}

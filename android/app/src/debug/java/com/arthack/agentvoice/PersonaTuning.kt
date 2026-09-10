@@ -124,6 +124,7 @@ internal data class PersonaPreviewState(
         if (orientation == "portrait") PreviewLayout(placement, design, halo, spirit, personaSide) else otherLayout),
     val savedSharedAppearance: PreviewSharedAppearance = sharedAppearance,
     val showPushToTalk: Boolean = true,
+    val icons: PreviewIcons = PreviewIcons(),
     val sounds: PreviewSounds = PreviewSounds(),
     val savedSounds: PreviewSounds = sounds,
 ) {
@@ -171,7 +172,7 @@ internal data class PersonaPreviewState(
             otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 20).put("showPushToTalk", showPushToTalk)
+    fun json(): JSONObject = JSONObject().put("protocol", 21).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", PreviewSounds().json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", 0)
         .put("appearanceOverrides", appearanceOverrides.appearanceJson()).put("savedAppearanceOverrides", savedAppearanceOverrides.appearanceJson())
@@ -228,7 +229,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..20)
+    require(protocol in 1..21)
     if (protocol >= 18) {
         decodePreviewSounds(data.getJSONObject("savedSounds"))
         require(decodePreviewSounds(data.getJSONObject("defaultSounds")) == PreviewSounds())
@@ -254,6 +255,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         presenceScope = if (protocol >= 15) data.getString("presenceScope") else "any-muted",
         horizontalOffsetDp = if (protocol >= 17) decodePreviewOffset(data.get("horizontalOffsetDp")) else 0,
         appearanceOverrides = if (protocol >= 17) decodeAppearanceOverrides(data.getJSONArray("appearanceOverrides")) else emptySet(),
+        icons = if (protocol >= 21) decodePreviewIcons(data.getJSONObject("icons")) else PreviewIcons(),
         showPushToTalk = if (protocol >= 19) decodePreviewBoolean(data.get("showPushToTalk")) else true,
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
         savedSounds = savedSounds)
@@ -285,6 +287,8 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
         horizontalOffsetDp = initialHorizontalOffsetDp, appearanceOverrides = initialOverrides, sharedAppearance = shared,
         sounds = initialSounds))
 
+    var showIconCredits by mutableStateOf(false)
+
     private fun checkOrientation(request: JSONObject) {
         check(request.getString("orientation") == state.orientation && request.get("orientationEpoch") == state.orientationEpoch) {
             "Phone rotated. Review the visible orientation before editing."
@@ -310,7 +314,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk", "icons"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -331,10 +335,16 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val overrides = decodeAppearanceOverrides(request.getJSONArray("appearanceOverrides"))
                     val showPushToTalk = decodePreviewBoolean(request.get("showPushToTalk"))
                     val sounds = decodePreviewSounds(request.getJSONObject("sounds"))
+                    val icons = decodePreviewIcons(request.getJSONObject("icons"))
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
                     state = next.applyAppearance(PreviewLayout(placement, design, halo, spirit, side, horizontal, overrides)).copy(
                         activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
-                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, revision = state.revision + 1)
+                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, icons = icons, revision = state.revision + 1)
+                }
+                "iconCredits" -> {
+                    require(request.fields() == setOf("id", "method"))
+                    state = state.endHold()
+                    showIconCredits = true
                 }
                 "save" -> Unit
                 else -> error("Unknown preview command")

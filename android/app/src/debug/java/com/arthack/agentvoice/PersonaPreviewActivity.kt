@@ -48,7 +48,10 @@ class PersonaPreviewActivity : ComponentActivity() {
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
-        setContent { VoiceTheme { PersonaPreview(session.state, onExit = ::finish) { session.state = it } } }
+        setContent { VoiceTheme {
+            PersonaPreview(session.state, onExit = ::finish) { session.state = it }
+            if (session.showIconCredits) PreviewIconCredits { session.showIconCredits = false }
+        } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -127,5 +130,5 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
             if (next.holding && !currentState.holding) { change(next); feedback.down() }
         },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk, icons = state.icons)
 }

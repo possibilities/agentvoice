@@ -39,6 +39,7 @@ import {
   type VersionTwelveDesign,
 } from "./design.ts";
 import { defaultHalo, equalHalo, type HaloSelection, parseHalo } from "./halo.ts";
+import { type Icons, parseIcons } from "./icons.ts";
 import { type MutedTuning, parseMutedTuning } from "./muted-presence.ts";
 import { defaultSounds, parseSounds, type Sounds } from "./sounds.ts";
 import { equalSpacing, legacySpacing } from "./spacing.ts";
@@ -89,6 +90,7 @@ export type VersionElevenLayout = Omit<VersionFourteenLayout, "design"> & {
 };
 export type Preview = Layout &
   OrientationFence & {
+    icons: Icons;
     showPushToTalk: boolean;
     sounds: Sounds;
     theme: Theme;
@@ -100,7 +102,7 @@ export type Preview = Layout &
     mode: Mode;
   };
 export type PhoneState = Preview & {
-  protocol: 20;
+  protocol: 21;
   savedSounds: Sounds;
   defaultSounds: Sounds;
   sharedAppearance: SharedAppearance;
@@ -270,6 +272,7 @@ export function parsePreview(value: unknown): Preview {
     "orientation",
     "orientationEpoch",
     "personaSide",
+    "icons",
     "showPushToTalk",
     "sounds",
     "theme",
@@ -294,6 +297,7 @@ export function parsePreview(value: unknown): Preview {
     ...parseOrientationFence(data),
     personaSide: parsePersonaSide(data["personaSide"]),
     ...parseSessionModes(data),
+    icons: parseIcons(data["icons"]),
     showPushToTalk: parseShowPushToTalk(data["showPushToTalk"]),
     sounds: parseSounds(data["sounds"]),
     connection: data["connection"] as Connection,
@@ -328,6 +332,7 @@ export function parseState(value: unknown): PhoneState {
     "orientation",
     "orientationEpoch",
     "personaSide",
+    "icons",
     "showPushToTalk",
     "sounds",
     "theme",
@@ -360,7 +365,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 20 ||
+    data["protocol"] !== 21 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -369,7 +374,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 20,
+    protocol: 21,
     savedSounds: parseSounds(data["savedSounds"]),
     defaultSounds: parseSounds(data["defaultSounds"]),
     sharedAppearance: parseSharedAppearance(data["sharedAppearance"]),
@@ -385,6 +390,7 @@ export function parseState(value: unknown): PhoneState {
     ...parseOrientationFence(data),
     personaSide: parsePersonaSide(data["personaSide"]),
     ...parseSessionModes(data),
+    icons: parseIcons(data["icons"]),
     showPushToTalk: parseShowPushToTalk(data["showPushToTalk"]),
     sounds: parseSounds(data["sounds"]),
     connection: data["connection"] as Connection,
@@ -620,6 +626,7 @@ export function previewOf(state: Preview): Preview {
     orientation: state.orientation,
     orientationEpoch: state.orientationEpoch,
     personaSide: state.personaSide,
+    icons: { ...state.icons },
     showPushToTalk: state.showPushToTalk,
     sounds: { ...state.sounds },
     theme: state.theme,

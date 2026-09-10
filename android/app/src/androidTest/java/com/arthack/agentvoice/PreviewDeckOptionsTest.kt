@@ -141,7 +141,7 @@ class PreviewDeckOptionsTest {
             .put("id", 1).put("method", "preview").put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
             .put("mode", state.mode).put("connection", state.connection).put("activity", state.activity)
             .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
+            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json())
         try {
             for (bad in listOf(0, 1, "false", JSONObject.NULL)) {
                 assertTrue(runCatching { session.command(request(session.state).put("showPushToTalk", bad)) }.isFailure)

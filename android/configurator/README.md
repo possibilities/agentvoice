@@ -360,7 +360,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol20 carries live/saved/default designs, sizes, vertical and
+Preview protocol21 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -370,7 +370,7 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is20;
+session-root fields on Preview/PhoneState, never Layout. Protocol is21;
 saved profile is version18 with separately saved shown/hidden extents;
 session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -396,13 +396,13 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently. All six
-`design.spacing` fields are shared without an override. Protocol20 requires
+`design.spacing` fields are shared without an override. Protocol21 requires
 current spacing to match `otherLayout` and saved spacing to match
 `savedOtherLayout`; profiles17–18 require root and landscape spacing equality.
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol20's active fields describe the phone's visible orientation; it also
+Protocol21's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
 changes orientation; the host cannot select it. Version18 profile receipts must
@@ -420,10 +420,10 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol20 is strict; Android restoration from
+never include it. Current live protocol21 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
-Protocol20 requires the shared session-root boolean `showPushToTalk`; it has no
+Protocol21 requires the shared session-root boolean `showPushToTalk`; it has no
 saved/default counterpart and never appears in Layout or profiles. Native
 restoration from protocol18 or earlier starts with Push to talk shown.
 Profiles17–18 and current traces reject `offshootPercent` everywhere. Legacy
@@ -458,9 +458,39 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol20 and profile18 require both extent fields. Legacy profiles
+Current protocol21 and profile18 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
 restoration from protocol19 or earlier does the same. Only explicit Save writes
 profile18.
+
+
+## Icon auditions and launcher studies
+
+The Shared session controls offer a coherent channel pair (Current, Engraved,
+Phosphor Bold, Phosphor Fill, Boatman or i cons) and an independent push-to-talk icon (Current
+press, Contact or Matching microphone). Matching microphone follows the live
+microphone from the selected pair. Each selector resets independently to Current.
+Selection remains while muted indicators are Off or Push to talk is hidden.
+“Credits on phone” opens native icon credits through a one-shot, generation- and
+orientation-fenced request. It changes no preview settings, profile or dirty state;
+the button is disabled while disconnected or another request is pending.
+Protocol21 requires exactly `icons: { channels, push }` at the session root;
+rotation, reconnect and activity restoration retain it. Restoration from
+protocol20 or earlier supplies `current/current`. These choices do not enter
+profile18, affect profile dirty comparison, or change production defaults.
+
+Launcher studies are a browser-only gallery: Current waveform plus Duplex Halo,
+Relay Aperture and Voice Carrier. Card selection only focuses a comparison; it
+never dispatches a phone command, changes the installed launcher or enters Save.
+Circle and squircle previews expose the central72 units of each108-unit source.
+Monochrome previews use illustrative tints; the current waveform's masked/tinted
+versions are comparison drawings, not existing Android adaptive resources.
+
+Assets are served from a fixed capability-scoped local allowlist. Phosphor source
+and MIT links are pinned HTTPS URLs; Original denotes project-authored artwork,
+not a claim of CC0 licensing. Boatman and i cons use acquired Noun Project
+artwork under CC BY3.0; the panel names both source assets, their creator and
+license, and describes the modifications. Matching microphone credits only
+its source mic. See [icon preview provenance](public/icon-previews/README.md).

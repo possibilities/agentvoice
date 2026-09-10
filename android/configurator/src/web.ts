@@ -5,6 +5,7 @@ import {
   equalSharedAppearance,
 } from "./appearance.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
+import { initializeIconControls, renderIcons } from "./icons-ui.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
   type Activity,
@@ -58,6 +59,7 @@ let status: Status | null = null;
 let draft: Preview | null = null;
 let inFlight = false;
 let saving = false;
+let openingCredits = false;
 let changed = false;
 let edit = 0;
 let saveFailure: string | null = null;
@@ -97,8 +99,11 @@ function render() {
   text(error, saveFailure || transientFailure || "");
   element("connection").dataset["connected"] = String(connected);
   element("connection-text").textContent = connected ? "Phone linked" : "Waiting for phone";
-  controls.disabled = !connected || saving;
-  save.disabled = !connected || inFlight || changed || saving;
+  controls.disabled = !connected || saving || openingCredits;
+  element<HTMLButtonElement>("icon-credits").disabled =
+    !connected || inFlight || changed || saving || openingCredits;
+  text(element("icon-credits"), openingCredits ? "Opening credits…" : "Credits on phone");
+  save.disabled = !connected || inFlight || changed || saving || openingCredits;
   save.textContent = saving ? "Saving…" : "Save profile";
   if (!status || !draft) return;
   element("device").textContent =
@@ -111,6 +116,7 @@ function render() {
     text(element(`override-${group}-label`), `Customize ${orientationLabel}`);
     text(element(`scope-${group}`), customized ? `${orientationLabel} only` : "Shared");
   }
+  renderIcons(draft.icons);
   element<HTMLSelectElement>("sound-family").value = draft.sounds.family;
   element<HTMLInputElement>("sound-volume").value = String(draft.sounds.volumePercent);
   text(element("sound-volume-value"), `${draft.sounds.volumePercent}%`);
@@ -353,7 +359,7 @@ async function flush() {
 }
 
 function update(change: (value: Preview) => Preview) {
-  if (!draft || !status?.connected || saving) return;
+  if (!draft || !status?.connected || saving || openingCredits) return;
   draft = change(draft);
   edit++;
   changed = true;
@@ -448,6 +454,10 @@ holdShare.addEventListener("input", () => {
   const holdSharePercent = Math.round(holdShare.valueAsNumber * 10) / 10;
   update((current) => ({ ...current, design: { ...current.design, holdSharePercent } }));
 });
+initializeIconControls((change) =>
+  update((current) => ({ ...current, icons: change(current.icons) })),
+);
+
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-reset]")) {
   button.addEventListener("click", () =>
     update((current) =>
@@ -517,8 +527,29 @@ position.addEventListener("input", () => {
       : { ...current, verticalOffsetDp: offsetDp },
   );
 });
+element("icon-credits").addEventListener("click", async () => {
+  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  edit++;
+  openingCredits = true;
+  render();
+  try {
+    status = await api("icon-credits", {
+      generation: status.generation,
+      orientation: status.state.orientation,
+      orientationEpoch: status.state.orientationEpoch,
+    });
+    draft = previewOf(status.state);
+    transientFailure = null;
+  } catch (failure) {
+    report(failure);
+  } finally {
+    openingCredits = false;
+    render();
+  }
+});
+
 save.addEventListener("click", async () => {
-  if (!status?.connected || inFlight || changed || saving) return;
+  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
   edit++;
   saving = true;
   render();
@@ -546,7 +577,7 @@ save.addEventListener("click", async () => {
 });
 
 async function poll() {
-  if (!inFlight && !saving && !changed) {
+  if (!inFlight && !saving && !changed && !openingCredits) {
     const pollEdit = edit;
     try {
       const next = await api("state");
