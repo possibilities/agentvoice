@@ -66,8 +66,10 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  Save captures every visual choice in profile 20; protocol 23 carries current,
-  saved and adopted defaults. Only connection/gates/held pointers and synthetic
+  Save captures every visual choice in profile 20; protocol 24 carries current,
+  saved and adopted defaults. A debug-only durable working draft autosaves edits;
+  Reset to production resets both layouts without writing the explicit checkpoint.
+  Only connection/gates/held pointers and synthetic
   activity are transient. No microphone, grants, voice calls or automatic edit/Save
   replay; explicitly selected interaction sounds are supported. Keep the physical
   phone preview and renderer instance stable; do not recreate the destroyed VM.
@@ -75,7 +77,9 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   design adoption. The complete canonical profile and provenance live in
   `android/design/shipping-{profile,provenance}.json`; generated constants and
   selected release resources follow it. Normal Gradle builds run `generate --check`
-  and never import a mutable private device file. Shared renderers live in main;
+  and never import a mutable private device file. Explicit promotion advances the
+  Studio baseline generation once; rebuilds retain drafts. Code-only releases can
+  run `shipping.ts release` to start a new Studio round from the canonical profile. Shared renderers live in main;
   bridge, sessions, alternate icon/sound assets and gallery stay debug/host-only.
   Audit release with `python3 android/scripts/verify-shipping-apk.py`. Keep Studio
   intact for future promotion; never hand-edit generated files or ship its controller.

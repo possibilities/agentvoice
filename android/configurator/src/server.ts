@@ -116,7 +116,12 @@ export async function serveConfigurator(
         request.headers.get("content-type") !== "application/json"
       )
         return json({ error: "Invalid request origin or content type" }, 403);
-      if (path !== "preview" && path !== "save" && path !== "icon-credits")
+      if (
+        path !== "preview" &&
+        path !== "save" &&
+        path !== "icon-credits" &&
+        path !== "reset-production"
+      )
         return json({ error: "Not found" }, 404);
       if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
@@ -224,7 +229,15 @@ export async function serveConfigurator(
               spirit: input["spirit"],
             }),
           });
-        else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
+        else if (path === "reset-production") {
+          if (input["revision"] !== phone.state.revision)
+            return json({ error: "Preview changed. Review it before resetting." }, 409);
+          await phone.request({
+            method: "resetProduction",
+            revision: input["revision"],
+            ...parseOrientationFence(input),
+          });
+        } else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);

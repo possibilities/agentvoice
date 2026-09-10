@@ -98,7 +98,7 @@ internal data class PersonaPreviewState(
             otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 23).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 24).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -156,7 +156,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..23)
+    require(protocol in 1..24)
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
         decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22)
@@ -209,15 +209,23 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
 
 internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = defaultPortraitLayout().design, initialHalo: PreviewHalo = defaultPortraitLayout().halo, initialSpirit: PreviewSpirit = defaultPortraitLayout().spirit, initialLandscape: PreviewLayout = defaultLandscapeLayout(), initialPortraitSide: String = "left", initialHorizontalOffsetDp: Int = 0,
     initialOverrides: Set<String> = emptySet(), initialShared: PreviewSharedAppearance? = null,
-    initialSounds: PreviewSounds = PreviewSounds()) {
+    initialSounds: PreviewSounds = PreviewSounds(), persistDesign: ((String) -> Unit)? = null) {
     private val shared = initialShared ?: PreviewSharedAppearance.from(PreviewLayout(initial, initialDesign, initialHalo, initialSpirit))
     private val spacedLandscape = initialLandscape.copy(design = initialLandscape.design.copy(spacing = initialDesign.spacing))
     private val landscape = shared.applyTo(if (initialShared == null) spacedLandscape.copy(
         appearanceOverrides = spacedLandscape.appearanceOverrides + legacyLandscapeOverrides(spacedLandscape, shared)) else spacedLandscape)
-    var state by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo,
+    private var currentState by mutableStateOf(PersonaPreviewState(placement = initial, design = initialDesign, halo = initialHalo,
         spirit = initialSpirit, otherLayout = landscape, personaSide = initialPortraitSide,
         horizontalOffsetDp = initialHorizontalOffsetDp, appearanceOverrides = initialOverrides, sharedAppearance = shared,
         sounds = initialSounds))
+
+    var persistWorkingDesign: ((String) -> Unit)? = persistDesign
+    var state: PersonaPreviewState
+        get() = currentState
+        set(value) {
+            if (persistWorkingDesign != null && value.designProfile() != currentState.designProfile()) persistWorkingDesign?.invoke(value.designProfile())
+            currentState = value
+        }
 
     var showIconCredits by mutableStateOf(false)
 
@@ -273,6 +281,15 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     state = next.applyAppearance(PreviewLayout(placement, design, halo, spirit, side, horizontal, overrides)).copy(
                         activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
                         mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, icons = icons, launcher = launcher, revision = state.revision + 1)
+                }
+                "resetProduction" -> {
+                    require(request.fields() == setOf("id", "method", "revision", "orientation", "orientationEpoch"))
+                    checkOrientation(request)
+                    check(request.get("revision") == state.revision) { "Preview changed. Review before resetting." }
+                    val next = state.withDesignProfile(StudioProduction.profile)
+                    // Reset is durable even when the current values already equal production.
+                    persistWorkingDesign?.invoke(next.designProfile())
+                    state = next
                 }
                 "iconCredits" -> {
                     require(request.fields() == setOf("id", "method"))

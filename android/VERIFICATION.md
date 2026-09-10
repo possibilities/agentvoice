@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Stable PTT labels and Persona-aligned connection notice**, September 10, 2026 UTC.
+Latest work: **Durable Studio drafts and Reset to production — September 10, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -1560,3 +1560,57 @@ selected-only resource/notice audit passed (`/tmp/agentvoice-status-polish-apk.j
 The phone and host saved profiles remain byte-identical to their pretest copies;
 no Save occurred. Studio state and rotation 1 / auto 0 / stay-awake 7 were restored,
 and real MainActivity reopened ready for an explicit call. No emulator was used.
+
+## Durable Studio drafts and Reset to production — September 10, 2026
+
+Protocol24/profile20: every acknowledged design edit persists atomically in a
+separate debug working draft. Full production reset covers both layouts, shared
+appearance, exact override flags, all seven visual choices and sounds. Explicit
+phone/host Save checkpoints remain independent. Explicit promotion and the new
+code-only `shipping.ts release` advance the Studio generation; ordinary builds
+and same-generation reinstall preserve it. The preceding-generation draft is
+retained separately for recovery.
+
+Verification:
+
+- Debug/release/test APK builds, 122 JVM tests (zero failures/errors/skips), and
+  Android lint passed: `/tmp/agentvoice-studio-draft-build-final.log`.
+- 105 host tests / 3,844 assertions passed, including promotion versus regeneration,
+  code-only release isolation and fenced reset/checkpoint preservation:
+  `/tmp/agentvoice-studio-draft-host-final.log`. Root/host TypeScript checks and
+  scoped Biome checks passed.
+- Physical S22 instrumentation: 20 tests passed in 3.242 seconds, including six new
+  draft tests plus Save, activity lifecycle, orientation and shared appearance:
+  `/tmp/agentvoice-studio-draft-instrumentation.log`. Tests isolate their files;
+  the activity fixture preserves/restores the operator draft.
+- Actual phone bridge checks exercised different portrait/landscape sizes, a local
+  Halo override, side/offset, hidden PTT extents, theme/indicator/icons/launcher and
+  sounds. Force-stop/relaunch and same-production APK reinstall retained them;
+  full reset and another force-stop/relaunch restored production exactly:
+  `/tmp/agentvoice-studio-draft-phone.log`. The initial scratch harness used the
+  wrong connection-wrapper accessor and exited before edits; the corrected run
+  above passed. New-generation behavior was tested with isolated draft-store and
+  promotion fixtures, not by changing the operator's production receipt.
+- A local isolated Chrome/Playwright check verified actual checkbox edit, draft
+  feedback, browser reload and Reset to production. Desktop/narrow screenshots
+  and zero page errors: `/tmp/agentvoice-studio-draft-browser.log` and
+  `/tmp/agentvoice-studio-draft-evidence/browser-{desktop,narrow}.png`.
+  The remote browser provider could not reach this host's loopback service; its
+  disposable session was closed before the local browser check.
+
+Installed debug build SHA-256:
+`2361b13cedaea87ff84200ac1326d4955fea5eb40649fc80c0ee951754a5790b`.
+Release remains byte-identical to the prior artifact:
+`3ccdf980748c2bd35cd7e229639993b5b241331216e646856e739494be7946cb`.
+Selected-resource/license audit passed and now also checks `StudioDraft` and
+`StudioProduction` absent from release:
+`/tmp/agentvoice-studio-draft-apk-audit.json`.
+
+Both exported checkpoint copies remain unchanged at SHA-256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+Final phone capture was inspected at
+`/tmp/agentvoice-studio-draft-evidence/phone-final.png`. Studio was left open at
+production settings, system user rotation0/auto1 restored to the values observed
+before testing, and desktop Studio opened for the operator. No real call or
+emulator was used. Phone access was released and a completion notification stored
+in AgentNotify (optional macOS banners disabled).

@@ -596,3 +596,23 @@ owned hold. Other recreation/background/transport teardown rules stay in force.
 Production UI verification uses controlled `CallUi` fixtures and acknowledged
 mute/hold semantics; it is not proof of spoken-call acoustic quality or a change
 to release-signing/distribution scope.
+
+
+## Production baseline and durable Studio drafts — September 10, 2026
+
+Protocol24 supersedes the earlier live-only persistence statements above while
+retaining profile20. The debug phone atomically stores every accepted design
+edit in a separate `persona-studio-draft.json`, with complete shared data,
+explicit overrides, both orientations and inactive PTT extents. Runtime rehearsal
+and transport state are excluded. Saved activity state is generation-fenced and
+cannot override the durable design. Explicit Save remains the only writer of the
+phone/host exported checkpoint.
+
+Reset to production is a single revision-, orientation- and connection-fenced
+command restoring the full shipped profile without exporting it. Promotion emits
+an exact complete Studio snapshot and a production generation. First launch of a
+new generation archives the previous draft and seeds production once; subsequent
+launches and same-generation reinstalls retain the working draft. Normal builds
+never advance generation. `shipping.ts release` advances it explicitly using the
+validated existing production design, for code-only releases. Studio snapshot and
+draft code remain debug-only; release packaging audits their absence.

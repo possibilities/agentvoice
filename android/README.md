@@ -250,8 +250,8 @@ landscape starts at 0 dp. Negative
 moves up; positive moves down. **Reset size** restores Contained's shared size
 or only the current Original state's size. **Reset position** restores the active orientation’s default.
 **Reset animation** affects only the four Contained motion fields; **Reset colors**
-affects only its three colors. Each reset preserves all other choices and stays
-unsaved until explicit Save.
+affects only its three colors. Each reset preserves all other choices and is autosaved in the working draft;
+explicit Save updates the exported checkpoint.
 The phone's synthetic channel and
 Push to talk buttons still work, and changes appear in the browser.
 Leave the host app and browser open through backgrounding, activity recreation
@@ -268,7 +268,7 @@ bun run android:configure --device <adb-serial>
 Explicit Save retains both orientations' design, sizes and position in a
 version 20 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 23 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 24 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
@@ -363,8 +363,7 @@ Each orientation has three independent controls: **Reach into Persona** (−40 t
 pulls them back. Fade length sets the distance over which ink returns to full
 strength; tip opacity keeps ink visible at the inner edge. Zero fade is a hard
 edge, so tip opacity has no fade span there. Each has its own reset, and Reset
-traces includes all three while retaining ambient glow. Changes remain unsaved
-until Save. Profiles through 13 gain only these defaults in memory.
+traces includes all three while retaining ambient glow. Changes are autosaved in the working draft; Save exports them. Profiles through 13 gain only these defaults in memory.
 
 The join and fade apply to trace ink, never to Persona pixels.
 Defaults reproduce the previous soft underlap. This remains a nominal join,
@@ -391,8 +390,7 @@ The studio labels each scope instead of assigning scope by column:
   vertical offsets are retained in profiles but no longer applied in the scene.
 
 Appearance resets use the common defaults and follow the displayed group scope.
-Layout resets use the current orientation's defaults. All changes require Save
-to persist. Profile 18 keeps common appearance and explicit per-orientation
+Layout resets use the current orientation's defaults. All design edits persist in the working draft; Save exports a checkpoint. Profile 18 keeps common appearance and explicit per-orientation
 overrides. Older profiles take shared appearance from portrait; untouched legacy
 landscape appearance defaults inherit, while customized differing groups become
 overrides. Size and control geometry are retained. The app never infers a setting
@@ -461,7 +459,7 @@ mode is labeled. Switching visibility retains both sizes. Reset button sizes
 resets only the active extent, and resets share only when PTT is shown. Existing
 profiles seed the new hidden extent from each orientation's existing extent in
 memory; loading never rewrites the saved file. Profiles 18–20 store the additional
-`controlsWithoutPttDp` field and protocol 23 carries both sizes.
+`controlsWithoutPttDp` field and protocol 24 carries both sizes.
 
 Both extent fields span 160–1600 dp. Landscape has no reserved half-screen lane: a
 large deck may overlap the independently positioned Persona in the foreground.
@@ -485,3 +483,18 @@ monochrome themed layer and legacy fallback. The adopted launcher is Relay
 Aperture. A Studio selection alone does not change the installed package icon.
 See [icon provenance and licenses](third-party/icons/README.md). **Credits on phone**
 opens the authors, sources and license links in a dismissible native dialog.
+
+## Returning to Studio after a release
+
+Run `bun run android:configure --device <serial>` with the matching debug APK.
+Studio starts at the latest promoted production design once per promotion, then
+atomically retains all design tweaks across process/host restarts and reinstall.
+**Reset to production** restores both layouts and every shared visual/sound choice
+without overwriting the exported checkpoint. **Save profile** exports the working
+design; `shipping.ts promote --profile <file>` adopts that complete design for a
+future release. Normal builds do not reset drafts. A code-only release can
+run `bun android/configurator/src/shipping.ts release` to start a new round
+from the validated canonical design.
+See the [working-draft contract](configurator/README.md#continue-from-production).
+These persistence/reset features and the complete Studio production snapshot are
+debug-only and audited absent from the release APK.

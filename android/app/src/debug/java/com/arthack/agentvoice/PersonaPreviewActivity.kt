@@ -21,6 +21,7 @@ import java.io.File
 class PersonaPreviewActivity : ComponentActivity() {
     private val selection get() = File(filesDir, "persona-tuning.json")
     private lateinit var session: PersonaPreviewSession
+    private var draftReady = false
     private var bridge: PersonaPreviewBridge? = null
     private var binding: PersonaPreviewBinding? = null
 
@@ -38,15 +39,35 @@ class PersonaPreviewActivity : ComponentActivity() {
             val portrait = defaultPortraitLayout()
             PreviewProfileLayouts(portrait, defaultLandscapeLayout(), PreviewSharedAppearance.from(portrait))
         }
+        val draft = StudioDraft(File(filesDir, "persona-studio-draft.json"))
+        val working = runCatching { draft.open() }
+        draftReady = working.isSuccess
         val portrait = loaded.portrait
         session = PersonaPreviewSession(portrait.placement, selection, portrait.design, portrait.halo,
             portrait.spirit, loaded.landscape, portrait.personaSide, portrait.horizontalOffsetDp,
             portrait.appearanceOverrides, loaded.shared, saved?.let { runCatching { decodePersonaSounds(it) }.getOrNull() } ?: ShippingDesign.sounds)
         val appearance = saved?.let { runCatching { decodeDesignAppearanceProfile(it) }.getOrNull() } ?: shippingAppearance()
         session.state = session.state.withAppearance(appearance).copy(savedAppearance = appearance)
-        savedInstanceState?.getString("previewState")?.let { json ->
-            runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign, session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide, session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance, session.state.savedSounds, session.state.savedAppearance) }
+        // Rehearsal continuity is activity-local; durable design always wins over an older Bundle.
+        if (working.isSuccess && savedInstanceState?.getString("productionGeneration") == StudioProduction.generation) {
+            savedInstanceState.getString("previewState")?.let { json ->
+                runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign,
+                    session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide,
+                    session.state.savedHorizontalOffsetDp, session.state.savedAppearanceOverrides, session.state.savedSharedAppearance,
+                    session.state.savedSounds, session.state.savedAppearance) }
+            }
         }
+        working.getOrNull()?.let { session.state = session.state.withDesignProfile(it).copy(revision = session.state.revision) }
+        if (working.isFailure) {
+            android.app.AlertDialog.Builder(this).setTitle("Studio draft could not be loaded")
+                .setMessage("Your draft and saved profile are retained. Close Studio to recover the file, or reset the working draft to production.")
+                .setCancelable(false).setNegativeButton("Close") { _, _ -> finish() }
+                .setPositiveButton("Reset to production") { _, _ ->
+                    runCatching { draft.write(StudioProduction.profile); session.state = session.state.withDesignProfile(StudioProduction.profile); draftReady = true; startBridge() }
+                        .onFailure { finish() }
+                }.show()
+        }
+        session.persistWorkingDesign = draft::write
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
         configure(intent)
@@ -84,12 +105,14 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     private fun startBridge() {
+        if (!draftReady) return
         val selected = binding ?: return
         if (bridge == null) bridge = PersonaPreviewBridge(selected.name, selected.token, session::command)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("previewState", session.state.json().toString())
+        outState.putString("productionGeneration", StudioProduction.generation)
         binding?.let {
             // Only the debug preview capability enters Android's private activity state, never a voice grant.
             outState.putString("previewSocket", it.name)

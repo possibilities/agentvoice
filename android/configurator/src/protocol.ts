@@ -128,7 +128,7 @@ export const visualSettingsFields = [
   "showPushToTalk",
 ] as const;
 export type PhoneState = Preview & {
-  protocol: 23;
+  protocol: 24;
   savedAppearance: VisualSettings;
   defaultAppearance: VisualSettings;
   savedSounds: Sounds;
@@ -435,7 +435,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 23 ||
+    data["protocol"] !== 24 ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -444,7 +444,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 23,
+    protocol: 24,
     savedAppearance: parseVisualSettings(data["savedAppearance"]),
     defaultAppearance: parseVisualSettings(data["defaultAppearance"]),
     savedSounds: parseSounds(data["savedSounds"]),

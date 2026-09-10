@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
+import java.io.File
 
 class PersonaPreviewLifecycleTest {
     private fun legacySession(state: PersonaPreviewState, protocol: Int) = state.json().withoutTraceJoinFields().put("protocol", protocol).apply {
@@ -58,6 +59,9 @@ class PersonaPreviewLifecycleTest {
             socket.outputStream.write("{\"id\":2,\"method\":\"get\"}\n".toByteArray())
             return JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
         }
+        val drafts = listOf("persona-studio-draft.json", "persona-studio-draft.json.bak", "persona-studio-draft.json.previous").map { File(context.filesDir, it) }
+        val preserved = drafts.associateWith { if (it.exists()) it.readBytes() else null }
+        try {
         ActivityScenario.launch<PersonaPreviewActivity>(intent).use { scenario ->
             var before: JSONObject
             connect().use { socket ->
@@ -79,6 +83,9 @@ class PersonaPreviewLifecycleTest {
             connect().use { socket -> assertEquals(before.toString(), state(socket).toString()) }
             scenario.recreate()
             connect().use { socket -> assertEquals(before.toString(), state(socket).toString()) }
+        }
+        } finally {
+            for ((file, bytes) in preserved) { if (bytes == null) file.delete() else file.writeBytes(bytes) }
         }
     }
 

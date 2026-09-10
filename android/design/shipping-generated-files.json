@@ -1,4 +1,5 @@
 [
+  "android/app/src/debug/java/com/arthack/agentvoice/StudioProduction.kt",
   "android/app/src/main/assets/notices/Shipping-Icons-LICENSE.txt",
   "android/app/src/main/assets/notices/Shipping-Icons-NOTICE.txt",
   "android/app/src/main/assets/notices/Shipping-Sounds-LICENSE.txt",

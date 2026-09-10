@@ -27,7 +27,7 @@ with zipfile.ZipFile(apk) as bundle:
         if source.exists():
             assert bundle.read('assets/notices/' + filename) == source.read_bytes(), filename
     dex = b''.join(bundle.read(name) for name in names if name.endswith('.dex'))
-    for symbol in (b'PersonaPreviewActivity', b'PersonaPreviewBridge', b'PersonaPreviewSession', b'DesignPreviewActivity'):
+    for symbol in (b'PersonaPreviewActivity', b'PersonaPreviewBridge', b'PersonaPreviewSession', b'DesignPreviewActivity', b'StudioDraft', b'StudioProduction'):
         assert symbol not in dex, symbol
     sdk = Path(os.environ['ANDROID_HOME'])
     aapt = sdk / 'build-tools/36.0.0/aapt2'

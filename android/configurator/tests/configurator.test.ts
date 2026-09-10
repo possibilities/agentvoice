@@ -82,7 +82,7 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 23,
+  protocol: 24,
   launcher: "current",
   savedAppearance: defaultVisualSettings(),
   defaultAppearance: defaultVisualSettings(),
@@ -2462,7 +2462,7 @@ test("debug reply framing accepts16383 bytes and rejects16384 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(16383 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(23);
+  expect((await pending).state.protocol).toBe(24);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });
@@ -3446,4 +3446,28 @@ test("legacy profile19 retains its exact field contract and defaults launcher on
     JSON.stringify({ ...source, version: 20, launcher: "relay-aperture" }),
   );
   expect(profileVisualSettings(complete).launcher).toBe("relay-aperture");
+});
+
+test("production reset is revision/orientation/generation fenced and never exports over the saved profile", async () => {
+  const { phone, post, saveTo } = await fixture();
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const checkpoint = await readFile(saveTo, "utf8");
+  phone.calls = [];
+  expect((await post("reset-production", { revision: phone.state.revision + 1 })).status).toBe(409);
+  expect(
+    (await post("reset-production", { revision: phone.state.revision, orientationEpoch: 99 }))
+      .status,
+  ).toBe(409);
+  expect(
+    (await post("reset-production", { revision: phone.state.revision, generation: 99 })).status,
+  ).toBe(409);
+  expect(phone.calls).toHaveLength(0);
+  expect((await post("reset-production", { revision: phone.state.revision })).status).toBe(200);
+  expect(phone.calls[0]).toEqual({
+    method: "resetProduction",
+    revision: phone.state.revision,
+    orientation: phone.state.orientation,
+    orientationEpoch: phone.state.orientationEpoch,
+  });
+  expect(await readFile(saveTo, "utf8")).toBe(checkpoint);
 });

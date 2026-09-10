@@ -64,6 +64,8 @@ let saving = false;
 let openingCredits = false;
 let changed = false;
 let edit = 0;
+let resetting = false;
+let draftFailure: string | null = null;
 let saveFailure: string | null = null;
 let transientFailure: string | null = null;
 
@@ -97,8 +99,8 @@ function report(failure: unknown, isSave = false) {
 
 function render() {
   const connected = status?.connected === true;
-  error.hidden = !(saveFailure || transientFailure);
-  text(error, saveFailure || transientFailure || "");
+  error.hidden = !(saveFailure || draftFailure || transientFailure);
+  text(error, saveFailure || draftFailure || transientFailure || "");
   element("connection").dataset["connected"] = String(connected);
   element("connection-text").textContent = connected ? "Phone linked" : "Waiting for phone";
   controls.disabled = !connected || saving || openingCredits;
@@ -106,7 +108,8 @@ function render() {
     !connected || inFlight || changed || saving || openingCredits;
   text(element("icon-credits"), openingCredits ? "Opening credits…" : "Credits on phone");
   save.disabled = !connected || inFlight || changed || saving || openingCredits;
-  save.textContent = saving ? "Saving…" : "Save profile";
+  save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save profile";
+  element<HTMLButtonElement>("reset-production").disabled = save.disabled;
   renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits);
   if (!status || !draft) return;
   element("device").textContent =
@@ -305,11 +308,13 @@ function render() {
         ? "Return to the Halo preview. It will reconnect automatically."
         : "Waiting for the host configurator…"
       : saving
-        ? "Saving to phone and host…"
+        ? resetting
+          ? "Restoring production design…"
+          : "Saving to phone and host…"
         : inFlight || changed
           ? "Updating the phone…"
           : !phoneMatches
-            ? "Unsaved changes"
+            ? "Draft kept on phone · not exported"
             : hostMatches
               ? "Saved on phone and host"
               : "Loaded from phone. Save keeps a host copy.",
@@ -353,7 +358,9 @@ async function flush() {
       changed = false;
     if ((edit === requestEdit && !stagedAppearance) || !changed) draft = previewOf(status.state);
     transientFailure = null;
+    draftFailure = null;
   } catch (failure) {
+    draftFailure = "Draft was not confirmed on the phone. Review the values and retry the edit.";
     changed = false;
     if (status) draft = previewOf(status.state);
     report(failure);
@@ -551,6 +558,32 @@ element("icon-credits").addEventListener("click", async () => {
     report(failure);
   } finally {
     openingCredits = false;
+    render();
+  }
+});
+
+element("reset-production").addEventListener("click", async () => {
+  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  edit++;
+  saving = true;
+  resetting = true;
+  render();
+  try {
+    status = await api("reset-production", {
+      revision: status.state.revision,
+      generation: status.generation,
+      orientation: status.state.orientation,
+      orientationEpoch: status.state.orientationEpoch,
+    });
+    draft = previewOf(status.state);
+    transientFailure = null;
+    draftFailure = null;
+  } catch (failure) {
+    draftFailure = "Reset was not confirmed. Review the phone and retry if needed.";
+    report(failure);
+  } finally {
+    saving = false;
+    resetting = false;
     render();
   }
 });
