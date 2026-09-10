@@ -21,9 +21,8 @@ internal fun PersonaPreviewState.withDesignProfile(profile: String): PersonaPrev
         sharedAppearance = layouts.shared, sounds = decodePersonaSounds(profile), revision = revision + 1)
 }
 
-/** A promotion advances generation; rebuilds/reconnects never do. Writes precede preview acknowledgement. */
-internal class StudioDraft(private val file: File, private val generation: String = StudioProduction.generation,
-    private val production: String = StudioProduction.profile) {
+/** Only an explicit reset replaces an existing draft. Writes precede preview acknowledgement. */
+internal class StudioDraft(private val file: File, private val production: String = StudioProduction.profile) {
     private var lastProfile: String? = null
 
     fun open(): String {
@@ -31,15 +30,12 @@ internal class StudioDraft(private val file: File, private val generation: Strin
         val previous = if (file.exists() || File(file.path + ".bak").exists()) atomic.readFully().toString(Charsets.UTF_8) else null
         if (previous != null) {
             val data = JSONObject(previous)
-            require(data.getInt("version") == 1) { "Unsupported Studio draft" }
-            if (data.getString("productionGeneration") == generation) {
-                val profile = data.getJSONObject("profile").toString()
-                validate(profile)
-                lastProfile = profile
-                return profile
-            }
-            // Keep the preceding release's working draft recoverable, separate from explicit Save.
-            savePersonaTuning(File(file.path + ".previous"), previous)
+            require(data.getInt("version") in 1..2) { "Unsupported Studio draft" }
+            // Version 1 carried a production marker. It never authorizes replacing the user's work.
+            val profile = data.getJSONObject("profile").toString()
+            validate(profile)
+            lastProfile = profile
+            return profile
         }
         write(production)
         return production
@@ -54,7 +50,7 @@ internal class StudioDraft(private val file: File, private val generation: Strin
     fun write(profile: String) {
         if (profile == lastProfile) return
         validate(profile)
-        savePersonaTuning(file, JSONObject().put("version", 1).put("productionGeneration", generation)
+        savePersonaTuning(file, JSONObject().put("version", 2)
             .put("profile", JSONObject(profile)).toString())
         lastProfile = profile
     }

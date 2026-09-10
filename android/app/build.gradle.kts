@@ -29,7 +29,32 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        create("studio") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".studio"
+            versionNameSuffix = "-studio"
+            matchingFallbacks += "debug"
+        }
+        create("production") {
+            initWith(getByName("release"))
+            // Preserve the installed real app's identity/data; this is a local signed production build.
+            applicationIdSuffix = ".dev"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
     }
+    testBuildType = "studio"
+    sourceSets.getByName("studio").apply {
+        java.srcDir("src/debug/java")
+        res.srcDir("src/debug/res")
+        assets.srcDir("src/debug/assets")
+    }
+    sourceSets.getByName("production").apply {
+        java.srcDir("src/release/java")
+        res.srcDir("src/release/res")
+        assets.srcDir("src/release/assets")
+    }
+    sourceSets.getByName("testStudio").java.srcDir("src/testDebug/java")
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -60,4 +85,5 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    add("studioImplementation", "androidx.compose.ui:ui-test-manifest")
 }

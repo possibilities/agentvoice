@@ -13,7 +13,7 @@ import {
 import { ReconnectingPhone } from "./reconnecting-phone.ts";
 
 const execute = promisify(execFile);
-const activity = "com.arthack.agentvoice.dev/com.arthack.agentvoice.PersonaPreviewActivity";
+const activity = "com.arthack.agentvoice.studio/com.arthack.agentvoice.PersonaPreviewActivity";
 
 async function adb(device: string, args: string[], signal?: AbortSignal): Promise<string> {
   try {
@@ -142,7 +142,7 @@ export async function connectPhone(device: string) {
     token,
   ]);
   if (/Error|Exception/.test(launch))
-    throw Error("Install the current Android debug APK before opening the configurator.");
+    throw Error("Install the current AgentVoice Studio APK before opening the configurator.");
   let phone: ReconnectingPhone | undefined;
   let closed = false;
   const ownedForward = (line: string) => {

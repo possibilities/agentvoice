@@ -39,17 +39,20 @@ class StudioDraftTest {
         } finally { dir.deleteRecursively() }
     }
 
-    @Test fun productionChangeSeedsOnceAndArchivesPriorDraftEvenWithIdenticalProductionValues() {
+    @Test fun newProductionAndLegacyMarkersNeverReplaceAnExistingDraft() {
         val dir = directory()
         try {
             val file = File(dir, "draft.json")
-            StudioDraft(file, "release-a").apply { open(); write(edited().designProfile()) }
-            val previous = file.readText()
-            val next = StudioDraft(file, "release-b")
-            assertEquals(design(StudioProduction.profile), design(next.open()))
-            assertEquals(previous, File(file.path + ".previous").readText())
-            next.write(edited().designProfile())
-            assertEquals(edited().designProfile(), design(StudioDraft(file, "release-b").open()))
+            val chosen = edited().designProfile()
+            for (version in listOf(1, 2)) {
+                val stored = JSONObject().put("version", version).put("profile", JSONObject(chosen))
+                if (version == 1) stored.put("productionGeneration", "older-production")
+                file.writeText(stored.toString())
+                val previous = file.readText()
+                assertEquals(chosen, design(StudioDraft(file, StudioProduction.profile).open()))
+                assertEquals(previous, file.readText())
+                assertFalse(File(file.path + ".previous").exists())
+            }
         } finally { dir.deleteRecursively() }
     }
 

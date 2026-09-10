@@ -8,7 +8,9 @@ No tuning panel obscures the phone.
 
 ## Continue from production
 
-Studio opens with the latest explicitly promoted production design. Its complete
+On first use only, Studio seeds its draft from the bundled production design.
+After that it always opens the last configured draft, even after a new production
+release or Studio upgrade. Only **Reset to production** adopts production again. Its complete
 baseline is `android/design/shipping-profile.json`; the generated debug-only
 `StudioProduction` preserves both layouts, shared appearance and exact override
 flags, all seven visual choices, both shown/hidden PTT extents and sounds.
@@ -19,7 +21,7 @@ reopening Studio, host restart and same-production APK reinstall. The host
 never replays stale browser edits after reconnect. Simulation mode/gates/activity,
 held pointers and bridge capabilities are excluded from this durable draft.
 Activity-local rehearsal continuity may survive recreation; its older Bundle
-cannot replace the durable design or cross a production generation.
+cannot replace the durable design even after production changes.
 
 **Reset to production** restores the entire shipped design in both orientations
 as one revision- and orientation-fenced command. It preserves the phone's current
@@ -30,16 +32,24 @@ orientation and the explicit saved checkpoint. Granular reset controls remain.
 A failed draft write does not apply/acknowledge the edit; a failed load stays
 visible and retains the unreadable file for recovery or explicit reset.
 
-Each explicit `shipping.ts promote` or `shipping.ts release` creates a production generation in the
-checked-in provenance receipt, even when adopting identical values. On the first
-Studio launch with that generation, the preceding draft is archived to
-`persona-studio-draft.json.previous` and the working copy starts at production.
-Subsequent launches retain tweaks. Normal `generate` and Gradle builds never
-advance this marker. For a new code-only production release that should also
-start a fresh Studio round, run `bun android/configurator/src/shipping.ts release`;
-do not import a mutable private profile automatically. Only the most recent
-preceding draft is retained in this recovery file; exported checkpoints remain
-independent. Release APKs include neither this draft store nor `StudioProduction`.
+**AgentVoice** and **AgentVoice Studio** are separate installed apps with separate
+storage. The local `production` build retains `com.arthack.agentvoice.dev` so the
+real app keeps its grant and permission state. The `studio` build uses
+`com.arthack.agentvoice.studio`, a distinct launcher and no microphone/network
+permissions. Its only launcher opens the synthetic Persona preview. Install both
+with `:app:assembleProduction :app:assembleStudio`; the host command targets Studio.
+Neither installation nor promotion resets an existing Studio draft. Draft version2
+removes automatic-production-refresh semantics; version1's old marker is ignored
+without rewriting its file on load. The former `shipping.ts release` command is
+removed because a code release must never discard Studio work.
+
+Opening Studio on the phone restores its design independently of the browser.
+Keep the host configurator running to use the browser controls. Studio stores
+that host's private synthetic-bridge binding separately from the draft, so an
+ordinary launcher open after process death reconnects the same browser without
+replaying edits. A host restart prints a new local URL; it observes the existing
+draft. This binding is never a production device grant and is never exported.
+Production APKs contain neither Studio's bridge/store nor its full reset snapshot.
 
 The promoted baseline currently selects Contained, Splayed traces, i cons channel
 icons, Relay Aperture launcher and Rocker 13 sounds. Numeric reset values follow
@@ -225,7 +235,7 @@ toast. The 240 ms transition reserves no layout space and moves neither Halo
 nor the controls. The connection selection is transient and is not saved in
 the profile. It does not change the host's actual ADB connection.
 
-Install the current Android debug APK on an explicitly selected, ADB-authorized
+Install the current AgentVoice Studio APK on an explicitly selected, ADB-authorized
 phone, then run from the repository root:
 
 ```sh
@@ -242,11 +252,12 @@ phone** and reconnects automatically when the preview returns. Unsaved design,
 sizes, position and selected state survive backgrounding and Android activity recreation.
 Temporary USB/ADB loss also reconnects to the same selected phone; the host
 recreates its own port forward if necessary. It never pulls the app into the
-foreground. Return to **Halo preview** on the phone when ready.
+foreground. Return to **AgentVoice Studio** on the phone when ready.
 Port 4317 is the default; `--port 0` selects an available port. Ctrl+C stops the
 host app and removes only its own ADB forward. The preview stays on the phone.
-Force-stopping the app, dismissing its task, or restarting the host command ends
-this binding; rerun the host command to establish a fresh session in those cases.
+After force-stop or task dismissal, open AgentVoice Studio again and the running
+host reconnects. Restarting the host command establishes a fresh binding and URL
+while retaining every design value.
 
 The command opens the debug-only **Halo preview** activity. It loads the phone's
 existing private `files/persona-tuning.json` as the exported checkpoint without rewriting it, then loads the working draft (or seeds production once). Size remains
@@ -560,8 +571,6 @@ Shipping is explicit and leaves Studio available for a later promotion:
 bun android/configurator/src/shipping.ts promote --profile saved-profile.json --live-state captured-studio-state.json
 bun android/configurator/src/shipping.ts generate
 bun android/configurator/src/shipping.ts generate --check
-# For a later code-only release using the same approved design:
-bun android/configurator/src/shipping.ts release
 ```
 
 Promotion accepts strict profiles18–20. Profiles19–20 can supply their own saved
@@ -573,8 +582,8 @@ a mismatch stops promotion for review. Promotion never writes either input.
 `android/design/shipping-profile.json` is a complete, independently parseable
 profile20. The separate `shipping-provenance.json` retains the exact source
 profile text/SHA and source-capture SHA, plus the adopted appearance snapshot.
-The source's original Save timestamp is retained. Explicit promotion advances the
-Studio generation; ordinary regeneration retains it. Regeneration checks the canonical
+The source's original Save timestamp is retained. Promotion updates the bundled production reset target; it never changes a
+working Studio draft. Regeneration checks the canonical
 profile against its promotion receipt before producing typed Kotlin defaults.
 The generated file inventory allows later promotion to remove only previously
 generated resources. Release includes only the adopted channel family, selected

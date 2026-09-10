@@ -61,16 +61,30 @@ checksum-pinned. Set `ANDROID_HOME` to your installed SDK or configure an untrac
 
 ```sh
 cd android
-./gradlew :app:assembleDebug :app:assembleRelease
-./gradlew :app:testDebugUnitTest :app:lintDebug
-./gradlew :app:assembleDebugAndroidTest
+./gradlew :app:assembleStudio :app:assembleProduction :app:assembleRelease
+./gradlew :app:testStudioUnitTest :app:lintStudio :app:lintProduction
+./gradlew :app:assembleStudioAndroidTest
 ```
 
-The installable development APK is
-`app/build/outputs/apk/debug/app-debug.apk`, package
-`com.arthack.agentvoice.dev`. It is separate from the unsigned release package
-`com.arthack.agentvoice`. Release signing/distribution is not configured.
-The desktop/Termux CLI's `bun run android:build` remains a different artifact.
+Two installable apps coexist:
+
+- `app/build/outputs/apk/production/app-production.apk`: **AgentVoice**, the real
+  client with the shipped design. Package `com.arthack.agentvoice.dev` preserves
+  the existing local installation's grant and permissions; signed with the local
+  debug key but optimized/shrunk like release, with no Studio code or assets.
+- `app/build/outputs/apk/studio/app-studio.apk`: **AgentVoice Studio**, package
+  `com.arthack.agentvoice.studio`. Independent private draft and profile storage,
+  distinct tuning icon, no microphone or network permissions. Its launcher opens
+  Studio directly; the host browser talks to its private ADB bridge.
+
+The unsigned distribution release remains `com.arthack.agentvoice`; distribution
+signing is not configured. Verify the two local artifacts with
+`python3 android/scripts/verify-design-apps.py`; the selected-assets audit also
+accepts the production APK path. On an explicitly selected phone, install both
+with `adb -s <serial> install -r <apk-path>`; updates preserve their separate data.
+The old combined `debug` variant remains a development
+fixture, not the normal phone installation. The desktop/Termux CLI's
+`bun run android:build` is a different artifact.
 
 Root `bun run test`, `bun run typecheck`, and `bun run lint` include the shared
 contract fixtures. Both Kotlin and the server Zod schemas validate
@@ -79,10 +93,10 @@ contract fixtures. Both Kotlin and the server Zod schemas validate
 On an explicitly selected disposable emulator, with microphone/audio disabled:
 
 ```sh
-adb -s <emulator-id> install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s <emulator-id> install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s <emulator-id> install -r app/build/outputs/apk/studio/app-studio.apk
+adb -s <emulator-id> install -r app/build/outputs/apk/androidTest/studio/app-studio-androidTest.apk
 adb -s <emulator-id> shell am instrument -w -r \
-  com.arthack.agentvoice.dev.test/androidx.test.runner.AndroidJUnitRunner
+  com.arthack.agentvoice.studio.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 Always select a device; never let `connectedAndroidTest` select every attached
@@ -257,8 +271,8 @@ Push to talk buttons still work, and changes appear in the browser.
 Leave the host app and browser open through backgrounding, activity recreation
 or temporary USB loss. The configurator waits for the same preview to return,
 reconnects automatically and retains unsaved tuning and design. It never replays Save or
-brings the app to the foreground. A force-stop or dismissed task requires a
-fresh host launch.
+brings the app to the foreground. After a force-stop or dismissed task, opening AgentVoice Studio reconnects
+the running host; a host restart prints a new browser URL.
 
 ```sh
 # From the repository root, with the current debug APK installed:
@@ -486,15 +500,16 @@ opens the authors, sources and license links in a dismissible native dialog.
 
 ## Returning to Studio after a release
 
-Run `bun run android:configure --device <serial>` with the matching debug APK.
-Studio starts at the latest promoted production design once per promotion, then
-atomically retains all design tweaks across process/host restarts and reinstall.
-**Reset to production** restores both layouts and every shared visual/sound choice
-without overwriting the exported checkpoint. **Save profile** exports the working
-design; `shipping.ts promote --profile <file>` adopts that complete design for a
-future release. Normal builds do not reset drafts. A code-only release can
-run `bun android/configurator/src/shipping.ts release` to start a new round
-from the validated canonical design.
-See the [working-draft contract](configurator/README.md#continue-from-production).
-These persistence/reset features and the complete Studio production snapshot are
-debug-only and audited absent from the release APK.
+Open **AgentVoice Studio** on the phone. Run
+`bun run android:configure --device <serial>` and open its browser URL; an already
+running host reconnects when Studio returns. The two apps have independent data.
+Studio always resumes the last configured design across restarts, reinstalls and
+production changes. Production seeds only a genuinely new Studio installation.
+**Reset to production** is the only way to replace an existing draft with the
+bundled shipped design, covering both layouts and all shared choices.
+
+**Save profile** exports a checkpoint; `shipping.ts promote --profile <file>`
+adopts that complete profile for a future release. Build/install both apps when
+releasing a new design so Studio's reset target stays current, but preserve its
+working draft. There is no automatic release-time refresh. See the
+[working-draft contract](configurator/README.md#continue-from-production).

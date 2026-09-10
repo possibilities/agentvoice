@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Durable Studio drafts and Reset to production — September 10, 2026** (receipt at the end).
+Latest work: **Separate Studio app; manual-only production reset — September 10, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -1614,3 +1614,62 @@ production settings, system user rotation0/auto1 restored to the values observed
 before testing, and desktop Studio opened for the operator. No real call or
 emulator was used. Phone access was released and a completion notification stored
 in AgentNotify (optional macOS banners disabled).
+
+## Separate Studio app; manual-only production reset — September 10, 2026
+
+The operator superseded automatic refresh on production promotion. Existing
+Studio drafts now always win; only an explicit Reset to production changes them
+to the bundled production design. Draft2 removes the generation marker; draft1
+ignores its old marker without rewriting the file on load. The release-reset
+command and generated generation constant are removed. New installations still
+need an initial seed; they use production only when no draft exists.
+
+Two apps are installed on the S22:
+
+- **AgentVoice**: local signed, optimized `production` APK, package
+  `com.arthack.agentvoice.dev`. Existing application identity, Android Keystore
+  and permissions are retained. Its only launcher is MainActivity. A cold launch
+  displayed **Start voice**, confirming the encrypted grant still loads; no call
+  was started.
+- **AgentVoice Studio**: `studio` APK, package `com.arthack.agentvoice.studio`,
+  separate private data and a tuning-ring launcher. Its only launcher opens
+  PersonaPreviewActivity. Packaged manifest has no Internet, network-state,
+  microphone or Bluetooth-connect permissions and no real MainActivity.
+
+The latest old-app draft and explicit checkpoint were copied byte-for-byte into
+Studio before replacing the combined .dev build. No grant was copied. Old draft
+values were verified against the migrated profile, including both layouts,
+overrides, sounds, launcher and visual settings. Both launcher activities were
+resolved independently through PackageManager.
+
+Studio persists its private, synthetic-only browser binding separately from the
+design profile. Actual phone checks edited the draft, force-stopped Studio and
+opened its launcher without extras: the same running host reconnected and kept
+the edit. Reinstalling Studio did the same. The exact original design was then
+restored; host and Studio exported checkpoints remained unchanged. No Reset or
+Save was used on the operator's design during these checks. Evidence:
+`/tmp/agentvoice-separate-studio-phone.log`; final native capture inspected at
+`/tmp/agentvoice-separate-studio/studio-phone-final.png`.
+
+Checks passed:
+
+- Studio/production/release/test APK builds, lintStudio/lintProduction and all
+  122 Studio JVM tests: `/tmp/agentvoice-separate-studio-build.log`.
+- 20 targeted Studio-package native tests / 3.766 seconds, including retained
+  drafts across different production defaults, historical draft markers, full
+  reset, Save, lifecycle, shared appearance and orientation:
+  `/tmp/agentvoice-separate-studio-instrumentation.log`.
+- 105 host tests / 3,840 assertions, host typecheck and scoped Biome checks:
+  `/tmp/agentvoice-separate-studio-host-final.log`.
+- New `verify-design-apps.py` checks distinct app labels/identities, one launcher
+  each and Studio capability isolation. Existing selected-only release audits
+  passed for production and distribution release:
+  `/tmp/agentvoice-separate-studio-{packaging,production-audit,release-audit}.json`.
+
+Installed production SHA-256:
+`2655dd7d52c9f39e8e850e7b4d645ccd91f6ba6d2a37645575d19347ab12161b`.
+Installed Studio SHA-256:
+`ee43ad0d87b532283af0fd5760eac94a8e552752f05deaca0a6424a950a59ae8`.
+System rotation settings were restored to their observed values; Studio/browser
+were left open with the exact migrated design. Phone access was released and a
+notification stored in AgentNotify. No emulator or new real voice call was used.

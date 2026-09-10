@@ -616,3 +616,26 @@ launches and same-generation reinstalls retain the working draft. Normal builds
 never advance generation. `shipping.ts release` advances it explicitly using the
 validated existing production design, for code-only releases. Studio snapshot and
 draft code remain debug-only; release packaging audits their absence.
+
+
+## Separate app and manual-only production refresh — September 10, 2026
+
+This supersedes the automatic generation refresh in the preceding section.
+The operator requires Studio to retain the last configured draft across every
+production release. Production is a first-install seed and an explicit Reset
+button target only. Draft2 removes the marker; draft1's marker is ignored without
+rewriting existing values. Promotion no longer emits a reset generation, and the
+extra code-only release-reset command is removed.
+
+Local production and Studio now coexist as separate applications: .dev retains
+the real client's identity/Keystore while .studio owns only the synthetic preview,
+independent draft/checkpoint and private ADB bridge. Production uses optimized
+selected-only release sources; Studio retains experimental options, has its own
+launcher, and removes network/microphone/Bluetooth permissions and MainActivity.
+The prior combined debug variant remains an internal fixture. Instrumentation
+now targets Studio so it need not replace the real client.
+
+Studio remembers the synthetic browser binding outside the exported design. An
+ordinary launcher open after process death reconnects an existing host without
+replaying mutations. Host restart establishes a new binding and local URL; both
+observe the retained draft. Real device grants are never copied or exposed.

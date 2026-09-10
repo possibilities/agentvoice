@@ -259,7 +259,7 @@ test("missing, invalid and overlapping promotion inputs fail before writing user
   expect(await readFile(input, "utf8")).toBe(profileText);
 });
 
-test("explicit promotion advances the Studio baseline while regeneration preserves its identity and complete profile", async () => {
+test("promotion generates a complete reset target without a Studio reset generation", async () => {
   const { root, input, selection } = await fixture();
   const args = ["promote", "--profile", input, "--session", selection, "--root", root];
   await shippingCli(args);
@@ -269,9 +269,8 @@ test("explicit promotion advances the Studio baseline while regeneration preserv
     "android/app/src/debug/java/com/arthack/agentvoice/StudioProduction.kt",
   );
   const first = parseShippingSnapshot(await readFile(receipt, "utf8"));
-  expect(first.productionId).toBeString();
   const generated = await readFile(studio, "utf8");
-  expect(generated).toContain(first.productionId!);
+  expect(generated).not.toContain("generation");
   expect(generated).toContain("appearanceOverrides");
   expect(generated).toContain("sharedAppearance");
   expect(generated).toContain("launcher");
@@ -279,24 +278,11 @@ test("explicit promotion advances the Studio baseline while regeneration preserv
   expect(await readFile(studio, "utf8")).toBe(generated);
   await shippingCli(args);
   const second = parseShippingSnapshot(await readFile(receipt, "utf8"));
-  expect(second.productionId).not.toBe(first.productionId);
+  expect(second).toEqual(first);
   expect(second.portrait).toEqual(first.portrait);
   expect(await readFile(input, "utf8")).toBe(profileText);
 });
 
-test("code-only release advances the Studio generation from validated production without importing a private draft", async () => {
-  const { root, input, selection } = await fixture();
-  await shippingCli(["promote", "--profile", input, "--session", selection, "--root", root]);
-  const canonical = join(root, "android/design/shipping-profile.json");
-  const receipt = join(root, "android/design/shipping-provenance.json");
-  const before = await readFile(canonical, "utf8");
-  const initial = parseShippingSnapshot(await readFile(receipt, "utf8"));
-  await writeFile(input, "unreadable private draft must never be imported");
-  await shippingCli(["release", "--root", root]);
-  const released = parseShippingSnapshot(await readFile(receipt, "utf8"));
-  expect(released.productionId).not.toBe(initial.productionId);
-  expect(await readFile(canonical, "utf8")).toBe(before);
-  expect(released.source).toEqual(initial.source);
-  await shippingCli(["generate", "--check", "--root", root]);
-  expect(() => shippingCli(["release", "--profile", input, "--root", root])).toThrow();
+test("retired automatic-reset release command is rejected", async () => {
+  expect(() => shippingCli(["release"])).toThrow();
 });

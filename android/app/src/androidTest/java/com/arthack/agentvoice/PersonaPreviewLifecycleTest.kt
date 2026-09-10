@@ -59,7 +59,7 @@ class PersonaPreviewLifecycleTest {
             socket.outputStream.write("{\"id\":2,\"method\":\"get\"}\n".toByteArray())
             return JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")
         }
-        val drafts = listOf("persona-studio-draft.json", "persona-studio-draft.json.bak", "persona-studio-draft.json.previous").map { File(context.filesDir, it) }
+        val drafts = listOf("persona-studio-draft.json", "persona-studio-draft.json.bak", "persona-studio-draft.json.previous", "persona-studio-binding.json", "persona-studio-binding.json.bak").map { File(context.filesDir, it) }
         val preserved = drafts.associateWith { if (it.exists()) it.readBytes() else null }
         try {
         ActivityScenario.launch<PersonaPreviewActivity>(intent).use { scenario ->

@@ -61,7 +61,7 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   executable at `dist/agentvoice-android-arm64`. It neither installs to a device
   nor opens media/inference; phone calls do not require the native audio build.
 - `bun run android:configure --device <adb-serial>` — host browser controls for
-  the debug APK's synthetic native preview. Read the
+  the separate Studio APK's synthetic native preview. Read the
   [studio contract](android/configurator/README.md) before changing preview UI,
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
@@ -77,12 +77,16 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   design adoption. The complete canonical profile and provenance live in
   `android/design/shipping-{profile,provenance}.json`; generated constants and
   selected release resources follow it. Normal Gradle builds run `generate --check`
-  and never import a mutable private device file. Explicit promotion advances the
-  Studio baseline generation once; rebuilds retain drafts. Code-only releases can
-  run `shipping.ts release` to start a new Studio round from the canonical profile. Shared renderers live in main;
+  and never import a mutable private device file. Studio always retains its last
+  draft, including across production changes; only Reset to production adopts the
+  bundled baseline again. Shared renderers live in main;
   bridge, sessions, alternate icon/sound assets and gallery stay debug/host-only.
   Audit release with `python3 android/scripts/verify-shipping-apk.py`. Keep Studio
   intact for future promotion; never hand-edit generated files or ship its controller.
+  Install `assembleProduction` (.dev, real app with existing grant) alongside
+  `assembleStudio` (.studio, isolated draft/ADB bridge). Instrumentation targets
+  Studio. Preserve both apps' data; do not reinstall the combined debug fixture as
+  the normal client or automatically import a checkpoint over a Studio draft.
 - `scripts/install-android --install --host <ssh-target>` — explicitly build and
   atomically converge that standalone on an already prepared Termux phone. It is
   never part of the desktop installer or an unattended update and starts no call.

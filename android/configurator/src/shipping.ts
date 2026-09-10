@@ -35,7 +35,6 @@ const releaseRoot = "android/app/src/release/";
 const noticesRoot = "android/app/src/main/assets/notices/Shipping-";
 export type ShippingSnapshot = {
   version: 1;
-  productionId?: string;
   source: {
     profile: { path: string; sha256: string; text: string };
     session: {
@@ -146,21 +145,7 @@ export function createShippingSnapshot(
 export function parseShippingSnapshot(text: string): ShippingSnapshot {
   if (text.length > 65536) throw Error("Shipping snapshot too large");
   const value = record(JSON.parse(text));
-  exact(value, [
-    "version",
-    "source",
-    "portrait",
-    "landscape",
-    "sounds",
-    "appearance",
-    ...(Object.hasOwn(value, "productionId") ? ["productionId"] : []),
-  ]);
-  const productionId = value["productionId"];
-  if (
-    productionId !== undefined &&
-    (typeof productionId !== "string" || !/^[a-f0-9-]{36}$/.test(productionId))
-  )
-    throw Error("Invalid production identity");
+  exact(value, ["version", "source", "portrait", "landscape", "sounds", "appearance"]);
   if (value["version"] !== 1) throw Error("Unsupported shipping snapshot");
   const source = record(value["source"]);
   exact(source, ["profile", "session"]);
@@ -209,7 +194,6 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
     throw Error("Shipping appearance differs from declared source");
   return {
     version: 1,
-    ...(productionId === undefined ? {} : { productionId: productionId as string }),
     source: source as ShippingSnapshot["source"],
     portrait,
     landscape,
@@ -296,7 +280,6 @@ export async function shippingOutputs(
 package com.arthack.agentvoice
 
 internal object StudioProduction {
-    const val generation = ${kotlinString(snapshot.productionId ?? sha256(canonicalJson(snapshot)))}
     const val profile = ${kotlinString(canonicalJson(completeShippingProfile(snapshot)))}
 }
 `,
@@ -467,9 +450,9 @@ export async function writeShipping(
 }
 export async function shippingCli(args: string[]): Promise<void> {
   const [command, ...rest] = args;
-  if (command !== "promote" && command !== "generate" && command !== "release")
+  if (command !== "promote" && command !== "generate")
     throw Error(
-      "Usage: shipping.ts promote --profile FILE [--session FILE | --live-state FILE | --default-session] [--root DIR]; shipping.ts generate [--check] [--root DIR]; shipping.ts release [--root DIR]",
+      "Usage: shipping.ts promote --profile FILE [--session FILE | --live-state FILE | --default-session] [--root DIR]; shipping.ts generate [--check] [--root DIR]",
     );
   const flags = new Map<string, string | true>();
   for (let index = 0; index < rest.length; index++) {
@@ -477,9 +460,7 @@ export async function shippingCli(args: string[]): Promise<void> {
     const allowed =
       command === "promote"
         ? ["--profile", "--session", "--live-state", "--default-session", "--root"]
-        : command === "release"
-          ? ["--root"]
-          : ["--check", "--root"];
+        : ["--check", "--root"];
     if (!allowed.includes(flag) || flags.has(flag))
       throw Error(`Unknown or duplicate option: ${flag}`);
     if (flag === "--check" || flag === "--default-session") flags.set(flag, true);
@@ -490,17 +471,15 @@ export async function shippingCli(args: string[]): Promise<void> {
     }
   }
   const root = resolve((flags.get("--root") as string) ?? repositoryRoot);
-  if (command === "generate" || command === "release") {
+  if (command === "generate") {
     const path = resolve(root, snapshotPath);
     const receiptPath = resolve(root, provenancePath);
     const snapshot = parseShippingSnapshot(await readFile(receiptPath, "utf8"));
     validateShippingProfile(parseProfile(await readFile(path, "utf8")), snapshot);
-    if (command === "release") snapshot.productionId = randomUUID();
     await writeShipping(snapshot, {
       root,
-      snapshot: command === "release",
       check: flags.has("--check"),
-      protectedPaths: command === "release" ? [] : [path, receiptPath],
+      protectedPaths: [path, receiptPath],
     });
     return;
   }
@@ -529,7 +508,6 @@ export async function shippingCli(args: string[]): Promise<void> {
     name(profilePath),
     choice,
   );
-  snapshot.productionId = randomUUID();
   await writeShipping(snapshot, {
     root,
     snapshot: true,

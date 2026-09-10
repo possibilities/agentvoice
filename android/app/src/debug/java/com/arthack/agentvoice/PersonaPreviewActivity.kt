@@ -49,7 +49,7 @@ class PersonaPreviewActivity : ComponentActivity() {
         val appearance = saved?.let { runCatching { decodeDesignAppearanceProfile(it) }.getOrNull() } ?: shippingAppearance()
         session.state = session.state.withAppearance(appearance).copy(savedAppearance = appearance)
         // Rehearsal continuity is activity-local; durable design always wins over an older Bundle.
-        if (working.isSuccess && savedInstanceState?.getString("productionGeneration") == StudioProduction.generation) {
+        if (working.isSuccess && savedInstanceState != null) {
             savedInstanceState.getString("previewState")?.let { json ->
                 runCatching { session.state = restorePersonaPreview(JSONObject(json), session.state.saved, session.state.savedDesign,
                     session.state.savedHalo, session.state.savedSpirit, session.state.savedOtherLayout, session.state.savedPersonaSide,
@@ -70,6 +70,8 @@ class PersonaPreviewActivity : ComponentActivity() {
         session.persistWorkingDesign = draft::write
         observeOrientation(resources.configuration)
         binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
+            ?: runCatching { JSONObject(AtomicFile(File(filesDir, "persona-studio-binding.json")).readFully().toString(Charsets.UTF_8)) }
+                .getOrNull()?.let { PersonaPreviewBinding.parse(it.optString("socket"), it.optString("token")) }
         configure(intent)
         setContent { VoiceTheme {
             PersonaPreview(session.state, onExit = ::finish) { session.state = it }
@@ -88,6 +90,8 @@ class PersonaPreviewActivity : ComponentActivity() {
         intent.removeExtra("previewSocket")
         intent.removeExtra("previewToken")
         if (binding?.name == next.name && binding?.token == next.token) return
+        // This private capability reaches only the synthetic Studio bridge, never a real call.
+        savePersonaTuning(File(filesDir, "persona-studio-binding.json"), JSONObject().put("socket", next.name).put("token", next.token).toString())
         bridge?.close()
         bridge = null
         binding = next
@@ -112,7 +116,6 @@ class PersonaPreviewActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("previewState", session.state.json().toString())
-        outState.putString("productionGeneration", StudioProduction.generation)
         binding?.let {
             // Only the debug preview capability enters Android's private activity state, never a voice grant.
             outState.putString("previewSocket", it.name)

@@ -305,7 +305,7 @@ function render() {
     feedback,
     !connected
       ? status.reconnecting
-        ? "Return to the Halo preview. It will reconnect automatically."
+        ? "Open AgentVoice Studio. It will reconnect automatically."
         : "Waiting for the host configurator…"
       : saving
         ? resetting
