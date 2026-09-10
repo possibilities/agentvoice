@@ -22,7 +22,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 19,
+    protocol: 20,
     showPushToTalk: true,
     sounds: defaultSounds(),
     savedSounds: defaultSounds(),

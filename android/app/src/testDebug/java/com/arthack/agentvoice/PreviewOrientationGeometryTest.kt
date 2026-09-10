@@ -44,7 +44,6 @@ class PreviewOrientationGeometryTest {
             assertEquals(small.diameter, large.diameter, 0f)
             assertEquals(small.stageX, large.stageX, 0f)
             assertEquals(small.stageY, large.stageY, 0f)
-            assertTrue(small.stageX + small.diameter < small.deckX)
             assertTrue(small.deckX + small.deckWidth <= width)
             assertTrue(large.deckViewportHeight < 480f)
             assertTrue(large.deckY + large.deckViewportHeight <= height)
@@ -96,8 +95,6 @@ class PreviewOrientationGeometryTest {
                             assertTrue(geometry.deckViewportHeight <= 387f + push - 16f)
                         } else {
                             assertTrue(geometry.deckWidth >= minOf(240f, baseline.deckWidth) - .001f)
-                            if (side == "left") assertTrue(geometry.deckX > geometry.stageX + geometry.diameter)
-                            else assertTrue(geometry.deckX + geometry.deckWidth < geometry.stageX)
                             assertTrue(geometry.deckY + geometry.deckViewportHeight <= height + .001f)
                         }
                     }

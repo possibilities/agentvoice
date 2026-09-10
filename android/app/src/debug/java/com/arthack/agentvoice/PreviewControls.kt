@@ -217,13 +217,17 @@ internal fun RockerMuteFace(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier) {
-        val topPadding = (18f * heightScale).coerceIn(10f, 28f).dp
-        val bottomPadding = (14f * heightScale).coerceIn(8f, 22f).dp
-        val glyphSize = (46f * heightScale).coerceIn(30f, 72f).dp
+        val compactHeight = maxHeight < 84.dp
+        val topPadding = if (compactHeight) 4.dp else (18f * heightScale).coerceIn(10f, 28f).dp
+        val bottomPadding = if (compactHeight) 8.dp else (14f * heightScale).coerceIn(8f, 22f).dp
+        val glyphInset = if (maxWidth < 110.dp) maxWidth * .1f else 18.dp
+        val glyphSize = minOf((46f * heightScale).coerceIn(30f, 72f).dp,
+            (maxWidth - glyphInset * 2f - 16.dp).coerceAtLeast(4.dp),
+            if (compactHeight) (maxHeight - topPadding - bottomPadding - 2.dp - with(density) { 20.sp.toDp() }).coerceAtLeast(4.dp) else 72.dp)
         val caption = remember(name, maxWidth, maxHeight, heightScale, density, measurer) { with(density) {
             rockerCaption(measurer, name, maxWidth.toPx(),
                 (maxHeight - topPadding - bottomPadding - glyphSize - 2.dp).toPx(),
-                heightScale, 1.dp.toPx())
+                heightScale, 1.dp.toPx(), maxHeight < 60.dp)
         } }
         Column(Modifier.fillMaxSize().drawBehind {
             val edge = 5.dp.toPx()
@@ -251,14 +255,19 @@ internal fun RockerMuteFace(
                 Offset(edge + 6.dp.toPx(), top), Offset(size.width - edge - 6.dp.toPx(), top), 2.dp.toPx())
         }.padding(top = topPadding + sink, bottom = bottomPadding - sink),
             verticalArrangement = Arrangement.SpaceBetween) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically,
+            Row(Modifier.fillMaxWidth().padding(horizontal = glyphInset), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 ChunkyChannelGlyph(speaker, muted, color,
                     if (muted) inks.surface else color.copy(alpha = .12f).over(inks.ground),
                     Modifier.size(glyphSize).testTag("rocker-channel-glyph"))
-                BinaryDetent(!muted, color, Modifier.width(12.dp).height((38f * heightScale).coerceIn(24f, 48f).dp))
+                BinaryDetent(!muted, color, Modifier.width(12.dp).height(if (compactHeight) glyphSize else (38f * heightScale).coerceIn(24f, 48f).dp))
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = caption.inset)) {
+            if (caption.stacked) Column(Modifier.fillMaxWidth().padding(horizontal = caption.inset)) {
+                Text(name, modifier = Modifier.fillMaxWidth().testTag("rocker-channel-caption"), color = color,
+                    style = caption.name, maxLines = 1, softWrap = false)
+                Text(status, modifier = Modifier.fillMaxWidth().testTag("rocker-state-caption"),
+                    color = if (muted) inks.text else inks.muted, style = caption.status, maxLines = 1, softWrap = false)
+            } else Row(Modifier.fillMaxWidth().padding(horizontal = caption.inset)) {
                 Text(name, modifier = Modifier.weight(1f).alignByBaseline().testTag("rocker-channel-caption"),
                     color = color, style = caption.name, maxLines = 1, softWrap = false)
                 Spacer(Modifier.width(6.dp))
@@ -271,11 +280,11 @@ internal fun RockerMuteFace(
     }
 }
 
-private data class RockerCaption(val name: TextStyle, val status: TextStyle, val inset: Dp, val statusWidth: Float)
+private data class RockerCaption(val name: TextStyle, val status: TextStyle, val inset: Dp, val statusWidth: Float, val stacked: Boolean = false)
 
 private fun rockerCaption(measurer: TextMeasurer, name: String, width: Float, height: Float,
-    heightScale: Float, unit: Float): RockerCaption {
-    fun candidate(nameSize: Int, statusSize: Int, inset: Dp): Pair<RockerCaption, Boolean> {
+    heightScale: Float, unit: Float, short: Boolean): RockerCaption {
+    fun candidate(nameSize: Int, statusSize: Int, inset: Dp, stacked: Boolean = false): Pair<RockerCaption, Boolean> {
         fun style(size: Int, weight: FontWeight) = TextStyle(fontFamily = VoiceInk.type, fontSize = size.sp,
             fontWeight = weight, letterSpacing = 0.sp, lineHeight = (size * 1.15f).sp)
         val nameStyle = style(nameSize, FontWeight.Normal)
@@ -286,12 +295,21 @@ private fun rockerCaption(measurer: TextMeasurer, name: String, width: Float, he
             measurer.measure(it, statusStyle, maxLines = 1, softWrap = false)
         }
         val statusWidth = states.maxOf { it.size.width }.toFloat()
-        val fits = nameLayout.size.width + statusWidth + (inset.value * 2f + 6f) * unit <= width &&
-            maxOf(nameLayout.size.height, states.maxOf { it.size.height }) <= height
-        return RockerCaption(nameStyle, statusStyle, inset, statusWidth) to fits
+        val textWidth = if (stacked) maxOf(nameLayout.size.width.toFloat(), statusWidth) else nameLayout.size.width + statusWidth + 6f * unit
+        val textHeight = if (stacked) nameLayout.size.height + states.maxOf { it.size.height } else maxOf(nameLayout.size.height, states.maxOf { it.size.height })
+        val fits = textWidth + (inset.value * 2f + 2f) * unit <= width && textHeight <= height
+        return RockerCaption(nameStyle, statusStyle, inset, statusWidth, stacked) to fits
     }
+    if (short) return candidate(10, 12, 12.dp).first
     val normal = candidate(scaledType(14, heightScale, 12, 18), scaledType(16, heightScale, 14, 18), 18.dp)
-    return if (normal.second) normal.first else candidate(12, 14, 12.dp).first
+    if (normal.second) return normal.first
+    val compact = candidate(12, 14, 12.dp)
+    if (compact.second || width >= 110f * unit) return compact.first
+    for ((nameSize, statusSize) in listOf(12 to 14, 10 to 12, 8 to 10, 6 to 8)) {
+        val stacked = candidate(nameSize, statusSize, if (width < 60f * unit) 4.dp else 6.dp, stacked = true)
+        if (stacked.second || nameSize == 6) return stacked.first
+    }
+    return compact.first
 }
 
 @Composable
@@ -407,7 +425,7 @@ internal fun PreviewHoldControl(
 }
 
 @Composable
-private fun RockerHoldFace(
+internal fun RockerHoldFace(
     ui: CallUi, ink: Color, surface: Color, modifier: Modifier, light: State<PreviewButtonLight>?,
     acknowledgedTouch: Boolean,
 ) {
@@ -418,6 +436,9 @@ private fun RockerHoldFace(
     val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
         val verticalFace = maxHeight > maxWidth * 1.15f
+        val shortFace = maxHeight < 70.dp
+        val shortTitle = ((maxHeight.value - 16f) / (1.8f * LocalDensity.current.fontScale)).toInt().coerceIn(6, 18)
+        val shortDetail = (shortTitle * .55f).toInt().coerceAtLeast(6)
         val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
         val liveTypeMaximum = if (maxWidth < 300.dp) 24 else 28
         val compactFace = largeType || maxWidth < 300.dp
@@ -474,8 +495,9 @@ private fun RockerHoldFace(
             end = if (verticalFace) 10.dp else if (compactFace) 20.dp else 24.dp, bottom = lowerInset)
         if (verticalFace) {
             val fontScale = LocalDensity.current.fontScale
-            val mainSize = ((maxWidth.value - 24f) / (2.6f * fontScale)).toInt().coerceIn(14, 32)
+            val mainSize = ((maxWidth.value - 24f) / (2.6f * fontScale)).toInt().coerceIn(6, 32)
             val glyphSize = minOf(42f, maxWidth.value * .35f).dp
+            val detailSize = minOf(11, ((maxWidth.value - 20f) / (4.8f * fontScale)).toInt().coerceAtLeast(6))
             Column(faceModifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 RockerPressGlyph(ink, ui.holding, Modifier.size(glyphSize))
                 Spacer(Modifier.height(16.dp))
@@ -491,7 +513,7 @@ private fun RockerHoldFace(
                     ui.holding -> "for mic"
                     ui.canHold -> "to talk"
                     else -> holdUnavailableReason(ui, concise = true)
-                }, ink, 11, maxLines = 4, align = TextAlign.Center)
+                }, ink, detailSize, maxLines = 4, align = TextAlign.Center)
             }
         } else Row(faceModifier, verticalAlignment = Alignment.CenterVertically) {
             RockerPressGlyph(ink, ui.holding,
@@ -503,7 +525,7 @@ private fun RockerHoldFace(
                     ui.holding -> if (concise) "Wait" else "Opening"
                     ui.canHold -> "Push"
                     else -> if (concise) "Off" else "Unavailable"
-                }, ink, when {
+                }, ink, if (shortFace) shortTitle else when {
                     microphoneLive -> scaledType(24, heightScale, 19, liveTypeMaximum)
                     !ui.canHold && !ui.holding -> scaledType(22, heightScale, 18, 26)
                     else -> scaledType(32, heightScale, 23, 42)
@@ -514,7 +536,7 @@ private fun RockerHoldFace(
                     ui.holding -> if (concise) "for microphone" else "microphone"
                     ui.canHold -> "to talk"
                     else -> holdUnavailableReason(ui, concise = concise)
-                }, ink, scaledType(11, heightScale, 10, 14), maxLines = 2)
+                }, ink, if (shortFace) shortDetail else scaledType(11, heightScale, 10, 14), maxLines = if (shortFace) 1 else 2)
             }
         }
     }
@@ -534,7 +556,7 @@ private fun holdUnavailableReason(ui: CallUi, concise: Boolean = false): String 
 
 @Composable
 private fun ControlText(text: String, color: Color, size: Int, bold: Boolean = false, maxLines: Int = 1, align: TextAlign = TextAlign.Start) {
-    Text(text, textAlign = align, color = color, fontFamily = VoiceInk.type, fontSize = size.sp,
+    Text(text, modifier = Modifier.fillMaxWidth(), textAlign = align, color = color, fontFamily = VoiceInk.type, fontSize = size.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
         letterSpacing = 0.sp, lineHeight = (size * 1.15f).sp, maxLines = maxLines)
 }

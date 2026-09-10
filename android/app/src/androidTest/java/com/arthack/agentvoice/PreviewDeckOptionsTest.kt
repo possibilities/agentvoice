@@ -79,6 +79,60 @@ class PreviewDeckOptionsTest {
         compose.onNodeWithTag("speaker-mute").assertWidthIsEqualTo(312.dp)
     }
 
+    @Test fun independentExtentsRenderPastHalfTheViewportAndToggleWithoutMovingPersona() {
+        compose.mainClock.autoAdvance = false
+        var state by mutableStateOf(PersonaPreviewState(design = PreviewDesign(
+            controlsHeightDp = 600, controlsWithoutPttDp = 220, spacing = PreviewSpacing(paddingDp = 16))))
+        compose.setContent { VoiceTheme { Box(Modifier.requiredSize(780.dp, 360.dp)) { PersonaPreview(state) { state = it } } } }
+        for (side in listOf("left", "right")) {
+            compose.runOnIdle { state = state.copy(personaSide = side, showPushToTalk = true) }
+            compose.mainClock.advanceTimeBy(1000)
+            val stage = compose.onNodeWithTag("studio-persona-stage", true).getUnclippedBoundsInRoot()
+            val deck = compose.onNodeWithTag("preview-controls")
+            deck.assertWidthIsEqualTo(600.dp)
+            val shown = deck.getUnclippedBoundsInRoot()
+            compose.runOnIdle { state = state.copy(showPushToTalk = false) }
+            compose.mainClock.advanceTimeBy(64)
+            deck.assertWidthIsEqualTo(220.dp)
+            val hidden = deck.getUnclippedBoundsInRoot()
+            assertEquals(shown.top, hidden.top); assertEquals(shown.bottom, hidden.bottom)
+            assertEquals(stage, compose.onNodeWithTag("studio-persona-stage", true).getUnclippedBoundsInRoot())
+            compose.onNodeWithTag("hold-to-talk").assertDoesNotExist()
+            compose.runOnIdle { state = state.copy(showPushToTalk = true) }
+            compose.mainClock.advanceTimeBy(64)
+            deck.assertWidthIsEqualTo(600.dp)
+        }
+    }
+
+    @Test fun oldExtentSeedsBothModesAndCurrentProfileRetainsAllFourSizes() {
+        val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
+            controlsHeightDp = 420, controlsWithoutPttDp = 210))
+        val landscape = defaultLandscapeLayout().copy(design = defaultLandscapeLayout().design.copy(
+            controlsHeightDp = 700, controlsWithoutPttDp = 310))
+        val encoded = encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit, landscape)
+        val decoded = decodePreviewProfileLayouts(encoded)
+        assertEquals(portrait.design, decoded.portrait.design)
+        assertEquals(landscape.design, decoded.landscape.design)
+        val old = JSONObject(encoded).withoutIndependentExtents().put("version", 17)
+        old.getJSONObject("landscape").getJSONObject("design").put("controlsHeightDp", 380)
+        val bytes = old.toString(2)
+        val migrated = decodePreviewProfileLayouts(bytes)
+        assertEquals(420, migrated.portrait.design.controlsWithoutPttDp)
+        assertEquals(380, migrated.landscape.design.controlsWithoutPttDp)
+        assertEquals(bytes, old.toString(2))
+        for (field in listOf("controlsHeightDp", "controlsWithoutPttDp")) {
+            for (bad in listOf(159, 1601, 200.5, "320", JSONObject.NULL)) {
+                val design = portrait.design.json().put(field, bad)
+                assertTrue(runCatching { decodePreviewDesign(design) }.isFailure)
+            }
+            assertTrue(runCatching { decodePreviewDesign(portrait.design.json().apply { remove(field) }) }.isFailure)
+        }
+        val original = PersonaPreviewState(design = migrated.portrait.design, otherLayout = migrated.landscape)
+        val oldState = original.json().withoutIndependentExtents().put("protocol", 19)
+        assertEquals(original, restorePersonaPreview(oldState, original.saved, original.savedDesign,
+            original.savedHalo, original.savedSpirit, original.savedOtherLayout))
+    }
+
     @Test fun visibilityIsStrictSessionOnlyAndLegacyOffshootsAreDiscardedWithoutWriting() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "deck-options-${UUID.randomUUID()}.json")
         val base = PersonaPreviewState(sounds = PreviewSounds("rocker-29", 38))
@@ -100,7 +154,7 @@ class PreviewDeckOptionsTest {
             session.command(JSONObject().put("id", 2).put("method", "save").put("revision", state.revision)
                 .put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch))
             val current = JSONObject(file.readText())
-            assertEquals(17, current.getInt("version")); assertFalse(current.has("showPushToTalk"))
+            assertEquals(18, current.getInt("version")); assertFalse(current.has("showPushToTalk"))
             assertFalse(current.toString().contains("offshootPercent"))
             val old = JSONObject(current.toString()).withLegacyOffshootFields().put("version", 16)
             old.getJSONObject("design").getJSONObject("traces").put("offshootPercent", 81)

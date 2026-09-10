@@ -13,7 +13,7 @@ internal data class PreviewControlGeometry(
 ) {
     init {
         require(pushGapDp in 0..48)
-        require(controlsHeightDp in 240..480) { "Controls height must be between 240 and 480 dp" }
+        require(controlsHeightDp in 160..1600) { "Controls extent must be between 160 and 1600 dp" }
         require(holdSharePercent.isFinite() && holdSharePercent in 30.0..60.0) {
             "Hold share must be between 30 and 60 percent"
         }

@@ -30,7 +30,7 @@ internal fun decodePersonaSpirit(json: String): PreviewSpirit {
     val data = JSONObject(json)
     return when (data.getInt("version")) {
         1, 2, 3, 4, 5, 6 -> PreviewSpirit()
-        7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 -> decodePreviewSpirit(data.getJSONObject("spirit"))
+        7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 -> decodePreviewSpirit(data.getJSONObject("spirit"))
         else -> error("Unsupported Persona tuning version")
     }
 }

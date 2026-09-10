@@ -62,8 +62,10 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
       next.design.traces.glowPercent = defaults.defaultSharedAppearance.glowPercent;
       break;
     case "controls":
-      next.design.controlsHeightDp = defaults.defaultDesign.controlsHeightDp;
-      next.design.holdSharePercent = defaults.defaultDesign.holdSharePercent;
+      if (next.showPushToTalk) {
+        next.design.controlsHeightDp = defaults.defaultDesign.controlsHeightDp;
+        next.design.holdSharePercent = defaults.defaultDesign.holdSharePercent;
+      } else next.design.controlsWithoutPttDp = defaults.defaultDesign.controlsWithoutPttDp;
       break;
     case "size":
       if (next.halo.variant === "contained")

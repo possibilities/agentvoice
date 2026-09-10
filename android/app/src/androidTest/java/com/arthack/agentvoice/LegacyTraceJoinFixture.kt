@@ -19,7 +19,14 @@ internal fun JSONObject.withoutSharedAppearanceFields(): JSONObject {
 }
 
 internal fun JSONObject.withLegacyOffshootFields(): JSONObject {
+    remove("controlsWithoutPttDp")
     if (has("pattern") && has("stancePercent") && !has("offshootPercent")) put("offshootPercent", 0)
     for (key in fields()) optJSONObject(key)?.withLegacyOffshootFields()
+    return this
+}
+
+internal fun JSONObject.withoutIndependentExtents(): JSONObject {
+    remove("controlsWithoutPttDp")
+    for (key in fields()) optJSONObject(key)?.withoutIndependentExtents()
     return this
 }

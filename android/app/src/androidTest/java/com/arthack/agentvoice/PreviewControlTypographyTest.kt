@@ -87,6 +87,53 @@ class PreviewControlTypographyTest {
         }
     }
 
+    @Test fun newlyAllowedShortAndNarrowFacesKeepCaptionsInside() {
+        var width by mutableStateOf(48)
+        var height by mutableStateOf(140)
+        var label by mutableStateOf("HUMAN")
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                VoiceTheme { RockerMuteFace(label, label == "AGENT", true, VoiceInk.muted, "wait", false,
+                    (height / 130f).coerceIn(.6f, 1.6f), Modifier.width(width.dp).height(height.dp).testTag("compact-face"), null, false) }
+            }
+        }
+        for ((w, h) in listOf(48 to 140, 73 to 140, 160 to 48)) for (name in listOf("HUMAN", "AGENT")) {
+            compose.runOnIdle { width = w; height = h; label = name }
+            val face = compose.onNodeWithTag("compact-face").getUnclippedBoundsInRoot()
+            for (tag in listOf("rocker-channel-caption", "rocker-state-caption")) {
+                val node = compose.onNodeWithTag(tag)
+                assertContained(face, node.getUnclippedBoundsInRoot(), "$w/$h $name")
+                val result = mutableListOf<TextLayoutResult>()
+                node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(result)) }
+                assertFalse("$w/$h $name $tag ${result.single().size} ${result.single().layoutInput.style.fontSize} width=${result.single().didOverflowWidth} height=${result.single().didOverflowHeight} paragraph=${result.single().multiParagraph.width}/${result.single().multiParagraph.height}", result.single().hasVisualOverflow)
+            }
+        }
+    }
+
+    @Test fun narrowAndShallowPushFacesFitAtLargeText() {
+        var width by mutableStateOf(48)
+        var height by mutableStateOf(300)
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                VoiceTheme { RockerHoldFace(CallUi(connected = true, micMuted = true, canHold = true),
+                    VoiceInk.you, VoiceInk.surface, Modifier.size(width.dp, height.dp).testTag("push-face"), null, false) }
+            }
+        }
+        for ((w, h) in listOf(48 to 300, 300 to 48)) {
+            compose.runOnIdle { width = w; height = h }
+            val face = compose.onNodeWithTag("push-face").getUnclippedBoundsInRoot()
+            for (label in listOf("Push", "to talk")) {
+                val node = compose.onNodeWithText(label)
+                assertContained(face, node.getUnclippedBoundsInRoot(), "$w/$h $label")
+                val results = mutableListOf<TextLayoutResult>()
+                node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+                assertFalse("$w/$h $label ${results.single().size} paragraph=${results.single().multiParagraph.width}/${results.single().multiParagraph.height}", results.single().hasVisualOverflow)
+            }
+        }
+    }
+
     private fun assertContained(outer: DpRect, inner: DpRect, context: String) {
         assertTrue(context, inner.left >= outer.left && inner.top >= outer.top)
         assertTrue(context, inner.right <= outer.right && inner.bottom <= outer.bottom)

@@ -83,26 +83,30 @@ label reads **Live now / microphone open**. Holding confirmed PTT reads
 **Live now / release to mute**. Button shapes and hit targets do not animate.
 
 **Controls height** in portrait becomes **Controls width** in landscape
-(240–480 dp). Landscape width fits the available control lane and anchors to its
-outer edge; height fills the visible safe area inside shared top/bottom padding.
-Persona size and manual position do not move when deck width changes. **Push-to-talk share** spans 30–60%: it is
-height share in portrait and width share in landscape. Portrait gives the mute
-row the remaining height after its join; landscape gives the stacked mute column
-the remaining width after its join. Landscape retains its independent 262 dp
-width and approximately 44.3% share baseline (`116 / 262 × 100`). **Reset button
-sizes** restores only these two sliders to the visible orientation's defaults,
-keeping spacing, composition, light and Persona tuning.
+(160–1600 dp). **With push to talk** and **Without push to talk** each keep their
+own extent in each orientation: four independently saved values. The slider
+edits only the visible choice. Fresh portrait values are 387 dp and landscape
+values 262 dp; older profiles seed each hidden extent from that orientation's
+stored extent. Switching visibility never copies one choice over the other.
+
+Only the physical viewport and Shared padding limit the rendered deck. Landscape
+height fills the padded viewport; there is no half-screen or Persona-lane width
+cap. Persona size and position remain fixed, and a larger control deck may overlap
+in front of it. Use Persona position to set separation. **Push-to-talk share**
+spans 30–60%: height share in portrait and width share in landscape. **Reset button
+sizes** resets only the active extent. It resets the PTT share only when PTT is
+shown; hidden mode preserves the stored share and the inactive extent.
 
 **Shared spacing** offers one **Padding** slider (0–40 dp) for minimum outer control
 space and both button gaps. Fresh layouts start at 16 dp. Older profiles show
 **Custom** and preserve their separate side, edge and button-gap settings until
 you adjust Padding; the slider rests at 16 without applying it. In portrait,
 controls stay inside the visible safe area; use Persona vertical position to
-adjust the space above them. **Section separation** is shown only in landscape,
-where it retains its existing 0–80 dp minimum extra gap between Persona and
-controls, with zero as its default. Hiding it in portrait retains its stored value. Each slider has its own reset. **Reset spacing** restores
-Padding to 16, section separation to zero, and the stored legacy baseline values
-for both orientations. The entire spacing object is shared: padding, legacy
+adjust the space above them. Section separation is hidden because it no longer
+constrains either layout; its stored value remains in shared spacing for legacy
+compatibility. Persona position controls separation. **Reset spacing** restores
+Padding to 16, the retained section gap to 0, and legacy baseline fields for both
+orientations. The entire spacing object is shared: padding, legacy
 custom side/edge spacing, both button gaps and section separation. Changing or
 resetting it in either orientation updates both layouts. These controls sit
 outside the orientation-only Layout section. Spacing remains unsaved until Save.
@@ -118,8 +122,8 @@ does not audition audio. The browser contains no player or audio asset routing.
 Changes remain unsaved until explicit Save.
 
 **Show push to talk** is a shared session choice, initially on. Turning it off
-hides Push to talk and its connector; the mute buttons fill the selected deck. In landscape the stacked mute column
-fills its width and the height inside shared padding. The
+hides Push to talk and its connector and selects the separately saved hidden
+extent. Landscape height continues to follow shared padding. The
 Push-to-talk share slider becomes disabled while its value
 is retained for when the button returns. This choice survives rotation and
 reconnection, but is excluded from Save. It changes only the design preview.
@@ -271,7 +275,7 @@ The preview has no microphone, voice playback, grant, controller, Codex,
 WebRTC or voice-server connection. Optional switch effects play locally on the
 phone only when its controls are used.
 
-Explicit Save writes a version 17 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 18 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold effective portrait values;
 `landscape` holds effective landscape values (integer-percent `scales`, both
 offsets, design, Halo, spirit and side). Root and landscape each include sorted
@@ -291,7 +295,7 @@ bound to the observed connection, so delayed requests cannot run after reconnect
 Reconnection reads the current phone state; it never replays edits or Save.
 An unconfirmed Save remains visible for review after recovery. A failed host write is reported
 separately from a successful phone save. Resets and live edits do not persist
-until Save. Version 1–16 phone profiles remain readable without rewriting.
+until Save. Version 1–17 phone profiles remain readable without rewriting.
 Every retired button style maps to Rockers and every old composition to Traces
 with baseline trace settings in memory. Version 9 preserves every existing trace
 choice and adds only the two 100% spacing defaults. Version 1 seeds all three
@@ -315,7 +319,7 @@ absent landscape uses those canonical defaults and inherits portrait appearance.
 This migration changes only in-memory effective appearance and flags; local
 geometry and saved bytes remain intact. Profiles through version 15 retain their
 exact saved shape and gain Off/70 sound settings in memory. Older profiles become
-version 17 only on explicit Save. Legacy profiles through16 use portrait spacing
+version 18 only on explicit Save. Legacy profiles through16 use portrait spacing
 for both effective layouts; the previous landscape spacing stays in the untouched
 raw file until Save. Profiles are ignored by Git.
 
@@ -356,7 +360,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders debug-only `PreviewStudioScreen` with synthetic state. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol19 carries live/saved/default designs, sizes, vertical and
+Preview protocol20 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -366,13 +370,13 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Defaults are
 14/0/100/0/14/float. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is19;
-saved profile is version17 without retired offshoot settings;
+session-root fields on Preview/PhoneState, never Layout. Protocol is20;
+saved profile is version18 with separately saved shown/hidden extents;
 session tuning stays excluded.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
 `hold: rocker`, `composition: traces`,
-and retains `controlsHeightDp` (integer 240–480)
+and requires `controlsHeightDp` and `controlsWithoutPttDp` (integers160–1600)
 and `holdSharePercent` (finite 30–60; height share in portrait, width share in
 landscape). The internal `hold` names retain their
 protocol meaning; the visible and accessible control is Push to talk.
@@ -392,16 +396,16 @@ wire/profile for restoration. Fresh defaults are 16/100/100/0/10/16.
 Version 12 profiles require their original five-field spacing object and gain
 only `paddingDp: -1` in memory; earlier profile shapes remain strict too.
 Current and saved design snapshots copy nested choices independently. All six
-`design.spacing` fields are shared without an override. Protocol19 requires
+`design.spacing` fields are shared without an override. Protocol20 requires
 current spacing to match `otherLayout` and saved spacing to match
-`savedOtherLayout`; profile17 requires root and landscape spacing equality.
+`savedOtherLayout`; profiles17–18 require root and landscape spacing equality.
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol19's active fields describe the phone's visible orientation; it also
+Protocol20's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version17 profile receipts must
+changes orientation; the host cannot select it. Version18 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors, spirit, override flags, shared appearance and sounds before the
 host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
@@ -416,13 +420,13 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol19 is strict; Android restoration from
+never include it. Current live protocol20 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
-Protocol19 requires the shared session-root boolean `showPushToTalk`; it has no
+Protocol20 requires the shared session-root boolean `showPushToTalk`; it has no
 saved/default counterpart and never appears in Layout or profiles. Native
 restoration from protocol18 or earlier starts with Push to talk shown.
-Profile17 and current traces reject `offshootPercent` everywhere. Legacy
+Profiles17–18 and current traces reject `offshootPercent` everywhere. Legacy
 profiles that contain offshoots retain and validate their original field, then
 strip it from effective root, landscape and shared appearance in memory. Other tuning, sounds,
 explicit override flags and the original saved files stay intact until Save.
@@ -448,7 +452,15 @@ and renderer stay in debug builds. See [Persona provenance and notices](../third
 for creator attribution, code/runtime licenses, and the external asset's published
 license evidence.
 
-The retained wire/profile name `controlsHeightDp` stores the orientation's primary
-deck extent: portrait height or landscape width. Values, saved files and profile
-version stay unchanged; the studio labels the dimension for the visible
-orientation. Reset button sizes restores its respective extent/share defaults.
+The retained wire/profile name `controlsHeightDp` stores the PTT-shown primary
+extent: portrait height or landscape width. `controlsWithoutPttDp` stores the
+corresponding hidden extent. The studio labels the current dimension and
+visibility scope. Reset button sizes restores only that extent, plus share when
+PTT is shown.
+
+Current protocol20 and profile18 require both extent fields. Legacy profiles
+through17 keep their strict original design fields and 240–480 dp bounds, and
+their raw saved bytes remain untouched. Effective readers seed
+`controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
+restoration from protocol19 or earlier does the same. Only explicit Save writes
+profile18.

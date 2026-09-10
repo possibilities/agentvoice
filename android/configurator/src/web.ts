@@ -133,7 +133,7 @@ function render() {
       `${amount}${unit === "%" ? " percent" : unit}`,
     );
   }
-  element("section-separation-row").hidden = draft.orientation === "portrait";
+  element("section-separation-row").hidden = true;
   element("portrait-spacing-hint").hidden = draft.orientation !== "portrait";
   for (const field of visibleSpacingFields) {
     const amount = draft.design.spacing[field];
@@ -171,7 +171,14 @@ function render() {
     element("controls-extent-label"),
     draft.orientation === "landscape" ? "Controls width" : "Controls height",
   );
-  controlHeight.value = String(draft.design.controlsHeightDp);
+  const activeExtent = draft.showPushToTalk
+    ? draft.design.controlsHeightDp
+    : draft.design.controlsWithoutPttDp;
+  controlHeight.value = String(activeExtent);
+  text(
+    element("controls-extent-scope"),
+    draft.showPushToTalk ? "With push to talk" : "Without push to talk",
+  );
   holdShare.value = String(draft.design.holdSharePercent);
   text(
     element("hold-share-hint"),
@@ -180,23 +187,23 @@ function render() {
   text(
     element("push-to-talk-hidden-hint"),
     draft.orientation === "landscape"
-      ? "Push to talk is hidden. The stacked mute column fills the full deck; the width share is kept for when you show it again."
-      : "Push to talk is hidden. The mute buttons fill the same controls height; the height share is kept for when you show it again.",
+      ? "Push to talk is hidden. The stacked mute column uses its own saved deck width; the width share is kept for when you show it again."
+      : "Push to talk is hidden. The mute buttons use their own saved controls height; the height share is kept for when you show it again.",
   );
   holdShare.disabled = !draft.showPushToTalk;
   text(
     element("controls-height-hint"),
     draft.orientation === "landscape"
-      ? "Deck width, fitted to its lane. Height fills the space inside Shared padding."
+      ? "Deck width is limited only by the viewport and Shared padding. Controls can overlap Persona; height fills the padded viewport."
       : draft.showPushToTalk
         ? "All three buttons"
         : "Both mute buttons",
   );
   element<HTMLInputElement>("show-push-to-talk").checked = draft.showPushToTalk;
   element("push-to-talk-hidden-hint").hidden = draft.showPushToTalk;
-  text(element("controls-height-value"), `${draft.design.controlsHeightDp} dp`);
+  text(element("controls-height-value"), `${activeExtent} dp`);
   text(element("hold-share-value"), `${Number(draft.design.holdSharePercent.toFixed(1))}%`);
-  controlHeight.setAttribute("aria-valuetext", `${draft.design.controlsHeightDp} dp`);
+  controlHeight.setAttribute("aria-valuetext", `${activeExtent} dp`);
   holdShare.setAttribute("aria-valuetext", `${draft.design.holdSharePercent.toFixed(1)} percent`);
   const contained = draft.halo.variant === "contained";
   element("original-traces-hint").hidden = contained;
@@ -429,7 +436,13 @@ for (const field of traceAmountFields) {
 }
 controlHeight.addEventListener("input", () => {
   const controlsHeightDp = controlHeight.valueAsNumber;
-  update((current) => ({ ...current, design: { ...current.design, controlsHeightDp } }));
+  update((current) => ({
+    ...current,
+    design: {
+      ...current.design,
+      [current.showPushToTalk ? "controlsHeightDp" : "controlsWithoutPttDp"]: controlsHeightDp,
+    },
+  }));
 });
 holdShare.addEventListener("input", () => {
   const holdSharePercent = Math.round(holdShare.valueAsNumber * 10) / 10;

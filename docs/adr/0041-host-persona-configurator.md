@@ -547,3 +547,19 @@ section separation. Persona's existing square/position remain independent.
 The retained `controlsHeightDp` wire/profile field stores this primary extent;
 no schema migration or saved-file write is needed for the requested semantic
 change. Reset retains each orientation's existing numeric defaults.
+
+### Independent visibility-mode extents and full landscape width
+
+Protocol 20/profile 18 adds `controlsWithoutPttDp` to each orientation's design,
+independent of the existing shown extent. Both are integer 160–1600 dp. Legacy
+profiles through 17 retain their exact schema/range 240–480 and seed the hidden
+extent from the corresponding shown extent only in their effective model.
+Visibility itself remains a shared session choice. Editing/resetting one mode
+must never overwrite the other; hidden reset also preserves PTT share.
+
+The reserved landscape lane is removed. As in portrait, control geometry may
+overlap the independently placed Persona, with controls owning the foreground
+and pointers. Only viewport/shared-padding bounds cap rendered extent. The
+old section gap no longer limits either orientation and its control is hidden;
+retain its stored value for compatibility. Narrow faces stack captions and
+short faces reduce glyph height, preserving ordinary-sized styling.

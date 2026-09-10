@@ -52,8 +52,7 @@ internal fun previewOrientationGeometry(
             else (if (height < 660f) 20f else 28f) * spacing.edgeClearancePercent / 100f
         val bottom = minOf(requestedBottom, (height - 1f).coerceAtLeast(0f))
         val viewport = minOf(actualDeckHeight, height - bottom)
-        // The square owns Persona placement, not minimum space above the controls. Section spacing
-        // uses only the room left above this bottom-aligned deck; it cannot extend the visible scene.
+        // Persona placement belongs to its square. The bottom-aligned deck cannot extend the visible scene.
         val deckTop = (height - bottom - viewport).coerceAtLeast(0f)
         return baseline.copy(deckX = side, deckY = deckTop, deckWidth = (width - side * 2f).coerceAtLeast(1f),
             deckViewportHeight = viewport, contentHeight = height)
@@ -62,17 +61,13 @@ internal fun previewOrientationGeometry(
     val positioned = baseline.copy(stageX = baseline.stageX + horizontalOffsetDp,
         horizontalOffsetDp = horizontalOffsetDp)
     val leftPersona = personaSide == "left"
-    val baselineInner = if (leftPersona) baseline.deckX else width - baseline.deckX - baseline.deckWidth
-    val baselineOuterMargin = width - baselineInner - baseline.deckWidth
-    val minimumWidth = minOf(240f, baseline.deckWidth)
+    val baselineOuterMargin = if (leftPersona) width - baseline.deckX - baseline.deckWidth else baseline.deckX
     val outerMargin = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else baselineOuterMargin * spacing.sideMarginPercent / 100f
-    val outer = (width - outerMargin)
-        .coerceIn(baselineInner + minimumWidth, width)
-    // Constrained controls consume their own spare width; the fixed Persona lane is never borrowed.
-    val inner = minOf(baselineInner + spacing.sectionGapDp, outer - minimumWidth)
-    // The retained profile field is the primary deck extent: height in portrait, width here.
-    val deckWidth = minOf(controlsHeight, (outer - inner).coerceAtLeast(1f))
+    val margin = outerMargin.coerceIn(0f, ((width - 1f) / 2f).coerceAtLeast(0f))
+    val outer = width - margin
+    // Match portrait: the deck can overlap the manually placed Persona, but stays inside the viewport.
+    val deckWidth = minOf(controlsHeight, (width - 2f * margin).coerceAtLeast(1f))
     val clearance = if (spacing.paddingDp >= 0) spacing.paddingDp.toFloat()
         else 16f * spacing.edgeClearancePercent / 100f
     val viewport = (height - clearance * 2f).coerceAtLeast(1f)

@@ -182,8 +182,8 @@ center and glow. These stationary neutral layers change no layout, renderer,
 tuning or touch target and preserve full bleed. Original retains a conservative
 shared envelope, so unequal state sizes can leave a larger gap or no visible
 routes when the envelope reaches the deck.
-The portrait height/landscape width slider spans 240–480 dp. Landscape height
-fills shared top/bottom padding; width fits its lane from the outer edge inward.
+The portrait height/landscape width slider spans 160–1600 dp. Landscape height
+fills shared top/bottom padding; width fits the visible viewport from the outer edge inward.
 Portrait height includes the baseline 16 dp join. Push-to-talk
 share spans 30–60% of that size basis. Extra join space changes total deck height
 while preserving both button-face heights. Provisional portrait defaults use
@@ -230,22 +230,22 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains both orientations' design, sizes and position in a
-version 17 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 18 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 19 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 20 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
 values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 17 stores portrait in the root fields and a separate `landscape` layout.
+Version 18 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–16 phone profiles load without rewriting; retired button styles map to
+version 1–17 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 17 only on Save. The real client and release
+become version 18 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -263,7 +263,7 @@ area fits its button faces proportionally while preserving the requested setting
 Persona's square, center, scale and manual offset remain unchanged; the deck may
 use the square's empty lower area and stays in front of oversized Persona artwork.
 Use Persona's vertical position to tune the space above the deck. Section separation
-is shown only in landscape; existing portrait values remain stored without effect.
+is retired from the controls; its old stored value has no layout effect.
 Individual resets and Reset spacing update both orientations. All six spacing
 fields are shared, with no orientation override; legacy landscape spacing adopts
 portrait spacing in memory without rewriting saved bytes.
@@ -354,7 +354,7 @@ The studio labels each scope instead of assigning scope by column:
 
 Appearance resets use the common defaults and follow the displayed group scope.
 Layout resets use the current orientation's defaults. All changes require Save
-to persist. Profile 17 keeps common appearance and explicit per-orientation
+to persist. Profile 18 keeps common appearance and explicit per-orientation
 overrides. Older profiles take shared appearance from portrait; untouched legacy
 landscape appearance defaults inherit, while customized differing groups become
 overrides. Size and control geometry are retained. The app never infers a setting
@@ -398,10 +398,11 @@ Shared session control **Show push to talk** hides the button and its connector.
 The mutes fill the selected deck height in portrait and full deck width in
 landscape. Hiding cancels an active hold without playing a release sound;
 reappearing never reacquires its pointer. The share value is retained while its
-slider is disabled. Visibility survives rotation/activity restoration but is not
+slider is disabled. With-PTT and without-PTT layouts retain independent deck
+extents within each orientation. Visibility survives rotation/activity restoration but is not
 saved to a profile or adopted by production.
 
-Protocol 19 requires consistent current/other and saved/other spacing; profile 17
+Protocol 20 requires consistent current/other and saved/other spacing; profile 18
 requires equal root/landscape spacing. Older effective layouts adopt portrait
 spacing, and validated historical offshoot values are discarded. Neither
 migration rewrites the operator's saved files before Save.
@@ -410,5 +411,22 @@ Landscape's **Controls width** slider uses the existing orientation-local extent
 value; **Controls height** remains the portrait label. Landscape height is
 automatic from the visible safe area minus shared padding at both ends. Width
 changes preserve Persona placement and the far edge of the deck. Width fits
-the available lane and section separation; tuning values are never rewritten
+the visible viewport and shared padding; tuning values are never rewritten
 to fit. Existing saved numbers remain intact and become widths in landscape.
+
+### Independent extents with and without PTT
+
+The active height/width slider edits one of four saved values: portrait with PTT,
+portrait without PTT, landscape with PTT, or landscape without PTT. The visible
+mode is labeled. Switching visibility retains both sizes. Reset button sizes
+resets only the active extent, and resets share only when PTT is shown. Existing
+profiles seed the new hidden extent from each orientation's existing extent in
+memory; loading never rewrites the saved file. Profile 18 stores the additional
+`controlsWithoutPttDp` field and protocol 20 carries both sizes.
+
+Both extent fields span 160–1600 dp. Landscape has no reserved half-screen lane: a
+large deck may overlap the independently positioned Persona in the foreground.
+Only the visible viewport and shared padding constrain its rendered bounds.
+Section separation is hidden and retained solely for older-profile compatibility;
+manual Persona placement owns that gap. Very narrow faces stack their channel and
+state captions; short faces reduce their glyph height to keep captions inside.

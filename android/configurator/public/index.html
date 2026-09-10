@@ -274,12 +274,13 @@
                     <label id="controls-extent-label" for="controls-height">Controls height</label>
                     <output id="controls-height-value" for="controls-height">262 dp</output>
                   </div>
-                  <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
+                  <p class="scope-badge" id="controls-extent-scope">With push to talk</p>
+                  <input id="controls-height" type="range" min="160" max="1600" step="1" value="262" aria-describedby="controls-extent-scope controls-height-hint" />
                   <div class="range-ends">
-                    <span>240 dp</span>
-                    <span id="controls-height-hint">All three buttons</span>
-                    <span>480 dp</span>
+                    <span>160 dp</span>
+                    <span>1600 dp</span>
                   </div>
+                  <p id="controls-height-hint" class="control-hint">All three buttons</p>
                 </div>
                 <div class="position-control">
                   <div class="size-heading">
@@ -293,13 +294,13 @@
                     <span>60%</span>
                   </div>
                 </div>
-                <p id="push-to-talk-hidden-hint" class="control-hint" hidden>Push to talk is hidden. The mute buttons fill the same controls height; the share is kept for when you show it again.</p>
+                <p id="push-to-talk-hidden-hint" class="control-hint" hidden>Push to talk is hidden. The mute buttons use their own saved controls height; the share is kept for when you show it again.</p>
                 <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
               </fieldset>
                 <fieldset class="shared-session" id="shared-spacing">
                   <legend class="panel-title">Shared spacing</legend>
                   <p class="scope-badge">Both orientations · Saved with profile</p>
-                  <p class="control-hint scope-explanation">Padding, button gaps and section separation stay the same across orientations. Changes and resets apply to both layouts.</p>
+                  <p class="control-hint scope-explanation">Padding and button gaps stay the same across orientations. Changes and resets apply to both layouts.</p>
                   <div class="motion-control">
                     <div class="size-heading">
                       <label for="spacing-paddingDp">Padding</label>
@@ -352,7 +353,7 @@
                     <span>Show push to talk</span>
                   </label>
                 </div>
-                <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations for this session. Hiding Push to talk also removes its connector and gives the mute buttons the full controls height.</p>
+                <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations for this session. Hiding Push to talk also removes its connector and uses the separately saved extent for the mute buttons.</p>
                 <div class="mixing">
                   <label for="preview-theme">Theme</label>
                   <select id="preview-theme" aria-describedby="session-style-hint">

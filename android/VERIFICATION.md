@@ -1,13 +1,12 @@
 # Android development build verification
 
-Latest synthetic UI work: **Coordinated switch sounds**, September 9, 2026, on
+Latest synthetic UI work: **Independent control extents**, September 9, 2026, on
 physical S22 `R5CT91TW4RP`, development package `com.arthack.agentvoice.dev`.
 No emulator is active. No check starts a voice call, microphone or inference.
-This round explicitly exercises debug-local switch sound playback.
 The latest installed debug APK SHA-256 is
-`167ac5e84c47f44bae548da50907912faa782da40df226f5cad72203c13bf32e`.
+`0c043c284bba80436b9556b2714228ecc604b24c86cfcefabcf516f14f16f471`.
 
-Current evidence is under [Coordinated switch sounds](#coordinated-switch-sounds).
+Current evidence is under [Independent control extents](#independent-control-extents).
 Earlier sections retain the results and limitations of their original rounds;
 they are not a cumulative claim about the latest APK.
 
@@ -1298,3 +1297,54 @@ Evidence: `/tmp/agentvoice-width-build-final.log`,
 `/tmp/agentvoice-width-phone-check.log`, and PNG/JSON pairs under
 `/tmp/agentvoice-width-phone/`. Current studio URL handoffs were refreshed and
 opened in Chrome.
+
+## Independent control extents
+
+Protocol 20/profile 18 retain separate shown/hidden PTT deck extents within each
+orientation. Legacy profiles seed the added field from their own orientation's
+existing size in memory. Current fields accept 160–1600 dp; historical profiles
+retain strict 240–480 validation. The active slider and reset affect only the
+visible mode. Hidden reset preserves PTT share. Shared padding stays common.
+
+Landscape no longer reserves a half-screen lane. The deck can overlap Persona
+in the foreground and is fitted only to the viewport minus shared padding.
+Persona's square and manual placement remain unchanged. Narrow mute faces stack
+labels; shallow mute/PTT faces reduce type and glyph size. Ordinary-size caption
+checks remain in the regression suite.
+
+Validation:
+
+- Debug/test APK assembly and lint passed; latest build log:
+  `/tmp/agentvoice-independent-caption-build.log`. 122 JVM tests passed with no
+  failures (`/tmp/agentvoice-independent-delivery-build.log`). Later changes
+  affected only Compose caption layout and its instrumentation tests.
+- The final installed APK passed all **84 phone tests in 141.13 seconds**:
+  `/tmp/agentvoice-independent-delivery-instrumentation.log`. Tests include four
+  retained extents, strict profile migration, legacy live-state restoration,
+  width beyond the midpoint in both handedness settings, fixed Persona bounds,
+  hold cancellation/reentry, native instance continuity and 1.5× text at narrow
+  and shallow extremes.
+- **80 studio tests / 3051 assertions**, TypeScript and Biome checks passed.
+  Browser fixture evidence in `/tmp/agentvoice-studio20-extents-browser/` records
+  47 preview requests, no Save, four extents, active-only resets, orientation
+  fences, reconnect behavior and no page overflow/errors.
+- Earlier runs exposed a historical fixture leaking the new field and compact
+  caption layout/fit problems; these were corrected before the final suite.
+  Transient missing Compose hierarchy/presence failures from an earlier run
+  did not recur in the final suite; no Persona renderer change was made.
+
+The extent range permits intentional overlap and very small text at extreme
+settings; these checks do not establish optimal readability for every combination
+of padding, split, device size and system text scale. Live-call behavior and
+subjective switch-sound quality are outside this synthetic layout round.
+
+Live exercise/restoration passed (`/tmp/agentvoice-independent-phone-check.log`).
+Native captures in `/tmp/agentvoice-independent-phone/` were reviewed for shown/
+hidden portrait and landscape, 600 dp width, mirrored width, 160 dp minimums
+at both split endpoints and the 1600 dp viewport limit. Wide controls correctly
+occlude Persona; compact captions remain inside their sampled faces. Both
+orientation layouts, unsaved session values and mute gates were restored, followed
+by exact original rotation settings. Phone and host saved files remained byte-for-byte
+unchanged. Host profile SHA-256:
+`f6a1d6fd6ee0cca1b319a176327b81beb4e7fe6d30d5b14a4ba34c2ddf97a951`.
+No Save was issued.

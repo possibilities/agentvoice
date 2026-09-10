@@ -30,7 +30,7 @@ internal fun decodePersonaSounds(json: String): PreviewSounds {
     val data = JSONObject(json)
     return when (data.getInt("version")) {
         in 1..15 -> PreviewSounds()
-        16, 17 -> decodePreviewSounds(data.getJSONObject("sounds"))
+        16, 17, 18 -> decodePreviewSounds(data.getJSONObject("sounds"))
         else -> error("Unsupported Persona tuning version")
     }
 }

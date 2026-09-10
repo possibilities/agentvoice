@@ -45,7 +45,7 @@ class PersonaPreviewTest {
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(17, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(18, JSONObject(fixture.readText()).getInt("version"))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))
@@ -76,7 +76,7 @@ class PersonaPreviewTest {
             assertEquals(v3, fixture.readText())
             assertEquals(PreviewHalo(), decodePersonaHalo(v3))
             val previous = design.copy(traces = PreviewTraces())
-            val oldDesign = previous.json().apply { remove("composition"); remove("traces"); remove("spacing"); put("hold", "trigger"); put("mute", "keycaps") }
+            val oldDesign = previous.json().withoutIndependentExtents().apply { remove("composition"); remove("traces"); remove("spacing"); put("hold", "trigger"); put("mute", "keycaps") }
             val v4 = legacyProfile(encodePersonaTuning(tuned, previous), 4).apply {
                 remove("halo"); put("design", oldDesign)
             }.toString()

@@ -75,15 +75,16 @@ private fun PreviewStudioScene(
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
         ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted,
         mutedCycleSeconds = mutedTuning.cycleSeconds)
-    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.effectivePushGapDp, showPushToTalk)
+    val controlsExtent = design.controlsExtent(showPushToTalk)
+    val deck = PreviewControlGeometry(controlsExtent, design.holdSharePercent, design.spacing.effectivePushGapDp, showPushToTalk)
     BoxWithConstraints(Modifier.fillMaxSize().background(theme.palette.ground)) {
         val screenWidth = maxWidth
         val portrait = maxHeight >= maxWidth
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
-                portrait, design.controlsHeightDp.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
-                spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else design.controlsHeightDp.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat())
+                portrait, controlsExtent.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
+                spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else controlsExtent.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat())
             var source by remember { mutableStateOf(target) }
             var destination by remember { mutableStateOf(target) }
             val progress = remember { Animatable(1f) }
@@ -172,7 +173,7 @@ private fun PreviewStudioScene(
                         // A relocated target cannot inherit the finger that owned its previous position.
                         key(target.layoutKey) {
                             PreviewControls(ui, { if (!latestChanging) onMute(it) }, { if (!latestChanging) onHold() }, release,
-                                Modifier.fillMaxWidth(), controlsHeightDp = design.controlsHeightDp,
+                                Modifier.fillMaxWidth(), controlsHeightDp = controlsExtent,
                                 holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing,
                                 availableHeightDp = geometry.deckViewportHeight,
                                 onReleaseCompleted = { if (!latestChanging) onReleaseCompleted() else release() }, showPushToTalk = showPushToTalk, landscape = !portrait, mirror = personaSide == "right")
