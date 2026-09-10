@@ -12,6 +12,9 @@ role, and an explicit initial Cove selection. Ejection errors stop the block.
 The database and recordings remain available afterward for investigation.
 The block runs in noninteractive Bash so interactive shell directory-change
 hooks cannot interrupt setup when strict variable checking is enabled.
+Generated role files use a private cache inside the trial workspace. This keeps
+the trial independent of shared or symlinked cache locations such as an external
+Scratch volume; it does not change your global cache configuration.
 
 ```sh
 env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
@@ -21,6 +24,7 @@ env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   trial_parent="${XDG_STATE_HOME:-$HOME/.local/state}/agentvoice"
   mkdir -p "$trial_parent"
   trial_workspace="$(mktemp -d "$trial_parent/voice-trial.XXXXXX")"
+  export XDG_CACHE_HOME="$trial_workspace/cache"
   bun run src/main.ts role eject --workspace "$trial_workspace" \
     --role "$PWD/roles/default" --voice cove
   bun run src/main.ts role status --workspace "$trial_workspace"
