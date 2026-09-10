@@ -10,9 +10,11 @@ call. Keep the working-agent pane visible and stop at the first failed check.
 Paste this entire block. It captures the usual config, the checkout's default
 role, and an explicit initial Cove selection. Ejection errors stop the block.
 The database and recordings remain available afterward for investigation.
+The block runs in noninteractive Bash so interactive shell directory-change
+hooks cannot interrupt setup when strict variable checking is enabled.
 
 ```sh
-(
+env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   set -eu
   cd /Users/arthack/code/agentvoice
   bun -e 'import { CONTROL_PROTOCOL_VERSION as v } from "./src/control/types.ts"; if (v !== 5) throw new Error(`Expected control API 5, found ${v}`); console.log("Checkout control API: 5");'
@@ -25,7 +27,7 @@ The database and recordings remain available afterward for investigation.
   printf '\nWORKSPACE: %s\n\nRun this exact command in terminal 2:\n' "$trial_workspace"
   printf 'bun run %q --workspace %q\n\n' "$PWD/src/main.ts" "$trial_workspace"
   exec bun run src/main.ts server --workspace "$trial_workspace"
-)
+AGENTVOICE_TRIAL
 ```
 
 Expected saved state: revision `1`, `savedVoice: "cove"`. Keep terminal 1
