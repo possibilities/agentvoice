@@ -81,7 +81,8 @@ when the phone is available again. Report any restoration problem immediately.
 - `bun run android:build` — cross-compile the ARM64 Android/Termux standalone
   executable at `dist/agentvoice-android-arm64`. It neither installs to a device
   nor opens media/inference; phone calls do not require the native audio build.
-- `bun run android:configure --device <adb-serial>` — host browser controls for
+- `bun run android:configure` — discover running Studio devices and choose one
+  in the browser (`--device <serial>` optionally pins one). Host browser controls for
   the separate Studio APK's synthetic native preview. Read the
   [studio contract](android/configurator/README.md) before changing preview UI,
   profiles, gestures, reconnect or rendering. Preserve current operator choices

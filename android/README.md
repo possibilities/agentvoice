@@ -290,7 +290,7 @@ the running host; a host restart prints a new browser URL.
 
 ```sh
 # From the repository root, with the current debug APK installed:
-bun run android:configure --device <adb-serial>
+bun run android:configure
 ```
 
 Explicit Save retains both orientations' design, sizes and position in a
@@ -516,7 +516,7 @@ opens the authors, sources and license links in a dismissible native dialog.
 ## Returning to Studio after a release
 
 Open **AgentVoice Studio** on the phone. Run
-`bun run android:configure --device <serial>` and open its browser URL; an already
+`bun run android:configure` and select the running Studio device in its browser; an already
 running host reconnects when Studio returns. The two apps have independent data.
 Studio always resumes the last configured design across restarts, reinstalls and
 production changes. Production seeds only a genuinely new Studio installation.

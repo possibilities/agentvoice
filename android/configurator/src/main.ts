@@ -1,19 +1,19 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { adbCaptureDevice, captureLayouts } from "./capture.ts";
-import { connectPhone } from "./device.ts";
 import { serveConfigurator } from "./server.ts";
+import { StudioTargets } from "./targets.ts";
 
 const usage = `AgentVoice configurator — browser controls, native phone preview.
 
-bun run android:configure --device <adb-serial>
+bun run android:configure [--device <adb-serial>]
 
---device SERIAL  Required: the authorized ADB phone with the AgentVoice Studio APK.
+--device SERIAL  Optional: preselect one running Studio device. Otherwise choose in the browser.
 --port NUMBER    Host loopback port (default 4317; 0 selects an available port).
---save-to PATH   Host JSON copy (default android/configurator/profiles/SERIAL.json).
+--save-to PATH   Host JSON copy for --device only (default profiles/SERIAL.json).
 
 Open the printed address in your host browser. Stop with Ctrl+C.
-This opens a synthetic Halo preview; it starts no voice call or audio.
+Open AgentVoice Studio on a USB-debugging-authorized device, then Refresh devices.
+Selection never launches an app or replaces another host. No voice call or audio is started.
 `;
 
 export function parseArgs(args: string[]) {
@@ -36,22 +36,24 @@ export function parseArgs(args: string[]) {
     }
     if (arg === "--save-to") saveTo = resolve(value);
   }
-  if (!device) throw Error("Choose the phone explicitly with --device <adb-serial>.");
-  saveTo ??= fileURLToPath(
-    new URL(`../profiles/${encodeURIComponent(device)}.json`, import.meta.url),
-  );
+  if (saveTo && !device)
+    throw Error("--save-to requires --device so exports cannot cross devices.");
+  if (device)
+    saveTo ??= fileURLToPath(
+      new URL(`../profiles/${encodeURIComponent(device)}.json`, import.meta.url),
+    );
   return { help: false, device, port, saveTo };
 }
 
 if (import.meta.main) {
-  let connection: Awaited<ReturnType<typeof connectPhone>> | undefined;
+  let targets: StudioTargets | undefined;
   let web: Awaited<ReturnType<typeof serveConfigurator>> | undefined;
   let stopping = false;
   async function stop() {
     if (stopping) return;
     stopping = true;
     await web?.close();
-    await connection
+    await targets
       ?.close()
       .catch(() => console.error("Could not remove the preview's ADB forward."));
   }
@@ -65,25 +67,29 @@ if (import.meta.main) {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) console.log(usage);
     else {
-      console.log("Opening AgentVoice Studio…");
-      connection = await connectPhone(options.device);
+      targets = new StudioTargets({
+        pinnedSerial: options.device || undefined,
+        saveTo: options.saveTo,
+      });
+      web = await serveConfigurator(undefined, {
+        port: options.port,
+        device: "",
+        saveTo: "",
+        targets,
+      });
+      console.log(
+        `\nAgentVoice Studio\n${web.url}\n\nOpen Studio on your device, then choose it in the browser. Ctrl+C releases the selected device.`,
+      );
+      await targets.refresh();
       if (stopping) {
-        await connection.close();
-      } else {
-        const selected = connection.phone;
-        const captureDevice = adbCaptureDevice(options.device);
-        web = await serveConfigurator(selected, {
-          ...options,
-          device: connection.label,
-          capture: (signal) => captureLayouts(selected, captureDevice, signal),
-        });
-        if (stopping) {
-          await web.close();
-          await connection.close();
-        } else
-          console.log(
-            `\nAgentVoice configurator\n${web.url}\n\nSave destination: ${options.saveTo}\nCtrl+C closes this preview connection.`,
-          );
+        await web.close();
+        await targets.close();
+      } else if (options.device) {
+        try {
+          await targets.select(options.device, targets.snapshot().revision);
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : "Choose a device in the browser.");
+        }
       }
     }
   } catch (error) {

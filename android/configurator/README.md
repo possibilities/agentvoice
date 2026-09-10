@@ -88,7 +88,7 @@ removed because a code release must never discard Studio work.
 
 Opening Studio on the phone restores its design independently of the browser.
 Keep the host configurator running to use the browser controls. Studio stores
-that host's private synthetic-bridge binding separately from the draft, so an
+its private synthetic-bridge binding separately from the draft, so an
 ordinary launcher open after process death reconnects the same browser without
 replaying edits. A host restart prints a new local URL; it observes the existing
 draft. This binding is never a production device grant and is never exported.
@@ -264,7 +264,7 @@ reported orientation and offers no orientation selector. Every edit and Save
 carries the observed orientation and rotation epoch as well as the host's peer
 generation; the host and phone refuse stale requests, including a round trip
 back to the same orientation. Queued browser drafts are dropped on rotation.
-Both effective layouts, their override flags and the shared base are stored on
+All four effective layouts, their override flags and the shared base are stored on
 Save. Legacy portrait appearance seeds that base; untouched landscape appearance
 inherits it while explicit landscape differences stay local.
 The model supports swapping Persona and deck sides without mirroring icons or
@@ -279,30 +279,50 @@ nor the controls. The connection selection is transient and is not saved in
 the profile. It does not change the host's actual ADB connection.
 
 Install the current AgentVoice Studio APK on an explicitly selected, ADB-authorized
-phone, then run from the repository root:
+phone. Open **AgentVoice Studio** on the phone, then run from the repository root:
 
 ```sh
-bun run android:configure --device R5CT91TW4RP
+bun run android:configure
 ```
 
-Or from this directory: `bun run start --device <adb-serial>`. Bun and ADB must be
-on PATH. Open the printed loopback address in a browser **on the host machine**.
-ADB runs without a mirroring window. scrcpy is optional and can run alongside
-the configurator; it is not used for control or rendering by this app. Moving
-the preview between displays, recreating its activity or backgrounding it can
-interrupt the connection. Leave this browser tab open: it shows **Waiting for
-phone** and reconnects automatically when the preview returns. Unsaved design,
-sizes, position and selected state survive backgrounding and Android activity recreation.
-Temporary USB/ADB loss also reconnects to the same selected phone; the host
-recreates its own port forward if necessary. It never pulls the app into the
-foreground. Return to **AgentVoice Studio** on the phone when ready.
-Port 4317 is the default; `--port 0` selects an available port. Ctrl+C stops the
-host app and removes only its own ADB forward. The preview stays on the phone.
-After force-stop or task dismissal, open AgentVoice Studio again and the running
-host reconnects. Restarting the host command establishes a fresh binding and URL
-while retaining every design value.
+Open the printed loopback address on the host machine. The browser starts with a
+**Studio device** picker. Initial discovery and **Refresh** list only authorized,
+online ADB devices with Studio currently foreground; discovering never launches
+an app or attaches a controller. Choose a device and **Link selected device**.
+**Choose another device** releases the current connection before another selection.
+The controls and screenshot gallery always belong to the selected device.
 
-The command opens the debug-only **Halo preview** activity. It loads the phone's
+`--device <serial>` optionally pins/preselects one running Studio device.
+`--save-to /absolute/file.json` is allowed only with that pin; otherwise each
+selected device exports to its own `profiles/<encoded-serial>.json`. No phone ID
+is required at startup, and the browser stays usable with an empty device list.
+Bun and ADB must be on PATH. `--port 0` chooses an available port; the default is
+4317. Do not replace an operator's existing host just to free its port.
+
+Studio creates a private random synthetic-bridge binding on its first open.
+Selection reads that exact file with authorized ADB `run-as`, validates it and
+allocates a new owned local port. Tokens never reach browser state or diagnostics.
+A matching forward from another host means **busy**: this host neither replaces
+its binding nor reuses/removes that forward. Stop the owning host normally before
+linking here. A crashed host's stale forward requires ownership-verified manual
+cleanup; discovery does not delete it. This coordination covers one local ADB
+daemon; independently authorized computers do not share a controller lease.
+
+The host reconnects only to the selected device and binding, observing its latest
+state without replaying edits or Save. It never pulls the app into the foreground.
+Return to Studio after backgrounding, force-stop or task dismissal. Ctrl+C stops
+the reconnect loop and removes only ports allocated by this host. The app and
+its working draft remain. A restarted host has a new browser URL and explicitly
+links the existing Studio binding; it does not replace design settings.
+
+Switching targets is excluded during edits, Save, capture or other pending
+commands. Selection epochs fence stale requests in addition to the existing
+connection generation and physical orientation checks. Switching clears the
+browser's old draft, export receipt and capture gallery before observing the new
+phone. Native binding corruption is a visible recovery error, never a silent
+rewrite of the draft, profile or private binding.
+
+Opening Studio loads the phone's
 existing private `files/persona-tuning.json` as the exported checkpoint without rewriting it, then loads the working draft (or seeds production once). Size remains
 35–120%. Original keeps independent state sizes; Contained shares one size.
 Vertical position applies to every state,
@@ -442,7 +462,7 @@ does not change or forward the production phone-browser gateway.
 `src/web.ts` and `public/` own the browser controls. `src/server.ts` serves them
 and coordinates saves; `src/device.ts` owns the selected ADB connection and
 `src/reconnecting-phone.ts` handles bounded retries and shutdown;
-`src/protocol.ts` validates the preview contract. Android's debug
+`src/discovery.ts` enumerates foreground authorized targets; `src/targets.ts` owns explicit selection, lifetime and export isolation. `src/protocol.ts` validates the preview contract. Android's debug
 `PersonaPreviewSession` applies the corresponding commands. `PersonaPreview`
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio

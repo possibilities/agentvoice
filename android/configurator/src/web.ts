@@ -37,16 +37,26 @@ import { visibleSpacingFields } from "./spacing.ts";
 import type { SpiritSelection } from "./spirit.ts";
 import { type TraceSelection, traceAmountFields } from "./traces.ts";
 
+type Target = { serial: string; label: string };
+type Targets = {
+  revision: number;
+  selected: string | null;
+  devices: Target[];
+  scanning: boolean;
+  error?: string;
+};
 type Status = {
   captureAvailable: boolean;
   connected: boolean;
   reconnecting: boolean;
   generation: number;
   disconnectReason?: string;
-  state: PhoneState;
+  state: PhoneState | null;
   device: string;
   savePath: string;
   hostSaved: Profile | null;
+  targets?: Targets;
+  selectionEpoch?: number;
 };
 type Capture = {
   id: string;
@@ -66,6 +76,12 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 const controls = element<HTMLFieldSetElement>("controls");
+const targetPicker = element<HTMLElement>("target-picker");
+const targetHint = element("target-hint");
+const targetList = element("target-list");
+const refreshTargets = element<HTMLButtonElement>("refresh-targets");
+const linkTarget = element<HTMLButtonElement>("link-target");
+const releaseTarget = element<HTMLButtonElement>("release-target");
 const slider = element<HTMLInputElement>("size");
 const position = element<HTMLInputElement>("position");
 const controlHeight = element<HTMLInputElement>("controls-height");
@@ -88,6 +104,54 @@ let resetting = false;
 let draftFailure: string | null = null;
 let saveFailure: string | null = null;
 let transientFailure: string | null = null;
+let targetChoice: string | null = null;
+let targetRequest = false;
+
+function isPicker(
+  current = status,
+): current is Status & { targets: Targets; selectionEpoch: number } {
+  return current?.targets !== undefined && current.selectionEpoch !== undefined;
+}
+
+function selectionBusy(): boolean {
+  return (
+    inFlight ||
+    saving ||
+    capturing ||
+    openingCredits ||
+    openingConnection ||
+    changed ||
+    targetRequest
+  );
+}
+
+function acceptsEpoch(epoch: number | undefined): boolean {
+  return epoch === undefined || status?.selectionEpoch === epoch;
+}
+
+function acceptStatus(next: Status, adoptDraft = false): void {
+  const changedEpoch =
+    status?.selectionEpoch !== undefined &&
+    next.selectionEpoch !== undefined &&
+    status.selectionEpoch !== next.selectionEpoch;
+  if (changedEpoch) {
+    edit++;
+    changed = false;
+    draft = null;
+    capture = null;
+    draftFailure = null;
+    saveFailure = null;
+    transientFailure = null;
+    targetChoice = null;
+  }
+  status = next;
+  if (!next.state) {
+    draft = null;
+    capture = null;
+  } else if (changedEpoch || adoptDraft) {
+    draft = previewOf(next.state);
+  }
+}
 
 function orientationLabel(orientation: Preview["orientation"]): string {
   return (
@@ -173,6 +237,18 @@ async function downloadComparison() {
   link.click();
 }
 
+function requestBody(body: unknown): unknown {
+  if (
+    body === undefined ||
+    body === null ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    status?.selectionEpoch === undefined
+  )
+    return body;
+  return { ...(body as Record<string, unknown>), selectionEpoch: status.selectionEpoch };
+}
+
 async function api<T = Status>(path: string, body?: unknown, timeout = 6000): Promise<T> {
   const response = await fetch(
     `./${path}`,
@@ -181,13 +257,61 @@ async function api<T = Status>(path: string, body?: unknown, timeout = 6000): Pr
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify(requestBody(body)),
           signal: AbortSignal.timeout(timeout),
         },
   );
   const result = await response.json();
   if (!response.ok) throw Error(result.error || "The host configurator did not answer.");
   return result as T;
+}
+
+function renderTargetPicker() {
+  const targets = status?.targets;
+  targetPicker.hidden = !targets;
+  if (!targets) return;
+  if (targetChoice && !targets.devices.some((device) => device.serial === targetChoice))
+    targetChoice = null;
+  const busy = selectionBusy() || targets.scanning;
+  refreshTargets.disabled = busy;
+  refreshTargets.textContent = targets.scanning ? "Refreshing…" : "Refresh";
+  targetList.replaceChildren();
+  for (const target of targets.devices) {
+    const label = document.createElement("label");
+    label.className = "target-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "studio-target";
+    input.value = target.serial;
+    input.checked = targetChoice === target.serial;
+    input.disabled = busy;
+    input.addEventListener("change", () => {
+      targetChoice = target.serial;
+      transientFailure = null;
+      render();
+    });
+    const name = document.createElement("span");
+    name.textContent = target.label;
+    const serial = document.createElement("small");
+    serial.textContent = target.serial;
+    label.append(input, name, serial);
+    targetList.append(label);
+  }
+  const idle = targets.selected === null;
+  text(
+    targetHint,
+    targets.error ??
+      (idle
+        ? targets.devices.length === 0
+          ? "Open Studio, connect an authorized USB device, then select Refresh."
+          : "Choose the Studio device, then select Link selected device."
+        : `Linked to ${targets.selected}. Choose another device when you are ready.`),
+  );
+  targetList.hidden = !idle;
+  linkTarget.hidden = !idle;
+  linkTarget.disabled = busy || !idle || targetChoice === null;
+  releaseTarget.disabled = busy || targets.selected === null;
+  releaseTarget.hidden = targets.selected === null;
 }
 
 function report(failure: unknown, isSave = false) {
@@ -198,22 +322,28 @@ function report(failure: unknown, isSave = false) {
 }
 
 function render() {
-  const connected = status?.connected === true;
+  const connected = status?.connected === true && status.state !== null;
+  renderTargetPicker();
+  controls.hidden = status?.targets !== undefined && status.state === null;
   error.hidden = !(saveFailure || draftFailure || transientFailure);
   text(error, saveFailure || draftFailure || transientFailure || "");
   element("connection").dataset["connected"] = String(connected);
   element("connection-text").textContent = connected ? "Phone linked" : "Waiting for phone";
-  controls.disabled = !connected || saving || openingCredits || capturing;
+  controls.disabled = !connected || saving || openingCredits || capturing || targetRequest;
   element<HTMLButtonElement>("icon-credits").disabled =
-    !connected || inFlight || changed || saving || openingCredits || capturing;
+    !connected || inFlight || changed || saving || openingCredits || capturing || targetRequest;
   text(
     element("icon-credits"),
     openingCredits && !openingConnection ? "Opening credits…" : "Credits on phone",
   );
-  save.disabled = !connected || inFlight || changed || saving || openingCredits || capturing;
+  save.disabled =
+    !connected || inFlight || changed || saving || openingCredits || capturing || targetRequest;
   save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save complete design";
   element<HTMLButtonElement>("reset-production").disabled = save.disabled;
-  renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits || capturing);
+  renderLauncher(
+    draft?.launcher ?? "current",
+    !connected || saving || openingCredits || capturing || targetRequest,
+  );
   const captureButton = element<HTMLButtonElement>("capture-layouts");
   captureButton.disabled =
     !connected ||
@@ -222,10 +352,26 @@ function render() {
     changed ||
     saving ||
     openingCredits ||
-    capturing;
+    capturing ||
+    targetRequest;
   captureButton.textContent = capturing ? "Capturing all 4 layouts…" : "Capture all 4 layouts";
   renderCapture();
-  if (!status || !draft) return;
+  if (!status?.state || !draft) {
+    element("device").textContent = status?.targets
+      ? "No Studio device linked"
+      : "Native phone preview";
+    text(
+      feedback,
+      status?.targets
+        ? "Open Studio, connect an authorized USB device, then select Refresh."
+        : "Waiting for the host configurator…",
+    );
+    const path = element("save-path");
+    path.hidden = true;
+    path.textContent = "";
+    document.documentElement.style.setProperty("--accent", colors.speaking);
+    return;
+  }
   element("device").textContent =
     `Previewing on ${status.device} · ${orientationLabel(draft.orientation)}`;
   const currentOrientationLabel = orientationLabel(draft.orientation);
@@ -435,26 +581,29 @@ function render() {
 }
 
 async function flush() {
-  if (inFlight || saving || !changed || !draft || !status?.connected) return;
+  if (inFlight || saving || !changed || !draft || !status?.connected || !status.state) return;
   const currentStatus = status;
+  const currentState = currentStatus.state;
+  if (!currentState) return;
   const currentDraft = draft;
+  const requestEpoch = currentStatus.selectionEpoch;
   inFlight = true;
   changed = false;
   const requestEdit = edit;
   const requestGeneration = currentStatus.generation;
   let selection = structuredClone(currentDraft);
-  const currentAppearance = appearanceOf(currentStatus.state);
+  const currentAppearance = appearanceOf(currentState);
   for (const group of appearanceGroups) {
     if (
       selection.appearanceOverrides.includes(group) &&
-      !status.state.appearanceOverrides.includes(group)
+      !currentState.appearanceOverrides.includes(group)
     )
       selection = applyAppearanceGroup(selection, currentAppearance, group);
     else if (
       !selection.appearanceOverrides.includes(group) &&
-      currentStatus.state.appearanceOverrides.includes(group)
+      currentState.appearanceOverrides.includes(group)
     )
-      selection = applyAppearanceGroup(selection, currentStatus.state.sharedAppearance, group);
+      selection = applyAppearanceGroup(selection, currentState.sharedAppearance, group);
   }
   // Scope changes settle first; retain queued appearance edits for the next request.
   const stagedAppearance = !equalLayout(selection, currentDraft);
@@ -462,20 +611,24 @@ async function flush() {
   render();
   try {
     const next = await api("preview", { ...selection, generation: requestGeneration });
-    status = next;
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next);
     if (
       !next.connected ||
       next.generation !== requestGeneration ||
+      !next.state ||
       !sameOrientation(selection, next.state)
     )
       changed = false;
-    if ((edit === requestEdit && !stagedAppearance) || !changed) draft = previewOf(next.state);
+    if (((edit === requestEdit && !stagedAppearance) || !changed) && next.state)
+      draft = previewOf(next.state);
     transientFailure = null;
     draftFailure = null;
   } catch (failure) {
+    if (!acceptsEpoch(requestEpoch)) return;
     draftFailure = "Draft was not confirmed on the phone. Review the values and retry the edit.";
     changed = false;
-    if (status) draft = previewOf(status.state);
+    if (status?.state) draft = previewOf(status.state);
     report(failure);
   } finally {
     inFlight = false;
@@ -485,7 +638,7 @@ async function flush() {
 }
 
 function update(change: (value: Preview) => Preview) {
-  if (!draft || !status?.connected || saving || openingCredits) return;
+  if (!draft || !status?.connected || saving || openingCredits || targetRequest) return;
   draft = change(draft);
   edit++;
   changed = true;
@@ -515,7 +668,7 @@ for (const group of appearanceGroups) {
         item === group ? checked : current.appearanceOverrides.includes(item),
       );
       const next = { ...current, appearanceOverrides };
-      return checked ? next : applyAppearanceGroup(next, status!.state.sharedAppearance, group);
+      return checked ? next : applyAppearanceGroup(next, status!.state!.sharedAppearance, group);
     });
   });
 }
@@ -588,7 +741,7 @@ initializeIconControls(
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-reset]")) {
   button.addEventListener("click", () =>
     update((current) =>
-      resetPreview(current, status!.state, button.dataset["reset"] as ResetTarget),
+      resetPreview(current, status!.state!, button.dataset["reset"] as ResetTarget),
     ),
   );
 }
@@ -654,9 +807,87 @@ position.addEventListener("input", () => {
       : { ...current, verticalOffsetDp: offsetDp },
   );
 });
+refreshTargets.addEventListener("click", async () => {
+  const current = status;
+  if (!isPicker(current) || selectionBusy()) return;
+  const requestEpoch = current.selectionEpoch;
+  edit++;
+  targetRequest = true;
+  render();
+  try {
+    const next = await api("targets/refresh", {}, 30000);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next);
+    transientFailure = null;
+  } catch (failure) {
+    if (acceptsEpoch(requestEpoch)) report(failure);
+  } finally {
+    targetRequest = false;
+    render();
+  }
+});
+
+linkTarget.addEventListener("click", async () => {
+  const current = status;
+  const serial = targetChoice;
+  if (!isPicker(current) || !serial || selectionBusy()) return;
+  const requestEpoch = current.selectionEpoch;
+  edit++;
+  targetRequest = true;
+  render();
+  try {
+    const next = await api("targets/select", { revision: current.targets.revision, serial }, 45000);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next, true);
+    targetChoice = next.targets?.selected ?? null;
+    transientFailure = null;
+  } catch (failure) {
+    if (acceptsEpoch(requestEpoch)) report(failure);
+  } finally {
+    targetRequest = false;
+    render();
+  }
+});
+
+releaseTarget.addEventListener("click", async () => {
+  const current = status;
+  if (!isPicker(current) || current.targets.selected === null || selectionBusy()) return;
+  const requestEpoch = current.selectionEpoch;
+  edit++;
+  targetRequest = true;
+  render();
+  try {
+    const next = await api(
+      "targets/select",
+      { revision: current.targets.revision, serial: null },
+      45000,
+    );
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next);
+    targetChoice = null;
+    transientFailure = null;
+  } catch (failure) {
+    if (acceptsEpoch(requestEpoch)) report(failure);
+  } finally {
+    targetRequest = false;
+    render();
+  }
+});
+
 element("setup-preview").addEventListener("change", async () => {
-  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  const current = status;
+  if (
+    !current?.connected ||
+    !current.state ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    targetRequest
+  )
+    return;
   const scene = element<HTMLSelectElement>("setup-preview").value;
+  const requestEpoch = current.selectionEpoch;
   openingConnection = true;
   edit++;
   openingCredits = true;
@@ -664,15 +895,15 @@ element("setup-preview").addEventListener("change", async () => {
   try {
     const next = await api("connection-preview", {
       scene,
-      generation: status.generation,
-      orientation: status.state.orientation,
-      orientationEpoch: status.state.orientationEpoch,
+      generation: current.generation,
+      orientation: current.state.orientation,
+      orientationEpoch: current.state.orientationEpoch,
     });
-    status = next;
-    draft = previewOf(next.state);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next, true);
     transientFailure = null;
   } catch (failure) {
-    report(failure);
+    if (acceptsEpoch(requestEpoch)) report(failure);
   } finally {
     openingCredits = false;
     openingConnection = false;
@@ -681,21 +912,32 @@ element("setup-preview").addEventListener("change", async () => {
 });
 
 element("icon-credits").addEventListener("click", async () => {
-  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  const current = status;
+  if (
+    !current?.connected ||
+    !current.state ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    targetRequest
+  )
+    return;
+  const requestEpoch = current.selectionEpoch;
   edit++;
   openingCredits = true;
   render();
   try {
     const next = await api("icon-credits", {
-      generation: status.generation,
-      orientation: status.state.orientation,
-      orientationEpoch: status.state.orientationEpoch,
+      generation: current.generation,
+      orientation: current.state.orientation,
+      orientationEpoch: current.state.orientationEpoch,
     });
-    status = next;
-    draft = previewOf(next.state);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next, true);
     transientFailure = null;
   } catch (failure) {
-    report(failure);
+    if (acceptsEpoch(requestEpoch)) report(failure);
   } finally {
     openingCredits = false;
     render();
@@ -703,35 +945,39 @@ element("icon-credits").addEventListener("click", async () => {
 });
 
 element("capture-layouts").addEventListener("click", async () => {
+  const current = status;
   if (
-    !status?.connected ||
-    !status.captureAvailable ||
+    !current?.connected ||
+    !current.state ||
+    !current.captureAvailable ||
     inFlight ||
     changed ||
     saving ||
     openingCredits ||
-    capturing
+    capturing ||
+    targetRequest
   )
     return;
+  const requestEpoch = current.selectionEpoch;
   capturing = true;
   render();
   try {
     const result = await api<CaptureResponse>(
       "capture-layouts",
       {
-        generation: status.generation,
-        revision: status.state.revision,
-        orientation: status.state.orientation,
-        orientationEpoch: status.state.orientationEpoch,
+        generation: current.generation,
+        revision: current.state.revision,
+        orientation: current.state.orientation,
+        orientationEpoch: current.state.orientationEpoch,
       },
       120000,
     );
-    status = result;
-    draft = previewOf(result.state);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(result, true);
     capture = result.capture;
     transientFailure = null;
   } catch (failure) {
-    report(failure);
+    if (acceptsEpoch(requestEpoch)) report(failure);
   } finally {
     capturing = false;
     render();
@@ -746,23 +992,35 @@ element("download-comparison").addEventListener("click", () => {
 });
 
 element("reset-production").addEventListener("click", async () => {
-  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  const current = status;
+  if (
+    !current?.connected ||
+    !current.state ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    targetRequest
+  )
+    return;
+  const requestEpoch = current.selectionEpoch;
   edit++;
   saving = true;
   resetting = true;
   render();
   try {
     const next = await api("reset-production", {
-      revision: status.state.revision,
-      generation: status.generation,
-      orientation: status.state.orientation,
-      orientationEpoch: status.state.orientationEpoch,
+      revision: current.state.revision,
+      generation: current.generation,
+      orientation: current.state.orientation,
+      orientationEpoch: current.state.orientationEpoch,
     });
-    status = next;
-    draft = previewOf(next.state);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next, true);
     transientFailure = null;
     draftFailure = null;
   } catch (failure) {
+    if (!acceptsEpoch(requestEpoch)) return;
     draftFailure = "Reset was not confirmed. Review the phone and retry if needed.";
     report(failure);
   } finally {
@@ -773,22 +1031,34 @@ element("reset-production").addEventListener("click", async () => {
 });
 
 save.addEventListener("click", async () => {
-  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  const current = status;
+  if (
+    !current?.connected ||
+    !current.state ||
+    inFlight ||
+    changed ||
+    saving ||
+    openingCredits ||
+    targetRequest
+  )
+    return;
+  const requestEpoch = current.selectionEpoch;
   edit++;
   saving = true;
   render();
   try {
     const next = await api("save", {
-      revision: status.state.revision,
-      generation: status.generation,
-      orientation: status.state.orientation,
-      orientationEpoch: status.state.orientationEpoch,
+      revision: current.state.revision,
+      generation: current.generation,
+      orientation: current.state.orientation,
+      orientationEpoch: current.state.orientationEpoch,
     });
-    status = next;
-    draft = previewOf(next.state);
+    if (!acceptsEpoch(requestEpoch)) return;
+    acceptStatus(next, true);
     saveFailure = null;
     transientFailure = null;
   } catch (failure) {
+    if (!acceptsEpoch(requestEpoch)) return;
     report(
       failure instanceof TypeError || failure instanceof DOMException
         ? Error("Save was not confirmed. Review the preview and host copy before saving again.")
@@ -802,16 +1072,16 @@ save.addEventListener("click", async () => {
 });
 
 async function poll() {
-  if (!inFlight && !saving && !changed && !openingCredits) {
+  if (!inFlight && !saving && !changed && !openingCredits && !capturing && !targetRequest) {
     const pollEdit = edit;
+    const pollEpoch = status?.selectionEpoch;
     try {
       const next = await api("state");
-      if (pollEdit === edit && !inFlight && !saving) {
+      if (pollEdit === edit && acceptsEpoch(pollEpoch) && !inFlight && !saving) {
         const recovered = next.connected && transientFailure !== null;
         if (next.connected) transientFailure = null;
         if (recovered || JSON.stringify(status) !== JSON.stringify(next)) {
-          status = next;
-          draft = previewOf(next.state);
+          acceptStatus(next, true);
           render();
         }
       }

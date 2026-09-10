@@ -687,3 +687,68 @@ input[type="color"]:focus-visible {
 .icon-changes {
   flex-basis: 100%;
 }
+
+.target-picker {
+  margin: 0 0 32px;
+  padding: 22px 0;
+  border-block: 1px solid var(--line);
+}
+.target-heading,
+.target-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.target-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 400;
+}
+.target-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.target-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: #090c0a;
+  font-size: 12px;
+}
+.target-option input {
+  grid-row: span 2;
+  margin: 0;
+  accent-color: var(--accent);
+}
+#target-list small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.target-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+.target-actions .save,
+.target-actions .reset {
+  min-height: 44px;
+  font-size: 11px;
+}
+@media (max-width: 620px) {
+  .target-heading,
+  .target-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .target-heading .reset,
+  .target-actions .save,
+  .target-actions .reset {
+    width: 100%;
+  }
+}

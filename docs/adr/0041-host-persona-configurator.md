@@ -639,3 +639,16 @@ Studio remembers the synthetic browser binding outside the exported design. An
 ordinary launcher open after process death reconnects an existing host without
 replaying mutations. Host restart establishes a new binding and local URL; both
 observe the retained draft. Real device grants are never copied or exposed.
+
+
+### Running-device selection (2026-09-10)
+
+The default command now starts a browser picker without `--device`. It lists
+ADB-authorized devices with Studio foreground; explicit selection reads the
+app-private persistent binding, creates only an owned forward and observes the
+current draft. No `am start` or binding replacement occurs. A local host already
+forwarding that binding is busy. Release precedes another selection, and browser
+requests carry selection epochs. Export destinations are per serial; a custom
+path requires a pinned `--device`. This supersedes the earlier fresh-binding-on-
+host-restart description. The boundary is one local ADB daemon, not a distributed
+lease between independently authorized computers.

@@ -414,8 +414,9 @@ async function fixture(options: { saveTo?: string } = {}) {
   return { phone, saveTo, url, origin, post };
 }
 
-test("CLI requires one explicit device and keeps the app separately runnable", () => {
-  expect(() => parseArgs([])).toThrow("--device");
+test("CLI opens a picker without a serial and isolates custom exports", () => {
+  expect(parseArgs([]).device).toBe("");
+  expect(() => parseArgs(["--save-to", "/tmp/export.json"])).toThrow("--device");
   expect(() => parseArgs(["--device", "phone", "--port", "65536"])).toThrow();
   expect(() => parseArgs(["--device", "phone", "--device", "other"])).toThrow();
   expect(parseArgs(["--device", "phone", "--port", "0"]).port).toBe(0);

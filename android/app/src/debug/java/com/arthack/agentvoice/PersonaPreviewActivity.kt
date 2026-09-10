@@ -27,6 +27,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     private var draftReady = false
     private var bridge: PersonaPreviewBridge? = null
     private var binding: PersonaPreviewBinding? = null
+    private val bindingStore by lazy { StudioBindingStore(File(filesDir, "persona-studio-binding.json")) }
     private val displays by lazy { getSystemService(DisplayManager::class.java) }
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -82,10 +83,11 @@ class PersonaPreviewActivity : ComponentActivity() {
         }
         session.persistWorkingDesign = draft::write
         observeOrientation(resources.configuration)
-        binding = PersonaPreviewBinding.parse(savedInstanceState?.getString("previewSocket"), savedInstanceState?.getString("previewToken"))
-            ?: runCatching { JSONObject(AtomicFile(File(filesDir, "persona-studio-binding.json")).readFully().toString(Charsets.UTF_8)) }
-                .getOrNull()?.let { PersonaPreviewBinding.parse(it.optString("socket"), it.optString("token")) }
-        configure(intent)
+        val storedBinding = runCatching { bindingStore.loadOrCreate() }
+        binding = storedBinding.getOrNull()
+        val explicit = PersonaPreviewBinding.parse(intent.getStringExtra("previewSocket"), intent.getStringExtra("previewToken"))
+        val configured = if (explicit != null) runCatching { configure(intent) } else Result.success(Unit)
+        if (configured.isFailure || (storedBinding.isFailure && explicit == null)) showBindingError()
         setContent { VoiceTheme {
             PersonaPreview(session.state, onExit = ::finish) { session.state = it }
             val rehearsal = session.state.connectionPreview
@@ -112,8 +114,8 @@ class PersonaPreviewActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        configure(intent)
-        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) startBridge()
+        if (runCatching { configure(intent) }.isFailure) showBindingError()
+        else if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) startBridge()
     }
 
     private fun configure(intent: Intent) {
@@ -122,10 +124,16 @@ class PersonaPreviewActivity : ComponentActivity() {
         intent.removeExtra("previewToken")
         if (binding?.name == next.name && binding?.token == next.token) return
         // This private capability reaches only the synthetic Studio bridge, never a real call.
-        savePersonaTuning(File(filesDir, "persona-studio-binding.json"), JSONObject().put("socket", next.name).put("token", next.token).toString())
+        bindingStore.replace(next)
         bridge?.close()
         bridge = null
         binding = next
+    }
+
+    private fun showBindingError() {
+        android.app.AlertDialog.Builder(this).setTitle("Studio connection unavailable")
+            .setMessage("The private Studio connection file is unreadable or invalid. Close Studio, then repair or remove persona-studio-binding.json before reopening. Your draft and saved profile were not changed.")
+            .setCancelable(false).setPositiveButton("Close") { _, _ -> finish() }.show()
     }
 
     override fun onStart() {
@@ -166,15 +174,6 @@ class PersonaPreviewActivity : ComponentActivity() {
         bridge = null
         session.state = session.state.endHold()
         super.onStop()
-    }
-}
-
-internal class PersonaPreviewBinding(val name: String, val token: String) {
-    override fun toString() = "PersonaPreviewBinding(redacted)"
-    companion object {
-        fun parse(name: String?, token: String?): PersonaPreviewBinding? =
-            if (name?.matches(Regex("agentvoice-halo-[a-f0-9]{32}")) == true && token?.matches(Regex("[a-f0-9]{64}")) == true)
-                PersonaPreviewBinding(name, token) else null
     }
 }
 

@@ -1814,3 +1814,33 @@ current. The protected S22 profile retains SHA-256
 The comparison export gained labels and narrower columns after the initial
 browser download review; that final presentation refinement awaits browser/phone
 acceptance, while original PNGs remain unchanged.
+
+
+## Studio device picker — 2026-09-10
+
+The host starts without a serial or selected phone. A bounded ADB read discovers
+only authorized online targets with Studio foreground. Explicit linking reads
+that app's private binding; no activity launch, binding replacement or design
+write occurs. Another local host's matching forward is busy. Switching targets
+requires release and fences old requests; exports stay in each serial's own path.
+A custom `--save-to` requires pinned `--device`. This is local ADB-host coordination,
+not a distributed lease between separately authorized computers.
+
+Host suite: 119 tests / 3,929 assertions; host and root TypeScript pass. Five new
+fake-ADB/loopback tests cover enumeration without launch, busy/racing forwards,
+authenticated read-only attachment, exact forward cleanup, per-target paths and
+HTTP origin/selection-epoch fences. No real ADB command was used for these checks.
+Native binding tests cover first creation, byte-exact reuse and malformed-file
+preservation; their instrumentation execution awaits explicit phone access.
+
+To limit system-disk use, this worktree's existing generated `android/app/build`
+directory was moved intact to `/Volumes/Scratch/agentvoice-green-river-build-20260910`
+and locally symlinked back. This freed about 1.1 GB; the symlink is ignored and
+not shipped. No shared cache or unrelated VM was removed. Incremental build uses
+one worker, a 768 MB Gradle heap, in-process Kotlin and offline dependencies.
+No phone operation, operator-host restart or default/trial service change occurred.
+
+`/tmp/agentvoice-picker-build.log`: Studio APK, instrumentation APK and Studio lint
+passed in 2m37s (18 executed tasks, 62 up-to-date). The installed-app/package audit
+is `/tmp/agentvoice-picker-packages.json`. No claim of native execution or phone
+UI acceptance is made for this binding change before the requested handoff.

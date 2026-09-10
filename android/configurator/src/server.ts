@@ -27,10 +27,12 @@ import {
   visualSettingsOf,
 } from "./protocol.ts";
 import { equalSounds } from "./sounds.ts";
+import type { ConfiguratorTargets } from "./targets.ts";
 
 export async function serveConfigurator(
-  phone: Phone,
+  fixedPhone: Phone | undefined,
   options: {
+    targets?: ConfiguratorTargets;
     port: number;
     device: string;
     saveTo: string;
@@ -59,17 +61,25 @@ export async function serveConfigurator(
     "Content-Security-Policy":
       "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
   };
-  const status = () => ({
-    captureAvailable: options.capture !== undefined,
-    connected: phone.connected,
-    reconnecting: phone.reconnecting ?? false,
-    generation: phone.generation ?? 1,
-    disconnectReason: phone.disconnectReason,
-    state: phone.state,
-    device: options.device,
-    savePath: options.saveTo,
-    hostSaved: saved,
-  });
+  const currentPhone = () => options.targets?.phone ?? fixedPhone;
+  const currentSaveTo = () => options.targets?.saveTo ?? options.saveTo;
+  const status = () => {
+    const phone = currentPhone();
+    return {
+      captureAvailable: !!phone && (options.capture !== undefined || options.targets !== undefined),
+      connected: phone?.connected ?? false,
+      reconnecting: phone?.reconnecting ?? false,
+      generation: phone?.generation ?? 1,
+      disconnectReason: phone?.disconnectReason,
+      state: phone?.state ?? null,
+      device: options.targets?.label ?? options.device,
+      savePath: currentSaveTo(),
+      hostSaved: saved,
+      ...(options.targets
+        ? { targets: options.targets.snapshot(), selectionEpoch: options.targets.epoch }
+        : {}),
+    };
+  };
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -141,6 +151,53 @@ export async function serveConfigurator(
         request.headers.get("content-type") !== "application/json"
       )
         return json({ error: "Invalid request origin or content type" }, 403);
+      if (path === "targets/refresh" || path === "targets/select") {
+        const targets = options.targets;
+        if (!targets) return json({ error: "Device selection is unavailable in this host." }, 404);
+        let input: Record<string, unknown>;
+        try {
+          input = record(await request.json());
+          exact(
+            input,
+            path === "targets/refresh"
+              ? ["selectionEpoch"]
+              : ["selectionEpoch", "revision", "serial"],
+          );
+          integer(input["selectionEpoch"], 1);
+          if (path === "targets/select") {
+            integer(input["revision"]);
+            if (input["serial"] !== null && typeof input["serial"] !== "string") throw Error();
+          }
+        } catch {
+          return json({ error: "Invalid device selection." }, 400);
+        }
+        if (mutating || input["selectionEpoch"] !== targets.epoch)
+          return json(
+            {
+              error: "Device selection changed or a request is pending. Review the current device.",
+            },
+            409,
+          );
+        mutating = true;
+        try {
+          if (path === "targets/refresh") await targets.refresh();
+          else {
+            saved = null;
+            latestCapture = undefined;
+            await targets.select(input["serial"] as string | null, input["revision"] as number);
+          }
+          return json(status());
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : "Could not select a device." },
+            409,
+          );
+        } finally {
+          mutating = false;
+        }
+      }
+      const phone = currentPhone();
+      const selectionEpoch = options.targets?.epoch;
       if (
         path !== "preview" &&
         path !== "save" &&
@@ -150,11 +207,17 @@ export async function serveConfigurator(
         path !== "capture-layouts"
       )
         return json({ error: "Not found" }, 404);
-      if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
+      if (!phone?.connected)
+        return json({ error: "Waiting for the phone preview to return." }, 503);
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
       let input: Record<string, unknown>;
       try {
         input = record(await request.json());
+        if (options.targets) {
+          if (input["selectionEpoch"] !== options.targets.epoch)
+            return json({ error: "The selected device changed. Review it before editing." }, 409);
+          delete input["selectionEpoch"];
+        }
         integer(input["generation"], 1);
         parseOrientationFence(input);
         if (path === "preview") {
@@ -220,12 +283,17 @@ export async function serveConfigurator(
       }
       if (mutating) return json({ error: "A change is still reaching the phone. Try again." }, 409);
       // Reading a request body can span a disconnect. Never dispatch an old browser edit on a new peer.
-      if (input["generation"] !== (phone.generation ?? 1))
+      if (
+        selectionEpoch !== options.targets?.epoch ||
+        currentPhone() !== phone ||
+        input["generation"] !== (phone.generation ?? 1)
+      )
         return json(
           { error: "Phone reconnected. Review its preview before making another change." },
           409,
         );
-      if (!phone.connected) return json({ error: "Waiting for the phone preview to return." }, 503);
+      if (!phone?.connected)
+        return json({ error: "Waiting for the phone preview to return." }, 503);
       if (!sameOrientation(parseOrientationFence(input), phone.state))
         return json(
           { error: "Phone rotated. Review its current layout before making another change." },
@@ -234,11 +302,13 @@ export async function serveConfigurator(
       mutating = true;
       try {
         if (path === "capture-layouts") {
-          if (!options.capture)
+          if (!options.capture && !options.targets)
             return json({ error: "Capture is unavailable for this target." }, 409);
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before capturing." }, 409);
-          captureTask = options.capture(captureAbort.signal);
+          captureTask = options.targets
+            ? options.targets.capture(captureAbort.signal)
+            : options.capture!(captureAbort.signal);
           latestCapture = await captureTask;
           return json({
             ...status(),
@@ -329,7 +399,7 @@ export async function serveConfigurator(
           )
             throw Error("Phone saved different settings. Review the preview.");
           try {
-            await saveProfile(options.saveTo, reply.profile);
+            await saveProfile(currentSaveTo(), reply.profile);
           } catch {
             return json(
               {

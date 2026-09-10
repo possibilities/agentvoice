@@ -22,6 +22,18 @@
           <h1 id="title">Design studio</h1>
           <p id="device">Native phone preview</p>
         </div>
+        <section id="target-picker" class="target-picker" aria-labelledby="target-heading" hidden>
+          <div class="target-heading">
+            <h2 id="target-heading">Studio device</h2>
+            <button type="button" id="refresh-targets" class="reset value-reset">Refresh</button>
+          </div>
+          <p id="target-hint" class="control-hint" role="status" aria-live="polite"></p>
+          <div id="target-list" class="target-list" role="radiogroup" aria-label="Available Studio devices"></div>
+          <div class="target-actions">
+            <button type="button" id="link-target" class="save">Link selected device</button>
+            <button type="button" id="release-target" class="reset">Choose another device</button>
+          </div>
+        </section>
         <fieldset id="controls" disabled>
           <legend class="sr-only">Design preview controls</legend>
           <div class="studio-grid">

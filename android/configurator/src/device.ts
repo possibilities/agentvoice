@@ -1,7 +1,11 @@
-import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
-import { promisify } from "node:util";
+import {
+  type Adb,
+  parseStudioBinding,
+  requireRunningStudio,
+  runAdb,
+  studioPackage,
+} from "./discovery.ts";
 import {
   integer,
   type Phone,
@@ -11,22 +15,6 @@ import {
   record,
 } from "./protocol.ts";
 import { ReconnectingPhone } from "./reconnecting-phone.ts";
-
-const execute = promisify(execFile);
-const activity = "com.arthack.agentvoice.studio/com.arthack.agentvoice.PersonaPreviewActivity";
-
-async function adb(device: string, args: string[], signal?: AbortSignal): Promise<string> {
-  try {
-    return (
-      await execute("adb", ["-s", device, ...args], { timeout: 12000, maxBuffer: 65536, signal })
-    ).stdout.trim();
-  } catch {
-    // Activity arguments include this preview's admission token.
-    throw Error(
-      "ADB failed. Check the selected phone is connected and USB debugging is authorized.",
-    );
-  }
-}
 
 type Reply = { state: PhoneState; profile?: string };
 type Pending = {
@@ -119,30 +107,20 @@ export class PhoneConnection implements Phone {
   }
 }
 
-export async function connectPhone(device: string) {
-  if ((await adb(device, ["get-state"])) !== "device")
-    throw Error("The selected phone is unavailable.");
-  const name = `agentvoice-halo-${randomBytes(16).toString("hex")}`;
-  const token = randomBytes(32).toString("hex");
-  const label = await adb(device, ["shell", "getprop", "ro.product.model"]);
-  const launch = await adb(device, [
-    "shell",
-    "am",
-    "start",
-    "-W",
-    "-f",
-    "0x24000000",
-    "-n",
-    activity,
-    "--es",
-    "previewSocket",
-    name,
-    "--es",
-    "previewToken",
-    token,
-  ]);
-  if (/Error|Exception/.test(launch))
-    throw Error("Install the current AgentVoice Studio APK before opening the configurator.");
+export async function connectPhone(device: string, runner: Adb = runAdb) {
+  const adb = (serial: string, args: string[], signal?: AbortSignal) =>
+    runner(["-s", serial, ...args], signal);
+  const admission = AbortSignal.timeout(30000);
+  await requireRunningStudio(device, runner, admission);
+  const { name, token } = parseStudioBinding(
+    await adb(
+      device,
+      ["shell", "run-as", studioPackage, "cat", "files/persona-studio-binding.json"],
+      admission,
+    ),
+  );
+  const label = await adb(device, ["shell", "getprop", "ro.product.model"], admission);
+  const allocated = new Set<string>();
   let phone: ReconnectingPhone | undefined;
   let closed = false;
   const ownedForward = (line: string) => {
@@ -158,22 +136,47 @@ export async function connectPhone(device: string) {
     const forwards = await adb(device, ["forward", "--list"]);
     for (const line of forwards.split("\n")) {
       const local = ownedForward(line);
-      if (local) await adb(device, ["forward", "--remove", local]);
+      if (local && allocated.has(local)) {
+        await adb(device, ["forward", "--remove", local]);
+        allocated.delete(local);
+      }
     }
   }
 
-  async function dial(signal?: AbortSignal): Promise<PhoneConnection> {
+  async function dial(parentSignal?: AbortSignal): Promise<PhoneConnection> {
+    const signal = AbortSignal.any([
+      ...(parentSignal ? [parentSignal] : []),
+      AbortSignal.timeout(20000),
+    ]);
     if ((await adb(device, ["get-state"], signal)) !== "device") throw Error("Phone unavailable");
     const forwards = await adb(device, ["forward", "--list"], signal);
-    const existing = forwards
+    const matches = forwards
       .split("\n")
       .map(ownedForward)
-      .find((local) => local !== undefined);
-    // USB reconnection can discard the forward. Allocate a new port without replacing another mapping.
-    const port =
-      existing?.slice(4) ??
-      (await adb(device, ["forward", "--no-rebind", "tcp:0", `localabstract:${name}`], signal));
-    if (!/^\d+$/.test(port)) throw Error("ADB did not allocate a preview port.");
+      .filter((local): local is string => local !== undefined);
+    if (matches.some((local) => !allocated.has(local)))
+      throw Error(
+        "This Studio device is linked to another browser host. Stop that host before linking here.",
+      );
+    const existing = matches.find((local) => allocated.has(local));
+    let port = existing?.slice(4);
+    if (!port) {
+      await requireRunningStudio(device, runner, signal);
+      port = await adb(
+        device,
+        ["forward", "--no-rebind", "tcp:0", `localabstract:${name}`],
+        signal,
+      );
+      if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+        throw Error("ADB did not allocate a preview port.");
+      allocated.add(`tcp:${port}`);
+      // A simultaneous local host can create a forward between our check and allocation.
+      const now = (await adb(device, ["forward", "--list"], signal)).split("\n").map(ownedForward);
+      if (now.some((local) => local !== undefined && !allocated.has(local)))
+        throw Error(
+          "This Studio device was linked elsewhere. Stop the other host before retrying.",
+        );
+    }
     signal?.throwIfAborted();
     const socket = createConnection({ host: "127.0.0.1", port: Number(port) });
     const abort = () => socket.destroy(Error("Preview connection cancelled"));
@@ -202,7 +205,7 @@ export async function connectPhone(device: string) {
   }
 
   try {
-    phone = new ReconnectingPhone(await dial(), dial);
+    phone = new ReconnectingPhone(await dial(admission), dial);
     return { phone, label, close };
   } catch (error) {
     await close();
