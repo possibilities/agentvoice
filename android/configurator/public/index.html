@@ -376,7 +376,7 @@
                 <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations and is saved with the profile. Hiding Push to talk also removes its connector and uses the separately saved extent for the mute buttons.</p>
                 <fieldset class="icon-audition" aria-describedby="icon-session-hint">
                   <legend>Icon auditions</legend>
-                  <p id="icon-session-hint" class="control-hint">Shared by both orientations. Save profile keeps these choices.</p>
+                  <p id="icon-session-hint" class="control-hint">Shared by both orientations. Save complete design keeps these choices.</p>
                   <button type="button" id="icon-credits" class="reset value-reset" aria-describedby="icon-credits-hint">Credits on phone</button>
                   <p id="icon-credits-hint" class="control-hint">Open the icon authors and licenses on the phone.</p>
                   <label for="channel-icons">Channel pair</label>
@@ -452,7 +452,7 @@
                 <p id="presence-contacts-hint" class="control-hint" hidden>Human left, agent right. Joined contacts are live; a lifted contact is muted.</p>
                 <fieldset id="muted-appearance" class="motion-controls">
                   <legend class="subpanel-title">Indicator appearance</legend>
-                  <p id="muted-fit-hint" class="control-hint">Larger text, icons and motion may be limited to fit inside Persona. Save profile keeps these choices.</p>
+                  <p id="muted-fit-hint" class="control-hint">Larger text, icons and motion may be limited to fit inside Persona. Save complete design keeps these choices.</p>
                   <div class="mixing">
                     <label for="muted-motion">Motion</label>
                     <select id="muted-motion">
@@ -511,26 +511,26 @@
               </fieldset>
             </div>
           </div>
-          <p class="control-hint">Tweaks are kept on this phone across Studio restarts. Reset to production restores the full shipped design in both orientations. Save profile exports a checkpoint for the next release.</p>
+          <section class="launcher-studies" aria-labelledby="launcher-heading">
+            <div class="launcher-heading"><h2 id="launcher-heading">Launcher</h2><span class="scope-badge">Saved choice</span></div>
+            <p class="control-hint">Compare circle, squircle and themed treatments. Save complete design keeps your choice; promotion updates the installed app. Masks and tints are illustrative.</p>
+            <button type="button" id="reset-launcher" data-reset="launcher" class="reset value-reset" disabled>Reset launcher</button>
+            <div id="launcher-gallery" class="launcher-gallery"></div>
+            <p id="launcher-selection" class="control-hint" role="status" aria-live="polite">Current waveform selected. Save complete design keeps this choice.</p>
+          </section>
+          <p class="control-hint">Tweaks are kept on this phone across Studio restarts. Reset to production restores the full shipped design in both orientations. Save complete design exports both layouts, launcher and shared choices together for the next release.</p>
           <div class="actions">
             <button type="button" id="reset-production" class="reset">Reset to production</button>
-            <button type="button" id="save" class="save">Save profile</button>
+            <button type="button" id="save" class="save">Save complete design</button>
           </div>
         </fieldset>
-        <section class="launcher-studies" aria-labelledby="launcher-heading">
-          <div class="launcher-heading"><h2 id="launcher-heading">Launcher</h2><span class="scope-badge">Saved choice</span></div>
-          <p class="control-hint">Compare circle, squircle and themed treatments. Save profile keeps your choice; promotion updates the installed app. Masks and tints are illustrative.</p>
-          <button type="button" id="reset-launcher" data-reset="launcher" class="reset value-reset" disabled>Reset launcher</button>
-          <div id="launcher-gallery" class="launcher-gallery"></div>
-          <p id="launcher-selection" class="control-hint" role="status" aria-live="polite">Current waveform selected. Save profile keeps this choice.</p>
-        </section>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>
           <p id="error" role="alert" hidden></p>
           <p id="save-path" hidden></p>
         </div>
       </section>
-      <footer>Studio keeps your tweaks. Save exports them; release promotion updates the app.</footer>
+      <footer>Studio keeps your tweaks. Save complete design exports them; release promotion updates the app.</footer>
     </main>
   </body>
 </html>

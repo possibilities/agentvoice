@@ -146,5 +146,5 @@ export function renderLauncher(launcher: LauncherStyle, disabled: boolean) {
   }
   element<HTMLButtonElement>("reset-launcher").disabled = disabled;
   element("launcher-selection").textContent =
-    `${selected.label} selected. Save profile keeps this choice.`;
+    `${selected.label} selected. Save complete design keeps this choice.`;
 }
