@@ -12,7 +12,7 @@ import {
 import { defaultDesign, parseDesign } from "../src/design.ts";
 import { PhoneConnection } from "../src/device.ts";
 import { defaultHalo, haloMotionFields, parseHalo } from "../src/halo.ts";
-import { withPersonaSide } from "../src/handedness.ts";
+import { balancedHandedLayout, withPersonaSide } from "../src/handedness.ts";
 import {
   defaultIcons,
   iconCatalog,
@@ -1480,6 +1480,50 @@ test("handedness mirrors manual position in either landscape and preserves all o
     const current = { ...previewOf(initial()), orientation };
     expect(withPersonaSide(current, "right")).toBe(current);
   }
+});
+
+test("balanced handedness uses the opposite production rotation and retains appearance", async () => {
+  const production = parseProfile(
+    await Bun.file(new URL("../../design/shipping-profile.json", import.meta.url)).text(),
+  );
+  for (const orientation of ["landscape", "landscape-reverse"] as const) {
+    const adopted = profileLayout(production, orientation);
+    const other = profileLayout(
+      production,
+      orientation === "landscape" ? "landscape-reverse" : "landscape",
+    );
+    const current = {
+      ...previewOf(initial()),
+      orientation,
+      personaSide: "right" as const,
+      horizontalOffsetDp: 193,
+      appearanceOverrides: ["halo" as const],
+      showPushToTalk: false,
+    };
+    current.halo.colors.idle = "#123456";
+    current.design.spacing.paddingDp = 31;
+    const result = balancedHandedLayout(current, production);
+    expect(result).toEqual({
+      ...current,
+      scales: other.scales,
+      horizontalOffsetDp: -other.horizontalOffsetDp,
+      halo: { ...current.halo, containedSizePercent: other.halo.containedSizePercent },
+      design: {
+        ...current.design,
+        controlsHeightDp: other.design.controlsHeightDp,
+        controlsWithoutPttDp: other.design.controlsWithoutPttDp,
+        holdSharePercent: other.design.holdSharePercent,
+      },
+    });
+    const sameHand = balancedHandedLayout(
+      { ...current, personaSide: adopted.personaSide },
+      production,
+    );
+    expect(sameHand.horizontalOffsetDp).toBe(adopted.horizontalOffsetDp);
+    expect(sameHand.design.controlsHeightDp).toBe(adopted.design.controlsHeightDp);
+  }
+  const portrait = previewOf(initial());
+  expect(balancedHandedLayout(portrait, production)).toBe(portrait);
 });
 
 test("version 10 preserves portrait bytes and seeds inherited landscape appearance in memory", () => {

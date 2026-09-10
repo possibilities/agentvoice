@@ -1,3 +1,4 @@
+import productionProfile from "../../design/shipping-profile.json";
 import {
   appearanceGroups,
   appearanceOf,
@@ -11,7 +12,7 @@ import {
   usableViewport,
 } from "./capture-layout.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
-import { withPersonaSide } from "./handedness.ts";
+import { balancedHandedLayout, withPersonaSide } from "./handedness.ts";
 import { initializeIconControls, renderIcons, renderLauncher } from "./icons-ui.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
@@ -28,6 +29,7 @@ import {
   type PresenceScope,
   type Preview,
   type Profile,
+  parseProfile,
   previewOf,
   profileLayout,
   profileSharedAppearance,
@@ -95,6 +97,7 @@ const feedback = element("feedback");
 const error = element("error");
 const save = element<HTMLButtonElement>("save");
 const colors = { speaking: "#bbaaff", listening: "#d4ff72", idle: "#f0f2e9" };
+const balancedProduction = parseProfile(JSON.stringify(productionProfile));
 let status: Status | null = null;
 let draft: Preview | null = null;
 let inFlight = false;
@@ -933,6 +936,9 @@ position.addEventListener("input", () => {
 element<HTMLSelectElement>("controls-side").addEventListener("change", (event) => {
   const side = (event.currentTarget as HTMLSelectElement).value;
   update((current) => withPersonaSide(current, side === "left" ? "right" : "left"));
+});
+element<HTMLButtonElement>("balance-handedness").addEventListener("click", () => {
+  update((current) => balancedHandedLayout(current, balancedProduction));
 });
 refreshTargets.addEventListener("click", async () => {
   const current = status;

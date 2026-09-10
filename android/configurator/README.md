@@ -295,6 +295,15 @@ Both hands share its sizes, traces, padding and appearance. Position reset uses
 the adopted default mirrored to the currently selected side in either landscape.
 The four-view capture shows each rotation's selected side.
 
+**Use balanced production layout** explicitly replaces only the active landscape's
+Persona scales/Contained size, horizontal position, shown/hidden control widths
+and PTT share. It uses this checkout's promoted production geometry; when changing
+hands relative to production it mirrors the opposite landscape rotation so the
+camera is on the equivalent edge. Appearance, override flags, shared padding,
+sounds and other rotations stay intact. It does not Save or promote. This is a
+starting point for the current phone, not a promise of identical insets on every
+device. The separate side selector mirrors current tuning without resetting it.
+
 The phone has no header while connected. **Preview connection** selects a
 synthetic Connected, Connecting or Disconnected state. A notice with a static glyph
 slides down from the top for Connecting or Disconnected and remains until that

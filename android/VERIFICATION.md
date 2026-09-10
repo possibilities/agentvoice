@@ -2040,3 +2040,34 @@ The retained grant admitted the attempted connection, so no QR enrollment reset
 was needed. Local private evidence is `/tmp/agentvoice-jni-crash/`; the exact
 regression failure is `/tmp/agentvoice-jni-before-audit.log` and build log is
 `/tmp/agentvoice-jni-production-build.log`.
+
+## Landscape handedness and balanced starting points — 2026-09-10
+
+Studio exposes Controls side for each landscape rotation. The selector mirrors
+manual horizontal position without replacing tuning. An explicit Use balanced
+production layout action seeds Persona size/position, both control widths and
+PTT share from promoted geometry. The opposite rotation supplies the mirrored
+geometry when changing hands; shared appearance/padding and other layouts remain
+unchanged. This retains four physical layout records, not separate per-hand banks.
+
+Native S22 comparisons at the current operator draft showed compressed traces
+with a naive mirror of reverse landscape. Reviewed balanced left-handed samples
+use landscape 427dp/+42dp and reverse landscape 409dp/+44dp (deck width/Persona
+horizontal offset), both at Contained81%. These mirror the opposite production
+rotation. HUMAN remains above AGENT; PTT stays outside. The sampled routes stay
+outside the Persona center with useful separation from the controls. No renderer,
+asset, APK or production-default changes were needed.
+
+Evidence: `/tmp/agentvoice-handedness-review/balanced-comparison.png`, raw
+`baseline-*.png` / `balanced-left-*.png` and their capture JSON include all four
+physical orientations. Captures use native animation at different instants;
+these stills do not establish every-frame symmetry or every-device cutout fit.
+The original draft/checkpoint/binding were restored byte-for-byte, and original
+accelerometer_rotation=1/user_rotation=0/free rotation were verified. No Save,
+grant change, service restart or production call was performed.
+
+Validation:125 configurator tests,784 root tests, configurator TypeScript,
+scoped Biome and diff checks passed. The refreshed host serves the new controls
+and compiled bundle and reconnects to Studio in portrait. Browser automation had
+no local browser / could not reach the loopback host; no browser-click validation
+is claimed. Native geometry was exercised through the same fenced preview API.
