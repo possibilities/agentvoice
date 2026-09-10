@@ -1,0 +1,44 @@
+Persona Halo / halo-2.0.riv
+
+Original asset used by the Vercel AI Elements Persona component:
+https://ejiidnob33g9ap1r.public.blob.vercel-storage.com/halo-2.0.riv
+
+Component source:
+https://github.com/vercel/ai-elements/blob/6a9d5b1822ffb10bba4bd97175f01edd7d8651cd/packages/elements/src/persona.tsx
+
+The original asset was retrieved on 2026-09-08 and is bundled unchanged.
+Size: 4,497 bytes.
+SHA-256: c8d97df33c47f52c993667515700e12f110539a46048b142a0ec787dba9dcc96
+
+Elements originated at Surge Studio. Its homepage, checked 2026-09-09,
+states that Vercel acquired Elements and its product range is now free
+in AI Elements: https://elements.surge.studio/
+
+The published Surge Studio license, effective 2024-01-29, identifies
+Hayden Barnett trading as Surge Studio and states Surge Studio's asset
+copyright ownership. It permits derivative end applications and restricts
+redistribution in tools, templates and source form. This pre-acquisition
+text does not establish the current Vercel asset terms:
+https://elements.surge.studio/legal/license
+
+The current license for this separately hosted .riv asset is not explicit
+in the inspected sources. AI Elements issue 471, checked 2026-09-09, was
+open with no comments about the asset license and editable source:
+https://github.com/vercel/ai-elements/issues/471
+
+AgentVoice modification, 2026-09-09:
+The Contained Halo debug variant modifies verified original runtime bytes
+in memory for inward listening rings and pulse, cubic rather than elastic
+easing, adjustable speaking/idle motion, and per-state colors. These are
+AgentVoice changes, not an upstream asset release. The bundled original
+.riv and production renderer remain unchanged. No original editable .rev
+source is supplied. The modified variant is debug-only.
+
+AI Elements component code: Copyright 2023 Vercel, Inc.; Apache-2.0.
+See AI-Elements-LICENSE.txt and the full Apache-2.0.txt in this directory.
+Rive Android runtime: Copyright (c) 2020-2024 Rive; MIT.
+See the full Rive-LICENSE.txt in this directory.
+
+Those code/runtime licenses do not establish the external asset's terms.
+This notice does not relicense the asset or claim endorsement by Surge
+Studio, Hayden Barnett, Vercel or Rive.

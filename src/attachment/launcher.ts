@@ -1,6 +1,7 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import type { z } from "zod";
 import { OwnedProcessTree } from "../core/owned-processes.ts";
-import { acquireAttachment } from "./bootstrap.ts";
+import { acquireAttachment, type attachmentTargetSchema } from "./bootstrap.ts";
 import type { AttachmentTicket } from "./gateway.ts";
 
 export const TUI_TOKEN_ENV = "AGENTVOICE_TUI_TOKEN";
@@ -21,10 +22,11 @@ export function attachmentArgv(ticket: AttachmentTicket): string[] {
 export async function runAttachment(
   selected: { workspace: string; threadId?: string },
   stateDir: string,
+  expected?: z.infer<typeof attachmentTargetSchema>,
 ): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw new Error("agentvoice attach agent requires an interactive terminal");
-  const ticket = await acquireAttachment(stateDir, selected.workspace, selected.threadId);
+  const ticket = await acquireAttachment(stateDir, selected.workspace, selected.threadId, expected);
   const terminalState = execFileSync("stty", ["-g"], { stdio: ["inherit", "pipe", "ignore"] })
     .toString()
     .trim();

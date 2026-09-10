@@ -1,6 +1,6 @@
 # 0019: Compare defaults against the Codex client and server together
 
-2026-09-06. Clarifies the vanilla baseline and supersedes ADR 0012's statement
+2026-09-06. Clarifies the vanilla baseline and supersedes [ADR 0012](0012-vanilla-voice-reconnects.md)'s statement
 that AgentVoice targets the app-server rather than desktop parity. Documentation
 decision only; runtime behavior and individual policy decisions are unchanged.
 

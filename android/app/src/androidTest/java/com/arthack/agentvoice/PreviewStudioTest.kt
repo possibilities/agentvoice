@@ -1,0 +1,73 @@
+package com.arthack.agentvoice
+
+import androidx.compose.runtime.*
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createComposeRule
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+
+class PreviewStudioTest {
+    @get:Rule val compose = createComposeRule()
+
+    @Test fun tracePatternsKeepRockerTargetsFixedAndChannelsIndependent() {
+        compose.mainClock.autoAdvance = false
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
+        compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
+        compose.mainClock.advanceTimeBy(64)
+        val targets = listOf("mic-mute", "speaker-mute", "hold-to-talk")
+        val before = targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
+        for (pattern in listOf("parallel", "splayed", "circuit")) {
+            compose.runOnIdle { state = state.select("idle").copy(design = PreviewDesign(traces = PreviewTraces(pattern, 135, 190, 75, 60))) }
+            compose.mainClock.advanceTimeBy(1200)
+            assertEquals("$pattern moved a rocker target", before,
+                targets.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
+            compose.onNodeWithTag("mic-mute").assertContentDescriptionEquals("HUMAN microphone").performClick()
+            compose.mainClock.advanceTimeBy(64)
+            compose.runOnIdle { assertFalse(state.micMuted); assertEquals("listening", state.mode) }
+            compose.onNodeWithTag("speaker-mute").assertContentDescriptionEquals("AGENT speaker").performClick()
+            compose.mainClock.advanceTimeBy(64)
+            compose.runOnIdle { assertTrue(state.speakerMuted); assertFalse(state.micMuted) }
+        }
+        compose.onNodeWithTag("preview-header").assertDoesNotExist()
+    }
+
+    @Test fun connectionNoticesDoNotMoveTargetsAndCannotResumeAHeldMicrophone() {
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
+        compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
+        val talk = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
+        val halo = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { down(center) }
+        compose.runOnIdle {
+            assertTrue(state.holding)
+            state = state.endHold().copy(connection = "disconnected")
+            assertFalse(state.ui().canHold)
+            assertFalse(state.ui().micOpen)
+            assertFalse(state.beginHold().holding)
+        }
+        compose.onNodeWithTag("hold-to-talk").performTouchInput { up() }
+        for (connection in listOf("disconnected", "connecting", "connected")) {
+            compose.runOnIdle { state = state.copy(connection = connection) }
+            assertEquals(talk, compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot())
+            assertEquals(halo, compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot())
+            compose.runOnIdle { assertFalse(state.holding); assertFalse(state.ui().micOpen) }
+            if (connection != "connected") {
+                compose.onNodeWithTag("mic-mute").assertIsNotEnabled()
+                compose.onNodeWithTag("hold-to-talk").assertIsNotEnabled()
+            }
+        }
+    }
+
+    @Test fun tallerControlsMoveThePersonaCenterWithoutChangingItsDiameter() {
+        var state by mutableStateOf(PersonaPreviewState(mode = "idle"))
+        compose.setContent { VoiceTheme { PersonaPreview(state) { state = it } } }
+        val initial = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val button = compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot()
+        compose.runOnIdle { state = state.copy(design = state.design.copy(controlsHeightDp = 380)) }
+        val after = compose.onNodeWithTag("studio-persona-stage", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals((initial.right - initial.left).value, (after.right - after.left).value, .5f)
+        assertEquals((initial.bottom - initial.top).value, (after.bottom - after.top).value, .5f)
+        assertTrue(after.top < initial.top)
+        assertEquals(button.bottom, compose.onNodeWithTag("hold-to-talk").getUnclippedBoundsInRoot().bottom)
+    }
+}

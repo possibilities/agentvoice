@@ -82,7 +82,13 @@ export type ControlStatus = {
   workspace: string;
   threadId: string;
   generation: number;
-  runtime: { pid?: number; buildId?: string; phase: string; voicePhase?: string };
+  runtime: {
+    pid?: number;
+    buildId?: string;
+    phase: string;
+    voicePhase?: string;
+    attachmentReady?: boolean;
+  };
   currentOperation?: ControlOperation;
   recentOperations: ControlOperation[];
 };

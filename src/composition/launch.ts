@@ -2,10 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { streamRemoteAttachment } from "../attachment/bridge.ts";
+import { streamAttachmentSession } from "../attachment/session.ts";
 import { observeFrontend } from "../frontend/observer.ts";
 import { frontendSocketPath } from "../frontend/protocol.ts";
 import { ControlSocket } from "../ipc/control-client.ts";
 import { stateDirectory } from "../paths.ts";
+import { AttachmentComposition } from "./attachment.ts";
 import { Composition } from "./controller.ts";
 
 // smolmux protocol 2 identifies a named Instance by config directory and name.
@@ -22,6 +25,7 @@ export async function runComposition(
   workspace?: string,
   command = [process.execPath, fileURLToPath(new URL("../main.ts", import.meta.url))],
   clientArgs: string[] = [],
+  options: { attach?: boolean; host?: string } = {},
 ) {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw new Error("agentvoice requires a terminal (TTY)");
@@ -36,11 +40,13 @@ export async function runComposition(
     );
   const clientId = randomUUID();
   const name = `agentvoice-${randomUUID().slice(0, 16)}`;
-  let composition: Composition | undefined;
-  const observation = await observeFrontend(
-    frontendSocketPath(stateDirectory(process.env, homedir()), workspace),
-    (state) => composition?.observe(state),
-  );
+  let composition: Composition | AttachmentComposition | undefined;
+  const stateDir = stateDirectory(process.env, homedir());
+  const observation = options.attach
+    ? undefined
+    : await observeFrontend(frontendSocketPath(stateDir, workspace), (state) => {
+        if (composition instanceof Composition) composition.observe(state);
+      });
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let mux: ControlSocket | undefined;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -54,7 +60,7 @@ export async function runComposition(
   let work: Promise<void> | undefined;
   try {
     for (const signal of signals) process.once(signal, stop);
-    await observation.waitUntilAvailable({
+    await observation?.waitUntilAvailable({
       signal: abort.signal,
       waiting: () => console.error("Closing previous call…"),
     });
@@ -85,18 +91,36 @@ export async function runComposition(
     const status = (await mux.request("instance.status")) as Record<string, unknown>;
     if (status["name"] !== name || status["pid"] !== child.pid || status["host"] !== "foreground")
       throw new Error("smolmux did not identify the owned foreground process");
-    composition = new Composition(mux, clientId, command, workspace, clientArgs);
+    composition = options.attach
+      ? new AttachmentComposition(mux, command, options.host)
+      : new Composition(mux, clientId, command, workspace, clientArgs);
     await mux.request("event.subscribe", { events: ["app.state"] });
-    work = composition.start();
+    const current = composition;
+    work = (async () => {
+      await current.start();
+      if (current instanceof AttachmentComposition) {
+        const receive = (frame: Parameters<typeof current.receive>[0]) => current.receive(frame);
+        if (options.host)
+          await streamRemoteAttachment(options.host, workspace, receive, abort.signal);
+        else await streamAttachmentSession(stateDir, workspace, receive, abort.signal);
+        current.stop();
+      }
+    })();
     work.catch((error) => composition?.stop(error));
-    await Promise.race([composition.done, child.exited, mux.done, observation.socket.done]);
+    await Promise.race([
+      composition.done,
+      child.exited,
+      mux.done,
+      ...(observation ? [observation.socket.done] : []),
+    ]);
     composition.stop();
     if (composition.error()) throw composition.error();
-    if (observation.socket.error()) throw observation.socket.error();
+    if (observation?.socket.error()) throw observation.socket.error();
     if (mux.error()) throw mux.error();
   } finally {
     composition?.stop();
-    observation.socket.close();
+    abort.abort();
+    observation?.socket.close();
     // Foreground shutdown reaps every local PTY; only this exact child may be signalled.
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

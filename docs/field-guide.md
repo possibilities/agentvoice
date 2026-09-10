@@ -1,6 +1,6 @@
 # Current AgentVoice field guide
 
-Updated for the waiting local server and pointer frontend (ADRs 0024/0022).
+Updated for the waiting local server and pointer frontend (ADRs [0024](adr/0024-server-and-pointer-frontend.md)/[0022](adr/0022-websocket-native-tui.md)).
 Historical upstream probes below retain their inspected versions and evidence.
 References to in-call Fresh describe a retired UI control; restart remains in MCP/API.
 
@@ -29,7 +29,7 @@ an ongoing call connected. Workspace is a selection boundary, not a sandbox.
 
 ## Stock TUI attachment boundary probe
 
-Attachment is always available through a guarded gateway (ADR 0022). A direct
+Attachment is always available through a guarded gateway ([ADR 0022](adr/0022-websocket-native-tui.md)). A direct
 authenticated connection to the owned Codex app-server is not scoped to the
 selected thread. The original boundary probe also established why native startup
 permission defaults cannot enforce a full-access-only attachment policy, which
@@ -239,14 +239,14 @@ The app-server forwards version unchanged; core selects v1 for omitted WebRTC
 or existing-call version. This confirms a real desktop v3 path, not a universal
 active rollout. These are Codex realtime protocol versions, not WebRTC standard
 versions. The decisions below incorporate the September 6 defaults review
-implemented in ADR 0020; earlier ADR decisions remain historical evidence.
+implemented in [ADR 0020](adr/0020-native-launch-defaults.md); earlier ADR decisions remain historical evidence.
 
 | Area | Finding and consequence | Decision |
 | --- | --- | --- |
 | Protocol, speech model and voice name | Desktop's conditional client-owned-call path explicitly selects v3; stock app-server WebRTC omission selects v1 and ignores configured voice. Protocol also changes the native speech-model fallback. | Current v3 behavior aligns with that desktop path and service compatibility; leave model/name resolution and explicit overrides native. Do not classify it as non-vanilla solely from server omission. |
 | Voice prompt and result visibility | The stock voice prompt says the user can see the full backend interaction and treats visible output as the primary surface. AgentVoice shows connection phase and mute controls, without a native work transcript/result view. | Keep the prompt unmodified for now. A minimal view of native results is a product gap worth resolving; silence or short spoken summaries may otherwise hide useful output. |
 | Session prompts and handoffs | Native Codex has voice start/end instructions and automatic handoff forwarding. Desktop adds its own session instructions/tools and can create calls itself. AgentVoice keeps Codex in charge of both the call and handoffs. | Keep native instructions and forwarding. Copying desktop instructions/tool metadata requires corresponding frontend handlers; it is not a compatibility prerequisite. |
-| Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | ADR 0029 now selects false on every call to match the inspected desktop startup baseline, superseding ADR 0020 for this setting. Explicit true/false and raw null remain; tail flush stays unset. This does not copy desktop continuity machinery. |
+| Startup context and transcript tail | App-server-created calls default to startup context on and tail flush off. Desktop requests startup context off and tail flush on, alongside its own prompt/initial-item/context machinery. | [ADR 0029](adr/0029-desktop-startup-context.md) now selects false on every call to match the inspected desktop startup baseline, superseding [ADR 0020](adr/0020-native-launch-defaults.md) for this setting. Explicit true/false and raw null remain; tail flush stays unset. This does not copy desktop continuity machinery. |
 | Work model, effort, Fast and history | Resume can restore saved settings; history mode also depends on native thread-store capabilities. Desktop can supply product/rollout settings. An omitted field does not necessarily mean config.toml is consulted. | Keep native resolution and existing Fast checks. Correct schema claims that history simply inherits config and that ultra guarantees proactive subagents. |
 | Microphone processing | Desktop requests browser microphone noise suppression. AgentVoice's native duplex PCM path has no echo cancellation/noise suppression stage. App-server cannot supply capture processing to a client-owned microphone. | Existing audio-quality limitation, not fixed by omission or by v3. Keep the headphones recommendation; assess audio processing with real use before adding DSP. |
 | Selection, permissions and transport | AgentVoice supplies required realtime gates and WebRTC/audio fields; explicit continuation uses exact-workspace history filters. Stock 0.153.3 lists this third-party app-server client's threads as `vscode` and may omit `threadSource` from list rows, so selection queries `appServer` plus `vscode` and verifies candidates with `thread/read`. | Ordinary launch starts fresh; explicit continue/resume retain lookup checks. Permissions inherit native/configured behavior unless --allow-full-access is supplied. Keep required realtime transport plumbing; re-probe list/read metadata on native upgrades. |
@@ -265,12 +265,12 @@ the new call received the old answer in native startup context but no new user
 message. Desktop contains its own silence instruction and optional transcript
 continuity machinery; stock app-server does not supply those semantics.
 [ADR 0010](adr/0010-quiet-voice-resume.md) records the evidence and the
-quiet-resume instruction that briefly addressed it; ADR 0011 added saved-speech
+quiet-resume instruction that briefly addressed it; [ADR 0011](adr/0011-spoken-history-continuity.md) added saved-speech
 restoration. [ADR 0012](adr/0012-vanilla-voice-reconnects.md) then retired the
 instruction. [ADR 0017](adr/0017-remove-spoken-history-replay.md) subsequently
 removed automatic saved-speech replay entirely. AgentVoice now adds neither
-replay items nor reconnect instructions. ADR 0020 separately restores native
-startup-context resolution; ADR 0029 later selects the desktop false default. Neither restores AgentVoice replay.
+replay items nor reconnect instructions. [ADR 0020](adr/0020-native-launch-defaults.md) separately restores native
+startup-context resolution; [ADR 0029](adr/0029-desktop-startup-context.md) later selects the desktop false default. Neither restores AgentVoice replay.
 
 ## Native voice context levers retained
 
@@ -280,7 +280,7 @@ startup-context resolution; ADR 0029 later selects the desktop false default. Ne
 | orchestrator.config.experimental_realtime_ws_startup_context | Replaces that snapshot when startup context is enabled; an explicit empty string suppresses its text | Replace the voice system prompt or bypass include-startup-context=false |
 | voice.flush-transcript-tail-on-session-end | Delivers leftover speech transcript text to the working agent at voice-session end; can trigger a turn | Replay it through an AgentVoice-managed next-session buffer |
 
-Decision (ADR 0029, superseding ADR 0020 for this setting): send false by default
+Decision ([ADR 0029](adr/0029-desktop-startup-context.md), superseding [ADR 0020](adr/0020-native-launch-defaults.md) for this setting): send false by default
 on every voice start, including renewal. Desktop-client defaults and app-server
 omission defaults differ: the latter includes the snapshot. Explicit true/false
 request or skip it; raw null restores native server resolution.
@@ -292,8 +292,8 @@ startup. Explicit raw `voice.extra.initialItems` (including `[]`/`null`) still
 pass through; populated initial items require effective v3. Native thread resume
 and explicit prompt/config customization are unchanged.
 
-The former `voice.replay-spoken-history` key is retired (ADR 0017), alongside
-`voice.quiet-resume` (ADR 0012). Remove either key even when set to false; launch
+The former `voice.replay-spoken-history` key is retired ([ADR 0017](adr/0017-remove-spoken-history-replay.md)), alongside
+`voice.quiet-resume` ([ADR 0012](adr/0012-vanilla-voice-reconnects.md)). Remove either key even when set to false; launch
 errors provide removal guidance. There is no automatic migration or history
 rewriting. The timeline reader, legacy rollout fallback, replay limits and
 replay probe have been removed.
@@ -343,7 +343,7 @@ choice, not automatic discovery; see README migration notes.
   other native context controls remain unset. This is
   not a claim that every native capability has a matching TUI or is independently verified.
 - Selective seeding of global skills. Role skills are isolated to the owned child
-  through `skills/extraRoots/set` (ADR 0014); enabling or hiding globally
+  through `skills/extraRoots/set` ([ADR 0014](adr/0014-roles.md)); enabling or hiding globally
   installed skills per launch remains a native `skills.config` passthrough.
 - Spoken conversation and audio latency/buffering validation. The editable command
   has been installed; stock 0.153.3 WebRTC startup has been checked without audio
@@ -351,7 +351,7 @@ choice, not automatic discovery; see README migration notes.
   and native tool/result presentation still need use-case validation.
 
 Explicit continue/workspace selection, retained controller plus disposable
-runtime (ADR 0015),
+runtime ([ADR 0015](adr/0015-retain-controller-replace-runtime.md)),
 and native --fast/--no-fast are implemented. They do not settle the items above.
 
 Native readiness checks complete before audio hardware opens; negotiation waits

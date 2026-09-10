@@ -384,7 +384,7 @@ export function runRuntimeWorker(
           return handoffFailure("not_ready");
         return submitHandoff(params as HandoffRequest);
       case "attachment-ticket": {
-        if (terminalFailure || stopping || !mediaEnabled || !issueAttachment)
+        if (terminalFailure || stopping || !issueAttachment)
           throw new Error("Attachment is unavailable");
         const ticket = issueAttachment();
         if (ticket.threadId !== (params as { threadId?: string })?.threadId)

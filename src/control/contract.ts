@@ -104,6 +104,7 @@ export const controlStatusSchema = z
         buildId: z.string().optional(),
         phase: z.string(),
         voicePhase: z.string().optional(),
+        attachmentReady: z.boolean().optional(),
       })
       .strict(),
     role: z
@@ -155,7 +156,7 @@ export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
   "agentvoice.thread_mailbox_open": {
     tool: "agentvoice_thread_mailbox_open",
     description:
-      "Open this orchestrator's thread mailbox: return and clear completion metadata, with a fresh snapshot of children still working. Full child results arrive through native Codex. Use the notice's operationId and expectedInstanceId; reuse an operationId only to retry that same opening. If remainingCompleted is nonzero, open again with a new operationId. Old notices may yield an empty mailbox. No per-message read receipts.",
+      "Direct-child work in this AgentVoice call is fire-and-forget after successful dispatch: each observed terminal turn automatically queues completion metadata and submits a turn/start mailbox notice. Stay available to the human; do not block or poll just to detect completion. Open this orchestrator's thread mailbox on notice: return and clear completion metadata, with a fresh snapshot of children still working. Full child results arrive separately through native Codex, possibly after the notice. Use the notice's operationId and expectedInstanceId; reuse an operationId only to retry that same opening. If remainingCompleted is nonzero, open again with a new operationId. Old notices may yield an empty mailbox. Handle reported delivery gaps or failures; call shutdown clears the mailbox. No per-message read receipts.",
     params: mailboxOpenParams,
     result: mailboxOpenResultSchema,
     readOnly: false,

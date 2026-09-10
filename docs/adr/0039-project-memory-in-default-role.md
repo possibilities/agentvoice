@@ -1,4 +1,8 @@
-# 0033: Project memory is part of the default role
+# 0039: Project memory is part of the default role
+
+Identifier corrected 2026-09-08: formerly `0033-project-memory-in-default-role.md`. The old number
+was shared by another decision; this record retains its original rationale.
+See the [identifier history](README.md#identifier-history).
 
 Accepted September 8, 2026. The default role carries a concise policy for
 repository vocabulary, decision history, and worker context because these

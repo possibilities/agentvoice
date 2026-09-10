@@ -9,7 +9,7 @@ const leaf = z.object({
 });
 export const layoutSchema = z.object({
   revision: z.number().int(),
-  root: z.object({ row: z.array(leaf).length(3) }),
+  root: z.object({ row: z.array(leaf).min(2).max(3) }),
   focus: z.string().nullable(),
   panes: z.array(z.object({ cols: z.number(), rows: z.number() })),
 });
@@ -18,6 +18,13 @@ export interface MuxControl {
 }
 export const names = ["client", "voice", "agent"] as const;
 export const waiting = "Waiting for voice connection";
+export function attachmentLayout() {
+  return {
+    root: { row: [{ text: "Waiting for a call" }, { text: "Waiting for a call" }] },
+    visible: [] as string[],
+    focus: null,
+  };
+}
 
 export function initialLayout() {
   return {

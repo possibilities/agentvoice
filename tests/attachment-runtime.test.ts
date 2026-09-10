@@ -71,7 +71,8 @@ test("attachment bootstrap and runtime replacement retain exact leases and revok
   writeFileSync(
     worker,
     `import { runRuntimeWorker } from ${JSON.stringify(new URL("../src/runtime-control/worker.ts", import.meta.url).pathname)};
-runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerMuted:true,async start(){},async stop(){},attachRemote(){},detachRemote(){}}},transport(options){return {liveForMs:1,sendOpusFrame(){},async stop(){},redial(){},async redialAndWait(){},handleReady(info){options.onReady(info);options.onPhase('live')},async handleAnswer(){},handleClosed(){},handleSignalLost(){},handleError(){}}}}});`,
+import { existsSync } from "node:fs";
+runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerMuted:true,async start(){},async stop(){},attachRemote(){},detachRemote(){}}},transport(options){let timer; return {liveForMs:1,sendOpusFrame(){},async stop(){clearInterval(timer)},redial(){},async redialAndWait(){},handleReady(info){options.onReady(info);timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(root, "media-live"))})){clearInterval(timer);options.onPhase('live')}},10)},async handleAnswer(){},handleClosed(){},handleSignalLost(){},handleError(){}}}}});`,
   );
   let controller!: RuntimeController;
   const control = await startControlServer({
@@ -123,11 +124,25 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     return socket;
   };
   try {
-    await controller.start();
+    expect(controller.status().runtime.attachmentReady).toBe(false);
+    const starting = controller.start();
+    await until(() => controller.status().runtime.attachmentReady === true);
+    expect(controller.status().runtime.phase).toBe("starting");
+    expect((await acquireAttachment(stateDir, root)).threadId).toBe("test-thread-1");
+    writeFileSync(join(root, "media-live"), "ready");
+    await starting;
     expect(controller.status().runtime.phase).toBe("ready");
     const first = await acquireAttachment(stateDir, root);
     expect(first.threadId).toBe("test-thread-1");
     expect(JSON.stringify(controller.status())).not.toContain(first.token);
+    await expect(
+      acquireAttachment(stateDir, root, first.threadId, {
+        workspace: root,
+        threadId: first.threadId,
+        instanceId: "another-controller",
+        generation: 1,
+      }),
+    ).rejects.toThrow("Backend changed");
     const old = await watch(first.url, first.token);
     await controller.redial({
       operationId: "redial",

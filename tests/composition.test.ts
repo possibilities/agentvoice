@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import type { AttachmentIdentity } from "../src/attachment/session.ts";
+import { attachmentSshArgv } from "../src/attachment/ssh.ts";
+import { AttachmentComposition } from "../src/composition/attachment.ts";
 import { Composition } from "../src/composition/controller.ts";
 import { initialLayout, replacePane } from "../src/composition/layout.ts";
 import type { FrontendObservation } from "../src/frontend/protocol.ts";
@@ -235,4 +239,83 @@ test("exit configuration failure prevents the voice client from starting", async
   await expect(composition.start()).rejects.toThrow("smolmux needs updating");
   expect(calls).toEqual(["instance.configure"]);
   composition.stop();
+});
+
+const attachedIdentity: AttachmentIdentity = {
+  clientId: randomUUID(),
+  workspace: "/exact/mobile workspace",
+  threadId: "mobile-thread",
+  instanceId: "mobile-call",
+  generation: 1,
+};
+test.each([undefined, "smolbird"])(
+  "two-pane view on %s starts only the pinned agent and desktop transcript",
+  async (host) => {
+    const mux = new FakeMux();
+    const composition = new AttachmentComposition(mux, ["bun", "/checkout/main.ts"], host);
+    let transcript: string | undefined;
+    try {
+      await composition.start();
+      expect(mux.layout.root.row).toHaveLength(2);
+      expect(mux.created()).toHaveLength(0);
+      const session = {
+        v: 1 as const,
+        type: "session" as const,
+        identity: attachedIdentity,
+        phase: "starting",
+        agentReady: true,
+      };
+      await composition.receive(session);
+      const args = ["__attach-agent", JSON.stringify(attachedIdentity)];
+      expect(mux.created()[0]!["argv"]).toEqual(
+        host
+          ? attachmentSshArgv(host, ["agentvoice", ...args], true)
+          : ["bun", "/checkout/main.ts", ...args],
+      );
+      const header = JSON.stringify({
+        type: "voice_transcript",
+        format: "agentvoice",
+        workspace: attachedIdentity.workspace,
+        threadId: attachedIdentity.threadId,
+      });
+      await composition.receive({ v: 1, type: "voice", line: header });
+      const viewer = mux.created()[1]!["argv"] as string[];
+      expect(viewer[0]).toBe("codex-viewer");
+      transcript = viewer[2]!;
+      expect(readFileSync(transcript, "utf8")).toBe(`${header}\n`);
+      expect(mux.created().map((app) => app["name"])).toEqual(["agent", "voice"]);
+      expect(mux.created().every((app) => app["pty"] === "local")).toBe(true);
+      await composition.receive(session);
+      expect(mux.created()).toHaveLength(2);
+      expect(mux.layout.focus).toBe("agent");
+      await expect(
+        composition.receive({ ...session, identity: { ...attachedIdentity, generation: 2 } }),
+      ).rejects.toThrow("Backend changed");
+      composition.event({
+        type: "event",
+        event: "app.state",
+        data: { app: { name: "agent", state: "exited" } },
+      });
+      await composition.done;
+      await composition.receive(session);
+      expect(mux.created()).toHaveLength(2);
+    } finally {
+      composition.stop();
+      await composition.drained();
+    }
+    expect(existsSync(transcript!)).toBe(false);
+  },
+);
+
+test("view refuses audio flags and SSH outside the desktop attachment mode", async () => {
+  for (const args of [
+    ["--host", "smolbird"],
+    ["client", "--attach"],
+    ["client", "--host", "smolbird"],
+    ["--attach", "--device", "0"],
+    ["--attach", "--connect", "private.json"],
+    ["--attach", "--host", "-oProxyCommand=bad"],
+    ["--attach", "--host", "smolbird", "--workspace", "relative"],
+  ])
+    expect(await main(args)).toBe(2);
 });

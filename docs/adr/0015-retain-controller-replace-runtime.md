@@ -1,6 +1,9 @@
 # 0015: Retain the foreground controller, replace the voice runtime
 
-Accepted 2026-09-05. Supersedes ADR 0009's single-process topology while
+Status review 2026-09-08: partially superseded.
+[0024](0024-server-and-pointer-frontend.md) moves the retained controller/runtime under the waiting server; [0033](0033-client-owned-native-media.md) moves native media to clients. Runtime replacement, owned Codex cleanup and journaled operations remain.
+
+Accepted 2026-09-05. Supersedes [ADR 0009](0009-one-foreground-workspace.md)'s single-process topology while
 preserving its foreground, workspace, permission, and owned-child policies.
 
 AgentVoice now has two foreground processes. The retained controller owns the

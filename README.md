@@ -28,6 +28,25 @@ AgentVoice does not install them. Use `agentvoice client` for the pointer fronte
 alone. Scripts that previously used bare `agentvoice` for that frontend must now
 use `agentvoice client`.
 
+For a call owned by the Android app or phone browser, open the **desktop** view:
+
+```sh
+agentvoice --attach                 # Backend on this desktop
+agentvoice --attach --host smolbird  # Backend in Android/Termux, over SSH
+```
+
+This opens just the voice transcript and stock Codex panes. It waits for a call
+without starting one, and the agent pane becomes available as soon as the native
+backend is ready, even while voice media is negotiating. Closing either pane ends
+the view and leaves the mobile call running. Call end, backend replacement or
+connection loss ends the view; rerun explicitly to attach again.
+
+`--host` uses an existing SSH host configuration, verified host key and key-based
+authentication. Both machines need this AgentVoice CLI version; only the desktop
+needs smolmux and codex-viewer. Optional `--workspace` selects an absolute path on
+the backend host. No attachment or Codex socket is exposed through the voice WSS
+gateway. See [desktop attachment](docs/composition.md#desktop-attachment-view).
+
 The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
 implements its own frontend, matching Codex can require the same explicit values
@@ -97,6 +116,16 @@ terminal command. Without `--connect`, the desktop option is disabled.
 Hold to talk stays visible but disabled until the microphone is muted and voice
 is connected; press and hold to talk, release to mute.
 See [network setup and Android handoff](docs/android-client-handoff.md).
+
+The first [native Android app](android/README.md) implements this authenticated
+client API directly, with a Compose voice screen, private device-grant import,
+client-owned WebRTC and foreground call ownership. It is a development build;
+on-device native audio acceptance and release distribution remain pending.
+See [Persona Halo attribution and asset provenance](android/third-party/persona-halo.md)
+for creator notices, code/runtime licenses and the external animation's license evidence.
+The shared Agentwiki playbook explains this live design workflow for Android, web
+and native desktop apps. Retrieve it with
+`agentwiki get design-studio-playbook-for-android-web-and-native-apps`.
 
 One server and one active frontend are allowed per canonical workspace.
 Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
@@ -203,7 +232,10 @@ count-only wake-up: accumulated completion notices and the current number of
 children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
 and clears completion metadata; native Codex supplies the full results.
 Multiple pending notices and empty openings are expected. The mailbox survives
-runtime replacement, has no per-message read receipts, and adds no system prompt.
+runtime replacement and has no per-message read receipts. The default role and
+mailbox tool description explicitly explain fire-and-forget dispatch: stay
+available to the human and process automatic notices without waiting or polling
+for completion. The runtime adds no system prompt of its own.
 Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
 for external clients. See [thread mailbox](docs/thread-mailbox.md) for scope,
 retry semantics and bounds.
@@ -220,7 +252,7 @@ bun run src/main.ts server --workspace ~/code/myapp
 bun run src/main.ts --workspace ~/code/myapp
 
 # Third terminal, for typed Codex interaction:
-bun run src/main.ts attach --workspace ~/code/myapp
+bun run src/main.ts attach agent --workspace ~/code/myapp
 ```
 
 Installed commands use the same flags with `agentvoice`. Attachment selects a
@@ -789,6 +821,16 @@ later mode message. See the [audit](docs/delegation-policy-audit.md) and
 [ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
 binary stay intact.
 
+The default append includes a dated Codex model guide and requires a deliberate
+model, effort, context fork and semantic name for each child assignment. Spark
+remains reference material for a future harness; current worker routing excludes
+it because its independent capacity cannot sustain the non-Spark Codex lead
+after main quota is exhausted. Quota remains unknown without a fresh observation
+tied to the call's account. See the
+[routing research and proposed quota integration](docs/subagent-model-routing.md)
+and [ADR 0040](docs/adr/0040-deliberate-subagent-routing.md). This is role guidance;
+it adds no quota feed or account switching.
+
 | Role file | Effect in AgentVoice |
 | --- | --- |
 | `SYSTEM_PROMPT.md` / `APPEND_SYSTEM_PROMPT.md` | Orchestrator `baseInstructions` / `developerInstructions`: the general role prompt every harness receives |
@@ -1112,7 +1154,7 @@ The navigation request audit used upstream tag `rust-v0.153.4`
 `codex-rs/tui/src/app/agent_picker.rs`, `app/session_lifecycle.rs`,
 `app/loaded_threads.rs` and `app_server_session.rs`. The gateway admits the
 picker's ancestry-filtered list fields and verifies each result independently;
-see [ADR 0024](docs/adr/0024-descendant-tui-attachment.md).
+see [ADR 0037](docs/adr/0037-descendant-tui-attachment.md).
 
 See [AGENTS.md](AGENTS.md) for the source map and [ADR 0009](docs/adr/0009-one-foreground-workspace.md)
 for historical ownership decisions. [ADR 0024](docs/adr/0024-server-and-pointer-frontend.md)

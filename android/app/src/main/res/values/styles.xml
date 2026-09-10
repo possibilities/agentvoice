@@ -1,0 +1,14 @@
+<resources>
+    <style name="Theme.AgentVoice" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#050607</item>
+        <item name="android:colorBackground">#050607</item>
+        <item name="android:windowSplashScreenBackground">#050607</item>
+        <item name="android:colorAccent">#D4FF72</item>
+        <item name="android:statusBarColor">#050607</item>
+        <item name="android:navigationBarColor">#050607</item>
+    </style>
+</resources>

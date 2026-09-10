@@ -20,7 +20,12 @@ export const attachmentTicketSchema = z
   })
   .strict();
 
-export async function acquireAttachment(stateDir: string, workspace: string, threadId?: string) {
+export async function acquireAttachment(
+  stateDir: string,
+  workspace: string,
+  threadId?: string,
+  expected?: z.infer<typeof attachmentTargetSchema>,
+) {
   const { descriptor, status } = await discoverControllerStatus(stateDir, workspace, threadId);
   const target = attachmentTargetSchema.parse({
     instanceId: status.instanceId,
@@ -28,6 +33,14 @@ export async function acquireAttachment(stateDir: string, workspace: string, thr
     threadId: status.threadId,
     workspace,
   });
+  if (
+    expected &&
+    (target.instanceId !== expected.instanceId ||
+      target.generation !== expected.generation ||
+      target.workspace !== expected.workspace ||
+      target.threadId !== expected.threadId)
+  )
+    throw new Error("Backend changed. Run agentvoice --attach again.");
   const response = await fetch(new URL("/tui/attach", descriptor.url), {
     method: "POST",
     headers: { Authorization: `Bearer ${descriptor.token}`, "Content-Type": "application/json" },

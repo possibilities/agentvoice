@@ -1,0 +1,9 @@
+# 0038: Thread mailbox wake-ups
+
+Identifier corrected 2026-09-08: formerly `0026-thread-mailbox-wakeups.md`. The old number
+was shared by another decision; this record retains its original rationale.
+See the [identifier history](README.md#identifier-history).
+
+AgentVoice observes terminal turns of the orchestrator's verified direct native children and immediately submits one count-only standalone tool output through `turn/start`, letting stock Codex start or steer the orchestrator while continuing to deliver child results itself. A call-controller-owned thread mailbox holds completion metadata until an idempotent opening returns and clears it; working-child counts are fresh snapshots, multiple pending wake-ups and empty openings are expected, and there are no per-message read receipts or new system/developer prompts. The control/MCP opening and read-only event snapshots/replay expose this policy to external clients; native submission ambiguity is reported without automatic retry, runtime replacement retains the mailbox, and call shutdown clears it.
+
+September 8, 2026 clarification: the operator wants the orchestrator to know before dispatch that direct-child work is fire-and-forget. The default role's existing append prompt now explicitly instructs it to stay available to the human, avoid completion waits/polling, and open automatic mailbox notices while retaining responsibility for results. The tool description exposes the same delivery contract to other roles. This amends the original no-new-prompt wording only for the selected default role's guidance; the runtime still injects no system/developer prompt. Mailbox metadata and native full responses remain separate, and observed-turn scope, delivery failures and call lifetime still bound the automatic-delivery promise.

@@ -103,6 +103,7 @@ export class RuntimeController implements ControlBackend {
   private voiceRevision = 1;
   private loadedVoice: string | null = null;
   private phase = "starting";
+  private nativeThreadReady = false;
   private operation: ControlOperation | undefined;
   private busy = false;
   private started = false;
@@ -158,17 +159,25 @@ export class RuntimeController implements ControlBackend {
         buildId: this.buildId,
         phase: this.phase,
         voicePhase: this.voice.phase,
+        attachmentReady: this.canAttach(),
       },
       currentOperation: this.operation && structuredClone(this.operation),
       recentOperations: this.journal.all().slice(-16).map(publicOperation),
     };
   }
+  private canAttach() {
+    return (
+      !this.closed &&
+      (!this.busy || this.phase === "starting") &&
+      ["starting", "ready"].includes(this.phase) &&
+      this.nativeThreadReady &&
+      !!this.active
+    );
+  }
   async attachmentTicket(value: unknown): Promise<AttachmentTicket> {
     const target = attachmentTargetSchema.parse(value);
     const current = () =>
-      !this.closed &&
-      !this.busy &&
-      this.phase === "ready" &&
+      this.canAttach() &&
       target.instanceId === this.options.instanceId &&
       target.generation === this.generation &&
       target.threadId === this.threadId &&
@@ -330,6 +339,8 @@ export class RuntimeController implements ControlBackend {
           return;
         }
         this.threadId = state.conversation.threadId;
+        // currentReady is emitted only after native thread and control initialization.
+        this.nativeThreadReady = true;
       }
       this.voice = structuredClone(state);
     } else if (method === "fatal" || (method === "exit" && this.phase === "ready")) {
@@ -387,6 +398,7 @@ export class RuntimeController implements ControlBackend {
       this.cancelHolds();
       this.active?.notify("mute", { mic: true, speaker: true });
       this.activeIncarnation = 0;
+      this.nativeThreadReady = false;
       this.mailbox.unavailableRuntime();
       this.phase = "quiescing";
       this.voice = { ...this.voice, phase: "waiting-ready" };

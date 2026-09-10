@@ -1,6 +1,10 @@
-# 0024: Native descendant navigation through TUI attachment
+# 0037: Native descendant navigation through TUI attachment
 
-Accepted 2026-09-06: extend ADR 0022's selected-thread whitelist to the granted
+Identifier corrected 2026-09-08: formerly `0024-descendant-tui-attachment.md`. The old number
+was shared by another decision; this record retains its original rationale.
+See the [identifier history](README.md#identifier-history).
+
+Accepted 2026-09-06: extend [ADR 0022](0022-websocket-native-tui.md)'s selected-thread whitelist to the granted
 orchestrator's native descendants in the same workspace, because stock Codex
 0.153.4 uses loaded-thread discovery, metadata reads and resume/history paging
 to implement subagent navigation.

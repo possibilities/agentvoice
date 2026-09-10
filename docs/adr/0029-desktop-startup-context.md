@@ -1,6 +1,6 @@
 # Desktop startup-context default
 
-2026-09-08. Supersedes ADR 0020 only for the generic voice startup-context
+2026-09-08. Supersedes [ADR 0020](0020-native-launch-defaults.md) only for the generic voice startup-context
 setting. The operator selected the inspected desktop-client baseline after
 investigating an unsolicited repetition immediately after automatic renewal.
 

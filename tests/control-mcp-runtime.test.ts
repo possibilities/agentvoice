@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
+import { AppServerError } from "../src/core/attach.ts";
 import { requireControlMcpReady } from "../src/core/control-mcp.ts";
 import { prepareRuntime, VoiceRuntime } from "../src/core/runtime.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
@@ -13,6 +14,62 @@ const control = {
   env: { PRIVATE_TEST_CAPABILITY: "fixture-secret" },
 };
 const tools = Object.fromEntries(CONTROL_MCP_TOOLS.map((name) => [name, { name }]));
+
+test("default readiness accepts a catalog arriving after five seconds without another request", async () => {
+  let calls = 0;
+  await requireControlMcpReady(
+    <T>(_method: string, _params: unknown, timeoutMs?: number) => {
+      calls++;
+      return new Promise<T>((resolve, reject) => {
+        const response = setTimeout(() => {
+          clearTimeout(deadline);
+          resolve({
+            data: [
+              {
+                name: control.name,
+                runtimeStatus: "connected",
+                authStatus: "bearerToken",
+                tools,
+              },
+            ],
+            nextCursor: null,
+          } as T);
+        }, 5_100);
+        const deadline = setTimeout(() => {
+          clearTimeout(response);
+          reject(new AppServerError("catalog timed out", undefined, true));
+        }, timeoutMs);
+      });
+    },
+    "saved",
+    control,
+  );
+  expect(calls).toBe(1);
+}, 10_000);
+
+test("catalog RPC timeout uses the remaining deadline and is not retried", async () => {
+  const budgets: number[] = [];
+  const timeout = new AppServerError("catalog timed out", undefined, true);
+  await expect(
+    requireControlMcpReady(
+      async <T>(_method: string, _params: unknown, timeoutMs?: number) => {
+        budgets.push(timeoutMs!);
+        if (budgets.length === 1) {
+          await Bun.sleep(20);
+          return { data: [], nextCursor: "next" } as T;
+        }
+        return new Promise<T>((_resolve, reject) => setTimeout(() => reject(timeout), timeoutMs));
+      },
+      "saved",
+      control,
+      200,
+    ),
+  ).rejects.toBe(timeout);
+  expect(budgets).toHaveLength(2);
+  expect(budgets[0]!).toBeLessThanOrEqual(200);
+  expect(budgets[1]!).toBeGreaterThan(0);
+  expect(budgets[1]!).toBeLessThan(budgets[0]!);
+});
 
 describe("mandatory control registration", () => {
   test("start/resume inject independent of role, preserve other servers, and verify each exact thread", async () => {
@@ -175,6 +232,32 @@ describe("mandatory control registration", () => {
     } finally {
       await runtime.shutdown();
       await h.cleanup();
+    }
+  });
+  test("catalog RPC timeout or refusal closes native without readiness, media, or retry", async () => {
+    for (const error of [
+      new AppServerError("catalog timed out", undefined, true),
+      new AppServerError("catalog refused", -32603),
+    ]) {
+      const h = runtimeHarness();
+      h.native.override = (method) =>
+        method === "mcpServerStatus/list" ? Promise.reject(error) : undefined;
+      const runtime = new VoiceRuntime(h.config, "test", h.events, {
+        ...h.runtimeOptions,
+        controlMcp: control,
+      });
+      try {
+        await expect(runtime.start()).rejects.toBe(error);
+        expect(h.ready).toEqual([]);
+        expect(h.native.closes).toBe(1);
+        expect(
+          h.native.calls.filter((call) => call.method === "mcpServerStatus/list"),
+        ).toHaveLength(1);
+        expect(h.native.calls.some((call) => call.method === "thread/realtime/start")).toBe(false);
+      } finally {
+        await runtime.shutdown();
+        await h.cleanup();
+      }
     }
   });
 });
