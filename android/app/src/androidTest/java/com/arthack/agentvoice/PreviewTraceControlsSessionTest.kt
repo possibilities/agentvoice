@@ -15,22 +15,24 @@ class PreviewTraceControlsSessionTest {
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
         .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json())
+        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
 
-    @Test fun legacyProfilesAndSessionsGainOnlyJoinDefaultsWithoutWriting() {
+    @Test fun legacyProfilesAndSessionsGainJoinDefaultsAndSharedSpacingWithoutWriting() {
         val original = PersonaPreviewState(mutedPresence = "contacts", presenceScope = "always",
-            design = defaultPortraitLayout().design.copy(traces = PreviewTraces("splayed", 143, 230, 88, 55, 72, 183)),
-            otherLayout = defaultLandscapeLayout().copy(appearanceOverrides = setOf("glow", "traces"), design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 30, 60, 183, 61))))
+            design = defaultPortraitLayout().design.copy(traces = PreviewTraces("splayed", 143, 230, 55, 72, 183)),
+            otherLayout = defaultLandscapeLayout().copy(appearanceOverrides = setOf("glow", "traces"), design = PreviewDesign(traces = PreviewTraces("circuit", 85, 130, 60, 183, 61))))
+        val migratedOther = original.otherLayout.copy(design = original.otherLayout.design.copy(spacing = original.design.spacing))
+        val migrated = original.copy(otherLayout = migratedOther, savedOtherLayout = migratedOther)
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "trace-legacy-${UUID.randomUUID()}.json")
         try {
             val old = JSONObject(encodePersonaTuning(original.placement, original.design, original.halo, original.spirit,
                 original.otherLayout, original.personaSide)).withoutTraceJoinFields().put("version", 13).toString(2)
             file.writeText(old)
             assertEquals(original.design, decodePersonaDesign(file.readText()))
-            assertEquals(original.otherLayout, decodeLandscapeLayout(file.readText()))
+            assertEquals(migratedOther, decodeLandscapeLayout(file.readText()))
             assertEquals(old, file.readText())
             val oldSession = original.json().withoutTraceJoinFields().put("protocol", 15)
-            assertEquals(original, restorePersonaPreview(oldSession, original.saved, original.savedDesign,
+            assertEquals(migrated, restorePersonaPreview(oldSession, original.saved, original.savedDesign,
                 original.savedHalo, original.savedSpirit, original.savedOtherLayout, original.savedPersonaSide, original.savedHorizontalOffsetDp, original.savedAppearanceOverrides, original.savedSharedAppearance))
             assertTrue(runCatching { decodePersonaDesign(JSONObject(old).put("version", 14).toString()) }.isFailure)
         } finally { file.delete() }
@@ -67,14 +69,14 @@ class PreviewTraceControlsSessionTest {
             val returned = withContext(Dispatchers.Main) { session.state }
             assertEquals(portrait, returned.design)
             assertEquals(landscape, returned.otherLayout.design)
-            assertEquals(18, returned.json().getInt("protocol"))
+            assertEquals(19, returned.json().getInt("protocol"))
             assertEquals(returned, restorePersonaPreview(returned.json(), returned.saved, returned.savedDesign,
                 returned.savedHalo, returned.savedSpirit, returned.savedOtherLayout, returned.savedPersonaSide, returned.savedHorizontalOffsetDp, returned.savedAppearanceOverrides, returned.savedSharedAppearance))
             assertFalse(file.exists())
             val response = session.command(JSONObject().put("id", 2).put("method", "save").put("revision", returned.revision)
                 .put("orientation", returned.orientation).put("orientationEpoch", returned.orientationEpoch))
             val saved = response.getString("profile")
-            assertEquals(16, JSONObject(saved).getInt("version"))
+            assertEquals(17, JSONObject(saved).getInt("version"))
             assertEquals(portrait, decodePersonaDesign(saved))
             assertEquals(landscape, decodeLandscapeLayout(saved).design)
             assertEquals(saved, file.readText())

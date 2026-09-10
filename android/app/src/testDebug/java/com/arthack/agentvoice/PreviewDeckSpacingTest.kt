@@ -32,18 +32,22 @@ class PreviewDeckSpacingTest {
         }
     }
 
-    @Test fun landscapeBundlesIncludeTheFullStrokeInsideNarrowChannelEdges() {
-        for (width in listOf(190.24f, 240f, 312f, 420f)) for (gap in listOf(0f, 10f, 40f)) {
-            for (halfSpan in listOf(4f, 8f, 16f)) for (stance in listOf(75, 100, 150)) {
-                val stroke = 3f
-                val reach = previewLandscapeFootReach(width, gap, halfSpan, stroke, 1f, stance) ?: continue
-                val nearestInk = reach - halfSpan - stroke / 2f
-                val farthestInk = reach + halfSpan + stroke / 2f
-                assertTrue(nearestInk >= gap / 2f)
-                assertTrue(farthestInk <= width / 2f)
+    @Test fun landscapeBundlesStayInsideTheStackedChannelEdges() {
+        for (height in listOf(190.24f, 240f, 312f)) for (gap in listOf(0, 10, 40)) {
+            for (pattern in listOf("parallel", "splayed", "circuit")) for (stance in listOf(75, 100, 150)) {
+                val layout = previewOrientationGeometry(780f, 360f, 780f, false, height, 0f)
+                val traces = previewLandscapeTraceGeometry(layout, 780f, 1f, 35f,
+                    PreviewTraces(pattern = pattern, stancePercent = stance, weightPercent = 250,
+                        footSpacingPercent = 200), gap)!!
+                assertTrue(traces.routes.isNotEmpty())
+                val centerY = layout.deckY + layout.deckViewportHeight / 2f
+                for (route in traces.routes) {
+                    val distance = kotlin.math.abs(route.landing.y - centerY)
+                    assertTrue(distance - traces.strokeWidth / 2f >= gap / 2f)
+                    assertTrue(distance + traces.strokeWidth / 2f <= layout.deckViewportHeight / 2f)
+                }
             }
         }
-        assertNull(previewLandscapeFootReach(70f, 40f, 16f, 3f, 1f, 150))
     }
 
     @Test fun mutedEligibilityUsesEffectiveGatesAndForeground() {

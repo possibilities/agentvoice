@@ -505,3 +505,34 @@ release behavior remain unchanged. Sound assets/attribution are in debug assets;
 source hashes, license and reproducible processing are documented under
 `android/third-party/switch-sounds`. Final subjective choice and acoustic pickup
 in a real voice call are not established by decode/gesture instrumentation.
+
+## Shared spacing, landscape columns and directional rockers
+
+Protocol 19/profile 17 supersedes the separate-spacing, offshoot and three-cue
+experiments above. Enforce equal spacing objects across both effective and saved
+layouts, without an orientation override. All six spacing fields move/reset
+together across orientations. Legacy landscape spacing adopts portrait values
+in memory; original files remain untouched until explicit Save. Persona sizing,
+placement and deck height/share remain local because their geometry differs.
+
+Landscape stacks HUMAN/AGENT in the column nearest Persona, with a full-height
+PTT column at the outer edge. Mirror columns, never channel order, for opposite
+handedness. PTT share is width here, height in portrait. Use the portrait trace
+engine with transposed axes instead of maintaining a second routing aesthetic.
+Decks fit the visible viewport without scroll; transient center misalignment
+during relocation suppresses traces rather than attaching to an invented center.
+Offshoot rendering, controls and current schema fields are removed. Historical
+readers validate then discard the old field.
+
+Show push to talk is a strict shared session boolean, default true, excluded
+from saved profiles and dirty comparisons. Hide removes the target/connector,
+releases any held pointer silently, and gives the mute controls the spare room.
+Retain PTT share while disabled. Rotation/restoration retains this experiment.
+
+The two CC0 sound families now contain four cues each: shared mute on/off,
+plus separate PTT down/up. Choose mute direction from the accepted persistent
+state, never the effective PTT gate. Existing toggle recordings become on
+byte-for-byte; PTT files are unchanged. New quieter/shorter off derivatives have
+complete source/hash/processing receipts. No cues on configuration, hydrate,
+reconnect, cancellation or relocation. Final sound preference remains the
+operator's audition choice.

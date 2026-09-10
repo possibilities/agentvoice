@@ -11,9 +11,11 @@ import {
   equalTraces,
   parseTraces,
   parseVersionNineTraces,
+  parseVersionSixteenTraces,
   parseVersionThirteenTraces,
   type TraceSelection,
   type VersionNineTraceSelection,
+  type VersionSixteenTraceSelection,
   type VersionThirteenTraceSelection,
 } from "./traces.ts";
 
@@ -34,6 +36,9 @@ export type VersionTenDesign = Omit<VersionEightDesign, "composition"> & {
 export type Design = Omit<VersionTenDesign, "traces"> & {
   traces: TraceSelection;
   spacing: Spacing;
+};
+export type VersionSixteenDesign = Omit<Design, "traces"> & {
+  traces: VersionSixteenTraceSelection;
 };
 export type VersionThirteenDesign = VersionTenDesign & { spacing: Spacing };
 export type VersionTwelveDesign = VersionTenDesign & { spacing: VersionTwelveSpacing };
@@ -89,6 +94,18 @@ export function parseDesign(value: unknown): Design {
     ...design,
     composition: "traces",
     traces: parseTraces(traces),
+    spacing: parseSpacing(spacing),
+  };
+}
+export function parseVersionSixteenDesign(value: unknown): VersionSixteenDesign {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid design");
+  const { spacing, traces, ...previous } = value as Record<string, unknown>;
+  const design = parseVersionEightDesign(previous);
+  if (design.composition !== "traces") throw Error("Invalid composition");
+  return {
+    ...design,
+    composition: "traces",
+    traces: parseVersionSixteenTraces(traces),
     spacing: parseSpacing(spacing),
   };
 }

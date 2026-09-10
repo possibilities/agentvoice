@@ -22,7 +22,8 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 18,
+    protocol: 19,
+    showPushToTalk: true,
     sounds: defaultSounds(),
     savedSounds: defaultSounds(),
     defaultSounds: defaultSounds(),
@@ -67,7 +68,6 @@ class Connection implements PreviewConnection {
         footSpacingPercent: 155,
         stancePercent: 140,
         weightPercent: 180,
-        offshootPercent: 45,
         glowPercent: 27,
       },
       controlsHeightDp: 380,
@@ -120,11 +120,11 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
     footSpacingPercent: 65,
     stancePercent: 93,
     weightPercent: 225,
-    offshootPercent: 71,
     glowPercent: 54,
   };
   returned.state = {
     ...returned.state,
+    showPushToTalk: false,
     sounds: { family: "rocker-13", volumePercent: 43 },
     mode: "idle",
     mutedTuning: { ...defaultMutedTuning(), textSizeSp: 23, motion: "ripple", driftPercent: 250 },
@@ -169,6 +169,7 @@ test("reconnect retains last preview, retries failed dials, then observes fresh 
   expect(phone.reconnecting).toBe(false);
   expect(phone.state.mode).toBe("idle");
   expect(phone.state.sounds).toEqual({ family: "rocker-13", volumePercent: 43 });
+  expect(phone.state.showPushToTalk).toBe(false);
   expect(phone.state.mutedTuning).toEqual({
     ...defaultMutedTuning(),
     textSizeSp: 23,

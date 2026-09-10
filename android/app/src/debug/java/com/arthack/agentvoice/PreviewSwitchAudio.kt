@@ -10,7 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.ConcurrentHashMap
 
-internal enum class PreviewSwitchCue(val file: String) { Toggle("toggle"), Down("ptt-down"), Up("ptt-up") }
+internal enum class PreviewSwitchCue(val file: String) { ToggleOn("toggle-on"), ToggleOff("toggle-off"), Down("ptt-down"), Up("ptt-up") }
 
 internal interface PreviewSwitchOutput {
     /** False means unavailable now; interaction feedback must never be queued for later. */
@@ -34,7 +34,7 @@ internal class PreviewSwitchFeedback(private val output: PreviewSwitchOutput) {
     private fun play(cue: PreviewSwitchCue): Boolean = foreground && settings.family != "off" &&
         settings.volumePercent > 0 && output.play(settings.family, cue, settings.volumePercent / 100f)
 
-    fun toggle() { play(PreviewSwitchCue.Toggle) }
+    fun toggle(open: Boolean) { play(if (open) PreviewSwitchCue.ToggleOn else PreviewSwitchCue.ToggleOff) }
     fun down() {
         if (held != null) return
         if (play(PreviewSwitchCue.Down)) held = settings

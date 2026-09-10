@@ -77,14 +77,7 @@
                   </div>
                   <input id="trace-weightPercent" type="range" min="50" max="250" step="1" value="100" />
                 </div>
-                <div class="motion-control">
-                  <div class="size-heading">
-                    <label for="trace-offshootPercent">Offshoots</label>
-                    <output id="trace-offshootPercent-value" for="trace-offshootPercent">Off</output>
-                  </div>
-                  <input id="trace-offshootPercent" type="range" min="0" max="100" step="1" value="0" aria-describedby="offshoot-hint" />
-                  <p id="offshoot-hint" class="control-hint">Lighter routes branch in other directions.</p>
-                </div>
+
                 <p id="trace-tip-baseline-hint" class="control-hint">Baseline: reach 0 dp, fade 12 dp and tip opacity 0%. The tip fades from transparent at the join to 72% at 2 dp and full opacity at 12 dp.</p>
                 <div class="motion-control">
                   <div class="size-heading">
@@ -244,7 +237,7 @@
               <fieldset class="local-layout">
                 <legend class="panel-title">Layout</legend>
                 <p class="scope-badge" id="local-layout-scope">Current orientation only</p>
-                <p class="control-hint scope-explanation">Persona size, position and button layout apply only to the orientation shown on the phone.</p>
+                <p class="control-hint scope-explanation">Persona size, position, controls height and Push-to-talk share apply only to the orientation shown on the phone.</p>
                 <div class="size-control">
                   <div class="size-heading">
                     <label id="size-label" for="size">Speaking size</label>
@@ -275,8 +268,38 @@
                   </div>
                   <button type="button" id="reset-position" data-reset="position" class="reset value-reset">Reset position</button>
                 </div>
-                <fieldset class="motion-controls">
-                  <legend class="subpanel-title">Spacing</legend>
+
+                <div class="size-control">
+                  <div class="size-heading">
+                    <label for="controls-height">Controls height</label>
+                    <output id="controls-height-value" for="controls-height">262 dp</output>
+                  </div>
+                  <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
+                  <div class="range-ends">
+                    <span>240 dp</span>
+                    <span id="controls-height-hint">All three buttons</span>
+                    <span>480 dp</span>
+                  </div>
+                </div>
+                <div class="position-control">
+                  <div class="size-heading">
+                    <label for="hold-share">Push-to-talk share</label>
+                    <output id="hold-share-value" for="hold-share">44.3%</output>
+                  </div>
+                  <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint push-to-talk-hidden-hint" />
+                  <div class="range-ends">
+                    <span>30%</span>
+                    <span id="hold-share-hint">Of controls height</span>
+                    <span>60%</span>
+                  </div>
+                </div>
+                <p id="push-to-talk-hidden-hint" class="control-hint" hidden>Push to talk is hidden. The mute buttons fill the same controls height; the share is kept for when you show it again.</p>
+                <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
+              </fieldset>
+                <fieldset class="shared-session" id="shared-spacing">
+                  <legend class="panel-title">Shared spacing</legend>
+                  <p class="scope-badge">Both orientations · Saved with profile</p>
+                  <p class="control-hint scope-explanation">Padding, button gaps and section separation stay the same across orientations. Changes and resets apply to both layouts.</p>
                   <div class="motion-control">
                     <div class="size-heading">
                       <label for="spacing-paddingDp">Padding</label>
@@ -298,36 +321,10 @@
                   </div>
                   <button type="button" id="reset-spacing" data-reset="spacing" class="reset value-reset">Reset spacing</button>
                 </fieldset>
-                <div class="size-control">
-                  <div class="size-heading">
-                    <label for="controls-height">Controls height</label>
-                    <output id="controls-height-value" for="controls-height">262 dp</output>
-                  </div>
-                  <input id="controls-height" type="range" min="240" max="480" step="1" value="262" aria-describedby="controls-height-hint" />
-                  <div class="range-ends">
-                    <span>240 dp</span>
-                    <span id="controls-height-hint">All three buttons</span>
-                    <span>480 dp</span>
-                  </div>
-                </div>
-                <div class="position-control">
-                  <div class="size-heading">
-                    <label for="hold-share">Push-to-talk share</label>
-                    <output id="hold-share-value" for="hold-share">44.3%</output>
-                  </div>
-                  <input id="hold-share" type="range" min="30" max="60" step="any" value="44.274809160305345" aria-describedby="hold-share-hint" />
-                  <div class="range-ends">
-                    <span>30%</span>
-                    <span id="hold-share-hint">Of controls height</span>
-                    <span>60%</span>
-                  </div>
-                </div>
-                <button type="button" id="reset-controls" data-reset="controls" class="reset panel-reset">Reset button sizes</button>
-              </fieldset>
               <fieldset class="shared-session">
                 <legend class="panel-title">Switch sounds</legend>
                 <p class="scope-badge">Both orientations · Saved with profile</p>
-                <p class="control-hint scope-explanation" id="sound-hint">Use the phone controls to hear your choice. Both mute switches share one click; Push to talk has separate press and release sounds. The level also follows the phone’s media volume. Changing these settings does not play a sound.</p>
+                <p class="control-hint scope-explanation" id="sound-hint">Use the phone controls to hear your choice. Both mute switches share the same on/off sound pair; Push to talk has its own press and release pair. The level also follows the phone’s media volume. Changing these settings does not play a sound.</p>
                 <div class="mixing">
                   <label for="sound-family">Sound</label>
                   <select id="sound-family" aria-describedby="sound-hint">
@@ -348,7 +345,14 @@
               <fieldset class="shared-session">
                 <legend class="panel-title">Shared session</legend>
                 <p class="scope-badge">Both orientations</p>
-                <p class="control-hint scope-explanation" id="session-style-hint">Theme, synthetic state and center indicator apply across orientations for this session. They are not saved.</p>
+                <p class="control-hint scope-explanation" id="session-style-hint">Push-to-talk visibility, theme, synthetic state and center indicator apply across orientations for this session. They are not saved.</p>
+                <div class="mixing">
+                  <label class="scope-customize">
+                    <input id="show-push-to-talk" type="checkbox" checked aria-describedby="push-to-talk-visibility-hint" />
+                    <span>Show push to talk</span>
+                  </label>
+                </div>
+                <p id="push-to-talk-visibility-hint" class="control-hint">Applies to both orientations for this session. Hiding Push to talk also removes its connector and gives the mute buttons the full controls height.</p>
                 <div class="mixing">
                   <label for="preview-theme">Theme</label>
                   <select id="preview-theme" aria-describedby="session-style-hint">
@@ -372,7 +376,7 @@
                     <option value="voice">Synthetic voice</option>
                   </select>
                 </div>
-                <p id="activity-hint" class="control-hint">Simulated activity only. No microphone or playback.</p>
+                <p id="activity-hint" class="control-hint">Simulated voice activity. No microphone or voice playback.</p>
                 <fieldset class="modes">
                   <legend class="sr-only">Preview state</legend>
                   <button type="button" data-mode="speaking" aria-pressed="false">

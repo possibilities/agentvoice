@@ -17,7 +17,6 @@ internal data class PreviewTraceGeometry(
     val strokeWidth: Float,
     val contactWidth: Float,
     val routes: List<PreviewTraceRoute>,
-    val offshoots: List<List<PreviewTracePoint>>,
 )
 
 /** All coordinates are pixels. Only allocated placement and operator settings determine a route. */
@@ -85,10 +84,9 @@ internal fun previewTraceGeometry(
             }
         }
     }
-    val offshoots = traceOffshoots(width, stageHeight, inset, personaCenterY, radius, unit)
-    if ((routes.flatMap { it.points } + offshoots.flatten()).any { !it.x.isFinite() || !it.y.isFinite() }) return null
+    if (routes.flatMap { it.points }.any { !it.x.isFinite() || !it.y.isFinite() }) return null
     return PreviewTraceGeometry(stageHeight, end, stroke, minOf(maxOf(4f * unit, stroke * 1.5f), lane * .7f),
-        routes, offshoots)
+        routes)
 }
 
 private data class TracePort(val index: Int, val x: Float, val y: Float, val contactEndY: Float, val landing: Float)
@@ -134,34 +132,6 @@ private fun traceRoute(port: TracePort, sharedStart: Float, end: Float, unit: Fl
     }
     add(port.landing, end)
     return points
-}
-
-/** These branches have fixed geometry; their separate control changes only the underlay's opacity. */
-private fun traceOffshoots(width: Float, deckTop: Float, inset: Float, centerY: Float, radius: Float,
-    unit: Float): List<List<PreviewTracePoint>> {
-    val outer = width / 2f - maxOf(12f * unit, inset / 2f)
-    val paths = mutableListOf<List<PreviewTracePoint>>()
-    repeat(2) { side ->
-        val sign = if (side == 0) -1f else 1f
-        fun point(x: Float, y: Float) = PreviewTracePoint(width / 2f + sign * x, y)
-        val upperX = radius * .58f
-        val upperY = centerY - circleHeight(radius, upperX)
-        val upward = minOf(22f * unit, (outer - upperX) * .55f, (upperY - 12f * unit) * .3f)
-        if (upward > unit && upperY < deckTop) {
-            paths += listOf(point(upperX, upperY), point(upperX + upward, upperY - upward),
-                point(upperX + upward, upperY - upward * 2.7f),
-                point(upperX + upward * 1.55f, upperY - upward * 3.25f))
-        }
-        val sideX = radius * .9f
-        val sideY = centerY + circleHeight(radius, sideX)
-        val outward = minOf(18f * unit, (outer - sideX) * .3f, (deckTop - sideY) * .15f,
-            (sideY - 12f * unit) * .5f)
-        if (outward > unit) {
-            paths += listOf(point(sideX, sideY), point(sideX + outward, sideY + outward * .45f),
-                point(outer - outward * .3f, sideY + outward * .45f), point(outer, sideY - outward * .2f))
-        }
-    }
-    return paths
 }
 
 private fun List<PreviewTracePoint>.withoutRepeatedPoints(): List<PreviewTracePoint> =

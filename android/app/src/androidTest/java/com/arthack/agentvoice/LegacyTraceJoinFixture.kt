@@ -11,8 +11,15 @@ internal fun JSONObject.withoutTraceJoinFields(): JSONObject {
 }
 
 internal fun JSONObject.withoutSharedAppearanceFields(): JSONObject {
-    for (key in listOf("sounds", "savedSounds", "defaultSounds", "horizontalOffsetDp", "appearanceOverrides", "sharedAppearance", "savedSharedAppearance",
+    withLegacyOffshootFields()
+    for (key in listOf("showPushToTalk", "sounds", "savedSounds", "defaultSounds", "horizontalOffsetDp", "appearanceOverrides", "sharedAppearance", "savedSharedAppearance",
         "defaultSharedAppearance", "savedHorizontalOffsetDp", "defaultHorizontalOffsetDp", "savedAppearanceOverrides")) remove(key)
     for (key in fields()) optJSONObject(key)?.withoutSharedAppearanceFields()
+    return this
+}
+
+internal fun JSONObject.withLegacyOffshootFields(): JSONObject {
+    if (has("pattern") && has("stancePercent") && !has("offshootPercent")) put("offshootPercent", 0)
+    for (key in fields()) optJSONObject(key)?.withLegacyOffshootFields()
     return this
 }

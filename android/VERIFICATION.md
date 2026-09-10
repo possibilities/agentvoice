@@ -1204,3 +1204,60 @@ Original/Contained rendering, appearance inheritance and layout are unchanged.
 - Noizey received exclusive phone use after verification/restoration through
   `/tmp/noizey-phone-handoff.txt`. AgentVoice's transport-only reconnect loop
   does not relaunch the app or replay settings while another app is foreground.
+
+### Shared spacing, landscape columns, optional PTT and directional sounds
+
+Protocol 19/profile 17 implements shared spacing without orientation overrides,
+removes offshoots, adds session-only PTT visibility, and uses mute on/off plus
+PTT down/up for both cleared sound families. Landscape stacks HUMAN/AGENT in
+the near column with full-height PTT at the outer edge; routing transposes the
+portrait engine. These remain debug studio experiments.
+
+Final debug APK SHA256:
+`5ce5dd8871026dfedcce44c2e9b4ac5f104d7aa1d72ecbaff2e3dc02333bdb80`.
+
+- Android debug/test APKs build, lint passes; 119 JVM tests pass. Release builds.
+- Final physical S22 instrumentation: **80 tests pass**, 144.191 seconds. The
+  initial targeted run found a portrait fixture running in landscape, a
+  subpixel width tolerance and old independent-spacing expectations. Fixtures
+  now explicitly cover their intended layout/normalized spacing. An initial
+  full run also lost a Compose hierarchy during operator interaction (causation
+  not established), plus one more stale migration expectation. After fixture
+  correction and an undisturbed rerun, the full suite is green.
+- Root: 704 tests / 10,061 assertions, typecheck and lint pass. Configurator:
+  75 tests / 2,939 assertions; host typecheck/Biome pass. Browser fixture covers
+  shared edits/resets both directions, local geometry, rotation fences,
+  reconnect without replay, visibility retention and disabled share controls,
+  no offshoot UI/requests, and no Save/audio/overflow/page errors.
+- Native screenshots reviewed at operator geometry: portrait shown/hidden,
+  landscape shown/hidden, mirrored landscape and shared padding after rotation.
+  Stacked mutes stay nearest Persona and the PTT column stays at the far edge.
+  Captured routes meet the side of the ring without crossing its clear center;
+  this is evidence for sampled poses, not every possible animated setting.
+  Hidden portrait intentionally uses the full selected deck height for mutes.
+- Real phone taps exercised both directions on both mute switches for each
+  family, followed by ordinary PTT press/release. Instrumentation verifies cue
+  direction/order, cancellation and all eight native streams. No subjective
+  phone-speaker or voice-call acoustic-pickup claim.
+- All eight debug WAVs match the specialist receipt and APK bytes. Previous
+  PTT bytes and the renamed on cues are unchanged. Release APK contains neither
+  switch-sound assets nor checked preview classes.
+- Fresh pre-install snapshot restored in both orientations, including sizes,
+  manual offsets, appearance overrides, center indicator, theme, mute gates,
+  Rocker29/70 and activity. Only retired offshoots are dropped and landscape
+  spacing adopts portrait's exact object (linked Padding 17). PTT is left shown;
+  the checkbox is available for experimentation. Phone and host saved files
+  remain byte-identical. No Save. Original rotation settings restored
+  (`accelerometer_rotation=1`, `user_rotation=0`). Phone access released and
+  completion notice saved to AgentNotify; optional system banners were off.
+
+Evidence: `/tmp/agentvoice-columns-final-build.log`,
+`/tmp/agentvoice-columns-test-rebuild2.log`,
+`/tmp/agentvoice-columns-instrumentation-final.log`,
+`/tmp/agentvoice-columns-release.log`, `/tmp/agentvoice-columns-assets.log`,
+`/tmp/agentvoice-columns-root-tests.log`,
+`/tmp/agentvoice-columns-configurator-tests.log`,
+`/tmp/agentvoice-studio19-spacing-browser/evidence.json`,
+`/tmp/agentvoice-columns-phone-check.log`, and the native PNG/JSON pairs under
+`/tmp/agentvoice-columns-phone/`. The live host was restarted on the new protocol
+and its current URL opened in Chrome; saved URL handoff files were refreshed.

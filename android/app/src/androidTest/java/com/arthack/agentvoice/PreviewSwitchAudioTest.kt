@@ -31,7 +31,7 @@ class PreviewSwitchAudioTest {
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag("mic-mute").performTouchInput { click() }
         compose.mainClock.advanceTimeByFrame()
-        compose.runOnIdle { assertTrue(state.micMuted); assertEquals(List(3) { PreviewSwitchCue.Toggle }, output.cues); output.cues.clear() }
+        compose.runOnIdle { assertTrue(state.micMuted); assertEquals(listOf(PreviewSwitchCue.ToggleOff, PreviewSwitchCue.ToggleOn, PreviewSwitchCue.ToggleOff), output.cues); output.cues.clear() }
         push.performTouchInput { down(center) }
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle { assertTrue(state.holding); assertEquals(listOf(PreviewSwitchCue.Down), output.cues) }
@@ -77,14 +77,14 @@ class PreviewSwitchAudioTest {
         lateinit var pool: PreviewSwitchPool
         compose.runOnIdle { pool = PreviewSwitchPool(context) }
         try {
-            compose.waitUntil(5000) { pool.readyCount == 6 }
+            compose.waitUntil(5000) { pool.readyCount == 8 }
             compose.runOnIdle {
                 for (family in listOf("rocker-29", "rocker-13")) for (cue in PreviewSwitchCue.entries) {
                     assertTrue("$family $cue", pool.play(family, cue, .05f))
                     pool.stop()
                 }
-                assertFalse(pool.play("off", PreviewSwitchCue.Toggle, .7f))
-                assertFalse(pool.play("rocker-29", PreviewSwitchCue.Toggle, 0f))
+                assertFalse(pool.play("off", PreviewSwitchCue.ToggleOn, .7f))
+                assertFalse(pool.play("rocker-29", PreviewSwitchCue.ToggleOn, 0f))
                 pool.close()
                 assertFalse(pool.play("rocker-29", PreviewSwitchCue.Up, .7f))
             }

@@ -55,8 +55,8 @@ class PreviewTraceJoinTest {
         }
     }
 
-    @Test fun routeAndOffshootStartsUseTheSameJoinWithoutMovingButtonFeet() {
-        val settings = PreviewTraces(offshootPercent = 100)
+    @Test fun routeStartsFollowTheJoinWithoutMovingButtonFeet() {
+        val settings = PreviewTraces()
         fun geometry(join: PreviewTraceJoin) = previewTraceGeometry(400f, 800f, 500f, 262f, 24f,
             200f, join.radiusPx, 1f, settings)!!
         val baseline = geometry(previewTraceJoin(90f, 1f, settings)!!)
@@ -65,11 +65,10 @@ class PreviewTraceJoinTest {
         for (route in reached.routes) assertEquals(60f, hypot(route.port.x - 200f, route.port.y - 200f), .001f)
         val centered = geometry(previewTraceJoin(90f, 1f, settings.copy(reachDp = 120))!!)
         assertTrue(centered.routes.isNotEmpty())
-        assertTrue(centered.offshoots.isNotEmpty())
-        for (point in centered.routes.map { it.port } + centered.offshoots.map { it.first() }) {
+        for (point in centered.routes.map { it.port }) {
             assertEquals(PreviewTracePoint(200f, 200f), point)
         }
-        assertTrue((centered.routes.flatMap { it.points } + centered.offshoots.flatten()).all { it.x.isFinite() && it.y.isFinite() })
+        assertTrue(centered.routes.flatMap { it.points }.all { it.x.isFinite() && it.y.isFinite() })
     }
 
     @Test fun invalidPaintGeometryCannotCreateANonfiniteShader() {

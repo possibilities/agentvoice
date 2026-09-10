@@ -18,17 +18,17 @@ class PreviewProfileTwelveTest {
     private fun preview(state: PersonaPreviewState) = state.activeLayout().json()
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
-        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json())
+        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
         .put("revision", state.revision).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
 
     @Test fun versionElevenPreservesUnequalLayoutsAndSavedBytesWithBaselineSpacing() {
         val portrait = PreviewLayout(PersonaPlacement(.91f, .43f, .67f, (-83).dp),
-            PreviewDesign(controlsHeightDp = 411, holdSharePercent = 57.2, traces = PreviewTraces("circuit", 143, 210, 57, 61, 75, 175)),
+            PreviewDesign(controlsHeightDp = 411, holdSharePercent = 57.2, traces = PreviewTraces("circuit", 143, 210, 61, 75, 175)),
             PreviewHalo(variant = "original", containedSizePercent = 102), PreviewSpirit("soft", 81, "fixed"), "right")
         val landscape = PreviewLayout(PersonaPlacement(.52f, .49f, .61f, 47.dp),
-            PreviewDesign(controlsHeightDp = 279, holdSharePercent = 31.4, traces = PreviewTraces("splayed", 87, 73, 12, 19, 180, 60)),
+            PreviewDesign(controlsHeightDp = 279, holdSharePercent = 31.4, traces = PreviewTraces("splayed", 87, 73, 19, 180, 60)),
             PreviewHalo(variant = "contained", containedSizePercent = 69), PreviewSpirit("still", 26, "follow"), "left")
         val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo, portrait.spirit,
             landscape, portrait.personaSide)).apply {
@@ -92,12 +92,12 @@ class PreviewProfileTwelveTest {
             assertEquals("contacts", landscape.mutedPresence)
             assertEquals("always", landscape.presenceScope)
             assertEquals(tuning, landscape.mutedTuning)
-            assertEquals(PreviewSpacing(paddingDp = 16), landscape.design.spacing)
+            assertEquals(PreviewSpacing(200, 0, 80, 40, 48), landscape.design.spacing)
             session.command(preview(landscape).put("theme", "grayscale")
                 .put("design", landscape.design.copy(spacing = PreviewSpacing(0, 200, 17, 0, 0)).json()))
             withContext(Dispatchers.Main) { session.state = session.state.rotate("portrait") }
             val returned = withContext(Dispatchers.Main) { session.state }
-            assertEquals(PreviewSpacing(200, 0, 80, 40, 48), returned.design.spacing)
+            assertEquals(PreviewSpacing(0, 200, 17, 0, 0), returned.design.spacing)
             assertEquals("grayscale", returned.theme)
             assertTrue(runCatching { session.command(staleEdit) }.isFailure)
             assertTrue(runCatching { session.command(staleSave) }.isFailure)
@@ -105,7 +105,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(16, encoded.getInt("version"))
+            assertEquals(17, encoded.getInt("version"))
             assertFalse(encoded.has("theme"))
             assertFalse(encoded.has("mutedPresence"))
             assertFalse(encoded.has("mutedTuning"))
@@ -169,7 +169,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(18, current.json().getInt("protocol"))
+                assertEquals(19, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())
@@ -185,7 +185,7 @@ class PreviewProfileTwelveTest {
         } finally { file.delete() }
     }
 
-    @Test fun versionTwelveAddsCustomPaddingWithoutChangingEitherLayoutOrSavedBytes() {
+    @Test fun versionTwelveAdoptsPortraitSpacingWithoutChangingGeometryOrSavedBytes() {
         val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
             spacing = PreviewSpacing(137, 63, 19, 7, 31)))
         val landscape = defaultLandscapeLayout().copy(design = defaultLandscapeLayout().design.copy(
@@ -193,6 +193,7 @@ class PreviewProfileTwelveTest {
         val old = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo,
             portrait.spirit, landscape, portrait.personaSide)).apply {
             withoutTraceJoinFields(); put("version", 12)
+            getJSONObject("landscape").getJSONObject("design").put("spacing", landscape.design.spacing.json())
             getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
             getJSONObject("landscape").getJSONObject("design").getJSONObject("spacing").remove("paddingDp")
         }
@@ -201,7 +202,7 @@ class PreviewProfileTwelveTest {
             file.writeText(old.toString(2))
             val bytes = file.readBytes()
             assertEquals(portrait.design, decodePersonaDesign(file.readText()))
-            assertEquals(landscape, decodeLandscapeLayout(file.readText()))
+            assertEquals(landscape.copy(design = landscape.design.copy(spacing = portrait.design.spacing)), decodeLandscapeLayout(file.readText()))
             assertArrayEquals(bytes, file.readBytes())
             val oldSession = PersonaPreviewState(design = portrait.design, otherLayout = landscape,
                 mutedTuning = PreviewMutedTuning(24, 65, 200, 70, 10, "ripple")).json().apply {
@@ -212,7 +213,7 @@ class PreviewProfileTwelveTest {
             val restored = restorePersonaPreview(oldSession, portrait.placement, portrait.design,
                 portrait.halo, portrait.spirit, landscape, portrait.personaSide)
             assertEquals(portrait.design, restored.design)
-            assertEquals(landscape, restored.otherLayout)
+            assertEquals(landscape.copy(design = landscape.design.copy(spacing = portrait.design.spacing)), restored.otherLayout)
             assertEquals("ripple", restored.mutedTuning.motion)
             assertThrows(IllegalArgumentException::class.java) {
                 decodePreviewDesign(old.getJSONObject("design"))

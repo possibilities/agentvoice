@@ -54,9 +54,17 @@ internal fun PreviewControls(
     spacing: PreviewSpacing = PreviewSpacing(),
     availableHeightDp: Float? = null,
     onReleaseCompleted: () -> Unit = onRelease,
+    showPushToTalk: Boolean = true,
+    landscape: Boolean = false,
+    mirror: Boolean = false,
 ) {
+    if (landscape) {
+        PreviewLandscapeControls(ui, onMute, onHold, onRelease, modifier, controlsHeightDp,
+            holdSharePercent, light, spacing, availableHeightDp, onReleaseCompleted, showPushToTalk, mirror)
+        return
+    }
     val inks = LocalPreviewTheme.current.palette
-    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.effectivePushGapDp)
+    val geometry = PreviewControlGeometry(controlsHeightDp, holdSharePercent, spacing.effectivePushGapDp, showPushToTalk)
     val fit = geometry.fitWithin(availableHeightDp)
     // The old recognizer disposes during resize; its release must see the new owner's callback.
     val latestHold by rememberUpdatedState(onHold)
@@ -64,20 +72,71 @@ internal fun PreviewControls(
     val latestCompleted by rememberUpdatedState(onReleaseCompleted)
     Column(modifier.height(fit.extent.dp).testTag("preview-controls")) {
         PreviewMuteControls(ui, onMute, Modifier.fillMaxWidth().height(fit.mute.dp), light, spacing.effectiveChannelGapDp)
-        Canvas(Modifier.fillMaxWidth().height(fit.gap.dp).clearAndSetSemantics { }) {
-            if (size.height <= 0f) return@Canvas
-            // Hold gates capture only; the conduit belongs to the microphone side of the deck.
-            val x = (size.width - spacing.effectiveChannelGapDp.dp.toPx()) / 4f
-            val ink = if (ui.canHold || ui.holding) inks.you else inks.line
-            drawLine(ink, Offset(x, 0f), Offset(x, size.height), 3.dp.toPx())
-            val capStroke = minOf(2.dp.toPx(), size.height)
-            val capY = size.height - capStroke / 2f
-            drawLine(ink, Offset(x - 8.dp.toPx(), capY),
-                Offset(x + 8.dp.toPx(), capY), capStroke)
+        if (showPushToTalk) {
+            Canvas(Modifier.fillMaxWidth().height(fit.gap.dp).clearAndSetSemantics { }) {
+                if (size.height <= 0f) return@Canvas
+                // Hold gates capture only; the conduit belongs to the microphone side of the deck.
+                val x = (size.width - spacing.effectiveChannelGapDp.dp.toPx()) / 4f
+                val ink = if (ui.canHold || ui.holding) inks.you else inks.line
+                drawLine(ink, Offset(x, 0f), Offset(x, size.height), 3.dp.toPx())
+                val capStroke = minOf(2.dp.toPx(), size.height)
+                val capY = size.height - capStroke / 2f
+                drawLine(ink, Offset(x - 8.dp.toPx(), capY),
+                    Offset(x + 8.dp.toPx(), capY), capStroke)
+            }
+            key(geometry, fit) {
+                PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
+                    Modifier.fillMaxWidth().height(fit.hold.dp), light, onReleaseCompleted = { latestCompleted() })
+            }
         }
-        key(geometry, fit) {
-            PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
-                Modifier.fillMaxWidth().height(fit.hold.dp), light, onReleaseCompleted = { latestCompleted() })
+    }
+}
+
+@Composable
+private fun PreviewLandscapeControls(
+    ui: CallUi, onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit,
+    modifier: Modifier, controlsHeightDp: Int, holdSharePercent: Double,
+    light: State<PreviewButtonLight>?, spacing: PreviewSpacing, availableHeightDp: Float?,
+    onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, mirror: Boolean,
+) {
+    val inks = LocalPreviewTheme.current.palette
+    val height = minOf(controlsHeightDp.toFloat(), availableHeightDp ?: controlsHeightDp.toFloat())
+    BoxWithConstraints(modifier.height(height.dp).testTag("preview-controls")) {
+        val gap = if (showPushToTalk) minOf(spacing.effectivePushGapDp.toFloat(), maxWidth.value / 4f) else 0f
+        val holdWidth = if (showPushToTalk) maxWidth.value * holdSharePercent.toFloat() / 100f else 0f
+        val muteWidth = (maxWidth.value - holdWidth - gap).coerceAtLeast(1f)
+        val channelGap = minOf(spacing.effectiveChannelGapDp.toFloat(), height / 3f)
+        val heightScale = ((height - channelGap) / 2f / 130f).coerceIn(.6f, 1.6f)
+        val latestRelease by rememberUpdatedState(onRelease)
+        val latestHold by rememberUpdatedState(onHold)
+        val latestCompleted by rememberUpdatedState(onReleaseCompleted)
+        @Composable fun muteColumn() {
+            Column(Modifier.width(muteWidth.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(channelGap.dp)) {
+                PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
+                    inks.you, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
+                PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
+                    inks.agent, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
+            }
+        }
+        @Composable fun pushColumn() {
+            key(height, holdWidth, gap) {
+                PreviewHoldControl(ui, { latestHold() }, { latestRelease() },
+                    Modifier.width(holdWidth.dp).fillMaxHeight(), light, onReleaseCompleted = { latestCompleted() })
+            }
+        }
+        @Composable fun conduit() {
+            Canvas(Modifier.width(gap.dp).fillMaxHeight().clearAndSetSemantics { }) {
+                val y = (size.height - channelGap.dp.toPx()) / 4f
+                val ink = if (ui.canHold || ui.holding) inks.you else inks.line
+                drawLine(ink, Offset(0f, y), Offset(size.width, y), 3.dp.toPx())
+                val cap = if (mirror) 0f else size.width
+                drawLine(ink, Offset(cap, y - 8.dp.toPx()), Offset(cap, y + 8.dp.toPx()), 2.dp.toPx())
+            }
+        }
+        Row(Modifier.fillMaxSize()) {
+            if (showPushToTalk && mirror) { pushColumn(); conduit() }
+            muteColumn()
+            if (showPushToTalk && !mirror) { conduit(); pushColumn() }
         }
     }
 }
@@ -358,6 +417,7 @@ private fun RockerHoldFace(
     val live = ui.holding && ui.micOpen
     val microphoneLive = microphoneIsLive(ui)
     BoxWithConstraints(modifier) {
+        val verticalFace = maxHeight > maxWidth * 1.15f
         val heightScale = (maxHeight.value / 116f).coerceIn(.6f, 1.6f)
         val liveTypeMaximum = if (maxWidth < 300.dp) 24 else 28
         val compactFace = largeType || maxWidth < 300.dp
@@ -366,7 +426,7 @@ private fun RockerHoldFace(
         val deep = (7f * heightScale).coerceIn(5f, 10f).dp
         val upperInset = if (ui.holding) deep else shallow
         val lowerInset = if (ui.holding) shallow else deep
-        Row(Modifier.fillMaxSize().drawBehind {
+        val faceModifier = Modifier.fillMaxSize().drawBehind {
             val cut = (12f * heightScale).coerceIn(8f, 16f).dp.toPx()
             val top = upperInset.toPx()
             val bottom = size.height - lowerInset.toPx()
@@ -410,9 +470,30 @@ private fun RockerHoldFace(
             val lipY = if (ui.holding) bottom else top
             val lipInset = (if (ui.holding) lowerSide else upperSide) + corner + 4.dp.toPx()
             drawLine(lip, Offset(lipInset, lipY), Offset(size.width - lipInset, lipY), 1.5.dp.toPx())
-        }.padding(start = if (compactFace) 20.dp else 24.dp, top = upperInset,
-            end = if (compactFace) 20.dp else 24.dp, bottom = lowerInset),
-            verticalAlignment = Alignment.CenterVertically) {
+        }.padding(start = if (verticalFace) 10.dp else if (compactFace) 20.dp else 24.dp, top = upperInset,
+            end = if (verticalFace) 10.dp else if (compactFace) 20.dp else 24.dp, bottom = lowerInset)
+        if (verticalFace) {
+            val fontScale = LocalDensity.current.fontScale
+            val mainSize = ((maxWidth.value - 24f) / (2.6f * fontScale)).toInt().coerceIn(14, 32)
+            val glyphSize = minOf(42f, maxWidth.value * .35f).dp
+            Column(faceModifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                RockerPressGlyph(ink, ui.holding, Modifier.size(glyphSize))
+                Spacer(Modifier.height(16.dp))
+                ControlText(when {
+                    microphoneLive -> "Live\nnow"
+                    ui.holding -> "Wait"
+                    ui.canHold -> "Push"
+                    else -> "Off"
+                }, ink, mainSize, bold = true, maxLines = 2, align = TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                ControlText(when {
+                    microphoneLive -> if (ui.holding) "release\nto mute" else "mic open"
+                    ui.holding -> "for mic"
+                    ui.canHold -> "to talk"
+                    else -> holdUnavailableReason(ui, concise = true)
+                }, ink, 11, maxLines = 4, align = TextAlign.Center)
+            }
+        } else Row(faceModifier, verticalAlignment = Alignment.CenterVertically) {
             RockerPressGlyph(ink, ui.holding,
                 Modifier.size(((if (compactFace) 28f else 36f) * heightScale).coerceIn(26f, 48f).dp))
             Spacer(Modifier.width(if (compactFace) 14.dp else 20.dp))
@@ -452,8 +533,8 @@ private fun holdUnavailableReason(ui: CallUi, concise: Boolean = false): String 
 }
 
 @Composable
-private fun ControlText(text: String, color: Color, size: Int, bold: Boolean = false, maxLines: Int = 1) {
-    Text(text, color = color, fontFamily = VoiceInk.type, fontSize = size.sp,
+private fun ControlText(text: String, color: Color, size: Int, bold: Boolean = false, maxLines: Int = 1, align: TextAlign = TextAlign.Start) {
+    Text(text, textAlign = align, color = color, fontFamily = VoiceInk.type, fontSize = size.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
         letterSpacing = 0.sp, lineHeight = (size * 1.15f).sp, maxLines = maxLines)
 }

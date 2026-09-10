@@ -36,7 +36,7 @@ class PersonaPreviewLifecycleTest {
             val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
             assertEquals(migrated(original), restored)
         }
-        val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 72, 41)))
+        val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 41)))
         val v9 = legacySession(v9State, 9).apply {
             getJSONObject("design").getJSONObject("traces").apply { remove("personaSpacingPercent"); remove("footSpacingPercent") }
         }
@@ -62,10 +62,10 @@ class PersonaPreviewLifecycleTest {
             var before: JSONObject
             connect().use { socket ->
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
-                    .put("theme", "bright").put("mutedPresence", "labeled").put("mutedTuning", PreviewMutedTuning(29, -30, 166, 42, 14, "ripple").json()).put("presenceScope", "always").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json())
+                    .put("theme", "bright").put("mutedPresence", "labeled").put("mutedTuning", PreviewMutedTuning(29, -30, 166, 42, 14, "ripple").json()).put("presenceScope", "always").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true)
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
-                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 80, 55, 75, 175)).json())
+                    .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 55, 75, 175)).json())
                     .put("halo", PreviewHalo(variant = "contained", containedSizePercent = 82, speakingColor = "#ff82dd").json())
                 socket.outputStream.write((preview.toString() + "\n").toByteArray())
                 before = JSONObject(readFrame(socket.inputStream, 16384)!!).getJSONObject("state")

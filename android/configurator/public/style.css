@@ -464,3 +464,8 @@ input[type="color"]:focus-visible {
 .shared-session .modes {
   margin: 20px 0;
 }
+
+#hold-share:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

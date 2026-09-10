@@ -109,6 +109,7 @@ export async function serveConfigurator(
             "orientation",
             "orientationEpoch",
             "personaSide",
+            "showPushToTalk",
             "sounds",
             "theme",
             "mutedPresence",
@@ -129,6 +130,7 @@ export async function serveConfigurator(
             orientation: input["orientation"],
             orientationEpoch: input["orientationEpoch"],
             personaSide: input["personaSide"],
+            showPushToTalk: input["showPushToTalk"],
             sounds: input["sounds"],
             theme: input["theme"],
             mutedPresence: input["mutedPresence"],
@@ -174,6 +176,7 @@ export async function serveConfigurator(
               orientation: input["orientation"],
               orientationEpoch: input["orientationEpoch"],
               personaSide: input["personaSide"],
+              showPushToTalk: input["showPushToTalk"],
               sounds: input["sounds"],
               theme: input["theme"],
               mutedPresence: input["mutedPresence"],
@@ -214,7 +217,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 16 ||
+            profile.version !== 17 ||
             !equalSounds(profileSounds(profile), expectedSounds) ||
             !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||
             !equalLayout(profileLayout(profile, expectedOrientation), expected) ||

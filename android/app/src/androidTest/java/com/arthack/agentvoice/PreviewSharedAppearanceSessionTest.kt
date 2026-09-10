@@ -16,7 +16,7 @@ class PreviewSharedAppearanceSessionTest {
         .put("method", "preview").put("id", 1).put("orientation", state.orientation)
         .put("orientationEpoch", state.orientationEpoch).put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("theme", state.theme).put("mutedPresence", state.mutedPresence)
-        .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json())
+        .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk)
 
     @Test fun sharedAppearanceEditsEitherOrientationWhileOverridesAndGeometryStayLocal() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "appearance-${UUID.randomUUID()}.json")
@@ -67,7 +67,7 @@ class PreviewSharedAppearanceSessionTest {
                 .put("orientation", joined.orientation).put("orientationEpoch", joined.orientationEpoch))
             val profile = reply.getString("profile")
             val decoded = decodePreviewProfileLayouts(profile)
-            assertEquals(16, JSONObject(profile).getInt("version"))
+            assertEquals(17, JSONObject(profile).getInt("version"))
             assertEquals(joined.activeLayout(), decoded.landscape)
             assertEquals(joined.otherLayout, decoded.portrait)
             assertEquals(joined.sharedAppearance, decoded.shared)
@@ -82,7 +82,7 @@ class PreviewSharedAppearanceSessionTest {
 
     @Test fun legacyDefaultsInheritButCustomLandscapeAppearanceAndGeometryArePreserved() {
         val portrait = defaultPortraitLayout().copy(design = defaultPortraitLayout().design.copy(
-            traces = PreviewTraces("splayed", 101, 250, 0, 50, 89, 200, -9, 80, 0)))
+            traces = PreviewTraces("splayed", 101, 250, 50, 89, 200, -9, 80, 0)))
         fun legacy(landscape: PreviewLayout) = JSONObject(encodePersonaTuning(portrait.placement, portrait.design,
             portrait.halo, portrait.spirit, landscape)).withoutSharedAppearanceFields().put("version", 14).toString(2)
         val baseline = PreviewLayout()

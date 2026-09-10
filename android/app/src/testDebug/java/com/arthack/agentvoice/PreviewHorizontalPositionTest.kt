@@ -28,28 +28,29 @@ class PreviewHorizontalPositionTest {
         }
     }
 
-    @Test fun movingTheNominalSquareAcrossTheDeckDoesNotEraseTheRoutingGutter() {
+    @Test fun movingTheNominalSquareKeepsSideContactsFixedUntilTheActualApertureOverlaps() {
         for (side in listOf("left", "right")) {
-            val baseline = landscape(side)
-            val gutter = previewLandscapeTraceGutterDp(baseline)
-            assertTrue(gutter > 0f)
-            for (offset in listOf(-200f, -37f, 58f, 200f)) {
-                assertEquals(gutter, previewLandscapeTraceGutterDp(landscape(side, offset = offset)), .001f)
+            val baseline = previewLandscapeTraceGeometry(landscape(side), 780f, 1f, 30f)!!
+            assertTrue(baseline.routes.isNotEmpty())
+            for (offset in listOf(-60f, 0f, 60f)) {
+                val moved = previewLandscapeTraceGeometry(landscape(side, offset = offset), 780f, 1f, 30f)!!
+                assertEquals(baseline.routes.map { it.landing }, moved.routes.map { it.landing })
+                assertEquals(baseline.center.x + offset, moved.center.x, .001f)
             }
-            val overlapping = landscape(side, offset = if (side == "left") 200f else -200f)
-            if (side == "left") assertTrue(overlapping.stageX + overlapping.diameter > overlapping.deckX)
-            else assertTrue(overlapping.stageX < overlapping.deckX + overlapping.deckWidth)
+            val overlap = landscape(side, offset = if (side == "left") 200f else -200f)
+            assertTrue(previewLandscapeTraceGeometry(overlap, 780f, 1f, 30f)!!.routes.isEmpty())
         }
     }
 
-    @Test fun positionTransitionsRetainTheFixedTraceLane() {
+    @Test fun positionTransitionsRetainTheFixedSideContacts() {
         for (side in listOf("left", "right")) {
-            val start = landscape(side, offset = -200f)
-            val end = landscape(side, offset = 200f)
+            val start = landscape(side, offset = -60f)
+            val end = landscape(side, offset = 60f)
+            val feet = previewLandscapeTraceGeometry(start, 780f, 1f, 30f)!!.routes.map { it.landing }
             for (progress in listOf(0f, .25f, .5f, .75f, 1f)) {
                 val presented = start.towards(end, progress)
-                assertEquals(-200f + 400f * progress, presented.horizontalOffsetDp, .001f)
-                assertEquals(previewLandscapeTraceGutterDp(start), previewLandscapeTraceGutterDp(presented), .001f)
+                assertEquals(-60f + 120f * progress, presented.horizontalOffsetDp, .001f)
+                assertEquals(feet, previewLandscapeTraceGeometry(presented, 780f, 1f, 30f)!!.routes.map { it.landing })
             }
         }
     }

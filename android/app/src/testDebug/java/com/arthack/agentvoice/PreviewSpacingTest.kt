@@ -24,7 +24,7 @@ class PreviewSpacingTest {
         assertEquals(PersonaPlacement(.78f, .56f, .78f, (-22).dp), portrait.placement)
         assertEquals(387, portrait.design.controlsHeightDp)
         assertEquals(40.9, portrait.design.holdSharePercent, 0.0)
-        assertEquals(PreviewTraces("parallel", 130, 175, 88, 0), portrait.design.traces)
+        assertEquals(PreviewTraces("parallel", 130, 175, 0), portrait.design.traces)
         assertEquals(PreviewSpacing(paddingDp = 16), portrait.design.spacing)
         assertEquals("contained", portrait.halo.variant)
         assertEquals(PreviewSpirit("still", 35, "follow"), portrait.spirit)

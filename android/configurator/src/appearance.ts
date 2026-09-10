@@ -1,7 +1,13 @@
 import { equalHalo, type HaloSelection, parseHalo } from "./halo.ts";
 import type { Layout, Preview } from "./protocol.ts";
 import { equalSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
-import { equalTraces, parseTraces, type TraceSelection } from "./traces.ts";
+import {
+  equalTraces,
+  parseTraces,
+  parseVersionSixteenTraces,
+  type TraceSelection,
+  type VersionSixteenTraceSelection,
+} from "./traces.ts";
 
 export const appearanceGroups = ["glow", "halo", "spirit", "traces"] as const;
 export type AppearanceGroup = (typeof appearanceGroups)[number];
@@ -11,6 +17,31 @@ export type SharedAppearance = {
   halo: Omit<HaloSelection, "containedSizePercent">;
   spirit: SpiritSelection;
 };
+export type VersionSixteenSharedAppearance = Omit<SharedAppearance, "traces"> & {
+  traces: Omit<VersionSixteenTraceSelection, "glowPercent">;
+};
+
+export function parseVersionSixteenSharedAppearance(
+  value: unknown,
+): VersionSixteenSharedAppearance {
+  const data = object(value, ["traces", "glowPercent", "halo", "spirit"]);
+  const traces = object(data["traces"], [
+    "pattern",
+    "stancePercent",
+    "personaSpacingPercent",
+    "footSpacingPercent",
+    "weightPercent",
+    "offshootPercent",
+    "reachDp",
+    "fadeLengthDp",
+    "tipOpacityPercent",
+  ]);
+  parseVersionSixteenTraces({ ...traces, glowPercent: data["glowPercent"] });
+  const { offshootPercent, ...currentTraces } = traces;
+  const current = parseSharedAppearance({ ...data, traces: currentTraces });
+  return { ...current, traces: { ...current.traces, offshootPercent: offshootPercent as number } };
+}
+
 function object(value: unknown, keys: string[]): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw Error("Invalid appearance");

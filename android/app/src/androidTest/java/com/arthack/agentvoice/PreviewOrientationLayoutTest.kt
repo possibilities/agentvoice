@@ -54,8 +54,8 @@ class PreviewOrientationLayoutTest {
         val leftDeck = compose.onNodeWithTag("preview-controls").getUnclippedBoundsInRoot()
         assertTrue(rightStage.left > leftDeck.right)
         assertEquals((leftStage.right - leftStage.left).value, (rightStage.right - rightStage.left).value, .1f)
-        assertTrue(compose.onNodeWithTag("mic-mute").getUnclippedBoundsInRoot().left <
-            compose.onNodeWithTag("speaker-mute").getUnclippedBoundsInRoot().left)
+        assertTrue(compose.onNodeWithTag("mic-mute").getUnclippedBoundsInRoot().top <
+            compose.onNodeWithTag("speaker-mute").getUnclippedBoundsInRoot().top)
         compose.runOnIdle { assertSame(view, nativeView()); assertFalse(state.holding); landscape = false }
         compose.mainClock.advanceTimeBy(400)
         stage.assertWidthIsEqualTo(320.dp).assertHeightIsEqualTo(320.dp)

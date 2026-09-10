@@ -36,13 +36,6 @@ internal fun PreviewPersonaTraces(
         val route = previewTraceInk(theme.decoration(VoiceInk.line.copy(alpha = .84f)), center, join)
         val contact = previewTraceInk(theme.decoration(VoiceInk.muted.copy(alpha = .32f)), center, join)
         clipRect(bottom = geometry.endY) {
-            if (settings.offshootPercent > 0) {
-                val offshoot = previewTraceInk(theme.decoration(VoiceInk.line.copy(alpha = .28f * settings.offshootPercent.coerceIn(0, 100) / 100f)),
-                    center, join)
-                for (points in geometry.offshoots) drawPath(points.tracePath(), offshoot,
-                    style = Stroke(maxOf(.45.dp.toPx(), geometry.strokeWidth * .62f),
-                        cap = StrokeCap.Butt, join = StrokeJoin.Bevel))
-            }
             for (trace in geometry.routes) {
                 drawPath(trace.points.tracePath(), route,
                     style = Stroke(geometry.strokeWidth, cap = StrokeCap.Butt, join = StrokeJoin.Bevel))

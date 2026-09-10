@@ -150,7 +150,7 @@ function render() {
     const amount = draft.design.traces[field];
     element<HTMLInputElement>(`trace-${field}`).value = String(amount);
     const unit = field.endsWith("Dp") ? " dp" : "%";
-    const off = amount === 0 && (field === "offshootPercent" || field === "glowPercent");
+    const off = amount === 0 && field === "glowPercent";
     text(element(`trace-${field}-value`), off ? "Off" : `${amount}${unit}`);
     element(`trace-${field}`).setAttribute(
       "aria-valuetext",
@@ -169,6 +169,23 @@ function render() {
   );
   controlHeight.value = String(draft.design.controlsHeightDp);
   holdShare.value = String(draft.design.holdSharePercent);
+  text(
+    element("hold-share-hint"),
+    draft.orientation === "landscape" ? "Of controls width" : "Of controls height",
+  );
+  text(
+    element("push-to-talk-hidden-hint"),
+    draft.orientation === "landscape"
+      ? "Push to talk is hidden. The stacked mute column fills the full deck; the width share is kept for when you show it again."
+      : "Push to talk is hidden. The mute buttons fill the same controls height; the height share is kept for when you show it again.",
+  );
+  holdShare.disabled = !draft.showPushToTalk;
+  text(
+    element("controls-height-hint"),
+    draft.showPushToTalk ? "All three buttons" : "Both mute buttons",
+  );
+  element<HTMLInputElement>("show-push-to-talk").checked = draft.showPushToTalk;
+  element("push-to-talk-hidden-hint").hidden = draft.showPushToTalk;
   text(element("controls-height-value"), `${draft.design.controlsHeightDp} dp`);
   text(element("hold-share-value"), `${Number(draft.design.holdSharePercent.toFixed(1))}%`);
   controlHeight.setAttribute("aria-valuetext", `${draft.design.controlsHeightDp} dp`);
@@ -328,6 +345,11 @@ function update(change: (value: Preview) => Preview) {
   render();
   void flush();
 }
+
+element<HTMLInputElement>("show-push-to-talk").addEventListener("change", (event) => {
+  const showPushToTalk = (event.currentTarget as HTMLInputElement).checked;
+  update((current) => ({ ...current, showPushToTalk }));
+});
 
 element<HTMLSelectElement>("sound-family").addEventListener("change", (event) => {
   const family = (event.currentTarget as HTMLSelectElement).value as SoundFamily;

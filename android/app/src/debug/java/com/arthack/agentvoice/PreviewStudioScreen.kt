@@ -7,8 +7,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,10 +44,11 @@ internal fun PreviewStudioScreen(
     presenceScope: String = "any-muted",
     horizontalOffsetDp: Int = 0,
     onReleaseCompleted: () -> Unit = onRelease,
+    showPushToTalk: Boolean = true,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme)) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk)
     }
 }
 
@@ -58,7 +57,7 @@ private fun PreviewStudioScene(
     ui: CallUi, design: PreviewDesign, placement: PersonaPlacement,
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
-    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit,
+    personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(onBack = onExit)
@@ -76,7 +75,7 @@ private fun PreviewStudioScene(
     val scene = rememberPreviewSpirit(ui, spirit, halo, activity, motionAllowed = motionAllowed,
         ambientPercent = design.traces.glowPercent, foreground = foreground, mutedPresence = muted,
         mutedCycleSeconds = mutedTuning.cycleSeconds)
-    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.effectivePushGapDp)
+    val deck = PreviewControlGeometry(design.controlsHeightDp, design.holdSharePercent, design.spacing.effectivePushGapDp, showPushToTalk)
     BoxWithConstraints(Modifier.fillMaxSize().background(theme.palette.ground)) {
         val screenWidth = maxWidth
         val portrait = maxHeight >= maxWidth
@@ -84,7 +83,7 @@ private fun PreviewStudioScene(
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
                 portrait, design.controlsHeightDp.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
-                spacing = design.spacing, actualDeckHeight = deck.extentHeightDp, horizontalOffsetDp = horizontalOffsetDp.toFloat())
+                spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else design.controlsHeightDp.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat())
             var source by remember { mutableStateOf(target) }
             var destination by remember { mutableStateOf(target) }
             val progress = remember { Animatable(1f) }
@@ -118,8 +117,6 @@ private fun PreviewStudioScene(
             }
             // Ordinary tuning updates keep the existing immediate geometry behavior.
             val geometry = if (changing) source.towards(destination, progress.value) else target
-            val deckScroll = rememberScrollState()
-            LaunchedEffect(target.layoutKey) { deckScroll.scrollTo(0) }
             val clearRadius = rememberTraceRadius(geometry.diameter, halo, placement).dp
             val traceAlpha = when {
                 destination.layoutKey != target.layoutKey -> 0f
@@ -134,7 +131,7 @@ private fun PreviewStudioScene(
                             traceLayer, (geometry.stageY + geometry.diameter / 2f + geometry.offsetY).dp,
                             clearRadius, design.traces, design.spacing.effectiveChannelGapDp)
                     } else {
-                        PreviewLandscapeTraces(geometry, clearRadius, design, deckScroll.value, traceLayer)
+                        PreviewLandscapeTraces(geometry, clearRadius, design, traceLayer)
                     }
                     Box(Modifier.offset { IntOffset(geometry.stageX.dp.roundToPx(), geometry.stageY.dp.roundToPx()) }
                         .requiredSize(geometry.diameter.dp)) {
@@ -171,15 +168,14 @@ private fun PreviewStudioScene(
                                 }
                             }
                         }
-                        .then(if (changing) Modifier.clearAndSetSemantics { disabled() } else Modifier)
-                        .verticalScroll(deckScroll, enabled = !portrait && target.deckViewportHeight < deck.extentHeightDp)) {
+                        .then(if (changing) Modifier.clearAndSetSemantics { disabled() } else Modifier)) {
                         // A relocated target cannot inherit the finger that owned its previous position.
                         key(target.layoutKey) {
                             PreviewControls(ui, { if (!latestChanging) onMute(it) }, { if (!latestChanging) onHold() }, release,
                                 Modifier.fillMaxWidth(), controlsHeightDp = design.controlsHeightDp,
                                 holdSharePercent = design.holdSharePercent, light = scene.light, spacing = design.spacing,
-                                availableHeightDp = if (portrait) geometry.deckViewportHeight else null,
-                                onReleaseCompleted = { if (!latestChanging) onReleaseCompleted() else release() })
+                                availableHeightDp = geometry.deckViewportHeight,
+                                onReleaseCompleted = { if (!latestChanging) onReleaseCompleted() else release() }, showPushToTalk = showPushToTalk, landscape = !portrait, mirror = personaSide == "right")
                         }
                     }
                 }

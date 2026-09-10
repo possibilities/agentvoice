@@ -174,8 +174,8 @@ press and keep the talk surface down to talk, release to mute. When the mic is
 already open, touching Live now gives a subtle visual acknowledgement without
 changing the mic or entering PTT. Active styling stays
 dark with focused lime accents. Traces is the fixed composition: Parallel,
-Splayed and Circuit routes share independent stance, weight and lighter offshoot
-controls. Persona contact spacing and Button foot spacing (50–200%, default 100%)
+Splayed and Circuit routes share independent stance and weight controls.
+Offshoots are removed. Persona contact spacing and Button foot spacing (50–200%, default 100%)
 separate neighboring routes at each end. Wider stance reserves room for the feet;
 protected-center clearance can limit upper spacing at large Persona sizes. Routes reach the selected Persona placement, preserving its clear
 center and glow. These stationary neutral layers change no layout, renderer,
@@ -228,22 +228,22 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains both orientations' design, sizes and position in a
-version 16 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 17 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 18 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 19 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
 values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 16 stores portrait in the root fields and a separate `landscape` layout.
+Version 17 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–15 phone profiles load without rewriting; retired button styles map to
+version 1–16 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 16 only on Save. The real client and release
+become version 17 only on Save. The real client and release
 APK keep their existing layout, behavior and compiled defaults until the operator
 chooses a design for explicit adoption in code; their labels now also say Push to talk.
 Debug builds include a **Halo preview** launcher
@@ -262,7 +262,9 @@ Persona's square, center, scale and manual offset remain unchanged; the deck may
 use the square's empty lower area and stays in front of oversized Persona artwork.
 Use Persona's vertical position to tune the space above the deck. Section separation
 is shown only in landscape; existing portrait values remain stored without effect.
-Individual resets and Reset spacing remain scoped to the visible orientation.
+Individual resets and Reset spacing update both orientations. All six spacing
+fields are shared, with no orientation override; legacy landscape spacing adopts
+portrait spacing in memory without rewriting saved bytes.
 
 Session-only **Theme** compares Bright, Quiet and Grayscale. Bright preserves the
 current palette exactly. Quiet reduces color and Halo intensity; Grayscale makes
@@ -324,7 +326,7 @@ edge, so tip opacity has no fade span there. Each has its own reset, and Reset
 traces includes all three while retaining ambient glow. Changes remain unsaved
 until Save. Profiles through 13 gain only these defaults in memory.
 
-The join and fade apply to trace ink and offshoots, never to Persona pixels.
+The join and fade apply to trace ink, never to Persona pixels.
 Defaults reproduce the previous soft underlap. This remains a nominal join,
 not a mask following the Rive ellipse: strong positive reach can reveal lines
 inside the ring and, when the join radius reaches zero, at its center.
@@ -341,14 +343,16 @@ The studio labels each scope instead of assigning scope by column:
   group's current appearance for local editing. Turning customization off adopts
   shared values again; it does not publish the local choice as a new common value.
   Shared edits update both inheriting layouts; an overridden layout is untouched.
-- Persona size, position, control height/share, padding and gaps always affect
+- Padding and all gaps are enforced shared values, including retained custom
+  margins and landscape section separation.
+- Persona size, position and control height/share always affect
   only the orientation reported by the phone. Portrait position moves up/down;
   landscape position moves left/right in screen coordinates. Previous landscape
   vertical offsets are retained in profiles but no longer applied in the scene.
 
 Appearance resets use the common defaults and follow the displayed group scope.
 Layout resets use the current orientation's defaults. All changes require Save
-to persist. Profile 16 keeps common appearance and explicit per-orientation
+to persist. Profile 17 keeps common appearance and explicit per-orientation
 overrides. Older profiles take shared appearance from portrait; untouched legacy
 landscape appearance defaults inherit, while customized differing groups become
 overrides. Size and control geometry are retained. The app never infers a setting
@@ -359,7 +363,8 @@ change from rotating scrcpy's display: Alt+R rotates Android itself.
 The host studio offers **Off**, **Rocker 29** (longer recorded decay) and
 **Rocker 13** (compact click), plus a shared Level slider and Reset sounds.
 Selection is silent; use the phone's controls to audition. Both mute buttons use
-one click. Push to talk uses a related lower down cue and a shorter, quieter up
+the same distinct on/off pair, selected from the new persistent mute state.
+Push to talk uses a related lower down cue and a shorter, quieter up
 cue. The phone's media volume also controls the output. Off/70 is the default;
 there is no automatic production adoption.
 
@@ -371,8 +376,30 @@ keeps its subtle visual feedback without a PTT sound. Changing the family/level
 or interrupting a hold discards its release cue; unloaded samples never queue
 late playback. Accessibility's explicit Start/Stop actions use the same pair.
 
-All six debug-only WAVs are adapted from Kenney's UI SFX Set (CC0); see
+All eight debug-only WAVs are adapted from Kenney's UI SFX Set (CC0); see
 [provenance, processing and license](third-party/switch-sounds/README.md). They
 play through a preloaded SoundPool, request no audio focus, change no system
 volume and never enter a voice track. This does not test acoustic pickup in a
 real voice call. No sound assets or player are included in release builds.
+
+## Landscape columns and optional PTT
+
+The debug landscape deck is two columns: HUMAN above AGENT nearest Persona,
+with full-height Push to talk at the far edge. Opposite handedness mirrors the
+columns without changing mute order. It fits the visible viewport without
+scrolling. Push-to-talk share adjusts width here and height in portrait; sizes
+and manual Persona placement remain orientation-local. Landscape routes reuse
+the portrait trace engine with transposed axes, preserving stance, foot/contact
+spacing, reach and fade.
+
+Shared session control **Show push to talk** hides the button and its connector.
+The mutes fill the selected deck height in portrait and full deck width in
+landscape. Hiding cancels an active hold without playing a release sound;
+reappearing never reacquires its pointer. The share value is retained while its
+slider is disabled. Visibility survives rotation/activity restoration but is not
+saved to a profile or adopted by production.
+
+Protocol 19 requires consistent current/other and saved/other spacing; profile 17
+requires equal root/landscape spacing. Older effective layouts adopt portrait
+spacing, and validated historical offshoot values are discarded. Neither
+migration rewrites the operator's saved files before Save.

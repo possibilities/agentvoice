@@ -121,11 +121,11 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
     PreviewStudioScreen(state.ui(), state.design, state.placement,
         onMute = {
             val next = currentState.toggle(it)
-            if (next != currentState) { change(next); feedback.toggle() }
+            if (next != currentState) { change(next); feedback.toggle(if (it == "mic") !next.micMuted else !next.speakerMuted) }
         }, onHold = {
             val next = currentState.beginHold()
             if (next.holding && !currentState.holding) { change(next); feedback.down() }
         },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk)
 }
