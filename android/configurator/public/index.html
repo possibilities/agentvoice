@@ -20,7 +20,11 @@
       <section aria-labelledby="title">
         <div class="intro">
           <h1 id="title">Design studio</h1>
-          <p id="device">Native phone preview</p>
+          <div class="intro-actions">
+            <p id="device">Native phone preview</p>
+            <button type="button" id="capture-layouts" class="reset capture-action">Capture all 4 layouts</button>
+          </div>
+          <p id="capture-hint" class="control-hint">Capture temporarily rotates the selected device through Portrait, Landscape, Reverse portrait and Reverse landscape, then restores it. It does not Save.</p>
         </div>
         <section id="target-picker" class="target-picker" aria-labelledby="target-heading" hidden>
           <div class="target-heading">
@@ -34,6 +38,18 @@
             <button type="button" id="release-target" class="reset">Choose another device</button>
           </div>
         </section>
+          <section id="capture-gallery" class="capture-gallery" aria-labelledby="capture-heading" hidden>
+            <div class="capture-heading">
+              <h2 id="capture-heading">Four-layout comparison</h2>
+              <div class="capture-heading-actions">
+                <label class="capture-guide-toggle"><input type="checkbox" id="show-capture-guides" checked /> Show system guides</label>
+                <button type="button" id="download-comparison" class="reset value-reset">Download comparison</button>
+              </div>
+            </div>
+            <p class="control-hint">Captured sequentially; animation frames may differ. Green guides show the Android system-bar-safe rectangle; violet guides show display cutouts. Originals remain untouched PNGs.</p>
+            <p id="capture-guide-summary" class="capture-guide-summary" role="status" aria-live="polite"></p>
+            <div id="capture-frames" class="capture-frames"></div>
+          </section>
         <fieldset id="controls" disabled>
           <legend class="sr-only">Design preview controls</legend>
           <div class="studio-grid">
@@ -535,17 +551,10 @@
             <p id="launcher-selection" class="control-hint" role="status" aria-live="polite">Current waveform selected. Save complete design keeps this choice.</p>
           </section>
           <p class="control-hint">Tweaks are kept on this phone across Studio restarts. Reset to production restores the full shipped design in all four physical orientations. Save complete design exports all four layouts, launcher and shared choices together for the next release.</p>
-          <section id="capture-gallery" class="capture-gallery" aria-labelledby="capture-heading" hidden>
-            <div class="capture-heading"><h2 id="capture-heading">Four-layout comparison</h2><button type="button" id="download-comparison" class="reset value-reset">Download comparison</button></div>
-            <p class="control-hint">Captured sequentially; animation frames may differ. Capture preserves design and rehearsal choices, but does not freeze the native timeline or Save.</p>
-            <div id="capture-frames" class="capture-frames"></div>
-          </section>
           <div class="actions">
             <button type="button" id="reset-production" class="reset">Reset to production</button>
-            <button type="button" id="capture-layouts" class="reset">Capture all 4 layouts</button>
             <button type="button" id="save" class="save">Save complete design</button>
           </div>
-          <p class="control-hint capture-hint">Capture temporarily rotates the selected device through Portrait, Landscape, Reverse portrait and Reverse landscape, then restores it. It does not Save.</p>
         </fieldset>
         <div class="feedback">
           <p id="feedback" role="status" aria-live="polite">Waiting for the phone…</p>

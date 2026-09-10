@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
 import { type Orientation, type Phone, stateLayouts, visualSettingsOf } from "./protocol.ts";
+import { type CaptureViewport, parseViewport } from "./viewport.ts";
 
 const execute = promisify(execFile);
 const captureOrder = ["portrait", "landscape", "portrait-reverse", "landscape-reverse"] as const;
@@ -18,6 +19,7 @@ export type LayoutFrame = {
   width: number;
   height: number;
   png: Uint8Array;
+  viewport?: CaptureViewport;
 };
 export type LayoutCapture = {
   id: string;
@@ -167,14 +169,17 @@ export async function captureLayouts(
       const before = phone.state.orientationEpoch;
       const png = await device.screenshot();
       await device.foreground();
-      await phone.request({ method: "get" });
+      const reply = await phone.request({ method: "get" });
       assertCurrent();
       if (phone.state.orientation !== orientation || phone.state.orientationEpoch !== before)
         throw Error("The device rotated during a screenshot. Try capturing again.");
       const size = pngSize(png);
       if (size.width > size.height !== orientation.startsWith("landscape"))
         throw Error("The screenshot does not match the Studio orientation.");
-      frames.push({ orientation, ...size, png });
+      const measured = parseViewport(reply.viewport);
+      const viewport =
+        measured?.width === size.width && measured.height === size.height ? measured : undefined;
+      frames.push({ orientation, ...size, png, ...(viewport ? { viewport } : {}) });
     }
   } catch (error) {
     captureError = error instanceof Error ? error : Error("Layout capture failed.");

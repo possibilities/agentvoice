@@ -51,6 +51,7 @@ import { defaultSounds, parseSounds, type Sounds } from "./sounds.ts";
 import { equalSpacing, legacySpacing } from "./spacing.ts";
 import { defaultSpirit, equalSpirit, parseSpirit, type SpiritSelection } from "./spirit.ts";
 import { defaultTraces, migrateTraces } from "./traces.ts";
+import type { CaptureViewport } from "./viewport.ts";
 
 export const themes = ["bright", "quiet", "grayscale"] as const;
 export type Theme = (typeof themes)[number];
@@ -891,7 +892,9 @@ export interface Phone {
   disconnectReason?: string;
   reconnecting?: boolean;
   generation?: number;
-  request(command: Record<string, unknown>): Promise<{ state: PhoneState; profile?: string }>;
+  request(
+    command: Record<string, unknown>,
+  ): Promise<{ state: PhoneState; profile?: string; viewport?: CaptureViewport }>;
 }
 
 export function parseOrientationFence(data: Record<string, unknown>): OrientationFence {

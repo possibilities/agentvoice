@@ -316,10 +316,11 @@ export async function serveConfigurator(
               id: latestCapture.id,
               createdAt: latestCapture.createdAt,
               restored: latestCapture.restored,
-              frames: latestCapture.frames.map(({ orientation, width, height }) => ({
+              frames: latestCapture.frames.map(({ orientation, width, height, viewport }) => ({
                 orientation,
                 width,
                 height,
+                ...(viewport ? { viewport } : {}),
                 url: `${prefix}capture/${latestCapture!.id}/${orientation}.png`,
               })),
             },

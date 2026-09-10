@@ -17,6 +17,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 
@@ -155,7 +157,15 @@ class PersonaPreviewActivity : ComponentActivity() {
     private fun startBridge() {
         if (!draftReady) return
         val selected = binding ?: return
-        if (bridge == null) bridge = PersonaPreviewBridge(selected.name, selected.token, session::command)
+        if (bridge == null) bridge = PersonaPreviewBridge(selected.name, selected.token, ::command)
+    }
+
+    private suspend fun command(request: JSONObject): JSONObject {
+        val reply = session.command(request)
+        if (request.getString("method") == "get") withContext(Dispatchers.Main) {
+            studioViewport(window.decorView)?.let { reply.put("viewport", it.json()) }
+        }
+        return reply
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

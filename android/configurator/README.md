@@ -36,6 +36,15 @@ must be closed first. The gallery labels all four native PNGs; **Download
 comparison** exports a labeled sheet, and each original remains downloadable.
 These are sequential animation samples, not simultaneous or frozen poses.
 
+The compact comparison places both portraits together beside stacked landscapes,
+using one pixel scale across all four. Original PNG downloads keep the native
+resolution. **Show system guides** overlays Android-reported visible system-bar
+insets and cutout bounding rectangles; it does not modify the screenshot bytes.
+Guides are omitted when the optional native viewport measurement is absent or
+its dimensions differ from the PNG. Missing measurements are not zero insets.
+A cutout rectangle describes Android's bounds, not the exact rounded hardware
+shape. A physical-device check remains necessary for camera-hole alignment.
+
 Capture sends only state reads to Studio: no edit, reset or Save. It refuses
 changed design/session state, reconnection and stale orientation/revision requests,
 restores the prior rotation mode on success/failure/cancellation, and publishes

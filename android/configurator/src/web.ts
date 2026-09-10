@@ -4,6 +4,12 @@ import {
   applyAppearanceGroup,
   equalSharedAppearance,
 } from "./appearance.ts";
+import {
+  type CaptureFrame as CaptureLayoutFrame,
+  type CapturePlacement,
+  compactCaptureLayout,
+  usableViewport,
+} from "./capture-layout.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
 import { initializeIconControls, renderIcons, renderLauncher } from "./icons-ui.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
@@ -62,12 +68,7 @@ type Capture = {
   id: string;
   createdAt: string;
   restored: boolean;
-  frames: {
-    orientation: "portrait" | "landscape" | "portrait-reverse" | "landscape-reverse";
-    width: number;
-    height: number;
-    url: string;
-  }[];
+  frames: Array<CaptureLayoutFrame & { url: string }>;
 };
 type CaptureResponse = Status & { capture: Capture };
 function element<T extends HTMLElement>(id: string): T {
@@ -82,6 +83,9 @@ const targetList = element("target-list");
 const refreshTargets = element<HTMLButtonElement>("refresh-targets");
 const linkTarget = element<HTMLButtonElement>("link-target");
 const releaseTarget = element<HTMLButtonElement>("release-target");
+const showCaptureGuides = element<HTMLInputElement>("show-capture-guides");
+const captureGuideSummary = element("capture-guide-summary");
+const downloadComparisonButton = element<HTMLButtonElement>("download-comparison");
 const slider = element<HTMLInputElement>("size");
 const position = element<HTMLInputElement>("position");
 const controlHeight = element<HTMLInputElement>("controls-height");
@@ -172,26 +176,143 @@ function text(node: HTMLElement, value: string) {
   if (node.textContent !== value) node.textContent = value;
 }
 
+function guideSvg(frame: CaptureLayoutFrame): SVGSVGElement | undefined {
+  if (!showCaptureGuides.checked) return undefined;
+  const viewport = usableViewport(frame);
+  if (!viewport) return undefined;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("capture-guides");
+  svg.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
+  svg.setAttribute("aria-hidden", "true");
+  const safeWidth = viewport.width - viewport.systemBars.left - viewport.systemBars.right;
+  const safeHeight = viewport.height - viewport.systemBars.top - viewport.systemBars.bottom;
+  if (safeWidth > 0 && safeHeight > 0) {
+    const safe = document.createElementNS(svg.namespaceURI, "rect");
+    safe.classList.add("capture-safe-area");
+    safe.setAttribute("x", String(viewport.systemBars.left));
+    safe.setAttribute("y", String(viewport.systemBars.top));
+    safe.setAttribute("width", String(safeWidth));
+    safe.setAttribute("height", String(safeHeight));
+    svg.append(safe);
+  }
+  for (const cutout of viewport.cutouts) {
+    const rect = document.createElementNS(svg.namespaceURI, "rect");
+    rect.classList.add("capture-cutout");
+    rect.setAttribute("x", String(cutout.left));
+    rect.setAttribute("y", String(cutout.top));
+    rect.setAttribute("width", String(cutout.right - cutout.left));
+    rect.setAttribute("height", String(cutout.bottom - cutout.top));
+    svg.append(rect);
+  }
+  return svg;
+}
+
 function renderCapture() {
   const gallery = element("capture-gallery");
   gallery.hidden = !capture;
   const frames = element("capture-frames");
   frames.replaceChildren();
   if (!capture) return;
-  for (const frame of capture.frames) {
+  const layout = compactCaptureLayout(capture.frames);
+  if (!layout) return;
+  const measuredFrames = capture.frames.filter((frame) => usableViewport(frame)).length;
+  text(
+    captureGuideSummary,
+    measuredFrames === capture.frames.length
+      ? "System guides are available in all 4 captures."
+      : `System guide data available in ${measuredFrames} of ${capture.frames.length} captures.`,
+  );
+  const composite = document.createElement("div");
+  composite.className = "capture-composite";
+  composite.style.setProperty("--capture-width", `${layout.width}px`);
+  composite.style.setProperty("--capture-height", `${layout.height}px`);
+  composite.style.setProperty("--capture-ratio", `${layout.width} / ${layout.height}`);
+  const byOrientation = new Map(capture.frames.map((frame) => [frame.orientation, frame]));
+  for (const placement of layout.frames) {
+    const frame = byOrientation.get(placement.orientation)!;
     const card = document.createElement("figure");
+    card.className = "capture-frame";
+    card.style.left = `${(placement.left / layout.width) * 100}%`;
+    card.style.top = `${(placement.top / layout.height) * 100}%`;
+    card.style.width = `${(placement.width / layout.width) * 100}%`;
+    card.style.height = `${(placement.cardHeight / layout.height) * 100}%`;
+    const screenshot = document.createElement("div");
+    screenshot.className = "capture-screenshot";
+    screenshot.style.height = `${(placement.height / placement.cardHeight) * 100}%`;
     const image = document.createElement("img");
     image.src = frame.url;
     image.alt = `${orientationLabel(frame.orientation)} capture`;
+    const guides = guideSvg(frame);
+    screenshot.append(image, ...(guides ? [guides] : []));
+    const caption = document.createElement("figcaption");
+    caption.style.height = `${(placement.captionHeight / placement.cardHeight) * 100}%`;
+    const metadata = document.createElement("span");
+    metadata.textContent = orientationLabel(frame.orientation);
+    metadata.title = `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`;
     const original = document.createElement("a");
     original.href = frame.url;
-    original.textContent = "Original PNG";
+    original.textContent = "PNG";
     original.download = `agentvoice-${frame.orientation}.png`;
-    const caption = document.createElement("figcaption");
-    caption.textContent = `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`;
-    card.append(image, caption, original);
-    frames.append(card);
+    caption.append(metadata, original);
+    card.append(screenshot, caption);
+    composite.append(card);
   }
+  frames.append(composite);
+}
+
+function drawGuides(
+  context: CanvasRenderingContext2D,
+  frame: CaptureLayoutFrame,
+  placement: CapturePlacement,
+  offset: number,
+) {
+  if (!showCaptureGuides.checked) return;
+  const viewport = usableViewport(frame);
+  if (!viewport) return;
+  const xScale = placement.width / viewport.width;
+  const yScale = placement.height / viewport.height;
+  const safeWidth = viewport.width - viewport.systemBars.left - viewport.systemBars.right;
+  const safeHeight = viewport.height - viewport.systemBars.top - viewport.systemBars.bottom;
+  context.save();
+  context.lineWidth = 1.5;
+  context.setLineDash([5, 4]);
+  context.strokeStyle = "#d4ff72";
+  if (safeWidth > 0 && safeHeight > 0)
+    context.strokeRect(
+      offset + placement.left + viewport.systemBars.left * xScale,
+      offset + placement.top + viewport.systemBars.top * yScale,
+      safeWidth * xScale,
+      safeHeight * yScale,
+    );
+  context.setLineDash([4, 3]);
+  context.fillStyle = "rgba(187, 170, 255, 0.24)";
+  context.strokeStyle = "#bbaaff";
+  for (const cutout of viewport.cutouts) {
+    const x = offset + placement.left + cutout.left * xScale;
+    const y = offset + placement.top + cutout.top * yScale;
+    const width = (cutout.right - cutout.left) * xScale;
+    const height = (cutout.bottom - cutout.top) * yScale;
+    context.fillRect(x, y, width, height);
+    context.strokeRect(x, y, width, height);
+  }
+  context.restore();
+}
+
+function drawCaptureLabel(
+  context: CanvasRenderingContext2D,
+  frame: CaptureLayoutFrame,
+  placement: CapturePlacement,
+  offset: number,
+) {
+  const label = `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`;
+  context.save();
+  context.font = "11px Plex, sans-serif";
+  context.fillStyle = "rgba(5, 6, 7, 0.84)";
+  const y = offset + placement.top + placement.height;
+  context.fillRect(offset + placement.left, y, placement.width, placement.captionHeight);
+  context.fillStyle = "#f0f2e9";
+  context.fillText(label, offset + placement.left + 8, y + 18);
+  context.restore();
 }
 
 async function downloadComparison() {
@@ -204,32 +325,28 @@ async function downloadComparison() {
       return { ...frame, image };
     }),
   );
-  const gutter = 32,
-    labelHeight = 64;
-  const columnWidths = [0, 1].map((column) =>
-    Math.max(...frames.filter((_, index) => index % 2 === column).map((frame) => frame.width)),
-  );
-  const rowHeights = [0, 1].map((row) =>
-    Math.max(...frames.slice(row * 2, row * 2 + 2).map((frame) => frame.height)),
-  );
+  const layout = compactCaptureLayout(frames);
+  if (!layout) throw Error("Could not arrange the captured layouts.");
+  const gutter = 10;
   const canvas = document.createElement("canvas");
-  canvas.width = columnWidths[0]! + columnWidths[1]! + gutter * 3;
-  canvas.height = rowHeights[0]! + rowHeights[1]! + labelHeight * 2 + gutter * 3;
+  canvas.width = Math.ceil(layout.width + gutter * 2);
+  canvas.height = Math.ceil(layout.height + gutter * 2);
   const context = canvas.getContext("2d");
   if (!context) throw Error("Could not compose the capture comparison.");
   context.fillStyle = "#17191d";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.font = "28px sans-serif";
-  context.fillStyle = "#f0f2f5";
-  for (const [index, frame] of frames.entries()) {
-    const x = gutter + (index % 2 === 0 ? 0 : columnWidths[0]! + gutter);
-    const y = gutter + (index < 2 ? 0 : rowHeights[0]! + labelHeight + gutter);
-    context.fillText(
-      `${orientationLabel(frame.orientation)} · ${frame.width} × ${frame.height}`,
-      x,
-      y + 36,
+  const byOrientation = new Map(frames.map((frame) => [frame.orientation, frame]));
+  for (const placement of layout.frames) {
+    const frame = byOrientation.get(placement.orientation)!;
+    context.drawImage(
+      frame.image,
+      gutter + placement.left,
+      gutter + placement.top,
+      placement.width,
+      placement.height,
     );
-    context.drawImage(frame.image, x, y + labelHeight);
+    drawGuides(context, frame, placement, gutter);
+    drawCaptureLabel(context, frame, placement, gutter);
   }
   const link = document.createElement("a");
   link.href = canvas.toDataURL("image/png");
@@ -355,6 +472,8 @@ function render() {
     capturing ||
     targetRequest;
   captureButton.textContent = capturing ? "Capturing all 4 layouts…" : "Capture all 4 layouts";
+  showCaptureGuides.disabled = capturing;
+  downloadComparisonButton.disabled = capturing || !capture;
   renderCapture();
   if (!status?.state || !draft) {
     element("device").textContent = status?.targets
@@ -984,7 +1103,10 @@ element("capture-layouts").addEventListener("click", async () => {
   }
 });
 
-element("download-comparison").addEventListener("click", () => {
+showCaptureGuides.addEventListener("change", renderCapture);
+
+downloadComparisonButton.addEventListener("click", () => {
+  if (capturing) return;
   void downloadComparison().catch((failure) => {
     report(failure);
     render();

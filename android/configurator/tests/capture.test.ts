@@ -238,3 +238,32 @@ test("restoring free rotation accepts the sensor-selected slot", async () => {
   expect(result.restored).toBe(true);
   expect(f.phone.state.orientation).toBe("landscape");
 });
+
+test("capture retains only viewport metadata matching the native PNG", async () => {
+  const f = fixture();
+  f.phone.request = async () => {
+    const landscape = f.phone.state.orientation.startsWith("landscape");
+    return {
+      state: f.phone.state,
+      viewport: {
+        width: landscape ? 780 : 360,
+        height: landscape ? 360 : 780,
+        systemBars: { left: 0, top: 24, right: 0, bottom: 20 },
+        cutouts: [{ left: 150, top: 0, right: 190, bottom: 24 }],
+      },
+    };
+  };
+  const capture = await captureLayouts(f.phone, f.device, undefined, fast);
+  expect(capture.frames.every((frame) => frame.viewport?.width === frame.width)).toBe(true);
+  f.phone.request = async () => ({
+    state: f.phone.state,
+    viewport: {
+      width: 1,
+      height: 1,
+      systemBars: { left: 0, top: 0, right: 0, bottom: 0 },
+      cutouts: [],
+    },
+  });
+  const mismatch = await captureLayouts(f.phone, f.device, undefined, fast);
+  expect(mismatch.frames.every((frame) => frame.viewport === undefined)).toBe(true);
+});

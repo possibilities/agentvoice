@@ -15,8 +15,9 @@ import {
   record,
 } from "./protocol.ts";
 import { ReconnectingPhone } from "./reconnecting-phone.ts";
+import { type CaptureViewport, parseViewport } from "./viewport.ts";
 
-type Reply = { state: PhoneState; profile?: string };
+type Reply = { state: PhoneState; profile?: string; viewport?: CaptureViewport };
 type Pending = {
   resolve: (reply: Reply) => void;
   reject: (error: Error) => void;
@@ -87,7 +88,12 @@ export class PhoneConnection implements Phone {
         this.state = state;
         clearTimeout(pending.timer);
         this.pending.delete(id);
-        pending.resolve({ state, ...(typeof profile === "string" ? { profile } : {}) });
+        const viewport = parseViewport(message["viewport"]);
+        pending.resolve({
+          state,
+          ...(typeof profile === "string" ? { profile } : {}),
+          ...(viewport ? { viewport } : {}),
+        });
       }
     } catch {
       this.close("The phone sent an invalid preview response.");

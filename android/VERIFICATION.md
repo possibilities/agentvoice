@@ -1844,3 +1844,38 @@ No phone operation, operator-host restart or default/trial service change occurr
 passed in 2m37s (18 executed tasks, 62 up-to-date). The installed-app/package audit
 is `/tmp/agentvoice-picker-packages.json`. No claim of native execution or phone
 UI acceptance is made for this binding change before the requested handoff.
+
+
+## Compact comparison and measured inset guides — 2026-09-10
+
+Studio `get` replies optionally include measured decor dimensions, visible
+system-bar insets and display-cutout bounding rectangles. This metadata is
+outside strict state/profile/draft data. The host bounds it and includes it only
+when its dimensions match the native PNG. Missing or incompatible measurements
+remain unavailable. The guide overlay does not change raw PNGs or design settings.
+
+The comparison uses one scale for both portraits beside stacked landscapes.
+Caption space is reserved outside the images, protecting cutout visibility.
+Capture is near the page title; the gallery is below the device picker. Original
+PNG links retain native resolution. Guide availability is explicit, and the
+comparison download follows the same optional-guide/compact-layout settings.
+
+Verification: all 123 host tests / 3,962 assertions pass (`/tmp/agentvoice-insets-host-tests.log`),
+including layout ordering/sizing, metadata validation and capture dimension
+matching. Host and root TypeScript, scoped Biome, generated-shipping drift and
+diff checks pass. Studio APK/test APK/lint build passed in 2m57s with one worker
+and the reduced 768MB Gradle heap (`/tmp/agentvoice-insets-build.log`).
+Package audit passes (`/tmp/agentvoice-insets-packages.json`); Studio SHA-256 is
+`cdfc9d945420746b9229fc26b5a1e074e3ada63a1229d9c13b32c022531ee622`.
+
+`/tmp/agentvoice-four-layouts/compact-comparison-review.png` renders the actual
+layout-helper placements using the earlier raw native captures, through
+ImageMagick. It visually confirms the compact arrangement with external labels;
+it is not a browser screenshot or a new phone capture. Those old captures lack
+viewport metadata, so the review artifact invents no inset guides.
+Physical cutout alignment, current browser gallery interaction, installation,
+and new binding/viewport instrumentation remain pending explicit phone handoff.
+The AgentNotify request is saved; optional macOS banners are off. No approval
+has been inferred from delivery or lack of response. The phone, existing host,
+latest draft and protected saved JSON are untouched. No VM or Gradle process
+remains running from this task.
