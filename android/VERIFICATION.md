@@ -1,9 +1,9 @@
 # Android development build verification
 
-Latest work: **Adopted shipping design and complete Studio Save**, September 10, 2026 UTC.
-The user-locked S22 profile is now complete version 19 and supplies generated
-production defaults. Studio protocol 22 persists all visual choices and retains
-its full editing range. See [Shipping adoption](#shipping-adoption) for the current
+Latest work: **Relay Aperture launcher adoption and startup failure handling**, September 10, 2026 UTC.
+The user-locked S22 profile is now complete version 20 and supplies generated
+production defaults. Studio protocol 23 persists all visual choices and retains
+its full editing range. See [Relay Aperture follow-up](#relay-aperture-follow-up) for the current
 build, tests, saved-copy/cold-reload checks and release packaging evidence. Earlier
 sections retain their original results and limitations; they are not cumulative
 verification of the current candidate. No verification started a voice call or
@@ -1480,3 +1480,56 @@ synthetic gate choices. Original system rotation (user_rotation 1,
 accelerometer_rotation 0) and stay-awake 7 were restored. No emulator was created.
 Phone access is released. Real spoken-call/audio routing acceptance remains a
 separate pre-existing limitation; rendered fixtures do not establish acoustic quality.
+
+
+## Relay Aperture follow-up
+
+The operator selected Relay Aperture explicitly. Protocol 23 / profile 20 now
+captures launcher selection in Save/dirty/reset/reload and generates only the
+selected adaptive foreground, Android themed monochrome layer and legacy fallback.
+The previous waveform drawable was removed. All existing design tuning is retained.
+The failure presentation also shows an explicit End attempt action when the server
+reports failed/stopped, instead of displaying Connecting indefinitely.
+
+- Combined debug/release builds, 122 JVM tests and Android lint passed. A subsequent
+  packaging rebuild removed the obsolete waveform resource. Logs are under
+  `/tmp/agentvoice-relay-adoption/{build,package-final}.log`.
+- The first targeted phone run lost its Compose foreground hierarchy; inspection
+  found Recents foregrounded. It was stopped, not counted as passing. The clean
+  rerun passed all 47 selected tests in 43.759 seconds, including native launcher
+  pixels/themed layer, full profile Save/reload/legacy19 handling, failure UI,
+  icons, orientation, sounds, extents and lifecycle checks. See `phone-tests-rerun.log`.
+  A final test-only refinement allows future launcher promotion without requiring
+  Relay forever; its Relay pixel assertions are unchanged, and compilation passed.
+- 102 Studio tests / 3,823 assertions, root/studio typechecks and Biome passed.
+  Browser Save/dirty/reset/reconnect evidence is
+  `/tmp/agentvoice-launcher-profile20-browser/evidence.json`.
+- Installed debug APK SHA-256 is
+  `94c003fad4d1f3f64909e020189e0bf0877de8a0ce34637819105fb33f38ad01`.
+  Release audit passed: SHA-256
+  `a164422020618df58bbdb8514bba0707e4cddf3663af8da45079d035bc495e1d`,
+  47,352,673 bytes, selected launcher/resources and sound quartet, no Studio
+  entrypoints/profile JSON/alternate icon assets. Audit: `apk-audit.json`.
+- The native package-manager launcher drawable was rendered and visually inspected
+  in `/tmp/agentvoice-relay-adoption/launcher.png`; this is installed resource
+  evidence, not a screenshot of the Samsung home-screen icon cache.
+- Real native+host Save upgraded both copies byte-identically to profile20, SHA-256
+  `fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+  A structural comparison with the preserved operator profile19 found changes only
+  to version, launcher and Save timestamp. Both layouts and all seven shared
+  visual fields match the canonical shipping profile. See `save-check.log`.
+  Rotation1/auto0/stay-awake7 were restored. Studio remains available; the real
+  MainActivity was reopened at Start voice, with its existing device grant retained.
+
+The user's failed attempt reached the tailnet backend; server discovery reported
+failed with no loaded threads. Sanitized startup observations showed mandatory
+AgentVoice control ready before `mcpServerStatus/list`, but the catalog RPC exceeded
+its five-second deadline while other MCP startup remained outstanding. The separate
+server commit `74ec414` increases the total bounded readiness allowance to60 seconds,
+keeping exact auth/catalog checks and the enclosing90-second activation cap.
+Focused server/runtime/frontend tests passed29 cases/245 assertions; typecheck and
+scoped lint passed. Only that fix was cherry-picked to the clean installed main
+checkout as `6759151`, and the idle default service was restarted successfully.
+No config, role or grant changes were made. A successful subsequent real voice call
+was not established by these automated/installation checks; user retry remains
+the end-to-end confirmation.

@@ -17,9 +17,9 @@ See [verification evidence](VERIFICATION.md). A preview's Connected label is syn
 ## Adopted shipping design
 
 The locked design is [shipping-profile.json](design/shipping-profile.json), a complete
-version 19 Studio profile. Its [provenance receipt](design/shipping-provenance.json)
+version 20 Studio profile. Its [provenance receipt](design/shipping-provenance.json)
 preserves the original saved bytes and the explicitly captured visual choices
-that older Save versions omitted. It selects the i cons pair, current PTT symbol,
+that older Save versions omitted. It selects the Relay Aperture launcher, i cons pair, current PTT symbol,
 Contained Halo, Splayed traces, Bright theme, tuned Tide/Ripple, and Rocker 13 at
 60%, with both orientation layouts preserved.
 
@@ -30,8 +30,8 @@ Back (or the accessible End call action) ends a call. Explicit grant import/Star
 errors and linked Credits remain available. Rotation preserves the call and uses
 the configured landscape layout; relocation still cancels a held pointer.
 
-The debug Studio remains intact. Profile 19 Save/reload includes icon pair/PTT,
-theme, center form/scope/type/motion, and PTT visibility as well as both layouts,
+The debug Studio remains intact. Profile 20 Save/reload includes icon pair/PTT,
+theme, center form/scope/type/motion, launcher choice and PTT visibility as well as both layouts,
 shared appearance and sound settings. Rehearsal connection/state/gates/activity
 are not preferences. Reset uses the adopted baseline. Legacy profiles remain
 readable; loading never silently rewrites them.
@@ -266,22 +266,22 @@ bun run android:configure --device <adb-serial>
 ```
 
 Explicit Save retains both orientations' design, sizes and position in a
-version 19 app-private `files/persona-tuning.json` and a matching JSON copy on the
+version 20 app-private `files/persona-tuning.json` and a matching JSON copy on the
 host, including the fixed Rockers, composition, dimensions and Halo
-variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 22 carries those
+variant, motion, colors and spirit settings, plus nested trace choices. Preview protocol 23 carries those
 choices plus transient connection and synthetic activity selections. Portrait
 reserves a screen-width square; landscape places Persona beside the Rocker deck.
 Size, placement and control geometry are independent. Appearance groups share
 values until customized for an orientation. The browser targets only the orientation reported
 by the connected phone, with epoch checks rejecting delayed rotation requests.
-Version 19 stores portrait in the root fields and a separate `landscape` layout.
+Version 20 stores portrait in the root fields and a separate `landscape` layout.
 Side swapping is supported in the model; its selector stays hidden for now. Existing
-version 1–18 phone profiles load without rewriting; retired button styles map to
+version 1–19 phone profiles load without rewriting; retired button styles map to
 Rockers and compositions to baseline Traces in memory. Version 9 preserves its
 existing traces and adds only the two 100% spacing defaults. Versions 1–4 initially select Original; versions 5–10 keep
 their Halo settings. Versions 1–3 use the control geometry baseline; versions
 4–10 keep their dimensions. Versions 7–10 retain their spirit settings. Older profiles
-become version 19 only on Save. Icons, theme, center indicator form/scope/tuning
+become version 20 only on Save. Icons, theme, center indicator form/scope/tuning
 and PTT visibility are also saved. The real client uses the explicitly adopted
 shipping profile described above; later Studio saves do not change production
 until another promotion.
@@ -333,7 +333,7 @@ Cycle changes preserve the current phase instead of jumping to a different pose.
 Contained's aperture follows the selected motion's conservative hard-stroke bounds;
 large text is admitted only when its measured shape, movement and clearance fit.
 Diffuse glow may remain behind it. Style, visibility and appearance resets are independent. These session selections survive rotation and
-activity restoration and are saved in profile 19.
+activity restoration and are saved in profile 20.
 
 The studio also offers a dim breathing **Background glow**, independent of the
 trace routes, **Button light: Soft** and **Persona color:
@@ -376,7 +376,7 @@ inside the ring and, when the join radius reaches zero, at its center.
 The studio labels each scope instead of assigning scope by column:
 
 - Theme, center indicator and its tuning apply to both orientations and are
-  included in complete version 19 design profiles.
+  included in complete version 20 design profiles.
 - Persona appearance (variant, animation, colors), Traces (including endpoint
   geometry and fade), Background glow, and Button lighting/color response each
   share a common value by default. **Customize this orientation** snapshots that
@@ -438,11 +438,11 @@ The mutes fill the selected deck height in portrait and full deck width in
 landscape. Hiding cancels an active hold without playing a release sound;
 reappearing never reacquires its pointer. The share value is retained while its
 slider is disabled. With-PTT and without-PTT layouts retain independent deck
-extents within each orientation. Visibility survives rotation/activity restoration and is saved in profile 19.
+extents within each orientation. Visibility survives rotation/activity restoration and is saved in profile 20.
 The shipping profile currently shows PTT.
 
 Protocol 22 requires consistent current/other and saved/other spacing; profiles
-18–19 require equal root/landscape spacing. Older effective layouts adopt portrait
+18–20 require equal root/landscape spacing. Older effective layouts adopt portrait
 spacing, and validated historical offshoot values are discarded. Neither
 migration rewrites the operator's saved files before Save.
 
@@ -460,8 +460,8 @@ portrait without PTT, landscape with PTT, or landscape without PTT. The visible
 mode is labeled. Switching visibility retains both sizes. Reset button sizes
 resets only the active extent, and resets share only when PTT is shown. Existing
 profiles seed the new hidden extent from each orientation's existing extent in
-memory; loading never rewrites the saved file. Profiles 18–19 store the additional
-`controlsWithoutPttDp` field and protocol 22 carries both sizes.
+memory; loading never rewrites the saved file. Profiles 18–20 store the additional
+`controlsWithoutPttDp` field and protocol 23 carries both sizes.
 
 Both extent fields span 160–1600 dp. Landscape has no reserved half-screen lane: a
 large deck may overlap the independently positioned Persona in the foreground.
@@ -475,10 +475,13 @@ state captions; short faces reduce their glyph height to keep captions inside.
 
 The studio compares matched HUMAN/AGENT pairs, with an independent PTT symbol.
 Selections are shared session choices, preserved through rotation and reconnect;
-they now participate in profile 19 Save/dirty state. The adopted shipping choice is i cons; Current remains
+they now participate in profile 20 Save/dirty state. The adopted shipping choice is i cons; Current remains
 the baseline. The center uses effective open/closed channel state while Rockers
 use persistent mute state; a PTT microphone always remains unslashed.
 
-The launcher gallery is browser-only and leaves the installed launcher unchanged.
+The launcher gallery saves its selection in profile 20. Selection changes the
+Studio preview and dirty state; promotion generates the installed adaptive icon,
+monochrome themed layer and legacy fallback. The adopted launcher is Relay
+Aperture. A Studio selection alone does not change the installed package icon.
 See [icon provenance and licenses](third-party/icons/README.md). **Credits on phone**
 opens the authors, sources and license links in a dismissible native dialog.

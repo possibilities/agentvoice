@@ -6,6 +6,7 @@ import { traceTipFields } from "./traces.ts";
 
 export type ResetTarget =
   | "visual-settings"
+  | "launcher"
   | "channel-icons"
   | "push-icon"
   | "sounds"
@@ -54,6 +55,9 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
   switch (target) {
     case "visual-settings":
       return { ...next, ...visualSettingsOf(defaults.defaultAppearance) };
+    case "launcher":
+      next.launcher = defaults.defaultAppearance.launcher;
+      break;
     case "channel-icons":
       next.icons.channels = defaults.defaultAppearance.icons.channels;
       break;

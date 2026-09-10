@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <application
         android:label="AgentVoice"
-        android:icon="@drawable/ic_agentvoice"
+        android:icon="@mipmap/ic_agentvoice"
         android:theme="@style/Theme.AgentVoice"
         android:allowBackup="false"
         android:fullBackupContent="false"

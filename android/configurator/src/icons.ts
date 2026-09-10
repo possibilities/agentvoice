@@ -179,8 +179,19 @@ export function parseIcons(value: unknown): Icons {
     throw Error("Invalid icon selection");
   return { channels: data["channels"] as IconStyle, push: data["push"] as PushIconStyle };
 }
+export const launcherStyles = [
+  "current",
+  "duplex-halo",
+  "relay-aperture",
+  "voice-carrier",
+] as const;
+export type LauncherStyle = (typeof launcherStyles)[number];
+export function parseLauncher(value: unknown): LauncherStyle {
+  if (!launcherStyles.includes(value as LauncherStyle)) throw Error("Invalid launcher choice");
+  return value as LauncherStyle;
+}
 export type LauncherConcept = {
-  id: string;
+  id: LauncherStyle;
   label: string;
   description: string;
   color: string;
@@ -191,7 +202,7 @@ export const launcherConcepts: readonly LauncherConcept[] = [
   {
     id: "current",
     label: "Current waveform",
-    description: "The installed mark. Masked and tinted here for comparison.",
+    description: "The original mark, shown here in each mask.",
     color: "launcher-current.svg",
     monochrome: "launcher-current-monochrome.svg",
     credit: original,

@@ -45,7 +45,7 @@ class PersonaPreviewTest {
             assertEquals(.52f, restored.listeningScale)
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
-            assertEquals(19, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(20, JSONObject(fixture.readText()).getInt("version"))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))
@@ -175,7 +175,7 @@ class PersonaPreviewTest {
                 val writer = socket.outputStream
                 writer.write((JSONObject().put("token", token).toString() + "\n").toByteArray())
                 val request = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connected").put("mode", "listening")
-                    .put("theme", "bright").put("mutedPresence", "tide").put("mutedTuning", PreviewMutedTuning().json()).put("presenceScope", "any-muted").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json())
+                    .put("theme", "bright").put("mutedPresence", "tide").put("mutedTuning", PreviewMutedTuning().json()).put("presenceScope", "any-muted").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json()).put("launcher", "current")
                     .put("scales", JSONObject().put("speaking", 78).put("listening", 52).put("idle", 78))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("circuit", 135, 180, 41, 65, 185)).json())

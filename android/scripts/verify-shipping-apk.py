@@ -36,6 +36,10 @@ with zipfile.ZipFile(apk) as bundle:
     shipped = set(re.findall(r'drawable/(shipping_channel_[a-z_]+)', resources))
     expected_icons = {p.stem for p in (root / 'app/src/release/res/drawable').glob('shipping_channel_*.xml')}
     assert shipped == expected_icons, (shipped, expected_icons)
+    assert 'mipmap/ic_agentvoice' in resources, 'adaptive launcher missing'
+    assert 'drawable/shipping_launcher_foreground' in resources, 'selected launcher missing'
+    assert 'drawable/shipping_launcher_monochrome' in resources, 'themed launcher missing'
+    assert 'drawable/ic_agentvoice' not in resources, 'retired waveform launcher leaked'
     print(json.dumps({'apk': str(apk), 'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
         'bytes': apk.stat().st_size, 'sound_files': sorted(actual_audio), 'studio_entrypoints': 'absent',
-        'profile_json': 'absent', 'packaged_notices': 'byte-exact'}, indent=2))
+        'profile_json': 'absent', 'launcher': selected['launcher'], 'packaged_notices': 'byte-exact'}, indent=2))

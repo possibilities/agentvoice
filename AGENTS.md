@@ -66,7 +66,7 @@ phone is the current preview; the operator explicitly destroyed the emulator.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  Save captures every visual choice in profile 19; protocol 22 carries current,
+  Save captures every visual choice in profile 20; protocol 23 carries current,
   saved and adopted defaults. Only connection/gates/held pointers and synthetic
   activity are transient. No microphone, grants, voice calls or automatic edit/Save
   replay; explicitly selected interaction sounds are supported. Keep the physical

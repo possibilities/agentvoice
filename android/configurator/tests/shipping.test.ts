@@ -15,10 +15,10 @@ import {
   writeShipping,
 } from "../src/shipping.ts";
 
-const locked = JSON.parse(
-  await readFile(new URL("../../design/shipping-provenance.json", import.meta.url), "utf8"),
+const profileText = await readFile(
+  new URL("./fixtures/shipping-profile18.json", import.meta.url),
+  "utf8",
 );
-const profileText: string = locked.source.profile.text;
 const session = {
   ...defaultVisualSettings(),
   icons: { channels: "noun-icons" as const, push: "current" as const },
@@ -66,6 +66,8 @@ test("locked shipping snapshot captures both effective orientations, exact sourc
   expect(generated).toContain('channels = "noun-icons"');
   expect(generated).toContain("textSizeSp = 32");
   expect(generated).toContain('motion = "ripple"');
+  expect(generated.match(/const val launcher/g)).toHaveLength(1);
+  expect(generated).toContain('const val launcher = "current"');
   expect(generated).not.toContain("decodePreview");
   expect(generated).not.toContain("JSONObject");
 });
@@ -77,7 +79,7 @@ test("legacy promotion requires explicit session source while profile19 carries 
   expect(createShippingSnapshot(profileText, "old.json", { kind: "defaults" }).appearance).toEqual(
     defaultVisualSettings(),
   );
-  const complete = { ...JSON.parse(profileText), version: 19, ...session };
+  const complete = { ...JSON.parse(profileText), version: 20, ...session };
   expect(
     createShippingSnapshot(JSON.stringify(complete), "complete.json", { kind: "profile" })
       .appearance,
@@ -188,7 +190,11 @@ test("release inventory contains only adopted artwork and sounds, and re-promoti
   await writeShipping(first, { root, snapshot: true });
   const outputs = await shippingOutputs(first);
   expect([...outputs.keys()].filter((path) => path.endsWith(".wav"))).toHaveLength(4);
-  expect([...outputs.keys()].filter((path) => path.endsWith(".xml"))).toHaveLength(4);
+  expect(
+    [...outputs.keys()].filter(
+      (path) => path.includes("shipping_channel_") && path.endsWith(".xml"),
+    ),
+  ).toHaveLength(4);
   expect([...outputs.keys()].some((path) => path.includes("rocker-29"))).toBe(false);
   expect(
     String(outputs.get("android/app/src/main/assets/notices/Shipping-Icons-NOTICE.txt")),

@@ -44,16 +44,18 @@ internal data class PersonaPreviewState(
     val savedSharedAppearance: PreviewSharedAppearance = sharedAppearance,
     val showPushToTalk: Boolean = true,
     val icons: PreviewIcons = PreviewIcons(),
+    val launcher: String = "current",
     val sounds: PreviewSounds = PreviewSounds(),
     val savedSounds: PreviewSounds = sounds,
-    val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons),
+    val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher),
 ) {
-    init { require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
+    init { require(launcher in previewLaunchers)
+        require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
         require(horizontalOffsetDp in -200..200 && savedHorizontalOffsetDp in -200..200)
         require(appearanceOverrides.all { it in previewAppearanceGroups } && savedAppearanceOverrides.all { it in previewAppearanceGroups }) }
-    fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons)
+    fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher)
     fun withAppearance(value: DesignAppearance) = copy(theme = value.theme, mutedPresence = value.mutedPresence,
-        mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk, icons = value.icons)
+        mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk, icons = value.icons, launcher = value.launcher)
 
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp, appearanceOverrides)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide, savedHorizontalOffsetDp, savedAppearanceOverrides)
@@ -96,7 +98,7 @@ internal data class PersonaPreviewState(
             otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 22).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 23).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -154,10 +156,10 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..22)
+    require(protocol in 1..23)
     if (protocol >= 22) {
-        decodeDesignAppearance(data.getJSONObject("savedAppearance"))
-        decodeDesignAppearance(data.getJSONObject("defaultAppearance"))
+        decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
+        decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22)
     }
     if (protocol >= 18) {
         decodePreviewSounds(data.getJSONObject("savedSounds"))
@@ -184,6 +186,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         presenceScope = if (protocol >= 15) data.getString("presenceScope") else "any-muted",
         horizontalOffsetDp = if (protocol >= 17) decodePreviewOffset(data.get("horizontalOffsetDp")) else 0,
         appearanceOverrides = if (protocol >= 17) decodeAppearanceOverrides(data.getJSONArray("appearanceOverrides")) else emptySet(),
+        launcher = if (protocol >= 23) data.getString("launcher").also { require(it in previewLaunchers) } else "current",
         icons = if (protocol >= 21) decodePreviewIcons(data.getJSONObject("icons")) else PreviewIcons(),
         showPushToTalk = if (protocol >= 19) decodePreviewBoolean(data.get("showPushToTalk")) else true,
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
@@ -243,7 +246,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk", "icons"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk", "icons", "launcher"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -262,13 +265,14 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val presenceScope = request.getString("presenceScope").also { require(it in previewPresenceScopes) }
                     val horizontal = decodePreviewOffset(request.get("horizontalOffsetDp"))
                     val overrides = decodeAppearanceOverrides(request.getJSONArray("appearanceOverrides"))
+                    val launcher = request.getString("launcher").also { require(it in previewLaunchers) }
                     val showPushToTalk = decodePreviewBoolean(request.get("showPushToTalk"))
                     val sounds = decodePreviewSounds(request.getJSONObject("sounds"))
                     val icons = decodePreviewIcons(request.getJSONObject("icons"))
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
                     state = next.applyAppearance(PreviewLayout(placement, design, halo, spirit, side, horizontal, overrides)).copy(
                         activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
-                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, icons = icons, revision = state.revision + 1)
+                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, icons = icons, launcher = launcher, revision = state.revision + 1)
                 }
                 "iconCredits" -> {
                     require(request.fields() == setOf("id", "method"))

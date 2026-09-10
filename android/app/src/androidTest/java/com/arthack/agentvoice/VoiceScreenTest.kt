@@ -106,4 +106,17 @@ class VoiceScreenTest {
         compose.onNodeWithText("Microphone and Volume by i cons", substring = true).assertExists()
         compose.onNodeWithText("Done").performClick()
     }
+    @Test fun failedStartupDoesNotPretendToKeepConnectingAndOffersAnExit() {
+        var stopped = false
+        compose.setContent {
+            VoiceTheme { VoiceScreen(CallUi(running = true, phase = "Voice unavailable"), true,
+                soundOutput = output, start = {}, stop = { stopped = true }, importGrant = {},
+                mute = {}, hold = {}, release = {}) }
+        }
+        compose.onNodeWithTag("voice-failure").assertExists()
+        compose.onNodeWithText("Connecting…").assertDoesNotExist()
+        compose.onNodeWithTag("end-failed-call").performClick()
+        compose.runOnIdle { assertTrue(stopped); assertTrue(cues.isEmpty()) }
+    }
+
 }

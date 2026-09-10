@@ -78,7 +78,7 @@ internal fun decodePersonaDesign(json: String): PreviewDesign {
         13 -> decodeLegacyControlExtentDesign(withLegacyTraceJoin(data.getJSONObject("design")))
         14, 15, 16 -> decodeLegacyControlExtentDesign(withoutLegacyOffshoots(data.getJSONObject("design")))
         17 -> decodeLegacyControlExtentDesign(data.getJSONObject("design"))
-        18, 19 -> decodePreviewDesign(data.getJSONObject("design"))
+        18, 19, 20 -> decodePreviewDesign(data.getJSONObject("design"))
         else -> error("Unsupported Persona tuning version")
     }
 }

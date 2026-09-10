@@ -3,6 +3,7 @@ import {
   type Icons,
   iconCatalog,
   iconStyles,
+  type LauncherStyle,
   launcherConcepts,
   pushIconCatalog,
   pushIconPreview,
@@ -71,7 +72,10 @@ export function renderIcons(icons: Icons) {
   );
   element("push-icon-credit").replaceChildren(...creditNodes(push.credit));
 }
-export function initializeIconControls(change: (change: (icons: Icons) => Icons) => void) {
+export function initializeIconControls(
+  change: (change: (icons: Icons) => Icons) => void,
+  changeLauncher: (launcher: LauncherStyle) => void,
+) {
   for (const [id, values, catalog, field] of [
     ["channel-icons", iconStyles, iconCatalog, "channels"],
     ["push-icon", pushIconStyles, pushIconCatalog, "push"],
@@ -93,6 +97,7 @@ export function initializeIconControls(change: (change: (icons: Icons) => Icons)
     card.className = "launcher-card";
     const choice = document.createElement("button");
     choice.type = "button";
+    choice.disabled = true;
     choice.className = "launcher-choice";
     choice.dataset["launcher"] = concept.id;
     choice.setAttribute("aria-pressed", String(concept.id === "current"));
@@ -122,16 +127,24 @@ export function initializeIconControls(change: (change: (icons: Icons) => Icons)
     description.className = "launcher-description";
     description.textContent = concept.description;
     choice.append(title, samples, description);
-    choice.addEventListener("click", () => {
-      for (const button of gallery.querySelectorAll("button[data-launcher]"))
-        button.setAttribute("aria-pressed", String(button === choice));
-      element("launcher-selection").textContent =
-        `Comparing ${concept.label}. Browser preview only.`;
-    });
+    choice.addEventListener("click", () => changeLauncher(concept.id));
     const credit = document.createElement("p");
     credit.className = "icon-credit";
     credit.append(...creditNodes(concept.credit));
     card.append(choice, credit);
     gallery.append(card);
   }
+}
+
+export function renderLauncher(launcher: LauncherStyle, disabled: boolean) {
+  const selected = launcherConcepts.find((concept) => concept.id === launcher)!;
+  for (const button of element("launcher-gallery").querySelectorAll<HTMLButtonElement>(
+    "button[data-launcher]",
+  )) {
+    button.disabled = disabled;
+    button.setAttribute("aria-pressed", String(button.dataset["launcher"] === launcher));
+  }
+  element<HTMLButtonElement>("reset-launcher").disabled = disabled;
+  element("launcher-selection").textContent =
+    `${selected.label} selected. Save profile keeps this choice.`;
 }

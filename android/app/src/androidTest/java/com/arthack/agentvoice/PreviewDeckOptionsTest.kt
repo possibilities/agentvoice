@@ -141,7 +141,7 @@ class PreviewDeckOptionsTest {
             .put("id", 1).put("method", "preview").put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
             .put("mode", state.mode).put("connection", state.connection).put("activity", state.activity)
             .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json())
+            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher)
         try {
             for (bad in listOf(0, 1, "false", JSONObject.NULL)) {
                 assertTrue(runCatching { session.command(request(session.state).put("showPushToTalk", bad)) }.isFailure)
@@ -154,7 +154,7 @@ class PreviewDeckOptionsTest {
             session.command(JSONObject().put("id", 2).put("method", "save").put("revision", state.revision)
                 .put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch))
             val current = JSONObject(file.readText())
-            assertEquals(19, current.getInt("version")); assertFalse(current.getBoolean("showPushToTalk"))
+            assertEquals(20, current.getInt("version")); assertFalse(current.getBoolean("showPushToTalk"))
             assertFalse(current.toString().contains("offshootPercent"))
             val old = JSONObject(current.toString()).withLegacyOffshootFields().put("version", 16)
             old.getJSONObject("design").getJSONObject("traces").put("offshootPercent", 81)

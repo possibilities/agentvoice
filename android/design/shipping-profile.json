@@ -107,6 +107,7 @@
     },
     "verticalOffsetDp": 8
   },
+  "launcher": "relay-aperture",
   "mutedPresence": "tide",
   "mutedTuning": {
     "breathPercent": 100,
@@ -118,7 +119,7 @@
   },
   "personaSide": "left",
   "presenceScope": "any-muted",
-  "savedAtEpochMs": 1789007406261,
+  "savedAtEpochMs": 1789009536017,
   "scaleMultipliers": {
     "idle": 0.78,
     "listening": 0.56,
@@ -165,6 +166,6 @@
     "surface": "soft"
   },
   "theme": "bright",
-  "version": 19,
+  "version": 20,
   "verticalOffsetDp": -30
 }

@@ -5,7 +5,7 @@ import {
   equalSharedAppearance,
 } from "./appearance.ts";
 import { haloColorStates, haloMotionFields } from "./halo.ts";
-import { initializeIconControls, renderIcons } from "./icons-ui.ts";
+import { initializeIconControls, renderIcons, renderLauncher } from "./icons-ui.ts";
 import { type MutedMotion, mutedTuningAmounts } from "./muted-presence.ts";
 import {
   type Activity,
@@ -107,6 +107,7 @@ function render() {
   text(element("icon-credits"), openingCredits ? "Opening credits…" : "Credits on phone");
   save.disabled = !connected || inFlight || changed || saving || openingCredits;
   save.textContent = saving ? "Saving…" : "Save profile";
+  renderLauncher(draft?.launcher ?? "current", !connected || saving || openingCredits);
   if (!status || !draft) return;
   element("device").textContent =
     `Previewing on ${status.device} · ${draft.orientation === "portrait" ? "Portrait" : "Landscape"}`;
@@ -276,7 +277,7 @@ function render() {
   const otherOrientation = draft.orientation === "portrait" ? "landscape" : "portrait";
   const hostMatches =
     status.hostSaved &&
-    status.hostSaved.version === 19 &&
+    status.hostSaved.version === 20 &&
     equalVisualSettings(profileVisualSettings(status.hostSaved), draft) &&
     equalSounds(profileSounds(status.hostSaved), draft.sounds) &&
     equalLayout(profileLayout(status.hostSaved, draft.orientation), draft) &&
@@ -459,8 +460,9 @@ holdShare.addEventListener("input", () => {
   const holdSharePercent = Math.round(holdShare.valueAsNumber * 10) / 10;
   update((current) => ({ ...current, design: { ...current.design, holdSharePercent } }));
 });
-initializeIconControls((change) =>
-  update((current) => ({ ...current, icons: change(current.icons) })),
+initializeIconControls(
+  (change) => update((current) => ({ ...current, icons: change(current.icons) })),
+  (launcher) => update((current) => ({ ...current, launcher })),
 );
 
 for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-reset]")) {

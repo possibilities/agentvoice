@@ -14,8 +14,8 @@ internal data class ShippingLayout(
 
 internal object ShippingDesign {
     const val profileSource = "android/configurator/profiles/R5CT91TW4RP.json"
-    const val profileSha256 = "0b0d7eb39e5a0269a53f47bcaeb0b7c49838962917c8363b7363a3f61e32b214"
-    const val sessionSha256 = "38a46b3453f13ce6615002fd5e63ed0af470dc5580d26635dffea055594735f4"
+    const val profileSha256 = "9253c921457a015c7b50c092ff94be4777b4db256304af73e44fe5f1398176a5"
+    const val sessionSha256 = "b9f5a583b4387cda4a9f7e1af6749ce3d3a190bcb08af76882c438b15b391dcc"
     val portrait = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -30.dp),
         design = PreviewDesign(
@@ -110,6 +110,7 @@ internal object ShippingDesign {
         channels = "noun-icons",
         push = "current",
     )
+    const val launcher = "relay-aperture"
     const val theme = "bright"
     const val mutedPresence = "tide"
     const val presenceScope = "any-muted"

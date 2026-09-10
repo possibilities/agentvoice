@@ -364,7 +364,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol22 carries live/saved/default designs, sizes, vertical and
+Preview protocol23 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -374,8 +374,8 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
 32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is22;
-saved profile is version19 with separately saved shown/hidden extents and all
+session-root fields on Preview/PhoneState, never Layout. Protocol is23;
+saved profile is version20 with separately saved shown/hidden extents and all
 shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
@@ -406,10 +406,10 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol22's active fields describe the phone's visible orientation; it also
+Protocol23's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
-changes orientation; the host cannot select it. Version19 profile receipts must
+changes orientation; the host cannot select it. Version20 profile receipts must
 include both exact confirmed layouts, including design, geometry, side,
 variant, motion, colors, spirit, override flags, shared appearance and sounds before the
 host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
@@ -424,10 +424,10 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol22 is strict; Android restoration from
+never include it. Current live protocol23 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
-The shared root boolean `showPushToTalk` appears in profile19 and in the
+The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
 `savedAppearance`/`defaultAppearance` snapshots; it never appears in Layout. Native
 restoration from protocol18 or earlier starts with Push to talk shown.
 Profiles17–18 and current traces reject `offshootPercent` everywhere. Legacy
@@ -435,8 +435,8 @@ profiles that contain offshoots retain and validate their original field, then
 strip it from effective root, landscape and shared appearance in memory. Other tuning, sounds,
 explicit override flags and the original saved files stay intact until Save.
 Connection, activity, synthetic mode and live call gates remain excluded from
-the profile. Profile19 saves push-to-talk visibility, icons, theme, indicator
-style, presence scope and muted tuning. Use matching current host code and debug APK.
+the profile. Profile20 saves launcher choice, push-to-talk visibility, icons, theme,
+indicator style, presence scope and muted tuning. Use matching current host code and debug APK.
 
 ```sh
 bun run test
@@ -463,12 +463,12 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol22 and profiles18–19 require both extent fields. Legacy profiles
+Current protocol23 and profiles18–20 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
 restoration from protocol19 or earlier does the same. Only explicit Save writes
-profile19.
+profile20.
 
 
 ## Icon auditions and launcher studies
@@ -482,18 +482,20 @@ Selection remains while muted indicators are Off or Push to talk is hidden.
 “Credits on phone” opens native icon credits through a one-shot, generation- and
 orientation-fenced request. It changes no preview settings, profile or dirty state;
 the button is disabled while disconnected or another request is pending.
-Protocol22 requires exactly `icons: { channels, push }` at the shared root;
+Protocol23 requires exactly `icons: { channels, push }` at the shared root;
 rotation, reconnect and activity restoration retain it. Restoration from
 protocol20 or earlier supplies `current/current`. Profile19 saves these choices and includes them in dirty comparison. Production
 defaults change only through explicit promotion. Legacy profiles through18
 remain strict and preserve their original bytes until an explicit Save.
 
-Launcher studies are a browser-only gallery: Current waveform plus Duplex Halo,
-Relay Aperture and Voice Carrier. Card selection only focuses a comparison; it
-never dispatches a phone command, changes the installed launcher or enters Save.
+The Launcher gallery offers Current waveform, Duplex Halo, Relay Aperture and
+Voice Carrier. Its selected card updates the shared launcher setting and becomes
+dirty until Save. Reload, rotation and reconnect observe the retained selection;
+disconnected cards are disabled and no selection is replayed automatically.
+Reset launcher uses the adopted shipping default. Choosing a card does not
+install an APK; explicit promotion generates the selected launcher resources.
 Circle and squircle previews expose the central72 units of each108-unit source.
-Monochrome previews use illustrative tints; the current waveform's masked/tinted
-versions are comparison drawings, not existing Android adaptive resources.
+Monochrome previews use illustrative tints.
 
 Assets are served from a fixed capability-scoped local allowlist. Phosphor source
 and MIT links are pinned HTTPS URLs; Original denotes project-authored artwork,
@@ -505,15 +507,18 @@ its source mic. See [icon preview provenance](public/icon-previews/README.md).
 
 ## Complete saves and shipping promotion
 
-Profile19 adds six required shared appearance fields at the root: `icons`,
+Profile19 added six required shared appearance fields at the root: `icons`,
 `theme`, `mutedPresence`, `presenceScope`, `mutedTuning`, and `showPushToTalk`.
 The existing layouts, appearance overrides, shared base and sounds retain their
 contracts. Protocol22 adds required `savedAppearance` and `defaultAppearance`
-objects, each containing exactly those six fields. Dirty comparison checks every
+objects, each containing exactly those six fields in that historical protocol.
+Current protocol23 and profile20 add `launcher` as the seventh shared appearance
+field: `current`, `duplex-halo`, `relay-aperture`, or `voice-carrier`. Profile19
+remains strict and contains no launcher field; its effective launcher defaults
+to Current only in memory. Existing files are upgraded only by explicit Save. Dirty comparison checks every
 saved appearance value. Icon and muted-tuning resets use adopted defaults;
-Reset shared choices restores all six together without changing geometry or
-sounds. Runtime connection, activity, synthetic mode, gates and launcher-gallery
-selection are never part of Save.
+Reset shared choices restores all seven together without changing geometry or
+sounds. Runtime connection, activity, synthetic mode and call gates are never part of Save.
 
 Shipping is explicit and leaves Studio available for a later promotion:
 
@@ -523,22 +528,32 @@ bun android/configurator/src/shipping.ts generate
 bun android/configurator/src/shipping.ts generate --check
 ```
 
-Promotion accepts strict profiles18–19. Profile19 can supply its own complete
+Promotion accepts strict profiles18–20. Profiles19–20 can supply their own saved
 appearance without another flag. A legacy profile requires an explicit
-`--session <six-field-json>`, `--live-state <captured-state-json>`, or
+`--session <seven-field-json>`, `--live-state <captured-state-json>`, or
 `--default-session`. A live capture must match both saved layouts and sounds;
 a mismatch stops promotion for review. Promotion never writes either input.
 
 `android/design/shipping-profile.json` is a complete, independently parseable
-profile19. The separate `shipping-provenance.json` retains the exact source
+profile20. The separate `shipping-provenance.json` retains the exact source
 profile text/SHA and source-capture SHA, plus the adopted appearance snapshot.
 The source's original Save timestamp is retained; a later Save timestamp alone
 does not count as a shipping design change. Regeneration checks the canonical
 profile against its promotion receipt before producing typed Kotlin defaults.
 The generated file inventory allows later promotion to remove only previously
 generated resources. Release includes only the adopted channel family, selected
-sound quartet and applicable notices; Studio keeps all audition assets.
+sound quartet, selected launcher resources and applicable notices; Studio keeps all audition assets.
 
 `--check` compares deterministic generated bytes and reports missing/stale
 outputs without writing. Tests use disposable output roots and preserve source
 profiles. The generator does not install an APK, contact a phone or start audio.
+
+
+Launcher generation reads the original local108-unit SVG paths, independent of
+the obsolete main launcher drawable. It emits only the chosen foreground,
+monochrome layer, fixed background color, adaptive resources for API26/API33,
+and a legacy vector using the central72-unit crop. The manifest references
+`@mipmap/ic_agentvoice`; API33 adds the monochrome layer while older adaptive
+resources retain foreground/background only. Unsupported SVG geometry fails
+explicitly rather than being silently simplified. Launcher selection is included
+in generated `ShippingDesign.launcher` and the owned generated-file inventory.

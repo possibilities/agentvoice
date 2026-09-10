@@ -73,7 +73,7 @@ internal fun VoiceScreen(
             }, onHold = { if (latestUi.canHold && !latestUi.holding) { hold(); feedback.down() } },
             onRelease = { feedback.cancel(); release() },
             onReleaseCompleted = { release(); feedback.release() }, onExit = { if (latestUi.running) stop() },
-            connection = when { ui.connected -> "connected"; ui.running -> "connecting"; else -> "disconnected" },
+            connection = when { ui.connected -> "connected"; ui.phase in setOf("Voice unavailable", "Voice stopped") -> "disconnected"; ui.running -> "connecting"; else -> "disconnected" },
             halo = layout.halo, spirit = layout.spirit, activity = "steady", personaSide = layout.personaSide,
             theme = ShippingDesign.theme, mutedPresence = ShippingDesign.mutedPresence,
             mutedTuning = ShippingDesign.mutedTuning, presenceScope = ShippingDesign.presenceScope,
@@ -93,6 +93,15 @@ internal fun VoiceScreen(
                     }
                     if (hasGrant) TextButton(onClick = importGrant, enabled = !importing) { Text("Replace device grant") }
                     TextButton(onClick = { credits = true }, modifier = Modifier.testTag("shipping-credits")) { Text("Credits") }
+                }
+            }
+        } else if (ui.phase in setOf("Voice unavailable", "Voice stopped")) {
+            Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding(), color = VoiceInk.ground) {
+                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Voice could not start. Check the server, then end this attempt and try again.",
+                        color = VoiceInk.text, fontFamily = VoiceInk.type,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("voice-failure"))
+                    TextButton(onClick = stop, modifier = Modifier.testTag("end-failed-call")) { Text("End attempt") }
                 }
             }
         } else (setupMessage ?: ui.message)?.let {
