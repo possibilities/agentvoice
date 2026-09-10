@@ -1673,3 +1673,39 @@ Installed Studio SHA-256:
 System rotation settings were restored to their observed values; Studio/browser
 were left open with the exact migrated design. Phone access was released and a
 notification stored in AgentNotify. No emulator or new real voice call was used.
+
+
+## Paid icon UI and scanner rehearsals — September 10, 2026
+
+Two one-time i cons icon purchases were verified from paid invoices. The local
+license-holder opt-in removes the app's Credits action; default public builds
+retain attribution and Studio keeps its complete icon credits. No invoice or
+billing data is committed. Packaged/source CC BY notices remain intact.
+
+The Relay Aperture scanner prototype is available in Studio's Connection setup
+section. Only Live camera opens hardware; other scenes are deterministic. No
+QR decoding, granting or server calls are implemented in this prototype. Closing
+or backgrounding releases the camera; a native camera-service read observed no
+Studio client after backgrounding. Browser generation/orientation fences apply.
+The full design draft and explicit profile retained their exact pre-test hashes.
+Portrait and landscape captures were reviewed; the final close action stays
+outside scrolling copy and scanning status clears the lower brackets.
+
+Validation: 738 root tests, 122 Studio JVM tests, 106 host tests passed; root/host
+TypeScript checks passed. Initial native checks passed 21 tests, then final overlay
+and paid-license checks passed 9 tests in 13.857s after the UI refinements.
+Studio/production builds and lints passed. Production APK inventory and the two
+app identity/permission audits passed; production was installed and its startup
+Credits action was absent. No real call was started for this slice.
+
+Production APK SHA256: `3aff0af785e6c64e12a7ec60fe4af068630ad9f9334465ded5e30a34c957261a`.
+Final Studio APK SHA256: `f9b35b6e21ff12aa72e530ff1020b2b9af1073853d2682d63869a0299f37c406`.
+Evidence: `/tmp/agentvoice-qr-flow/`; retained Studio draft SHA256
+`ae14523168bcae482e8315ddabd75739c091835758b3592b3eba7492588ee0a5`;
+explicit host profile SHA256
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+System orientation restored to accelerometer_rotation1/user_rotation0.
+
+Next authorized slice: implement `agentvoice network qr --name <device>` and
+real scan/validate/encrypted-save/auto-connect, preserving one stored grant and
+manual removal/replacement for now. Multi-server management remains later work.

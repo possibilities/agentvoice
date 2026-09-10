@@ -513,3 +513,20 @@ adopts that complete profile for a future release. Build/install both apps when
 releasing a new design so Studio's reset target stays current, but preserve its
 working draft. There is no automatic release-time refresh. See the
 [working-draft contract](configurator/README.md#continue-from-production).
+
+
+## Paid icon distribution and connection prototype — September 10, 2026
+
+The selected i cons microphone/speaker were purchased individually with verified
+attribution waivers. This license holder's local build opts in through
+`agentvoice.paidNounIcons=856601,974802` in gitignored `android/local.properties`.
+Public builds default to attribution; the opt-in does not license downstream forks.
+Public CC BY sources/notices and Studio's all-library credits remain.
+See [purchase scope](third-party/icons/noun-project/paid-license.md).
+
+Studio now rehearses the upcoming QR setup in **Connection setup → App view**.
+Only Live camera opens hardware. All other states are mock scenes; neither saves
+or reads a grant nor calls a server. The camera stops in the background and on
+closing. Drafts and profiles do not include this transient rehearsal. Protocol25
+adds its state/command; saved profile20 and working draft2 are unchanged.
+The CLI instruction is a prototype for the next slice, not an implemented command.

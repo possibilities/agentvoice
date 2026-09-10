@@ -170,7 +170,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(23, current.json().getInt("protocol"))
+                assertEquals(25, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())

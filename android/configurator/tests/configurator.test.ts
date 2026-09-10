@@ -82,7 +82,8 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 24,
+  protocol: 25,
+  connectionPreview: "off",
   launcher: "current",
   savedAppearance: defaultVisualSettings(),
   defaultAppearance: defaultVisualSettings(),
@@ -2462,7 +2463,7 @@ test("debug reply framing accepts16383 bytes and rejects16384 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(16383 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(24);
+  expect((await pending).state.protocol).toBe(25);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });
@@ -3223,6 +3224,48 @@ test("unconfirmed phone credits fail once without Save or automatic replay", asy
   expect((await post("icon-credits", {})).status).toBe(502);
   expect(phone.calls).toEqual([{ method: "iconCredits" }]);
   expect(await Bun.file(saveTo).exists()).toBe(false);
+});
+
+test("connection rehearsal is a strict transient command with orientation and generation fences", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const before = structuredClone(phone.state);
+  expect((await post("connection-preview", { scene: "permission" })).status).toBe(200);
+  expect(phone.calls).toEqual([
+    {
+      method: "connectionPreview",
+      scene: "permission",
+      orientation: before.orientation,
+      orientationEpoch: before.orientationEpoch,
+    },
+  ]);
+  expect(phone.state).toEqual(before);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  for (const body of [
+    { scene: "saveGrant" },
+    { scene: "camera", token: "secret" },
+    {},
+    { scene: null },
+  ])
+    expect((await post("connection-preview", body)).status).toBe(400);
+  expect(
+    (await post("connection-preview", { scene: "camera", generation: phone.generation + 1 }))
+      .status,
+  ).toBe(409);
+  expect(
+    (
+      await post("connection-preview", {
+        scene: "camera",
+        orientationEpoch: before.orientationEpoch + 1,
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (await post("connection-preview", { scene: "camera" }, { Origin: "https://example.com" }))
+      .status,
+  ).toBe(403);
+  expect(phone.calls).toHaveLength(1);
+  expect(() => parseState({ ...before, connectionPreview: "saveGrant" })).toThrow();
+  expect(() => parseState({ ...before, protocol: 24 })).toThrow();
 });
 
 test("cleared Noun pairs expose exact attribution and matching-mic credits without widening safe links", () => {

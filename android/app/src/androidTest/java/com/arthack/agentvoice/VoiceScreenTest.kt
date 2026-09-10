@@ -94,7 +94,7 @@ class VoiceScreenTest {
         compose.runOnIdle { assertEquals(PreviewSwitchCue.Down, cues.last()) }
     }
 
-    @Test fun setupRetainsExplicitStartImportAndSelectedCredits() {
+    @Test fun setupRespectsTheDistributorsIconLicense() {
         var starts = 0
         compose.setContent {
             VoiceTheme { VoiceScreen(CallUi(), true, soundOutput = output,
@@ -102,9 +102,14 @@ class VoiceScreenTest {
         }
         compose.onNodeWithTag("start-voice").performClick()
         compose.runOnIdle { assertEquals(1, starts); assertTrue(cues.isEmpty()) }
-        compose.onNodeWithTag("shipping-credits").performClick()
-        compose.onNodeWithText("Microphone and Volume by i cons", substring = true).assertExists()
-        compose.onNodeWithText("Done").performClick()
+        if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS)) {
+            compose.onNodeWithTag("shipping-credits").performClick()
+            compose.onNodeWithText("Microphone and Volume by i cons", substring = true).assertExists()
+            compose.onNodeWithText("Done").performClick()
+        } else compose.onNodeWithTag("shipping-credits").assertDoesNotExist()
+        assertTrue(requiresShippingIconCredit("noun-icons", false))
+        assertFalse(requiresShippingIconCredit("noun-icons", true))
+        assertTrue(requiresShippingIconCredit("noun-boatman", true))
     }
     @Test fun failedStartupDoesNotPretendToKeepConnectingAndOffersAnExit() {
         var stopped = false

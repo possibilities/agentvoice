@@ -404,7 +404,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol24 carries live/saved/default designs, sizes, vertical and
+Preview protocol25 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -414,7 +414,7 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
 32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is24;
+session-root fields on Preview/PhoneState, never Layout. Protocol is25;
 saved profile is version20 with separately saved shown/hidden extents and all
 shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -446,7 +446,7 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in both orientations.
-Protocol24's active fields describe the phone's visible orientation; it also
+Protocol25's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. The phone alone
 changes orientation; the host cannot select it. Version20 profile receipts must
@@ -464,7 +464,7 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol24 is strict; Android restoration from
+never include it. Current live protocol25 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
 The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
@@ -503,7 +503,7 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol24 and profiles18–20 require both extent fields. Legacy profiles
+Current protocol25 and profiles18–20 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
@@ -522,7 +522,7 @@ Selection remains while muted indicators are Off or Push to talk is hidden.
 “Credits on phone” opens native icon credits through a one-shot, generation- and
 orientation-fenced request. It changes no preview settings, profile or dirty state;
 the button is disabled while disconnected or another request is pending.
-Protocol24 requires exactly `icons: { channels, push }` at the shared root;
+Protocol25 requires exactly `icons: { channels, push }` at the shared root;
 rotation, reconnect and activity restoration retain it. Restoration from
 protocol20 or earlier supplies `current/current`. Profile19 saves these choices and includes them in dirty comparison. Production
 defaults change only through explicit promotion. Legacy profiles through18
@@ -602,3 +602,21 @@ and a legacy vector using the central72-unit crop. The manifest references
 resources retain foreground/background only. Unsupported SVG geometry fails
 explicitly rather than being silently simplified. Launcher selection is included
 in generated `ShippingDesign.launcher` and the owned generated-file inventory.
+
+
+## Connection setup rehearsals
+
+Protocol25 adds the transient `connectionPreview` state and an orientation-fenced
+`connectionPreview` command (`scene`, `orientation`, `orientationEpoch`). The host
+also checks connection generation. **Connection setup → App view** opens the
+shared Relay Aperture overlay on the phone. Camera explanation, denied/unavailable,
+invalid/found, securing, connecting and failure scenes are deterministic rehearsals.
+Only **Live camera · Prototype** requests camera permission and binds the rear
+camera. Closing the overlay or backgrounding releases it. No QR analyzer,
+credential read/write, server request or microphone is used by Studio.
+
+This rehearsal is excluded from draft/profile/dirty comparison and resets on a
+new activity instance. All configured design values and saved bytes remain intact.
+CameraX is shared app code; Studio continues to remove network and microphone
+permissions. The command shown in this prototype is the next implementation slice;
+it is not yet a working QR-grant command.

@@ -336,6 +336,9 @@ internal object StudioProduction {
     if (source) notice += `${source}\n`;
   if (credit.changes) notice += `${credit.changes}\n`;
   notice += `Push-to-talk icon: ${snapshot.appearance.icons.push}.\n`;
+  if (family === "noun-icons")
+    notice +=
+      "These sources and derivatives remain CC BY 3.0. A distributor's separately purchased attribution waiver does not extend to downstream forks; downstream apps must provide attribution or obtain their own applicable license.\n";
   result.set(`${noticesRoot}Icons-NOTICE.txt`, notice);
   if (family.startsWith("noun-"))
     result.set(

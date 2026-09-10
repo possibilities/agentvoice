@@ -62,6 +62,7 @@ let draft: Preview | null = null;
 let inFlight = false;
 let saving = false;
 let openingCredits = false;
+let openingConnection = false;
 let changed = false;
 let edit = 0;
 let resetting = false;
@@ -106,7 +107,10 @@ function render() {
   controls.disabled = !connected || saving || openingCredits;
   element<HTMLButtonElement>("icon-credits").disabled =
     !connected || inFlight || changed || saving || openingCredits;
-  text(element("icon-credits"), openingCredits ? "Opening credits…" : "Credits on phone");
+  text(
+    element("icon-credits"),
+    openingCredits && !openingConnection ? "Opening credits…" : "Credits on phone",
+  );
   save.disabled = !connected || inFlight || changed || saving || openingCredits;
   save.textContent = saving ? (resetting ? "Resetting…" : "Saving…") : "Save profile";
   element<HTMLButtonElement>("reset-production").disabled = save.disabled;
@@ -122,6 +126,9 @@ function render() {
     text(element(`override-${group}-label`), `Customize ${orientationLabel}`);
     text(element(`scope-${group}`), customized ? `${orientationLabel} only` : "Shared");
   }
+  element<HTMLSelectElement>("setup-preview").value = status.state.connectionPreview;
+  element<HTMLSelectElement>("setup-preview").disabled =
+    !connected || inFlight || changed || saving || openingCredits;
   renderIcons(draft.icons);
   element<HTMLSelectElement>("sound-family").value = draft.sounds.family;
   element<HTMLInputElement>("sound-volume").value = String(draft.sounds.volumePercent);
@@ -541,6 +548,31 @@ position.addEventListener("input", () => {
       : { ...current, verticalOffsetDp: offsetDp },
   );
 });
+element("setup-preview").addEventListener("change", async () => {
+  if (!status?.connected || inFlight || changed || saving || openingCredits) return;
+  const scene = element<HTMLSelectElement>("setup-preview").value;
+  openingConnection = true;
+  edit++;
+  openingCredits = true;
+  render();
+  try {
+    status = await api("connection-preview", {
+      scene,
+      generation: status.generation,
+      orientation: status.state.orientation,
+      orientationEpoch: status.state.orientationEpoch,
+    });
+    draft = previewOf(status.state);
+    transientFailure = null;
+  } catch (failure) {
+    report(failure);
+  } finally {
+    openingCredits = false;
+    openingConnection = false;
+    render();
+  }
+});
+
 element("icon-credits").addEventListener("click", async () => {
   if (!status?.connected || inFlight || changed || saving || openingCredits) return;
   edit++;

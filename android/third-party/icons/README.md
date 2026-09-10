@@ -29,7 +29,11 @@ opens accessible, selectable linked credits without adding a permanent header.
 The selected source/license/modification credits and full terms are also
 packaged in release and reachable from the app’s Credits action. Moving credit text out of an icon is not
 removing attribution: it remains in those credits and beside the source files.
-No payment, attribution waiver or exclusive trademark right is claimed.
+Michael Bannister purchased the selected i cons pair on September 10, 2026.
+His licensed app build may omit their attribution UI; public builds retain it
+unless the distributor explicitly configures their own applicable waiver.
+See [verified purchase and build scope](noun-project/paid-license.md).
+No exclusive trademark right or blanket waiver for forks is claimed.
 
 The screenshots used during discovery are evaluation references only. They were
 not traced or bundled. All Noun integration geometry derives from the actual

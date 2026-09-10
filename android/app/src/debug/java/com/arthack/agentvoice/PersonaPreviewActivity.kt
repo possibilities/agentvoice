@@ -75,6 +75,19 @@ class PersonaPreviewActivity : ComponentActivity() {
         configure(intent)
         setContent { VoiceTheme {
             PersonaPreview(session.state, onExit = ::finish) { session.state = it }
+            val rehearsal = session.state.connectionPreview
+            LaunchedEffect(rehearsal != "off") {
+                if (rehearsal != "off") android.widget.Toast.makeText(this@PersonaPreviewActivity,
+                    "Connection preview · no server access", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            val close = { session.state = session.state.copy(connectionPreview = "off") }
+            if (rehearsal == "camera") ConnectionCamera { cameraState, action, surface ->
+                ConnectionOverlay(ConnectionScene.camera(cameraState), close, action, studio = true,
+                    theme = session.state.theme, personaSide = session.state.personaSide, camera = surface)
+            } else ConnectionScene.entries.firstOrNull { it.key == rehearsal }?.let { scene ->
+                ConnectionOverlay(scene, close, action = { session.state = session.state.copy(connectionPreview = "scanning") },
+                    studio = true, theme = session.state.theme, personaSide = session.state.personaSide)
+            }
             if (session.showIconCredits) PreviewIconCredits { session.showIconCredits = false }
         } }
     }

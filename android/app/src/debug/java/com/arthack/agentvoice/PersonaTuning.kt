@@ -14,6 +14,7 @@ internal data class PersonaPreviewState(
     val saved: PersonaPlacement = placement,
     val mode: String = "speaking",
     val connection: String = "connected",
+    val connectionPreview: String = "off",
     val holding: Boolean = false,
     val revision: Int = 0,
     val design: PreviewDesign = defaultPortraitLayout().design,
@@ -98,7 +99,7 @@ internal data class PersonaPreviewState(
             otherLayout = shared.applyTo(otherLayout).let { it.copy(design = it.design.copy(spacing = requested.design.spacing)) })
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 24).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 25).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -156,7 +157,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..24)
+    require(protocol in 1..25)
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
         decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22)
@@ -290,6 +291,13 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     // Reset is durable even when the current values already equal production.
                     persistWorkingDesign?.invoke(next.designProfile())
                     state = next
+                }
+                "connectionPreview" -> {
+                    require(request.fields() == setOf("id", "method", "scene", "orientation", "orientationEpoch"))
+                    checkOrientation(request)
+                    val scene = request.getString("scene")
+                    require(scene in setOf("off", "camera") + ConnectionScene.entries.map { it.key })
+                    state = state.endHold().copy(connectionPreview = scene)
                 }
                 "iconCredits" -> {
                     require(request.fields() == setOf("id", "method"))

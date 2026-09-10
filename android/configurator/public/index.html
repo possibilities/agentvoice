@@ -323,6 +323,25 @@
                   <button type="button" id="reset-spacing" data-reset="spacing" class="reset value-reset">Reset spacing</button>
                 </fieldset>
               <fieldset class="shared-session">
+                <legend class="panel-title">Connection setup</legend>
+                <p class="scope-badge">Rehearsal · Not saved</p>
+                <label for="setup-preview">App view</label>
+                <select id="setup-preview" aria-describedby="setup-preview-hint">
+                  <option value="off">Voice controls</option>
+                  <option value="permission">Camera explanation</option>
+                  <option value="camera">Live camera · Prototype</option>
+                  <option value="scanning">Scanning · Mock camera</option>
+                  <option value="denied">Camera permission denied</option>
+                  <option value="unavailable">Camera unavailable</option>
+                  <option value="invalid">Invalid code</option>
+                  <option value="found">Code found</option>
+                  <option value="saving">Securing access</option>
+                  <option value="connecting">Connecting</option>
+                  <option value="failed">Connection failed</option>
+                </select>
+                <p id="setup-preview-hint" class="control-hint">Only Live camera opens the phone camera. This prototype does not scan codes, store access or connect to a server. Close it on the phone or choose Voice controls to return.</p>
+              </fieldset>
+              <fieldset class="shared-session">
                 <legend class="panel-title">Switch sounds</legend>
                 <p class="scope-badge">Both orientations · Saved with profile</p>
                 <p class="control-hint scope-explanation" id="sound-hint">Use the phone controls to hear your choice. Both mute switches share the same on/off sound pair; Push to talk has its own press and release pair. The level also follows the phone’s media volume. Changing these settings does not play a sound.</p>

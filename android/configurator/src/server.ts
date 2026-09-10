@@ -4,6 +4,8 @@ import { equalSharedAppearance } from "./appearance.ts";
 import { iconPreviewFiles } from "./icons.ts";
 import { saveProfile } from "./profile.ts";
 import {
+  type ConnectionPreview,
+  connectionPreviews,
   equalLayout,
   equalVisualSettings,
   exact,
@@ -120,6 +122,7 @@ export async function serveConfigurator(
         path !== "preview" &&
         path !== "save" &&
         path !== "icon-credits" &&
+        path !== "connection-preview" &&
         path !== "reset-production"
       )
         return json({ error: "Not found" }, 404);
@@ -178,6 +181,10 @@ export async function serveConfigurator(
             halo: input["halo"],
             spirit: input["spirit"],
           });
+        } else if (path === "connection-preview") {
+          exact(input, ["generation", "orientation", "orientationEpoch", "scene"]);
+          if (!connectionPreviews.includes(input["scene"] as ConnectionPreview))
+            throw Error("Invalid connection scene");
         } else if (path === "icon-credits") {
           exact(input, ["generation", "orientation", "orientationEpoch"]);
         } else {
@@ -237,7 +244,13 @@ export async function serveConfigurator(
             revision: input["revision"],
             ...parseOrientationFence(input),
           });
-        } else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
+        } else if (path === "connection-preview")
+          await phone.request({
+            method: "connectionPreview",
+            scene: input["scene"],
+            ...parseOrientationFence(input),
+          });
+        else if (path === "icon-credits") await phone.request({ method: "iconCredits" });
         else {
           if (input["revision"] !== phone.state.revision)
             return json({ error: "Preview changed. Review it before saving." }, 409);

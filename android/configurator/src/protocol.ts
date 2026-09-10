@@ -127,8 +127,24 @@ export const visualSettingsFields = [
   "mutedTuning",
   "showPushToTalk",
 ] as const;
+export const connectionPreviews = [
+  "off",
+  "camera",
+  "permission",
+  "denied",
+  "opening",
+  "scanning",
+  "unavailable",
+  "invalid",
+  "found",
+  "saving",
+  "connecting",
+  "failed",
+] as const;
+export type ConnectionPreview = (typeof connectionPreviews)[number];
 export type PhoneState = Preview & {
-  protocol: 24;
+  protocol: 25;
+  connectionPreview: ConnectionPreview;
   savedAppearance: VisualSettings;
   defaultAppearance: VisualSettings;
   savedSounds: Sounds;
@@ -384,6 +400,7 @@ export function parseState(value: unknown): PhoneState {
   const data = record(value);
   exact(data, [
     "protocol",
+    "connectionPreview",
     "savedAppearance",
     "defaultAppearance",
     "savedSounds",
@@ -435,7 +452,8 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 24 ||
+    data["protocol"] !== 25 ||
+    !connectionPreviews.includes(data["connectionPreview"] as ConnectionPreview) ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
     typeof data["holding"] !== "boolean" ||
@@ -444,7 +462,8 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 24,
+    protocol: 25,
+    connectionPreview: data["connectionPreview"] as ConnectionPreview,
     savedAppearance: parseVisualSettings(data["savedAppearance"]),
     defaultAppearance: parseVisualSettings(data["defaultAppearance"]),
     savedSounds: parseSounds(data["savedSounds"]),

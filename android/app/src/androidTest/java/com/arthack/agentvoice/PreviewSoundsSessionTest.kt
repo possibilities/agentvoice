@@ -108,7 +108,7 @@ class PreviewSoundsSessionTest {
             assertEquals(chosen, saved.savedSounds)
             assertEquals(saved, restore(saved.json(), saved))
             val stateJson = saved.json()
-            assertEquals(23, stateJson.getInt("protocol"))
+            assertEquals(25, stateJson.getInt("protocol"))
             assertEquals(ShippingDesign.sounds, decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
             assertFalse(stateJson.getJSONObject("otherLayout").has("sounds"))
             assertTrue(response.toString().toByteArray().size < 16384)

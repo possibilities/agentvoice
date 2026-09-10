@@ -35,6 +35,9 @@ internal fun VoiceTheme(content: @Composable () -> Unit) {
         surface = VoiceInk.surface, onBackground = VoiceInk.text, onSurface = VoiceInk.text), content = content)
 }
 
+internal fun requiresShippingIconCredit(family: String, paidNounIcons: Boolean): Boolean =
+    family == "noun-boatman" || (family == "noun-icons" && !paidNounIcons)
+
 /** The adopted scene consumes real controller state; only the debug studio synthesizes it. */
 @Composable
 internal fun VoiceScreen(
@@ -92,7 +95,8 @@ internal fun VoiceScreen(
                         Text(if (importing) "Importing…" else if (hasGrant) "Start voice" else "Import device grant", fontFamily = VoiceInk.type)
                     }
                     if (hasGrant) TextButton(onClick = importGrant, enabled = !importing) { Text("Replace device grant") }
-                    TextButton(onClick = { credits = true }, modifier = Modifier.testTag("shipping-credits")) { Text("Credits") }
+                    if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS))
+                        TextButton(onClick = { credits = true }, modifier = Modifier.testTag("shipping-credits")) { Text("Credits") }
                 }
             }
         } else if (ui.phase in setOf("Voice unavailable", "Voice stopped")) {
