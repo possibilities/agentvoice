@@ -449,6 +449,17 @@ volume and never enter a voice track. This does not test acoustic pickup in a
 real voice call. Release includes only the adopted four-file quartet and player;
 the other family remains debug-only.
 
+Bluetooth auditions can sound different from a real call despite identical WAVs
+and gain. Studio uses normal media playback. Production enters Android communication
+mode and selects an available headset microphone/output (LE audio when exposed,
+otherwise classic Bluetooth SCO). On the tested S22/headset, Android moves the
+media stream from A2DP to SCO too, then restores A2DP when the call ends. The call
+path changes playback bandwidth/processing; its mixer sample rate does not prove
+the Bluetooth codec bandwidth. Studio currently has no call-route audition, so
+evaluate a proposed sound on the intended voice hardware before adopting it.
+Do not switch audio mode or microphone route on mute/PTT gestures just to improve
+cue fidelity; that changes the call's capture/output path.
+
 ## Landscape columns and optional PTT
 
 The debug landscape deck is two columns: HUMAN above AGENT nearest Persona,

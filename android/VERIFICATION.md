@@ -2071,3 +2071,33 @@ scoped Biome and diff checks passed. The refreshed host serves the new controls
 and compiled bundle and reconnects to Studio in portrait. Browser automation had
 no local browser / could not reach the loopback host; no browser-click validation
 is claimed. Native geometry was exercised through the same fenced preview API.
+
+## Bluetooth switch-sound diagnosis — 2026-09-10
+
+The installed-build artifacts contain byte-identical Rocker13 toggle-on,
+toggle-off, PTT-down and PTT-up WAVs in Studio and production. The captured Studio
+draft and adopted production both select Rocker13/60%; their shared SoundPool
+uses playback rate1 and USAGE_MEDIA/CONTENT_TYPE_SONIFICATION.
+
+An authorized physical S22/headset check observed MODE_NORMAL and inactive SCO
+before the call. Production then owned MODE_IN_COMMUNICATION with active SCO,
+Bluetooth SCO capture and playback. Crucially, AudioPolicy STRATEGY_MEDIA changed
+from AUDIO_DEVICE_OUT_BLUETOOTH_A2DP to AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET
+during the call, covering the UI sound stream too. No connected LE audio route
+was exposed. After Back ended the attempt, mode returned to NORMAL, SCO became
+inactive and STRATEGY_MEDIA returned to A2DP. This establishes a different audio
+path, not a measured codec bandwidth or subjective listening comparison.
+
+Private raw dumps are under `/tmp/agentvoice-bluetooth-sound`; they contain device
+identifiers and unrelated audio state and must not be committed. The test used a
+brief Studio mute pair and production mute/PTT interactions. Production passed
+the connecting overlay and no failure panel was observed; no spoken exchange
+was performed, so this is not end-to-end voice quality verification. Older usage
+limit messages in retained server stderr are not attributed to this attempt.
+
+Draft/checkpoint/binding were byte-identical afterward; rotation/font settings
+were unchanged, the previous VNC activity was restored, and phone release was
+notified. No grant, system-volume, service or production-code changes were made.
+The remaining product choice is a realistic Studio call-route audition and/or
+sound tuning that works through the call channel; no audio-routing workaround or
+replacement sound was silently adopted.
