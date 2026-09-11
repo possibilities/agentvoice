@@ -3,8 +3,8 @@
   "connectedArtboardScale": 1.9,
   "design": {
     "composition": "traces",
-    "controlsHeightDp": 415,
-    "controlsWithoutPttDp": 396,
+    "controlsHeightDp": 409,
+    "controlsWithoutPttDp": 390,
     "header": "none",
     "hold": "rocker",
     "holdSharePercent": 36.4,
@@ -53,8 +53,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 409,
-      "controlsWithoutPttDp": 365,
+      "controlsHeightDp": 403,
+      "controlsWithoutPttDp": 359,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -93,7 +93,7 @@
       "speakingMotionPercent": 68,
       "variant": "contained"
     },
-    "horizontalOffsetDp": -44,
+    "horizontalOffsetDp": -38,
     "personaSide": "left",
     "scales": {
       "idle": 78,
@@ -111,8 +111,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 427,
-      "controlsWithoutPttDp": 365,
+      "controlsHeightDp": 421,
+      "controlsWithoutPttDp": 359,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -151,7 +151,7 @@
       "speakingMotionPercent": 68,
       "variant": "contained"
     },
-    "horizontalOffsetDp": -42,
+    "horizontalOffsetDp": -36,
     "personaSide": "left",
     "scales": {
       "idle": 78,
@@ -180,8 +180,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 421,
-      "controlsWithoutPttDp": 396,
+      "controlsHeightDp": 415,
+      "controlsWithoutPttDp": 390,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -232,7 +232,7 @@
       "strengthPercent": 51,
       "surface": "soft"
     },
-    "verticalOffsetDp": -28
+    "verticalOffsetDp": -22
   },
   "presenceScope": "any-muted",
   "savedAtEpochMs": 1,
@@ -283,5 +283,5 @@
   },
   "theme": "bright",
   "version": 21,
-  "verticalOffsetDp": -43
+  "verticalOffsetDp": -37
 }

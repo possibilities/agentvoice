@@ -2266,3 +2266,41 @@ Draft/checkpoint/binding, rotation, font and animator settings were verified equ
 to the handoff backup. Studio remained foreground; phone release was notified.
 No live call or server operation occurred in this round. Private evidence:
 `/tmp/agentvoice-disconnected-size/`.
+
+## Persona outer clearance — 2026-09-10
+
+Adopted a 6dp inward movement in all four physical layouts, rounding the prior
+5.33dp sampled speaking-stroke estimate upward. Persona size and animation are
+unchanged. Each control block becomes 6dp shorter along the same axis, for both
+PTT-present and hidden modes, preserving the Persona-to-deck trace corridor and
+the buttons' outer edge. Shared padding, button gaps and cutout subtraction are
+unchanged. Landscape handedness continues to mirror placement and use the
+opposite physical production slot for its balanced baseline.
+
+Studio's 126 tests pass; 141 Android JVM tests pass, including corridor/outer-edge
+invariants across portrait/landscape, cutout sides, handedness and PTT visibility.
+Production and Studio builds and both lint checks pass (5m 10s); the final JVM
+regression run passes in 29s. The selected-resource/JNI APK audit passes.
+No renderer or runtime code changes required a new native instrumentation run.
+
+On the authorized S22, captured speaking before/after in all four orientations,
+all four hidden-PTT layouts, and both mirrored landscape sides with/without PTT.
+Visual review found the intended additional outer clearance, retained connecting
+routes and unchanged outer button alignment. These are sequential native poses;
+they do not establish a universal maximum animation envelope or every-frame
+camera avoidance. Thinking's lateral-arm shaping remains a separate queued task.
+
+Installed APKs were hash-verified on device:
+- Production: `7ec1e8b691c03b87e0198b20dca94ae8da322b5c5c3066357d7bd788977fe6a9`.
+- Studio: `983daaa19a1f331c10ad90a0176110ff542c874994ba1494e231a35180eb3dee`.
+
+The latest working draft matched the previous adopted profile at handoff. Only
+the intended twelve geometry values changed; the final draft matches the newly
+adopted profile. The explicit checkpoint and bridge binding remain byte-identical.
+Original portrait/Thinking simulation, PTT visibility, font and animator scale
+were restored. Final verification caught auto-rotate disabled after the review;
+it was explicitly restored and rechecked with the original user rotation before
+phone release. Studio remained foreground and linked at port 4317. Phone release
+was notified. No live voice call, grant mutation or server operation occurred.
+Private screenshots, viewport records and delivery receipt are under
+`/tmp/agentvoice-wake-clearance/phone/`.

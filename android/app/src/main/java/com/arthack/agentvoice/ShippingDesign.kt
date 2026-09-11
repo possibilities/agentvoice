@@ -13,14 +13,14 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "../../../../../../tmp/agentvoice-disconnected-size/adopted-profile.json"
-    const val profileSha256 = "f1a5d01a8bb28935dbe566cf94e7db43fd9ecaa07f3827de5fdee622d6657100"
+    const val profileSource = "../../../../../../tmp/agentvoice-wake-clearance/candidate-profile.json"
+    const val profileSha256 = "984ef47fbf8d03197e82d1c4cca01e99b845ac93a8b78beebd7c8d6b02740d93"
     const val sessionSha256 = "b9f5a583b4387cda4a9f7e1af6749ce3d3a190bcb08af76882c438b15b391dcc"
     val portrait = ShippingLayout(
-        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -43.dp),
+        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -37.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 415, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
+            controlsHeightDp = 409, controlsWithoutPttDp = 390, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -63,7 +63,7 @@ internal object ShippingDesign {
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = 8.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 409, controlsWithoutPttDp = 365, holdSharePercent = 36.4,
+            controlsHeightDp = 403, controlsWithoutPttDp = 359, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -100,13 +100,13 @@ internal object ShippingDesign {
             strengthPercent = 51,
             surface = "soft",
         ),
-        personaSide = "left", horizontalOffsetDp = -44,
+        personaSide = "left", horizontalOffsetDp = -38,
     )
     val portraitReverse = ShippingLayout(
-        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -28.dp),
+        placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -22.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 421, controlsWithoutPttDp = 396, holdSharePercent = 36.4,
+            controlsHeightDp = 415, controlsWithoutPttDp = 390, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -149,7 +149,7 @@ internal object ShippingDesign {
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = 8.dp),
         design = PreviewDesign(
             layout = "studio", header = "none",
-            controlsHeightDp = 427, controlsWithoutPttDp = 365, holdSharePercent = 36.4,
+            controlsHeightDp = 421, controlsWithoutPttDp = 359, holdSharePercent = 36.4,
             traces = PreviewTraces(
                 fadeLengthDp = 80,
                 footSpacingPercent = 200,
@@ -186,7 +186,7 @@ internal object ShippingDesign {
             strengthPercent = 51,
             surface = "soft",
         ),
-        personaSide = "left", horizontalOffsetDp = -42,
+        personaSide = "left", horizontalOffsetDp = -36,
     )
     val sounds = PreviewSounds(
         family = "rocker-13",

@@ -198,4 +198,45 @@ class PreviewOrientationGeometryTest {
         assertEquals(351f, g.deckViewportHeight, .001f)
     }
 
+    @Test fun inwardWakeClearancePreservesTraceCorridorAndOuterButtonEdge() {
+        val spacing = PreviewSpacing(paddingDp = 21)
+        for (portrait in listOf(true, false)) for (reverse in listOf(false, true)) {
+            for (side in listOf("left", "right")) for (ptt in listOf(true, false)) {
+                val cutout = when {
+                    portrait && !reverse -> PreviewCutoutPadding(top = 27f)
+                    portrait -> PreviewCutoutPadding(bottom = 27f)
+                    !reverse -> PreviewCutoutPadding(left = 27f)
+                    else -> PreviewCutoutPadding(right = 27f)
+                }
+                fun geometry(inward: Float): PreviewOrientationGeometry {
+                    val extent = (396 - inward).toInt()
+                    val deck = PreviewControlGeometry(extent, 36.4, 21, ptt)
+                    return previewOrientationGeometry(if (portrait) 360f else 753f,
+                        if (portrait) 753f else 360f, if (portrait) 360f else 780f,
+                        portrait, extent.toFloat(), if (portrait) -30f + inward else 0f,
+                        side, spacing, if (portrait) deck.extentHeightDp else extent.toFloat(),
+                        horizontalOffsetDp = if (side == "left") -40f + inward else 40f - inward,
+                        cutoutPadding = cutout)
+                }
+                val before = geometry(0f); val after = geometry(6f)
+                fun corridor(g: PreviewOrientationGeometry) = when {
+                    portrait -> g.deckY - (g.stageY + g.offsetY + g.diameter / 2f)
+                    side == "left" -> g.deckX - (g.stageX + g.diameter / 2f)
+                    else -> g.stageX + g.diameter / 2f - (g.deckX + g.deckWidth)
+                }
+                assertEquals(corridor(before), corridor(after), .001f)
+                assertEquals(before.diameter, after.diameter, 0f)
+                if (portrait) {
+                    assertEquals(before.deckY + before.deckViewportHeight, after.deckY + after.deckViewportHeight, .001f)
+                    assertEquals(before.deckX, after.deckX, 0f)
+                    assertEquals(before.deckWidth, after.deckWidth, 0f)
+                } else {
+                    assertEquals(if (side == "left") before.deckX + before.deckWidth else before.deckX,
+                        if (side == "left") after.deckX + after.deckWidth else after.deckX, .001f)
+                    assertEquals(before.deckY, after.deckY, 0f)
+                    assertEquals(before.deckViewportHeight, after.deckViewportHeight, 0f)
+                }
+            }
+        }
+    }
 }
