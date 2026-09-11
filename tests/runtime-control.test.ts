@@ -196,7 +196,7 @@ describe("persistent controller and disposable runtime", () => {
         ],
       });
       expect(newCalls.findIndex((call) => call.method === "turn/start")).toBeGreaterThan(
-        newCalls.findIndex((call) => call.method === "mcpServerStatus/list"),
+        newCalls.findIndex((call) => call.method === "mcpServer/tool/call"),
       );
       await until(() => voiceEvents.length === 3);
       expect(voiceEvents.map((event) => event.event)).toEqual([
@@ -282,7 +282,7 @@ describe("persistent controller and disposable runtime", () => {
       expect(
         newCalls.some(
           (call) =>
-            call.method === "mcpServerStatus/list" && call.params.threadId === first.threadId,
+            call.method === "mcpServer/tool/call" && call.params.threadId === first.threadId,
         ),
       ).toBe(true);
       const redial = await controller.redial(mutation("redial-only"));

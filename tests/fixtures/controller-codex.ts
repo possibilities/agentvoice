@@ -8,7 +8,6 @@ const store = join(root, "native-threads.json");
 const threads: Array<Record<string, unknown>> = existsSync(store)
   ? JSON.parse(readFileSync(store, "utf8"))
   : [];
-let config: Record<string, unknown> = {};
 const loaded = new Set<string>();
 const full = existsSync(join(root, "native-permissions.json"))
   ? JSON.parse(readFileSync(join(root, "native-permissions.json"), "utf8"))
@@ -59,12 +58,10 @@ function handle(line: string, send: (text: string) => void) {
     threads.unshift(thread);
     loaded.add(thread.id);
     writeFileSync(store, JSON.stringify(threads));
-    config = params.config ?? {};
     result = { thread, ...full, model: params.model ?? "native-default" };
   }
   if (request.method === "thread/read" || request.method === "thread/resume") {
     if (request.method === "thread/resume") {
-      if (params.config) config = params.config;
       loaded.add(params.threadId);
     }
     result = {
@@ -73,16 +70,24 @@ function handle(line: string, send: (text: string) => void) {
       model: params.model ?? "native-default",
     };
   }
-  if (request.method === "mcpServerStatus/list") {
-    const servers = config["mcp_servers"] as Record<string, { enabled_tools?: string[] }>;
+  if (request.method === "mcpServer/tool/call") {
+    if (existsSync(join(root, "fail-mcp"))) {
+      send(
+        `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32603, message: "control unavailable" } })}\n`,
+      );
+      return;
+    }
     result = {
-      data: Object.entries(servers ?? {}).map(([name, server]) => ({
-        name,
-        runtimeStatus: existsSync(join(root, "fail-mcp")) ? "failed" : "connected",
-        authStatus: "bearerToken",
-        tools: Object.fromEntries((server.enabled_tools ?? []).map((name) => [name, { name }])),
-      })),
-      nextCursor: null,
+      content: [],
+      structuredContent: {
+        protocolVersion: 5,
+        instanceId: "fixture-controller",
+        workspace: root,
+        threadId: params.threadId,
+        generation: 1,
+        runtime: { phase: "starting" },
+        recentOperations: [],
+      },
     };
   }
   if (request.method === "turn/start") {

@@ -1,5 +1,7 @@
-/** Request-scoped mandatory control registration and native catalog readiness. */
+/** Request-scoped mandatory control registration and authenticated native readiness. */
 import { ConfigError } from "./config.ts";
+
+const CONTROL_READINESS_TOOL = "agentvoice_status";
 
 export interface ControlMcpRegistration {
   name: string;
@@ -39,62 +41,37 @@ export async function requireControlMcpReady(
   request: <T = unknown>(method: string, params: unknown, timeout?: number) => Promise<T>,
   threadId: string,
   registration: ControlMcpRegistration,
-  // Stock 0.153.4 snapshots a separate MCP connection set, including other servers
-  // with a 30s default startup timeout. Keep one budget across polling and pages,
-  // inside the controller's 90s activation deadline.
-  timeoutMs = 60_000,
+  timeoutMs = 10_000,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let cursor: string | undefined;
-    const seen = new Set<string>();
-    type Status = {
-      name?: string;
-      runtimeStatus?: string | null;
-      authStatus?: string;
-      tools?: Record<string, unknown>;
-    };
-    const matching: Status[] = [];
-    let entries = 0;
-    for (let page = 0; page < 16; page++) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new Error("AgentVoice control MCP readiness timed out");
-      const result = await request<{ data?: Status[]; nextCursor?: string | null }>(
-        "mcpServerStatus/list",
-        { threadId, detail: "toolsAndAuthOnly", limit: 64, ...(cursor ? { cursor } : {}) },
-        remaining,
-      );
-      if (!Array.isArray(result.data)) throw new Error("Control MCP returned a malformed catalog");
-      entries += result.data.length;
-      if (entries > 1024) throw new Error("Control MCP catalog exceeded its entry limit");
-      matching.push(...result.data.filter((entry) => entry.name === registration.name));
-      if (!result.nextCursor) break;
-      if (seen.has(result.nextCursor))
-        throw new Error("Control MCP status pagination repeated a cursor");
-      if (page === 15) throw new Error("Control MCP catalog exceeded its page limit");
-      cursor = result.nextCursor;
-      seen.add(cursor);
-    }
-    if (matching.length > 1)
-      throw new Error("Control MCP catalog has duplicate reserved server entries");
-    const status = matching[0];
-    if (status && status.runtimeStatus !== "starting" && status.runtimeStatus !== "notStarted") {
-      const tools = status.tools;
-      if (
-        status.runtimeStatus !== "connected" ||
-        status.authStatus !== "bearerToken" ||
-        !record(tools) ||
-        Object.keys(tools).length !== registration.tools.length ||
-        registration.tools.some((name) => !Object.hasOwn(tools, name))
-      )
-        throw new Error(
-          "AgentVoice control MCP connected without authenticated readiness and its required tool catalog",
-        );
-      return;
-    }
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(50, Math.max(0, deadline - Date.now()))),
-    );
-  }
-  throw new Error("AgentVoice control MCP is not ready; runtime startup can be retried");
+  if (!registration.tools.includes(CONTROL_READINESS_TOOL))
+    throw new Error("AgentVoice control MCP has no readiness tool");
+
+  // A thread-scoped direct call uses the published MCP connection. Success proves
+  // that native Codex authenticated to this call's unique loopback server and
+  // discovered its statically registered, enabled tool set. mcpServerStatus/list
+  // rebuilds the global MCP inventory and waits for unrelated servers.
+  const result = await request<{
+    isError?: boolean;
+    structuredContent?: unknown;
+  }>(
+    "mcpServer/tool/call",
+    {
+      threadId,
+      server: registration.name,
+      tool: CONTROL_READINESS_TOOL,
+      arguments: {},
+    },
+    timeoutMs,
+  );
+  const status = result?.structuredContent;
+  if (
+    result?.isError === true ||
+    !record(status) ||
+    !Number.isSafeInteger(status["protocolVersion"]) ||
+    typeof status["instanceId"] !== "string" ||
+    status["instanceId"].length === 0 ||
+    !record(status["runtime"]) ||
+    !Array.isArray(status["recentOperations"])
+  )
+    throw new Error("AgentVoice control MCP returned an invalid authenticated readiness result");
 }
