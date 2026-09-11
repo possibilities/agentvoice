@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Show in Menu Bar at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
+    private let loginItem = NSMenuItem(title: "Open AgentVoice at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let probe = WaitingServerProbe()
     private let login = LoginItemController()
     private var probeRevision = 0

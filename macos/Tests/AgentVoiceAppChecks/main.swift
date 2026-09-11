@@ -25,7 +25,7 @@ require(parseLaunchctlState("") == .unavailable, "empty launchd output was accep
 require(
     LoginItemPresentation(state: .disabled)
         == LoginItemPresentation(
-            title: "Show in Menu Bar at Login",
+            title: "Open AgentVoice at Login",
             checked: false,
             enabled: true,
             action: .register
@@ -35,7 +35,7 @@ require(
 require(
     LoginItemPresentation(state: .enabled)
         == LoginItemPresentation(
-            title: "Show in Menu Bar at Login",
+            title: "Open AgentVoice at Login",
             checked: true,
             enabled: true,
             action: .unregister

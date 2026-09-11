@@ -70,12 +70,12 @@ public struct LoginItemPresentation: Equatable, Sendable {
     public init(state: LoginItemState) {
         switch state {
         case .disabled:
-            title = "Show in Menu Bar at Login"
+            title = "Open AgentVoice at Login"
             checked = false
             enabled = true
             action = .register
         case .enabled:
-            title = "Show in Menu Bar at Login"
+            title = "Open AgentVoice at Login"
             checked = true
             enabled = true
             action = .unregister

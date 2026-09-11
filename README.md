@@ -404,7 +404,7 @@ caller cwd. On macOS, it also installs the signed native menu bundle at
 `~/Applications/AgentVoice.app`, then installs
 `~/Library/LaunchAgents/io.arthack.agentvoice.server.plist` and bootstraps the
 waiting server in the logged-in user's GUI domain. The menu app and LaunchAgent
-have independent login lifecycles: **Show in Menu Bar at Login** controls only the
+have independent login lifecycles: **Open AgentVoice at Login** controls only the
 menu app, while the LaunchAgent keeps its existing RunAtLoad and KeepAlive policy.
 Quitting or disabling the menu app never ends a call. Rerunning installation
 restarts the server job and does end any active call. The job runs while logged

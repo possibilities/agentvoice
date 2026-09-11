@@ -10,7 +10,7 @@ microphone identity retained by [0027](0027-service-microphone-identity.md) and
 The macOS installer places a signed `AgentVoice.app` in the user's Applications
 directory. It is an AppKit menu-bar app with the agent activation policy and a
 native status item. The first surface is intentionally small: the current
-launchd state of the default waiting server, **Show in Menu Bar at Login**, and
+launchd state of the default waiting server, **Open AgentVoice at Login**, and
 **Quit AgentVoice Menu**. A launchd `running` state says only that the waiting
 job is running; it is not a Codex, account, media, or call readiness claim.
 
