@@ -5,6 +5,7 @@ import {
   disableNetwork,
   loadNetworkSettings,
 } from "./credentials.ts";
+import { PairedDevices } from "./pairing.ts";
 import { createGrantQr, renderGrantQr } from "./qr.ts";
 
 export const NETWORK_USAGE = `agentvoice network configure --endpoint wss://host:port/v2/client --port <loopback-port>
@@ -19,6 +20,7 @@ Network configuration activates on the next default server restart. The backend
 binds only 127.0.0.1; use a dedicated tailnet-only TLS reverse proxy. Never Funnel.
 Device grants are private reusable credentials valid for 30 days. Export files and
 QR codes contain their secret; only the explicit network qr command prints one.
+Native Pair phone enrollment instead creates a durable public-key device identity.
 Revocation disconnects active devices within 10 seconds. Existing calls are not resumed automatically.`;
 
 export type ParsedNetworkCommand =
@@ -144,9 +146,15 @@ export function networkCommand(
   } else if (command.action === "status") {
     write(JSON.stringify(loadNetworkSettings(stateDir) ?? null));
   } else if (command.action === "list") {
-    write(JSON.stringify(new DeviceCredentials(stateDir).list(), null, 2));
+    const legacy = new DeviceCredentials(stateDir).list().map((record) => ({
+      kind: "legacy-grant" as const,
+      ...record,
+    }));
+    write(JSON.stringify([...legacy, ...new PairedDevices(stateDir).list()], null, 2));
   } else if (command.action === "revoke") {
-    new DeviceCredentials(stateDir).revoke(command.id);
+    const credentials = new DeviceCredentials(stateDir);
+    const paired = new PairedDevices(stateDir);
+    if (!paired.revoke(command.id)) credentials.revoke(command.id);
     write("Device revoked; live connections close within 10 seconds. Its record is retained.");
   }
 }

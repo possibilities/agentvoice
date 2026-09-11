@@ -193,7 +193,7 @@ async function fixture(timings = { interval: 20, timeout: 1000 }) {
   const id = credentials.grant("test", endpoint, path);
   const profile = loadConnectionProfile(path);
   const gateway = new NetworkGateway(root, server.path, { version: 1, endpoint, port: 0 }, timings);
-  gateway.start();
+  await gateway.start();
   const sockets: WebSocket[] = [];
   async function open(pong = true) {
     const frames: Record<string, unknown>[] = [];
