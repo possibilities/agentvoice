@@ -69,8 +69,13 @@ bun run /path/to/agentvoice/src/main.ts server
 bun run /path/to/agentvoice/src/main.ts
 ```
 
-On macOS, installation starts the default server as a user LaunchAgent. Run
-`agentvoice` whenever you want a call. For manual use, run `agentvoice server`.
+On macOS, installation adds a native AgentVoice menu app and starts the default
+server as a separate user LaunchAgent. The menu can show at login and reports the
+LaunchAgent's job state without starting a call or probing Codex, authentication,
+or audio. Quitting the menu leaves the server and any Android or terminal call
+running. Run `agentvoice` whenever you want a call. For manual use, run
+`agentvoice server`. See [macOS menu app](docs/macos-app.md) for its build,
+installation, and future native-UI boundary.
 To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, permission, role and conversation-selection flags belong to
@@ -388,16 +393,23 @@ voice session; live voice compatibility is a separate check.
 
 The installer requires Bun 1.3+, an executable stock Codex (`CODEX_PATH` or PATH),
 a C11 compiler (Zig, clang or cc), and a clean checkout with the AgentVoice GitHub
-origin. Codex is checked for presence, not invoked; login and realtime compatibility
-are separate runtime prerequisites. It runs `bun install --frozen-lockfile`, builds
-native audio to a temporary file, then atomically links `~/.local/bin/agentvoice`
+origin. A full macOS install also requires the Swift command-line tools, `iconutil`,
+and `codesign`. Codex is checked for presence, not invoked; login and realtime
+compatibility are separate runtime prerequisites. It runs
+`bun install --frozen-lockfile`, builds native audio to a temporary file, then
+atomically links `~/.local/bin/agentvoice`
 directly to `src/main.ts` and records the commit in
 `~/.local/state/agentvoice/deployed-sha` (`XDG_STATE_HOME` honored). The link preserves
-caller cwd. On macOS, it then installs `~/Library/LaunchAgents/io.arthack.agentvoice.server.plist`
-and bootstraps the waiting server in the logged-in user's GUI domain. Rerunning
-installation restarts that job and ends any active call. The job runs while
-logged in; sleep suspends it. A manual default server must be stopped before
-installing, since it owns the same socket.
+caller cwd. On macOS, it also installs the signed native menu bundle at
+`~/Applications/AgentVoice.app`, then installs
+`~/Library/LaunchAgents/io.arthack.agentvoice.server.plist` and bootstraps the
+waiting server in the logged-in user's GUI domain. The menu app and LaunchAgent
+have independent login lifecycles: **Show in Menu Bar at Login** controls only the
+menu app, while the LaunchAgent keeps its existing RunAtLoad and KeepAlive policy.
+Quitting or disabling the menu app never ends a call. Rerunning installation
+restarts the server job and does end any active call. The job runs while logged
+in; sleep suspends it. A manual default server must be stopped before installing,
+since it owns the same socket.
 
 The plist pins absolute Bun and source entrypoint paths, uses the user's home
 as launch cwd, and captures PATH plus configured XDG, CODEX_HOME, CODEX_PATH and
@@ -421,9 +433,11 @@ any stale `.install-lock`; check for a running installer before manual removal.
 If another command shadows the link on PATH, installation warns without deleting it.
 
 For disposable tests or alternate destinations, set absolute
-`AGENTVOICE_INSTALL_BIN_DIR` and `AGENTVOICE_INSTALL_STATE_DIR` paths, and pass
-`--command-only` to avoid touching the user's LaunchAgent. These two overrides
-move only command publication and its receipt; service state follows XDG_STATE_HOME.
+`AGENTVOICE_INSTALL_BIN_DIR`, `AGENTVOICE_INSTALL_STATE_DIR`, and on macOS
+`AGENTVOICE_INSTALL_APP_DIR` paths. Pass `--command-only` to avoid building or
+installing the menu app and touching the user's LaunchAgent. The bin and state
+overrides move only command publication and its receipt; service state follows
+XDG_STATE_HOME.
 Non-macOS installations publish the command only. No prompts, skills, credentials,
 Codex configuration or shell profiles are changed, and installation never starts
 the TUI or a voice call. An unrelated or edited plist is refused. A service failure
@@ -1020,8 +1034,9 @@ does not restore the retired remote/resident implementation. Remove a retired `r
 your chosen config before launching. Other unknown retired keys are rejected
 by strict config validation.
 
-The explicit installer manages only its `io.arthack.agentvoice.server` LaunchAgent.
-Normal launches never install services, migrate history or clean private state.
+The explicit installer manages the native menu bundle and only its
+`io.arthack.agentvoice.server` LaunchAgent. Normal launches never install apps or
+services, migrate history or clean private state.
 Previously installed legacy LaunchAgents, old logs, pairings,
 `thread.json` and `workers.json` are untouched and unused by this source.
 An old running service will not honor the new per-thread lock: stop/migrate it
@@ -1254,13 +1269,17 @@ The installer renames the previously managed `dev.agentvoice.default` service to
 
 ### macOS microphone permission for the service
 
-The installer packages its own copy of Bun as a signed `AgentVoice.app` below
+The waiting service uses a private runtime bundle, not the visible menu app. The
+installer packages its own copy of Bun as a signed `AgentVoice.app` below
 `~/.local/state/agentvoice/default/service/runtime/` (honoring XDG state).
 It preserves Bun's runtime entitlements and adds microphone access plus an
 AgentVoice usage description. The LaunchAgent and its runtime children use this
 executable; the Homebrew Bun installation is never modified. A stable app signing
 identity is retained across installer updates, and modified bundles are refused.
 Failed service updates restore the previous runtime before restarting its job.
+Its `io.arthack.agentvoice` identity remains distinct from the menu app's
+`io.arthack.agentvoice.menu` identity so existing client microphone grants remain
+stable.
 
 On the first voice call, allow AgentVoice microphone access in the macOS prompt.
 If previously denied, enable AgentVoice under System Settings → Privacy & Security

@@ -96,10 +96,17 @@ timestamp-and-UUID directory name inside the workspace base. Created initially
 when absent, then selected afresh for each default call; file edits do not change
 selection and active calls retain their selected directory.
 
-**LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that starts
-the waiting default server at login and restarts it on exit. Its installer-owned
-signed AgentVoice.app executable supplies the client's macOS microphone identity. The server opens no audio
-or Codex child until a frontend calls.
+**LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that
+starts the waiting default server at login and restarts it on exit. Its private,
+installer-owned runtime bundle supplies the native client's stable macOS microphone
+identity; it is distinct from the visible menu app. The server opens no audio or
+Codex child until a frontend calls.
+
+**Menu app** — The installed native macOS `AgentVoice.app`: a menu-bar status
+surface and independently registered main-app login item. It observes the default
+LaunchAgent without becoming a frontend or another server supervisor. Quitting
+it or disabling its login item leaves the waiting server and any call running.
+_Avoid_: Server (the LaunchAgent owns that lifecycle), client (it owns no call/media).
 
 **Full access** — Optional launch override: --allow-full-access or file
 allow-full-access:true explicitly selects

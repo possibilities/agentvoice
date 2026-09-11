@@ -10,8 +10,16 @@ owns the current source map and recording/attachment implementation guidance.
 
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt, followed by
-  default LaunchAgent installation on macOS. --command-only skips service management.
+  the native menu app and default LaunchAgent installation on macOS. --command-only
+  skips both app and service management.
   No configuration, prompt/skill setup or legacy command cleanup.
+- macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
+  registration, read-only launchd state and signed application packaging. The menu
+  is not a frontend or server supervisor; quitting it must not end a call. Follow
+  AgentNotify for future native panels, windows and shared SwiftUI content.
+- src/macos-app.ts: ownership, signing, source-revision and running-process checks
+  for atomic menu app installation. Keep its bundle identity distinct from the
+  private microphone-entitled Bun runtime below AgentVoice state.
 - scripts/install-android*: clean-checkout ARM64 standalone build plus an explicit
   SSH deployment to prepared Termux. Keep the target and receipt ownership-correlated,
   stage and verify before atomic publication, and never install phone packages,
@@ -246,8 +254,9 @@ The LaunchAgent label is `io.arthack.agentvoice.server`; explicit installation
 retires only the ownership-verified former `dev.agentvoice.default` job.
 
 
-The macOS service uses the installer-owned signed Bun copy in
-`default/service/runtime/AgentVoice.app`, preserving Bun entitlements and adding
+The macOS service uses the installer-owned private signed Bun copy in
+`default/service/runtime/AgentVoice.app`, distinct from the user-facing menu app.
+It preserves Bun entitlements and adds
 `com.apple.security.device.audio-input` plus NSMicrophoneUsageDescription. Never
 re-sign Homebrew Bun or write TCC grants. Keep the bundle's stable signing identity,
 receipt checks and transactional rollback. Restart validates the persisted bundle

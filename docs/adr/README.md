@@ -55,6 +55,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
 | [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
 | [0043: Adapt delegation to the conversation and the work](0043-adaptive-conversation-first-delegation.md) | Accepted | Direct or delegated read-only work/thinking, useful parallelism, explicit handoffs and direct call controls. |
+| [0044: A native macOS menu app observes the waiting server](0044-native-macos-menu-app.md) | Accepted | The AppKit login item stays independent from LaunchAgent and call lifetime. |
 
 ## Identifier history
 
