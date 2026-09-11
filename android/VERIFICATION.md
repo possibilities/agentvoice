@@ -2441,3 +2441,11 @@ Production remains installed at
 this audition round did not install/launch production, touch its grant or restart
 the server. No emulator was created. The temporary, conversation-only permission
 to use a plugged-in phone does not change the standing repository handoff rule.
+
+Independent icon-expert screenshot review prefers Phosphor Bold for the mechanical
+style, then Fill for tiny Halo clarity. No fit/clipping blocker was found in the
+inspected portraits and Bold landscape. A small partial left-eye crescent remains
+in the Bold muted Robot; this is a polishing candidate if that pair is selected,
+not a Studio-audition blocker. Speaking profiles' square can suggest stop/status
+and its waves can suggest activity; do not treat that concept as a settled
+production mute-control design. Explicit audio labels and on/off states remain.
