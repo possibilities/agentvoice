@@ -131,6 +131,16 @@ when the phone is available again. Report any restoration problem immediately.
   Use --command-only for command publication fixtures; it skips both the app and
   LaunchAgent. Never run live launchctl in tests.
 
+A build or worktree commit is not delivery. After a verified desktop behavior
+change is committed, integrate it into the clean canonical local `main`, run the
+full installer from that checkout, open or relaunch the installed menu app, and
+verify that local `main`, the installed app source revision, deployed-SHA receipt,
+and running executable all identify the delivery commit. Coordinate the service
+window and prove the default frontend idle immediately before installation because
+a full install restarts the LaunchAgent and ends a call. Quit only the exact menu
+app when replacement requires it; do not terminate a call to make room for an app
+update. Preserve Studio, phone, grants, and unrelated services.
+
 ## Source map
 
 Read [architecture and source ownership](docs/architecture.md) before editing a
