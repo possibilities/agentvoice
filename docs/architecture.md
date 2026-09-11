@@ -174,7 +174,11 @@ owns the current source map and recording/attachment implementation guidance.
 - src/control/: shared Zod contract/dispatch, private UDS NDJSON server,
   loopback Streamable HTTP MCP projection, and private live-controller discovery
   for the explicit `mcp-config` export and local attachment bootstrap. Keep the
-  MCP and Unix control operations semantically identical.
+  MCP and Unix control operations semantically identical. Runtime readiness uses
+  one read-only, thread-scoped `agentvoice_status` tool call to prove the unique
+  authenticated server and its statically registered enabled catalog. Never gate
+  voice startup on `mcpServerStatus/list`: native Codex rebuilds the global MCP
+  inventory for that request and waits for unrelated servers.
 - src/mailbox/: verified direct-child lifecycle observation, call-owned completion
   metadata and count-only wake-ups. Each child terminal turn immediately submits
   a named standalone tool output through native turn/start; multiple pending
