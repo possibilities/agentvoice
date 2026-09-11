@@ -22,66 +22,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 403,
-      "controlsWithoutPttDp": 359,
-      "header": "none",
-      "hold": "rocker",
-      "holdSharePercent": 36.4,
-      "layout": "studio",
-      "mute": "rockers",
-      "spacing": {
-        "channelGapDp": 18,
-        "edgeClearancePercent": 200,
-        "paddingDp": 21,
-        "pushGapDp": 18,
-        "sectionGapDp": 4,
-        "sideMarginPercent": 48
-      },
-      "traces": {
-        "fadeLengthDp": 80,
-        "footSpacingPercent": 200,
-        "glowPercent": 67,
-        "pattern": "splayed",
-        "personaSpacingPercent": 98,
-        "reachDp": -9,
-        "stancePercent": 101,
-        "tipOpacityPercent": 0,
-        "weightPercent": 250
-      }
-    },
-    "halo": {
-      "colors": {
-        "idle": "#f0f2e9",
-        "listening": "#d4ff72",
-        "speaking": "#bbaaff"
-      },
-      "containedSizePercent": 81,
-      "idleBreathingPercent": 95,
-      "listeningPulsePercent": 68,
-      "ringSpreadPercent": 80,
-      "speakingMotionPercent": 68,
-      "variant": "contained"
-    },
-    "horizontalOffsetDp": -38,
-    "personaSide": "left",
-    "scales": {
-      "idle": 78,
-      "listening": 56,
-      "speaking": 78
-    },
-    "spirit": {
-      "persona": "follow",
-      "strengthPercent": 51,
-      "surface": "soft"
-    },
-    "verticalOffsetDp": 8
-  },
-  "landscapeReverse": {
-    "appearanceOverrides": [],
-    "design": {
-      "composition": "traces",
-      "controlsHeightDp": 421,
-      "controlsWithoutPttDp": 359,
+      "controlsHeightDp": 401,
+      "controlsWithoutPttDp": 357,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -134,12 +76,70 @@
     },
     "verticalOffsetDp": 8
   },
+  "landscapeReverse": {
+    "appearanceOverrides": [],
+    "design": {
+      "composition": "traces",
+      "controlsHeightDp": 419,
+      "controlsWithoutPttDp": 357,
+      "header": "none",
+      "hold": "rocker",
+      "holdSharePercent": 36.4,
+      "layout": "studio",
+      "mute": "rockers",
+      "spacing": {
+        "channelGapDp": 18,
+        "edgeClearancePercent": 200,
+        "paddingDp": 21,
+        "pushGapDp": 18,
+        "sectionGapDp": 4,
+        "sideMarginPercent": 48
+      },
+      "traces": {
+        "fadeLengthDp": 80,
+        "footSpacingPercent": 200,
+        "glowPercent": 67,
+        "pattern": "splayed",
+        "personaSpacingPercent": 98,
+        "reachDp": -9,
+        "stancePercent": 101,
+        "tipOpacityPercent": 0,
+        "weightPercent": 250
+      }
+    },
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "containedSizePercent": 81,
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "horizontalOffsetDp": -34,
+    "personaSide": "left",
+    "scales": {
+      "idle": 78,
+      "listening": 56,
+      "speaking": 78
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "verticalOffsetDp": 8
+  },
   "portrait": {
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 409,
-      "controlsWithoutPttDp": 390,
+      "controlsHeightDp": 407,
+      "controlsWithoutPttDp": 388,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -190,14 +190,14 @@
       "strengthPercent": 51,
       "surface": "soft"
     },
-    "verticalOffsetDp": -37
+    "verticalOffsetDp": -35
   },
   "portraitReverse": {
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 415,
-      "controlsWithoutPttDp": 390,
+      "controlsHeightDp": 413,
+      "controlsWithoutPttDp": 388,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -248,7 +248,7 @@
       "strengthPercent": 51,
       "surface": "soft"
     },
-    "verticalOffsetDp": -22
+    "verticalOffsetDp": -20
   },
   "sounds": {
     "family": "rocker-13",
@@ -256,9 +256,9 @@
   },
   "source": {
     "profile": {
-      "path": "../../../../../../tmp/agentvoice-wake-clearance/candidate-profile.json",
-      "sha256": "984ef47fbf8d03197e82d1c4cca01e99b845ac93a8b78beebd7c8d6b02740d93",
-      "text": "{\n  \"appearanceOverrides\": [],\n  \"connectedArtboardScale\": 1.9,\n  \"design\": {\n    \"composition\": \"traces\",\n    \"controlsHeightDp\": 409,\n    \"controlsWithoutPttDp\": 390,\n    \"header\": \"none\",\n    \"hold\": \"rocker\",\n    \"holdSharePercent\": 36.4,\n    \"layout\": \"studio\",\n    \"mute\": \"rockers\",\n    \"spacing\": {\n      \"channelGapDp\": 18,\n      \"edgeClearancePercent\": 200,\n      \"paddingDp\": 21,\n      \"pushGapDp\": 18,\n      \"sectionGapDp\": 4,\n      \"sideMarginPercent\": 48\n    },\n    \"traces\": {\n      \"fadeLengthDp\": 80,\n      \"footSpacingPercent\": 200,\n      \"glowPercent\": 67,\n      \"pattern\": \"splayed\",\n      \"personaSpacingPercent\": 98,\n      \"reachDp\": -9,\n      \"stancePercent\": 101,\n      \"tipOpacityPercent\": 0,\n      \"weightPercent\": 250\n    }\n  },\n  \"disconnectedArtboardScale\": 1.9,\n  \"halo\": {\n    \"colors\": {\n      \"idle\": \"#f0f2e9\",\n      \"listening\": \"#d4ff72\",\n      \"speaking\": \"#bbaaff\"\n    },\n    \"containedSizePercent\": 77,\n    \"idleBreathingPercent\": 95,\n    \"listeningPulsePercent\": 68,\n    \"ringSpreadPercent\": 80,\n    \"speakingMotionPercent\": 68,\n    \"variant\": \"contained\"\n  },\n  \"horizontalOffsetDp\": 0,\n  \"icons\": {\n    \"channels\": \"noun-icons\",\n    \"push\": \"current\"\n  },\n  \"landscape\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 403,\n      \"controlsWithoutPttDp\": 359,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 81,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": -38,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": 8\n  },\n  \"landscapeReverse\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 421,\n      \"controlsWithoutPttDp\": 359,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 81,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": -36,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": 8\n  },\n  \"launcher\": \"relay-aperture\",\n  \"mutedPresence\": \"tide\",\n  \"mutedTuning\": {\n    \"breathPercent\": 100,\n    \"brightnessPercent\": -19,\n    \"cycleSeconds\": 13,\n    \"driftPercent\": 196,\n    \"motion\": \"ripple\",\n    \"textSizeSp\": 32\n  },\n  \"personaSide\": \"left\",\n  \"portraitReverse\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 415,\n      \"controlsWithoutPttDp\": 390,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 77,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": 0,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": -22\n  },\n  \"presenceScope\": \"any-muted\",\n  \"savedAtEpochMs\": 1,\n  \"scaleMultipliers\": {\n    \"idle\": 0.78,\n    \"listening\": 0.56,\n    \"speaking\": 0.78\n  },\n  \"sharedAppearance\": {\n    \"glowPercent\": 67,\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"traces\": {\n      \"fadeLengthDp\": 80,\n      \"footSpacingPercent\": 200,\n      \"pattern\": \"splayed\",\n      \"personaSpacingPercent\": 98,\n      \"reachDp\": -9,\n      \"stancePercent\": 101,\n      \"tipOpacityPercent\": 0,\n      \"weightPercent\": 250\n    }\n  },\n  \"showPushToTalk\": true,\n  \"sounds\": {\n    \"family\": \"rocker-13\",\n    \"volumePercent\": 60\n  },\n  \"spirit\": {\n    \"persona\": \"follow\",\n    \"strengthPercent\": 51,\n    \"surface\": \"soft\"\n  },\n  \"theme\": \"bright\",\n  \"version\": 21,\n  \"verticalOffsetDp\": -37\n}\n"
+      "path": "../../../../../../tmp/agentvoice-clearance-refinement/candidate-profile.json",
+      "sha256": "3e0bdf2f49f6912d9b4e3b4fd5a13ff38491d96e369f43a5e7c5d3bea35a63e6",
+      "text": "{\n  \"appearanceOverrides\": [],\n  \"connectedArtboardScale\": 1.9,\n  \"design\": {\n    \"composition\": \"traces\",\n    \"controlsHeightDp\": 407,\n    \"controlsWithoutPttDp\": 388,\n    \"header\": \"none\",\n    \"hold\": \"rocker\",\n    \"holdSharePercent\": 36.4,\n    \"layout\": \"studio\",\n    \"mute\": \"rockers\",\n    \"spacing\": {\n      \"channelGapDp\": 18,\n      \"edgeClearancePercent\": 200,\n      \"paddingDp\": 21,\n      \"pushGapDp\": 18,\n      \"sectionGapDp\": 4,\n      \"sideMarginPercent\": 48\n    },\n    \"traces\": {\n      \"fadeLengthDp\": 80,\n      \"footSpacingPercent\": 200,\n      \"glowPercent\": 67,\n      \"pattern\": \"splayed\",\n      \"personaSpacingPercent\": 98,\n      \"reachDp\": -9,\n      \"stancePercent\": 101,\n      \"tipOpacityPercent\": 0,\n      \"weightPercent\": 250\n    }\n  },\n  \"disconnectedArtboardScale\": 1.9,\n  \"halo\": {\n    \"colors\": {\n      \"idle\": \"#f0f2e9\",\n      \"listening\": \"#d4ff72\",\n      \"speaking\": \"#bbaaff\"\n    },\n    \"containedSizePercent\": 77,\n    \"idleBreathingPercent\": 95,\n    \"listeningPulsePercent\": 68,\n    \"ringSpreadPercent\": 80,\n    \"speakingMotionPercent\": 68,\n    \"variant\": \"contained\"\n  },\n  \"horizontalOffsetDp\": 0,\n  \"icons\": {\n    \"channels\": \"noun-icons\",\n    \"push\": \"current\"\n  },\n  \"landscape\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 401,\n      \"controlsWithoutPttDp\": 357,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 81,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": -36,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": 8\n  },\n  \"landscapeReverse\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 419,\n      \"controlsWithoutPttDp\": 357,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 81,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": -34,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": 8\n  },\n  \"launcher\": \"relay-aperture\",\n  \"mutedPresence\": \"tide\",\n  \"mutedTuning\": {\n    \"breathPercent\": 100,\n    \"brightnessPercent\": -19,\n    \"cycleSeconds\": 13,\n    \"driftPercent\": 196,\n    \"motion\": \"ripple\",\n    \"textSizeSp\": 32\n  },\n  \"personaSide\": \"left\",\n  \"portraitReverse\": {\n    \"appearanceOverrides\": [],\n    \"design\": {\n      \"composition\": \"traces\",\n      \"controlsHeightDp\": 413,\n      \"controlsWithoutPttDp\": 388,\n      \"header\": \"none\",\n      \"hold\": \"rocker\",\n      \"holdSharePercent\": 36.4,\n      \"layout\": \"studio\",\n      \"mute\": \"rockers\",\n      \"spacing\": {\n        \"channelGapDp\": 18,\n        \"edgeClearancePercent\": 200,\n        \"paddingDp\": 21,\n        \"pushGapDp\": 18,\n        \"sectionGapDp\": 4,\n        \"sideMarginPercent\": 48\n      },\n      \"traces\": {\n        \"fadeLengthDp\": 80,\n        \"footSpacingPercent\": 200,\n        \"glowPercent\": 67,\n        \"pattern\": \"splayed\",\n        \"personaSpacingPercent\": 98,\n        \"reachDp\": -9,\n        \"stancePercent\": 101,\n        \"tipOpacityPercent\": 0,\n        \"weightPercent\": 250\n      }\n    },\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"containedSizePercent\": 77,\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"horizontalOffsetDp\": 0,\n    \"personaSide\": \"left\",\n    \"scales\": {\n      \"idle\": 78,\n      \"listening\": 56,\n      \"speaking\": 78\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"verticalOffsetDp\": -20\n  },\n  \"presenceScope\": \"any-muted\",\n  \"savedAtEpochMs\": 1,\n  \"scaleMultipliers\": {\n    \"idle\": 0.78,\n    \"listening\": 0.56,\n    \"speaking\": 0.78\n  },\n  \"sharedAppearance\": {\n    \"glowPercent\": 67,\n    \"halo\": {\n      \"colors\": {\n        \"idle\": \"#f0f2e9\",\n        \"listening\": \"#d4ff72\",\n        \"speaking\": \"#bbaaff\"\n      },\n      \"idleBreathingPercent\": 95,\n      \"listeningPulsePercent\": 68,\n      \"ringSpreadPercent\": 80,\n      \"speakingMotionPercent\": 68,\n      \"variant\": \"contained\"\n    },\n    \"spirit\": {\n      \"persona\": \"follow\",\n      \"strengthPercent\": 51,\n      \"surface\": \"soft\"\n    },\n    \"traces\": {\n      \"fadeLengthDp\": 80,\n      \"footSpacingPercent\": 200,\n      \"pattern\": \"splayed\",\n      \"personaSpacingPercent\": 98,\n      \"reachDp\": -9,\n      \"stancePercent\": 101,\n      \"tipOpacityPercent\": 0,\n      \"weightPercent\": 250\n    }\n  },\n  \"showPushToTalk\": true,\n  \"sounds\": {\n    \"family\": \"rocker-13\",\n    \"volumePercent\": 60\n  },\n  \"spirit\": {\n    \"persona\": \"follow\",\n    \"strengthPercent\": 51,\n    \"surface\": \"soft\"\n  },\n  \"theme\": \"bright\",\n  \"version\": 21,\n  \"verticalOffsetDp\": -35\n}\n"
     },
     "session": {
       "kind": "profile",

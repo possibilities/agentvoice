@@ -2304,3 +2304,26 @@ phone release. Studio remained foreground and linked at port 4317. Phone release
 was notified. No live voice call, grant mutation or server operation occurred.
 Private screenshots, viewport records and delivery receipt are under
 `/tmp/agentvoice-wake-clearance/phone/`.
+
+### Clearance refinement after operator review
+
+The operator requested a little more outer clearance, explicitly retaining circle
+size. Added another 2dp inward (8dp total from the original design) and shortened
+both control extents another 2dp in all four slots. Exactly twelve numeric profile
+values changed; Persona size/animation and all appearance/padding settings remain.
+Builds, both lint checks and 141 JVM tests pass (4m 46s); the exact Production APK
+passes the selected-resource/JNI audit. An initial audit invocation selected the
+old default release artifact; rerunning with the intended Production path passed.
+
+Native speaking captures in all four layouts show the refinement. Both apps were
+installed and hash-verified:
+- Production: `be6737b7a624d85d529fa57f90f0685d795aa7447b1497226ccf2487a8dfcd3e`.
+- Studio: `143567799c0c6a6f2087432ddcf7b6cc154089cc54dd8776c4fdd367ef226bd8`.
+
+Fresh handoff backup matched the previous production draft; the final draft
+matches the refinement. Explicit checkpoint/binding remain byte-identical and
+all captured system settings match, including auto-rotate. Speaking simulation
+was restored. The activity reopened in portrait rather than the initial reverse
+landscape; auto-rotation was restored and this was disclosed in the release
+notification. No phone operations followed release. Private evidence is under
+`/tmp/agentvoice-clearance-refinement/phone/`.

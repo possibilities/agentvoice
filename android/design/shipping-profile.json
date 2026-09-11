@@ -3,8 +3,8 @@
   "connectedArtboardScale": 1.9,
   "design": {
     "composition": "traces",
-    "controlsHeightDp": 409,
-    "controlsWithoutPttDp": 390,
+    "controlsHeightDp": 407,
+    "controlsWithoutPttDp": 388,
     "header": "none",
     "hold": "rocker",
     "holdSharePercent": 36.4,
@@ -53,66 +53,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 403,
-      "controlsWithoutPttDp": 359,
-      "header": "none",
-      "hold": "rocker",
-      "holdSharePercent": 36.4,
-      "layout": "studio",
-      "mute": "rockers",
-      "spacing": {
-        "channelGapDp": 18,
-        "edgeClearancePercent": 200,
-        "paddingDp": 21,
-        "pushGapDp": 18,
-        "sectionGapDp": 4,
-        "sideMarginPercent": 48
-      },
-      "traces": {
-        "fadeLengthDp": 80,
-        "footSpacingPercent": 200,
-        "glowPercent": 67,
-        "pattern": "splayed",
-        "personaSpacingPercent": 98,
-        "reachDp": -9,
-        "stancePercent": 101,
-        "tipOpacityPercent": 0,
-        "weightPercent": 250
-      }
-    },
-    "halo": {
-      "colors": {
-        "idle": "#f0f2e9",
-        "listening": "#d4ff72",
-        "speaking": "#bbaaff"
-      },
-      "containedSizePercent": 81,
-      "idleBreathingPercent": 95,
-      "listeningPulsePercent": 68,
-      "ringSpreadPercent": 80,
-      "speakingMotionPercent": 68,
-      "variant": "contained"
-    },
-    "horizontalOffsetDp": -38,
-    "personaSide": "left",
-    "scales": {
-      "idle": 78,
-      "listening": 56,
-      "speaking": 78
-    },
-    "spirit": {
-      "persona": "follow",
-      "strengthPercent": 51,
-      "surface": "soft"
-    },
-    "verticalOffsetDp": 8
-  },
-  "landscapeReverse": {
-    "appearanceOverrides": [],
-    "design": {
-      "composition": "traces",
-      "controlsHeightDp": 421,
-      "controlsWithoutPttDp": 359,
+      "controlsHeightDp": 401,
+      "controlsWithoutPttDp": 357,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -165,6 +107,64 @@
     },
     "verticalOffsetDp": 8
   },
+  "landscapeReverse": {
+    "appearanceOverrides": [],
+    "design": {
+      "composition": "traces",
+      "controlsHeightDp": 419,
+      "controlsWithoutPttDp": 357,
+      "header": "none",
+      "hold": "rocker",
+      "holdSharePercent": 36.4,
+      "layout": "studio",
+      "mute": "rockers",
+      "spacing": {
+        "channelGapDp": 18,
+        "edgeClearancePercent": 200,
+        "paddingDp": 21,
+        "pushGapDp": 18,
+        "sectionGapDp": 4,
+        "sideMarginPercent": 48
+      },
+      "traces": {
+        "fadeLengthDp": 80,
+        "footSpacingPercent": 200,
+        "glowPercent": 67,
+        "pattern": "splayed",
+        "personaSpacingPercent": 98,
+        "reachDp": -9,
+        "stancePercent": 101,
+        "tipOpacityPercent": 0,
+        "weightPercent": 250
+      }
+    },
+    "halo": {
+      "colors": {
+        "idle": "#f0f2e9",
+        "listening": "#d4ff72",
+        "speaking": "#bbaaff"
+      },
+      "containedSizePercent": 81,
+      "idleBreathingPercent": 95,
+      "listeningPulsePercent": 68,
+      "ringSpreadPercent": 80,
+      "speakingMotionPercent": 68,
+      "variant": "contained"
+    },
+    "horizontalOffsetDp": -34,
+    "personaSide": "left",
+    "scales": {
+      "idle": 78,
+      "listening": 56,
+      "speaking": 78
+    },
+    "spirit": {
+      "persona": "follow",
+      "strengthPercent": 51,
+      "surface": "soft"
+    },
+    "verticalOffsetDp": 8
+  },
   "launcher": "relay-aperture",
   "mutedPresence": "tide",
   "mutedTuning": {
@@ -180,8 +180,8 @@
     "appearanceOverrides": [],
     "design": {
       "composition": "traces",
-      "controlsHeightDp": 415,
-      "controlsWithoutPttDp": 390,
+      "controlsHeightDp": 413,
+      "controlsWithoutPttDp": 388,
       "header": "none",
       "hold": "rocker",
       "holdSharePercent": 36.4,
@@ -232,7 +232,7 @@
       "strengthPercent": 51,
       "surface": "soft"
     },
-    "verticalOffsetDp": -22
+    "verticalOffsetDp": -20
   },
   "presenceScope": "any-muted",
   "savedAtEpochMs": 1,
@@ -283,5 +283,5 @@
   },
   "theme": "bright",
   "version": 21,
-  "verticalOffsetDp": -37
+  "verticalOffsetDp": -35
 }
