@@ -2574,3 +2574,33 @@ and exact design backups are under `/tmp/agentvoice-thinking-wingspan/phone/`.
 The normal unpinned Studio host is restored at `http://127.0.0.1:4317/`, using
 the normal per-device export destination. No server restart, voice call, grant
 change, emulator or production design adoption occurred.
+
+
+### Returned-phone completion
+
+The phone returned and had no newer design edits: only the test wingspan 1 and
+profile migration differed from its original draft. All 42 selected native tests
+now have passing results. The first batch was interrupted during operator phone
+interaction; the three animation timeouts and remaining tests were rerun in a
+completed 24-test batch. There was no source correction or additional build.
+
+Measured full-loop bounds: Idle 131×132 px, wingspan 1 width 135 px, 2 width 136 px,
+5 width 146 px, and 10 width 166 px. The idle silhouette is identical between each
+comparison pair; vertical envelopes stay within the existing pixel tolerance.
+The trim sweeps remain animated at every sampled setting.
+
+Captured and inspected 1/5/10 in all four physical layouts. The existing YouTube
+picture-in-picture window initially obscured Persona; moving it away allowed a
+second set with unobscured Persona geometry. These are sequential animation
+samples, complemented by the full-loop native measurements above.
+
+Production was installed without launching it or changing grants. Installed
+Production SHA matches the audited APK above; installed Studio SHA is
+`84457d32564f27ee03834f6e7ef5fe086ca2ae1e202ee5d0ea7c52da842bb5c1`.
+The original draft, explicit checkpoint and bridge binding were restored and
+verified byte-for-byte. Studio shows Thinking with wingspan 2, retaining the
+operator’s 77% size and all other tuning. Final system reads confirm free
+rotation, accelerometer_rotation 1, user_rotation 0, font_scale 1.0 and
+animator_duration_scale 1.0. Native checks and all device work are complete.
+Phone release notification: `ca1ab588-6f69-48bf-9de9-828f4ff3aab4`.
+Evidence and restoration receipt: `/tmp/agentvoice-thinking-wingspan/returned/`.
