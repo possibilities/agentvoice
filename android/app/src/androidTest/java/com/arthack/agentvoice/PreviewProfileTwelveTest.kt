@@ -105,7 +105,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(22, encoded.getInt("version"))
+            assertEquals(23, encoded.getInt("version"))
             assertTrue(encoded.has("theme"))
             assertTrue(encoded.has("mutedPresence"))
             assertTrue(encoded.has("mutedTuning"))
@@ -170,7 +170,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(29, current.json().getInt("protocol"))
+                assertEquals(30, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())

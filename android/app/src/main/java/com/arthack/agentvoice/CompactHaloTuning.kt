@@ -7,11 +7,24 @@ internal data class CompactHaloTuning(
     val listeningPulsePercent: Int = 25,
     val speakingMotionPercent: Int = 25,
     val idleBreathingPercent: Int = 25,
+    val thinkingWingspan: Int = 2,
 ) {
     init {
+        require(thinkingWingspan in 1..10) { "Thinking wingspan must be between 1 and 10." }
         require(listOf(ringSpreadPercent, listeningPulsePercent, speakingMotionPercent, idleBreathingPercent).all { it in 0..100 }) {
             "Contained Halo motion must be between 0 and 100 percent."
         }
+    }
+}
+
+internal fun thinkingDashScale(wingspan: Int): Float {
+    require(wingspan in 1..10)
+    // Keep the prior compact geometry exactly at 2 and the authored reach at 10.
+    return when (wingspan) {
+        1 -> 1.025f
+        2 -> 1.05f
+        10 -> 1.28f
+        else -> 1.05f + (wingspan - 2) * (.23f / 8f)
     }
 }
 

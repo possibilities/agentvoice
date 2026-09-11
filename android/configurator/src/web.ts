@@ -91,6 +91,7 @@ const showCaptureGuides = element<HTMLInputElement>("show-capture-guides");
 const captureGuideSummary = element("capture-guide-summary");
 const downloadComparisonButton = element<HTMLButtonElement>("download-comparison");
 const slider = element<HTMLInputElement>("size");
+const thinkingWingspan = element<HTMLInputElement>("thinking-wingspan");
 const position = element<HTMLInputElement>("position");
 const controlHeight = element<HTMLInputElement>("controls-height");
 const holdShare = element<HTMLInputElement>("hold-share");
@@ -612,6 +613,9 @@ function render() {
   element("original-traces-hint").hidden = contained;
   element<HTMLSelectElement>("halo-variant").value = draft.halo.variant;
   element("contained-controls").hidden = !contained;
+  thinkingWingspan.value = String(draft.halo.thinkingWingspan);
+  text(element("thinking-wingspan-value"), String(draft.halo.thinkingWingspan));
+  thinkingWingspan.setAttribute("aria-valuetext", String(draft.halo.thinkingWingspan));
   text(
     element("size-hint"),
     contained ? "One size across all states" : "Independent size for each state",
@@ -673,7 +677,7 @@ function render() {
   const liveLayouts = { ...stateLayouts(phoneState), [draft.orientation]: layoutOf(draft) };
   const hostMatches =
     savedProfile !== null &&
-    savedProfile.version === 21 &&
+    savedProfile.version === 23 &&
     equalVisualSettings(profileVisualSettings(savedProfile), draft) &&
     equalSounds(profileSounds(savedProfile), draft.sounds) &&
     orientations.every((orientation) =>
@@ -905,6 +909,10 @@ element<HTMLInputElement>("spirit-strength").addEventListener("input", (event) =
 element<HTMLSelectElement>("halo-variant").addEventListener("change", (event) => {
   const variant = (event.currentTarget as HTMLSelectElement).value as "original" | "contained";
   update((current) => ({ ...current, halo: { ...current.halo, variant } }));
+});
+thinkingWingspan.addEventListener("input", () => {
+  const value = thinkingWingspan.valueAsNumber;
+  update((current) => ({ ...current, halo: { ...current.halo, thinkingWingspan: value } }));
 });
 for (const key of haloMotionFields) {
   element<HTMLInputElement>(key).addEventListener("input", (event) => {

@@ -96,3 +96,9 @@ Dash1 Mirror, Dash1). Thinking loops2/1 animate only TrimPath start/end/offset
 color binding, inherited Idle breathing, and empty thinking_off timeline remain
 unchanged. Implicit zero start/end hides these dashes outside Thinking.
 The existing source hash and per-site raw-float guards apply before mutation.
+
+Thinking wingspan tuning, September 11, 2026: Contained now exposes an integer
+1–10 range for those same four scaleX fields. Setting 2 preserves 1.05; setting 1
+uses 1.025; settings 3–9 interpolate from 1.05 to 1.28, and 10 equals authored 1.28.
+This changes only the dash reach, retaining the source circle, Y geometry and
+complete trim-path timelines. Older designs default to 2. Original stays intact.

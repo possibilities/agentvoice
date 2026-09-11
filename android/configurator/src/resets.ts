@@ -24,6 +24,7 @@ export type ResetTarget =
   | "size"
   | "position"
   | "animation"
+  | "thinking-wingspan"
   | "colors"
   | "light"
   | `trace-${(typeof traceTipFields)[number]}`
@@ -106,6 +107,9 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     case "animation":
       for (const key of haloMotionFields)
         next.halo[key] = defaults.defaultSharedAppearance.halo[key];
+      break;
+    case "thinking-wingspan":
+      next.halo.thinkingWingspan = defaults.defaultSharedAppearance.halo.thinkingWingspan;
       break;
     case "colors":
       next.halo.colors = { ...defaults.defaultSharedAppearance.halo.colors };

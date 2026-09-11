@@ -50,6 +50,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
+            thinkingWingspan = 2,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -93,6 +94,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
+            thinkingWingspan = 2,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -136,6 +138,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
+            thinkingWingspan = 2,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -179,6 +182,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
+            thinkingWingspan = 2,
             variant = "contained",
         ),
         spirit = PreviewSpirit(

@@ -24,7 +24,7 @@ afterEach(async () => {
 class Connection implements PreviewConnection {
   connected = true;
   state: PhoneState = {
-    protocol: 29,
+    protocol: 30,
     connectionPreview: "off",
     launcher: "current",
     connectionStyle: "relay",

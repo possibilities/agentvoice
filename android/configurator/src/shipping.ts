@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { migrateLegacyHaloFields } from "./halo.ts";
 import { iconCatalog } from "./icons.ts";
 import { launcherOutputPaths, launcherOutputs } from "./launcher.ts";
 import {
@@ -36,7 +37,7 @@ const manifestPath = "android/design/shipping-generated-files.json";
 const releaseRoot = "android/app/src/release/";
 const noticesRoot = "android/app/src/main/assets/notices/Shipping-";
 export type ShippingSnapshot = {
-  version: 2;
+  version: 3;
   source: {
     profile: { path: string; sha256: string; text: string };
     session: {
@@ -93,9 +94,10 @@ export function createShippingSnapshot(
     profile.version !== 19 &&
     profile.version !== 20 &&
     profile.version !== 21 &&
-    profile.version !== 22
+    profile.version !== 22 &&
+    profile.version !== 23
   )
-    throw Error("Promotion requires profile18 through profile22");
+    throw Error("Promotion requires profile18 through profile23");
   const portrait = profileLayout(profile, "portrait");
   const landscape = profileLayout(profile, "landscape");
   const portraitReverse = profileLayout(profile, "portrait-reverse");
@@ -108,7 +110,8 @@ export function createShippingSnapshot(
       profile.version !== 19 &&
       profile.version !== 20 &&
       profile.version !== 21 &&
-      profile.version !== 22
+      profile.version !== 22 &&
+      profile.version !== 23
     )
       throw Error("Profile18 needs --session, --live-state or --default-session");
     appearance = profileVisualSettings(profile);
@@ -116,8 +119,9 @@ export function createShippingSnapshot(
   else {
     const wrapper = record(JSON.parse(choice.text));
     const state = record(wrapper["state"] ?? wrapper);
-    if (![21, 22, 23, 24, 25, 26, 27, 28, 29].includes(state["protocol"] as number))
+    if (![21, 22, 23, 24, 25, 26, 27, 28, 29, 30].includes(state["protocol"] as number))
       throw Error("Unsupported captured studio protocol");
+    if ((state["protocol"] as number) < 30) migrateLegacyHaloFields(state);
     integer(state["revision"]);
     if (
       state["orientation"] !== "portrait" &&
@@ -127,18 +131,22 @@ export function createShippingSnapshot(
     )
       throw Error("Invalid captured orientation");
     const capturedLayouts =
-      state["protocol"] === 27 || state["protocol"] === 28 || state["protocol"] === 29
+      state["protocol"] === 27 ||
+      state["protocol"] === 28 ||
+      state["protocol"] === 29 ||
+      state["protocol"] === 30
         ? stateLayouts(
             parseState({
               ...state,
-              protocol: 29,
-              connectionStyle: state["protocol"] === 29 ? state["connectionStyle"] : "relay",
+              protocol: 30,
+              connectionStyle:
+                (state["protocol"] as number) >= 29 ? state["connectionStyle"] : "relay",
               savedAppearance:
-                state["protocol"] === 29
+                (state["protocol"] as number) >= 29
                   ? state["savedAppearance"]
                   : { ...record(state["savedAppearance"]), connectionStyle: "relay" },
               defaultAppearance:
-                state["protocol"] === 29
+                (state["protocol"] as number) >= 29
                   ? state["defaultAppearance"]
                   : { ...record(state["defaultAppearance"]), connectionStyle: "relay" },
             }),
@@ -170,16 +178,18 @@ export function createShippingSnapshot(
         state["protocol"] === 24 ||
         state["protocol"] === 27 ||
         state["protocol"] === 28 ||
-        state["protocol"] === 29
+        state["protocol"] === 29 ||
+        state["protocol"] === 30
         ? {
             ...state,
-            connectionStyle: state["protocol"] === 29 ? state["connectionStyle"] : "relay",
+            connectionStyle:
+              (state["protocol"] as number) >= 29 ? state["connectionStyle"] : "relay",
           }
         : { ...state, launcher: "current", connectionStyle: "relay" },
     );
   }
   return {
-    version: 2,
+    version: 3,
     source: {
       profile: { path: sourceName(profilePath), sha256: sha256(profileText), text: profileText },
       session: {
@@ -201,7 +211,7 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   if (text.length > 65536) throw Error("Shipping snapshot too large");
   const value = record(JSON.parse(text));
   const version = value["version"];
-  if (version !== 1 && version !== 2) throw Error("Unsupported shipping snapshot");
+  if (version !== 1 && version !== 2 && version !== 3) throw Error("Unsupported shipping snapshot");
   exact(
     value,
     version === 1
@@ -236,6 +246,7 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
     throw Error("Unexpected session source");
   const rawAppearance = record(value["appearance"]);
   const sourceVersion = parseProfile(profile["text"]).version;
+  if (version <= 2 && sourceVersion <= 22) migrateLegacyHaloFields(value);
   const legacyLauncher = !Object.hasOwn(rawAppearance, "launcher") && sourceVersion < 20;
   const legacyConnectionStyle =
     !Object.hasOwn(rawAppearance, "connectionStyle") && sourceVersion < 22;
@@ -256,11 +267,11 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   const landscape = parseLayout(value["landscape"]);
   const sourceProfile = parseProfile(profile["text"]);
   const portraitReverse =
-    version === 2
+    version >= 2
       ? parseLayout(value["portraitReverse"])
       : profileLayout(sourceProfile, "portrait-reverse");
   const landscapeReverse =
-    version === 2
+    version >= 2
       ? parseLayout(value["landscapeReverse"])
       : profileLayout(sourceProfile, "landscape-reverse");
   const sounds = parseSounds(value["sounds"]);
@@ -278,7 +289,7 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   )
     throw Error("Shipping appearance differs from declared source");
   return {
-    version: 2,
+    version: 3,
     source: source as ShippingSnapshot["source"],
     portrait,
     landscape,
@@ -290,27 +301,28 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
 }
 export function completeShippingProfile(
   snapshot: ShippingSnapshot,
-): Extract<Profile, { version: 22 }> {
+): Extract<Profile, { version: 23 }> {
   const source = parseProfile(snapshot.source.profile.text);
   if (
     source.version !== 18 &&
     source.version !== 19 &&
     source.version !== 20 &&
     source.version !== 21 &&
-    source.version !== 22
+    source.version !== 22 &&
+    source.version !== 23
   )
     throw Error("Unsupported shipping profile source");
   return {
     ...source,
-    version: 22,
+    version: 23,
     portraitReverse: snapshot.portraitReverse,
     landscapeReverse: snapshot.landscapeReverse,
     ...snapshot.appearance,
-  } as Extract<Profile, { version: 22 }>;
+  } as Extract<Profile, { version: 23 }>;
 }
 function validateShippingProfile(profile: Profile, snapshot: ShippingSnapshot): void {
   if (
-    (profile.version !== 21 && profile.version !== 22) ||
+    (profile.version !== 21 && profile.version !== 22 && profile.version !== 23) ||
     !equalLayout(profileLayout(profile, "portrait"), snapshot.portrait) ||
     !equalLayout(profileLayout(profile, "landscape"), snapshot.landscape) ||
     !equalLayout(profileLayout(profile, "portrait-reverse"), snapshot.portraitReverse) ||
@@ -350,7 +362,7 @@ function kotlinConstructor(name: string, fields: Record<string, unknown>, indent
 }
 function layoutKotlin(layout: Layout): string {
   const { design, halo, spirit } = layout;
-  return `ShippingLayout(\n        placement = PersonaPlacement(speakingScale = ${number(layout.scales.speaking / 100, true)}, listeningScale = ${number(layout.scales.listening / 100, true)}, idleScale = ${number(layout.scales.idle / 100, true)}, offsetY = ${layout.verticalOffsetDp}.dp),\n        design = PreviewDesign(\n            layout = ${kotlinString(design.layout)}, header = ${kotlinString(design.header)},\n            controlsHeightDp = ${design.controlsHeightDp}, controlsWithoutPttDp = ${design.controlsWithoutPttDp}, holdSharePercent = ${number(design.holdSharePercent)},\n            traces = ${kotlinConstructor("PreviewTraces", design.traces, 16)},\n            spacing = ${kotlinConstructor("PreviewSpacing", design.spacing, 16)},\n        ),\n        halo = ${kotlinConstructor("PreviewHalo", { variant: halo.variant, containedSizePercent: halo.containedSizePercent, ringSpreadPercent: halo.ringSpreadPercent, listeningPulsePercent: halo.listeningPulsePercent, speakingMotionPercent: halo.speakingMotionPercent, idleBreathingPercent: halo.idleBreathingPercent, speakingColor: halo.colors.speaking, listeningColor: halo.colors.listening, idleColor: halo.colors.idle }, 12)},\n        spirit = ${kotlinConstructor("PreviewSpirit", spirit, 12)},\n        personaSide = ${kotlinString(layout.personaSide)}, horizontalOffsetDp = ${layout.horizontalOffsetDp},\n    )`;
+  return `ShippingLayout(\n        placement = PersonaPlacement(speakingScale = ${number(layout.scales.speaking / 100, true)}, listeningScale = ${number(layout.scales.listening / 100, true)}, idleScale = ${number(layout.scales.idle / 100, true)}, offsetY = ${layout.verticalOffsetDp}.dp),\n        design = PreviewDesign(\n            layout = ${kotlinString(design.layout)}, header = ${kotlinString(design.header)},\n            controlsHeightDp = ${design.controlsHeightDp}, controlsWithoutPttDp = ${design.controlsWithoutPttDp}, holdSharePercent = ${number(design.holdSharePercent)},\n            traces = ${kotlinConstructor("PreviewTraces", design.traces, 16)},\n            spacing = ${kotlinConstructor("PreviewSpacing", design.spacing, 16)},\n        ),\n        halo = ${kotlinConstructor("PreviewHalo", { variant: halo.variant, containedSizePercent: halo.containedSizePercent, thinkingWingspan: halo.thinkingWingspan, ringSpreadPercent: halo.ringSpreadPercent, listeningPulsePercent: halo.listeningPulsePercent, speakingMotionPercent: halo.speakingMotionPercent, idleBreathingPercent: halo.idleBreathingPercent, speakingColor: halo.colors.speaking, listeningColor: halo.colors.listening, idleColor: halo.colors.idle }, 12)},\n        spirit = ${kotlinConstructor("PreviewSpirit", spirit, 12)},\n        personaSide = ${kotlinString(layout.personaSide)}, horizontalOffsetDp = ${layout.horizontalOffsetDp},\n    )`;
 }
 export function generateKotlin(snapshot: ShippingSnapshot): string {
   const { appearance } = snapshot;
@@ -619,7 +631,7 @@ export async function shippingCli(args: string[]): Promise<void> {
     const snapshot = parseShippingSnapshot(await readFile(receiptPath, "utf8"));
     const profile = parseProfile(await readFile(path, "utf8"));
     validateShippingProfile(profile, snapshot);
-    if (profile.version !== 22) {
+    if (profile.version !== 23) {
       if (flags.has("--check"))
         throw Error(`Generated shipping file is missing or stale: ${snapshotPath}`);
       await atomicWrite(path, canonicalJson(completeShippingProfile(snapshot)));

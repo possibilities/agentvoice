@@ -43,6 +43,7 @@
     "listeningPulsePercent": 68,
     "ringSpreadPercent": 80,
     "speakingMotionPercent": 68,
+    "thinkingWingspan": 2,
     "variant": "contained"
   },
   "horizontalOffsetDp": 0,
@@ -92,6 +93,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
+      "thinkingWingspan": 2,
       "variant": "contained"
     },
     "horizontalOffsetDp": -36,
@@ -150,6 +152,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
+      "thinkingWingspan": 2,
       "variant": "contained"
     },
     "horizontalOffsetDp": -34,
@@ -219,6 +222,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
+      "thinkingWingspan": 2,
       "variant": "contained"
     },
     "horizontalOffsetDp": 0,
@@ -254,6 +258,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
+      "thinkingWingspan": 2,
       "variant": "contained"
     },
     "spirit": {
@@ -283,6 +288,6 @@
     "surface": "soft"
   },
   "theme": "bright",
-  "version": 22,
+  "version": 23,
   "verticalOffsetDp": -35
 }

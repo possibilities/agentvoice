@@ -14,8 +14,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.platform.app.InstrumentationRegistry
 import app.rive.runtime.kotlin.core.Rive
 import app.rive.runtime.kotlin.core.SMIBoolean
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -61,14 +59,6 @@ class ThinkingArmBoundsTest {
 
     private fun alpha(pixels: IntArray) = IntArray(pixels.size) { pixels[it] ushr 24 }
 
-    private fun priorThinkingScale(candidate: ByteArray): ByteArray = candidate.copyOf().also { bytes ->
-        val values = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        for (offset in listOf(304, 364, 436, 496)) {
-            check(values.getInt(offset) == 1.05f.toRawBits()) { "Contained Thinking scale mapping changed at $offset." }
-            values.putFloat(offset, 1.28f)
-        }
-    }
-
     private fun sampleLoop(candidate: CompactHaloAnimationView, prior: CompactHaloAnimationView): Pair<Samples, Samples> {
         val candidateBounds = mutableListOf<AlphaBounds>()
         val priorBounds = mutableListOf<AlphaBounds>()
@@ -89,10 +79,16 @@ class ThinkingArmBoundsTest {
             Samples(priorBounds, priorSignatures, elapsed)
     }
 
-    @Test fun containedThinkingArmsStayNearIdleCircleWhilePriorScaleOverreaches() {
-        val tuning = CompactHaloTuning(idleBreathingPercent = 0)
+    @Test fun currentCompactReachStaysUnchanged() = compareWingspan(2)
+
+    @Test fun smallestWingspanKeepsTheCircleAndMovingArms() = compareWingspan(1)
+
+    @Test fun midpointWingspanRemainsBetweenCompactAndOriginal() = compareWingspan(5)
+
+    private fun compareWingspan(wingspan: Int) {
+        val tuning = CompactHaloTuning(idleBreathingPercent = 0, thinkingWingspan = wingspan)
         val candidateBytes = compactHaloBytes(source(), tuning)
-        val priorBytes = priorThinkingScale(candidateBytes)
+        val priorBytes = compactHaloBytes(source(), tuning.copy(thinkingWingspan = 10))
         lateinit var candidate: CompactHaloAnimationView
         lateinit var prior: CompactHaloAnimationView
         compose.setContent {
@@ -141,9 +137,10 @@ class ThinkingArmBoundsTest {
         val priorBottom = priorSamples.bounds.maxOf { it.bottom }
         val candidateYExtent = candidateBottom - candidateTop + 1
         val priorYExtent = priorBottom - priorTop + 1
-        android.util.Log.i("ThinkingArmBounds", "idle=${idle.width}x${idle.height} candidateWidth=$candidateMaxWidth priorWidth=$priorMaxWidth candidateY=$candidateTop..$candidateBottom priorY=$priorTop..$priorBottom frames=${candidateSamples.signatures.size}/${priorSamples.signatures.size} elapsedMs=${candidateSamples.elapsedMs}")
-        assertTrue("Candidate width $candidateMaxWidth must stay near Idle width ${idle.width}",
+        android.util.Log.i("ThinkingArmBounds", "wingspan=$wingspan idle=${idle.width}x${idle.height} candidateWidth=$candidateMaxWidth priorWidth=$priorMaxWidth candidateY=$candidateTop..$candidateBottom priorY=$priorTop..$priorBottom frames=${candidateSamples.signatures.size}/${priorSamples.signatures.size} elapsedMs=${candidateSamples.elapsedMs}")
+        if (wingspan <= 2) assertTrue("Candidate width $candidateMaxWidth must stay near Idle width ${idle.width}",
             candidateMaxWidth <= idle.width * 1.10 + 2)
+        else assertTrue("Midpoint must visibly extend beyond the compact reach", candidateMaxWidth > idle.width * 1.10)
         assertTrue("Prior width $priorMaxWidth must materially exceed candidate width $candidateMaxWidth",
             priorMaxWidth >= candidateMaxWidth + idle.width * .08)
         assertTrue("Candidate Y extent $candidateYExtent must stay near Idle height ${idle.height}",

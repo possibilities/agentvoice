@@ -43,7 +43,7 @@ internal data class PreviewSharedAppearance(
     }
 }
 
-internal fun decodeSharedAppearance(data: JSONObject, legacyOffshoots: Boolean = false): PreviewSharedAppearance {
+internal fun decodeSharedAppearance(data: JSONObject, legacyOffshoots: Boolean = false, legacyWingspan: Boolean = false): PreviewSharedAppearance {
     require(data.fields() == setOf("traces", "glowPercent", "halo", "spirit"))
     val traces = JSONObject(data.getJSONObject("traces").toString())
     require(!traces.has("glowPercent"))
@@ -52,7 +52,7 @@ internal fun decodeSharedAppearance(data: JSONObject, legacyOffshoots: Boolean =
     val routing = decodePreviewTraces((if (legacyOffshoots) stripLegacyOffshoots(traces) else traces).put("glowPercent", 0))
     val glow = data.get("glowPercent")
     require(glow is Number && glow.toDouble() % 1.0 == 0.0 && glow.toDouble() in 0.0..100.0)
-    return PreviewSharedAppearance(routing, glow.toInt(), decodePreviewHalo(halo.put("containedSizePercent", 78)),
+    return PreviewSharedAppearance(routing, glow.toInt(), decodePreviewHalo(halo.put("containedSizePercent", 78), legacyWingspan),
         decodePreviewSpirit(data.getJSONObject("spirit")))
 }
 
@@ -103,7 +103,7 @@ internal fun decodePreviewProfileLayouts(json: String): PreviewProfileLayouts {
     if (version >= 17) require(listOfNotNull(portrait, decodedLandscape, decodedPortraitReverse, decodedLandscapeReverse)
         .all { it.design.spacing == portrait.design.spacing })
     val storedLandscape = if (version >= 17) decodedLandscape else decodedLandscape.copy(design = decodedLandscape.design.copy(spacing = portrait.design.spacing))
-    val shared = if (version >= 15) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = version <= 16)
+    val shared = if (version >= 15) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = version <= 16, legacyWingspan = version <= 22)
         else PreviewSharedAppearance.from(portrait)
     val landscape = if (version >= 15) storedLandscape else storedLandscape.copy(
         appearanceOverrides = legacyLandscapeOverrides(storedLandscape, shared))

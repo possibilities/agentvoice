@@ -58,7 +58,7 @@ class PreviewFourOrientationSessionTest {
             val profile = session.command(JSONObject().put("id", 1).put("method", "save")
                 .put("revision", before.revision).put("orientation", before.orientation)
                 .put("orientationEpoch", before.orientationEpoch)).getString("profile")
-            assertEquals(22, JSONObject(profile).getInt("version"))
+            assertEquals(23, JSONObject(profile).getInt("version"))
             val decoded = decodePreviewProfileLayouts(profile)
             assertEquals(expected, decoded.asMap())
             val saved = withContext(Dispatchers.Main) { session.state }
@@ -90,7 +90,7 @@ class PreviewFourOrientationSessionTest {
             val current = JSONObject(encodePersonaTuning(portrait.placement, portrait.design, portrait.halo,
                 portrait.spirit, landscape, portrait.personaSide, portrait.horizontalOffsetDp,
                 portrait.appearanceOverrides, PreviewSharedAppearance.from(portrait)))
-            val legacy = current.put("version", 20).apply {
+            val legacy = current.withoutThinkingWingspan().put("version", 20).apply {
                 remove("connectionStyle")
                 remove("portraitReverse")
                 remove("landscapeReverse")

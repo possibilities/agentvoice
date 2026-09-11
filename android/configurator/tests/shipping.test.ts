@@ -32,6 +32,22 @@ const session = {
     motion: "ripple" as const,
   },
 };
+function withoutThinkingWingspan<T>(value: T): T {
+  const copy = structuredClone(value) as unknown;
+  const visit = (item: unknown): void => {
+    if (Array.isArray(item)) {
+      for (const child of item) visit(child);
+      return;
+    }
+    if (!item || typeof item !== "object") return;
+    const data = item as Record<string, unknown>;
+    if ("variant" in data && "colors" in data && "ringSpreadPercent" in data)
+      delete data["thinkingWingspan"];
+    for (const child of Object.values(data)) visit(child);
+  };
+  visit(copy);
+  return copy as T;
+}
 const snapshot = () =>
   createShippingSnapshot(profileText, "saved-profile.json", {
     kind: "file",
@@ -73,6 +89,57 @@ test("locked shipping snapshot captures both effective orientations, exact sourc
   expect(generated).not.toContain("JSONObject");
 });
 
+test("legacy profile promotions emit provenance3 and provenance1/2 receipts migrate wingspan once", () => {
+  const complete = completeShippingProfile(snapshot()) as unknown as Record<string, unknown>;
+  for (const version of [18, 19, 20, 21, 22]) {
+    const source = withoutThinkingWingspan({ ...complete, version }) as Record<string, unknown>;
+    if (version <= 20) {
+      delete source["portraitReverse"];
+      delete source["landscapeReverse"];
+    }
+    if (version === 18) {
+      for (const field of Object.keys(defaultVisualSettings())) delete source[field];
+    } else {
+      if (version <= 21) delete source["connectionStyle"];
+      if (version === 19) delete source["launcher"];
+    }
+    const text = JSON.stringify(source);
+    const promoted = createShippingSnapshot(
+      text,
+      `profile${version}.json`,
+      version === 18 ? { kind: "defaults" } : { kind: "profile" },
+    );
+    expect(promoted.version).toBe(3);
+    expect(promoted.source.profile.text).toBe(text);
+    for (const layout of [
+      promoted.portrait,
+      promoted.landscape,
+      promoted.portraitReverse,
+      promoted.landscapeReverse,
+    ])
+      expect(layout.halo.thinkingWingspan).toBe(2);
+    expect(parseShippingSnapshot(canonicalJson(promoted))).toEqual(promoted);
+  }
+
+  for (const version of [1, 2] as const) {
+    const oldReceipt = withoutThinkingWingspan({ ...snapshot(), version });
+    if (version === 1) {
+      delete (oldReceipt as unknown as Record<string, unknown>)["portraitReverse"];
+      delete (oldReceipt as unknown as Record<string, unknown>)["landscapeReverse"];
+    }
+    const parsed = parseShippingSnapshot(canonicalJson(oldReceipt));
+    expect(parsed.version).toBe(3);
+    expect(parsed.source.profile.text).toBe(profileText);
+    expect(parsed.source.profile.sha256).toBe(sha256(profileText));
+    expect(parsed.portrait.halo.thinkingWingspan).toBe(2);
+    const invalid = structuredClone(oldReceipt);
+    invalid.portrait.halo.thinkingWingspan = 2;
+    expect(() => parseShippingSnapshot(canonicalJson(invalid))).toThrow(
+      "Legacy Halo contains current fields",
+    );
+  }
+});
+
 test("legacy promotion requires explicit session source while profile19 carries its saved appearance", () => {
   expect(() => createShippingSnapshot(profileText, "old.json", { kind: "profile" })).toThrow(
     "needs --session",
@@ -104,7 +171,7 @@ test("legacy promotion requires explicit session source while profile19 carries 
 
 test("live capture promotion requires saved-layout and sound parity and excludes runtime call fields", () => {
   const base = snapshot();
-  const state = {
+  const state = withoutThinkingWingspan({
     ...base.portrait,
     ...session,
     protocol: 21,
@@ -117,7 +184,7 @@ test("live capture promotion requires saved-layout and sound parity and excludes
     activity: "voice",
     mode: "listening",
     micOpen: true,
-  };
+  });
   const captured = (value: unknown) =>
     createShippingSnapshot(profileText, "saved.json", {
       kind: "live",
@@ -195,7 +262,7 @@ test("promotion and regeneration are deterministic, check never writes, and sour
   const codePath = join(root, "android/app/src/main/java/com/arthack/agentvoice/ShippingDesign.kt");
   const code = await readFile(codePath, "utf8");
   const bytes = await readFile(canonical, "utf8");
-  expect(JSON.parse(bytes)).toMatchObject({ version: 22, connectionStyle: "relay" });
+  expect(JSON.parse(bytes)).toMatchObject({ version: 23, connectionStyle: "relay" });
   expect(code).toContain('const val connectionStyle = "relay"');
   await shippingCli(["generate", "--check", "--root", root]);
   await shippingCli(["generate", "--root", root]);
@@ -216,14 +283,14 @@ test("generation upgrades an adopted profile21 to relay without changing its pri
   await writeShipping(value, { root, snapshot: true });
   const canonical = join(root, "android/design/shipping-profile.json");
   const current = JSON.parse(await readFile(canonical, "utf8"));
-  const legacy = { ...current, version: 21 };
+  const legacy = withoutThinkingWingspan({ ...current, version: 21 });
   delete legacy.connectionStyle;
   await writeFile(canonical, canonicalJson(legacy));
   await shippingCli(["generate", "--root", root]);
   const upgraded = JSON.parse(await readFile(canonical, "utf8"));
   expect(upgraded).toEqual(current);
   expect(upgraded.connectionStyle).toBe("relay");
-  expect(upgraded.version).toBe(22);
+  expect(upgraded.version).toBe(23);
 });
 
 test("release inventory contains only adopted artwork and sounds, and re-promotion removes owned stale assets", async () => {

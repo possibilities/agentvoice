@@ -9,6 +9,30 @@ import org.junit.Test
 class CompactHaloAssetTest {
     private fun source() = File("src/main/res/raw/persona_halo.riv").readBytes()
 
+    @Test fun wingspanMovesOnlyFourDashScalesMonotonicallyAcrossItsWholeRange() {
+        val original = source()
+        val baseline = compactHaloBytes(original, CompactHaloTuning())
+        val sites = listOf(304, 364, 436, 496)
+        val allowed = sites.flatMap { it until it + 4 }.toSet()
+        var previous = 1f
+        for (wingspan in 1..10) {
+            val scale = thinkingDashScale(wingspan)
+            assertTrue(scale > previous)
+            previous = scale
+            val result = compactHaloBytes(original, CompactHaloTuning(thinkingWingspan = wingspan))
+            val values = ByteBuffer.wrap(result).order(ByteOrder.LITTLE_ENDIAN)
+            for (site in sites) assertEquals(scale, values.getFloat(site), 0f)
+            for (offset in result.indices) if (offset !in allowed)
+                assertEquals("Wingspan $wingspan changed unrelated byte $offset", baseline[offset], result[offset])
+        }
+        assertEquals(1.025f, thinkingDashScale(1), 0f)
+        assertEquals(1.05f, thinkingDashScale(2), 0f)
+        assertEquals(1.28f, thinkingDashScale(10), 0f)
+        assertArrayEquals(baseline, compactHaloBytes(original, CompactHaloTuning(thinkingWingspan = 2)))
+        for (invalid in listOf(0, 11, Int.MAX_VALUE))
+            assertTrue(runCatching { CompactHaloTuning(thinkingWingspan = invalid) }.isFailure)
+    }
+
     @Test fun rejectsAnyDifferentSourceWithoutMutatingIt() {
         val original = source()
         val before = original.copyOf()

@@ -17,13 +17,15 @@ class ShippingProfileTest {
     private val portrait = PreviewLayout(
         placement = PersonaPlacement(.51f, .62f, .73f, (-39).dp),
         design = PreviewDesign(controlsHeightDp = 418, holdSharePercent = 49.0, controlsWithoutPttDp = 609),
-        halo = PreviewHalo(variant = "contained", containedSizePercent = 65, ringSpreadPercent = 61),
+        halo = PreviewHalo(variant = "contained", containedSizePercent = 65, ringSpreadPercent = 61,
+            thinkingWingspan = 7),
         spirit = PreviewSpirit("soft", 58, "follow"), horizontalOffsetDp = -13,
     )
     private val landscape = portrait.copy(
         placement = PersonaPlacement(.84f, .91f, .67f, 28.dp),
         design = portrait.design.copy(controlsHeightDp = 731, holdSharePercent = 34.0, controlsWithoutPttDp = 1024),
-        halo = portrait.halo.copy(containedSizePercent = 93, ringSpreadPercent = 18, speakingColor = "#123abc"),
+        halo = portrait.halo.copy(containedSizePercent = 93, ringSpreadPercent = 18,
+            speakingColor = "#123abc", thinkingWingspan = 4),
         spirit = portrait.spirit.copy(strengthPercent = 82), personaSide = "right", horizontalOffsetDp = 37,
         appearanceOverrides = setOf("halo", "spirit"),
     )
@@ -85,16 +87,17 @@ class ShippingProfileTest {
         assertEquals(expected.connectionStyle, actual.connectionStyle)
     }
 
-    private fun assertLayouts(state: PersonaPreviewState) {
+    private fun assertLayouts(state: PersonaPreviewState, expectedPortrait: PreviewLayout = portrait,
+        expectedLandscape: PreviewLayout = landscape) {
         val p = if (state.orientation == "portrait") state else state.rotate("portrait")
-        assertEquals(portrait, p.activeLayout())
-        assertEquals(landscape, p.otherLayout)
-        assertEquals(portrait, p.savedLayout())
-        assertEquals(landscape, p.savedOtherLayout)
-        assertEquals(portrait, p.layouts().getValue(previewPortraitReverse))
-        assertEquals(landscape, p.layouts().getValue(previewLandscapeReverse))
-        assertEquals(portrait, p.savedLayouts().getValue(previewPortraitReverse))
-        assertEquals(landscape, p.savedLayouts().getValue(previewLandscapeReverse))
+        assertEquals(expectedPortrait, p.activeLayout())
+        assertEquals(expectedLandscape, p.otherLayout)
+        assertEquals(expectedPortrait, p.savedLayout())
+        assertEquals(expectedLandscape, p.savedOtherLayout)
+        assertEquals(expectedPortrait, p.layouts().getValue(previewPortraitReverse))
+        assertEquals(expectedLandscape, p.layouts().getValue(previewLandscapeReverse))
+        assertEquals(expectedPortrait, p.savedLayouts().getValue(previewPortraitReverse))
+        assertEquals(expectedLandscape, p.savedLayouts().getValue(previewLandscapeReverse))
         assertEquals(sounds, p.sounds)
         assertEquals(sounds, p.savedSounds)
     }
@@ -119,7 +122,7 @@ class ShippingProfileTest {
                 val reply = session.command(save(selected))
                 val text = reply.getString("profile")
                 val profile = JSONObject(text)
-                assertEquals(22, profile.getInt("version"))
+                assertEquals(23, profile.getInt("version"))
                 assertEquals(text, file.readText())
                 assertAppearance(chosen, decodeDesignAppearanceProfile(text))
                 assertEquals(portrait, decodePreviewProfileLayouts(text).portrait)
@@ -132,7 +135,7 @@ class ShippingProfileTest {
                 val saved = withContext(Dispatchers.Main) { session.state }
                 assertAppearance(chosen, saved.savedAppearance)
                 assertLayouts(saved)
-                assertEquals(29, reply.getJSONObject("state").getInt("protocol"))
+                assertEquals(30, reply.getJSONObject("state").getInt("protocol"))
                 assertAppearance(chosen, decodeDesignAppearance(reply.getJSONObject("state").getJSONObject("savedAppearance")))
                 val loaded = reload(file)
                 val restored = withContext(Dispatchers.Main) { loaded.state }
@@ -182,27 +185,29 @@ class ShippingProfileTest {
     @Test fun profileEighteenUsesHistoricalAppearanceWithoutChangingSavedBytesOrLayouts() = runBlocking {
         val file = file()
         try {
-            val legacy = JSONObject(fixture(appearance())).put("version", 18).apply {
+            val legacy = JSONObject(fixture(appearance())).withoutThinkingWingspan().put("version", 18).apply {
                 for (key in appearanceFields) remove(key)
             }.toString(2)
             file.writeText(legacy)
             val historical = DesignAppearance("bright", "tide", PreviewMutedTuning(14, 0, 100, 0, 14, "float"),
                 "any-muted", true, PreviewIcons("current", "current"))
+            val legacyPortrait = portrait.copy(halo = portrait.halo.copy(thinkingWingspan = 2))
+            val legacyLandscape = landscape.copy(halo = landscape.halo.copy(thinkingWingspan = 2))
             val loaded = reload(file)
             val restored = withContext(Dispatchers.Main) { loaded.state }
             assertAppearance(historical, restored.appearance())
             assertAppearance(historical, restored.savedAppearance)
-            assertLayouts(restored)
+            assertLayouts(restored, legacyPortrait, legacyLandscape)
             assertEquals(legacy, file.readText())
             val migrated = loaded.command(save(restored)).getString("profile")
-            assertEquals(22, JSONObject(migrated).getInt("version"))
+            assertEquals(23, JSONObject(migrated).getInt("version"))
             assertAppearance(historical, decodeDesignAppearanceProfile(migrated))
-            assertEquals(portrait, decodePreviewProfileLayouts(migrated).portrait)
-            assertEquals(landscape, decodeLandscapeLayout(migrated))
+            assertEquals(legacyPortrait, decodePreviewProfileLayouts(migrated).portrait)
+            assertEquals(legacyLandscape, decodeLandscapeLayout(migrated))
         } finally { file.delete() }
     }
 
-    @Test fun profileTwentyTwoRequiresCompleteValidAppearance() {
+    @Test fun profileTwentyThreeRequiresCompleteValidAppearance() {
         val complete = fixture(appearance())
         for (key in appearanceFields) {
             val missing = JSONObject(complete).apply { remove(key) }
@@ -270,11 +275,11 @@ class ShippingProfileTest {
         } finally { file.delete() }
     }
     @Test fun legacyNineteenKeepsAppearanceAndSeedsCurrentLauncherWithoutRewriting() {
-        val previous = JSONObject(fixture(appearance())).put("version", 19).apply {
+        val previous = JSONObject(fixture(appearance())).withoutThinkingWingspan().put("version", 19).apply {
             remove("launcher"); remove("connectionStyle")
         }.toString()
         assertAppearance(appearance().copy(launcher = "current", connectionStyle = "relay"), decodeDesignAppearanceProfile(previous))
-        val restored = PersonaPreviewState().withAppearance(appearance()).json().put("protocol", 22).apply {
+        val restored = PersonaPreviewState().withAppearance(appearance()).json().withoutThinkingWingspan().put("protocol", 22).apply {
             remove("launcher"); remove("connectionStyle")
             getJSONObject("savedAppearance").apply { remove("launcher"); remove("connectionStyle") }
             getJSONObject("defaultAppearance").apply { remove("launcher"); remove("connectionStyle") }

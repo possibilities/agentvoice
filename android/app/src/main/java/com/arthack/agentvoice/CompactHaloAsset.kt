@@ -26,7 +26,7 @@ internal fun compactHaloBytes(original: ByteArray, tuning: CompactHaloTuning): B
     patch(idleBreathing) { 1f + (it - 1f) * (tuning.idleBreathingPercent / 100f) }
     // Thinking sweeps trimmed arcs along these paths. Narrow only the dash ellipses;
     // the central circle, vertical reach, sweep timing and other states stay authored.
-    patch(thinkingDashWidth) { 1.05f }
+    patch(thinkingDashWidth) { thinkingDashScale(tuning.thinkingWingspan) }
     for (site in listeningEase) {
         check(result[site.typeOffset].toInt() == 4 && result[site.idOffset].toInt() == site.originalId)
         // Use the file's cubic (.42, 0, .58, 1) instead of elastic entry/exit overshoot.

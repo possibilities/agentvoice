@@ -172,6 +172,15 @@
                   </select>
                 </div>
                 <div id="contained-controls" hidden>
+                  <div class="motion-control">
+                    <div class="size-heading">
+                      <label for="thinking-wingspan">Thinking wingspan</label>
+                      <output id="thinking-wingspan-value" for="thinking-wingspan">2</output>
+                    </div>
+                    <input id="thinking-wingspan" type="range" min="1" max="10" step="1" value="2" aria-describedby="thinking-wingspan-hint" />
+                    <p id="thinking-wingspan-hint" class="control-hint">How far Thinking reaches beyond Idle. 1 is tight; 10 is Original reach.</p>
+                    <button type="button" id="reset-thinking-wingspan" data-reset="thinking-wingspan" class="reset value-reset">Reset Thinking wingspan</button>
+                  </div>
                   <fieldset class="motion-controls">
                     <legend class="subpanel-title">Motion</legend>
                     <div class="motion-control">

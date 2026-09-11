@@ -47,3 +47,8 @@ Studio, Hayden Barnett, Vercel or Rive.
 AgentVoice modification, 2026-09-11: Contained Thinking narrows only the four
 moving dash ellipses horizontally (scaleX 1.28 to 1.05), retaining the central
 circle, vertical geometry, authored sweep timing and unchanged Original asset.
+
+September 11, 2026: Contained Thinking wingspan 1–10 tunes the same four
+dash scaleX fields: 1=1.025, 2=1.05 (the compact baseline), 3–9 interpolate
+toward 1.28, and 10=1.28 (authored reach). Circle, vertical geometry, trim-path
+timelines and the original asset remain unchanged.

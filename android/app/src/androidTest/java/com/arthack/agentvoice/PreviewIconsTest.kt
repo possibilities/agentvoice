@@ -68,16 +68,16 @@ class PreviewIconsTest {
             assertEquals(beforeCredits.endHold(), state())
             assertArrayEquals(savedBytes, file.readBytes())
             val selected = state()
-            val legacy = selected.json().put("protocol", 20).apply { remove("icons") }
+            val legacy = selected.json().withoutThinkingWingspan().put("protocol", 20).apply { remove("icons") }
             assertEquals(PreviewIcons(), restorePersonaPreview(legacy, selected.saved).icons)
             val reply = session.command(JSONObject().put("method", "save").put("id", 2)
                 .put("revision", selected.revision).put("orientation", selected.orientation)
                 .put("orientationEpoch", selected.orientationEpoch))
             val profile = JSONObject(reply.getString("profile"))
-            assertEquals(22, profile.getInt("version"))
+            assertEquals(23, profile.getInt("version"))
             assertEquals(selected.icons, decodePreviewIcons(profile.getJSONObject("icons")))
             assertEquals(selected.icons, state().icons)
-            assertEquals(29, reply.getJSONObject("state").getInt("protocol"))
+            assertEquals(30, reply.getJSONObject("state").getInt("protocol"))
         } finally { file.delete() }
     }
 

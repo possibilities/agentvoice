@@ -130,7 +130,7 @@ internal data class PersonaPreviewState(
         return withLayoutMaps(effective, savedLayouts()).copy(sharedAppearance = shared)
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 29).put("connectionPreview", connectionPreview).put("launcher", launcher)
+    fun json(): JSONObject = JSONObject().put("protocol", 30).put("connectionPreview", connectionPreview).put("launcher", launcher)
         .put("connectionStyle", connectionStyle).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
@@ -191,16 +191,16 @@ private fun Map<String, PreviewLayout>.previewLayoutsJson(): JSONObject = JSONOb
     for ((orientation, layout) in this) data.put(orientation.previewOrientationJsonKey(), layout.json())
 }
 
-private fun decodeRemainingLayouts(data: JSONObject, orientation: String): Map<String, PreviewLayout> {
+private fun decodeRemainingLayouts(data: JSONObject, orientation: String, version: Int): Map<String, PreviewLayout> {
     val expected = oppositePreviewOrientations(orientation)
     require(data.fields() == expected.map { it.previewOrientationJsonKey() }.toSet())
-    return expected.associateWith { decodePreviewLayout(data.getJSONObject(it.previewOrientationJsonKey())) }
+    return expected.associateWith { decodePreviewLayout(data.getJSONObject(it.previewOrientationJsonKey()), version) }
 }
 
-private fun decodeSavedActiveLayout(data: JSONObject): PreviewLayout = PreviewLayout(
+private fun decodeSavedActiveLayout(data: JSONObject, legacyWingspan: Boolean): PreviewLayout = PreviewLayout(
     decodePreviewScales(data.getJSONObject("savedScales")).copy(offsetY = decodePreviewOffset(data.get("savedVerticalOffsetDp")).dp),
     decodePreviewDesign(data.getJSONObject("savedDesign")),
-    decodePreviewHalo(data.getJSONObject("savedHalo")),
+    decodePreviewHalo(data.getJSONObject("savedHalo"), legacyWingspan),
     decodePreviewSpirit(data.getJSONObject("savedSpirit")),
     data.getString("savedPersonaSide"),
     decodePreviewOffset(data.get("savedHorizontalOffsetDp")),
@@ -221,7 +221,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..29)
+    require(protocol in 1..30)
     if (protocol <= 26) require(orientation in setOf(previewPortrait, previewLandscape))
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22,
@@ -243,12 +243,12 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
                 if (protocol <= 19) decodeLegacyControlExtentDesign(migrated) else decodePreviewDesign(migrated)
             }
         } ?: PreviewDesign(), savedDesign = savedDesign,
-        halo = data.optJSONObject("halo")?.let(::decodePreviewHalo) ?: PreviewHalo(), savedHalo = savedHalo,
+        halo = data.optJSONObject("halo")?.let { decodePreviewHalo(it, legacyWingspan = protocol <= 29) } ?: PreviewHalo(), savedHalo = savedHalo,
         spirit = data.optJSONObject("spirit")?.let(::decodePreviewSpirit) ?: PreviewSpirit(), savedSpirit = savedSpirit,
         micMuted = holding || data.optBoolean("micMuted", mode != "listening"), speakerMuted = data.optBoolean("speakerMuted", false),
         orientation = orientation, orientationEpoch = epoch,
         personaSide = data.optString("personaSide", "left").also { require(it in previewPersonaSides) },
-        otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, if (protocol >= 20) 18 else if (protocol >= 19) 17 else if (protocol >= 17) 16 else if (protocol >= 16) 14 else if (protocol >= 14) 13 else if (protocol == 13) 12 else protocol) } ?: PreviewLayout(),
+        otherLayout = data.optJSONObject("otherLayout")?.let { decodePreviewLayout(it, if (protocol >= 30) 23 else if (protocol >= 20) 18 else if (protocol >= 19) 17 else if (protocol >= 17) 16 else if (protocol >= 16) 14 else if (protocol >= 14) 13 else if (protocol == 13) 12 else protocol) } ?: PreviewLayout(),
         theme = data.optString("theme", "bright"), mutedPresence = data.optString("mutedPresence", "tide"),
         mutedTuning = if (protocol >= 13) decodePreviewMutedTuning(data.getJSONObject("mutedTuning")) else PreviewMutedTuning(),
         presenceScope = if (protocol >= 15) data.getString("presenceScope") else "any-muted",
@@ -261,8 +261,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
         savedSounds = savedSounds, savedAppearance = savedAppearance)
     val restored = if (protocol >= 27) base.copy(
-        remainingLayouts = decodeRemainingLayouts(data.getJSONObject("remainingLayouts"), orientation),
-        savedRemainingLayouts = decodeRemainingLayouts(data.getJSONObject("savedRemainingLayouts"), orientation),
+        remainingLayouts = decodeRemainingLayouts(data.getJSONObject("remainingLayouts"), orientation, if (protocol >= 30) 23 else 22),
+        savedRemainingLayouts = decodeRemainingLayouts(data.getJSONObject("savedRemainingLayouts"), orientation, if (protocol >= 30) 23 else 22),
     ) else base
     val currentValues = if (protocol >= 27) restored.layouts() else {
         val portrait = if (orientation == previewPortrait) restored.activeLayout() else restored.otherLayout
@@ -272,7 +272,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     }
     val portrait = currentValues.getValue(previewPortrait)
     val landscape = currentValues.getValue(previewLandscape)
-    val shared = if (protocol >= 17) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = protocol <= 18) else PreviewSharedAppearance.from(portrait)
+    val shared = if (protocol >= 17) decodeSharedAppearance(data.getJSONObject("sharedAppearance"), legacyOffshoots = protocol <= 18, legacyWingspan = protocol <= 29) else PreviewSharedAppearance.from(portrait)
     val scopedLandscape = if (protocol >= 17) landscape else landscape.copy(appearanceOverrides = legacyLandscapeOverrides(landscape, shared))
     if (protocol >= 19) require(currentValues.values.all { it.design.spacing == portrait.design.spacing })
     val migratedLandscape = if (protocol >= 19) scopedLandscape else scopedLandscape.copy(design = scopedLandscape.design.copy(spacing = portrait.design.spacing))
@@ -284,10 +284,10 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         require(effectiveValues.all { (slot, layout) -> layout == expected(migratedValues.getValue(slot)) })
     }
     val savedValues = if (protocol >= 27) {
-        val savedActive = decodeSavedActiveLayout(data)
+        val savedActive = decodeSavedActiveLayout(data, legacyWingspan = protocol <= 29)
         val savedCurrent = restored.savedRemainingLayouts + mapOf(orientation to savedActive,
-            facingPreviewOrientation(orientation) to decodePreviewLayout(data.getJSONObject("savedOtherLayout")))
-        val savedBase = decodeSharedAppearance(data.getJSONObject("savedSharedAppearance"))
+            facingPreviewOrientation(orientation) to decodePreviewLayout(data.getJSONObject("savedOtherLayout"), if (protocol >= 30) 23 else 22))
+        val savedBase = decodeSharedAppearance(data.getJSONObject("savedSharedAppearance"), legacyWingspan = protocol <= 29)
         require(savedCurrent.values.all { it.design.spacing == savedCurrent.getValue(previewPortrait).design.spacing })
         require(savedCurrent.values.all { savedBase.applyTo(it) == it })
         savedCurrent
@@ -298,7 +298,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         previewLandscapeReverse to savedLandscape,
     ).mapValues { (_, layout) -> savedShared.applyTo(layout.copy(design = layout.design.copy(spacing = savedDesign.spacing))) }
     return restored.withLayoutMaps(effectiveValues, savedValues).copy(sharedAppearance = shared,
-        savedSharedAppearance = if (protocol >= 27) decodeSharedAppearance(data.getJSONObject("savedSharedAppearance")) else savedShared,
+        savedSharedAppearance = if (protocol >= 27) decodeSharedAppearance(data.getJSONObject("savedSharedAppearance"), legacyWingspan = protocol <= 29) else savedShared,
         savedSounds = if (protocol >= 27) decodePreviewSounds(data.getJSONObject("savedSounds")) else savedSounds,
         savedAppearance = if (protocol >= 27) decodeDesignAppearance(data.getJSONObject("savedAppearance"),
             legacyConnectionStyle = protocol <= 28) else savedAppearance)

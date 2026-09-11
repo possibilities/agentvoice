@@ -109,14 +109,14 @@ internal fun currentPreviewOrientation(): String {
     return previewOrientation(configuration.orientation, rotation)
 }
 
-internal fun decodePreviewLayout(data: JSONObject, version: Int = 18): PreviewLayout {
+internal fun decodePreviewLayout(data: JSONObject, version: Int = 23): PreviewLayout {
     require(data.fields() == setOf("scales", "verticalOffsetDp", "design", "halo", "spirit", "personaSide") +
         if (version >= 15) setOf("horizontalOffsetDp", "appearanceOverrides") else emptySet<String>())
     val design = data.getJSONObject("design")
     val spaced = when { version <= 11 -> withLegacyPreviewSpacing(design); version == 12 -> withVersionTwelvePadding(design); else -> design }
     val migrated = if (version <= 13) withLegacyTraceJoin(spaced) else if (version <= 16) withoutLegacyOffshoots(spaced) else spaced
     return PreviewLayout(decodePreviewPlacement(data), if (version <= 17) decodeLegacyControlExtentDesign(migrated) else decodePreviewDesign(migrated),
-        decodePreviewHalo(data.getJSONObject("halo")), decodePreviewSpirit(data.getJSONObject("spirit")), data.getString("personaSide"),
+        decodePreviewHalo(data.getJSONObject("halo"), legacyWingspan = version <= 22), decodePreviewSpirit(data.getJSONObject("spirit")), data.getString("personaSide"),
         if (version >= 15) decodePreviewOffset(data.get("horizontalOffsetDp")) else 0,
         if (version >= 15) decodeAppearanceOverrides(data.getJSONArray("appearanceOverrides")) else emptySet())
 }
@@ -126,14 +126,14 @@ internal fun decodeLandscapeLayout(json: String): PreviewLayout = decodePreviewP
 internal fun decodeStoredLandscapeLayout(json: String): PreviewLayout {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..22)
+    require(version in 1..23)
     return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else PreviewLayout()
 }
 
 internal fun decodePortraitSide(json: String): String {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..22)
+    require(version in 1..23)
     return (if (version >= 11) data.getString("personaSide") else "left")
         .also { require(it in previewPersonaSides) }
 }

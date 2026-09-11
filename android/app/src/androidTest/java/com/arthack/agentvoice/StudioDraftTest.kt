@@ -17,7 +17,7 @@ class StudioDraftTest {
     private fun edited(): PersonaPreviewState {
         val base = PersonaPreviewState().withDesignProfile(StudioProduction.profile)
         val other = base.otherLayout.copy(personaSide = "right", horizontalOffsetDp = 49,
-            halo = base.otherLayout.halo.copy(ringSpreadPercent = 17), appearanceOverrides = setOf("halo"),
+            halo = base.otherLayout.halo.copy(ringSpreadPercent = 17, thinkingWingspan = 8), appearanceOverrides = setOf("halo"),
             design = base.otherLayout.design.copy(controlsWithoutPttDp = 743))
         return base.copy(otherLayout = other, sounds = PreviewSounds("rocker-29", 39), launcher = "duplex-halo", connectionStyle = "datum",
             theme = "grayscale", icons = PreviewIcons("engraved", "contact"), showPushToTalk = false,
@@ -36,6 +36,7 @@ class StudioDraftTest {
             assertEquals(chosen, design(StudioDraft(file).open()))
             assertEquals("operator checkpoint", checkpoint.readText())
             assertEquals(setOf("halo"), decodePreviewProfileLayouts(chosen).landscape.appearanceOverrides)
+            assertEquals(8, decodePreviewProfileLayouts(chosen).landscape.halo.thinkingWingspan)
         } finally { dir.deleteRecursively() }
     }
 
@@ -129,7 +130,7 @@ class StudioDraftTest {
         try {
             val file = File(dir, "draft.json")
             val current = JSONObject(edited().designProfile())
-            val legacy = JSONObject(current.toString()).put("version", 20).apply {
+            val legacy = JSONObject(current.toString()).withoutThinkingWingspan().put("version", 20).apply {
                 remove("connectionStyle")
                 remove("portraitReverse")
                 remove("landscapeReverse")
@@ -145,7 +146,7 @@ class StudioDraftTest {
             store.write(migrated.copy(horizontalOffsetDp = 17).designProfile())
             val saved = JSONObject(file.readText())
             assertEquals(3, saved.getInt("version"))
-            assertEquals(22, saved.getJSONObject("profile").getInt("version"))
+            assertEquals(23, saved.getJSONObject("profile").getInt("version"))
             assertTrue(saved.getJSONObject("profile").has("portraitReverse"))
             assertTrue(saved.getJSONObject("profile").has("landscapeReverse"))
         } finally { dir.deleteRecursively() }

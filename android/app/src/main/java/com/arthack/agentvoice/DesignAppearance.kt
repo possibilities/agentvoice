@@ -45,7 +45,7 @@ internal fun decodeDesignAppearance(data: JSONObject, legacy: Boolean = false,
 
 internal fun decodeDesignAppearanceProfile(json: String): DesignAppearance {
     val data = JSONObject(json)
-    require(data.getInt("version") in 1..22)
+    require(data.getInt("version") in 1..23)
     if (data.getInt("version") < 19) return DesignAppearance()
     val values = JSONObject()
     val legacyLauncher = data.getInt("version") == 19

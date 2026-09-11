@@ -2535,3 +2535,42 @@ Thinking-round backup's 0 after all window-manager operations. Production grants
 were preserved and Production was not launched. Phone release notification sent.
 Evidence: `/tmp/agentvoice-original-traces/`, including all comparisons, test logs
 and final restoration receipt. No emulator or design promotion was used.
+
+
+## Thinking wingspan slider — September 11, 2026
+
+Contained Halo now saves an integer Thinking wingspan 1–10. Setting 2 is byte-exact
+with the prior compact 1.05 scale; 1 uses 1.025 and 10 reaches authored 1.28. Only
+the four guarded scaleX fields vary across the range. A JVM regression compares
+every other byte against the compact baseline for all ten values, preserving
+the central circle, Y geometry and complete trim-path timelines. Original stays
+unchanged. Profile 23/protocol 30 carry the setting through shared appearance,
+orientation overrides, draft, checkpoint, resets and promotion. Legacy profiles
+gain 2 in memory without rewriting their files. New provenance 3 receipts mark
+the normalized shape; older receipts keep their original source text and hashes.
+
+Both APKs, Studio instrumentation APK, Android lint and 149 JVM tests pass.
+All 132 configurator tests, the full Bun suite, TypeScript typecheck, Biome lint
+and the shipping generation check pass.
+The production APK audit passes: 48,420,845 bytes, selected assets only, no Studio
+entrypoints or profile JSON. SHA-256:
+`3fa42cb4fabfd1822a91d26e575b6ff5bce94d23a7d31bd74ac0ee324d0eff97`.
+The generated baseline migration adds only wingspan 2 and version 23; all earlier
+visual values remain identical and the original promotion receipt is untouched.
+
+Studio 30 was installed on the S22. Its first upgraded connection decoded
+successfully and restored the operator’s current 77%/Thinking/portrait design.
+Draft, explicit checkpoint and bridge-binding bytes matched the preinstall
+backup. A live wingspan 1 edit was accepted. The four-orientation capture was
+interrupted when another app became foreground, then the phone was unplugged.
+Native pixel/profile/draft test execution, complete slider audition, Production
+installation and final phone restoration are pending device return. No success
+is claimed for those checks. The operator was notified immediately: Studio’s
+draft currently retains the test value 1, with its explicit checkpoint untouched.
+Restore 2 on return while preserving any subsequent human edits, then reread
+rotation settings; capture temporarily controls rotation. The original settings
+and exact design backups are under `/tmp/agentvoice-thinking-wingspan/phone/`.
+
+The normal unpinned Studio host is restored at `http://127.0.0.1:4317/`, using
+the normal per-device export destination. No server restart, voice call, grant
+change, emulator or production design adoption occurred.
