@@ -85,9 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
+    private let pairPhoneItem = NSMenuItem(title: AgentVoiceMenuCopy.pairPhone, action: #selector(showPairPhone), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: AgentVoiceMenuCopy.runAtLogin, action: #selector(toggleLoginItem), keyEquivalent: "")
     private let probe = WaitingServerProbe()
     private let login = LoginItemController()
+    private var pairPhoneWindow: PairPhoneWindowController?
     private var probeRevision = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -102,9 +104,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.setAccessibilityLabel("AgentVoice")
 
         serverItem.isEnabled = false
+        pairPhoneItem.target = self
         loginItem.target = self
         menu.addItem(serverItem)
         menu.addItem(.separator())
+        menu.addItem(pairPhoneItem)
         menu.addItem(loginItem)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: AgentVoiceMenuCopy.quit, action: #selector(quitMenu), keyEquivalent: "q")
@@ -147,6 +151,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             show(error)
         }
+    }
+
+    @objc private func showPairPhone() {
+        if pairPhoneWindow == nil { pairPhoneWindow = PairPhoneWindowController() }
+        pairPhoneWindow?.present(on: statusItem.button?.window?.screen)
     }
 
     private func show(_ error: Error) {

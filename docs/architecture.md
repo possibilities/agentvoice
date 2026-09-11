@@ -14,9 +14,11 @@ owns the current source map and recording/attachment implementation guidance.
   skips both app and service management.
   No configuration, prompt/skill setup or legacy command cleanup.
 - macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
-  registration, read-only launchd state and signed application packaging. The menu
-  is not a frontend or server supervisor; quitting it must not end a call. Follow
-  AgentNotify for future native panels, windows and shared SwiftUI content.
+  registration, read-only launchd state, reusable SwiftUI pairing-preview window
+  and signed application packaging. The preview QR is deliberately outside the
+  credential namespace. The menu is not a frontend or server supervisor; quitting
+  it must not end a call. Follow AgentNotify for native panels, windows and shared
+  SwiftUI content.
 - src/macos-app.ts: ownership, signing, source-revision and running-process checks
   for atomic menu app installation. Keep its bundle identity distinct from the
   private microphone-entitled Bun runtime below AgentVoice state.

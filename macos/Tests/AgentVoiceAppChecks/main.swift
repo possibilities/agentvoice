@@ -13,8 +13,19 @@ require(
     "running launchd state was not recognized"
 )
 require(WaitingServerState.running.menuTitle == "AgentVoice is running", "running menu copy changed")
+require(AgentVoiceMenuCopy.pairPhone == "Pair phone…", "pair-phone menu copy changed")
 require(AgentVoiceMenuCopy.runAtLogin == "Run at login", "login menu copy changed")
 require(AgentVoiceMenuCopy.quit == "Quit menu", "quit menu copy changed")
+require(PairPhonePreviewCopy.title == "Pair your phone", "pair-phone title changed")
+require(
+    PairPhonePreviewCopy.instruction == "Open AgentVoice on your phone and scan this code.",
+    "pair-phone instruction changed"
+)
+require(
+    PairPhonePreviewCopy.payload.hasPrefix("agentvoice-preview:v1:")
+        && !PairPhonePreviewCopy.payload.hasPrefix("agentvoice-grant:v1:"),
+    "pair-phone preview could be mistaken for a device grant"
+)
 require(
     parseLaunchctlState("\tstate = waiting\n") == .loaded("waiting"),
     "non-running launchd state was not preserved"

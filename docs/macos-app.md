@@ -8,6 +8,7 @@ audio or Codex to test readiness.
 The menu currently contains:
 
 - the default LaunchAgent's current launchd state;
+- **Pair phone…**, which opens a reusable native interaction-preview window;
 - **Run at login**, backed by `SMAppService.mainApp` and enabled by
   default on the app's first launch;
 - **Open Login Item Settings…** when macOS requires approval; and
@@ -17,6 +18,13 @@ The menu currently contains:
 account authentication, media readiness, frontend admission, or a live call.
 Use the existing terminal clients to start calls and `agentvoice service` for
 explicit service management.
+
+The pairing window is currently an interaction prototype. Its QR payload uses
+the rejected `agentvoice-preview:v1:` namespace and cannot create device access,
+connect to the server, request microphone permission, or start a call. The same
+fixed window is raised on repeated menu selection and remains open until the
+person closes it, matching a focused macOS setup task rather than a transient
+menu-bar popover.
 
 ## Build and verify
 

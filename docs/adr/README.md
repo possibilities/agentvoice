@@ -56,6 +56,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
 | [0043: Adapt delegation to the conversation and the work](0043-adaptive-conversation-first-delegation.md) | Accepted | Direct or delegated read-only work/thinking, useful parallelism, explicit handoffs and direct call controls. |
 | [0044: A native macOS menu app observes the waiting server](0044-native-macos-menu-app.md) | Accepted | The AppKit login item stays independent from LaunchAgent and call lifetime. |
+| [0045: Pair phone begins as a persistent native interaction preview](0045-native-pair-phone-preview.md) | Accepted | Desktop layout and lifecycle only; the preview QR cannot grant access or start a call. |
 
 ## Identifier history
 

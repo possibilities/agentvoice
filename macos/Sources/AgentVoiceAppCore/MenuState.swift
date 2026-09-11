@@ -1,8 +1,20 @@
 import Foundation
 
 public enum AgentVoiceMenuCopy {
+    public static let pairPhone = "Pair phone…"
     public static let runAtLogin = "Run at login"
     public static let quit = "Quit menu"
+}
+
+public enum PairPhonePreviewCopy {
+    public static let title = "Pair your phone"
+    public static let instruction = "Open AgentVoice on your phone and scan this code."
+    public static let securityNote = "Only scan this code with AgentVoice."
+    public static let previewNote = "Interaction preview — pairing is not connected yet."
+
+    // Deliberately rejected by the Android grant parser. Replacing this with a
+    // real credential requires the private issuance and activation lifecycle.
+    public static let payload = "agentvoice-preview:v1:desktop-interaction"
 }
 
 public enum WaitingServerState: Equatable, Sendable {
