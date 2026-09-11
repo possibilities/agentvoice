@@ -18,11 +18,13 @@ internal fun PreviewLandscapeTraces(
     clearRadius: Dp,
     design: PreviewDesign,
     modifier: Modifier = Modifier,
+    displayedClearRadius: (() -> Dp)? = null,
 ) {
     val theme = LocalPreviewTheme.current
     Canvas(modifier) {
         val unit = 1.dp.toPx()
-        val join = previewTraceJoin(clearRadius.toPx(), unit, design.traces) ?: return@Canvas
+        val radius = displayedClearRadius?.invoke() ?: clearRadius
+        val join = previewTraceJoin(radius.toPx(), unit, design.traces) ?: return@Canvas
         val traces = previewLandscapeTraceGeometry(geometry, size.width, unit, join.radiusPx,
             design.traces, design.spacing.effectiveChannelGapDp) ?: return@Canvas
         val center = Offset(traces.center.x, traces.center.y)

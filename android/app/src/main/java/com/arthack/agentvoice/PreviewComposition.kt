@@ -26,10 +26,12 @@ internal fun PreviewPersonaTraces(
     personaClearRadius: Dp = 0.dp,
     settings: PreviewTraces = PreviewTraces(),
     channelGapDp: Int = 10,
+    displayedClearRadius: (() -> Dp)? = null,
 ) {
     val theme = LocalPreviewTheme.current
     Canvas(modifier) {
-        val join = previewTraceJoin(personaClearRadius.toPx(), 1.dp.toPx(), settings) ?: return@Canvas
+        val radius = displayedClearRadius?.invoke() ?: personaClearRadius
+        val join = previewTraceJoin(radius.toPx(), 1.dp.toPx(), settings) ?: return@Canvas
         val geometry = previewTraceGeometry(size.width, size.height, stageHeight.toPx(), controlsHeight.toPx(),
             sideInset.toPx(), personaCenterY.toPx(), join.radiusPx, 1.dp.toPx(), settings, channelGapDp) ?: return@Canvas
         val center = Offset(size.width / 2f, personaCenterY.toPx())

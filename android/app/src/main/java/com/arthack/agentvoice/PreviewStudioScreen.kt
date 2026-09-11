@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
@@ -138,6 +139,14 @@ private fun PreviewStudioScene(
             // Ordinary tuning updates keep the existing immediate geometry behavior.
             val geometry = if (changing) source.towards(destination, progress.value) else target
             val clearRadius = rememberTraceRadius(geometry.diameter, halo, placement).dp
+            val displayedPlacement = remember(halo.variant) {
+                if (halo.variant == "original") PersonaDisplayedPlacement() else null
+            }
+            val displayedClearRadius: (() -> Dp)? = if (halo.variant == "original") ({
+                // This is the exact scale used by PersonaHalo's graphics layer, including
+                // native-governed listening handover. Keep the existing .4 guard factor.
+                displayedPlacement?.scale?.let { (geometry.diameter * it * .4f).dp } ?: clearRadius
+            }) else null
             val traceAlpha = when {
                 destination.layoutKey != target.layoutKey -> 0f
                 changing -> (progress.value * 2f - 1f).coerceAtLeast(0f)
@@ -149,9 +158,9 @@ private fun PreviewStudioScene(
                     if (portrait) {
                         PreviewPersonaTraces(geometry.deckY.dp, deck.extentHeightDp.dp, geometry.deckX.dp,
                             traceLayer, (geometry.stageY + geometry.diameter / 2f + geometry.offsetY).dp,
-                            clearRadius, design.traces, design.spacing.effectiveChannelGapDp)
+                            clearRadius, design.traces, design.spacing.effectiveChannelGapDp, displayedClearRadius)
                     } else {
-                        PreviewLandscapeTraces(geometry, clearRadius, design, traceLayer)
+                        PreviewLandscapeTraces(geometry, clearRadius, design, traceLayer, displayedClearRadius)
                     }
                     Box(Modifier.offset { IntOffset(geometry.stageX.dp.roundToPx(), geometry.stageY.dp.roundToPx()) }
                         .requiredSize(geometry.diameter.dp)) {
@@ -161,7 +170,7 @@ private fun PreviewStudioScene(
                             if (halo.variant == "contained") PreviewSpiritHalo(ui, stage, presentedPlacement, halo, scene.colors)
                             else PersonaHalo(ui, stage, presentedPlacement, PersonaColors(
                                 listening = theme.haloArgb(VoiceInk.you.toArgb()), speaking = theme.haloArgb(VoiceInk.agent.toArgb()),
-                                idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())))
+                                idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())), displayedPlacement)
                         }
                         // Only disconnected/connecting Idle uses this aperture. Connected speech and
                         // listening remove the notice immediately, without a stale outgoing status.

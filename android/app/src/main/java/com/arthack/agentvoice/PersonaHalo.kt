@@ -99,7 +99,7 @@ internal fun personaAnimationsEnabled(context: Context): Boolean =
 
 @Composable
 internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlacement = PersonaPlacement(),
-    colors: PersonaColors = PersonaColors()) {
+    colors: PersonaColors = PersonaColors(), displayedPlacement: PersonaDisplayedPlacement? = null) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
@@ -126,6 +126,11 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
     val targetScale = artboardScale * placement.scaleFor(state)
     val animate = resumed && !reducedMotion
     val scale = remember { Animatable(targetScale) }
+    DisposableEffect(displayedPlacement, scale) {
+        val applied = scale.asState()
+        displayedPlacement?.bind(applied)
+        onDispose { displayedPlacement?.release(applied) }
+    }
     var renderedState by remember { mutableStateOf(state) }
     val growthDuration = remember(renderedState, animate) { mutableStateOf<Int?>(null) }
     val readyToGrow = renderedState == state && growthDuration.value != null

@@ -210,11 +210,13 @@ kept in the working draft; explicit Save updates the exported checkpoint.
 Routes now reach the selected Persona size and position instead of ending a
 fixed distance above the deck. Their geometry and soft clear aperture follow
 settings, never animated pixels, and preserve the transparent center and native
-glow. Original uses one conservative attachment envelope across its three state
-sizes; a deliberately smaller state can sit farther from its routes. When that
-envelope reaches the deck, routes collapse and can disappear even while the
-current smaller ring remains above it. Contained's single size across states avoids
-that tradeoff. Contained now uses its nominal frame and maximum selected speaking
+glow. Original follows the same displayed scale as its native wrapper, including
+shrink-before-Listening and native-controlled exit growth. A larger setting for
+another state no longer hides the current smaller state's routes. Its existing
+conservative attachment factor remains unchanged; it is not an exact animated
+edge and can leave space around the smaller central ring. Both orientations read
+that scale during drawing, without restarting the renderer or adding a separate
+state timer. Contained retains its shared size and existing attachment rule. Contained now uses its nominal frame and maximum selected speaking
 expansion for a closer body boundary, with a 1 dp guard. Trace ink stays at 72%
 strength 2 dp outside that boundary and reaches full strength at 12 dp, making
 the feeds less washed out near the glow. The hollow center stays protected;

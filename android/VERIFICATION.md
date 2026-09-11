@@ -2485,3 +2485,53 @@ installed without launching it; its existing grant was preserved. Phone release
 notification sent. No emulator was created and no design profile was promoted.
 Evidence: `/tmp/agentvoice-thinking-arms/`, including native logs, before/after
 captures, both-sided motion sheets and restoration receipt.
+
+## Original displayed-scale trace attachment — September 11, 2026
+
+Original trace drawing now observes the exact existing wrapper Animatable through
+an identity-fenced, read-only State binding. Both Canvas paths read it during
+painting, so a frame invalidates drawing without recomposing the native view.
+The former largest-of-all-state-scales radius is retained only while unbound.
+No additional state mapping, native callback, timer, animation or profile field
+was introduced. Existing listening handover, interrupted scaling and reduced
+motion remain owned by PersonaHalo; Contained retains its existing path.
+
+The specialist review deliberately narrowed the earlier proposal: preserve the
+Original .4 attachment guard rather than adding new per-state radii or a second
+clearance animation. Asset calibration confirms .4 is the 64/256 frame radius
+multiplied by the authored listening-entry scale 1.6. It is a conservative join
+policy, not a maximum pixel bound or the closer 65/256 hard-frame edge. Closer
+nominal-core attachment would change the visual overlap policy and is not part
+of this fix. Idle can still show only short feeds with the current long fade;
+large Speaking settings can still overlap the deck or viewport. This change
+removes unrelated state-size leakage, not every possible experimental-layout gap.
+
+148 JVM tests and nine native tests passed. Native coverage includes nested scale
+updates, old-release/new-binding ownership, portrait and landscape draw-only
+invalidation, interrupted size/state transitions, native-view identity, reduced
+motion, disposal, existing listening handovers and trace paint. Production,
+Studio and instrumentation builds and both lints passed; repository lint,
+generated shipping drift and exact APK resource audit also passed. The Production
+APK remains 48,420,713 bytes, with no Studio entrypoints or profile JSON.
+
+Physical Studio captures compare Speaking/Listening/Idle sizes 100/35/60 before
+and after in all four orientations. After captures also cover Thinking and both
+landscape sides. Listening routes reappear; smaller Idle routes reflect its own
+scale while retaining the existing conservative gap/fade. The independent source
+review found no blocking issues. These are synthetic views and sampled frames,
+not a voice call or exhaustive pixel bounds. No server restart was performed.
+
+Installed APK hashes were reread:
+
+- Production: `43b8742a8eceef3796009fd8bbe7c840c7b704f6da0e5a55dda2a5cbec649873`
+- Studio: `7f3016fa7bbb3fe46507d71fdee71ff59aaa6dfd60c284977321af6effff8111`
+
+The exact Boatman/Datum/Listening landscape draft and gates were restored. Draft,
+checkpoint and bridge binding remain byte-identical. Final system reads confirm
+auto-rotation 1, user_rotation 0, font_scale 1.0, animator_duration_scale 1.0 and
+free rotation. The final display-orientation restoration also writes Android's
+saved user_rotation; its temporary value 1 was corrected to the original
+Thinking-round backup's 0 after all window-manager operations. Production grants
+were preserved and Production was not launched. Phone release notification sent.
+Evidence: `/tmp/agentvoice-original-traces/`, including all comparisons, test logs
+and final restoration receipt. No emulator or design promotion was used.
