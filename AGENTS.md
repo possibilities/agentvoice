@@ -11,7 +11,11 @@ The server-owned call controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
 owns config/prompt/role loading and an owned stock Codex app-server. All clients
 own audio and WebRTC; no production server path loads native media ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
-Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
+Frontend disconnect closes the call before another can begin. The macOS installer
+supervises the waiting default server as a user LaunchAgent and installs a separate
+native menu app ([ADR 0044](docs/adr/0044-native-macos-menu-app.md)). The menu app's
+login item controls only its own menu-bar presence; quitting or disabling it must
+not stop the server or a call.
 Authenticated WSS transport v2 (frontend API v3) is opt-in behind a dedicated tailnet-only TLS
 proxy ([ADR 0034](docs/adr/0034-authenticated-client-network.md)). `client` and `phone --connect` load a private device grant;
 browser content stays loopback-only and never receives that grant. Never expose
@@ -119,11 +123,13 @@ when the phone is available again. Report any restoration problem immediately.
 - `bun run generate:schema` — regenerate server.schema.json after schema edits.
 - `bun run generate:events-schema` — regenerate the repo-local events.schema.json
   contract and named event catalog; keep its drift and socket-frame tests passing.
-- `scripts/install.sh --install` / `bun run cli:install` — same editable command and macOS LaunchAgent
-  installer, called by AgentStart. Requires explicit installation scope;
+- `scripts/install.sh --install` / `bun run cli:install` — same editable command,
+  native macOS menu app and LaunchAgent installer, called by AgentStart. Requires
+  explicit installation scope;
   never use the live destination to test. Installer tests use disposable checkouts,
   local-only dependencies, a fake compiler, a fake launchctl runner and a Codex invocation sentinel.
-  Use --command-only for command publication fixtures; never run live launchctl in tests.
+  Use --command-only for command publication fixtures; it skips both the app and
+  LaunchAgent. Never run live launchctl in tests.
 
 ## Source map
 

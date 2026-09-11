@@ -18,6 +18,8 @@
     "start": "bun run src/main.ts",
     "setup": "bun run scripts/setup.ts",
     "native:build": "bun run scripts/build-native.ts",
+    "macos:build": "bash scripts/build-macos-app.sh",
+    "macos:check": "swift run --package-path macos --scratch-path build/macos-checks AgentVoiceAppChecks",
     "android:build": "bun build --compile --target=bun-linux-arm64-android --no-compile-autoload-dotenv --no-compile-autoload-bunfig --no-compile-autoload-tsconfig --no-compile-autoload-package-json --outfile=dist/agentvoice-android-arm64 src/main.ts",
     "android:configure": "bun run android/configurator/src/main.ts",
     "audio:probe": "bun run scripts/audio-probe.ts",

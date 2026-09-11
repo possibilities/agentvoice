@@ -53,7 +53,13 @@ function fixture() {
   ]) {
     copyFileSync(join(repository, "scripts", name), join(root, "scripts", name));
   }
-  for (const name of ["service.ts", "service-runtime.ts", "paths.ts", "private-files.ts"]) {
+  for (const name of [
+    "service.ts",
+    "service-runtime.ts",
+    "macos-app.ts",
+    "paths.ts",
+    "private-files.ts",
+  ]) {
     copyFileSync(join(repository, "src", name), join(root, "src", name));
   }
   for (const name of ["bun", "git", "dirname", "bash"]) {
@@ -167,7 +173,7 @@ exit "$FIXTURE_COMPILER_EXIT"
           return { code: 0, out: "", err: "" };
         },
       };
-      await install(new VoiceService(options));
+      await install(new VoiceService(options), false);
     `;
     const child = Bun.spawn([process.execPath, "-e", script], {
       cwd: base,

@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { installMacApp, MACOS_APP_NAME, preflightMacApp } from "../src/macos-app.ts";
 import { serviceOptions, VoiceService } from "../src/service.ts";
 import { checkPrerequisites } from "./prerequisites.ts";
 
@@ -25,15 +26,16 @@ const uid = process.getuid?.();
 const usage = `Usage: scripts/install.sh --install [--command-only] | --help
 
 Install frozen dependencies, build native audio, and atomically link the editable
-agentvoice command to this checkout. On macOS also install and start the default
-waiting-server LaunchAgent (replacing this installer's existing job). No audio or
-Codex child opens until a frontend calls. --command-only skips service management.
-Requires a clean Git checkout, Bun 1.3+, stock Codex and a C11 compiler.
+agentvoice command to this checkout. On macOS also install AgentVoice.app and start
+the default waiting-server LaunchAgent (replacing this installer's existing job).
+No audio or Codex child opens until a frontend calls. --command-only skips the app
+and service. Requires a clean Git checkout, Bun 1.3+, stock Codex and a C11 compiler.
 
 Destinations (absolute paths; no application-controlled symlink components):
   AGENTVOICE_INSTALL_BIN_DIR    default: ~/.local/bin
   AGENTVOICE_INSTALL_STATE_DIR  default: $XDG_STATE_HOME/agentvoice
                                       or ~/.local/state/agentvoice
+  AGENTVOICE_INSTALL_APP_DIR    default: ~/Applications (macOS only)
 Receipt: deployed-sha (the commit installed, not a pin on later source edits).
 An unrelated existing command is never overwritten. No uninstall or migration.
 `;
@@ -138,7 +140,10 @@ async function run(argv: string[]): Promise<void> {
   if (code !== 0) refuse(`build/dependency step failed (exit ${code}); command link not changed`);
 }
 
-export async function install(serviceOverride?: VoiceService | false): Promise<void> {
+export async function install(
+  serviceOverride?: VoiceService | false,
+  appOverride?: boolean,
+): Promise<void> {
   if (uid === undefined || uid === 0) refuse("run as the target user, not root (POSIX required)");
   checkPrerequisites();
   const sha = cleanHead();
@@ -157,6 +162,19 @@ export async function install(serviceOverride?: VoiceService | false): Promise<v
       ? undefined
       : (serviceOverride ??
         (process.platform === "darwin" ? new VoiceService(serviceOptions(source)) : undefined));
+  const installApp = appOverride ?? (process.platform === "darwin" && service !== undefined);
+  const appDir = process.env["AGENTVOICE_INSTALL_APP_DIR"] ?? join(homedir(), "Applications");
+  const app = join(appDir, MACOS_APP_NAME);
+  let appDisposition: "missing" | "current" | "replace" | undefined;
+  if (installApp) {
+    directory(appDir);
+    safePath(join(root, "build", "macos"));
+    safePath(join(root, "dist"));
+    for (const command of ["swift", "iconutil", "codesign"]) {
+      if (!Bun.which(command)) refuse(`${command} is required to build AgentVoice.app`);
+    }
+    appDisposition = preflightMacApp(app, sha);
+  }
   await service?.preflight();
   const receipt = join(stateDir, "deployed-sha");
 
@@ -212,6 +230,9 @@ export async function install(serviceOverride?: VoiceService | false): Promise<v
     await run([process.execPath, "install", "--frozen-lockfile"]);
     safePath(join(root, "build", "native", `${process.platform}-${process.arch}`));
     await run([process.execPath, "run", join(root, "scripts/build-native.ts")]);
+    if (installApp && appDisposition !== "current") {
+      await run(["/bin/bash", join(root, "scripts/build-macos-app.sh")]);
+    }
     if (cleanHead() !== sha)
       refuse("checkout changed during installation; command link not changed");
     validateDestination();
@@ -228,6 +249,20 @@ export async function install(serviceOverride?: VoiceService | false): Promise<v
       console.warn(
         `PATH does not select this command${onPath ? ` (currently ${onPath})` : ""}; put ${binDir} first. No other command was changed.`,
       );
+    }
+    if (installApp) {
+      try {
+        mkdirSync(appDir, { recursive: true, mode: 0o755 });
+        directory(appDir);
+        const result = installMacApp(join(root, "dist", MACOS_APP_NAME), app, sha);
+        console.log(
+          result === "current"
+            ? `AgentVoice menu app is already current at ${app}`
+            : `Installed ${app}`,
+        );
+      } catch (error) {
+        throw new Error(`Command installed, but menu app installation failed: ${String(error)}`);
+      }
     }
     if (service) {
       try {
@@ -264,7 +299,8 @@ if (import.meta.main) {
     process.exitCode = 2;
   } else {
     try {
-      await install(args.includes("--command-only") ? false : undefined);
+      const commandOnly = args.includes("--command-only");
+      await install(commandOnly ? false : undefined, commandOnly ? false : undefined);
     } catch (error) {
       console.error(
         `agentvoice install: ${error instanceof Error ? error.message : String(error)}`,
