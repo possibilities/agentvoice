@@ -396,7 +396,7 @@ function iconResources(family: string): string[] {
     return ["mic", "mic_muted", "speaker", "speaker_muted"].map(
       (part) => `preview_engraved_${part}`,
     );
-  if (family === "noun-boatman" || family === "noun-icons")
+  if (family === "noun-boatman" || family === "noun-icons" || family.startsWith("participant-"))
     return ["mic", "mic_muted", "speaker", "speaker_muted"].map(
       (part) => `preview_${family.replaceAll("-", "_")}_${part}`,
     );
@@ -482,7 +482,11 @@ internal object StudioProduction {
         resolve(repositoryRoot, "android/third-party/icons/noun-project/CC-BY-3.0.txt"),
       ),
     );
-  else if (family.startsWith("phosphor-"))
+  else if (
+    family.startsWith("phosphor-") ||
+    family === "participant-bold" ||
+    family === "participant-fill"
+  )
     result.set(
       `${noticesRoot}Icons-LICENSE.txt`,
       await readFile(resolve(repositoryRoot, "android/third-party/icons/phosphor/LICENSE.txt")),

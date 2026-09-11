@@ -260,6 +260,43 @@ test("release inventory contains only adopted artwork and sounds, and re-promoti
   await writeShipping(next, { root, check: true });
 });
 
+test("participant auditions promote exact selected vectors and required license without the gallery", async () => {
+  for (const family of ["participant-profile", "participant-bold", "participant-fill"] as const) {
+    const profile = {
+      ...completeShippingProfile(snapshot()),
+      icons: { channels: family, push: "current" },
+    };
+    const selected = createShippingSnapshot(JSON.stringify(profile), "participant.json", {
+      kind: "profile",
+    });
+    const outputs = await shippingOutputs(selected);
+    for (const part of ["mic", "mic_muted", "speaker", "speaker_muted"]) {
+      const actual = outputs.get(
+        `android/app/src/release/res/drawable/shipping_channel_${part}.xml`,
+      );
+      const expected = await readFile(
+        new URL(
+          `../../app/src/debug/res/drawable/preview_${family.replaceAll("-", "_")}_${part}.xml`,
+          import.meta.url,
+        ),
+      );
+      expect(new Uint8Array(actual as Uint8Array)).toEqual(new Uint8Array(expected));
+    }
+    expect(
+      [...outputs.keys()].some(
+        (path) => path.includes("preview_participant") || path.includes("icon-previews"),
+      ),
+    ).toBe(false);
+    const license = outputs.get("android/app/src/main/assets/notices/Shipping-Icons-LICENSE.txt");
+    if (family === "participant-profile") expect(license).toBeUndefined();
+    else
+      expect(new TextDecoder().decode(license as Uint8Array)).toContain(
+        "Copyright (c) 2023 Phosphor Icons",
+      );
+    expect(parseShippingSnapshot(canonicalJson(selected)).appearance.icons.channels).toBe(family);
+  }
+});
+
 test("missing, invalid and overlapping promotion inputs fail before writing user sources", async () => {
   const { root, input, selection } = await fixture();
   await expect(

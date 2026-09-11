@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Connection display inside Persona — September 11, 2026** (receipt at the end).
+Latest work: **Participant icon auditions — September 11, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -2385,3 +2385,59 @@ Auto-rotation1, user_rotation0, font_scale1.0 and animator_duration_scale1.0 wer
 restored and reread; window-manager rotation is free. The physical display
 settled in portrait instead of its initial reverse landscape; this was disclosed
 in the completion notification. No saved orientation geometry was changed.
+
+## Participant icon auditions — September 11, 2026
+
+Added shared Studio choices Speaking profiles (original AgentVoice artwork) and
+Phosphor User/Robot Bold and Fill (MIT). Original identity silhouettes remain
+intact while live voice arcs change to an audio-stop block. Stock copies use a
+shared transparent diagonal mute slash, 95% Robot optical size and a documented
+muted-User-only clip removing an isolated shoulder tip. Upstream stock originals
+and license are byte-exact; generated SVGs have accessible titles and image roles.
+
+All three pairs reuse existing icon Save/draft/reset/orientation handling. PTT
+may retain its press symbol or Match human channel. Audio controls, semantic
+labels and current production selection are unchanged. Future promotion copies
+only the selected pair’s four exact vectors and applicable license; the APK
+audit now explicitly rejects leaked participant audition resources.
+
+Host verification: 130 tests / 4,202 assertions passed, including complete
+selection and promotion/resource/license cases; TypeScript, Biome and generated
+production drift checks passed. The stock generator reconstructed native vectors
+as SVG with zero differing pixels at 96/24/16 and reproduced its outputs exactly.
+Original source/preview equality and XML parsing pass. Parent reviewed both
+large/small comparison sheets and requested and visually verified the stock User
+fragment correction. These are source-rendered comparisons, not Android GPU or
+physical-display evidence. Native phone review and Studio delivery remain pending
+a newly notified explicit handoff; the previous phone turn was released.
+
+Evidence: `android/third-party/icons/phosphor-participants/comparison.png` and
+its provenance/receipt, `/tmp/agentvoice-human-android-design/final-comparison.png`,
+and `/tmp/agentvoice-participant-icons/`. The current operator checkpoint hash
+remains `fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+
+Participant build follow-through: Studio, Production and instrumentation APKs
+built successfully; 143 JVM tests and Studio/Production lints passed. The exact
+Production artifact passes the updated shipping audit, including exclusion of
+participant audition resources. Four native PreviewIcons tests passed on S22,
+covering the full family inventory, independent selections/persistence,
+credits, transparent knockout behavior and renderer/held-pointer continuity.
+
+Participant phone delivery complete: Studio installed and its exact APK SHA256
+verified as `a3ea0c4f197cff12e10181daeb5784b66dea220240859d143ab4cb94e9e7fba9`.
+All three families captured across all four physical layouts with native small
+Halo and Rocker icons; opposite audio gates were verified and captured in portrait
+for each pair. All three four-layout captures reported successful restoration.
+Parent reviewed portrait and landscape native views; the browser exposes all
+three choices and the revised PTT label on the stable4317 host. This is synthetic
+UI verification, not a live voice call.
+
+Phone released/notified with the exact original Boatman/Datum/Listening landscape
+session, gates and settings restored. Draft, checkpoint and binding are all
+byte-identical to this turn's backup. Auto-rotation1, user_rotation0, font_scale1.0,
+animator_duration_scale1.0 and free window-manager rotation were reread.
+Production remains installed at
+`83d95b7e1e4ea7e4393fe703917d83953798f8a258b45fd39d7a771d7529ed3a`;
+this audition round did not install/launch production, touch its grant or restart
+the server. No emulator was created. The temporary, conversation-only permission
+to use a plugged-in phone does not change the standing repository handoff rule.

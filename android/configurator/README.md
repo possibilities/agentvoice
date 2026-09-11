@@ -65,6 +65,21 @@ Shipping generates all four slots from the adopted profile22/provenance2.
 Legacy profile20 reverse defaults are synthesized from their matching axis only
 when reading that older format; loading it never rewrites its saved bytes.
 
+## Participant icon audition
+
+The shared channel-icon selector includes **Human / Agent · Speaking profiles**
+(original artwork) and **Human / Agent · Phosphor Bold / Fill** (MIT). These
+identify whose audio is controlled. Rocker labels and accessibility descriptions
+still identify microphone and agent audio; changing icons does not disable or
+disconnect a participant. The same pair appears in the small center indicators.
+PTT can retain its press symbol or use **Match human channel**.
+
+These are additional choices in the existing profile22/protocol29 icon field;
+Save, draft persistence, rotation and Reset to production use the same complete
+selection. A matching updated Studio APK is needed to render the new choices.
+No production selection is adopted by adding an audition. Promotion packages
+only the selected vectors and license, while the full library remains in Studio.
+
 ## Continue from production
 
 **Connection display** is shared across all four layouts. **Relay mark** places
@@ -660,9 +675,10 @@ profile22.
 ## Icon auditions and launcher studies
 
 The Shared appearance controls offer a coherent channel pair (Current, Engraved,
-Phosphor Bold, Phosphor Fill, Boatman or i cons) and an independent push-to-talk icon (Current
-press, Contact or Matching microphone). Matching microphone follows the live
-microphone from the selected pair. Each selector resets independently to its adopted default (i cons channels,
+Phosphor Bold, Phosphor Fill, Boatman, i cons or the Human / Agent auditions)
+and an independent push-to-talk icon (Current
+press, Contact or Match human channel). Match human channel follows the live
+human icon from the selected pair. Each selector resets independently to its adopted default (i cons channels,
 Current push symbol).
 Selection remains while muted indicators are Off or Push to talk is hidden.
 “Credits on phone” opens native icon credits through a one-shot, generation- and
@@ -684,12 +700,11 @@ install an APK; explicit promotion generates the selected launcher resources.
 Circle and squircle previews expose the central72 units of each108-unit source.
 Monochrome previews use illustrative tints.
 
-Assets are served from a fixed capability-scoped local allowlist. Phosphor source
+Assets are served from a fixed loopback-only local allowlist. Phosphor source
 and MIT links are pinned HTTPS URLs; Original denotes project-authored artwork,
 not a claim of CC0 licensing. Boatman and i cons use acquired Noun Project
 artwork under CC BY3.0; the panel names both source assets, their creator and
-license, and describes the modifications. Matching microphone credits only
-its source mic. See [icon preview provenance](public/icon-previews/README.md).
+license, and describes the modifications. For Noun pairs, Match human channel credits only its source microphone. See [icon preview provenance](public/icon-previews/README.md).
 
 
 ## Complete saves and shipping promotion

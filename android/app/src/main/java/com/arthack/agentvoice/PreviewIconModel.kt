@@ -4,7 +4,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import org.json.JSONObject
 
 internal val previewPushIcons = setOf("current", "contact", "microphone")
-internal val previewIconFamilies = setOf("current", "engraved", "phosphor-bold", "phosphor-fill", "noun-boatman", "noun-icons")
+internal val previewIconFamilies = setOf("current", "engraved", "phosphor-bold", "phosphor-fill", "noun-boatman", "noun-icons", "participant-profile", "participant-bold", "participant-fill")
 
 /** Shared icon choices persist with the complete design profile; release bundles only its selection. */
 internal data class PreviewIcons(val channels: String = "current", val push: String = "current") {

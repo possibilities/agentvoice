@@ -4,7 +4,7 @@ The complete library remains available to the debug studio. The locked shipping
 profile selects i cons Microphone 856601 / Volume 974802, with the original PTT
 symbol. Release bundles only the selected pair and its live/muted adaptations. The
 channel pair changes together across Rockers and center indicators; PTT can keep
-the current symbol, use the original Contact, or follow the selected microphone.
+the current symbol, use the original Contact, or follow the selected human-channel icon.
 The installed launcher remains unchanged; its original alternatives appear only
 in the browser gallery.
 
@@ -45,3 +45,16 @@ with `rsvg-convert` and ImageMagick available. This uses the checked-in original
 and evidence; the receipt includes all source transforms and mute sample pixels.
 The exported helper only changes its input/output path handling from the reviewed
 scratch helper. It does not install anything or edit application resources.
+
+## Human / Agent participants
+
+- **Speaking profiles**: original AgentVoice participant drawings; see
+  [source and generation](participants-original/README.md). Live audio marks and
+  muted derivatives accompany the stable human/machine pair.
+- **Phosphor participants Bold / Fill**: actual MIT User and Robot sources at
+  the same pinned Phosphor revision; see [receipt](phosphor-participants/README.md).
+  Integration copies include optical alignment and a transparent mute slash.
+
+The installed production pair is unchanged until explicit promotion. “Match
+human channel” also works with participant families; the PTT audio action and
+accessible labels remain unchanged.

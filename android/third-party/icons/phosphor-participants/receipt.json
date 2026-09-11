@@ -1,0 +1,300 @@
+{
+  "revision": 1,
+  "source": "https://github.com/phosphor-icons/core",
+  "commit": "2b75f3ad12b420c9504ef05df8d2564a28f8500e",
+  "license": "MIT",
+  "mapping": {
+    "mic": "user participant",
+    "speaker": "robot participant"
+  },
+  "canvas": "0 0 256 256; Android intrinsic size 64dp, matching the existing Phosphor Studio audition",
+  "adaptations": [
+    "Preserved every upstream path byte-for-byte in originals/ and copied its path data without redrawing.",
+    "Centered Robot uniformly at 95% optical scale; User remains at upstream scale.",
+    "Added a common diagonal mute slash with a true-transparent opposite-winding knockout; no background-color paint is used.",
+    "Muted User only: transparently clipped the shoulder tip beyond the common slash's lower butt terminus (x+y > 426.666...); upstream originals, live User, and all Robot geometry remain unchanged.",
+    "Added browser accessibility metadata and converted the same geometry to debug-only Android VectorDrawable XML."
+  ],
+  "validation": "Generator reconstructed every VectorDrawable as SVG and obtained zero differing pixels at 96, 24, and 16 px; painted connected-component counts and smallest-component areas record small-size fragment behavior.",
+  "comparison": {
+    "file": "comparison.png",
+    "sha256": "ed15fb4d70109753a4d3887fa88d28d08f410323117bee3d10016fd0a1858e06",
+    "rows_pixels": [
+      96,
+      24,
+      16
+    ],
+    "columns": [
+      "bold user live",
+      "bold user muted",
+      "bold robot live",
+      "bold robot muted",
+      "fill user live",
+      "fill user muted",
+      "fill robot live",
+      "fill robot muted"
+    ]
+  },
+  "assets": [
+    {
+      "weight": "bold",
+      "role": "mic",
+      "participant": "user",
+      "source": "user-bold.svg",
+      "scale": 1.0,
+      "source_sha256": "a4739174a602675d627b029aa524dd9345c56838ed1da34b5e1c3d02611792d5",
+      "transform": "identity",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "android/configurator/public/icon-previews/participant-bold-mic.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_bold_mic.xml",
+          "svg_sha256": "90865ac254bdd4918138aa451c8b5b78230e078a4ccec7471a0ad3762fcd0b3e",
+          "vector_sha256": "8343f7629a03d8f354aea2762ea3741711d69d8f48198de3c552ae017e59533b",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 2249
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 191
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 96
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "android/configurator/public/icon-previews/participant-bold-mic-muted.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_bold_mic_muted.xml",
+          "svg_sha256": "c1a9bf2458ca6f69aa1b1951308c87f20aa0cf1dc918ceb144fa49ab7fc2d4b7",
+          "vector_sha256": "b2fd67f1ae1082eaa45b2c7c0ae72054f4f9e39b9f057e6bdf8675cc747327d9",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 3,
+              "smallest_component_pixels": 750
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 214
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 102
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "weight": "bold",
+      "role": "speaker",
+      "participant": "robot",
+      "source": "robot-bold.svg",
+      "scale": 0.95,
+      "source_sha256": "a99282b21cad922ff594b4bdd2833e16675afd1148ed6c1120519be5c6c45ee4",
+      "transform": "matrix(0.95 0 0 0.95 6.4 6.4)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "android/configurator/public/icon-previews/participant-bold-speaker.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_bold_speaker.xml",
+          "svg_sha256": "849a063aadc72910b80bc33ad304c52af916ed12591df66ba8574b2d1962239e",
+          "vector_sha256": "824ebfe0dc3ae711a6c0ff88f8e86b7b7c6ea42a3ccc3f58c19cd9a8faa2e608",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 4,
+              "smallest_component_pixels": 124
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 294
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 148
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "android/configurator/public/icon-previews/participant-bold-speaker-muted.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_bold_speaker_muted.xml",
+          "svg_sha256": "980e300bac32767a444a9213b89efd1df76103d5808de1d0cb75431fe7930372",
+          "vector_sha256": "5e5c8270e1c09b218fd0bbb5493b6a88ea8636fef14991d122abea70963e8326",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 6,
+              "smallest_component_pixels": 10
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 313
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 153
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "weight": "fill",
+      "role": "mic",
+      "participant": "user",
+      "source": "user-fill.svg",
+      "scale": 1.0,
+      "source_sha256": "9e011a83732426181c4e18ebfe0322635ed7a222ccd572072b1233a91f88fd0b",
+      "transform": "identity",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "android/configurator/public/icon-previews/participant-fill-mic.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_fill_mic.xml",
+          "svg_sha256": "5d9348e19e0a7a07b3dc7aa623ee831193627bcde9ca88d400f147344aedcdc3",
+          "vector_sha256": "b9eda9d71186d11939765e45d85033f7c662b69bb58d790473e3daf5465625cf",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 3867
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 262
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 126
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "android/configurator/public/icon-previews/participant-fill-mic-muted.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_fill_mic_muted.xml",
+          "svg_sha256": "79c8b5ad677559176d3a76283852b956b058c28250ca904b729dca830acfcd21",
+          "vector_sha256": "5182e39117764b3d8a9101c9d2464764f49e23f072a4eb5b32291e67a24a72bc",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 3,
+              "smallest_component_pixels": 838
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 266
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 124
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "weight": "fill",
+      "role": "speaker",
+      "participant": "robot",
+      "source": "robot-fill.svg",
+      "scale": 0.95,
+      "source_sha256": "c969f03339114964a2e7ac516616c3620695ade3aab8411c9f355f3afacf631d",
+      "transform": "matrix(0.95 0 0 0.95 6.4 6.4)",
+      "variants": [
+        {
+          "state": "live",
+          "svg": "android/configurator/public/icon-previews/participant-fill-speaker.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_fill_speaker.xml",
+          "svg_sha256": "5a35b6df0dd68b1e1cc269c3191424208cc1ce9e8400914482e621371ffa4844",
+          "vector_sha256": "12ee6b0b3ce2ae654acd33560120a27fceb569188eae671c6dbd540d479b7064",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 4432
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 322
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 154
+            }
+          ]
+        },
+        {
+          "state": "muted",
+          "svg": "android/configurator/public/icon-previews/participant-fill-speaker-muted.svg",
+          "vector": "android/app/src/debug/res/drawable/preview_participant_fill_speaker_muted.xml",
+          "svg_sha256": "09042597eab44a5a961456e2f427583719d3dee13d56bffcdd3cadd5c76aa53f",
+          "vector_sha256": "1df00edb5291c7def62e93db66772981f34e64eeb711e5b63feb6faf2f8bb08a",
+          "checks": [
+            {
+              "pixels": 96,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 3,
+              "smallest_component_pixels": 843
+            },
+            {
+              "pixels": 24,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 326
+            },
+            {
+              "pixels": 16,
+              "svg_native_difference_pixels": 0,
+              "painted_components": 1,
+              "smallest_component_pixels": 155
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

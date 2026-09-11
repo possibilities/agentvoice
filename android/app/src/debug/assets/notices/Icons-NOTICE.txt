@@ -52,3 +52,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Participant icon auditions
+Speaking profiles: original AgentVoice artwork, repository MIT license.
+Phosphor User and Robot, Bold and Fill: Copyright (c) 2023 Phosphor Icons, MIT.
+https://github.com/phosphor-icons/core/tree/2b75f3ad12b420c9504ef05df8d2564a28f8500e
+Integration copies use optical sizing and transparent mute slashes. Original
+source coordinates and exact modifications are recorded in the repository under
+android/third-party/icons/phosphor-participants/.
+These controls mute participant audio; they do not disable a person or agent.

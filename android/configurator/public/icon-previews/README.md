@@ -39,7 +39,7 @@ EvenOdd clipping. No background-colored erase paint is used.
 
 `ptt-contact-monochrome.svg` is an original action glyph: cap, stem and fixed
 contact. Its 48-unit geometry uses filled rectangles at (10,8,28,6), (20,14,8,16)
-and (8,39,32,5). Matching microphone uses the selected family's existing live mic.
+and (8,39,32,5). Match human channel uses the selected family's existing live human-channel icon.
 
 Duplex Halo, Relay Aperture and Voice Carrier launcher concepts are original task
 artwork from the same project design team. Color and monochrome source geometry
@@ -88,3 +88,14 @@ Unserved designer verification exports are excluded from the preview directory.
 Noun SVGs already carried valid title/description references and were unchanged;
 their eight file hashes match normalization receipt revision3, including the
 muted Boatman speaker correction described above.
+
+## Human / Agent auditions
+
+`participant-profile-*` are original Speaking profiles, with stable participant
+silhouettes and voice arcs replaced by an audio-stop block when muted. Their
+editable originals and generator live in `android/third-party/icons/participants-original/`.
+`participant-bold-*` and `participant-fill-*` derive from the actual Phosphor
+User/Robot MIT SVGs, with documented optical sizing and transparent mute
+adaptations in `android/third-party/icons/phosphor-participants/`. The native
+VectorDrawables and gallery previews are generated together. These are additional
+Studio options, not an adopted production pair.

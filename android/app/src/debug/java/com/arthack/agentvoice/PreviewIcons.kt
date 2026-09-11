@@ -32,6 +32,21 @@ internal fun previewChannelPainter(speaker: Boolean, muted: Boolean): Painter? {
         } else {
             if (muted) R.drawable.preview_noun_icons_mic_muted else R.drawable.preview_noun_icons_mic
         }
+        "participant-profile" -> if (speaker) {
+            if (muted) R.drawable.preview_participant_profile_speaker_muted else R.drawable.preview_participant_profile_speaker
+        } else {
+            if (muted) R.drawable.preview_participant_profile_mic_muted else R.drawable.preview_participant_profile_mic
+        }
+        "participant-bold" -> if (speaker) {
+            if (muted) R.drawable.preview_participant_bold_speaker_muted else R.drawable.preview_participant_bold_speaker
+        } else {
+            if (muted) R.drawable.preview_participant_bold_mic_muted else R.drawable.preview_participant_bold_mic
+        }
+        "participant-fill" -> if (speaker) {
+            if (muted) R.drawable.preview_participant_fill_speaker_muted else R.drawable.preview_participant_fill_speaker
+        } else {
+            if (muted) R.drawable.preview_participant_fill_mic_muted else R.drawable.preview_participant_fill_mic
+        }
         else -> return null
     }
     return painterResource(resource)

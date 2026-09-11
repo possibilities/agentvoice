@@ -55,7 +55,7 @@ with zipfile.ZipFile(apk) as bundle:
     sdk = Path(os.environ['ANDROID_HOME'])
     aapt = sdk / 'build-tools/36.0.0/aapt2'
     resources = subprocess.check_output([str(aapt), 'dump', 'resources', str(apk)], text=True)
-    assert not re.search(r'drawable/preview_(engraved|phosphor|noun)', resources), 'audition icon resources leaked'
+    assert not re.search(r'drawable/preview_(engraved|phosphor|noun|participant)', resources), 'audition icon resources leaked'
     shipped = set(re.findall(r'drawable/(shipping_channel_[a-z_]+)', resources))
     expected_icons = {p.stem for p in (root / 'app/src/release/res/drawable').glob('shipping_channel_*.xml')}
     assert shipped == expected_icons, (shipped, expected_icons)

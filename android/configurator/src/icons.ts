@@ -5,6 +5,9 @@ export const iconStyles = [
   "phosphor-fill",
   "noun-boatman",
   "noun-icons",
+  "participant-profile",
+  "participant-bold",
+  "participant-fill",
 ] as const;
 export const pushIconStyles = ["current", "contact", "microphone"] as const;
 export type IconStyle = (typeof iconStyles)[number];
@@ -80,6 +83,47 @@ function nounCredits(
   };
 }
 export const iconCatalog: Record<IconStyle, IconOption> = {
+  "participant-profile": {
+    label: "Human / Agent · Speaking profiles",
+    credit: {
+      ...original,
+      changes: "Matched participant profiles with audio-specific live and muted marks.",
+    },
+    channels: [
+      "participant-profile-mic.svg",
+      "participant-profile-mic-muted.svg",
+      "participant-profile-speaker.svg",
+      "participant-profile-speaker-muted.svg",
+    ],
+  },
+  "participant-bold": {
+    label: "Human / Agent · Phosphor Bold",
+    credit: {
+      ...phosphor,
+      changes:
+        "User and Robot; robot optically reduced, shared transparent mute slash added. These controls mute audio, not the participant.",
+    },
+    channels: [
+      "participant-bold-mic.svg",
+      "participant-bold-mic-muted.svg",
+      "participant-bold-speaker.svg",
+      "participant-bold-speaker-muted.svg",
+    ],
+  },
+  "participant-fill": {
+    label: "Human / Agent · Phosphor Fill",
+    credit: {
+      ...phosphor,
+      changes:
+        "User and Robot; robot optically reduced, shared transparent mute slash added. These controls mute audio, not the participant.",
+    },
+    channels: [
+      "participant-fill-mic.svg",
+      "participant-fill-mic-muted.svg",
+      "participant-fill-speaker.svg",
+      "participant-fill-speaker-muted.svg",
+    ],
+  },
   current: {
     label: "Current",
     credit: original,
@@ -150,7 +194,7 @@ export const iconCatalog: Record<IconStyle, IconOption> = {
 export const pushIconCatalog: Record<PushIconStyle, { label: string }> = {
   current: { label: "Current press" },
   contact: { label: "Contact" },
-  microphone: { label: "Matching microphone" },
+  microphone: { label: "Match human channel" },
 };
 export function pushIconPreview(icons: Icons): { file: string; credit: IconCredit } {
   if (icons.push === "microphone")
