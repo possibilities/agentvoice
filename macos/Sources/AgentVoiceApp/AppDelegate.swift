@@ -3,6 +3,7 @@ import AppKit
 import ServiceManagement
 
 private let serverLabel = "io.arthack.agentvoice.server"
+private let statusItemLength: CGFloat = 22
 
 private final class WaitingServerProbe {
     func read(completion: @escaping @Sendable (WaitingServerState) -> Void) {
@@ -42,7 +43,9 @@ private final class LoginItemController {
         case .requiresApproval:
             return .approvalRequired
         case .notFound:
-            return .unavailable
+            // A freshly installed main app can report notFound until its first
+            // successful registration. Registration is still the correct action.
+            return .disabled
         @unknown default:
             return .unavailable
         }
@@ -67,16 +70,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Show in Menu Bar at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
+    private let loginItem = NSMenuItem(title: "Open AgentVoice at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let probe = WaitingServerProbe()
     private let login = LoginItemController()
     private var probeRevision = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "AgentVoice")
+        statusItem = NSStatusBar.system.statusItem(withLength: statusItemLength)
+        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        let image = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "AgentVoice")?
+            .withSymbolConfiguration(configuration)
         image?.isTemplate = true
         statusItem.button?.image = image
+        statusItem.button?.imagePosition = .imageOnly
         statusItem.button?.toolTip = "AgentVoice"
         statusItem.button?.setAccessibilityLabel("AgentVoice")
 
@@ -95,7 +101,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        statusItem.button?.highlight(true)
         refresh()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        statusItem.button?.highlight(false)
     }
 
     private func refresh() {

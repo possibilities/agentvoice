@@ -8,7 +8,7 @@ audio or Codex to test readiness.
 The menu currently contains:
 
 - the default LaunchAgent's current launchd state;
-- **Show in Menu Bar at Login**, backed by `SMAppService.mainApp`;
+- **Open AgentVoice at Login**, backed by `SMAppService.mainApp`;
 - **Open Login Item Settings…** when macOS requires approval; and
 - **Quit AgentVoice Menu**, which leaves the server and any call running.
 
