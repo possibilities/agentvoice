@@ -13,8 +13,8 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "android/configurator/profiles/R5CT91TW4RP.json"
-    const val profileSha256 = "4c5dd0c1766771ab1efa8957e89513e7b34b9bd116b4f96fa4642a6570dabc53"
+    const val profileSource = "../../../../../../Volumes/Scratch/agentvoice-layout-study-20260911/candidate-profile.json"
+    const val profileSha256 = "0e5554a7f1bb36740dcfefc7af3075a3f21cc7e7bdbe575490811ca0c3fedc87"
     const val sessionSha256 = "4d2c6cbb1f1a336b6ff890bc23e9ebab380ac4e8ac3727a9e7ca1af9a5ea38fe"
     val portrait = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -35.dp),
@@ -102,7 +102,7 @@ internal object ShippingDesign {
             strengthPercent = 51,
             surface = "soft",
         ),
-        personaSide = "left", horizontalOffsetDp = -36,
+        personaSide = "left", horizontalOffsetDp = -43,
     )
     val portraitReverse = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -20.dp),

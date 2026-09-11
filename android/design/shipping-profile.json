@@ -96,7 +96,7 @@
       "thinkingWingspan": 5,
       "variant": "contained"
     },
-    "horizontalOffsetDp": -36,
+    "horizontalOffsetDp": -43,
     "personaSide": "left",
     "scales": {
       "idle": 78,
@@ -240,7 +240,7 @@
     "verticalOffsetDp": -20
   },
   "presenceScope": "any-muted",
-  "savedAtEpochMs": 1789156843397,
+  "savedAtEpochMs": 1,
   "scaleMultipliers": {
     "idle": 0.78,
     "listening": 0.56,
