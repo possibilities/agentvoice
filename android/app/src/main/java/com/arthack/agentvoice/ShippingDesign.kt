@@ -13,9 +13,9 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "../../../../../../tmp/agentvoice-connection-flow/datum-profile.json"
-    const val profileSha256 = "51b5ef23bd2858757215b9e79d843deebcb53028d2d41637330223ba36be39ff"
-    const val sessionSha256 = "46b510968648235073515bab698315b0354be21963067efc394ea846bc4ed799"
+    const val profileSource = "android/configurator/profiles/R5CT91TW4RP.json"
+    const val profileSha256 = "4c5dd0c1766771ab1efa8957e89513e7b34b9bd116b4f96fa4642a6570dabc53"
+    const val sessionSha256 = "4d2c6cbb1f1a336b6ff890bc23e9ebab380ac4e8ac3727a9e7ca1af9a5ea38fe"
     val portrait = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -35.dp),
         design = PreviewDesign(
@@ -50,7 +50,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
-            thinkingWingspan = 2,
+            thinkingWingspan = 5,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -94,7 +94,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
-            thinkingWingspan = 2,
+            thinkingWingspan = 5,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -138,7 +138,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
-            thinkingWingspan = 2,
+            thinkingWingspan = 5,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -182,7 +182,7 @@ internal object ShippingDesign {
             ringSpreadPercent = 80,
             speakingColor = "#bbaaff",
             speakingMotionPercent = 68,
-            thinkingWingspan = 2,
+            thinkingWingspan = 5,
             variant = "contained",
         ),
         spirit = PreviewSpirit(
@@ -201,7 +201,7 @@ internal object ShippingDesign {
         push = "current",
     )
     const val launcher = "relay-aperture"
-    const val connectionStyle = "datum"
+    const val connectionStyle = "relay"
     const val theme = "bright"
     const val mutedPresence = "tide"
     const val presenceScope = "any-muted"

@@ -2646,3 +2646,22 @@ configured phone; the retained legacy-grant call is not evidence for that path.
 
 Private local evidence is under `/tmp/agentvoice-connection-flow/`. Never commit
 its bridge-binding backups. Phone access was released after restoration.
+
+## Saved configuration promotion — 2026-09-11
+
+Promoted the operator-selected `configurator/profiles/R5CT91TW4RP.json` exactly.
+Its source SHA-256 is
+`4c5dd0c1766771ab1efa8957e89513e7b34b9bd116b4f96fa4642a6570dabc53`;
+the canonical shipping profile is semantically identical and the provenance
+retains the original bytes. The snapshot selects Thinking wingspan 5 and Relay
+connection display, with all four existing layout geometries and Rocker 13 at
+60% retained. This updates Studio's bundled production baseline without resetting
+its working draft or explicit checkpoint.
+
+All 185 Android JVM tests and 134 Studio host tests pass. Production and Studio
+assemble successfully, both Android lint variants pass, and both APK packaging
+audits pass. No runtime, transport, permission or server changes are part of this
+promotion. Audited production SHA-256:
+`f297dd3ef240fce690b736d3fbbb531c721b22210db3ded68e85cc46a14a7f76`.
+Audited Studio SHA-256:
+`83e81f63f4d2df1bbac47f84ccff9fb43e7521ec041cd8e49f792ea2a90a8ca5`.

@@ -1,7 +1,7 @@
 {
   "appearanceOverrides": [],
   "connectedArtboardScale": 1.9,
-  "connectionStyle": "datum",
+  "connectionStyle": "relay",
   "design": {
     "composition": "traces",
     "controlsHeightDp": 407,
@@ -43,7 +43,7 @@
     "listeningPulsePercent": 68,
     "ringSpreadPercent": 80,
     "speakingMotionPercent": 68,
-    "thinkingWingspan": 2,
+    "thinkingWingspan": 5,
     "variant": "contained"
   },
   "horizontalOffsetDp": 0,
@@ -93,7 +93,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
-      "thinkingWingspan": 2,
+      "thinkingWingspan": 5,
       "variant": "contained"
     },
     "horizontalOffsetDp": -36,
@@ -152,7 +152,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
-      "thinkingWingspan": 2,
+      "thinkingWingspan": 5,
       "variant": "contained"
     },
     "horizontalOffsetDp": -34,
@@ -222,7 +222,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
-      "thinkingWingspan": 2,
+      "thinkingWingspan": 5,
       "variant": "contained"
     },
     "horizontalOffsetDp": 0,
@@ -240,7 +240,7 @@
     "verticalOffsetDp": -20
   },
   "presenceScope": "any-muted",
-  "savedAtEpochMs": 1,
+  "savedAtEpochMs": 1789156843397,
   "scaleMultipliers": {
     "idle": 0.78,
     "listening": 0.56,
@@ -258,7 +258,7 @@
       "listeningPulsePercent": 68,
       "ringSpreadPercent": 80,
       "speakingMotionPercent": 68,
-      "thinkingWingspan": 2,
+      "thinkingWingspan": 5,
       "variant": "contained"
     },
     "spirit": {
