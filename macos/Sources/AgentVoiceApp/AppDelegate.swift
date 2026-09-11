@@ -73,8 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var probeRevision = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "AgentVoice")
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let image = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "AgentVoice")
         image?.isTemplate = true
         statusItem.button?.image = image
         statusItem.button?.toolTip = "AgentVoice"
