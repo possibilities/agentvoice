@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { equalSharedAppearance } from "./appearance.ts";
 import type { LayoutCapture } from "./capture.ts";
@@ -39,8 +38,7 @@ export async function serveConfigurator(
     capture?: (signal: AbortSignal) => Promise<LayoutCapture>;
   },
 ) {
-  const token = randomBytes(24).toString("hex");
-  const prefix = `/${token}/`;
+  const prefix = "/";
   const bundle = await Bun.build({
     entrypoints: [fileURLToPath(new URL("./web.ts", import.meta.url))],
     target: "browser",
@@ -89,10 +87,7 @@ export async function serveConfigurator(
     async fetch(request) {
       const origin = `http://127.0.0.1:${server.port}`;
       const url = new URL(request.url);
-      if (
-        request.headers.get("host") !== `127.0.0.1:${server.port}` ||
-        !url.pathname.startsWith(prefix)
-      )
+      if (request.headers.get("host") !== `127.0.0.1:${server.port}`)
         return json({ error: "Not found" }, 404);
       const path = url.pathname.slice(prefix.length);
       if (request.method === "GET") {

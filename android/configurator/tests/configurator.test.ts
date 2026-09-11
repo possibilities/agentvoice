@@ -1041,7 +1041,9 @@ test("a mismatched position receipt never claims a saved host copy", async () =>
 
 test("invalid origins, hosts, routes, bodies and stale saves never mutate the phone", async () => {
   const { phone, post, url, origin } = await fixture();
-  expect((await fetch(`${origin}/state`)).status).toBe(404);
+  expect(url).toBe(`${origin}/`);
+  expect((await fetch(`${origin}/state`)).status).toBe(200);
+  expect((await fetch(`${origin}/old-token/state`)).status).toBe(404);
   expect((await fetch(url, { headers: { Host: "attacker.invalid" } })).status).toBe(404);
   expect(
     (

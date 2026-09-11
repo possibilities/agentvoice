@@ -118,7 +118,7 @@ Opening Studio on the phone restores its design independently of the browser.
 Keep the host configurator running to use the browser controls. Studio stores
 its private synthetic-bridge binding separately from the draft, so an
 ordinary launcher open after process death reconnects the same browser without
-replaying edits. A host restart prints a new local URL; it observes the existing
+replaying edits. A host restart retains the same local URL on its selected port; it observes the existing
 draft. This binding is never a production device grant and is never exported.
 Production APKs contain neither Studio's bridge/store nor its full reset snapshot.
 
@@ -336,7 +336,9 @@ phone. Open **AgentVoice Studio** on the phone, then run from the repository roo
 bun run android:configure
 ```
 
-Open the printed loopback address on the host machine. The browser starts with a
+Open `http://127.0.0.1:4317/` on the host machine (or the printed address if
+using `--port`). Only one host can own a Studio device: stop an older host before
+linking it from another. The browser starts with a
 **Studio device** picker. Initial discovery and **Refresh** list only authorized,
 online ADB devices with Studio currently foreground; discovering never launches
 an app or attaches a controller. Choose a device and **Link selected device**.
@@ -363,7 +365,7 @@ The host reconnects only to the selected device and binding, observing its lates
 state without replaying edits or Save. It never pulls the app into the foreground.
 Return to Studio after backgrounding, force-stop or task dismissal. Ctrl+C stops
 the reconnect loop and removes only ports allocated by this host. The app and
-its working draft remain. A restarted host has a new browser URL and explicitly
+its working draft remain. A restarted host retains its browser URL and explicitly
 links the existing Studio binding; it does not replace design settings.
 
 Switching targets is excluded during edits, Save, capture or other pending
@@ -490,7 +492,8 @@ separate shared renderer.
 ## Boundary
 
 The host serves only fixed local assets and bounded tuning requests on
-`127.0.0.1`, behind a random per-run URL. Writes require the exact Host and Origin.
+`127.0.0.1`, at a stable root URL (default `http://127.0.0.1:4317/`).
+There is no browser URL token. Writes require the exact Host and Origin.
 CSP blocks external assets, scripts and embedding; there is no CDN or WebView.
 The existing bundled IBM Plex Mono font is served under its [OFL](../fonts/OFL.txt).
 
