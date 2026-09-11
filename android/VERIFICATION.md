@@ -2627,11 +2627,22 @@ private bridge binding matched the immediate pre-handoff backups byte-for-byte.
 The host remains linked at `http://127.0.0.1:4317/`. The adopted design changes only
 `connectionStyle` from Relay to Datum; all layout geometry remains unchanged.
 
-The initial full Android build, both lint variants, 178 JVM tests and APK audits
-passed. The updated 134-test Studio host suite passed. Later frozen error-header
-cases exposed a callback-completion race; that source fix requires the final
-build rerun. Full live durable QR enrollment awaits the coordinated desktop/server
-release; the retained legacy-grant call is not evidence for that new path.
+The final full Android build, both lint variants and all 185 JVM tests pass.
+Both APK audits pass, including production-only microphone foreground service and
+wake-lock permissions, Studio capability isolation, retained WebRTC JNI classes,
+and selected assets/notices. The updated 134-test Studio host suite passes.
+The shared pairing fixture validates Android/server signing-byte and signature
+interop. Final regressions cover the callback-completion race, canonical scanned
+endpoints, and bounded exact challenge-error JSON/header matching. Legacy endpoint
+canonicalization remains compatible. Combined TypeScript typecheck and Biome pass;
+the desktop/server owner reports 814 root tests passing.
+
+Audited production APK SHA-256:
+`ba2e919100bcd3bad86f34c630540a9feb16ce78c2ec37eb404369486b2ca602`.
+Audited Studio APK SHA-256:
+`2075a7925795d09ab4e7d6781f4e7abb01e90dbd148306832d303e78424bd9b8`.
+Live first-use durable QR enrollment was not exercised on the operator's already
+configured phone; the retained legacy-grant call is not evidence for that path.
 
 Private local evidence is under `/tmp/agentvoice-connection-flow/`. Never commit
 its bridge-binding backups. Phone access was released after restoration.

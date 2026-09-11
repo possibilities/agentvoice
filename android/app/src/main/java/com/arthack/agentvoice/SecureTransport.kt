@@ -175,19 +175,29 @@ internal class SecureTransport(
 
     private fun challengeFailure(response: Response): String {
         val raw = response.header("X-AgentVoice-Error")
-        val error = try { boundedErrorHeader(response) } catch (_: ProtocolFailure) { null }
-        return when {
-            response.code == 400 && error == "invalid_request" ->
+        if (response.code == 404 && raw == null) {
+            return "Server configuration mismatch. Update AgentVoice on your desktop."
+        }
+        return try {
+            val header = boundedErrorHeader(response) ?: throw ProtocolFailure()
+            val body = response.body?.byteStream()?.use {
+                readBoundedUtf8(it, MAX_CHALLENGE_RESPONSE_BYTES)
+            } ?: throw ProtocolFailure()
+            val error = parseChallengeError(response.code, body)
+            requireWire(header == error)
+            when (error) {
+                "invalid_request" ->
                 "Server protocol mismatch. Update the app and server."
-            response.code == 404 && error == "device_unavailable" ->
+                "device_unavailable" ->
                 "This phone’s device access was removed. Ask the server owner to pair it again."
-            response.code == 429 && error == "challenge_limited" ->
+                "challenge_limited" ->
                 "Server is busy. Try again when it is available."
-            response.code == 503 && error == "pairing_unavailable" ->
+                "pairing_unavailable" ->
                 "Server is unavailable. Start again when it is ready."
-            response.code == 404 && raw == null ->
-                "Server configuration mismatch. Update AgentVoice on your desktop."
-            else -> "Could not authenticate saved device access. Update the app and server."
+                else -> throw ProtocolFailure()
+            }
+        } catch (_: Exception) {
+            "Could not authenticate saved device access. Update the app and server."
         }
     }
 

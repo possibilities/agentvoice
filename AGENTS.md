@@ -23,7 +23,8 @@ native Codex, MCP, attachment or event sockets through this gateway. Read [READM
 runtime replacement and restart handoff semantics.
 
 For the native Android client, configure the private Tailscale WSS endpoint and
-use the desktop menu's **Pair phone…** window. New enrollment uses a short-lived,
+use the desktop menu's **Pair phone…** window or `agentvoice network pair`.
+New enrollment uses a short-lived,
 one-use `agentvoice-pair:v1:` QR and a nonexportable Android Keystore P-256 key.
 Persist the exact pending request before sending; an explicit recovery retry
 reuses it, never creates a second identity. Enrollment/authentication opens no

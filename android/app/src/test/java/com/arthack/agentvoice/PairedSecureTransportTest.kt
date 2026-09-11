@@ -190,7 +190,7 @@ class PairedSecureTransportTest {
         }
     }
 
-    @Test fun unavailableChallengeDoesNotReadAnUnboundedBodyOrRetry() {
+    @Test fun oversizedChallengeErrorBodyFailsGenericallyWithoutRetry() {
         val fixture = fixture()
         fixture.server.enqueue(MockResponse().setResponseCode(503)
             .setHeader("X-AgentVoice-Error", "pairing_unavailable")
@@ -198,12 +198,74 @@ class PairedSecureTransportTest {
         val events = Events()
         val transport = SecureTransport(fixture.client, device(fixture.server), events, unopenedKeys)
         try {
-            assertTrue(events.take().startsWith("Server is unavailable"))
+            assertEquals("Could not authenticate saved device access. Update the app and server.",
+                events.take())
             assertEquals(1, fixture.server.requestCount)
             assertTrue(!transport.send("must not send"))
         } finally {
             transport.cancel()
             close(fixture)
+        }
+    }
+
+    @Test fun exactChallengeErrorBodiesAndHeadersSelectKnownFailures() {
+        for ((status, code, expected) in listOf(
+            Triple(400, "invalid_request", "Server protocol mismatch. Update the app and server."),
+            Triple(404, "device_unavailable",
+                "This phone’s device access was removed. Ask the server owner to pair it again."),
+            Triple(429, "challenge_limited", "Server is busy. Try again when it is available."),
+            Triple(503, "pairing_unavailable", "Server is unavailable. Start again when it is ready."),
+        )) {
+            val fixture = fixture()
+            fixture.server.enqueue(MockResponse().setResponseCode(status)
+                .setHeader("X-AgentVoice-Error", code)
+                .setBody("""{"v":1,"error":{"code":"$code"}}"""))
+            val events = Events()
+            val transport = SecureTransport(fixture.client, device(fixture.server), events, unopenedKeys)
+            try {
+                assertEquals(expected, events.take())
+                assertEquals(1, fixture.server.requestCount)
+            } finally {
+                transport.cancel()
+                close(fixture)
+            }
+        }
+    }
+
+    @Test fun headerFreeNotFoundRetainsOldServerConfigurationFailure() {
+        val fixture = fixture()
+        fixture.server.enqueue(MockResponse().setResponseCode(404))
+        val events = Events()
+        val transport = SecureTransport(fixture.client, device(fixture.server), events, unopenedKeys)
+        try {
+            assertEquals("Server configuration mismatch. Update AgentVoice on your desktop.", events.take())
+            assertEquals(1, fixture.server.requestCount)
+        } finally {
+            transport.cancel()
+            close(fixture)
+        }
+    }
+
+    @Test fun mismatchedOrMalformedChallengeErrorJsonFailsGenerically() {
+        for (body in listOf(
+            """{"v":1,"error":{"code":"invalid_request"}}""",
+            """{"v":1,"error":{"code":"device_unavailable"},"extra":true}""",
+            "not-json",
+        )) {
+            val fixture = fixture()
+            fixture.server.enqueue(MockResponse().setResponseCode(404)
+                .setHeader("X-AgentVoice-Error", "device_unavailable")
+                .setBody(body))
+            val events = Events()
+            val transport = SecureTransport(fixture.client, device(fixture.server), events, unopenedKeys)
+            try {
+                assertEquals("Could not authenticate saved device access. Update the app and server.",
+                    events.take())
+                assertEquals(1, fixture.server.requestCount)
+            } finally {
+                transport.cancel()
+                close(fixture)
+            }
         }
     }
 

@@ -59,7 +59,8 @@ internal class PairingQr internal constructor(
             objectValue.fields("v", "endpoint", "enrollment", "expiresAt")
             objectValue.version(1)
             val endpoint = objectValue.string("endpoint")
-            endpointParts(endpoint)
+            val endpointParts = endpointParts(endpoint)
+            requireWire(endpoint == endpointParts.wssUrl("/v2/client"))
             val enrollment = objectValue.string("enrollment")
             requireWire(enrollmentPattern.matches(enrollment))
             val expiresAt = objectValue.long("expiresAt")
@@ -79,6 +80,7 @@ internal class PairingQr internal constructor(
 
 internal data class EndpointParts(val authority: String, private val hostForUrl: String) {
     fun httpsUrl(path: String): String = "https://$hostForUrl$path"
+    fun wssUrl(path: String): String = "wss://$hostForUrl$path"
 }
 
 /** Matches the existing WSS endpoint restrictions and supplies the server's canonical authority. */
@@ -181,6 +183,22 @@ internal fun parsePairingError(status: Int, text: String): PairingProblem {
         503 to "pairing_unavailable" -> PairingProblem.PairingUnavailable
         else -> throw ProtocolFailure()
     }
+}
+
+internal fun parseChallengeError(status: Int, text: String): String {
+    val objectValue = jsonObject(text)
+    objectValue.fields("v", "error")
+    objectValue.version(1)
+    val error = objectValue.obj("error")
+    error.fields("code")
+    val code = error.string("code")
+    requireWire(status to code in setOf(
+        400 to "invalid_request",
+        404 to "device_unavailable",
+        429 to "challenge_limited",
+        503 to "pairing_unavailable",
+    ))
+    return code
 }
 
 internal fun PairingProblem.wireCode(): String? = when (this) {

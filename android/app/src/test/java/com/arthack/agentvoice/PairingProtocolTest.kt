@@ -54,6 +54,19 @@ class PairingProtocolTest {
             endpointParts("wss://[2001:0db8:0:0:0:0:0:1]:48414/v2/client").authority)
     }
 
+    @Test fun qrRejectsEndpointsThatAreValidButNotCanonicalWireUrls() {
+        for (endpoint in listOf(
+            "wss://Voice.Example:48414/v2/client",
+            "wss://voice.example:443/v2/client",
+            "wss://[2001:0db8:0:0:0:0:0:1]:48414/v2/client",
+        )) {
+            assertThrows(ProtocolFailure::class.java) { PairingQr.parse(qrForEndpoint(endpoint)) }
+            endpointParts(endpoint)
+        }
+        assertEquals("[2001:db8::1]:48414",
+            PairingQr.parse(qrForEndpoint("wss://[2001:db8::1]:48414/v2/client")).authority)
+    }
+
     @Test fun labelIsNfcBoundedByScalarsAndRejectsControls() {
         assertEquals("é", normalizePairingLabel("e\u0301"))
         assertEquals("🙂".repeat(80), normalizePairingLabel("🙂".repeat(80)))
@@ -117,4 +130,7 @@ class PairingProtocolTest {
     }
 
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
+
+    private fun qrForEndpoint(endpoint: String) = PAIRING_QR_PREFIX +
+        """{"v":1,"endpoint":"$endpoint","enrollment":"$enrollment","expiresAt":1800000300000}"""
 }

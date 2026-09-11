@@ -831,8 +831,9 @@ and rebinding. Tapping its notification returns to that exact call and cannot
 start a new one from a stale notification. The service does not recreate audio
 after process termination. The first three production call visits show the same
 Back hint, and long-pressing the Persona area replays it without adding permanent
-navigation chrome. Production enrollment continues to use the native app's
-verified QR and private grant-storage flow.
+navigation chrome. Production enrollment uses the native app's verified
+`agentvoice-pair:v1:` QR and durable Keystore pairing flow; existing saved
+bearer access stays compatible.
 
 New exports record `disconnectedArtboardScale: 1.9`, equal to connected scale.
 Older receipts with `1.5` remain readable without rewriting their source bytes;
