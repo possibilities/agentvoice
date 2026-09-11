@@ -228,6 +228,11 @@ Push-to-talk share slider becomes disabled while its value
 is retained for when the button returns. This choice survives rotation and
 reconnection and process restart, and is included in Save. It changes only the design preview until promotion.
 
+While a press waits for the microphone gate, the button retains **Push / to talk**
+and depresses for immediate touch feedback. It shows **Live now / release to mute**
+only after the microphone opens; no intermediate Opening or Wait labels flash.
+Accessibility reports the pending press as **Pressed**. Disconnected status remains visible.
+
 **Theme** offers Bright (default), Quiet and Grayscale. **Center indicator**
 compares Off, Tide (original), Words, Channel icons, Icons + words and Contacts.
 Tide remains the original both-muted indicator. Words shows the live/muted

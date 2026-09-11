@@ -43,6 +43,18 @@ class PreviewControlsTest {
                 compose.runOnIdle { ui = ready.copy(micMuted = false, micOpen = true, canHold = false, controlsPending = pending) }
                 compose.onNodeWithText(if (landscape) "Live\nnow" else "Live now").assertExists()
             }
+            for (pending in listOf(
+                ready.copy(holding = true, micOpen = false),
+                ready.copy(holding = true, micOpen = false, controlsPending = true),
+                ready.copy(micMuted = false, micOpen = false, canHold = false, controlsPending = true),
+            )) {
+                compose.runOnIdle { ui = pending }
+                compose.onNodeWithText("Push").assertExists()
+                compose.onNodeWithText("to talk").assertExists()
+                for (transient in listOf("Opening", "Wait", "for mic", "for microphone"))
+                    compose.onNodeWithText(transient).assertDoesNotExist()
+                compose.onNodeWithText(if (landscape) "Live\nnow" else "Live now").assertDoesNotExist()
+            }
         }
     }
 
@@ -119,7 +131,7 @@ class PreviewControlsTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ToggleableState))
         push.performTouchInput { down(center) }
-        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Opening microphone"))
+        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Pressed"))
         compose.onNodeWithTag("mic-mute").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.runOnIdle { assertEquals(1, presses); assertEquals(0, releases); ui = ui.copy(micOpen = true) }
@@ -202,7 +214,7 @@ class PreviewControlsTest {
         val start = push.fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
         assertEquals("Start talking", start.label)
         compose.runOnIdle { assertTrue(start.action()) }
-        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Opening microphone"))
+        push.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Pressed"))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ToggleableState))
         val stop = push.fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
         assertEquals("Stop talking", stop.label)

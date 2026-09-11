@@ -2124,7 +2124,8 @@ SCO remained the headset route during the call; afterward MODE_NORMAL and inacti
 SCO were verified. Studio draft/checkpoint/binding were byte-identical, rotation/font
 unchanged and the previous VNC activity restored. Phone release was notified.
 Private runtime evidence is under `/tmp/agentvoice-call-cue-comparison/phone`.
-Operator listening comparison remains pending; perceived improvement is unverified.
+The operator subsequently confirmed: "The sound works great now btw."
+This closes the subjective Bluetooth cue comparison for this headset.
 All 138 Studio JVM tests, production/Studio assembly and both lint checks passed
 with a full Kotlin compilation (3m 28s). The initial incremental compilation
 reported unresolved existing top-level functions; disabling incremental compilation
@@ -2133,5 +2134,21 @@ resolved it without unrelated source changes.
 Production comparison APK SHA256:
 `212ef542238940723b80230cf03e483fd77b7767fec9843835c5cb3e6fcd3b4f`.
 The selected-resource/JNI audit passes with the exact quartet and no Studio
-entrypoints/profile payload. The original installed APK is retained privately in
-`/tmp/agentvoice-call-cue-comparison/original-production.apk` for rollback.
+entrypoints/profile payload. The temporary original-APK rollback copy was removed
+after operator acceptance to reclaim disk space.
+
+## Stable pending PTT labels — 2026-09-10
+
+Pending holds retain Push/to talk in both button orientations. Opening, Wait and
+waiting-for-microphone wording is removed; accessibility describes the pending
+hold as Pressed. Live now still requires the effective microphone gate to be open.
+Touch depression, gesture ownership, gate acknowledgements and sound triggers are
+unchanged. The existing native control regression now covers pending hold and
+unmute states in both orientations, including no premature Live now label.
+
+All 138 Studio JVM tests, production/Studio and instrumentation assembly, and
+production/Studio lint passed with full Kotlin compilation. The production
+selected-resource/JNI audit passed for APK SHA256
+`d2e16418453779f02e4c0a109a1dc0762306bc9ddf775dde41e25d441f80fb77`.
+Focused device instrumentation and installation await the next explicit phone
+handoff; this entry does not claim either has run.

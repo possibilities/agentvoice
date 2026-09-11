@@ -399,9 +399,10 @@ internal fun PreviewHoldControl(
         contentDescription = "Push to talk"
         stateDescription = when {
             ui.connected && ui.micOpen -> if (ui.holding) "Live now. Release to mute" else "Live now. Microphone open"
-            ui.holding -> "Opening microphone"
+            ui.holding -> "Pressed"
             ui.canHold -> "Ready"
-            else -> "Unavailable. ${holdUnavailableReason(ui)}"
+            ui.connected -> "Microphone muted"
+            else -> "Unavailable. ${holdDisconnectedReason()}"
         }
         if (!ui.canHold && !ui.holding) disabled()
         // Accessibility owns an explicit start/stop, never a simulated timed pointer press.
@@ -506,16 +507,14 @@ internal fun RockerHoldFace(
                 Spacer(Modifier.height(16.dp))
                 ControlText(when {
                     microphoneLive -> "Live\nnow"
-                    ui.holding -> "Wait"
                     ui.connected -> "Push"
                     else -> "Off"
                 }, ink, mainSize, bold = true, maxLines = 2, align = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release\nto mute" else "mic open"
-                    ui.holding -> "for mic"
                     ui.connected -> "to talk"
-                    else -> holdUnavailableReason(ui, concise = true)
+                    else -> holdDisconnectedReason(concise = true)
                 }, ink, detailSize, maxLines = 4, align = TextAlign.Center)
             }
         } else Row(faceModifier, verticalAlignment = Alignment.CenterVertically) {
@@ -525,7 +524,6 @@ internal fun RockerHoldFace(
             Column(Modifier.weight(1f)) {
                 ControlText(when {
                     microphoneLive -> "Live now"
-                    ui.holding -> if (concise) "Wait" else "Opening"
                     ui.connected -> "Push"
                     else -> if (concise) "Off" else "Unavailable"
                 }, ink, if (shortFace) shortTitle else when {
@@ -536,9 +534,8 @@ internal fun RockerHoldFace(
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
-                    ui.holding -> if (concise) "for microphone" else "microphone"
                     ui.connected -> "to talk"
-                    else -> holdUnavailableReason(ui, concise = concise)
+                    else -> holdDisconnectedReason(concise = concise)
                 }, ink, if (shortFace) shortDetail else scaledType(11, heightScale, 10, 14), maxLines = if (shortFace) 1 else 2)
             }
         }
@@ -550,11 +547,8 @@ private fun scaledType(base: Int, heightScale: Float, minimum: Int, maximum: Int
 
 private fun microphoneIsLive(ui: CallUi): Boolean = ui.connected && !ui.controlsPending && ui.micOpen
 
-private fun holdUnavailableReason(ui: CallUi, concise: Boolean = false): String = when {
-    !ui.connected -> if (concise) "Not connected" else "Voice not connected"
-    !ui.micMuted -> "Opening microphone"
-    else -> if (concise) "Waiting for mic" else "Waiting for microphone"
-}
+private fun holdDisconnectedReason(concise: Boolean = false): String =
+    if (concise) "Not connected" else "Voice not connected"
 
 @Composable
 private fun ControlText(text: String, color: Color, size: Int, bold: Boolean = false, maxLines: Int = 1, align: TextAlign = TextAlign.Start) {
