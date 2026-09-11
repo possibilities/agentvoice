@@ -12,6 +12,7 @@ require(
     parseLaunchctlState("path = /tmp/job\n\tstate = running\npid = 42\n") == .running,
     "running launchd state was not recognized"
 )
+require(WaitingServerState.running.menuTitle == "AgentVoice is running", "running menu copy changed")
 require(
     parseLaunchctlState("\tstate = waiting\n") == .loaded("waiting"),
     "non-running launchd state was not preserved"

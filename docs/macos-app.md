@@ -13,7 +13,7 @@ The menu currently contains:
 - **Open Login Item Settings…** when macOS requires approval; and
 - **Quit AgentVoice Menu**, which leaves the server and any call running.
 
-“Waiting server is running” reports the job state only. It does not establish
+“AgentVoice is running” reports the job state only. It does not establish
 account authentication, media readiness, frontend admission, or a live call.
 Use the existing terminal clients to start calls and `agentvoice service` for
 explicit service management.

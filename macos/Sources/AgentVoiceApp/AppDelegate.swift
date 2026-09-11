@@ -3,7 +3,6 @@ import AppKit
 import ServiceManagement
 
 private let serverLabel = "io.arthack.agentvoice.server"
-private let statusItemLength: CGFloat = 22
 
 private final class WaitingServerProbe {
     func read(completion: @escaping @Sendable (WaitingServerState) -> Void) {
@@ -92,8 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var probeRevision = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: statusItemLength)
-        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
         let image = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "AgentVoice")?
             .withSymbolConfiguration(configuration)
         image?.isTemplate = true
@@ -112,18 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         quit.target = self
         menu.addItem(quit)
         menu.delegate = self
+        // The attached menu owns native tracking and selected highlighting.
         statusItem.menu = menu
         login.applyDefaultIfNeeded()
         refresh()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        statusItem.button?.highlight(true)
         refresh()
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        statusItem.button?.highlight(false)
     }
 
     private func refresh() {

@@ -8,7 +8,7 @@ public enum WaitingServerState: Equatable, Sendable {
     public var menuTitle: String {
         switch self {
         case .running:
-            return "Waiting server is running"
+            return "AgentVoice is running"
         case .loaded(let state):
             return "Waiting server: \(state)"
         case .unavailable:
