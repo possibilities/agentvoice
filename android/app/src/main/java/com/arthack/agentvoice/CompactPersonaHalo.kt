@@ -48,14 +48,14 @@ internal fun CompactPersonaHalo(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
-    var reducedMotion by remember { mutableStateOf(!android.animation.ValueAnimator.areAnimatorsEnabled()) }
+    var reducedMotion by remember { mutableStateOf(!personaAnimationsEnabled(context)) }
     DisposableEffect(lifecycle, context) {
         val observer = LifecycleEventObserver { _, _ ->
             resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         }
         val motion = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                reducedMotion = !android.animation.ValueAnimator.areAnimatorsEnabled()
+                reducedMotion = !personaAnimationsEnabled(context)
             }
         }
         lifecycle.addObserver(observer)
@@ -86,7 +86,7 @@ internal fun CompactPersonaHalo(
         }
         return
     }
-    val animate = ui.connected && resumed && !reducedMotion
+    val animate = resumed && !reducedMotion
     // One shared size; state changes are entirely inside the modified animation.
     val targetScale = (if (ui.connected) 1.9f else 1.5f) * placement.speakingScale
     val scale = remember { Animatable(targetScale) }

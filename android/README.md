@@ -176,7 +176,7 @@ call running. Stock Codex TUI handles native approvals. See
   runs through native Rive, with no WebView or remote content. Violet speaking
   follows enabled playback RMS, with a short release hold between syllables;
   acid-green listening follows the open microphone gate. White idle is ambient
-  presence; disconnected is a muted still. There is no inferred thinking state.
+  presence; disconnected uses the idle loop in its muted color. There is no inferred thinking state.
   The first native pose settles before drawing, avoiding a tiny startup ring.
   Window and system splash backgrounds use the same dark canvas.
   Disabled system animations and backgrounding settle the visual to one still
@@ -184,7 +184,8 @@ call running. Stock Codex TUI handles native approvals. See
   padded artboard is enlarged to bring the ring near screen width. Its animation
   may bleed past the top and sides and underneath the header or buttons, which
   render and receive touches above it. There is no panel crop or edge mask.
-  The disconnected still is smaller so startup details remain clear.
+  The disconnected Persona is smaller so startup details remain clear. Its idle
+  loop continues while foregrounded, including before a call; it needs no audio or server.
   The operator's chosen sizes are 78% for Speaking/Idle and 58% for Listening,
   with a fixed +35 dp vertical offset in every state. Each state has its own
   size multiplier; ordinary size changes ease over 300 ms, respecting reduced

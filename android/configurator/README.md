@@ -67,6 +67,10 @@ A future explicit promotion writes profile21/provenance2, including every slot.
 
 ## Continue from production
 
+Disconnected and connecting previews keep the Persona's idle loop moving in its
+disconnected color and smaller size, matching production. Backgrounding and
+Android's disabled-animation setting still settle it to a still frame.
+
 On first use only, Studio seeds its draft from the bundled production design.
 After that it always opens the last configured draft, even after a new production
 release or Studio upgrade. Only **Reset to production** adopts production again. Its complete

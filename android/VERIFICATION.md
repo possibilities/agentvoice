@@ -2160,3 +2160,35 @@ Studio was reopened in its prior foreground; draft, checkpoint and binding staye
 byte-identical before and after reopening. Rotation and font settings were
 unchanged. No production call was started. Phone access was released and notified.
 Private device evidence: `/tmp/agentvoice-stable-ptt/phone/`.
+
+## Disconnected Persona motion — 2026-09-10
+
+Original and Contained now run the authored idle loop while disconnected and
+foregrounded. Disconnected color and smaller scale remain; no Rive bytes, saved
+tuning, controls, sound or audio state changed. Backgrounding still pauses the
+native animation. Persona observers read the global animator-duration setting
+directly: the previous ValueAnimator cached flag could lag its change notification.
+The full Studio check reproduced continued motion after disabling system
+animations before this correction; the final build stops and resumes correctly.
+
+Validation:
+- 138 Studio JVM tests, production/Studio/instrumentation assembly, both lint
+  checks and the selected-resource/JNI APK audit pass. Final build: 3m 12s.
+- Nine native Persona tests pass in 23.106s, including visible disconnected
+  animation, lifecycle pause/resume, live system-animation changes with exact
+  restoration, and retained view/machine identity for both variants. Existing
+  transition, recolor and paused-texture regressions remain green.
+- Full native Studio screenshots show changing disconnected ring geometry.
+  The same Persona crop has zero RGB difference across the two disabled-animation
+  captures. This is sampled still-frame evidence, not every-frame review.
+- Final Production and Studio APK hashes match the installed S22 packages:
+  `0a05cd41e79986ec1df318ef04bd07d65106c1384b30c9ebcd8296e73066677e`
+  and `67646c920b09924dcb1cf9c940a59d623b27715247eee4dfecb0d7557f1f4716`.
+- Draft/checkpoint/binding stayed byte-identical; simulation and Studio foreground
+  were restored, as were rotation, font and animator-duration settings. No real
+  call was started. Phone access was released with an operator notification.
+
+An initial instrumentation run was interrupted by ADB transport loss; completed
+retries and final evidence are under `/tmp/agentvoice-disconnected-presence/`.
+The Thinking follow-up is queued separately: server thread/turn events exist,
+but an authoritative coding-work aggregate is not yet projected to Android.

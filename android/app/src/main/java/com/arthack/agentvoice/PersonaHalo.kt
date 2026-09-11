@@ -77,20 +77,24 @@ internal fun personaState(ui: CallUi): PersonaState = when {
     else -> PersonaState.Idle
 }
 
+// ValueAnimator's cached flag can lag a settings observer notification.
+internal fun personaAnimationsEnabled(context: Context): Boolean =
+    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+
 @Composable
 internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlacement = PersonaPlacement(),
     colors: PersonaColors = PersonaColors()) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
-    var reducedMotion by remember { mutableStateOf(!android.animation.ValueAnimator.areAnimatorsEnabled()) }
+    var reducedMotion by remember { mutableStateOf(!personaAnimationsEnabled(context)) }
     DisposableEffect(lifecycle, context) {
         val observer = LifecycleEventObserver { _, _ ->
             resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         }
         val motion = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                reducedMotion = !android.animation.ValueAnimator.areAnimatorsEnabled()
+                reducedMotion = !personaAnimationsEnabled(context)
             }
         }
         lifecycle.addObserver(observer)
@@ -110,7 +114,7 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
     val ink = colors.forState(state)
     val artboardScale = if (ui.connected) 1.9f else 1.5f
     val targetScale = artboardScale * placement.scaleFor(state)
-    val animate = ui.connected && resumed && !reducedMotion
+    val animate = resumed && !reducedMotion
     val scale = remember { Animatable(targetScale) }
     var renderedState by remember { mutableStateOf(state) }
     val growthDuration = remember(renderedState, animate) { mutableStateOf<Int?>(null) }
@@ -202,7 +206,7 @@ class HaloAnimationView(context: Context, attrs: AttributeSet? = null) : RiveAni
         setBooleanState("default", "listening", state == PersonaState.Listening)
         setBooleanState("default", "speaking", state == PersonaState.Speaking)
         setBooleanState("default", "thinking", false)
-        // Keep the authored halo visible at rest; paused idle is our asleep presentation.
+        // Disconnected presence uses the visible idle loop; the asset's asleep input hides it.
         setBooleanState("default", "asleep", false)
         stateMachines.first().viewModelInstance!!.getColorProperty("color").value = color
         play()
