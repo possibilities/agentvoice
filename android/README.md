@@ -190,7 +190,7 @@ call running. Stock Codex TUI handles native approvals. See
   padded artboard is enlarged to bring the ring near screen width. Its animation
   may bleed past the top and sides and underneath the header or buttons, which
   render and receive touches above it. There is no panel crop or edge mask.
-  The disconnected Persona is smaller so startup details remain clear. Its idle
+  The disconnected Persona retains normal Idle size. Its idle
   loop continues while foregrounded, including before a call; it needs no audio or server.
   The operator's chosen sizes are 78% for Speaking/Idle and 58% for Listening,
   with a fixed +35 dp vertical offset in every state. Each state has its own
@@ -204,7 +204,7 @@ call running. Stock Codex TUI handles native approvals. See
   Entering Listening reaches its smaller scale before starting the ripples.
   Color still follows the audio gate immediately, and cancelling the entry
   prevents the pending ripple animation from starting.
-  Disconnected uses Idle's multiplier with the smaller artboard.
+  Disconnected uses Idle's multiplier and the same artboard scale as connected states.
   No audio samples reach Rive.
 
 The UI uses IBM Plex Mono under the SIL Open Font License in `fonts/OFL.txt`,

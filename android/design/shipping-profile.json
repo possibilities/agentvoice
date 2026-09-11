@@ -30,7 +30,7 @@
       "weightPercent": 250
     }
   },
-  "disconnectedArtboardScale": 1.5,
+  "disconnectedArtboardScale": 1.9,
   "halo": {
     "colors": {
       "idle": "#f0f2e9",

@@ -52,7 +52,7 @@ internal fun encodePersonaTuning(placement: PersonaPlacement, design: PreviewDes
             .put("idle", percent(placement.idleScale)))
         .put("verticalOffsetDp", placement.offsetY.value.roundToInt())
         .put("connectedArtboardScale", 1.9)
-        .put("disconnectedArtboardScale", 1.5)
+        .put("disconnectedArtboardScale", 1.9)
         .put("savedAtEpochMs", System.currentTimeMillis())
         .toString(2)
 }

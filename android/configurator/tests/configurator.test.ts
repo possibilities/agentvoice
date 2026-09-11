@@ -457,6 +457,12 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
   ).toThrow();
   const saved = profile(initial());
   expect(parseProfile(JSON.stringify(saved))).toEqual(saved);
+  for (const disconnectedArtboardScale of [1.5, 1.9] as const) {
+    const receipt = { ...saved, disconnectedArtboardScale };
+    expect(parseProfile(JSON.stringify(receipt))).toEqual(receipt);
+  }
+  for (const disconnectedArtboardScale of [1.6, "1.9", null])
+    expect(() => parseProfile(JSON.stringify({ ...saved, disconnectedArtboardScale }))).toThrow();
   for (const verticalOffsetDp of [-200, 0, 20, 200]) {
     expect(parseProfile(JSON.stringify({ ...saved, verticalOffsetDp })).verticalOffsetDp).toBe(
       verticalOffsetDp,

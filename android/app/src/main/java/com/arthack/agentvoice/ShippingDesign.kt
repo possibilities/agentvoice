@@ -13,8 +13,8 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "../../../../../../tmp/agentvoice-cutout-spacing/s22-cutout-balanced-profile.json"
-    const val profileSha256 = "b3a1819af5b3508aacaca67ab8f74fadabe031dedf0b6d1932357c6343ecee12"
+    const val profileSource = "../../../../../../tmp/agentvoice-disconnected-size/adopted-profile.json"
+    const val profileSha256 = "f1a5d01a8bb28935dbe566cf94e7db43fd9ecaa07f3827de5fdee622d6657100"
     const val sessionSha256 = "b9f5a583b4387cda4a9f7e1af6749ce3d3a190bcb08af76882c438b15b391dcc"
     val portrait = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -43.dp),

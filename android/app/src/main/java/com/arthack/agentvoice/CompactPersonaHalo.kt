@@ -83,7 +83,7 @@ internal fun CompactPersonaHalo(
     }
     val animate = resumed && !reducedMotion
     // One shared size; state changes are entirely inside the modified animation.
-    val targetScale = (if (ui.connected) 1.9f else 1.5f) * placement.speakingScale
+    val targetScale = 1.9f * placement.speakingScale
     val scale = remember { Animatable(targetScale) }
     LaunchedEffect(targetScale, animate) {
         if (animate) scale.animateTo(targetScale, tween(300, easing = FastOutSlowInEasing))

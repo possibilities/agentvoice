@@ -197,7 +197,8 @@ export type Profile = {
   scaleMultipliers: Scales;
   verticalOffsetDp: number;
   connectedArtboardScale: 1.9;
-  disconnectedArtboardScale: 1.5;
+  // Legacy receipts retain 1.5; new exports describe the fixed normal Idle scale.
+  disconnectedArtboardScale: 1.5 | 1.9;
   savedAtEpochMs: number;
 } & (
   | { version: 2; design?: never }
@@ -632,7 +633,7 @@ export function parseProfile(text: string): Profile {
       data["version"] as number,
     ) ||
     data["connectedArtboardScale"] !== 1.9 ||
-    data["disconnectedArtboardScale"] !== 1.5
+    ![1.5, 1.9].includes(data["disconnectedArtboardScale"] as number)
   ) {
     throw Error("Unsupported profile");
   }

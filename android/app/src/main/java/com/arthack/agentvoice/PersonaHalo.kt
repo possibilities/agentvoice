@@ -122,7 +122,7 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
     }
     val state = rememberPersonaState(ui)
     val ink = colors.forState(state)
-    val artboardScale = if (ui.connected) 1.9f else 1.5f
+    val artboardScale = 1.9f
     val targetScale = artboardScale * placement.scaleFor(state)
     val animate = resumed && !reducedMotion
     val scale = remember { Animatable(targetScale) }

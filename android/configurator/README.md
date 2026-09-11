@@ -76,7 +76,7 @@ content-free coding-activity state, with audible voice and human input taking pr
 Protocol28 adds this audition; profile21 and draft3 are unchanged.
 
 Disconnected and connecting previews keep the Persona's idle loop moving in its
-disconnected color and smaller size, matching production. Backgrounding and
+disconnected color and normal Idle size, matching production. Backgrounding and
 Android's disabled-animation setting still settle it to a still frame.
 
 On first use only, Studio seeds its draft from the bundled production design.
@@ -735,3 +735,8 @@ new activity instance. All configured design values and saved bytes remain intac
 CameraX is shared app code; Studio continues to remove network and microphone
 permissions. Production enrollment uses the native app's QR flow; Studio's
 connection scenes are preview-only and never enroll a device.
+
+New exports record `disconnectedArtboardScale: 1.9`, equal to connected scale.
+Older receipts with `1.5` remain readable without rewriting their source bytes;
+this field records renderer behavior, not a user-tunable size. Current rendering
+always preserves normal Idle size across connection changes.

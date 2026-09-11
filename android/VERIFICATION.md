@@ -2230,3 +2230,39 @@ phone access was released with an operator notification. Network transport,
 heartbeat and grants remain v2; frontend API 3 requires a coordinated app/server
 upgrade, without replacing the device grant. Private check logs are under
 `/tmp/agentvoice-thinking/`.
+
+
+## Normal disconnected Idle size — 2026-09-10
+
+Original and Contained no longer reduce artboard scale from 1.9 to 1.5 on
+connection loss. Original retains its selected Idle multiplier; Contained retains
+its shared multiplier. Color, native idle motion, listening-exit settlement and
+lifecycle/reduced-motion rules remain. Button geometry and every operator-selected
+design value are unchanged. The adopted profile changes only disconnected scale
+metadata; fresh exports record 1.9, while readers preserve legacy 1.5 receipts.
+The private device checkpoint is byte-identical to its pre-change version.
+
+Studio's 126 tests, typecheck and scoped lint pass; 140 Android JVM tests pass.
+Production/Studio/instrumentation assembly and both Android lint checks pass
+(6m 34s). The selected-resource/JNI audit passes. Six native tests pass in 16.054s,
+including visible ring size across connection changes for both variants, animation
+pause/resume and export migration. The first pixel-bound assertion was too strict
+for differing authored poses; the final test uses centered placement and an 8%
+size tolerance, below the old 21% disconnected reduction. Full Studio samples
+show matching overall Idle/disconnected size; they are not identical poses.
+
+Installed APK hashes match the built files:
+- Production: `7513b95619008b912b50ca99231da8a7217d1fb60aa3f32cf961a274e568d202`.
+- Studio: `827f64a55027dbffc427cf65e2c535bd5f68ecfa344c730abfec6f5173c02b5e`.
+
+Twelve portrait speaking samples yielded a largest contiguous bright top stroke
+of 16px (5.33dp at density 3), a starting estimate for the queued cutout adjustment,
+not a universal animation maximum. Four speaking layouts were captured with native
+viewport metadata; rotation restoration succeeded. The follow-up preview restore
+initially used a stale orientation epoch and was rejected; a fresh state restored
+the original connected-Idle simulation. Autosave had updated only the draft's
+renderer-scale metadata; the exact original draft bytes were restored afterward.
+Draft/checkpoint/binding, rotation, font and animator settings were verified equal
+to the handoff backup. Studio remained foreground; phone release was notified.
+No live call or server operation occurred in this round. Private evidence:
+`/tmp/agentvoice-disconnected-size/`.

@@ -61,6 +61,7 @@ class PersonaPreviewTest {
             assertEquals(.78f, restored.idleScale)
             assertEquals((-24).dp, restored.offsetY)
             assertEquals(21, JSONObject(fixture.readText()).getInt("version"))
+            assertEquals(1.9, JSONObject(fixture.readText()).getDouble("disconnectedArtboardScale"), 0.0)
             assertEquals(PreviewSpirit(), decodePersonaSpirit(fixture.readText()))
             assertEquals(PreviewSpirit(), decodePersonaSpirit(legacy))
             assertEquals(halo, decodePersonaHalo(fixture.readText()))
