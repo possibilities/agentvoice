@@ -13,6 +13,8 @@ require(
     "running launchd state was not recognized"
 )
 require(WaitingServerState.running.menuTitle == "AgentVoice is running", "running menu copy changed")
+require(AgentVoiceMenuCopy.runAtLogin == "Run at login", "login menu copy changed")
+require(AgentVoiceMenuCopy.quit == "Quit menu", "quit menu copy changed")
 require(
     parseLaunchctlState("\tstate = waiting\n") == .loaded("waiting"),
     "non-running launchd state was not preserved"
@@ -26,7 +28,7 @@ require(parseLaunchctlState("") == .unavailable, "empty launchd output was accep
 require(
     LoginItemPresentation(state: .disabled)
         == LoginItemPresentation(
-            title: "Run AgentVoice at login",
+            title: "Run at login",
             checked: false,
             enabled: true,
             action: .register
@@ -36,7 +38,7 @@ require(
 require(
     LoginItemPresentation(state: .enabled)
         == LoginItemPresentation(
-            title: "Run AgentVoice at login",
+            title: "Run at login",
             checked: true,
             enabled: true,
             action: .unregister

@@ -1,5 +1,10 @@
 import Foundation
 
+public enum AgentVoiceMenuCopy {
+    public static let runAtLogin = "Run at login"
+    public static let quit = "Quit menu"
+}
+
 public enum WaitingServerState: Equatable, Sendable {
     case running
     case loaded(String)
@@ -94,12 +99,12 @@ public struct LoginItemPresentation: Equatable, Sendable {
     public init(state: LoginItemState) {
         switch state {
         case .disabled:
-            title = "Run AgentVoice at login"
+            title = AgentVoiceMenuCopy.runAtLogin
             checked = false
             enabled = true
             action = .register
         case .enabled:
-            title = "Run AgentVoice at login"
+            title = AgentVoiceMenuCopy.runAtLogin
             checked = true
             enabled = true
             action = .unregister

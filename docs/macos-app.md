@@ -8,10 +8,10 @@ audio or Codex to test readiness.
 The menu currently contains:
 
 - the default LaunchAgent's current launchd state;
-- **Run AgentVoice at login**, backed by `SMAppService.mainApp` and enabled by
+- **Run at login**, backed by `SMAppService.mainApp` and enabled by
   default on the app's first launch;
 - **Open Login Item Settings…** when macOS requires approval; and
-- **Quit AgentVoice Menu**, which leaves the server and any call running.
+- **Quit menu**, which leaves the server and any call running.
 
 “AgentVoice is running” reports the job state only. It does not establish
 account authentication, media readiness, frontend admission, or a live call.

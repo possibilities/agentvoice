@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Run AgentVoice at login", action: #selector(toggleLoginItem), keyEquivalent: "")
+    private let loginItem = NSMenuItem(title: AgentVoiceMenuCopy.runAtLogin, action: #selector(toggleLoginItem), keyEquivalent: "")
     private let probe = WaitingServerProbe()
     private let login = LoginItemController()
     private var probeRevision = 0
@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(loginItem)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit AgentVoice Menu", action: #selector(quitMenu), keyEquivalent: "q")
+        let quit = NSMenuItem(title: AgentVoiceMenuCopy.quit, action: #selector(quitMenu), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         menu.delegate = self
