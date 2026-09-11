@@ -32,7 +32,9 @@ private final class WaitingServerProbe {
 }
 
 private final class LoginItemController {
+    private static let defaultWasRecordedKey = "loginItemDefaultWasRecorded"
     private let service = SMAppService.mainApp
+    private let defaults = UserDefaults.standard
 
     var state: LoginItemState {
         switch service.status {
@@ -55,13 +57,27 @@ private final class LoginItemController {
         switch action {
         case .register:
             try service.register()
+            defaults.set(true, forKey: Self.defaultWasRecordedKey)
         case .unregister:
             try service.unregister()
+            defaults.set(true, forKey: Self.defaultWasRecordedKey)
         case .openSettings:
             SMAppService.openSystemSettingsLoginItems()
         case .none:
             break
         }
+    }
+
+    func applyDefaultIfNeeded() {
+        let plan = LoginItemDefaultPlan(
+            state: state,
+            defaultWasRecorded: defaults.bool(forKey: Self.defaultWasRecordedKey)
+        )
+        guard plan.recordDefault else { return }
+        // Record before registration so a transient failure does not create a
+        // modal or repeated background-item prompt on every app launch.
+        defaults.set(true, forKey: Self.defaultWasRecordedKey)
+        if plan.action == .register { try? service.register() }
     }
 }
 
@@ -70,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Open AgentVoice at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
+    private let loginItem = NSMenuItem(title: "Run AgentVoice at login", action: #selector(toggleLoginItem), keyEquivalent: "")
     private let probe = WaitingServerProbe()
     private let login = LoginItemController()
     private var probeRevision = 0
@@ -97,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(quit)
         menu.delegate = self
         statusItem.menu = menu
+        login.applyDefaultIfNeeded()
         refresh()
     }
 
