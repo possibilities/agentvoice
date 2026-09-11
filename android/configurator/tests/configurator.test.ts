@@ -84,9 +84,10 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 28,
+  protocol: 29,
   connectionPreview: "off",
   launcher: "current",
+  connectionStyle: "relay",
   savedAppearance: defaultVisualSettings(),
   defaultAppearance: defaultVisualSettings(),
   icons: { channels: "current", push: "current" },
@@ -177,11 +178,11 @@ const currentProfile = (state: PhoneState): Extract<Profile, { version: 18 }> =>
     landscape: layoutOf(state.orientation === "landscape" ? state : state.otherLayout),
   };
 };
-const completeProfile = (state: PhoneState): Extract<Profile, { version: 21 }> => {
+const completeProfile = (state: PhoneState): Extract<Profile, { version: 22 }> => {
   const layouts = stateLayouts(state);
   return {
     ...currentProfile(state),
-    version: 21,
+    version: 22,
     portraitReverse: layouts["portrait-reverse"],
     landscapeReverse: layouts["landscape-reverse"],
     ...visualSettingsOf(state),
@@ -201,6 +202,7 @@ class FakePhone implements Phone {
   wrongOffsetReceipt = false;
   wrongHiddenExtentReceipt = false;
   wrongSoundsReceipt: "family" | "volumePercent" | undefined;
+  wrongConnectionStyleReceipt = false;
   changeSoundsDuringSave = false;
   wrongSpiritReceipt: "surface" | "strengthPercent" | "persona" | undefined;
   oldReceipt = false;
@@ -261,6 +263,7 @@ class FakePhone implements Phone {
         ...previewOf(initial()),
         icons: command["icons"],
         launcher: command["launcher"],
+        connectionStyle: command["connectionStyle"],
         showPushToTalk: command["showPushToTalk"],
         sounds: command["sounds"],
         theme: command["theme"],
@@ -323,6 +326,8 @@ class FakePhone implements Phone {
         savedSpirit: { ...this.state.spirit },
       };
       const receipt = completeProfile(this.state);
+      if (this.wrongConnectionStyleReceipt)
+        receipt.connectionStyle = receipt.connectionStyle === "datum" ? "beacon" : "datum";
       if (this.wrongHiddenExtentReceipt) receipt.landscape.design.controlsWithoutPttDp++;
       if (this.wrongSoundsReceipt === "family") receipt.sounds.family = "rocker-13";
       if (this.wrongSoundsReceipt === "volumePercent") receipt.sounds.volumePercent++;
@@ -392,6 +397,7 @@ async function fixture(options: { saveTo?: string } = {}) {
           ? {
               icons: phone.state.icons,
               launcher: phone.state.launcher,
+              connectionStyle: phone.state.connectionStyle,
               showPushToTalk: phone.state.showPushToTalk,
               sounds: phone.state.sounds,
               theme: phone.state.theme,
@@ -888,7 +894,7 @@ test("trace edits remain unsaved and exact version 18 Save snapshots the reviewe
   phone.changeDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileDesign(saved).traces).toEqual(traces);
   expect(phone.state.savedDesign.traces).toEqual(traces);
   expect(phone.state.design.traces.weightPercent).toBe(181);
@@ -1205,7 +1211,7 @@ test("Contained saves motion colors and common size without replacing Original s
   expect(phone.state.halo.containedSizePercent).toBe(83);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileHalo(saved)).toEqual({ ...halo, variant: "original" });
   expect(phone.state.savedHalo).toEqual(phone.state.halo);
   expect("connection" in saved).toBe(false);
@@ -1387,7 +1393,7 @@ test("spirit is unsaved until exact version 18 Save and activity never enters th
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileSpirit(saved)).toEqual(spirit);
   expect(profileDesign(saved)).toEqual(design);
   expect(phone.state.savedSpirit).toEqual(spirit);
@@ -1475,7 +1481,7 @@ test("independent layouts retain portrait choices and save both layouts from lan
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileLayout(saved, "portrait")).toEqual(layoutOf(portrait));
   expect(profileLayout(saved, "landscape")).toEqual(layoutOf(landscape));
   phone.rotate();
@@ -1912,7 +1918,7 @@ test("muted appearance survives rotation and Off and saves in profile19", async 
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
   expect(saved).toEqual(completeProfile(phone.state));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(savedText).toContain('"mutedTuning"');
   expect(() => parseProfile(JSON.stringify({ ...saved, mutedTuning }))).not.toThrow();
   expect(() =>
@@ -2068,7 +2074,7 @@ test("shared unified padding and its reset preserve hidden legacy values and oth
   });
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileLayout(saved, "portrait").design.spacing).toEqual(phone.state.design.spacing);
   expect(profileLayout(saved, "landscape")).toEqual(phone.state.otherLayout);
   for (const spacing of [
@@ -2174,7 +2180,7 @@ test("indicator style and scope persist across rotation, Off, appearance resets 
   const savedText = await readFile(saveTo, "utf8");
   const saved = parseProfile(savedText);
   expect(saved).toEqual(completeProfile(phone.state));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(savedText).toContain('"presenceScope"');
   expect(savedText).toContain('"mutedPresence"');
   expect(() => parseProfile(JSON.stringify({ ...saved, presenceScope: "always" }))).not.toThrow();
@@ -2332,7 +2338,7 @@ test("trace reach and fade save independently by orientation including hard ends
   expect(await Bun.file(saveTo).exists()).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileLayout(saved, "portrait").design.traces).toEqual(portrait);
   expect(profileLayout(saved, "landscape").design.traces).toEqual(landscape);
 });
@@ -2568,7 +2574,7 @@ test("debug reply framing accepts65535 bytes and rejects65536 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(65535 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(28);
+  expect((await pending).state.protocol).toBe(29);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });
@@ -2708,7 +2714,7 @@ test("only exact sound receipts write the host profile and captured sound choice
   phone.changeSoundsDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileSounds(saved)).toEqual(captured);
   expect(phone.state.sounds).toEqual({ family: "off", volumePercent: 0 });
   expect(phone.state.savedSounds).toEqual(captured);
@@ -2750,7 +2756,7 @@ test("push-to-talk visibility is a strict saved shared boolean without layout fi
     expect(resetPreview(previewOf(phone.state), phone.state, target).showPushToTalk).toBe(false);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileVisualSettings(saved).showPushToTalk).toBe(phone.state.showPushToTalk);
   expect(profileLayout(saved, "portrait")).toEqual(portrait);
   expect(profileLayout(saved, "landscape")).toEqual(landscape);
@@ -3128,7 +3134,7 @@ test("four saved extents remain independent across visibility changes and rotati
   phone.rotateDuringSave = true;
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileLayout(saved, "portrait").design.controlsHeightDp).toBe(940);
   expect(profileLayout(saved, "portrait").design.controlsWithoutPttDp).toBe(570);
   expect(profileLayout(saved, "landscape").design.controlsHeightDp).toBe(1300);
@@ -3233,13 +3239,13 @@ test("icon choices persist across rotation, hiding and Save with independent res
     expect(resetPreview(previewOf(phone.state), phone.state, target).icons).toEqual(icons);
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileVisualSettings(saved).icons).toEqual(icons);
   expect(profileVisualSettings(saved).launcher).toBe("current");
   expect(phone.state.icons).toEqual(icons);
   expect(profileLayout(saved, "portrait")).toEqual(portrait);
   expect(profileLayout(saved, "landscape")).toEqual(landscape);
-  if (saved.version !== 21) throw Error("Expected current profile");
+  if (saved.version !== 22) throw Error("Expected current profile");
   expect(() => parseProfile(JSON.stringify({ ...saved, icons }))).not.toThrow();
   expect(() =>
     parseProfile(JSON.stringify({ ...saved, landscape: { ...saved.landscape, icons } })),
@@ -3476,7 +3482,7 @@ test("profile19 and protocol22 require every saved appearance field while legacy
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const bytes = await readFile(saveTo, "utf8");
   const saved = parseProfile(bytes);
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileVisualSettings(saved)).toEqual(selected);
   expect(phone.state.savedAppearance).toEqual(selected);
   for (const field of Object.keys(selected)) {
@@ -3576,7 +3582,7 @@ test("launcher selection is strict, shared and durable in profile20 with adopted
   expect(phone.state.launcher).toBe("relay-aperture");
   expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
   const saved = parseProfile(await readFile(saveTo, "utf8"));
-  expect(saved.version).toBe(21);
+  expect(saved.version).toBe(22);
   expect(profileVisualSettings(saved).launcher).toBe("relay-aperture");
   expect(phone.state.savedAppearance.launcher).toBe("relay-aperture");
   phone.state.defaultAppearance.launcher = "duplex-halo";
@@ -3586,8 +3592,52 @@ test("launcher selection is strict, shared and durable in profile20 with adopted
   expect(layoutOf(reset)).toEqual(layoutOf(phone.state));
 });
 
-test("legacy profile19 retains its exact field contract and defaults launcher only in memory", () => {
-  const { launcher: _, ...legacyAppearance } = defaultVisualSettings();
+test("connection display is strict, shared across all layouts and complete in profile22", async () => {
+  const { phone, post, saveTo } = await fixture();
+  for (const connectionStyle of [undefined, null, "", "tower", {}, 1]) {
+    expect(() => parseState({ ...phone.state, connectionStyle })).toThrow();
+    expect((await post("preview", { ...previewOf(phone.state), connectionStyle })).status).toBe(
+      400,
+    );
+  }
+  expect(
+    (
+      await post("preview", {
+        ...previewOf(phone.state),
+        connectionStyle: "datum",
+        connection: "failed",
+      })
+    ).status,
+  ).toBe(200);
+  expect(phone.state.connectionStyle).toBe("datum");
+  expect(phone.state.connection).toBe("failed");
+  phone.rotate();
+  expect(phone.state.connectionStyle).toBe("datum");
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(saved.version).toBe(22);
+  expect(profileVisualSettings(saved).connectionStyle).toBe("datum");
+  expect(saved).not.toHaveProperty("connection");
+
+  phone.wrongConnectionStyleReceipt = true;
+  await post("preview", { ...previewOf(phone.state), connectionStyle: "beacon" });
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(502);
+  expect(profileVisualSettings(parseProfile(await readFile(saveTo, "utf8"))).connectionStyle).toBe(
+    "datum",
+  );
+
+  const legacy = {
+    ...(saved as Extract<Profile, { version: 22 }>),
+    version: 21 as const,
+  } as Record<string, unknown>;
+  delete legacy["connectionStyle"];
+  const legacyText = JSON.stringify(legacy);
+  expect(JSON.stringify(parseProfile(legacyText))).toBe(legacyText);
+  expect(profileVisualSettings(parseProfile(legacyText)).connectionStyle).toBe("relay");
+});
+
+test("legacy profile19 retains its exact field contract and defaults newer choices only in memory", () => {
+  const { launcher: _, connectionStyle: __, ...legacyAppearance } = defaultVisualSettings();
   const source = { ...currentProfile(initial()), version: 19 as const, ...legacyAppearance };
   const text = JSON.stringify(source);
   const profile = parseProfile(text);
@@ -3600,6 +3650,7 @@ test("legacy profile19 retains its exact field contract and defaults launcher on
     JSON.stringify({ ...source, version: 20, launcher: "relay-aperture" }),
   );
   expect(profileVisualSettings(complete).launcher).toBe("relay-aperture");
+  expect(profileVisualSettings(complete).connectionStyle).toBe("relay");
 });
 
 test("production reset is revision/orientation/generation fenced and never exports over the saved profile", async () => {

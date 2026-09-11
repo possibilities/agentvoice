@@ -204,5 +204,14 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
             if (next.holding && !currentState.holding) { change(next); feedback.down() }
         },
         onRelease = release, onExit = onExit, connection = state.connection, halo = state.halo, spirit = state.spirit, activity = state.activity,
-        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk, icons = state.icons)
+        personaSide = state.personaSide, theme = state.theme, mutedPresence = state.mutedPresence, mutedTuning = state.mutedTuning, presenceScope = state.presenceScope, horizontalOffsetDp = state.horizontalOffsetDp, onReleaseCompleted = completedRelease, showPushToTalk = state.showPushToTalk, icons = state.icons,
+        connectionStyle = state.connectionStyle, connectionDetail = state.ui().message,
+        onConnect = if (state.connection in setOf("disconnected", "failed")) ({
+            val next = currentState.endHold()
+            change(next.copy(connection = "connecting", revision = next.revision + 1))
+        }) else null,
+        onCancelConnection = if (state.connection == "connecting") ({
+            val next = currentState.endHold()
+            change(next.copy(connection = "disconnected", revision = next.revision + 1))
+        }) else null)
 }

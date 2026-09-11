@@ -16,3 +16,20 @@ internal fun historicalPreviewSession(file: File): PersonaPreviewSession {
     val p = historicalPortraitLayout()
     return PersonaPreviewSession(p.placement, file, p.design, p.halo, p.spirit, historicalLandscapeLayout())
 }
+
+/** Protocols through 26 had two physical layouts; restoration clones each axis in memory. */
+internal fun PersonaPreviewState.withLegacyAxisClones(): PersonaPreviewState {
+    val current = mapOf(
+        previewPortrait to activeLayout(),
+        previewLandscape to otherLayout,
+        previewPortraitReverse to activeLayout(),
+        previewLandscapeReverse to otherLayout,
+    )
+    val savedValues = mapOf(
+        previewPortrait to savedLayout(),
+        previewLandscape to savedOtherLayout,
+        previewPortraitReverse to savedLayout(),
+        previewLandscapeReverse to savedOtherLayout,
+    )
+    return withLayoutMaps(current, savedValues)
+}

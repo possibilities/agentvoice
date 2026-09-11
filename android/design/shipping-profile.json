@@ -1,6 +1,7 @@
 {
   "appearanceOverrides": [],
   "connectedArtboardScale": 1.9,
+  "connectionStyle": "relay",
   "design": {
     "composition": "traces",
     "controlsHeightDp": 407,
@@ -282,6 +283,6 @@
     "surface": "soft"
   },
   "theme": "bright",
-  "version": 21,
+  "version": 22,
   "verticalOffsetDp": -35
 }

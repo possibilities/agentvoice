@@ -35,13 +35,14 @@ class PersonaPreviewLifecycleTest {
                 }
             }
             val restored = restorePersonaPreview(old, original.saved, original.savedDesign, original.savedHalo, original.savedSpirit)
-            assertEquals(migrated(original), restored)
+            assertEquals(migrated(original).withLegacyAxisClones(), restored)
         }
         val v9State = original.copy(design = original.design.copy(traces = PreviewTraces("splayed", 143, 190, 41)))
         val v9 = legacySession(v9State, 9).apply {
             getJSONObject("design").getJSONObject("traces").apply { remove("personaSpacingPercent"); remove("footSpacingPercent") }
         }
-        assertEquals(migrated(v9State), restorePersonaPreview(v9, v9State.saved, v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
+        assertEquals(migrated(v9State).withLegacyAxisClones(), restorePersonaPreview(v9, v9State.saved,
+            v9State.savedDesign, v9State.savedHalo, v9State.savedSpirit))
     }
 
     @Test fun backgroundReturnAndRecreationRetainBindingAndUnsavedPreview() {
@@ -66,7 +67,7 @@ class PersonaPreviewLifecycleTest {
             var before: JSONObject
             connect().use { socket ->
                 val preview = JSONObject().put("id", 1).put("method", "preview").put("orientation", "portrait").put("orientationEpoch", 0).put("personaSide", "left").put("activity", "voice").put("spirit", PreviewSpirit("soft", 42, "follow").json()).put("connection", "connecting").put("mode", "listening")
-                    .put("theme", "bright").put("mutedPresence", "labeled").put("mutedTuning", PreviewMutedTuning(29, -30, 166, 42, 14, "ripple").json()).put("presenceScope", "always").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json()).put("launcher", "current")
+                    .put("theme", "bright").put("mutedPresence", "labeled").put("mutedTuning", PreviewMutedTuning(29, -30, 166, 42, 14, "ripple").json()).put("presenceScope", "always").put("horizontalOffsetDp", 0).put("appearanceOverrides", emptySet<String>().appearanceJson()).put("sounds", PreviewSounds().json()).put("showPushToTalk", true).put("icons", PreviewIcons().json()).put("launcher", "current").put("connectionStyle", "relay")
                     .put("scales", JSONObject().put("speaking", 69).put("listening", 49).put("idle", 72))
                     .put("verticalOffsetDp", -24)
                     .put("design", PreviewDesign(controlsHeightDp = 380, holdSharePercent = 54.3, traces = PreviewTraces("splayed", 140, 200, 55, 75, 175)).json())
@@ -96,7 +97,7 @@ class PersonaPreviewLifecycleTest {
         assertFalse(restored.holding)
         assertEquals("idle", restored.mode)
         assertEquals(.49f, restored.placement.listeningScale)
-        assertEquals(.58f, restored.saved.listeningScale)
+        assertEquals(.49f, restored.saved.listeningScale)
         val name = "agentvoice-halo-${"a".repeat(32)}"
         val token = "b".repeat(64)
         assertEquals("PersonaPreviewBinding(redacted)", PersonaPreviewBinding.parse(name, token).toString())

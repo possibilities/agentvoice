@@ -92,9 +92,10 @@ export function createShippingSnapshot(
     profile.version !== 18 &&
     profile.version !== 19 &&
     profile.version !== 20 &&
-    profile.version !== 21
+    profile.version !== 21 &&
+    profile.version !== 22
   )
-    throw Error("Promotion requires profile18 through profile21");
+    throw Error("Promotion requires profile18 through profile22");
   const portrait = profileLayout(profile, "portrait");
   const landscape = profileLayout(profile, "landscape");
   const portraitReverse = profileLayout(profile, "portrait-reverse");
@@ -103,14 +104,19 @@ export function createShippingSnapshot(
   let appearance: VisualSettings;
   if (choice.kind === "defaults") appearance = defaultVisualSettings();
   else if (choice.kind === "profile") {
-    if (profile.version !== 19 && profile.version !== 20 && profile.version !== 21)
+    if (
+      profile.version !== 19 &&
+      profile.version !== 20 &&
+      profile.version !== 21 &&
+      profile.version !== 22
+    )
       throw Error("Profile18 needs --session, --live-state or --default-session");
     appearance = profileVisualSettings(profile);
   } else if (choice.kind === "file") appearance = parseVisualSettings(JSON.parse(choice.text));
   else {
     const wrapper = record(JSON.parse(choice.text));
     const state = record(wrapper["state"] ?? wrapper);
-    if (![21, 22, 23, 24, 25, 26, 27, 28].includes(state["protocol"] as number))
+    if (![21, 22, 23, 24, 25, 26, 27, 28, 29].includes(state["protocol"] as number))
       throw Error("Unsupported captured studio protocol");
     integer(state["revision"]);
     if (
@@ -121,8 +127,22 @@ export function createShippingSnapshot(
     )
       throw Error("Invalid captured orientation");
     const capturedLayouts =
-      state["protocol"] === 27 || state["protocol"] === 28
-        ? stateLayouts(parseState({ ...state, protocol: 28 }))
+      state["protocol"] === 27 || state["protocol"] === 28 || state["protocol"] === 29
+        ? stateLayouts(
+            parseState({
+              ...state,
+              protocol: 29,
+              connectionStyle: state["protocol"] === 29 ? state["connectionStyle"] : "relay",
+              savedAppearance:
+                state["protocol"] === 29
+                  ? state["savedAppearance"]
+                  : { ...record(state["savedAppearance"]), connectionStyle: "relay" },
+              defaultAppearance:
+                state["protocol"] === 29
+                  ? state["defaultAppearance"]
+                  : { ...record(state["defaultAppearance"]), connectionStyle: "relay" },
+            }),
+          )
         : null;
     const layouts = capturedLayouts ?? {
       portrait:
@@ -149,9 +169,13 @@ export function createShippingSnapshot(
       state["protocol"] === 23 ||
         state["protocol"] === 24 ||
         state["protocol"] === 27 ||
-        state["protocol"] === 28
-        ? state
-        : { ...state, launcher: "current" },
+        state["protocol"] === 28 ||
+        state["protocol"] === 29
+        ? {
+            ...state,
+            connectionStyle: state["protocol"] === 29 ? state["connectionStyle"] : "relay",
+          }
+        : { ...state, launcher: "current", connectionStyle: "relay" },
     );
   }
   return {
@@ -211,14 +235,18 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   } else if (session["path"] !== null || session["sha256"] !== null)
     throw Error("Unexpected session source");
   const rawAppearance = record(value["appearance"]);
-  const legacyAppearance =
-    !Object.hasOwn(rawAppearance, "launcher") && parseProfile(profile["text"]).version < 20;
-  const appearance = parseVisualSettings(
-    legacyAppearance ? { ...rawAppearance, launcher: "current" } : rawAppearance,
-  );
+  const sourceVersion = parseProfile(profile["text"]).version;
+  const legacyLauncher = !Object.hasOwn(rawAppearance, "launcher") && sourceVersion < 20;
+  const legacyConnectionStyle =
+    !Object.hasOwn(rawAppearance, "connectionStyle") && sourceVersion < 22;
+  const appearance = parseVisualSettings({
+    ...rawAppearance,
+    ...(legacyLauncher ? { launcher: "current" } : {}),
+    ...(legacyConnectionStyle ? { connectionStyle: "relay" } : {}),
+  });
   if (
     digest(session["valuesSha256"]) !==
-    sha256(canonicalJson(legacyAppearance ? rawAppearance : appearance))
+    sha256(canonicalJson(legacyLauncher || legacyConnectionStyle ? rawAppearance : appearance))
   )
     throw Error("Session snapshot provenance mismatch");
   const original = createShippingSnapshot(profile["text"], profile["path"] as string, {
@@ -262,26 +290,27 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
 }
 export function completeShippingProfile(
   snapshot: ShippingSnapshot,
-): Extract<Profile, { version: 21 }> {
+): Extract<Profile, { version: 22 }> {
   const source = parseProfile(snapshot.source.profile.text);
   if (
     source.version !== 18 &&
     source.version !== 19 &&
     source.version !== 20 &&
-    source.version !== 21
+    source.version !== 21 &&
+    source.version !== 22
   )
     throw Error("Unsupported shipping profile source");
   return {
     ...source,
-    version: 21,
+    version: 22,
     portraitReverse: snapshot.portraitReverse,
     landscapeReverse: snapshot.landscapeReverse,
     ...snapshot.appearance,
-  } as Extract<Profile, { version: 21 }>;
+  } as Extract<Profile, { version: 22 }>;
 }
 function validateShippingProfile(profile: Profile, snapshot: ShippingSnapshot): void {
   if (
-    (profile.version !== 20 && profile.version !== 21) ||
+    (profile.version !== 21 && profile.version !== 22) ||
     !equalLayout(profileLayout(profile, "portrait"), snapshot.portrait) ||
     !equalLayout(profileLayout(profile, "landscape"), snapshot.landscape) ||
     !equalLayout(profileLayout(profile, "portrait-reverse"), snapshot.portraitReverse) ||
@@ -351,6 +380,7 @@ export function generateKotlin(snapshot: ShippingSnapshot): string {
     `    val sounds = ${kotlinConstructor("PreviewSounds", snapshot.sounds)}`,
     `    val icons = ${kotlinConstructor("PreviewIcons", appearance.icons)}`,
     `    const val launcher = ${kotlinString(appearance.launcher)}`,
+    `    const val connectionStyle = ${kotlinString(appearance.connectionStyle)}`,
     `    const val theme = ${kotlinString(appearance.theme)}`,
     `    const val mutedPresence = ${kotlinString(appearance.mutedPresence)}`,
     `    const val presenceScope = ${kotlinString(appearance.presenceScope)}`,
@@ -583,7 +613,13 @@ export async function shippingCli(args: string[]): Promise<void> {
     const path = resolve(root, snapshotPath);
     const receiptPath = resolve(root, provenancePath);
     const snapshot = parseShippingSnapshot(await readFile(receiptPath, "utf8"));
-    validateShippingProfile(parseProfile(await readFile(path, "utf8")), snapshot);
+    const profile = parseProfile(await readFile(path, "utf8"));
+    validateShippingProfile(profile, snapshot);
+    if (profile.version !== 22) {
+      if (flags.has("--check"))
+        throw Error(`Generated shipping file is missing or stale: ${snapshotPath}`);
+      await atomicWrite(path, canonicalJson(completeShippingProfile(snapshot)));
+    }
     await writeShipping(snapshot, {
       root,
       check: flags.has("--check"),

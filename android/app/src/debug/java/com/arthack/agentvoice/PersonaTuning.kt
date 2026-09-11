@@ -54,20 +54,23 @@ internal data class PersonaPreviewState(
     val showPushToTalk: Boolean = true,
     val icons: PreviewIcons = PreviewIcons(),
     val launcher: String = "current",
+    val connectionStyle: String = "relay",
     val sounds: PreviewSounds = PreviewSounds(),
     val savedSounds: PreviewSounds = sounds,
-    val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher),
+    val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher, connectionStyle),
 ) {
     init { require(launcher in previewLaunchers)
+        require(connectionStyle in previewConnectionStyles)
         require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
         require(horizontalOffsetDp in -200..200 && savedHorizontalOffsetDp in -200..200)
         require(appearanceOverrides.all { it in previewAppearanceGroups } && savedAppearanceOverrides.all { it in previewAppearanceGroups })
         require(orientation in previewOrientations)
         require(remainingLayouts.keys == oppositePreviewOrientations(orientation))
         require(savedRemainingLayouts.keys == oppositePreviewOrientations(orientation)) }
-    fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher)
+    fun appearance() = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher, connectionStyle)
     fun withAppearance(value: DesignAppearance) = copy(theme = value.theme, mutedPresence = value.mutedPresence,
-        mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk, icons = value.icons, launcher = value.launcher)
+        mutedTuning = value.mutedTuning, presenceScope = value.presenceScope, showPushToTalk = value.showPushToTalk,
+        icons = value.icons, launcher = value.launcher, connectionStyle = value.connectionStyle)
 
     fun activeLayout() = PreviewLayout(placement, design, halo, spirit, personaSide, horizontalOffsetDp, appearanceOverrides)
     fun savedLayout() = PreviewLayout(saved, savedDesign, savedHalo, savedSpirit, savedPersonaSide, savedHorizontalOffsetDp, savedAppearanceOverrides)
@@ -127,7 +130,8 @@ internal data class PersonaPreviewState(
         return withLayoutMaps(effective, savedLayouts()).copy(sharedAppearance = shared)
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 28).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 29).put("connectionPreview", connectionPreview).put("launcher", launcher)
+        .put("connectionStyle", connectionStyle).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -165,8 +169,9 @@ internal data class PersonaPreviewState(
 
     fun ui(): CallUi {
         val connected = connection == "connected"
-        return CallUi(running = connection != "disconnected", connected = connected,
-            phase = when (connection) { "connecting" -> "Connecting"; "disconnected" -> "Disconnected"; else -> "Connected" },
+        return CallUi(running = connection != "disconnected" && connection != "failed", connected = connected,
+            phase = when (connection) { "connecting" -> "Connecting"; "disconnected" -> "Disconnected"; "failed" -> "Connection failed"; else -> "Connected" },
+            message = if (connection == "failed") "Could not reach the server. Check your server and Tailscale, then try again." else null,
             micMuted = micMuted, micOpen = connected && (!micMuted || holding), speakerMuted = speakerMuted,
             speakerOpen = connected && !speakerMuted, canHold = connected && micMuted && showPushToTalk, holding = connected && holding,
             outputLevel = if (connected && mode == "speaking" && !speakerMuted) .14f else 0f,
@@ -216,11 +221,13 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..28)
+    require(protocol in 1..29)
     if (protocol <= 26) require(orientation in setOf(previewPortrait, previewLandscape))
     if (protocol >= 22) {
-        decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
-        decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22)
+        decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22,
+            legacyConnectionStyle = protocol <= 28)
+        decodeDesignAppearance(data.getJSONObject("defaultAppearance"), legacy = protocol == 22,
+            legacyConnectionStyle = protocol <= 28)
     }
     if (protocol >= 18) {
         decodePreviewSounds(data.getJSONObject("savedSounds"))
@@ -248,6 +255,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         horizontalOffsetDp = if (protocol >= 17) decodePreviewOffset(data.get("horizontalOffsetDp")) else 0,
         appearanceOverrides = if (protocol >= 17) decodeAppearanceOverrides(data.getJSONArray("appearanceOverrides")) else emptySet(),
         launcher = if (protocol >= 23) data.getString("launcher").also { require(it in previewLaunchers) } else "current",
+        connectionStyle = if (protocol >= 29) data.getString("connectionStyle").also { require(it in previewConnectionStyles) } else "relay",
         icons = if (protocol >= 21) decodePreviewIcons(data.getJSONObject("icons")) else PreviewIcons(),
         showPushToTalk = if (protocol >= 19) decodePreviewBoolean(data.get("showPushToTalk")) else true,
         sounds = if (protocol >= 18) decodePreviewSounds(data.getJSONObject("sounds")) else PreviewSounds(),
@@ -292,7 +300,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     return restored.withLayoutMaps(effectiveValues, savedValues).copy(sharedAppearance = shared,
         savedSharedAppearance = if (protocol >= 27) decodeSharedAppearance(data.getJSONObject("savedSharedAppearance")) else savedShared,
         savedSounds = if (protocol >= 27) decodePreviewSounds(data.getJSONObject("savedSounds")) else savedSounds,
-        savedAppearance = if (protocol >= 27) decodeDesignAppearance(data.getJSONObject("savedAppearance")) else savedAppearance)
+        savedAppearance = if (protocol >= 27) decodeDesignAppearance(data.getJSONObject("savedAppearance"),
+            legacyConnectionStyle = protocol <= 28) else savedAppearance)
 }
 
 internal class PersonaPreviewSession(initial: PersonaPlacement, private val selection: File, initialDesign: PreviewDesign = defaultPortraitLayout().design, initialHalo: PreviewHalo = defaultPortraitLayout().halo, initialSpirit: PreviewSpirit = defaultPortraitLayout().spirit, initialLandscape: PreviewLayout = defaultLandscapeLayout(), initialPortraitSide: String = "left", initialHorizontalOffsetDp: Int = 0,
@@ -354,7 +363,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
             when (method) {
                 "get" -> require(request.fields() == setOf("id", "method"))
                 "preview" -> {
-                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk", "icons", "launcher"))
+                    require(request.fields() == setOf("id", "method", "connection", "mode", "scales", "verticalOffsetDp", "design", "halo", "spirit", "activity", "orientation", "orientationEpoch", "personaSide", "theme", "mutedPresence", "mutedTuning", "presenceScope", "horizontalOffsetDp", "appearanceOverrides", "sounds", "showPushToTalk", "icons", "launcher", "connectionStyle"))
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
@@ -374,13 +383,15 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     val horizontal = decodePreviewOffset(request.get("horizontalOffsetDp"))
                     val overrides = decodeAppearanceOverrides(request.getJSONArray("appearanceOverrides"))
                     val launcher = request.getString("launcher").also { require(it in previewLaunchers) }
+                    val connectionStyle = request.getString("connectionStyle").also { require(it in previewConnectionStyles) }
                     val showPushToTalk = decodePreviewBoolean(request.get("showPushToTalk"))
                     val sounds = decodePreviewSounds(request.getJSONObject("sounds"))
                     val icons = decodePreviewIcons(request.getJSONObject("icons"))
                     val next = if (mode != state.mode) state.select(mode) else state.endHold()
                     state = next.applyAppearance(PreviewLayout(placement, design, halo, spirit, side, horizontal, overrides)).copy(
                         activity = activity, connection = connection, theme = theme, mutedPresence = mutedPresence,
-                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk, icons = icons, launcher = launcher, revision = state.revision + 1)
+                        mutedTuning = mutedTuning, presenceScope = presenceScope, sounds = sounds, showPushToTalk = showPushToTalk,
+                        icons = icons, launcher = launcher, connectionStyle = connectionStyle, revision = state.revision + 1)
                 }
                 "resetProduction" -> {
                     require(request.fields() == setOf("id", "method", "revision", "orientation", "orientationEpoch"))

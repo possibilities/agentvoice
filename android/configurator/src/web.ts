@@ -518,6 +518,7 @@ function render() {
   text(element("sound-volume-value"), `${draft.sounds.volumePercent}%`);
   element("sound-volume").setAttribute("aria-valuetext", `${draft.sounds.volumePercent} percent`);
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
+  element<HTMLSelectElement>("connection-style").value = draft.connectionStyle;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
   element("presence-scope-row").hidden =
     draft.mutedPresence === "tide" || draft.mutedPresence === "off";
@@ -878,6 +879,12 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-r
 element<HTMLSelectElement>("connection-preview").addEventListener("change", (event) => {
   const connection = (event.currentTarget as HTMLSelectElement).value as Connection;
   update((current) => ({ ...current, connection }));
+});
+
+element<HTMLSelectElement>("connection-style").addEventListener("change", (event) => {
+  const connectionStyle = (event.currentTarget as HTMLSelectElement)
+    .value as Preview["connectionStyle"];
+  update((current) => ({ ...current, connectionStyle }));
 });
 
 element<HTMLSelectElement>("preview-activity").addEventListener("change", (event) => {

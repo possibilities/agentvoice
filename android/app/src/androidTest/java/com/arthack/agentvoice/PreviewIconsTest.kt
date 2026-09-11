@@ -35,7 +35,7 @@ class PreviewIconsTest {
         .put("orientationEpoch", state.orientationEpoch).put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("theme", state.theme).put("mutedPresence", state.mutedPresence)
         .put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope)
-        .put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher)
+        .put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle)
 
     @Test fun iconChoicesSurviveRotationAndPersistOnlyOnExplicitSave() = runBlocking {
         val file = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "icons-${UUID.randomUUID()}.json")
@@ -74,10 +74,10 @@ class PreviewIconsTest {
                 .put("revision", selected.revision).put("orientation", selected.orientation)
                 .put("orientationEpoch", selected.orientationEpoch))
             val profile = JSONObject(reply.getString("profile"))
-            assertEquals(21, profile.getInt("version"))
+            assertEquals(22, profile.getInt("version"))
             assertEquals(selected.icons, decodePreviewIcons(profile.getJSONObject("icons")))
             assertEquals(selected.icons, state().icons)
-            assertEquals(28, reply.getJSONObject("state").getInt("protocol"))
+            assertEquals(29, reply.getJSONObject("state").getInt("protocol"))
         } finally { file.delete() }
     }
 

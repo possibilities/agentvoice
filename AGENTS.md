@@ -92,7 +92,7 @@ when the phone is available again. Report any restoration problem immediately.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  Save captures every visual choice in profile 21; protocol 28 carries current,
+  Save captures every visual choice in profile 22; protocol 29 carries current,
   saved and adopted defaults. A debug-only durable working draft autosaves edits;
   Reset to production resets all four physical layouts without writing the explicit checkpoint.
   Only connection/gates/held pointers and synthetic

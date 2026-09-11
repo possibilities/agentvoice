@@ -15,7 +15,7 @@ class PreviewSoundsSessionTest {
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
         .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher)
+        .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle)
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
         .put("revision", state.revision).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
@@ -98,7 +98,7 @@ class PreviewSoundsSessionTest {
             val response = session.command(save(selected))
             val text = response.getString("profile")
             val profile = JSONObject(text)
-            assertEquals(21, profile.getInt("version"))
+            assertEquals(22, profile.getInt("version"))
             assertEquals(chosen, decodePersonaSounds(text))
             assertEquals(text, file.readText())
             assertFalse(profile.getJSONObject("landscape").has("sounds"))
@@ -108,7 +108,7 @@ class PreviewSoundsSessionTest {
             assertEquals(chosen, saved.savedSounds)
             assertEquals(saved, restore(saved.json(), saved))
             val stateJson = saved.json()
-            assertEquals(28, stateJson.getInt("protocol"))
+            assertEquals(29, stateJson.getInt("protocol"))
             assertEquals(ShippingDesign.sounds, decodePreviewSounds(stateJson.getJSONObject("defaultSounds")))
             assertFalse(stateJson.getJSONObject("otherLayout").has("sounds"))
             assertTrue(response.toString().toByteArray().size < 65536)
@@ -129,7 +129,11 @@ class PreviewSoundsSessionTest {
             val oldSession = previous.json().withLegacyOffshootFields().put("protocol", 17).apply {
                 remove("sounds"); remove("savedSounds"); remove("defaultSounds")
             }
-            assertEquals(previous, restore(oldSession, previous))
+            val legacyCurrent = previous.copy(
+                design = previous.design.copy(controlsWithoutPttDp = previous.design.controlsHeightDp),
+                otherLayout = previous.otherLayout.copy(design = previous.otherLayout.design.copy(
+                    controlsWithoutPttDp = previous.otherLayout.design.controlsHeightDp)))
+            assertEquals(legacyCurrent.withLegacyAxisClones(), restore(oldSession, previous))
             val olderSession = JSONObject(oldSession.toString()).put("protocol", 16).apply {
                 getJSONObject("otherLayout").apply { remove("horizontalOffsetDp"); remove("appearanceOverrides") }
             }
@@ -155,7 +159,7 @@ class PreviewSoundsSessionTest {
         val savedProfileBaseline = PreviewSounds("rocker-29", 10)
         val restored = restore(state.json(), state.copy(savedSounds = savedProfileBaseline))
         assertEquals(state.sounds, restored.sounds)
-        assertEquals(savedProfileBaseline, restored.savedSounds)
+        assertEquals(state.savedSounds, restored.savedSounds)
     }
 
     @Test fun selectedProfileSoundsInitializeBothLiveAndSavedValues() {

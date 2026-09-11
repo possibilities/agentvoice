@@ -18,7 +18,7 @@ class PreviewProfileTwelveTest {
     private fun preview(state: PersonaPreviewState) = state.activeLayout().json()
         .put("id", 1).put("method", "preview").put("mode", state.mode).put("connection", state.connection)
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
-        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher)
+        .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json()).put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle)
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
         .put("revision", state.revision).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
@@ -105,7 +105,7 @@ class PreviewProfileTwelveTest {
             val reply = session.command(save(returned))
             val profile = reply.getString("profile")
             val encoded = JSONObject(profile)
-            assertEquals(21, encoded.getInt("version"))
+            assertEquals(22, encoded.getInt("version"))
             assertTrue(encoded.has("theme"))
             assertTrue(encoded.has("mutedPresence"))
             assertTrue(encoded.has("mutedTuning"))
@@ -170,7 +170,7 @@ class PreviewProfileTwelveTest {
                 val current = withContext(Dispatchers.Main) { session.state }
                 assertEquals(style, current.mutedPresence)
                 assertEquals(scope, current.presenceScope)
-                assertEquals(28, current.json().getInt("protocol"))
+                assertEquals(29, current.json().getInt("protocol"))
                 assertEquals(current, restorePersonaPreview(current.json(), current.saved, current.savedDesign,
                     current.savedHalo, current.savedSpirit, current.savedOtherLayout, current.savedPersonaSide))
                 assertFalse(file.exists())
@@ -178,7 +178,7 @@ class PreviewProfileTwelveTest {
             val original = withContext(Dispatchers.Main) { session.state }.copy(mutedPresence = "tide",
                 theme = "quiet", mutedTuning = PreviewMutedTuning(29, -73, 166, 41, 14, "float"))
             val legacy = original.json().withoutTraceJoinFields().put("protocol", 14).apply { remove("presenceScope") }
-            assertEquals(original.copy(presenceScope = "any-muted"), restorePersonaPreview(legacy,
+            assertEquals(original.copy(presenceScope = "any-muted").withLegacyAxisClones(), restorePersonaPreview(legacy,
                 original.saved, original.savedDesign, original.savedHalo, original.savedSpirit,
                 original.savedOtherLayout, original.savedPersonaSide))
             assertTrue(runCatching { restorePersonaPreview(original.json().apply { remove("presenceScope") },

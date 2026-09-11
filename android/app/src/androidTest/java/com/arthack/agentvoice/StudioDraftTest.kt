@@ -19,7 +19,7 @@ class StudioDraftTest {
         val other = base.otherLayout.copy(personaSide = "right", horizontalOffsetDp = 49,
             halo = base.otherLayout.halo.copy(ringSpreadPercent = 17), appearanceOverrides = setOf("halo"),
             design = base.otherLayout.design.copy(controlsWithoutPttDp = 743))
-        return base.copy(otherLayout = other, sounds = PreviewSounds("rocker-29", 39), launcher = "duplex-halo",
+        return base.copy(otherLayout = other, sounds = PreviewSounds("rocker-29", 39), launcher = "duplex-halo", connectionStyle = "datum",
             theme = "grayscale", icons = PreviewIcons("engraved", "contact"), showPushToTalk = false,
             mutedPresence = "labeled", presenceScope = "always", mutedTuning = PreviewMutedTuning(27, -43, 156, 55, 19, "ripple"))
     }
@@ -130,6 +130,7 @@ class StudioDraftTest {
             val file = File(dir, "draft.json")
             val current = JSONObject(edited().designProfile())
             val legacy = JSONObject(current.toString()).put("version", 20).apply {
+                remove("connectionStyle")
                 remove("portraitReverse")
                 remove("landscapeReverse")
             }
@@ -144,7 +145,7 @@ class StudioDraftTest {
             store.write(migrated.copy(horizontalOffsetDp = 17).designProfile())
             val saved = JSONObject(file.readText())
             assertEquals(3, saved.getInt("version"))
-            assertEquals(21, saved.getJSONObject("profile").getInt("version"))
+            assertEquals(22, saved.getJSONObject("profile").getInt("version"))
             assertTrue(saved.getJSONObject("profile").has("portraitReverse"))
             assertTrue(saved.getJSONObject("profile").has("landscapeReverse"))
         } finally { dir.deleteRecursively() }

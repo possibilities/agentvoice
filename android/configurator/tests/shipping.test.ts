@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { defaultVisualSettings } from "../src/protocol.ts";
 import {
   canonicalJson,
+  completeShippingProfile,
   createShippingSnapshot,
   generateKotlin,
   kotlinString,
@@ -79,11 +80,12 @@ test("legacy promotion requires explicit session source while profile19 carries 
   expect(createShippingSnapshot(profileText, "old.json", { kind: "defaults" }).appearance).toEqual(
     defaultVisualSettings(),
   );
-  const complete = { ...JSON.parse(profileText), version: 20, ...session };
+  const { connectionStyle: _, ...legacySession } = session;
+  const complete = { ...JSON.parse(profileText), version: 20, ...legacySession };
   expect(
     createShippingSnapshot(JSON.stringify(complete), "complete.json", { kind: "profile" })
       .appearance,
-  ).toEqual(session);
+  ).toEqual({ ...legacySession, connectionStyle: "relay" });
   expect(() =>
     createShippingSnapshot(
       JSON.stringify({ ...complete, connection: "connected" }),
@@ -150,6 +152,28 @@ test("snapshot parsing rejects modified source, provenance and effective design"
     expect(() => parseShippingSnapshot(JSON.stringify(changed))).toThrow();
 });
 
+test("profile22 provenance requires an explicit connection display", () => {
+  const legacySnapshot = snapshot();
+  const profile22 = completeShippingProfile(legacySnapshot);
+  const current = createShippingSnapshot(JSON.stringify(profile22), "profile22.json", {
+    kind: "profile",
+  });
+  const appearance = { ...current.appearance } as Record<string, unknown>;
+  delete appearance["connectionStyle"];
+  const invalid = {
+    ...current,
+    appearance,
+    source: {
+      ...current.source,
+      session: {
+        ...current.source.session,
+        valuesSha256: sha256(canonicalJson(appearance)),
+      },
+    },
+  };
+  expect(() => parseShippingSnapshot(canonicalJson(invalid))).toThrow("Unexpected fields");
+});
+
 test("Kotlin provenance string escaping cannot create interpolation or source statements", () => {
   expect(kotlinString('x"\\\n\r\t$evil\u000c')).toBe(
     '"x\\"\\\\\\u000a\\u000d\\u0009\\$evil\\u000c"',
@@ -171,6 +195,8 @@ test("promotion and regeneration are deterministic, check never writes, and sour
   const codePath = join(root, "android/app/src/main/java/com/arthack/agentvoice/ShippingDesign.kt");
   const code = await readFile(codePath, "utf8");
   const bytes = await readFile(canonical, "utf8");
+  expect(JSON.parse(bytes)).toMatchObject({ version: 22, connectionStyle: "relay" });
+  expect(code).toContain('const val connectionStyle = "relay"');
   await shippingCli(["generate", "--check", "--root", root]);
   await shippingCli(["generate", "--root", root]);
   expect(await readFile(codePath, "utf8")).toBe(code);
@@ -182,6 +208,22 @@ test("promotion and regeneration are deterministic, check never writes, and sour
   expect(await readFile(codePath, "utf8")).toBe("stale");
   expect(await readFile(input, "utf8")).toBe(profileText);
   expect(await readFile(selection, "utf8")).toBe(JSON.stringify(session));
+});
+
+test("generation upgrades an adopted profile21 to relay without changing its prior values", async () => {
+  const { root } = await fixture();
+  const value = snapshot();
+  await writeShipping(value, { root, snapshot: true });
+  const canonical = join(root, "android/design/shipping-profile.json");
+  const current = JSON.parse(await readFile(canonical, "utf8"));
+  const legacy = { ...current, version: 21 };
+  delete legacy.connectionStyle;
+  await writeFile(canonical, canonicalJson(legacy));
+  await shippingCli(["generate", "--root", root]);
+  const upgraded = JSON.parse(await readFile(canonical, "utf8"));
+  expect(upgraded).toEqual(current);
+  expect(upgraded.connectionStyle).toBe("relay");
+  expect(upgraded.version).toBe(22);
 });
 
 test("release inventory contains only adopted artwork and sounds, and re-promotion removes owned stale assets", async () => {

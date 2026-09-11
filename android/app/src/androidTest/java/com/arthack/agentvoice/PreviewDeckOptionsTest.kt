@@ -129,7 +129,7 @@ class PreviewDeckOptionsTest {
         }
         val original = PersonaPreviewState(design = migrated.portrait.design, otherLayout = migrated.landscape)
         val oldState = original.json().withoutIndependentExtents().put("protocol", 19)
-        assertEquals(original, restorePersonaPreview(oldState, original.saved, original.savedDesign,
+        assertEquals(original.withLegacyAxisClones(), restorePersonaPreview(oldState, original.saved, original.savedDesign,
             original.savedHalo, original.savedSpirit, original.savedOtherLayout))
     }
 
@@ -141,7 +141,7 @@ class PreviewDeckOptionsTest {
             .put("id", 1).put("method", "preview").put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
             .put("mode", state.mode).put("connection", state.connection).put("activity", state.activity)
             .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
-            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher)
+            .put("presenceScope", state.presenceScope).put("sounds", state.sounds.json()).put("showPushToTalk", state.showPushToTalk).put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle)
         try {
             for (bad in listOf(0, 1, "false", JSONObject.NULL)) {
                 assertTrue(runCatching { session.command(request(session.state).put("showPushToTalk", bad)) }.isFailure)
@@ -154,7 +154,7 @@ class PreviewDeckOptionsTest {
             session.command(JSONObject().put("id", 2).put("method", "save").put("revision", state.revision)
                 .put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch))
             val current = JSONObject(file.readText())
-            assertEquals(21, current.getInt("version")); assertFalse(current.getBoolean("showPushToTalk"))
+            assertEquals(22, current.getInt("version")); assertFalse(current.getBoolean("showPushToTalk"))
             assertFalse(current.toString().contains("offshootPercent"))
             val old = JSONObject(current.toString()).withLegacyOffshootFields().put("version", 16)
             old.getJSONObject("design").getJSONObject("traces").put("offshootPercent", 81)
@@ -165,7 +165,14 @@ class PreviewDeckOptionsTest {
             inconsistent.getJSONObject("landscape").getJSONObject("design").getJSONObject("spacing").put("paddingDp", 7)
             assertTrue(runCatching { decodePreviewProfileLayouts(inconsistent.toString()) }.isFailure)
             val originalBytes = old.toString(2); file.writeText(originalBytes)
-            assertEquals(decodePreviewProfileLayouts(current.toString()), decodePreviewProfileLayouts(file.readText()))
+            val currentLayouts = decodePreviewProfileLayouts(current.toString())
+            val legacyPortrait = currentLayouts.portrait.copy(design = currentLayouts.portrait.design.copy(
+                controlsWithoutPttDp = currentLayouts.portrait.design.controlsHeightDp))
+            val legacyLandscape = currentLayouts.landscape.copy(design = currentLayouts.landscape.design.copy(
+                controlsWithoutPttDp = currentLayouts.landscape.design.controlsHeightDp))
+            assertEquals(currentLayouts.copy(portrait = legacyPortrait, landscape = legacyLandscape,
+                portraitReverse = legacyPortrait, landscapeReverse = legacyLandscape),
+                decodePreviewProfileLayouts(file.readText()))
             assertEquals(originalBytes, file.readText())
             assertEquals(81, old.getJSONObject("design").getJSONObject("traces").getInt("offshootPercent"))
             for (bad in listOf(-1, 101, .5, "5", JSONObject.NULL)) {

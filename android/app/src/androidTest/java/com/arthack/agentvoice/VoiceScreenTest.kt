@@ -103,7 +103,9 @@ class VoiceScreenTest {
         compose.onNodeWithText("Start voice").assertDoesNotExist()
         compose.onNodeWithText("Import device grant").assertDoesNotExist()
         compose.onNodeWithText("Replace device grant").assertDoesNotExist()
+        openConnectionDetails()
         compose.onNodeWithText("Connection setup").assertExists()
+        compose.onNodeWithText("Done").performClick()
         compose.runOnIdle { assertTrue(cues.isEmpty()) }
         if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS)) {
             compose.onNodeWithTag("shipping-credits").performClick()
@@ -121,10 +123,15 @@ class VoiceScreenTest {
                 soundOutput = output, stop = { stopped = true },
                 mute = {}, hold = {}, release = {}) }
         }
-        compose.onNodeWithTag("voice-failure").assertExists()
-        compose.onNodeWithText("Connecting…").assertDoesNotExist()
-        compose.onNodeWithTag("end-failed-call").performClick()
+        compose.onNodeWithText("Connecting").assertDoesNotExist()
+        openConnectionDetails()
+        compose.onNodeWithTag("connection-dialog-action").performClick()
         compose.runOnIdle { assertTrue(stopped); assertTrue(cues.isEmpty()) }
     }
 
+    private fun openConnectionDetails() {
+        val tag = if (compose.onAllNodesWithTag("connection-details").fetchSemanticsNodes().isNotEmpty())
+            "connection-details" else "connection-compact"
+        compose.onNodeWithTag(tag).performClick()
+    }
 }

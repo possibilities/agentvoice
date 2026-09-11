@@ -48,10 +48,14 @@ internal fun PreviewStudioScreen(
     showPushToTalk: Boolean = true,
     icons: PreviewIcons = PreviewIcons(),
     handleBack: Boolean = true,
+    connectionStyle: String = "relay",
+    connectionDetail: String? = null,
+    onConnect: (() -> Unit)? = null,
+    onCancelConnection: (() -> Unit)? = null,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection)
     }
 }
 
@@ -61,6 +65,7 @@ private fun PreviewStudioScene(
     onMute: (String) -> Unit, onHold: () -> Unit, onRelease: () -> Unit, onExit: () -> Unit,
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
     personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, handleBack: Boolean,
+    connectionStyle: String, connectionDetail: String?, onConnect: (() -> Unit)?, onCancelConnection: (() -> Unit)?,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(enabled = handleBack, onBack = onExit)
@@ -158,6 +163,14 @@ private fun PreviewStudioScene(
                                 listening = theme.haloArgb(VoiceInk.you.toArgb()), speaking = theme.haloArgb(VoiceInk.agent.toArgb()),
                                 idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())))
                         }
+                        // Only disconnected/connecting Idle uses this aperture. Connected speech and
+                        // listening remove the notice immediately, without a stale outgoing status.
+                        val noticeScale = if (halo.variant == "contained") halo.containedSizePercent / 100f else placement.idleScale
+                        val idleInset = if (halo.variant == "contained") .20f * (1f - .06f * halo.idleBreathingPercent / 100f) else .16f
+                        PreviewConnectionNotice(connection,
+                            Modifier.align(Alignment.Center).offset(y = geometry.offsetY.dp),
+                            style = connectionStyle, innerRadius = (geometry.diameter * 1.9f * noticeScale * idleInset).dp,
+                            detail = connectionDetail, onConnect = onConnect, onCancel = onCancelConnection)
                         val aperture = rememberMutedAperture(geometry.diameter, halo, placement, motionAllowed && foreground)
                         if (mutedPresence == "tide") {
                             PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
@@ -195,11 +208,7 @@ private fun PreviewStudioScene(
                     }
                 }
             }
-            val noticeWidth = minOf(maxWidth, 312.dp)
-            val noticeLeft = (geometry.stageX + geometry.diameter / 2f - noticeWidth.value / 2f)
-                .coerceIn(0f, (maxWidth - noticeWidth).value.coerceAtLeast(0f))
-            PreviewConnectionNotice(connection, Modifier.align(Alignment.TopStart)
-                .offset { IntOffset(noticeLeft.dp.roundToPx(), 0) }.width(noticeWidth))
+
         }
     }
 }

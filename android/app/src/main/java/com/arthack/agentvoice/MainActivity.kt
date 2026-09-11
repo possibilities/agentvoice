@@ -73,7 +73,8 @@ class MainActivity : ComponentActivity() {
                 }
                 BackHandler(ui.running) { controller.stop("Call ended.") }
                 VoiceScreen(ui, stop = { controller.stop("Call ended.") },
-                    mute = controller::toggleMute, hold = controller::hold, release = controller::release)
+                    mute = controller::toggleMute, hold = controller::hold, release = controller::release,
+                    connect = if (loaded && hasGrant && !loadFailed && !microphoneNeeded) ::requestCall else null)
                 val close = { finish() }
                 when {
                     !loaded -> ConnectionOverlay(ConnectionScene.Found, close,
@@ -91,9 +92,7 @@ class MainActivity : ComponentActivity() {
                     microphoneNeeded -> ConnectionOverlay(
                         if (microphoneDenied) ConnectionScene.MicrophoneDenied else ConnectionScene.Microphone,
                         close, action = ::allowMicrophone)
-                    !ui.running -> ConnectionOverlay(ConnectionScene.Failed, close, action = ::requestCall,
-                        title = "Ready to reconnect", detail = ui.message ?: "Your device access is saved. Connect when you’re ready.",
-                        actionLabel = "Connect")
+
                 }
             }
         }

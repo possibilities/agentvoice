@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Separate Studio app; manual-only production reset — September 10, 2026** (receipt at the end).
+Latest work: **Connection display inside Persona — September 11, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -2327,3 +2327,61 @@ was restored. The activity reopened in portrait rather than the initial reverse
 landscape; auto-rotation was restored and this was disclosed in the release
 notification. No phone operations followed release. Private evidence is under
 `/tmp/agentvoice-clearance-refinement/phone/`.
+
+## Connection display inside Persona — September 11, 2026
+
+Connection status and Connect/Retry/Cancel now occupy the existing Persona
+aperture. Relay mark is the initial shipped style; Beacon word and Datum line
+are shared, saved Studio alternatives. Complete failure detail remains selectable
+and scrollable. Small apertures and enlarged text use a 48dp details control.
+The old top connection plate and saved-grant reconnect overlay are gone. QR,
+access-recovery and microphone-permission overlays remain separate. No new
+disconnecting phase is fabricated; this slice changes no Persona animation or size.
+
+Profile22/protocol29 carry live, saved and production `connectionStyle`. Older
+profiles migrate to Relay in memory; their saved bytes are not rewritten. Draft3
+remains complete and durable. The canonical design changes only the format
+version and Relay style; all adopted geometry, colors, icons and sounds remain
+exact. Legacy provenance is supported only for an embedded pre22 source; a
+new22 receipt missing the field is rejected even with a recomputed hash.
+
+- Configurator: 128 tests / 4,029 assertions passed; the additional tightened
+  provenance check passed in the 12-test shipping run. TypeScript, Biome and
+  generated-file drift checks passed.
+- Android: 143 JVM tests passed; Studio/Production builds and both lints passed.
+  Initial native runs exposed historical fixtures missing current request fields
+  or expecting moving production defaults and two-axis layouts. Those failures
+  are recorded in the private test logs, not treated as successful runs.
+- Native screenshots reviewed all four physical layouts for each of Relay, Beacon
+  and Datum; additional connecting/failed views and the three-style comparison
+  were reviewed. One interrupted capture was rejected; its complete replacement
+  restored successfully. These are synthetic native scenes, not live-call proof.
+- Production APK SHA256:
+  `83d95b7e1e4ea7e4393fe703917d83953798f8a258b45fd39d7a771d7529ed3a`.
+  Studio APK SHA256:
+  `c327cd28095605f0a6650ffb867adf521e8f0a3a12145ce0c670a49407ea61dd`.
+  Both were installed on S22 and installed bytes verified. Shipping audit passes:
+  no Studio entrypoints or profile JSON, only the selected Rocker13 quartet,
+  Relay Aperture launcher and byte-exact packaged notices.
+
+Private evidence: `/tmp/agentvoice-persona-connection/` (build, native-test and
+shipping-audit logs; `phone/` backups, screenshots and comparison). No emulator,
+production launch, voice call, microphone probe, grant repair or server restart
+was performed by this slice.
+
+Final native verification covers 62 distinct tests in 14 classes: the expanded
+run passed 57 and exposed five remaining historical-fixture mismatches; the
+corrected four-class rerun passed all 20 tests, resolving all five. The current
+UI, large-font fallback, selectable error, action callbacks and Persona-relative
+positioning tests pass. No production code was changed to accommodate those
+fixture corrections.
+
+Phone released with Studio linked on4317 and the original connected/Thinking
+simulation restored. All preexisting draft choices compare equal; only profile
+21→22 and `connectionStyle: relay` were added. Phone checkpoint and binding are
+byte-identical. Host checkpoint SHA256 remains
+`fa90da13aee5d0282945f11639290083cde58dcb5075ec48854411f7c8ec1b42`.
+Auto-rotation1, user_rotation0, font_scale1.0 and animator_duration_scale1.0 were
+restored and reread; window-manager rotation is free. The physical display
+settled in portrait instead of its initial reverse landscape; this was disclosed
+in the completion notification. No saved orientation geometry was changed.

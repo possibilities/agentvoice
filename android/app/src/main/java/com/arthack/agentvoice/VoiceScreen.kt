@@ -37,12 +37,21 @@ internal fun VoiceTheme(content: @Composable () -> Unit) {
 internal fun requiresShippingIconCredit(family: String, paidNounIcons: Boolean): Boolean =
     family == "noun-boatman" || (family == "noun-icons" && !paidNounIcons)
 
+internal fun voiceConnectionNoticeState(ui: CallUi): String = when {
+    ui.connected -> "connected"
+    ui.phase in setOf("Voice unavailable", "Voice stopped") -> "failed"
+    ui.running -> "connecting"
+    ui.message != null && !ui.message.startsWith("Call ended") -> "failed"
+    else -> "disconnected"
+}
+
 /** The adopted scene consumes real controller state; only the debug studio synthesizes it. */
 @Composable
 internal fun VoiceScreen(
     ui: CallUi, stop: () -> Unit,
     mute: (String) -> Unit, hold: () -> Unit, release: () -> Unit,
     soundOutput: PreviewSwitchOutput? = null,
+    connect: (() -> Unit)? = null,
 ) {
     val layout = shippingLayoutForOrientation(currentPreviewOrientation())
     val latestUi by rememberUpdatedState(ui)
@@ -73,23 +82,21 @@ internal fun VoiceScreen(
             }, onHold = { if (latestUi.canHold && !latestUi.holding) { hold(); feedback.down() } },
             onRelease = { feedback.cancel(); release() },
             onReleaseCompleted = { release(); feedback.release() }, onExit = { if (latestUi.running) stop() },
-            connection = when { ui.connected -> "connected"; ui.phase in setOf("Voice unavailable", "Voice stopped") -> "disconnected"; ui.running -> "connecting"; else -> "disconnected" },
+            connection = voiceConnectionNoticeState(ui),
             halo = layout.halo, spirit = layout.spirit, activity = "steady", personaSide = layout.personaSide,
             theme = ShippingDesign.theme, mutedPresence = ShippingDesign.mutedPresence,
             mutedTuning = ShippingDesign.mutedTuning, presenceScope = ShippingDesign.presenceScope,
             horizontalOffsetDp = layout.horizontalOffsetDp, showPushToTalk = ShippingDesign.showPushToTalk,
-            icons = ShippingDesign.icons, handleBack = ui.running)
-        if (ui.running && ui.phase in setOf("Voice unavailable", "Voice stopped")) {
-            Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding(), color = VoiceInk.ground) {
-                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Voice could not start. Check the server, then end this attempt and try again.",
-                        color = VoiceInk.text, fontFamily = VoiceInk.type,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("voice-failure"))
-                    TextButton(onClick = stop, modifier = Modifier.testTag("end-failed-call")) { Text("End attempt") }
-                }
-            }
-        }
-        ui.message?.let {
+            icons = ShippingDesign.icons, handleBack = ui.running,
+            connectionStyle = ShippingDesign.connectionStyle,
+            connectionDetail = ui.message ?: when (ui.phase) {
+                "Voice stopped" -> "Voice stopped. End this attempt before reconnecting."
+                "Voice unavailable" -> "Voice could not start. Check the server, then end this attempt and try again."
+                else -> null
+            },
+            onConnect = if (!ui.running) connect else null,
+            onCancelConnection = if (ui.running && !ui.connected) stop else null)
+        if (ui.connected) ui.message?.let {
             Text(it, color = VoiceInk.text, fontFamily = VoiceInk.type, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().background(VoiceInk.surface)
                     .padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite })

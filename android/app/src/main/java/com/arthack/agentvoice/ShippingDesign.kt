@@ -197,6 +197,7 @@ internal object ShippingDesign {
         push = "current",
     )
     const val launcher = "relay-aperture"
+    const val connectionStyle = "relay"
     const val theme = "bright"
     const val mutedPresence = "tide"
     const val presenceScope = "any-muted"

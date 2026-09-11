@@ -21,9 +21,9 @@ even when Android's portrait/landscape configuration does not change. Android's
 user rotation policy still applies outside an explicit capture.
 
 Geometry and appearance overrides are local to each slot. Shared spacing, shared
-appearance, sounds and the seven shared visual choices apply across all four.
-Protocol28 carries the visible slot, its facing-pair `otherLayout`, and the other
-two in `remainingLayouts`, plus saved counterparts. Profile21 adds
+appearance, sounds and the eight shared visual choices apply across all four.
+Protocol29 carries the visible slot, its facing-pair `otherLayout`, and the other
+two in `remainingLayouts`, plus saved counterparts. Profile21 added
 `portraitReverse` and `landscapeReverse` beside root portrait and `landscape`.
 Draft3 saves this complete profile. Readers clone legacy reverse slots from their
 matching axis in memory; loading never rewrites older drafts or checkpoints.
@@ -61,11 +61,38 @@ written to the profile directory. Phone mappings assume a natural-portrait devic
 physical cutout, reverse-rotation and natural-landscape tablet behavior need
 separate device acceptance.
 
-Shipping now generates four slots. The currently adopted profile20/provenance1
-remain unchanged; their reverse defaults are synthesized from the matching axis.
-A future explicit promotion writes profile21/provenance2, including every slot.
+Shipping generates all four slots from the adopted profile22/provenance2.
+Legacy profile20 reverse defaults are synthesized from their matching axis only
+when reading that older format; loading it never rewrites its saved bytes.
 
 ## Continue from production
+
+**Connection display** is shared across all four layouts. **Relay mark** places
+a quiet connection glyph above the status, **Beacon word** emphasizes larger
+words, and **Datum line** uses a compact labeled status. The display sits inside
+the Persona and follows its existing center in both axes. It replaces the old
+top connection plate; it does not resize or pause the Persona. The connected
+muted indicator and disconnected connection display never compete.
+
+The connection rehearsal now includes **Failed**. In Studio, Connect/Retry moves
+only the synthetic preview to Connecting; choose Connected in the host to finish
+that rehearsal. Cancel returns the rehearsal to Disconnected. These actions do
+not use grants, a microphone or the voice server. Production Connect/Retry is an
+explicit attempt using the existing saved grant; Cancel or End attempt ends the
+current attempt. Details retains the complete error in a selectable, scrollable
+dialog. Very small Personas or large accessibility fonts use one 48dp details
+control so the full status and actions remain reachable. There is no invented
+Disconnecting phase: the controller does not currently expose one.
+
+QR enrollment, device-access recovery and permission overlays remain separate.
+A usable saved grant no longer opens a full-screen reconnect overlay after a
+call ends; its Connect action lives inside the Persona.
+
+Protocol29/profile22 add required shared `connectionStyle: relay|beacon|datum`
+with live/saved/production values. Older profiles gain Relay in memory without
+rewriting the checkpoint. Draft3 continues to store the complete profile. Save
+captures the style; Reset to production restores it with every other design
+choice. Only the selected production style is used in the real app.
 
 **Thinking** auditions verified coding activity with the bundled Rive state.
 It shares Idle size/color (and Contained's shared size); these controls explicitly
@@ -84,7 +111,7 @@ After that it always opens the last configured draft, even after a new productio
 release or Studio upgrade. Only **Reset to production** adopts production again. Its complete
 baseline is `android/design/shipping-profile.json`; the generated debug-only
 `StudioProduction` preserves all four layouts, shared appearance and exact override
-flags, all seven visual choices, both shown/hidden PTT extents and sounds.
+flags, all eight visual choices, both shown/hidden PTT extents and sounds.
 
 Every acknowledged design edit is atomically autosaved on the phone in
 `files/persona-studio-draft.json`. It survives process death, force-stop,
@@ -433,16 +460,19 @@ The preview has no microphone, voice playback, grant, controller, Codex,
 WebRTC or voice-server connection. Optional switch effects play locally on the
 phone only when its controls are used.
 
-Explicit Save writes a version 20 profile atomically on the phone. Root geometry,
+Explicit Save writes a version 22 profile atomically on the phone. Root geometry,
 `design`, `halo`, `spirit` and `personaSide` hold effective portrait values;
 `landscape` holds effective landscape values (integer-percent `scales`, both
 offsets, design, Halo, spirit and side). Root and landscape each include sorted
 `appearanceOverrides`; root `sharedAppearance` stores the shared base. Root
 `sounds` stores the shared sound family and level. Root `icons`, `theme`,
-`mutedPresence`, `presenceScope`, `mutedTuning`, `launcher` and `showPushToTalk` capture the
+`mutedPresence`, `presenceScope`, `mutedTuning`, `launcher`, `connectionStyle` and
+`showPushToTalk` capture the
 remaining visual choices. All four layouts and every shared visual and sound
 setting must match the captured save request, even if
-the phone rotates before its receipt arrives. Its root `design`
+the phone rotates before its receipt arrives. `connectionStyle` is exactly
+`relay|beacon|datum`; profiles through version21 gain Relay only in memory and
+retain their original bytes. Its root `design`
 contains the fixed layout/header and Rockers, composition, controls height
 and talk-button share, plus nested `traces` and `spacing` settings. Its `halo` stores variant, common Contained size, motion
 and opaque RGB colors. Its `spirit` stores surface light, light strength and
@@ -521,9 +551,9 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol28 carries live/saved/default designs, sizes, vertical and
+Preview protocol29 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
-`connection: connected|connecting|disconnected`, `activity: steady|voice`,
+`connection: connected|connecting|disconnected|failed`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
 `mutedPresence: off|tide|words|channels|labeled|contacts`, required
 `presenceScope: both-muted|any-muted|always` (default `any-muted`), and required
@@ -531,8 +561,8 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
 32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is28;
-saved profile is version21 with separately saved shown/hidden extents and all
+session-root fields on Preview/PhoneState, never Layout. Protocol is29;
+saved profile is version22 with separately saved shown/hidden extents and all
 shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
 The design contract fixes `layout: studio`, `header: none`, `mute: rockers`,
@@ -563,9 +593,9 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in all four orientations.
-Protocol28's active fields describe the phone's visible orientation; it also
+Protocol29's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
-`defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. Ordinary tuning follows only the phone’s displayed orientation. The explicit capture operation temporarily rotates it, then restores its rotation setting. Version21 profile receipts must
+`defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. Ordinary tuning follows only the phone’s displayed orientation. The explicit capture operation temporarily rotates it, then restores its rotation setting. Version22 profile receipts must
 include all four exact confirmed layouts, including design, geometry, side,
 variant, motion, colors, spirit, override flags, shared appearance and sounds before the
 host copy is written. `horizontalOffsetDp` is an integer from−200 through200.
@@ -580,7 +610,7 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol28 is strict; Android restoration from
+never include it. Current live protocol29 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
 The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
@@ -619,12 +649,12 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol28 and profiles18–21 require both extent fields. Legacy profiles
+Current protocol29 and profiles18–22 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
 restoration from protocol19 or earlier does the same. Only explicit Save writes
-profile21.
+profile22.
 
 
 ## Icon auditions and launcher studies
@@ -679,7 +709,10 @@ field: `current`, `duplex-halo`, `relay-aperture`, or `voice-carrier`. Profile19
 remains strict and contains no launcher field; its effective launcher defaults
 to Current only in memory. Existing files are upgraded only by explicit Save. Dirty comparison checks every
 saved appearance value. Icon and muted-tuning resets use adopted defaults;
-Reset shared choices restores all seven together without changing geometry or
+Protocol29 and profile22 add `connectionStyle` as the eighth shared appearance
+field. Protocols through28 and profiles through21 use Relay only in memory and
+remain byte-for-byte unchanged until explicit Save. Reset shared choices restores
+all eight together without changing geometry or
 sounds. Runtime connection, activity, synthetic mode and call gates are never part of Save.
 
 Shipping is explicit and leaves Studio available for a later promotion:
@@ -690,9 +723,9 @@ bun android/configurator/src/shipping.ts generate
 bun android/configurator/src/shipping.ts generate --check
 ```
 
-Promotion accepts strict profiles18–21. Profiles19–21 can supply their own saved
+Promotion accepts strict profiles18–22. Profiles19–22 can supply their own saved
 appearance without another flag. A legacy profile requires an explicit
-`--session <seven-field-json>`, `--live-state <captured-state-json>`, or
+`--session <eight-field-json>`, `--live-state <captured-state-json>`, or
 `--default-session`. A live capture must match both saved layouts and sounds;
 a mismatch stops promotion for review. Promotion never writes either input.
 
