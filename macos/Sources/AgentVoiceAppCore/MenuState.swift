@@ -6,15 +6,13 @@ public enum AgentVoiceMenuCopy {
     public static let quit = "Quit menu"
 }
 
-public enum PairPhonePreviewCopy {
+public enum PairPhoneCopy {
     public static let title = "Pair your phone"
     public static let instruction = "Open AgentVoice on your phone and scan this code."
-    public static let securityNote = "Only scan this code with AgentVoice."
-    public static let previewNote = "Interaction preview — pairing is not connected yet."
-
-    // Deliberately rejected by the Android grant parser. Replacing this with a
-    // real credential requires the private issuance and activation lifecycle.
-    public static let payload = "agentvoice-preview:v1:desktop-interaction"
+    public static let waiting = "Waiting for your phone…"
+    public static let paired = "Phone paired"
+    public static let pairedDetail = "You can now use this phone to call AgentVoice."
+    public static let durableNote = "This code expires in 5 minutes. Your phone stays paired until you remove it."
 }
 
 public enum WaitingServerState: Equatable, Sendable {

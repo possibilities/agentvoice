@@ -29,6 +29,9 @@ export const CHALLENGE_PATH = "/v2/auth/challenge";
 export const PAIRING_WINDOW_MS = 5 * 60_000;
 export const PAIRING_RECOVERY_MS = 24 * 60 * 60_000;
 export const CHALLENGE_WINDOW_MS = 30_000;
+export const INVALID_ENROLLMENT_WINDOW_MS = 10_000;
+export const INVALID_ENROLLMENT_LIMIT = 32;
+export const INVALID_CHALLENGE_LIMIT = 64;
 export const PAIRING_SOCKET_VERSION = 1;
 
 const idSchema = z.string().regex(/^[a-f0-9]{32}$/);
@@ -44,7 +47,11 @@ const base64UrlSchema = z
   .regex(/^[A-Za-z0-9_-]+$/);
 const challengeIdSchema = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
 const nonceSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const signatureSchema = z.string().regex(/^[A-Za-z0-9_-]{86,107}$/);
+const signatureSchema = z
+  .string()
+  .min(11)
+  .max(96)
+  .regex(/^[A-Za-z0-9_-]+$/);
 
 export const pairingQrSchema = z
   .object({
@@ -158,6 +165,24 @@ function validatedPublicKey(value: string): { encoded: string; der: Buffer; fing
   }
 }
 
+function canonicalEcdsaSignature(value: string): Buffer {
+  const der = decodeBase64Url(value, 8, 72);
+  if (der[0] !== 0x30 || der[1] !== der.byteLength - 2) throw new Error("invalid signature DER");
+  let offset = 2;
+  for (let index = 0; index < 2; index++) {
+    if (der[offset++] !== 0x02) throw new Error("invalid signature DER");
+    const length = der[offset++];
+    if (!length || length > 33 || offset + length > der.byteLength)
+      throw new Error("invalid signature DER");
+    const first = der[offset]!;
+    if ((first & 0x80) !== 0 || (length > 1 && first === 0 && (der[offset + 1]! & 0x80) === 0))
+      throw new Error("invalid signature DER");
+    offset += length;
+  }
+  if (offset !== der.byteLength) throw new Error("invalid signature DER");
+  return der;
+}
+
 const pairedRecordSchema = z
   .object({
     version: z.literal(PAIRING_VERSION),
@@ -248,18 +273,24 @@ export class PairedDevices {
   }
 
   active(id: string): boolean {
-    return this.read(id) !== undefined;
+    return this.status(id) === "active";
   }
 
-  publicKey(id: string): Buffer | undefined {
-    const record = this.read(id);
+  status(id: string): "active" | "revoked" | "unknown" {
+    if (this.read(id, false)) return "active";
+    if (this.read(id, true)) return "revoked";
+    return "unknown";
+  }
+
+  publicKey(id: string, revoked = false): Buffer | undefined {
+    const record = this.read(id, revoked);
     if (!record) return;
     return validatedPublicKey(record.publicKeySpki).der;
   }
 
   revoke(id: string): boolean {
     if (!idSchema.safeParse(id).success) throw new Error("Invalid device ID");
-    const record = this.read(id);
+    const record = this.read(id, false);
     if (!record) return false;
     renameSync(join(this.directory, `${id}.json`), join(this.directory, `${id}.revoked.json`));
     return true;
@@ -290,10 +321,12 @@ export class PairedDevices {
       }));
   }
 
-  private read(id: string): PairedRecord | undefined {
+  private read(id: string, revoked: boolean): PairedRecord | undefined {
     if (!idSchema.safeParse(id).success) return;
     try {
-      const record = pairedRecordSchema.parse(readPrivateJson(join(this.directory, `${id}.json`)));
+      const record = pairedRecordSchema.parse(
+        readPrivateJson(join(this.directory, `${id}${revoked ? ".revoked" : ""}.json`)),
+      );
       if (
         record.id !== id ||
         validatedPublicKey(record.publicKeySpki).fingerprint !== record.fingerprint
@@ -348,15 +381,28 @@ const enrollmentRecordSchema = z
   });
 type EnrollmentRecord = z.infer<typeof enrollmentRecordSchema>;
 
-export type PairingStatus = {
-  status: "prepared" | "waiting" | "paired";
-  expiresAt: number;
-  deviceId?: string;
-};
+export const pairingStatusSchema = z
+  .object({
+    status: z.enum(["prepared", "waiting", "paired"]),
+    expiresAt: z.number().int().positive(),
+    deviceId: idSchema.optional(),
+  })
+  .strict();
+export type PairingStatus = z.infer<typeof pairingStatusSchema>;
+
+export const pairingPrepareResponseSchema = z
+  .object({
+    enrollmentId: idSchema,
+    receipt: digestSchema,
+    payload: z.string().min(1).max(PAIRING_QR_MAX_BYTES),
+    expiresAt: z.number().int().positive(),
+  })
+  .strict();
 
 export class PairingCoordinator {
   readonly paired: PairedDevices;
   readonly directory: string;
+  private invalidEnrollments: number[] = [];
 
   constructor(
     stateDir: string,
@@ -426,7 +472,7 @@ export class PairingCoordinator {
   cancel(enrollmentId: string, receipt: string, now = Date.now()): PairingStatus | undefined {
     const record = this.authorizeLocal(enrollmentId, receipt, now);
     if (record.state === "paired") return this.project(record);
-    renameSync(this.path(record.id), join(this.directory, `${record.id}.cancelled.json`));
+    unlinkSync(this.path(record.id));
     return;
   }
 
@@ -437,10 +483,15 @@ export class PairingCoordinator {
     } catch {
       throw new PairingFailure("invalid_request", 400);
     }
+    this.sweepInvalidEnrollments(now);
+    if (this.invalidEnrollments.length >= INVALID_ENROLLMENT_LIMIT)
+      throw new PairingFailure("pairing_limited", 429);
     const [id, secret] = request.enrollment.split(".") as [string, string];
     const record = this.read(id);
-    if (!record || !equalDigest(secret, record.secretHash))
+    if (!record || !equalDigest(secret, record.secretHash)) {
+      this.invalidEnrollments.push(now);
       throw new PairingFailure("invalid_enrollment", 401);
+    }
     const publicKey = validatedPublicKey(request.publicKey);
     const label = normalizedLabel(request.label);
     const requestDigest = digest(JSON.stringify([request.requestId, label, publicKey.fingerprint]));
@@ -516,13 +567,18 @@ export class PairingCoordinator {
     for (const record of this.records()) {
       if (record.state !== "paired" && record.expiresAt <= now) this.expire(record);
       else if (record.state === "paired" && record.recoveryUntil! <= now)
-        renameSync(this.path(record.id), join(this.directory, `${record.id}.consumed.json`));
+        unlinkSync(this.path(record.id));
     }
+  }
+
+  private sweepInvalidEnrollments(now: number): void {
+    const cutoff = now - INVALID_ENROLLMENT_WINDOW_MS;
+    this.invalidEnrollments = this.invalidEnrollments.filter((attempt) => attempt > cutoff);
   }
 
   private expire(record: EnrollmentRecord): void {
     try {
-      renameSync(this.path(record.id), join(this.directory, `${record.id}.expired.json`));
+      unlinkSync(this.path(record.id));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
@@ -587,6 +643,7 @@ type ChallengeRecord = {
 
 export interface PairingProofReservation {
   readonly deviceId: string;
+  readonly revoked: boolean;
   commit(): void;
   release(): void;
 }
@@ -594,6 +651,7 @@ export interface PairingProofReservation {
 export class PairingChallenges {
   private readonly challenges = new Map<string, ChallengeRecord>();
   private readonly perDevice = new Map<string, number>();
+  private invalidDevices: number[] = [];
 
   constructor(private readonly devices: PairedDevices) {}
 
@@ -605,7 +663,13 @@ export class PairingChallenges {
       throw new PairingFailure("invalid_request", 400);
     }
     this.sweep(now);
-    if (!this.devices.active(request.deviceId)) throw new PairingFailure("device_unavailable", 404);
+    this.sweepInvalidDevices(now);
+    if (this.invalidDevices.length >= INVALID_CHALLENGE_LIMIT)
+      throw new PairingFailure("challenge_limited", 429);
+    if (!this.devices.active(request.deviceId)) {
+      this.invalidDevices.push(now);
+      throw new PairingFailure("device_unavailable", 404);
+    }
     const count = this.perDevice.get(request.deviceId) ?? 0;
     if (this.challenges.size >= 256 || count >= 4)
       throw new PairingFailure("challenge_limited", 429);
@@ -641,18 +705,14 @@ export class PairingChallenges {
     const challengeId = headers.get("x-agentvoice-challenge")!;
     const signatureText = headers.get("x-agentvoice-signature")!;
     const record = this.challenges.get(challengeId);
-    if (
-      !record ||
-      record.reserved ||
-      record.deviceId !== deviceId ||
-      record.expiresAt <= now ||
-      !this.devices.active(deviceId)
-    )
+    if (!record || record.reserved || record.deviceId !== deviceId || record.expiresAt <= now)
       return;
+    const deviceStatus = this.devices.status(deviceId);
+    if (deviceStatus === "unknown") return;
     record.reserved = true;
     try {
-      const signature = decodeBase64Url(signatureText, 64, 80);
-      const publicKey = this.devices.publicKey(deviceId);
+      const signature = canonicalEcdsaSignature(signatureText);
+      const publicKey = this.devices.publicKey(deviceId, deviceStatus === "revoked");
       if (!publicKey) throw new Error("missing key");
       const key = createPublicKey({ key: publicKey, format: "der", type: "spki" });
       if (
@@ -671,6 +731,7 @@ export class PairingChallenges {
     let settled = false;
     return {
       deviceId,
+      revoked: deviceStatus === "revoked",
       commit: () => {
         if (settled) return;
         settled = true;
@@ -689,6 +750,11 @@ export class PairingChallenges {
     for (const [challengeId, record] of this.challenges) {
       if (record.expiresAt <= now) this.remove(challengeId, record);
     }
+  }
+
+  private sweepInvalidDevices(now: number): void {
+    const cutoff = now - INVALID_ENROLLMENT_WINDOW_MS;
+    this.invalidDevices = this.invalidDevices.filter((attempt) => attempt > cutoff);
   }
 
   private remove(challengeId: string, record: ChallengeRecord): void {
@@ -767,18 +833,22 @@ export class PairingControlServer {
       if (request.method === "prepare") {
         localPrepareSchema.parse(request.params);
         const prepared = this.pairing.prepare();
-        result = {
+        result = pairingPrepareResponseSchema.parse({
           enrollmentId: prepared.enrollment.slice(0, 32),
           receipt: prepared.receipt,
           payload: prepared.payload,
           expiresAt: prepared.expiresAt,
-        };
+        });
       } else if (request.method === "activate") {
         const params = localMutationSchema.parse(request.params);
-        result = this.pairing.activate(params.enrollmentId, params.receipt);
+        result = pairingStatusSchema.parse(
+          this.pairing.activate(params.enrollmentId, params.receipt),
+        );
       } else if (request.method === "status") {
         const params = localMutationSchema.parse(request.params);
-        result = this.pairing.status(params.enrollmentId, params.receipt);
+        result = pairingStatusSchema.parse(
+          this.pairing.status(params.enrollmentId, params.receipt),
+        );
       } else if (request.method === "cancel") {
         const params = localMutationSchema.parse(request.params);
         result = this.pairing.cancel(params.enrollmentId, params.receipt) ?? {

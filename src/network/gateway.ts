@@ -76,14 +76,27 @@ export class NetworkGateway {
         fetch: async (request, server) => {
           const url = new URL(request.url);
           const requestHost = request.headers.get("host") ?? "";
-          const reject = (status: number, code?: string) =>
-            code
-              ? new Response(JSON.stringify({ v: 1, error: { code } }), {
-                  status,
-                  headers: { "Cache-Control": "no-store", "Content-Type": "application/json" },
-                })
-              : new Response(null, { status, headers: { "Cache-Control": "no-store" } });
-          if (this.stopping) return reject(503, "pairing_unavailable");
+          const reject = (status: number) =>
+            new Response(null, { status, headers: { "Cache-Control": "no-store" } });
+          const rejectJson = (status: number, code: string) =>
+            new Response(JSON.stringify({ v: 1, error: { code } }), {
+              status,
+              headers: {
+                "Cache-Control": "no-store",
+                "Content-Type": "application/json",
+                "X-AgentVoice-Error": code,
+              },
+            });
+          const rejectUpgrade = (status: number, code: string) =>
+            new Response(null, {
+              status,
+              headers: { "Cache-Control": "no-store", "X-AgentVoice-Error": code },
+            });
+          if (this.stopping) {
+            return url.pathname === PAIRING_PATH || url.pathname === CHALLENGE_PATH
+              ? rejectJson(503, "pairing_unavailable")
+              : rejectUpgrade(503, "pairing_unavailable");
+          }
           if (url.search || request.headers.has("origin")) return reject(404);
           if (![host, `127.0.0.1:${server.port}`].includes(requestHost)) return reject(421);
           if (url.pathname === PAIRING_PATH || url.pathname === CHALLENGE_PATH) {
@@ -92,7 +105,7 @@ export class NetworkGateway {
               request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
                 "application/json"
             )
-              return reject(400, "invalid_request");
+              return rejectJson(400, "invalid_request");
             try {
               const maximum = url.pathname === PAIRING_PATH ? 4096 : 512;
               const text = await request.text();
@@ -120,7 +133,7 @@ export class NetworkGateway {
                 error instanceof PairingFailure
                   ? error
                   : new PairingFailure("pairing_unavailable", 503);
-              return reject(failure.status, failure.code);
+              return rejectJson(failure.status, failure.code);
             }
           }
           if (request.method !== "GET" || url.pathname !== NETWORK_PATH) return reject(404);
@@ -143,9 +156,13 @@ export class NetworkGateway {
             if (id) authority = { kind: "legacy-grant", id };
           } else if (!authorization) {
             proof = this.challenges.reserve(request.headers, requestHost);
+            if (proof?.revoked) {
+              proof.commit();
+              return rejectUpgrade(403, "device_revoked");
+            }
             if (proof) authority = { kind: "paired-device", id: proof.deviceId };
           }
-          if (!authority) return reject(401);
+          if (!authority) return rejectUpgrade(401, "device_auth_failed");
           const reservationKey = `${authority.kind}:${authority.id}`;
           const count = this.deviceReservations.get(reservationKey) ?? 0;
           if (this.reserved >= 16 || count >= 4) {

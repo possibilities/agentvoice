@@ -14,9 +14,9 @@ owns the current source map and recording/attachment implementation guidance.
   skips both app and service management.
   No configuration, prompt/skill setup or legacy command cleanup.
 - macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
-  registration, read-only launchd state, reusable SwiftUI pairing-preview window
-  and signed application packaging. The preview QR is deliberately outside the
-  credential namespace. The menu is not a frontend or server supervisor; quitting
+  registration, read-only launchd state, reusable SwiftUI pairing window,
+  private render-gated pairing-socket client and signed application packaging.
+  The menu is not a frontend or server supervisor; quitting
   it must not end a call. Follow AgentNotify for native panels, windows and shared
   SwiftUI content.
 - src/macos-app.ts: ownership, signing, source-revision and running-process checks
@@ -69,8 +69,11 @@ owns the current source map and recording/attachment implementation guidance.
   Never persist or expose its URL through discovery, accept arbitrary content,
   rebind for LAN/tailnet/ADB access. The bridge may connect to authenticated WSS
   while the page remains same-device. See ADRs [0032](adr/0032-loopback-browser-media-frontend.md)/[0034](adr/0034-authenticated-client-network.md).
-- src/network/: WSS device grants, loopback TLS-proxy backend, bounded heartbeat
-  framing and client adapter. Network and local owners share the same VoiceServer.
+- src/network/: legacy WSS bearer grants, durable public-key device pairing,
+  one-use connection challenges, loopback TLS-proxy backend, bounded heartbeat
+  framing and client adapter. The native menu and CLI prepare enrollment through
+  a separate private UDS and activate it only after rendering. Network and local
+  owners share the same VoiceServer.
   Fail closed on invalid credentials, Origin, protocol, frames and liveness;
   close local ownership immediately without waiting for a network close handshake.
   No automatic reconnect, secret logging, TLS bypass or public Funnel deployment.

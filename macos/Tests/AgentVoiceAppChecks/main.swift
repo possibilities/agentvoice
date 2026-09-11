@@ -16,15 +16,14 @@ require(WaitingServerState.running.menuTitle == "AgentVoice is running", "runnin
 require(AgentVoiceMenuCopy.pairPhone == "Pair phone…", "pair-phone menu copy changed")
 require(AgentVoiceMenuCopy.runAtLogin == "Run at login", "login menu copy changed")
 require(AgentVoiceMenuCopy.quit == "Quit menu", "quit menu copy changed")
-require(PairPhonePreviewCopy.title == "Pair your phone", "pair-phone title changed")
+require(PairPhoneCopy.title == "Pair your phone", "pair-phone title changed")
 require(
-    PairPhonePreviewCopy.instruction == "Open AgentVoice on your phone and scan this code.",
+    PairPhoneCopy.instruction == "Open AgentVoice on your phone and scan this code.",
     "pair-phone instruction changed"
 )
 require(
-    PairPhonePreviewCopy.payload.hasPrefix("agentvoice-preview:v1:")
-        && !PairPhonePreviewCopy.payload.hasPrefix("agentvoice-grant:v1:"),
-    "pair-phone preview could be mistaken for a device grant"
+    PairPhoneCopy.durableNote.contains("stays paired"),
+    "durable pairing copy no longer distinguishes code expiry from pairing lifetime"
 )
 require(
     parseLaunchctlState("\tstate = waiting\n") == .loaded("waiting"),
