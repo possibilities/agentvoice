@@ -2220,7 +2220,13 @@ variants. Original retains its existing conservative trace standoff; these sampl
 stills do not establish every-frame geometry or universal trace attachment.
 Draft, checkpoint and binding remain byte-identical after audition/restoration.
 
-Paired production installation and server delivery remain pending. Network transport,
+Production and Studio were installed with exact on-device APK hash matches.
+Studio SHA256: `2197a5eb09c82b2edf9e4979e955b22076705b08d74a32e76a7e3fe1e208d405`.
+After an idle admission check and coordinated restart, the default server answered
+a frontend3 observation with idle/busy=false. No live voice call was started;
+real coding activity during a user call remains ordinary-use validation.
+Studio foreground/simulation and rotation, font and animator settings were restored;
+phone access was released with an operator notification. Network transport,
 heartbeat and grants remain v2; frontend API 3 requires a coordinated app/server
 upgrade, without replacing the device grant. Private check logs are under
 `/tmp/agentvoice-thinking/`.
