@@ -10,7 +10,7 @@ microphone identity retained by [0027](0027-service-microphone-identity.md) and
 The macOS installer places a signed `AgentVoice.app` in the user's Applications
 directory. It is an AppKit menu-bar app with the agent activation policy and a
 native status item. The first surface is intentionally small: the current
-launchd state of the default waiting server, **Open AgentVoice at Login**, and
+launchd state of the default waiting server, **Run AgentVoice at login**, and
 **Quit AgentVoice Menu**. A launchd `running` state says only that the waiting
 job is running; it is not a Codex, account, media, or call readiness claim.
 
@@ -23,9 +23,12 @@ service restart/removal retains its existing call-ending semantics.
 
 `SMAppService.mainApp` owns the menu app's login setting. Enabled means macOS may
 open the menu app on subsequent logins. Disabling it leaves the current menu app
-and the separate waiting server running, matching the platform API. Revoked
-approval becomes an explicit **Open Login Item Settings…** action rather than an
-invented enabled state.
+and the separate waiting server running, matching the platform API. On its first
+launch, the app records and applies an enabled default once; later launches and
+updates never overwrite an explicit opt-out. A failed default registration stays
+available as a manual action rather than creating a startup alert or repeated
+prompt. Revoked approval becomes an explicit **Open Login Item Settings…** action
+rather than an invented enabled state.
 
 The menu app uses the bundle identifier `io.arthack.agentvoice.menu`. The private
 signed Bun runtime under AgentVoice state keeps `io.arthack.agentvoice`, its
@@ -56,6 +59,6 @@ than inferring call readiness from launchd.
 The menu can be present or absent independently of server and call lifetime.
 There is one server supervisor, not two. The installer now requires the macOS
 Swift command-line tools for a full install, while command-only and non-macOS
-installation keep their existing scope. The first app has no automatic service
-mutation, call button, microphone access, Codex login probe, or native-history
-access; those require later product decisions and focused lifecycle tests.
+installation keep their existing scope. The first app has no automatic
+waiting-server mutation, call button, microphone access, Codex login probe, or
+native-history access; those require later product decisions and focused lifecycle tests.

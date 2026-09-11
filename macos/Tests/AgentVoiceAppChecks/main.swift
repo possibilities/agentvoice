@@ -12,6 +12,7 @@ require(
     parseLaunchctlState("path = /tmp/job\n\tstate = running\npid = 42\n") == .running,
     "running launchd state was not recognized"
 )
+require(WaitingServerState.running.menuTitle == "AgentVoice is running", "running menu copy changed")
 require(
     parseLaunchctlState("\tstate = waiting\n") == .loaded("waiting"),
     "non-running launchd state was not preserved"
@@ -25,7 +26,7 @@ require(parseLaunchctlState("") == .unavailable, "empty launchd output was accep
 require(
     LoginItemPresentation(state: .disabled)
         == LoginItemPresentation(
-            title: "Open AgentVoice at Login",
+            title: "Run AgentVoice at login",
             checked: false,
             enabled: true,
             action: .register
@@ -35,7 +36,7 @@ require(
 require(
     LoginItemPresentation(state: .enabled)
         == LoginItemPresentation(
-            title: "Open AgentVoice at Login",
+            title: "Run AgentVoice at login",
             checked: true,
             enabled: true,
             action: .unregister
@@ -51,6 +52,28 @@ require(
             action: .openSettings
         ),
     "approval-required login-item presentation changed"
+)
+
+let firstLaunch = LoginItemDefaultPlan(state: .disabled, defaultWasRecorded: false)
+let optedOut = LoginItemDefaultPlan(state: .disabled, defaultWasRecorded: true)
+let alreadyEnabled = LoginItemDefaultPlan(state: .enabled, defaultWasRecorded: false)
+let unavailable = LoginItemDefaultPlan(state: .unavailable, defaultWasRecorded: false)
+
+require(
+    firstLaunch.recordDefault && firstLaunch.action == .register,
+    "first launch no longer defaults the login item on"
+)
+require(
+    !optedOut.recordDefault && optedOut.action == .none,
+    "an explicit login-item choice would be overwritten"
+)
+require(
+    alreadyEnabled.recordDefault && alreadyEnabled.action == .none,
+    "an existing enabled login item would be registered twice"
+)
+require(
+    !unavailable.recordDefault && unavailable.action == .none,
+    "an unavailable login API incorrectly consumed the first-launch default"
 )
 
 print("AgentVoice macOS menu checks passed.")

@@ -8,7 +8,7 @@ public enum WaitingServerState: Equatable, Sendable {
     public var menuTitle: String {
         switch self {
         case .running:
-            return "Waiting server is running"
+            return "AgentVoice is running"
         case .loaded(let state):
             return "Waiting server: \(state)"
         case .unavailable:
@@ -54,6 +54,30 @@ public enum LoginItemAction: Equatable, Sendable {
     case none
 }
 
+public struct LoginItemDefaultPlan: Equatable, Sendable {
+    public let recordDefault: Bool
+    public let action: LoginItemAction
+
+    public init(state: LoginItemState, defaultWasRecorded: Bool) {
+        guard !defaultWasRecorded else {
+            recordDefault = false
+            action = .none
+            return
+        }
+        switch state {
+        case .disabled:
+            recordDefault = true
+            action = .register
+        case .enabled, .approvalRequired:
+            recordDefault = true
+            action = .none
+        case .unavailable:
+            recordDefault = false
+            action = .none
+        }
+    }
+}
+
 public struct LoginItemPresentation: Equatable, Sendable {
     public let title: String
     public let checked: Bool
@@ -70,12 +94,12 @@ public struct LoginItemPresentation: Equatable, Sendable {
     public init(state: LoginItemState) {
         switch state {
         case .disabled:
-            title = "Open AgentVoice at Login"
+            title = "Run AgentVoice at login"
             checked = false
             enabled = true
             action = .register
         case .enabled:
-            title = "Open AgentVoice at Login"
+            title = "Run AgentVoice at login"
             checked = true
             enabled = true
             action = .unregister
