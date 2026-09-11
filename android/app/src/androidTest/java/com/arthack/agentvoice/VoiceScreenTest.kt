@@ -24,6 +24,23 @@ class VoiceScreenTest {
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
 
+    @Test fun personaLongPressReplaysHintAndBackNavigatesWithoutEndingCall() {
+        var hints = 0
+        var navigations = 0
+        var ends = 0
+        lateinit var back: androidx.activity.OnBackPressedDispatcher
+        compose.setContent {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            VoiceTheme { VoiceScreen(ready, soundOutput = output, stop = { ends++ }, mute = {},
+                hold = {}, release = {}, onBack = { navigations++ }, onNavigationHint = { hints++ }) }
+        }
+        compose.onNodeWithTag("persona-navigation-hint").performTouchInput { longClick() }
+        compose.runOnIdle { assertEquals(1, hints); assertEquals(0, ends); assertEquals(0, navigations) }
+        compose.onNodeWithTag("mic-mute").performTouchInput { longClick() }
+        compose.runOnIdle { assertEquals(1, hints); back.onBackPressed() }
+        compose.runOnIdle { assertEquals(1, navigations); assertEquals(0, ends) }
+    }
+
     @Test fun holdReleaseAndCancellationFollowTheOwningPointer() {
         var presses = 0
         var releases = 0

@@ -100,7 +100,7 @@ function withoutThinkingWingspan<T>(value: T): T {
   return copy as T;
 }
 function expectLegacyProfile(actual: Profile, expected: unknown): void {
-  expect(withoutThinkingWingspan(actual)).toEqual(expected);
+  expect(Bun.deepEquals(withoutThinkingWingspan(actual), expected)).toBe(true);
 }
 const initial = (): PhoneState => ({
   protocol: 30,
@@ -1243,10 +1243,13 @@ test("Thinking wingspan is strict in protocol30 and profile23 while profile22 ga
       ],
     (state) =>
       delete (state.otherLayout.halo as unknown as Record<string, unknown>)["thinkingWingspan"],
-    (state) =>
+    (state) => {
+      if (!("portraitReverse" in state.remainingLayouts))
+        throw Error("Portrait state must carry reverse-orientation layouts");
       delete (state.remainingLayouts.portraitReverse.halo as unknown as Record<string, unknown>)[
         "thinkingWingspan"
-      ],
+      ];
+    },
   ];
   for (const mutate of stateMutations) {
     const state = initial();
@@ -3519,6 +3522,54 @@ test("connection rehearsal is a strict transient command with orientation and ge
   expect(phone.calls).toHaveLength(1);
   expect(() => parseState({ ...before, connectionPreview: "saveGrant" })).toThrow();
   expect(() => parseState({ ...before, protocol: 24 })).toThrow();
+});
+
+test("protocol 30 widens only its transient connection rehearsal scenes", async () => {
+  const { phone, post, saveTo } = await fixture();
+  const before = structuredClone(phone.state);
+  expect(parseState(before).connectionPreview).toBe("off");
+  for (const scene of [
+    "root-unpaired",
+    "root-pairing-pending",
+    "root-disconnected",
+    "root-connecting",
+    "root-active",
+    "root-failed",
+  ] as const) {
+    expect(parseState({ ...before, connectionPreview: scene }).connectionPreview).toBe(scene);
+    expect((await post("connection-preview", { scene })).status).toBe(200);
+  }
+  expect(phone.calls.map((call) => call["scene"])).toEqual([
+    "root-unpaired",
+    "root-pairing-pending",
+    "root-disconnected",
+    "root-connecting",
+    "root-active",
+    "root-failed",
+  ]);
+  expect(phone.state).toEqual(before);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
+  expect(() => parseState({ ...before, connectionPreview: "root-connected" })).toThrow();
+});
+
+test("an older phone bridge rejects a new root rehearsal visibly and without retry", async () => {
+  const { phone, post, saveTo } = await fixture();
+  phone.request = async (command) => {
+    phone.calls.push(command);
+    throw Error("Phone rejected widened protocol 30 rehearsal");
+  };
+  const response = await post("connection-preview", { scene: "root-active" });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "Phone rejected widened protocol 30 rehearsal" });
+  expect(phone.calls).toEqual([
+    {
+      method: "connectionPreview",
+      scene: "root-active",
+      orientation: phone.state.orientation,
+      orientationEpoch: phone.state.orientationEpoch,
+    },
+  ]);
+  expect(await Bun.file(saveTo).exists()).toBe(false);
 });
 
 test("cleared Noun pairs expose exact attribution and matching-mic credits without widening safe links", () => {

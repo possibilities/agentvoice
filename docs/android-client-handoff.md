@@ -42,8 +42,8 @@ Manual/Termux servers use `agentvoice server` in a foreground terminal. On deskt
 # Explicit first enable: requires a connected Tailscale device and unused ports.
 bun ~/code/agentstart/scripts/agentvoice-network.ts --enable
 agentvoice network status
-# Native Android app:
-agentvoice network qr --name phone
+# Native Android app: choose Pair phone… in the desktop menu, or:
+agentvoice network pair
 # Termux/native desktop client profile:
 agentvoice network grant --name Android --out /absolute/private/android.json
 agentvoice network list
@@ -57,28 +57,29 @@ the intended devices. Never place this route on an existing public Funnel port.
 
 Custom trusted TLS proxies can use `agentvoice network configure --endpoint
 wss://host:port/v2/client --port <loopback-port>` followed by a default-server
-restart. The proxy must preserve Authorization, WebSocket subprotocol and a Host
-equal to the configured endpoint or loopback backend. It must not log headers or
-frames. Do not expose the backend directly or disable certificate verification.
+restart. The proxy must preserve Authorization or the `X-AgentVoice-*` proof
+headers, WebSocket subprotocol, and Host. Paired-device requests require the
+endpoint’s canonical authority (including non-default port); do not replace it
+with the loopback backend Host. It must not log credentials, headers or frames. Do not expose the backend directly or disable certificate verification.
 
 Grant output is create-new only, mode 0600, and contains
 `{version:1,endpoint:"wss://…/v2/client",token:"<id>.<secret>"}`. Transfer only this
 file through a trusted encrypted channel, never chat, clipboard logs, URLs or
 browser storage. On Termux use a private app-owned directory and mode 0600.
-For the native Android app, scan the separate `network qr` output instead. It
-encodes `agentvoice-grant:v1:` followed by the exact compact profile JSON, capped
-at 2048 UTF-8 bytes. This is a reusable bearer credential, not one-use pairing;
-keep the terminal and its scrollback private. The app checks the authenticated
-verified-TLS upgrade without starting a call, then saves the grant encrypted
-with Android Keystore in no-backup storage before starting voice. No Codex
-credential is transferred. Endpoint validation forbids ws:, URL credentials,
-queries, fragments and paths other than `/v2/client`.
+The native Android app instead uses the desktop menu's **Pair phone…** enrollment
+window and `agentvoice-pair:v1:` QR. This short-lived, one-use capability enrolls
+a durable Keystore signing identity; it is not a bearer call credential. HTTPS
+enrollment and challenge requests use only the QR endpoint's verified authority,
+with no redirects or insecure fallback. A pending request is saved before sending
+and recovered only by an explicit retry of the same tuple. See the
+[client API](client-api.md#android-device-enrollment) for the pairing contract.
+Existing Android bearer grants remain compatible. No Codex credential is transferred.
 
 Grants expire after 30 days. Revoke with `agentvoice network revoke <device-id>`;
 active connections close within 10 seconds, or on their next frame. File-based
 clients need a new profile to renew. The native Android app currently retains
 its single grant even when rejected or unreadable; it has no deletion/replacement
-UI. Recovery requires manual app-data repair, then scanning a new QR. There is
+UI. Recovery requires manual app-data repair, then a new pairing enrollment. There is
 no refresh secret. Revoke the old grant when replacing it. `network disable` retains settings under a
 disabled filename; restart the default server to immediately stop network access.
 Remove only its dedicated Serve route with `tailscale serve --https=48414 off`.
@@ -170,9 +171,12 @@ for local devices. Muting locally may be immediate; unmuting waits for server
 confirmation. PTT release/cancel/blur must clear the hold. App stop, permission
 revocation, network loss or heartbeat failure must immediately mute, stop capture
 and playback, close all peers and close/cancel WSS—even if no server is reachable.
-For the initial Android client, backgrounding ends the call; background voice
-would require a separately designed foreground service, audio-focus and notification
-policy. Do not infer background support from a surviving socket.
+The Android call is owned by a private microphone foreground service. Back,
+backgrounding and locking release held PTT but retain that call; Activity
+recreation binds to the same controller. Disconnect or notification Hang up
+ends it. The notification also offers microphone Mute/Unmute and return-to-call.
+Process death never automatically reopens media. See
+[call navigation](android-call-navigation.md) for the lifecycle and permission policy.
 
 Call disconnect closes server-owned Codex and work; the waiting server survives.
 Cleanup must complete before another call is admitted. Reconnect means a new call

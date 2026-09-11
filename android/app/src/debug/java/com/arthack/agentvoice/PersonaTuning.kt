@@ -10,6 +10,11 @@ import java.io.File
 import kotlin.math.roundToInt
 
 internal val previewStates = previewModes + "thinking"
+internal val previewConnectionRoots = setOf(
+    "root-unpaired", "root-pairing-pending", "root-disconnected", "root-connecting", "root-active", "root-failed",
+)
+private val previewSetupRehearsals = setOf("off", "camera") + ConnectionScene.entries.map { it.key }
+internal val previewConnectionRehearsals = previewSetupRehearsals + previewConnectionRoots
 
 internal data class PersonaPreviewState(
     val placement: PersonaPlacement = defaultPortraitLayout().placement,
@@ -59,7 +64,8 @@ internal data class PersonaPreviewState(
     val savedSounds: PreviewSounds = sounds,
     val savedAppearance: DesignAppearance = DesignAppearance(theme, mutedPresence, mutedTuning, presenceScope, showPushToTalk, icons, launcher, connectionStyle),
 ) {
-    init { require(launcher in previewLaunchers)
+    init { require(connectionPreview in previewConnectionRehearsals)
+        require(launcher in previewLaunchers)
         require(connectionStyle in previewConnectionStyles)
         require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
         require(horizontalOffsetDp in -200..200 && savedHorizontalOffsetDp in -200..200)
@@ -177,6 +183,17 @@ internal data class PersonaPreviewState(
             outputLevel = if (connected && mode == "speaking" && !speakerMuted) .14f else 0f,
             codingActivity = if (connected && mode == "thinking") CodingActivity.Working else CodingActivity.Idle)
     }
+
+    fun connectionRootUi(): CallUi = when (connectionPreview) {
+        "root-unpaired" -> CallUi(phase = "Ready")
+        "root-pairing-pending" -> CallUi(phase = "Pairing not finished")
+        "root-disconnected" -> CallUi(phase = "Disconnected")
+        "root-connecting" -> CallUi(running = true, phase = "Connecting")
+        "root-active" -> CallUi(running = true, connected = true, phase = "Connected")
+        "root-failed" -> CallUi(phase = "Connection failed",
+            message = "Could not reach the server. Check your server and Tailscale, then try again.")
+        else -> error("Not a connection root rehearsal")
+    }
 }
 
 private fun String.previewOrientationJsonKey(): String = when (this) {
@@ -222,6 +239,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
     require(protocol in 1..30)
+    val connectionPreview = data.optString("connectionPreview", "off")
+    require(connectionPreview in if (protocol >= 30) previewConnectionRehearsals else previewSetupRehearsals)
     if (protocol <= 26) require(orientation in setOf(previewPortrait, previewLandscape))
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22,
@@ -234,7 +253,8 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
         decodePreviewSounds(data.getJSONObject("defaultSounds"))
     }
     val base = PersonaPreviewState(placement = decodePreviewPlacement(data), saved = saved,
-        mode = if (holding) "idle" else mode, connection = connection, revision = revision, activity = activity,
+        mode = if (holding) "idle" else mode, connection = connection, connectionPreview = connectionPreview,
+        revision = revision, activity = activity,
         design = data.optJSONObject("design")?.let {
             if (protocol in 3..11) decodePersonaDesign(JSONObject().put("version", protocol).put("design", it).toString())
             else {
@@ -406,7 +426,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     require(request.fields() == setOf("id", "method", "scene", "orientation", "orientationEpoch"))
                     checkOrientation(request)
                     val scene = request.getString("scene")
-                    require(scene in setOf("off", "camera") + ConnectionScene.entries.map { it.key })
+                    require(scene in previewConnectionRehearsals)
                     state = state.endHold().copy(connectionPreview = scene)
                 }
                 "iconCredits" -> {

@@ -31,16 +31,33 @@ internal data class CallUi(
     val codingActivity: CodingActivity = CodingActivity.Unknown,
 )
 
+internal interface OwnedCallController {
+    val ui: CallUi
+    fun start(credential: CallCredential)
+    fun toggleMute(target: String)
+    fun hold()
+    fun release()
+    fun stop(message: String? = null)
+    fun dispose()
+}
+
 internal class CallController(
     private val context: Context,
     private val mediaFactory: (PeerEvents) -> MediaEngine = { VoicePeer(context, it) },
-    private val transportFactory: ((DeviceGrant, TransportEvents) -> CallTransport)? = null,
+    private val transportFactory: ((CallCredential, TransportEvents) -> CallTransport)? = null,
     private val permissionGranted: () -> Boolean = {
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     },
     private val observeNetwork: Boolean = true,
-) {
-    var ui by mutableStateOf(CallUi()); private set
+    private val onUiChanged: (CallUi) -> Unit = {},
+) : OwnedCallController {
+    private var currentUi by mutableStateOf(CallUi())
+    override var ui: CallUi
+        get() = currentUi
+        private set(value) {
+            currentUi = value
+            onUiChanged(value)
+        }
     private val main = Handler(Looper.getMainLooper())
     private val http = secureHttpClient()
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -59,7 +76,7 @@ internal class CallController(
     private val acknowledgements = mutableMapOf<String, Ack>()
     private val prepared = linkedSetOf<String>()
 
-    fun start(grant: DeviceGrant) {
+    override fun start(credential: CallCredential) {
         if (cleanupFailed) { ui = CallUi(message = "Audio cleanup failed. Close and reopen AgentVoice."); return }
         if (ui.running) return
         stop()
@@ -122,7 +139,8 @@ internal class CallController(
             }
             override fun ended(message: String) = dispatch { stop(message) }
         }
-        transport = transportFactory?.invoke(grant, transportEvents) ?: SecureTransport(http, grant, transportEvents)
+        transport = transportFactory?.invoke(credential, transportEvents)
+            ?: SecureTransport(http, credential, transportEvents)
         main.postDelayed({
             if (generation == epoch && !opened) stop("Could not connect securely. Check Tailscale and your server.")
         }, 15_000)
@@ -193,7 +211,7 @@ internal class CallController(
             outputLevel = if (gate.speakerOpen) peer?.outputLevel ?: 0f else 0f)
         main.postDelayed({ tick(epoch) }, 50)
     }
-    fun toggleMute(target: String) = guarded {
+    override fun toggleMute(target: String) = guarded {
         if (!ui.connected || gate.controlsPending) return@guarded
         release()
         val muted = if (target == "mic") !gate.state.mic.muted else !gate.state.speaker.muted
@@ -201,13 +219,13 @@ internal class CallController(
         refresh()
         send("input", command("mute", target, muted), Ack("mute", target))
     }
-    fun hold() = guarded {
+    override fun hold() = guarded {
         if (!gate.hold()) return@guarded
         holdRevision++
         send("input", command("hold"), Ack("hold", revision = holdRevision))
         refresh()
     }
-    fun release() {
+    override fun release() {
         val held = gate.release()
         holdRevision++
         // Close local capture before writing or awaiting any response.
@@ -236,7 +254,7 @@ internal class CallController(
     private inline fun guarded(block: () -> Unit) {
         try { block() } catch (_: Exception) { stop("Connection or audio failed. Check your server, then start again.") }
     }
-    fun stop(message: String? = null) {
+    override fun stop(message: String?) {
         generation++
         gate.stop()
         main.removeCallbacksAndMessages(null)
@@ -251,7 +269,7 @@ internal class CallController(
         ui = CallUi(phase = if (message == null) "Ready" else "Disconnected", message =
             if (cleanupFailed) "Audio cleanup failed. Close and reopen AgentVoice." else message)
     }
-    fun dispose() {
+    override fun dispose() {
         stop()
         http.connectionPool.evictAll()
         http.dispatcher.executorService.shutdown()

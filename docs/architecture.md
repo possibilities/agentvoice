@@ -224,7 +224,12 @@ owns the current source map and recording/attachment implementation guidance.
 ## Native Android and design studio
 
 The native Android client owns its WebRTC and audio through authenticated WSS;
-read [the Android implementation boundaries](../android/README.md#implementation-boundaries)
+its private foreground `CallService` retains the controller independently of
+Activity navigation. Back and foreground changes release PTT without ending the
+call; explicit Disconnect or notification Hang up closes it. See
+[Android call navigation](android-call-navigation.md) for service and notification
+ownership, launch policy and Studio rehearsal boundaries.
+Read [the Android implementation boundaries](../android/README.md#implementation-boundaries)
 before changing it. The debug-only host [design studio](../android/configurator/README.md)
 owns synthetic preview controls and profiles. Its saved design choices are
 exploratory and must not silently become production layout or defaults.

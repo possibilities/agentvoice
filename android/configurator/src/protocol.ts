@@ -155,6 +155,12 @@ export const visualSettingsFields = [
 ] as const;
 export const connectionPreviews = [
   "off",
+  "root-unpaired",
+  "root-pairing-pending",
+  "root-disconnected",
+  "root-connecting",
+  "root-active",
+  "root-failed",
   "camera",
   "permission",
   "denied",

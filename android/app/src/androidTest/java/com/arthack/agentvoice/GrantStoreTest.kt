@@ -75,6 +75,24 @@ class GrantStoreTest {
         assertArrayEquals(malformed, storedFile.readBytes())
     }
 
+    @Test fun missingEncryptionKeyFailsWithoutCreatingAReplacement() {
+        val store = GrantStore(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            directory,
+            alias,
+        )
+        store.saveNew(grant())
+        val storedFile = File(directory, "device-grant.v1")
+        val originalBytes = storedFile.readBytes()
+        val keys = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        keys.deleteEntry(alias)
+
+        assertThrows(IllegalStateException::class.java) { store.load() }
+        val reopened = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        assertFalse(reopened.containsAlias(alias))
+        assertArrayEquals(originalBytes, storedFile.readBytes())
+    }
+
     private fun ByteArray.containsSequence(sequence: ByteArray): Boolean {
         if (sequence.isEmpty()) return true
         for (start in 0..size - sequence.size) {

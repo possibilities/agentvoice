@@ -52,6 +52,8 @@ internal fun VoiceScreen(
     mute: (String) -> Unit, hold: () -> Unit, release: () -> Unit,
     soundOutput: PreviewSwitchOutput? = null,
     connect: (() -> Unit)? = null,
+    onBack: () -> Unit = {},
+    onNavigationHint: (() -> Unit)? = null,
 ) {
     val layout = shippingLayoutForOrientation(currentPreviewOrientation())
     val latestUi by rememberUpdatedState(ui)
@@ -81,13 +83,13 @@ internal fun VoiceScreen(
                 }
             }, onHold = { if (latestUi.canHold && !latestUi.holding) { hold(); feedback.down() } },
             onRelease = { feedback.cancel(); release() },
-            onReleaseCompleted = { release(); feedback.release() }, onExit = { if (latestUi.running) stop() },
+            onReleaseCompleted = { release(); feedback.release() }, onExit = { release(); onBack() },
             connection = voiceConnectionNoticeState(ui),
             halo = layout.halo, spirit = layout.spirit, activity = "steady", personaSide = layout.personaSide,
             theme = ShippingDesign.theme, mutedPresence = ShippingDesign.mutedPresence,
             mutedTuning = ShippingDesign.mutedTuning, presenceScope = ShippingDesign.presenceScope,
             horizontalOffsetDp = layout.horizontalOffsetDp, showPushToTalk = ShippingDesign.showPushToTalk,
-            icons = ShippingDesign.icons, handleBack = ui.running,
+            icons = ShippingDesign.icons, handleBack = true,
             connectionStyle = ShippingDesign.connectionStyle,
             connectionDetail = ui.message ?: when (ui.phase) {
                 "Voice stopped" -> "Voice stopped. End this attempt before reconnecting."
@@ -95,7 +97,8 @@ internal fun VoiceScreen(
                 else -> null
             },
             onConnect = if (!ui.running) connect else null,
-            onCancelConnection = if (ui.running && !ui.connected) stop else null)
+            onCancelConnection = if (ui.running && !ui.connected) stop else null,
+            onNavigationHint = onNavigationHint)
         if (ui.connected) ui.message?.let {
             Text(it, color = VoiceInk.text, fontFamily = VoiceInk.type, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().background(VoiceInk.surface)

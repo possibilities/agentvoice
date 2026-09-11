@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "label": {
+    "normalization": "NFC",
+    "minimumUnicodeScalars": 1,
+    "maximumUnicodeScalars": 80,
+    "forbiddenUnicodeCategory": "Cc"
+  },
+  "qr": {
+    "prefix": "agentvoice-pair:v1:",
+    "payload": "agentvoice-pair:v1:{\"v\":1,\"endpoint\":\"wss://voice.example:48414/v2/client\",\"enrollment\":\"00112233445566778899aabbccddeeff.000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\",\"expiresAt\":1800000300000}",
+    "value": {
+      "v": 1,
+      "endpoint": "wss://voice.example:48414/v2/client",
+      "enrollment": "00112233445566778899aabbccddeeff.000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "expiresAt": 1800000300000
+    },
+    "pairUrl": "https://voice.example:48414/v2/pair",
+    "challengeUrl": "https://voice.example:48414/v2/auth/challenge"
+  },
+  "deviceProof": {
+    "algorithm": "SHA256withECDSA",
+    "signatureEncoding": "DER-base64url-no-padding",
+    "publicKeyEncoding": "P-256-SPKI-DER-base64url-no-padding",
+    "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaxfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpZP40Li_hp_m47n60p8D54WK84zV2sxXs7LtkBoN79R9Q",
+    "deviceId": "00112233445566778899aabbccddeeff",
+    "challengeId": "AQIDBAUGBwgJCgsMDQ4PEA",
+    "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "method": "GET",
+    "authority": "voice.example:48414",
+    "path": "/v2/client",
+    "subprotocol": "agentvoice.v2",
+    "signingBytesHex": "4167656e74566f696365206465766963652d617574682076310000203030313132323333343435353636373738383939616162626363646465656666001641514944424155474277674a4367734d4451345045410020000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f00034745540013766f6963652e6578616d706c653a3438343134000a2f76322f636c69656e74000d6167656e74766f6963652e7632",
+    "signingBytesSha256": "5fffed46c1419fa29829188a99a8801d1f7d437519c5e418f2ea4b30d3c1d6eb",
+    "signature": "MEUCIEIKewiZ9TGVayJ_ShLaFlpWugkDIXNJ9pWlDYJ4lEdhAiEAhdDgu2kDvGJ7f5UuLjb_fgdsLPzKmdHnKumr-DRvSg8"
+  }
+}

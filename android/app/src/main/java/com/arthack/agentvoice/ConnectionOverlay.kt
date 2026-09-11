@@ -31,7 +31,7 @@ internal enum class ConnectionScene(val key: String, val title: String, val deta
     Permission("permission", "Scan a connection code", "Allow camera access to connect this phone to your AgentVoice server.", "Allow camera"),
     Denied("denied", "Camera access is off", "Allow camera access in Android settings, then return here to scan your code.", "Open settings"),
     Opening("opening", "Opening camera…", "Point this phone at the connection code on your server."),
-    Scanning("scanning", "Scan a connection code", "On your server, run the command below. Then point this phone at the code."),
+    Scanning("scanning", "Scan a connection code", "Open AgentVoice on your desktop and choose Pair phone. Then point this phone at the code."),
     Unavailable("unavailable", "Camera unavailable", "Check that no other app is using the camera, then try again.", "Try again"),
     Invalid("invalid", "That isn’t an AgentVoice code", "Use a connection code from your AgentVoice server.", "Scan again"),
     Found("found", "Code found", "Checking secure access to your server…"),
@@ -117,7 +117,7 @@ internal fun ConnectionOverlay(
                             .testTag("connection-title"))
                     Text(detail, color = VoiceInk.muted, fontFamily = VoiceInk.type, fontSize = 14.sp, lineHeight = 21.sp)
                     if (scene in setOf(ConnectionScene.Permission, ConnectionScene.Scanning)) {
-                        Text("agentvoice network qr --name phone", color = ink, fontFamily = VoiceInk.type,
+                        Text("AgentVoice menu → Pair phone…", color = ink, fontFamily = VoiceInk.type,
                             fontSize = 12.sp, lineHeight = 19.sp,
                             modifier = Modifier.background(VoiceInk.surface, RoundedCornerShape(8.dp)).padding(12.dp))
                     }
@@ -130,7 +130,7 @@ internal fun ConnectionOverlay(
                         }
                     }
                     TextButton(onClick = close, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp).testTag("connection-close")) {
-                        Text(if (studio) "Back to Studio" else "Close", color = VoiceInk.muted, fontFamily = VoiceInk.type)
+                        Text(if (studio) "Back to Studio" else "Connections", color = VoiceInk.muted, fontFamily = VoiceInk.type)
                     }
                     if (!studio && requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS)) {
                         TextButton(onClick = { credits = true }, modifier = Modifier.testTag("connection-credits")) {

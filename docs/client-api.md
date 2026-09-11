@@ -34,22 +34,34 @@ replacement. Authentication-only QR validation does not negotiate a call version
 
 ## Android device enrollment
 
-After configuring the dedicated private Tailscale WSS route, issue the native
-client's credential with:
+After configuring the dedicated private Tailscale WSS route, use **Pair phone…**
+in the desktop AgentVoice menu, or run `agentvoice network pair`. Both surfaces
+activate the enrollment only after rendering the code and cancel an unredeemed
+code when closed. Their `agentvoice-pair:v1:` QR carries a five-minute,
+one-use enrollment capability, not the long-lived call credential. The phone
+creates a nonexportable P-256 signing key and persists the exact enrollment
+request encrypted in no-backup storage before posting to same-authority HTTPS
+`/v2/pair`. A lost reply has an explicit exact-request recovery path for 24 hours;
+foregrounding never resubmits enrollment automatically.
 
-```sh
-agentvoice network qr --name phone
-```
+Successful enrollment stores the device and server identities. Each later WSS
+connection gets a fresh challenge from `/v2/auth/challenge` and signs the device,
+challenge, nonce, method, canonical authority, path and subprotocol using
+SHA256withECDSA. Only the public key leaves Keystore. Enrollment and challenges
+create no frontend owner, call or media. The network path/subprotocol and frontend
+API versions remain unchanged. The complete protocol is [ADR 0046](adr/0046-durable-device-pairing.md).
+The frozen interop vector is
+[`pairing-v1.json`](../tests/fixtures/pairing-v1.json).
 
-The printed QR is an exact reusable bearer credential valid for 30 days. It is
-private access, not one-use pairing. The Android scanner parses it and performs
-an auth-only verified-TLS WSS upgrade before saving; that check creates no call.
-On success the app encrypts the profile and uses `saveNew` in app-private
-no-backup storage. Microphone permission is requested separately. A saved grant
-gets one automatic connection attempt per foreground; failures require an
-explicit retry and never loop. Revoked or unreadable stored grants are kept and
-are never replaced automatically. Current app recovery has no delete or replace
-control; manual app-data repair is required.
+The Android scanner accepts this pairing format for new enrollment. Existing
+saved bearer grants remain usable until expiry/revocation; `network qr` remains
+a legacy bearer export. Neither stored access nor missing/corrupt keys are
+silently replaced. Recovery currently has no delete or replace control.
+
+Microphone permission is separate. A cold launch with saved access makes one
+automatic call attempt; failures require explicit retry. Back navigates to
+connections while the foreground-service-owned call continues. Disconnect and
+notification Hang up end it. See [call navigation](android-call-navigation.md).
 
 ## Methods
 

@@ -13,9 +13,9 @@ internal data class ShippingLayout(
 )
 
 internal object ShippingDesign {
-    const val profileSource = "../../../../../../tmp/agentvoice-clearance-refinement/candidate-profile.json"
-    const val profileSha256 = "3e0bdf2f49f6912d9b4e3b4fd5a13ff38491d96e369f43a5e7c5d3bea35a63e6"
-    const val sessionSha256 = "b9f5a583b4387cda4a9f7e1af6749ce3d3a190bcb08af76882c438b15b391dcc"
+    const val profileSource = "../../../../../../tmp/agentvoice-connection-flow/datum-profile.json"
+    const val profileSha256 = "51b5ef23bd2858757215b9e79d843deebcb53028d2d41637330223ba36be39ff"
+    const val sessionSha256 = "46b510968648235073515bab698315b0354be21963067efc394ea846bc4ed799"
     val portrait = ShippingLayout(
         placement = PersonaPlacement(speakingScale = 0.78f, listeningScale = 0.56f, idleScale = 0.78f, offsetY = -35.dp),
         design = PreviewDesign(
@@ -201,7 +201,7 @@ internal object ShippingDesign {
         push = "current",
     )
     const val launcher = "relay-aperture"
-    const val connectionStyle = "relay"
+    const val connectionStyle = "datum"
     const val theme = "bright"
     const val mutedPresence = "tide"
     const val presenceScope = "any-muted"

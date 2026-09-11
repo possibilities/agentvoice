@@ -2604,3 +2604,34 @@ rotation, accelerometer_rotation 1, user_rotation 0, font_scale 1.0 and
 animator_duration_scale 1.0. Native checks and all device work are complete.
 Phone release notification: `ca1ab588-6f69-48bf-9de9-828f4ff3aab4`.
 Evidence and restoration receipt: `/tmp/agentvoice-thinking-wingspan/returned/`.
+
+## Call navigation, foreground ownership and pairing client — 2026-09-11
+
+Production on the S22 connected to the existing Tailscale server with its retained
+legacy grant. Back opened the connection screen without ending the call; Home and
+notification return reused it. Native notification Unmute/Mute changed the
+acknowledged microphone state, and Hang up returned the server to idle. A second
+call remained connected with the display off. Its partial wake lock was present
+while active and absent after explicit Disconnect. These were connection/lifecycle
+checks, with no spoken response acceptance claim.
+
+Twenty-four initial native screen/controller tests passed. Eleven further native
+checks passed for pending connection presentation, encrypted pairing-state
+round trips, nonexportable Keystore signing, and missing-key rejection without
+ciphertext replacement. Test keys and files used unique fixture names and were
+removed. Existing production access was not deleted or migrated.
+
+The Studio connection root and pending-pairing landscape screen were inspected on
+the phone. Rehearsals were reset to Off; working draft, explicit checkpoint and
+private bridge binding matched the immediate pre-handoff backups byte-for-byte.
+The host remains linked at `http://127.0.0.1:4317/`. The adopted design changes only
+`connectionStyle` from Relay to Datum; all layout geometry remains unchanged.
+
+The initial full Android build, both lint variants, 178 JVM tests and APK audits
+passed. The updated 134-test Studio host suite passed. Later frozen error-header
+cases exposed a callback-completion race; that source fix requires the final
+build rerun. Full live durable QR enrollment awaits the coordinated desktop/server
+release; the retained legacy-grant call is not evidence for that new path.
+
+Private local evidence is under `/tmp/agentvoice-connection-flow/`. Never commit
+its bridge-binding backups. Phone access was released after restoration.

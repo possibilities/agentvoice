@@ -377,22 +377,32 @@
                 <label for="setup-preview">App view</label>
                 <select id="setup-preview" aria-describedby="setup-preview-hint">
                   <option value="off">Voice controls</option>
-                  <option value="permission">Camera explanation</option>
-                  <option value="camera">Live camera</option>
-                  <option value="scanning">Scanning · Mock camera</option>
-                  <option value="denied">Camera permission denied</option>
-                  <option value="unavailable">Camera unavailable</option>
-                  <option value="invalid">Invalid code</option>
-                  <option value="found">Code found</option>
-                  <option value="saving">Securing access</option>
-                  <option value="connecting">Connecting</option>
-                  <option value="failed">Connection failed</option>
-                  <option value="rejected">Rejected access</option>
-                  <option value="storage-failed">Storage failure</option>
-                  <option value="microphone">Microphone permission</option>
-                  <option value="microphone-denied">Microphone denied</option>
+                  <optgroup label="Connection screen">
+                    <option value="root-unpaired">Unpaired</option>
+                    <option value="root-pairing-pending">Pairing not finished</option>
+                    <option value="root-disconnected">Disconnected</option>
+                    <option value="root-connecting">Connecting</option>
+                    <option value="root-active">Active call</option>
+                    <option value="root-failed">Failed</option>
+                  </optgroup>
+                  <optgroup label="Setup overlay">
+                    <option value="permission">Camera explanation</option>
+                    <option value="camera">Live camera</option>
+                    <option value="scanning">Scanning · Mock camera</option>
+                    <option value="denied">Camera permission denied</option>
+                    <option value="unavailable">Camera unavailable</option>
+                    <option value="invalid">Invalid code</option>
+                    <option value="found">Code found</option>
+                    <option value="saving">Securing access</option>
+                    <option value="connecting">Connecting</option>
+                    <option value="failed">Connection failed</option>
+                    <option value="rejected">Rejected access</option>
+                    <option value="storage-failed">Storage failure</option>
+                    <option value="microphone">Microphone permission</option>
+                    <option value="microphone-denied">Microphone denied</option>
+                  </optgroup>
                 </select>
-                <p id="setup-preview-hint" class="control-hint">Only Live camera opens the phone camera. Studio’s live camera preview does not decode codes, store access or access the network. Close it on the phone or choose Voice controls to return.</p>
+                <p id="setup-preview-hint" class="control-hint">Connection screen choices rehearse navigation and synthetic call state. Only Live camera opens the phone camera. Studio does not decode codes, enroll a device, store access or access the network. Close setup on the phone or choose Voice controls to return.</p>
               </fieldset>
               <fieldset class="shared-session">
                 <legend class="panel-title">Switch sounds</legend>

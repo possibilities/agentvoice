@@ -23,9 +23,10 @@ internal class GrantStore(context: Context, directory: File = context.noBackupFi
     private val lockFile = File(directory, "device-grant.lock")
     private val aad = "agentvoice-device-grant-v1".toByteArray(Charsets.UTF_8)
 
-    private fun key(): SecretKey {
+    private fun key(createIfMissing: Boolean): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(alias, null) as? SecretKey)?.let { return it }
+        if (!createIfMissing) throw IllegalStateException("Saved device access key is unavailable")
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
             init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -47,7 +48,8 @@ internal class GrantStore(context: Context, directory: File = context.noBackupFi
         val bytes = file.openRead().use { boundedRead(it, 16_385) }
         requireWire(bytes.size in 30..16_384 && bytes[0] == 1.toByte())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
+        cipher.init(Cipher.DECRYPT_MODE, key(createIfMissing = false),
+            GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
         cipher.updateAAD(aad)
         val plain = cipher.doFinal(bytes, 13, bytes.size - 13)
         try { DeviceGrant.parse(decode(plain)) } finally { plain.fill(0); bytes.fill(0) }
@@ -63,7 +65,7 @@ internal class GrantStore(context: Context, directory: File = context.noBackupFi
             requireWire(bytes.size in 1..8192)
             DeviceGrant.parse(decode(bytes))
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key())
+            cipher.init(Cipher.ENCRYPT_MODE, key(createIfMissing = true))
             cipher.updateAAD(aad)
             val encrypted = byteArrayOf(1) + cipher.iv + cipher.doFinal(bytes)
             val stream = file.startWrite()

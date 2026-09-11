@@ -91,20 +91,32 @@ class PersonaPreviewActivity : ComponentActivity() {
         val configured = if (explicit != null) runCatching { configure(intent) } else Result.success(Unit)
         if (configured.isFailure || (storedBinding.isFailure && explicit == null)) showBindingError()
         setContent { VoiceTheme {
-            PersonaPreview(session.state, onExit = ::finish) { session.state = it }
             val rehearsal = session.state.connectionPreview
-            LaunchedEffect(rehearsal != "off") {
-                if (rehearsal != "off") android.widget.Toast.makeText(this@PersonaPreviewActivity,
+            var setupReturn by remember { mutableStateOf("off") }
+            val selectRehearsal: (String) -> Unit = { scene ->
+                session.state = session.state.endHold().copy(connectionPreview = scene)
+            }
+            val showNavigationHint = {
+                android.widget.Toast.makeText(this@PersonaPreviewActivity,
+                    CALL_NAVIGATION_HINT, android.widget.Toast.LENGTH_SHORT).show()
+            }
+            StudioPreviewNavigation(session.state, onExit = ::finish,
+                onScan = { setupReturn = session.state.connectionPreview },
+                onCredits = { session.showIconCredits = true },
+                showNavigationHint = showNavigationHint) { session.state = it }
+            LaunchedEffect(rehearsal) {
+                if (rehearsal == "off" || rehearsal in previewConnectionRoots) setupReturn = rehearsal
+                if (rehearsal != "off" && rehearsal !in previewConnectionRoots) android.widget.Toast.makeText(this@PersonaPreviewActivity,
                     "Connection preview · no server access", android.widget.Toast.LENGTH_SHORT).show()
             }
-            val close = { session.state = session.state.copy(connectionPreview = "off") }
+            val close = { selectRehearsal(setupReturn) }
             if (rehearsal == "camera") ConnectionCamera { cameraState, action, surface ->
                 ConnectionOverlay(ConnectionScene.camera(cameraState), close, action, studio = true,
                     theme = session.state.theme, personaSide = session.state.personaSide, camera = surface)
             } else ConnectionScene.entries.firstOrNull { it.key == rehearsal }?.let { scene ->
                 val next = when (scene.key) {
                     "microphone", "microphone-denied" -> "connecting"
-                    "storage-failed" -> "off"
+                    "storage-failed" -> setupReturn
                     else -> "scanning"
                 }
                 ConnectionOverlay(scene, close, action = { session.state = session.state.copy(connectionPreview = next) },
@@ -188,7 +200,50 @@ class PersonaPreviewActivity : ComponentActivity() {
 }
 
 @Composable
-internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, soundOutput: PreviewSwitchOutput? = null, change: (PersonaPreviewState) -> Unit) {
+internal fun StudioPreviewNavigation(
+    state: PersonaPreviewState,
+    onExit: () -> Unit = {},
+    onScan: () -> Unit,
+    onCredits: (() -> Unit)? = null,
+    showNavigationHint: () -> Unit,
+    change: (PersonaPreviewState) -> Unit,
+) {
+    var callVisible by remember { mutableStateOf(false) }
+    var showedNavigationHint by remember { mutableStateOf(false) }
+    LaunchedEffect(state.connectionPreview) {
+        if (state.connectionPreview != "root-active") callVisible = false
+    }
+    if (state.connectionPreview in previewConnectionRoots && !callVisible) {
+        val pairingPending = state.connectionPreview == "root-pairing-pending"
+        ConnectionScreen(state.connectionRootUi(), paired = state.connectionPreview !in setOf("root-unpaired", "root-pairing-pending"),
+            onConnect = { change(state.endHold().copy(connectionPreview = "root-connecting")) },
+            onReturnToCall = {
+                callVisible = true
+                if (!showedNavigationHint) {
+                    showedNavigationHint = true
+                    showNavigationHint()
+                }
+            },
+            onDisconnect = { change(state.endHold().copy(connectionPreview = "root-disconnected")) },
+            onScan = {
+                onScan()
+                change(state.endHold().copy(connectionPreview = if (pairingPending) "found" else "scanning"))
+            },
+            onCredits = onCredits, pairingPending = pairingPending)
+    } else {
+        val syntheticCall = callVisible && state.connectionPreview == "root-active"
+        val visibleState = if (syntheticCall) state.copy(connection = "connected") else state
+        PersonaPreview(visibleState,
+            onExit = if (syntheticCall) ({ callVisible = false }) else onExit,
+            onNavigationHint = if (syntheticCall) showNavigationHint else null) { next ->
+            change(if (syntheticCall) next.copy(connection = state.connection) else next)
+        }
+    }
+}
+
+@Composable
+internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {}, soundOutput: PreviewSwitchOutput? = null,
+    onNavigationHint: (() -> Unit)? = null, change: (PersonaPreviewState) -> Unit) {
     val currentState by rememberUpdatedState(state)
     val feedback = rememberPreviewSwitchFeedback(state.sounds, soundOutput)
     val release: () -> Unit = { feedback.cancel(); if (currentState.holding) change(currentState.endHold()) }
@@ -213,5 +268,6 @@ internal fun PersonaPreview(state: PersonaPreviewState, onExit: () -> Unit = {},
         onCancelConnection = if (state.connection == "connecting") ({
             val next = currentState.endHold()
             change(next.copy(connection = "disconnected", revision = next.revision + 1))
-        }) else null)
+        }) else null,
+        onNavigationHint = onNavigationHint)
 }

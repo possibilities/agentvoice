@@ -23,13 +23,21 @@ native Codex, MCP, attachment or event sockets through this gateway. Read [READM
 runtime replacement and restart handoff semantics.
 
 For the native Android client, configure the private Tailscale WSS endpoint and
-run `agentvoice network qr --name phone`. The exact QR is a reusable 30-day
-bearer credential, not one-use pairing. The scanner parses it, performs an
-auth-only verified-TLS upgrade with no call, then encrypts and `saveNew`s it in
-no-backup storage. Microphone permission is separate. The app attempts one
-connection per foreground, requires explicit retry after failure, and never
-auto-replaces a stored revoked or unreadable grant. There is no delete/replace
-UI yet; recovery is manual app-data repair.
+use the desktop menu's **Pair phone…** window. New enrollment uses a short-lived,
+one-use `agentvoice-pair:v1:` QR and a nonexportable Android Keystore P-256 key.
+Persist the exact pending request before sending; an explicit recovery retry
+reuses it, never creates a second identity. Enrollment/authentication opens no
+call or media. Existing saved bearer grants remain compatible, but the scanner
+only enrolls the new pairing format. Never silently replace credentials or keys.
+See [Android call navigation](docs/android-call-navigation.md) and
+[client API](docs/client-api.md#android-device-enrollment).
+
+A saved credential gets one automatic attempt on a cold launch. Back opens
+connections without hanging up; the private microphone foreground service keeps
+the call through backgrounding and Activity recreation. Disconnect or notification
+Hang up ends it. Notification actions are call-incarnation fenced. Studio rehearses
+this flow without service, network, grants or microphone. Failed, revoked or
+unreadable access is retained; there is no delete/replace UI yet.
 
 ## What vanilla Codex means
 

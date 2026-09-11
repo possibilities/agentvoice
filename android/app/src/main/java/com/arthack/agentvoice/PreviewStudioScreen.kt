@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +19,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
@@ -53,10 +56,11 @@ internal fun PreviewStudioScreen(
     connectionDetail: String? = null,
     onConnect: (() -> Unit)? = null,
     onCancelConnection: (() -> Unit)? = null,
+    onNavigationHint: (() -> Unit)? = null,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection, onNavigationHint)
     }
 }
 
@@ -67,6 +71,7 @@ private fun PreviewStudioScene(
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
     personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, handleBack: Boolean,
     connectionStyle: String, connectionDetail: String?, onConnect: (() -> Unit)?, onCancelConnection: (() -> Unit)?,
+    onNavigationHint: (() -> Unit)?,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(enabled = handleBack, onBack = onExit)
@@ -102,6 +107,8 @@ private fun PreviewStudioScene(
             )
         }
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+            val viewportWidth = maxWidth.value
+            val viewportHeight = maxHeight.value
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,
                 portrait, controlsExtent.toFloat(), if (portrait) placement.offsetY.value else 0f, personaSide,
                 spacing = design.spacing, actualDeckHeight = if (portrait) deck.extentHeightDp else controlsExtent.toFloat(), horizontalOffsetDp = horizontalOffsetDp.toFloat(), cutoutPadding = cutoutPadding)
@@ -190,6 +197,15 @@ private fun PreviewStudioScene(
                             PreviewCenterIndicator(ui, mutedPresence, presenceScope, foreground, motionAllowed,
                                 scene.phaseTurns, geometry.diameter.dp, geometry.offsetY.dp, aperture.dp, mutedTuning)
                         }
+                    }
+                    if (ui.connected && onNavigationHint != null && !changing) {
+                        val bounds = personaHintBounds(geometry, viewportWidth, viewportHeight)
+                        val hint by rememberUpdatedState(onNavigationHint)
+                        Box(Modifier.offset { IntOffset(bounds.x.dp.roundToPx(), bounds.y.dp.roundToPx()) }
+                            .size(bounds.width.dp, bounds.height.dp)
+                            .testTag("persona-navigation-hint")
+                            .semantics { onLongClick("Show navigation hint") { hint(); true } }
+                            .pointerInput(target.layoutKey) { detectTapGestures(onLongPress = { hint() }) })
                     }
                     Box(Modifier.offset { IntOffset(geometry.deckX.dp.roundToPx(), geometry.deckY.dp.roundToPx()) }
                         .requiredSize(geometry.deckWidth.dp, geometry.deckViewportHeight.dp)

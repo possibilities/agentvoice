@@ -1,7 +1,7 @@
 {
   "appearanceOverrides": [],
   "connectedArtboardScale": 1.9,
-  "connectionStyle": "relay",
+  "connectionStyle": "datum",
   "design": {
     "composition": "traces",
     "controlsHeightDp": 407,

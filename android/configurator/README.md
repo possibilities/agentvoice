@@ -91,19 +91,21 @@ the Persona and follows its existing center in both axes. It replaces the old
 top connection plate; it does not resize or pause the Persona. The connected
 muted indicator and disconnected connection display never compete.
 
-The connection rehearsal now includes **Failed**. In Studio, Connect/Retry moves
-only the synthetic preview to Connecting; choose Connected in the host to finish
-that rehearsal. Cancel returns the rehearsal to Disconnected. These actions do
-not use grants, a microphone or the voice server. Production Connect/Retry is an
-explicit attempt using the existing saved grant; Cancel or End attempt ends the
-current attempt. Details retains the complete error in a selectable, scrollable
-dialog. Very small Personas or large accessibility fonts use one 48dp details
-control so the full status and actions remain reachable. There is no invented
-Disconnecting phase: the controller does not currently expose one.
+The Persona-level **Preview connection** rehearsal includes **Failed**. In Studio,
+Connect/Retry moves only that synthetic preview to Connecting; choose Connected
+in the host to finish the rehearsal. Cancel returns it to Disconnected. These
+actions do not use grants, a microphone, the call service or the voice server.
+Production Connect/Retry is an explicit attempt using the existing saved grant;
+Cancel ends the current attempt. Details retains the complete error in a
+selectable, scrollable dialog. Very small Personas or large accessibility fonts
+use one 48dp details control so the full status and actions remain reachable.
+There is no invented Disconnecting phase: the controller does not currently
+expose one.
 
 QR enrollment, device-access recovery and permission overlays remain separate.
-A usable saved grant no longer opens a full-screen reconnect overlay after a
-call ends; its Connect action lives inside the Persona.
+A usable saved grant does not reopen enrollment after a call ends. Retry remains
+an explicit action in the Persona connection display or Connection screen,
+according to the current route.
 
 Protocol29/profile22 add required shared `connectionStyle: relay|beacon|datum`
 with live/saved/production values. Older profiles gain Relay in memory without
@@ -375,7 +377,8 @@ sounds and other rotations stay intact. It does not Save or promote. This is a
 starting point for the current phone, not a promise of identical insets on every
 device. The separate side selector mirrors current tuning without resetting it.
 
-The phone has no header while connected. **Preview connection** selects a
+The Persona has no header or permanent navigation control while connected.
+**Preview connection** selects a
 synthetic Connected, Connecting or Disconnected state. A notice with a static glyph
 slides down from the top for Connecting or Disconnected and remains until that
 condition ends. It slides away when Connected returns; there is no connected
@@ -783,21 +786,53 @@ in generated `ShippingDesign.launcher` and the owned generated-file inventory.
 
 ## Connection setup rehearsals
 
-Protocol26 carries the transient `connectionPreview` state and an orientation-fenced
-`connectionPreview` command (`scene`, `orientation`, `orientationEpoch`). The host
-also checks connection generation. **Connection setup → App view** opens the
-shared Relay Aperture overlay on the phone. Camera explanation, denied/unavailable,
-invalid/found, securing, connecting, rejected, storage, microphone and failure
-scenes are deterministic mock rehearsals. Only **Live camera** requests
-camera permission and binds the rear camera for a preview; it has no analyzer.
-Closing the overlay or backgrounding releases it. No QR parsing, credential
-read/write, server request or microphone is used by Studio.
+Protocol26 introduced the transient `connectionPreview` state and its
+orientation-fenced command (`scene`, `orientation`, `orientationEpoch`). Current
+protocol30 widens that existing transient enum with `root-unpaired`,
+`root-pairing-pending`, `root-disconnected`, `root-connecting`, `root-active` and
+`root-failed`; profile23 is unchanged. The host also checks connection generation.
+Older Studio builds reject an unsupported new root scene, and current hosts
+continue to accept an older phone's `off` state.
 
-This rehearsal is excluded from draft/profile/dirty comparison and resets on a
-new activity instance. All configured design values and saved bytes remain intact.
-CameraX is shared app code; Studio continues to remove network and microphone
-permissions. Production enrollment uses the native app's QR flow; Studio's
-connection scenes are preview-only and never enroll a device.
+**Connection setup → App view → Connection screen** renders the shared app root.
+Connect or Try again moves its synthetic state to Connecting; choose Active call
+in the host to complete the attempt. Cancel and Disconnect return it to
+Disconnected. Scan from Unpaired opens the existing deterministic mock scanner
+and never enrolls the phone. Pairing not finished exposes the shared Finish
+pairing recovery action; it opens the synthetic Found overlay, and choosing
+Active call in the host completes the rehearsal. It never reads or writes a
+pairing key. Camera explanation, denied/unavailable,
+invalid/found, securing, connecting, rejected, storage, microphone and failure
+overlays remain available as separate mock rehearsals. Only the explicit **Live
+camera** choice requests camera permission and binds the rear camera for a
+preview; it has no analyzer. Closing or backgrounding that overlay releases the
+camera.
+
+Return to call opens the existing synthetic Persona without redialing. Android
+Back returns to the Connection screen and leaves `root-active` intact. The
+Persona gains no navigation chrome. Its first synthetic call visit briefly says
+“Back returns to connections. Your call stays active.” Long-pressing the Persona
+area replays the same hint; the gesture excludes the control deck.
+
+These scenes are excluded from draft, profile and dirty comparison. Activity
+recreation may restore the transient scene for rehearsal continuity, while a new
+cold activity starts with Voice controls. All configured design values and exact
+saved bytes remain intact. Studio performs no QR parsing, enrollment, credential
+read/write, server request, network access, microphone access or call-service
+operation. CameraX is shared app code; the Studio manifest removes the production
+call service and its network and microphone permissions.
+
+In production, Android Back from Persona returns to the Connection screen without
+hanging up. Return to call reuses the running call. Explicit Disconnect or the
+ongoing notification's Hang up action ends it; the notification's microphone
+action follows the existing acknowledged mute protocol. A private microphone
+foreground service owns a running call across Activity navigation, backgrounding
+and rebinding. Tapping its notification returns to that exact call and cannot
+start a new one from a stale notification. The service does not recreate audio
+after process termination. The first three production call visits show the same
+Back hint, and long-pressing the Persona area replays it without adding permanent
+navigation chrome. Production enrollment continues to use the native app's
+verified QR and private grant-storage flow.
 
 New exports record `disconnectedArtboardScale: 1.9`, equal to connected scale.
 Older receipts with `1.5` remain readable without rewriting their source bytes;

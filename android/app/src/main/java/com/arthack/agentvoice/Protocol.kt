@@ -45,7 +45,7 @@ internal fun jsonObject(text: String): JsonObject = try {
 private val uuid = Regex("^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$")
 
 // Never use a data class: generated toString/copy/component methods would expose the grant.
-internal class DeviceGrant private constructor(val endpoint: String, val token: String) {
+internal class DeviceGrant private constructor(override val endpoint: String, val token: String) : CallCredential {
     override fun toString() = "DeviceGrant(redacted)"
     companion object {
         fun parse(text: String): DeviceGrant {

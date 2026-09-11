@@ -71,7 +71,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     testOptions { unitTests.isReturnDefaultValues = true }
-    sourceSets.getByName("test").resources.srcDir("../contract")
+    sourceSets.getByName("test").resources.srcDirs("../contract", "../../tests/fixtures")
     lint { abortOnError = true }
 }
 

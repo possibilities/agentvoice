@@ -1,13 +1,13 @@
 # AgentVoice for Android
 
-A native, foreground voice client for the existing AgentVoice server. One screen:
+A native voice client for the existing AgentVoice server. Its call screen contains
 HUMAN and AGENT Rocker mute controls, a push-to-talk surface, and Vercel AI Elements'
 Persona Halo. Kotlin/Compose and native Rive draw the interface; native WebRTC owns audio. Android
-12 / API 31 or newer, ARM64 phones and ARM64/x86-64 emulators.
+12 / API 31 or newer. Use the physical phone in coordinated turns; emulator use is retired.
 
 This development build is installed on a Samsung Galaxy S22 running Android 16.
 Native WSS/WebRTC connected to the desktop over Tailscale. Real-device checks
-verified permission denial, PTT hold/release, background teardown, grant
+verified permission denial, PTT hold/release, foreground-service call retention, grant
 revocation and rejection of the revoked grant. A human spoken request with an
 audible answer and the remaining route/failure cases still require acceptance.
 See [verification evidence](VERIFICATION.md). A preview's Connected label is synthetic.
@@ -17,7 +17,7 @@ See [verification evidence](VERIFICATION.md). A preview's Connected label is syn
 ## Adopted shipping design
 
 The locked design is [shipping-profile.json](design/shipping-profile.json), a complete
-version 20 Studio profile. Its [provenance receipt](design/shipping-provenance.json)
+version 23 Studio profile. Its [provenance receipt](design/shipping-provenance.json)
 preserves the original saved bytes and the explicitly captured visual choices
 that older Save versions omitted. It selects the Relay Aperture launcher, i cons pair, current PTT symbol,
 Contained Halo, Splayed traces, Bright theme, tuned Tide/Ripple, and Rocker 13 at
@@ -26,7 +26,8 @@ Contained Halo, Splayed traces, Bright theme, tuned Tide/Ripple, and Rocker 13 a
 The production `VoiceScreen` now consumes generated `ShippingDesign` constants and
 the same rendering components as the Studio, using actual `CallUi` gates and
 measured levels. It never loads a private Studio profile or a rehearsal state.
-Back (or the accessible End call action) ends a call. QR enrollment, connection
+Back returns to the connection screen while the call continues. Explicit Disconnect
+or notification Hang up ends it. QR enrollment, connection
 errors and linked Credits remain available. Rotation preserves the call and uses
 the configured landscape layout; relocation still cancels a held pointer.
 
@@ -96,12 +97,12 @@ Root `bun run test`, `bun run typecheck`, and `bun run lint` include the shared
 contract fixtures. Both Kotlin and the server Zod schemas validate
 `contract/server-frames.json`.
 
-On an explicitly selected disposable emulator, with microphone/audio disabled:
+During an approved phone handoff, run synthetic instrumentation without microphone/audio:
 
 ```sh
-adb -s <emulator-id> install -r app/build/outputs/apk/studio/app-studio.apk
-adb -s <emulator-id> install -r app/build/outputs/apk/androidTest/studio/app-studio-androidTest.apk
-adb -s <emulator-id> shell am instrument -w -r \
+adb -s <serial> install -r app/build/outputs/apk/studio/app-studio.apk
+adb -s <serial> install -r app/build/outputs/apk/androidTest/studio/app-studio-androidTest.apk
+adb -s <serial> shell am instrument -w -r \
   com.arthack.agentvoice.studio.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
@@ -110,26 +111,30 @@ phone. Installation on a personal phone is a separate explicit step.
 
 ## Connect
 
-Configure the server's dedicated private Tailscale WSS route, then run:
+Configure the server's dedicated private Tailscale WSS route, then choose
+**Pair phone…** in the desktop AgentVoice menu, or run `agentvoice network pair`
+in a terminal and leave it open while scanning. First use of the phone app opens
+the camera. Scan the short-lived `agentvoice-pair:v1:` QR to enroll a durable
+device identity using a nonexportable Android Keystore P-256 signing key.
+Enrollment uses verified same-authority HTTPS and creates no call or media.
 
-```sh
-agentvoice network qr --name phone
-```
+Before sending, the phone encrypts and atomically saves the exact request in
+no-backup storage. If the response is lost, **Finish pairing** retries that same
+request explicitly; it does not create another key or device. Successful pairing
+enters the call, with microphone permission requested separately. Every later WSS
+connection authenticates with a fresh signed challenge. No URL, QR secret, SDP,
+audio or transcript is logged. See the [client API](../docs/client-api.md#android-device-enrollment).
 
-The command prints an exact reusable bearer credential QR valid for 30 days.
-It contains the configured `wss://…/v2/client` endpoint and secret, so treat it
-as private; it is reusable access, not one-use pairing. In the native app, allow
-camera access and scan it from Connection setup. The scanner parses the exact
-payload, performs an auth-only verified-TLS WSS upgrade, and creates no call.
-After that succeeds, the app encrypts the grant with Android Keystore AES-256-GCM
-and saves it with `saveNew` in app-private no-backup storage. No URL, grant, SDP,
-audio or transcript is logged.
+Existing saved bearer grants still work until expiry/revocation. The legacy
+`agentvoice network qr` command exports those reusable 30-day credentials; the
+new Android scanner enrolls only the new pairing format. Saved access and missing
+or corrupt keys are never automatically replaced. Manual repair remains necessary
+for rejected access; no delete/replace UI is included in this slice.
 
-Microphone permission is a separate voice gate. Once a grant is saved, the app
-attempts one connection automatically per foreground visit; a failed attempt
-does not loop and requires an explicit retry. Tailscale and upstream Internet
-access must be available. The server controls conversation selection and
-persistent mute defaults.
+With saved access, a cold launch opens Persona and attempts one call. Returning
+to the foreground reuses a running call and does not retry a failed one. Tailscale
+and upstream Internet access must be available. The server controls conversation
+selection and persistent mute defaults.
 
 HUMAN toggles the persistent microphone mute; AGENT toggles playback mute. While
 HUMAN is muted and media is connected, hold the bottom surface to talk. Release,
@@ -138,12 +143,17 @@ immediately. A delayed acknowledgement cannot reopen it. TalkBack exposes explic
 Start talking / Stop talking actions with the same gates.
 
 The screen stays awake during a call. System bars can be revealed by swiping.
-End call, Back, backgrounding, lock, transport loss, failed heartbeat, audio focus
-loss or removal of the selected audio device tears down locally. Reopening the
-app requires an explicit Start. Activity recreation still ends the call, while ordinary orientation changes now
-retain the activity and release any owned hold. Portrait and landscape use their
+Back, backgrounding and lock release held PTT but preserve the call in a private
+microphone foreground service. An ongoing native notification has Hang up and
+microphone Mute/Unmute actions. Returning to the app reuses that call. Explicit
+Disconnect, transport loss, failed heartbeat, audio focus loss or removal of the
+selected audio device tears down locally. Activity recreation rebinds to the same
+owner without redialing; orientation changes release any owned hold. Portrait and landscape use their
 adopted visible-viewport layouts without page scrolling. A quiet sliding notice
-appears while connecting or disconnected; connected presentation has no header.
+appears inside Persona while connecting or disconnected; connected presentation
+has no header or permanent navigation control. A brief onboarding toast teaches
+Back, and long-pressing the Persona area replays it. See
+[call navigation](../docs/android-call-navigation.md) for launch and notification behavior.
 
 Expired or revoked grants stay stored and are never auto-replaced. An unreadable
 stored grant is also retained. The app has no refresh-secret, server
@@ -161,11 +171,17 @@ call running. Stock Codex TUI handles native approvals. See
 - `Protocol.kt`: strict owner-frame decoder, endpoint validation, heartbeat,
   rate/pending limits and request correlation. Unknown/malformed frames terminate
   the connection; responses for methods this client never sent are invalid.
-- `SecureTransport.kt`: verified WSS, exactly `agentvoice.v2`, Bearer header,
+- `PairingProtocol.kt` / `PairingStore.kt` / `PairingEnrollment.kt`: strict pairing
+  format, bounded HTTPS enrollment, encrypted pending/ready state and Keystore signing.
+- `SecureTransport.kt`: verified WSS, exactly `agentvoice.v2`, signed device challenge
+  or an existing legacy Bearer header,
   no Origin, redirect, retry, caching or interceptors. Queued callback bytes and
   outgoing bytes are bounded. OkHttp delivers complete messages: the 1 MiB
   incoming check is after library reassembly, not an allocation bound inside
   OkHttp's WebSocket parser.
+- `CallService.kt` / `CallOwner.kt`: one call survives Activity unbinding; private
+  foreground service, incarnation-fenced notification actions and no sticky
+  restart or automatic media creation. `MainActivity` owns navigation and permissions.
 - `AudioGate.kt` / `CallController.kt`: server-authoritative gates with local
   restrictions, per-call generations, per-press acknowledgement fencing, one
   owner connection, no replay/reconnect. Runtime replacement retains ownership.
@@ -227,7 +243,7 @@ or connect to a server. Scenarios: `setup`, `ready`, `connecting`, `live`, `talk
 between scenarios, because launching an already topmost activity retains its state.
 
 ```sh
-adb -s <emulator-id> shell am start \
+adb -s <serial> shell am start \
   -n com.arthack.agentvoice.dev/com.arthack.agentvoice.DesignPreviewActivity \
   --es scenario live
 ```
