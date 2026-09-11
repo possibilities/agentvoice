@@ -16,4 +16,5 @@
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>AgentVoiceInstaller</key><string>agentvoice/scripts/install.sh</string>
 <key>AgentVoiceSourceRevision</key><string>SOURCE_REVISION</string>
+<key>AgentVoiceStateDirectory</key><string>STATE_DIRECTORY</string>
 </dict></plist>

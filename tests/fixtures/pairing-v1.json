@@ -18,6 +18,18 @@
     "pairUrl": "https://voice.example:48414/v2/pair",
     "challengeUrl": "https://voice.example:48414/v2/auth/challenge"
   },
+  "authorityCases": [
+    {
+      "endpoint": "wss://VOICE.EXAMPLE:443/v2/client",
+      "canonicalEndpoint": "wss://voice.example/v2/client",
+      "authority": "voice.example"
+    },
+    {
+      "endpoint": "wss://[2001:0db8:0:0:0:0:0:1]:48414/v2/client",
+      "canonicalEndpoint": "wss://[2001:db8::1]:48414/v2/client",
+      "authority": "[2001:db8::1]:48414"
+    }
+  ],
   "deviceProof": {
     "algorithm": "SHA256withECDSA",
     "signatureEncoding": "DER-base64url-no-padding",

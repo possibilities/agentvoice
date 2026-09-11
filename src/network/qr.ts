@@ -40,6 +40,13 @@ export function createGrantQrMatrix(payload: string): QrMatrix {
   } catch {
     throw new Error("Grant QR payload is invalid");
   }
+  return createQrMatrix(payload);
+}
+
+export function createQrMatrix(payload: string): QrMatrix {
+  const bytes = new TextEncoder().encode(payload);
+  if (bytes.byteLength > GRANT_QR_MAX_BYTES)
+    throw new Error("QR payload exceeds the 2048-byte limit");
   try {
     const code = qrcode(0, "M");
     code.addData(String.fromCharCode(...bytes), "Byte");
@@ -48,7 +55,7 @@ export function createGrantQrMatrix(payload: string): QrMatrix {
       Array.from({ length: code.getModuleCount() }, (_, column) => code.isDark(row, column)),
     );
   } catch {
-    throw new Error("Unable to encode private credential QR");
+    throw new Error("Unable to encode QR");
   }
 }
 
@@ -75,10 +82,7 @@ function moduleAt(matrix: QrMatrix, row: number, column: number): boolean {
   return matrix[sourceRow]?.[sourceColumn] ?? false;
 }
 
-export function renderGrantQr(
-  matrix: QrMatrix,
-  terminal: { isTTY: boolean; columns?: number },
-): string {
+export function renderQr(matrix: QrMatrix, terminal: { isTTY: boolean; columns?: number }): string {
   const size = validateMatrix(matrix) + 2 * GRANT_QR_QUIET_ZONE;
   if (terminal.isTTY && (terminal.columns === undefined || terminal.columns < size))
     throw new Error("Terminal is too narrow to display the private credential QR");
@@ -101,3 +105,5 @@ export function renderGrantQr(
   }
   return lines.join("\n");
 }
+
+export const renderGrantQr = renderQr;

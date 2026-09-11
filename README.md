@@ -127,16 +127,20 @@ client API directly, with a Compose voice screen, QR enrollment, client-owned
 WebRTC and foreground call ownership. It is a development build; on-device
 native audio acceptance and release distribution remain pending.
 
-To enroll it, configure the dedicated private Tailscale WSS endpoint and run
-`agentvoice network qr --name phone`. The command prints an exact reusable
-bearer credential QR valid for 30 days; it is a secret, not one-use pairing.
-The native scanner parses the QR, performs an auth-only verified-TLS WSS
-upgrade (which creates no call), then encrypts the credential into app-private
-no-backup storage with `saveNew`. Microphone permission is requested separately
-for voice. A saved grant makes one automatic connection attempt per foreground;
-failures need an explicit retry and never loop. Revoked or unreadable stored
-grants are retained and never replaced automatically. There is no delete or
-replacement control in the app yet; repair is a manual app-data operation.
+To pair it, configure the dedicated private Tailscale WSS endpoint, then choose
+**Pair phone…** in the macOS menu app or run `agentvoice network pair`. The
+five-minute QR is a one-use enrollment capability. It registers a phone-owned
+P-256 key; the resulting pairing has no expiry and remains until
+`agentvoice network revoke <device-id>`. Enrollment and connection-proof checks
+are auth-only and create no call. Before redemption the phone durably records
+the exact pending tuple, allowing one exact recovery after a lost success
+response without creating another device. A cold launch makes one connection
+attempt to its saved server; failure waits for explicit Retry. Android Back and
+Home leave an active foreground-service call running, with mute, return and hang
+up controls in its ongoing notification; see
+[Android call navigation](docs/android-call-navigation.md). The older
+`agentvoice network qr --name phone` command remains available for explicit
+30-day bearer compatibility. Microphone permission is requested separately.
 The [adopted design profile](android/design/shipping-profile.json) supplies shipping defaults;
 the retained debug studio can audition and promote future designs, including
 [Kenney CC0 switch sound families](android/third-party/switch-sounds/README.md).

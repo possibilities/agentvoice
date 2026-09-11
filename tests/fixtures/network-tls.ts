@@ -60,7 +60,7 @@ const local = new VoiceServer(frontendSocketPath(root), async (_changed, _params
 });
 await local.start();
 gateway = new NetworkGateway(root, local.path, { version: 1, endpoint, port: 0 });
-gateway.start();
+await gateway.start();
 const credentials = new DeviceCredentials(root);
 credentials.grant("TLS test", endpoint, join(root, "profile.json"));
 const profile = loadConnectionProfile(join(root, "profile.json"));

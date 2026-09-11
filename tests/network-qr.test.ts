@@ -49,6 +49,7 @@ test("network qr parser accepts exactly one named device and preserves other str
     name: "Phone",
     output: "phone.json",
   });
+  expect(parseNetworkCommand(["pair"])).toEqual({ action: "pair" });
   for (const args of [
     ["qr"],
     ["qr", "--name"],
@@ -57,8 +58,100 @@ test("network qr parser accepts exactly one named device and preserves other str
     ["qr", "--name=Phone"],
     ["--help", "extra"],
     ["status", "extra"],
+    ["pair", "extra"],
   ])
     expect(() => parseNetworkCommand(args)).toThrow(NETWORK_USAGE);
+});
+
+test("network pair renders before activation, waits for completion and prints a durable receipt", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-network-pair-command-"));
+  try {
+    configureNetwork(root, { version: 1, endpoint, port: 44414 });
+    const enrollmentId = "00".repeat(16);
+    const receipt = "11".repeat(32);
+    const expiresAt = 1_800_000_300_000;
+    const payload = `agentvoice-pair:v1:${JSON.stringify({
+      v: 1,
+      endpoint,
+      enrollment: `${enrollmentId}.${"22".repeat(32)}`,
+      expiresAt,
+    })}`;
+    const requests: string[] = [];
+    const output: string[] = [];
+    let closed = false;
+    const connection = {
+      async request(method: string) {
+        requests.push(method);
+        if (method === "prepare") return { enrollmentId, receipt, payload, expiresAt };
+        if (method === "activate") {
+          expect(output).toHaveLength(1);
+          expect(output[0]).toContain("▀");
+          return { status: "waiting", expiresAt };
+        }
+        if (method === "status") return { status: "paired", expiresAt, deviceId: "33".repeat(16) };
+        throw new Error(`unexpected method ${method}`);
+      },
+      close() {
+        closed = true;
+      },
+    };
+    await networkCommand(["pair"], root, {
+      terminal: { isTTY: false },
+      connectPairing: async () => connection,
+      now: () => 1_800_000_000_000,
+      sleep: async () => {},
+      write: (value) => output.push(value),
+    });
+    expect(requests).toEqual(["prepare", "activate", "status"]);
+    expect(output).toHaveLength(3);
+    expect(output[1]).toContain("stay paired until you revoke it");
+    expect(output[2]).toContain("Phone paired");
+    expect(output[2]).toContain(`agentvoice network revoke ${"33".repeat(16)}`);
+    expect(output.join("\n")).not.toContain(`${enrollmentId}.${"22".repeat(32)}`);
+    expect(closed).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("network pair cancels a prepared enrollment when QR output fails", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-network-pair-failure-"));
+  try {
+    configureNetwork(root, { version: 1, endpoint, port: 44414 });
+    const enrollmentId = "44".repeat(16);
+    const receipt = "55".repeat(32);
+    const expiresAt = 1_800_000_300_000;
+    const payload = `agentvoice-pair:v1:${JSON.stringify({
+      v: 1,
+      endpoint,
+      enrollment: `${enrollmentId}.${"66".repeat(32)}`,
+      expiresAt,
+    })}`;
+    const requests: string[] = [];
+    const connection = {
+      async request(method: string) {
+        requests.push(method);
+        if (method === "prepare") return { enrollmentId, receipt, payload, expiresAt };
+        if (method === "cancel") return { status: "cancelled" };
+        throw new Error(`unexpected method ${method}`);
+      },
+      close() {},
+    };
+    await expect(
+      Promise.resolve(
+        networkCommand(["pair"], root, {
+          terminal: { isTTY: false },
+          connectPairing: async () => connection,
+          write: () => {
+            throw new Error("do not retain rendered secret");
+          },
+        }),
+      ),
+    ).rejects.toThrow("no enrollment was activated");
+    expect(requests).toEqual(["prepare", "cancel"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("grant QR payload is exact, strict and byte bounded; terminal rendering has a quiet zone", () => {

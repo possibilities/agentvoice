@@ -45,14 +45,14 @@ export const connectionProfileSchema = z
   })
   .strict();
 export type ConnectionProfile = z.infer<typeof connectionProfileSchema>;
-const deviceLabelSchema = z
+export const deviceLabelSchema = z
   .string()
-  .min(1)
-  .max(80)
-  .refine(
-    (value) => [...value].every((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
-    "Device label must not contain control characters",
-  );
+  .refine((value) => {
+    const normalized = value.normalize("NFC");
+    const length = [...normalized].length;
+    return length >= 1 && length <= 80 && !/\p{Cc}/u.test(normalized);
+  }, "Device label must not contain control characters")
+  .transform((value) => value.normalize("NFC"));
 const recordSchema = z
   .object({
     id: z.string().regex(/^[a-f0-9]{32}$/),
@@ -93,7 +93,7 @@ export function readPrivateJson(path: string): unknown {
     closeSync(fd);
   }
 }
-function createPrivateJson(path: string, value: unknown): void {
+export function createPrivateJson(path: string, value: unknown): void {
   if (!isAbsolute(path)) throw new Error("Private file path must be absolute");
   safeAncestors(dirname(path));
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });

@@ -397,7 +397,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (command === "network") {
       const { networkCommand } = await import("./network/command.ts");
-      networkCommand(argv.slice(1), stateDirectory(process.env, homedir()));
+      await networkCommand(argv.slice(1), stateDirectory(process.env, homedir()));
       return 0;
     }
     if (command === "resident" || command === "remote" || command === "console") {

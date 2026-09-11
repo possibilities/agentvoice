@@ -311,7 +311,7 @@ export async function runServer(
       if (settings) {
         const { NetworkGateway } = await import("../network/gateway.ts");
         network = new NetworkGateway(stateDir, frontendSocketPath(stateDir), settings);
-        network.start();
+        await network.start();
         console.log(
           `Authenticated client API available behind TLS proxy on loopback port ${network.port}`,
         );
