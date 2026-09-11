@@ -387,6 +387,11 @@ private struct PairingDisplayAcknowledgement: NSViewRepresentable {
             scheduleAcknowledgement()
         }
 
+        override func layout() {
+            super.layout()
+            scheduleAcknowledgement()
+        }
+
         func scheduleAcknowledgement() {
             guard !completed, !scheduled, let window, window.isVisible, !window.isMiniaturized,
                   bounds.width > 0, bounds.height > 0
