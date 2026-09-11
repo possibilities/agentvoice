@@ -1,6 +1,12 @@
 import { haloMotionFields } from "./halo.ts";
 import { type MutedTuningField, mutedTuningFields } from "./muted-presence.ts";
-import { type PhoneState, type Preview, previewOf, visualSettingsOf } from "./protocol.ts";
+import {
+  type PhoneState,
+  type Preview,
+  previewOf,
+  scaleMode,
+  visualSettingsOf,
+} from "./protocol.ts";
 import { type SpacingField, spacingFields } from "./spacing.ts";
 import { traceTipFields } from "./traces.ts";
 
@@ -88,7 +94,7 @@ export function resetPreview(current: Preview, defaults: PhoneState, target: Res
     case "size":
       if (next.halo.variant === "contained")
         next.halo.containedSizePercent = defaults.defaultHalo.containedSizePercent;
-      else next.scales[next.mode] = defaults.defaults[next.mode];
+      else next.scales[scaleMode(next.mode)] = defaults.defaults[scaleMode(next.mode)];
       break;
     case "position":
       if (next.orientation === "landscape" || next.orientation === "landscape-reverse")

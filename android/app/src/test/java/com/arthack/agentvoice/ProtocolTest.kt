@@ -19,6 +19,18 @@ class ProtocolTest {
     @Test fun deeplyNestedHostileJsonIsRejectedBeforeRecursiveParsing() {
         rejected { parseFrame("[".repeat(10_000) + "]".repeat(10_000)) }
     }
+    @Test fun codingActivityIsRequiredAndDoesNotChangeNetworkHeartbeatVersion() {
+        for (activity in CodingActivity.entries) {
+            val frame = """{"v":3,"type":"state","state":{"available":true,"phase":"live","mic":{"muted":true,"effectiveMuted":true},"speaker":{"muted":false,"effectiveMuted":false},"codingActivity":"${activity.wire}"}}"""
+            assertEquals(activity, (parseFrame(frame) as ServerFrame.State).value.codingActivity)
+            rejected { parseFrame(frame.replace("\"v\":3", "\"v\":2")) }
+            rejected { parseFrame(frame.replace(",\"codingActivity\":\"${activity.wire}\"", "")) }
+            rejected { parseFrame(frame.replace("\"codingActivity\":\"${activity.wire}\"", "\"codingActivity\":\"busy\"")) }
+        }
+        val request = jsonObject(WireLedger { 0L }.request("input", command("release")).text)
+        assertEquals(JsonPrimitive(3), request["v"])
+        assertEquals(JsonPrimitive(2), jsonObject(WireLedger { 0L }.pong("a".repeat(32)))["v"])
+    }
 
     @Test fun grantsRequireExactTlsEndpointAndNeverPrintSecrets() {
         val grant = DeviceGrant.parse(profile("wss://desktop.example.ts.net:48414/v2/client"))
@@ -34,21 +46,21 @@ class ProtocolTest {
     @Test fun everyOwnerMessageHasStrictFieldsAndTypes() {
         assertEquals(ServerFrame.Ping("a".repeat(32)), parseFrame("""{"v":2,"type":"ping","nonce":"${"a".repeat(32)}"}"""))
         for (type in listOf("prepare", "close")) {
-            assertEquals(ServerFrame.Media(type, id), parseFrame("""{"v":2,"type":"client-media","message":{"type":"$type","sessionId":"$id"}}"""))
+            assertEquals(ServerFrame.Media(type, id), parseFrame("""{"v":3,"type":"client-media","message":{"type":"$type","sessionId":"$id"}}"""))
         }
-        assertEquals(ServerFrame.Response("1", true), parseFrame("""{"v":2,"type":"response","id":"1","ok":true,"result":null}"""))
-        assertEquals(ServerFrame.Response("1", false), parseFrame("""{"v":2,"type":"response","id":"1","ok":false,"error":{"message":"refused"}}"""))
+        assertEquals(ServerFrame.Response("1", true), parseFrame("""{"v":3,"type":"response","id":"1","ok":true,"result":null}"""))
+        assertEquals(ServerFrame.Response("1", false), parseFrame("""{"v":3,"type":"response","id":"1","ok":false,"error":{"message":"refused"}}"""))
         val invalid = listOf("[]", "null", "{'v':2}", """{"v":1,"type":"ping","nonce":"${"a".repeat(32)}"}""",
             """{"v":"2","type":"ping","nonce":"${"a".repeat(32)}"}""",
             """{"v":2,"type":"ping","nonce":"bad"}""", """{"v":2,"type":"pong","nonce":"${"a".repeat(32)}"}""",
-            """{"v":2,"type":"response","id":"1","ok":"true","result":null}""",
-            """{"v":2,"type":"response","id":"1","ok":true,"result":null,"extra":1}""",
-            """{"v":2,"type":"client-media","message":{"type":"answer","sessionId":"$id","sdp":""}}""",
-            """{"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"wrong"}}""")
+            """{"v":3,"type":"response","id":"1","ok":"true","result":null}""",
+            """{"v":3,"type":"response","id":"1","ok":true,"result":null,"extra":1}""",
+            """{"v":3,"type":"client-media","message":{"type":"answer","sessionId":"$id","sdp":""}}""",
+            """{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"wrong"}}""")
         invalid.forEach { value -> rejected { parseFrame(value) } }
     }
     @Test fun byteAndSdpLimitsAreNotCharacterByteConfusion() {
-        val frame = """{"v":2,"type":"client-media","message":{"type":"answer","sessionId":"$id","sdp":"${"x".repeat(MAX_SDP_CHARS)}"}}"""
+        val frame = """{"v":3,"type":"client-media","message":{"type":"answer","sessionId":"$id","sdp":"${"x".repeat(MAX_SDP_CHARS)}"}}"""
         assertTrue(parseFrame(frame) is ServerFrame.Media)
         rejected { parseFrame(frame.replace("\"sdp\":\"", "\"sdp\":\"x")) }
         rejected { parseFrame("世".repeat(MAX_FRAME_BYTES / 3 + 1)) }

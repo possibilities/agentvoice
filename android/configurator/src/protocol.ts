@@ -61,9 +61,11 @@ export type PresenceScope = (typeof presenceScopes)[number];
 export type MutedPresence = (typeof mutedPresences)[number];
 export const activities = ["steady", "voice"] as const;
 export type Activity = (typeof activities)[number];
-export const modes = ["speaking", "listening", "idle"] as const;
+export const scaleModes = ["speaking", "listening", "idle"] as const;
+export const modes = [...scaleModes, "thinking"] as const;
 export type Mode = (typeof modes)[number];
-export type Scales = Record<Mode, number>;
+export type Scales = Record<(typeof scaleModes)[number], number>;
+export const scaleMode = (mode: Mode): keyof Scales => (mode === "thinking" ? "idle" : mode);
 export const connections = ["connected", "connecting", "disconnected"] as const;
 export type Connection = (typeof connections)[number];
 export const orientations = [
@@ -158,7 +160,7 @@ export const connectionPreviews = [
 ] as const;
 export type ConnectionPreview = (typeof connectionPreviews)[number];
 export type PhoneState = Preview & {
-  protocol: 27;
+  protocol: 28;
   connectionPreview: ConnectionPreview;
   savedAppearance: VisualSettings;
   defaultAppearance: VisualSettings;
@@ -367,7 +369,7 @@ export function integer(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER):
 
 export function parseScales(value: unknown): Scales {
   const data = record(value);
-  exact(data, [...modes]);
+  exact(data, [...scaleModes]);
   return {
     speaking: integer(data["speaking"], 35, 120),
     listening: integer(data["listening"], 35, 120),
@@ -492,7 +494,7 @@ export function parseState(value: unknown): PhoneState {
     "speakerMuted",
   ]);
   if (
-    data["protocol"] !== 27 ||
+    data["protocol"] !== 28 ||
     !connectionPreviews.includes(data["connectionPreview"] as ConnectionPreview) ||
     !connections.includes(data["connection"] as Connection) ||
     !activities.includes(data["activity"] as Activity) ||
@@ -502,7 +504,7 @@ export function parseState(value: unknown): PhoneState {
   )
     throw Error("Invalid phone state");
   const state: PhoneState = {
-    protocol: 27,
+    protocol: 28,
     connectionPreview: data["connectionPreview"] as ConnectionPreview,
     savedAppearance: parseVisualSettings(data["savedAppearance"]),
     defaultAppearance: parseVisualSettings(data["defaultAppearance"]),
@@ -883,7 +885,7 @@ export function previewOf(state: Preview): Preview {
 }
 
 export function equalScales(a: Scales, b: Scales): boolean {
-  return modes.every((mode) => a[mode] === b[mode]);
+  return scaleModes.every((mode) => a[mode] === b[mode]);
 }
 
 export interface Phone {

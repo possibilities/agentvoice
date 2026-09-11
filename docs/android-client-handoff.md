@@ -1,6 +1,6 @@
 # Android client handoff
 
-Implement [client API v2](client-api.md), validated by [`client.schema.json`](../client.schema.json).
+Implement [client API v3](client-api.md), validated by [`client.schema.json`](../client.schema.json).
 Do not port server internals or call stock Codex directly. The server owns Codex
 startup, login/configuration, conversation selection, leases, renewals, transcript
 storage and cleanup. The Android app owns permission, audio routing, mute gates,

@@ -40,7 +40,7 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
-internal enum class PersonaState { Asleep, Idle, Listening, Speaking }
+internal enum class PersonaState { Asleep, Idle, Thinking, Listening, Speaking }
 
 internal data class PersonaColors(
     val listening: Int = VoiceInk.you.toArgb(),
@@ -51,7 +51,7 @@ internal data class PersonaColors(
     fun forState(state: PersonaState): Int = when (state) {
         PersonaState.Listening -> listening
         PersonaState.Speaking -> speaking
-        PersonaState.Idle -> idle
+        PersonaState.Idle, PersonaState.Thinking -> idle
         PersonaState.Asleep -> asleep
     }
 }
@@ -65,16 +65,32 @@ internal data class PersonaPlacement(
     fun scaleFor(state: PersonaState): Float = when (state) {
         PersonaState.Speaking -> speakingScale
         PersonaState.Listening -> listeningScale
-        PersonaState.Idle, PersonaState.Asleep -> idleScale
+        PersonaState.Idle, PersonaState.Thinking, PersonaState.Asleep -> idleScale
     }
 }
 
-// No "thinking" state: the client has no reliable observation of agent cognition.
+// Thinking represents verified coding work, never an inference from silence.
 internal fun personaState(ui: CallUi): PersonaState = when {
     !ui.connected -> PersonaState.Asleep
     ui.speakerOpen && ui.outputLevel > .008f -> PersonaState.Speaking
+    ui.micOpen && (ui.holding || ui.inputLevel > .02f) -> PersonaState.Listening
+    ui.codingActivity == CodingActivity.Working -> PersonaState.Thinking
     ui.micOpen -> PersonaState.Listening
     else -> PersonaState.Idle
+}
+
+@Composable
+internal fun rememberPersonaState(ui: CallUi): PersonaState {
+    val requested = personaState(ui)
+    var state by remember { mutableStateOf(requested) }
+    LaunchedEffect(requested, ui.connected, ui.speakerOpen, ui.micOpen, ui.holding) {
+        // Keep short gaps in speech from flashing the coding-work animation.
+        if (state == PersonaState.Speaking && requested != PersonaState.Speaking &&
+            ui.connected && ui.speakerOpen && !(ui.micOpen && ui.holding)) delay(180)
+        else if (state == PersonaState.Listening && requested == PersonaState.Thinking && ui.micOpen) delay(250)
+        state = requested
+    }
+    return state
 }
 
 // ValueAnimator's cached flag can lag a settings observer notification.
@@ -104,13 +120,7 @@ internal fun PersonaHalo(ui: CallUi, modifier: Modifier, placement: PersonaPlace
             context.contentResolver.unregisterContentObserver(motion)
         }
     }
-    val requested = personaState(ui)
-    var state by remember { mutableStateOf(requested) }
-    LaunchedEffect(requested, ui.connected, ui.speakerOpen) {
-        // Bridge short silences between syllables; gate closure and disconnect remain immediate.
-        if (state == PersonaState.Speaking && requested != PersonaState.Speaking && ui.connected && ui.speakerOpen) delay(180)
-        state = requested
-    }
+    val state = rememberPersonaState(ui)
     val ink = colors.forState(state)
     val artboardScale = if (ui.connected) 1.9f else 1.5f
     val targetScale = artboardScale * placement.scaleFor(state)
@@ -205,7 +215,7 @@ class HaloAnimationView(context: Context, attrs: AttributeSet? = null) : RiveAni
         revision.incrementAndGet()
         setBooleanState("default", "listening", state == PersonaState.Listening)
         setBooleanState("default", "speaking", state == PersonaState.Speaking)
-        setBooleanState("default", "thinking", false)
+        setBooleanState("default", "thinking", state == PersonaState.Thinking)
         // Disconnected presence uses the visible idle loop; the asset's asleep input hides it.
         setBooleanState("default", "asleep", false)
         stateMachines.first().viewModelInstance!!.getColorProperty("color").value = color

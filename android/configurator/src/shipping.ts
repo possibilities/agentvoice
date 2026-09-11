@@ -110,7 +110,7 @@ export function createShippingSnapshot(
   else {
     const wrapper = record(JSON.parse(choice.text));
     const state = record(wrapper["state"] ?? wrapper);
-    if (![21, 22, 23, 24, 25, 26, 27].includes(state["protocol"] as number))
+    if (![21, 22, 23, 24, 25, 26, 27, 28].includes(state["protocol"] as number))
       throw Error("Unsupported captured studio protocol");
     integer(state["revision"]);
     if (
@@ -120,7 +120,10 @@ export function createShippingSnapshot(
       state["orientation"] !== "landscape-reverse"
     )
       throw Error("Invalid captured orientation");
-    const capturedLayouts = state["protocol"] === 27 ? stateLayouts(parseState(state)) : null;
+    const capturedLayouts =
+      state["protocol"] === 27 || state["protocol"] === 28
+        ? stateLayouts(parseState({ ...state, protocol: 28 }))
+        : null;
     const layouts = capturedLayouts ?? {
       portrait:
         state["orientation"] === "portrait"
@@ -143,7 +146,10 @@ export function createShippingSnapshot(
         "Captured live design or sounds differ from the saved profile; review before promotion",
       );
     appearance = visualSettingsOf(
-      state["protocol"] === 23 || state["protocol"] === 24 || state["protocol"] === 27
+      state["protocol"] === 23 ||
+        state["protocol"] === 24 ||
+        state["protocol"] === 27 ||
+        state["protocol"] === 28
         ? state
         : { ...state, launcher: "current" },
     );

@@ -28,6 +28,7 @@ internal data class CallUi(
     val controlsPending: Boolean = false,
     val inputLevel: Float = 0f,
     val outputLevel: Float = 0f,
+    val codingActivity: CodingActivity = CodingActivity.Unknown,
 )
 
 internal class CallController(
@@ -229,7 +230,8 @@ internal class CallController(
             micMuted = gate.state.mic.muted, speakerMuted = gate.state.speaker.muted,
             micOpen = admitted && gate.micOpen, speakerOpen = admitted && gate.speakerOpen,
             canHold = admitted && gate.canHold, holding = gate.holding,
-            controlsPending = gate.controlsPending)
+            controlsPending = gate.controlsPending,
+            codingActivity = if (live) gate.state.codingActivity else CodingActivity.Unknown)
     }
     private inline fun guarded(block: () -> Unit) {
         try { block() } catch (_: Exception) { stop("Connection or audio failed. Check your server, then start again.") }

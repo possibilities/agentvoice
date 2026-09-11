@@ -78,7 +78,7 @@ voice, permission, role and conversation-selection flags belong to
 The composition and `client` also accept `--device` and `--output-device` for
 client-local audio. `client` and `phone` also accept `--connect <private-profile.json>`
 instead of `--workspace` for authenticated WSS access to the desktop server.
-Both clients use [client API v2](docs/client-api.md); the server never opens audio.
+Both clients use [client API v3](docs/client-api.md); the server never opens audio.
 
 On an Android phone, run the server and browser frontend in separate Termux
 terminals:

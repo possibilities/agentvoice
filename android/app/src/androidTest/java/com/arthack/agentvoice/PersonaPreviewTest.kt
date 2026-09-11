@@ -19,6 +19,21 @@ import java.util.concurrent.atomic.AtomicInteger
 class PersonaPreviewTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun thinkingAuditionSurvivesControlsAndSharesExistingSavedTuning() {
+        val initial = PersonaPreviewState()
+        val thinking = initial.select("thinking")
+        assertEquals(PersonaState.Thinking, personaState(thinking.ui()))
+        assertEquals(PersonaState.Thinking, personaState(thinking.toggle("mic").ui()))
+        assertEquals(PersonaState.Thinking, personaState(thinking.toggle("speaker").ui()))
+        val held = thinking.beginHold()
+        assertEquals(PersonaState.Listening, personaState(held.ui()))
+        assertEquals(PersonaState.Thinking, personaState(held.endHold().ui()))
+        assertEquals(PersonaState.Asleep, personaState(thinking.copy(connection = "disconnected").ui()))
+        assertEquals(initial.placement, thinking.placement)
+        assertEquals(initial.halo, thinking.halo)
+        assertEquals(initial.designProfile(), thinking.designProfile())
+    }
+
     private fun legacyProfile(profile: String, version: Int) = JSONObject(profile).withoutTraceJoinFields().put("version", version).apply {
         remove("landscape"); remove("personaSide")
         getJSONObject("design").remove("spacing")

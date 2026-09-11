@@ -129,7 +129,7 @@ class ShippingProfileTest {
                 val saved = withContext(Dispatchers.Main) { session.state }
                 assertAppearance(chosen, saved.savedAppearance)
                 assertLayouts(saved)
-                assertEquals(27, reply.getJSONObject("state").getInt("protocol"))
+                assertEquals(28, reply.getJSONObject("state").getInt("protocol"))
                 assertAppearance(chosen, decodeDesignAppearance(reply.getJSONObject("state").getJSONObject("savedAppearance")))
                 val loaded = reload(file)
                 val restored = withContext(Dispatchers.Main) { loaded.state }

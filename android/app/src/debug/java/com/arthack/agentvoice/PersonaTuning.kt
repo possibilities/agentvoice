@@ -9,6 +9,8 @@ import org.json.JSONObject
 import java.io.File
 import kotlin.math.roundToInt
 
+internal val previewStates = previewModes + "thinking"
+
 internal data class PersonaPreviewState(
     val placement: PersonaPlacement = defaultPortraitLayout().placement,
     val saved: PersonaPlacement = placement,
@@ -125,7 +127,7 @@ internal data class PersonaPreviewState(
         return withLayoutMaps(effective, savedLayouts()).copy(sharedAppearance = shared)
     }
 
-    fun json(): JSONObject = JSONObject().put("protocol", 27).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
+    fun json(): JSONObject = JSONObject().put("protocol", 28).put("connectionPreview", connectionPreview).put("launcher", launcher).put("showPushToTalk", showPushToTalk).put("icons", icons.json())
         .put("savedAppearance", savedAppearance.json()).put("defaultAppearance", shippingAppearance().json())
         .put("sounds", sounds.json()).put("savedSounds", savedSounds.json()).put("defaultSounds", ShippingDesign.sounds.json())
         .put("horizontalOffsetDp", horizontalOffsetDp).put("savedHorizontalOffsetDp", savedHorizontalOffsetDp).put("defaultHorizontalOffsetDp", defaultPreviewLayout(orientation).horizontalOffsetDp)
@@ -152,14 +154,14 @@ internal data class PersonaPreviewState(
 
     fun toggle(target: String): PersonaPreviewState = if (connection != "connected") this else when (target) {
         "mic" -> copy(micMuted = !micMuted, holding = false,
-            mode = if (micMuted) "listening" else if (mode == "speaking") "speaking" else "idle", revision = revision + 1)
+            mode = if (mode == "thinking") mode else if (micMuted) "listening" else if (mode == "speaking") "speaking" else "idle", revision = revision + 1)
         "speaker" -> copy(speakerMuted = !speakerMuted, holding = false,
-            mode = if (speakerMuted) "speaking" else if (!micMuted) "listening" else "idle", revision = revision + 1)
+            mode = if (mode == "thinking") mode else if (speakerMuted) "speaking" else if (!micMuted) "listening" else "idle", revision = revision + 1)
         else -> error("Unknown channel")
     }
 
-    fun beginHold() = if (connection == "connected" && micMuted && showPushToTalk) copy(mode = "listening", holding = true, revision = revision + 1) else this
-    fun endHold() = if (holding) copy(mode = "idle", micMuted = true, holding = false, revision = revision + 1) else this
+    fun beginHold() = if (connection == "connected" && micMuted && showPushToTalk) copy(mode = if (mode == "thinking") mode else "listening", holding = true, revision = revision + 1) else this
+    fun endHold() = if (holding) copy(mode = if (mode == "thinking") mode else "idle", micMuted = true, holding = false, revision = revision + 1) else this
 
     fun ui(): CallUi {
         val connected = connection == "connected"
@@ -167,7 +169,8 @@ internal data class PersonaPreviewState(
             phase = when (connection) { "connecting" -> "Connecting"; "disconnected" -> "Disconnected"; else -> "Connected" },
             micMuted = micMuted, micOpen = connected && (!micMuted || holding), speakerMuted = speakerMuted,
             speakerOpen = connected && !speakerMuted, canHold = connected && micMuted && showPushToTalk, holding = connected && holding,
-            outputLevel = if (connected && mode == "speaking" && !speakerMuted) .14f else 0f)
+            outputLevel = if (connected && mode == "speaking" && !speakerMuted) .14f else 0f,
+            codingActivity = if (connected && mode == "thinking") CodingActivity.Working else CodingActivity.Idle)
     }
 }
 
@@ -204,7 +207,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     savedSounds: PreviewSounds = PreviewSounds(), savedAppearance: DesignAppearance = DesignAppearance()): PersonaPreviewState {
     val mode = data.getString("mode")
     val revision = data.get("revision")
-    require(mode in previewModes && revision is Int && revision >= 0)
+    require(mode in previewStates && revision is Int && revision >= 0)
     val holding = data.getBoolean("holding")
     val connection = data.optString("connection", "connected")
     require(connection in previewConnections)
@@ -213,7 +216,7 @@ internal fun restorePersonaPreview(data: JSONObject, saved: PersonaPlacement, sa
     val orientation = data.optString("orientation", "portrait").also { require(it in previewOrientations) }
     val epoch = data.optInt("orientationEpoch", 0).also { require(it >= 0) }
     val protocol = data.optInt("protocol", 10)
-    require(protocol in 1..27)
+    require(protocol in 1..28)
     if (protocol <= 26) require(orientation in setOf(previewPortrait, previewLandscape))
     if (protocol >= 22) {
         decodeDesignAppearance(data.getJSONObject("savedAppearance"), legacy = protocol == 22)
@@ -355,7 +358,7 @@ internal class PersonaPreviewSession(initial: PersonaPlacement, private val sele
                     checkOrientation(request)
                     val side = request.getString("personaSide").also { require(it in previewPersonaSides) }
                     val mode = request.getString("mode")
-                    require(mode in previewModes)
+                    require(mode in previewStates)
                     val connection = request.getString("connection")
                     require(connection in previewConnections)
                     val placement = decodePreviewPlacement(request)

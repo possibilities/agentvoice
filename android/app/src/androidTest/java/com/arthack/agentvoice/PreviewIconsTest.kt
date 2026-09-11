@@ -77,7 +77,7 @@ class PreviewIconsTest {
             assertEquals(21, profile.getInt("version"))
             assertEquals(selected.icons, decodePreviewIcons(profile.getJSONObject("icons")))
             assertEquals(selected.icons, state().icons)
-            assertEquals(27, reply.getJSONObject("state").getInt("protocol"))
+            assertEquals(28, reply.getJSONObject("state").getInt("protocol"))
         } finally { file.delete() }
     }
 

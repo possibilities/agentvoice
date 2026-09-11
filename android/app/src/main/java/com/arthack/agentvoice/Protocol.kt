@@ -6,6 +6,7 @@ import kotlinx.serialization.json.*
 internal const val MAX_FRAME_BYTES = 1024 * 1024
 internal const val MAX_SDP_CHARS = 192 * 1024
 internal const val SUBPROTOCOL = "agentvoice.v2"
+internal const val FRONTEND_VERSION = 3
 
 internal class ProtocolFailure : Exception("Incompatible server message")
 internal fun requireWire(condition: Boolean) { if (!condition) throw ProtocolFailure() }
@@ -66,11 +67,18 @@ internal class DeviceGrant private constructor(val endpoint: String, val token: 
 }
 
 internal data class ChannelState(val muted: Boolean = true, val effectiveMuted: Boolean = true)
+internal enum class CodingActivity(val wire: String) {
+    Working("working"), Blocked("blocked"), Idle("idle"), Unknown("unknown");
+    companion object {
+        fun parse(value: String): CodingActivity = entries.firstOrNull { it.wire == value } ?: throw ProtocolFailure()
+    }
+}
 internal data class VoiceState(
     val available: Boolean = false,
     val phase: String = "stopped",
     val mic: ChannelState = ChannelState(),
     val speaker: ChannelState = ChannelState(),
+    val codingActivity: CodingActivity = CodingActivity.Unknown,
 )
 private fun channel(objectValue: JsonObject): ChannelState {
     objectValue.fields("muted", "effectiveMuted")
@@ -88,7 +96,7 @@ internal sealed interface ServerFrame {
 internal fun parseFrame(text: String): ServerFrame {
     requireWire(text.toByteArray(Charsets.UTF_8).size <= MAX_FRAME_BYTES)
     val frame = jsonObject(text)
-    frame.version(2)
+    frame.version(if (frame.string("type") == "ping") 2 else FRONTEND_VERSION)
     return when (frame.string("type")) {
         "ping" -> {
             frame.fields("v", "type", "nonce")
@@ -99,11 +107,11 @@ internal fun parseFrame(text: String): ServerFrame {
         "state" -> {
             frame.fields("v", "type", "state")
             val state = frame.obj("state")
-            state.fields("available", "phase", "mic", "speaker")
+            state.fields("available", "phase", "mic", "speaker", "codingActivity")
             val phase = state.string("phase")
             requireWire(phase in setOf("waiting-ready", "negotiating", "live", "failed", "stopped"))
             ServerFrame.State(VoiceState(state.bool("available"), phase,
-                channel(state.obj("mic")), channel(state.obj("speaker"))))
+                channel(state.obj("mic")), channel(state.obj("speaker")), CodingActivity.parse(state.string("codingActivity"))))
         }
         "response" -> {
             val ok = frame.bool("ok")
@@ -177,7 +185,7 @@ internal class WireLedger(private val now: () -> Long) {
         val id = (++nextId).toString()
         pending[id] = method to now()
         val text = buildJsonObject {
-            put("v", 2); put("type", "request"); put("id", id)
+            put("v", FRONTEND_VERSION); put("type", "request"); put("id", id)
             put("method", method); put("params", params)
         }.toString()
         return Request(id, text)

@@ -65,12 +65,7 @@ internal fun CompactPersonaHalo(
             context.contentResolver.unregisterContentObserver(motion)
         }
     }
-    val requested = personaState(ui)
-    var state by remember { mutableStateOf(requested) }
-    LaunchedEffect(requested, ui.connected, ui.speakerOpen) {
-        if (state == PersonaState.Speaking && requested != PersonaState.Speaking && ui.connected && ui.speakerOpen) delay(180)
-        state = requested
-    }
+    val state = rememberPersonaState(ui)
     val original = remember(context) { runCatching { context.resources.openRawResource(R.raw.persona_halo).use { it.readBytes() } } }
     var appliedTuning by remember { mutableStateOf(tuning) }
     LaunchedEffect(tuning) {
@@ -162,7 +157,7 @@ class CompactHaloAnimationView(context: Context, attrs: AttributeSet? = null) : 
         revision.incrementAndGet()
         setBooleanState("default", "listening", state == PersonaState.Listening)
         setBooleanState("default", "speaking", state == PersonaState.Speaking)
-        setBooleanState("default", "thinking", false)
+        setBooleanState("default", "thinking", state == PersonaState.Thinking)
         setBooleanState("default", "asleep", false)
         stateMachines.single().viewModelInstance!!.getColorProperty("color").value = color
         play()

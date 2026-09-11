@@ -49,15 +49,30 @@ class CallControllerTest {
             transport.events.opened()
         }
         reply(transport.requests.first().string("id"))
-        receive("""{"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"$session"}}""")
+        receive("""{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"$session"}}""")
         main { media.connect(session) }
         state(true, true)
     }
     private fun receive(value: String) { main { transport.events.text(value) {} } }
-    private fun reply(id: String) = receive("""{"v":2,"type":"response","id":"$id","ok":true,"result":null}""")
-    private fun state(muted: Boolean, effective: Boolean, phase: String = "live") = receive("""{"v":2,"type":"state","state":{"available":true,"phase":"$phase","mic":{"muted":$muted,"effectiveMuted":$effective},"speaker":{"muted":false,"effectiveMuted":false}}}""")
+    private fun reply(id: String) = receive("""{"v":3,"type":"response","id":"$id","ok":true,"result":null}""")
+    private fun state(muted: Boolean, effective: Boolean, phase: String = "live", activity: String = "unknown") = receive("""{"v":3,"type":"state","state":{"codingActivity":"$activity","available":true,"phase":"$phase","mic":{"muted":$muted,"effectiveMuted":$effective},"speaker":{"muted":false,"effectiveMuted":false}}}""")
 
     @After fun cleanup() { if (::controller.isInitialized) main { controller.dispose() } }
+
+    @Test fun codingActivityUsesAuthoritativeStateAndClearsWithTheCall() {
+        start()
+        state(true, true, activity = "working")
+        main { assertEquals(CodingActivity.Working, controller.ui.codingActivity) }
+        state(true, true, activity = "blocked")
+        main { assertEquals(CodingActivity.Blocked, controller.ui.codingActivity) }
+        state(true, true, activity = "working")
+        state(true, true, phase = "stopped", activity = "unknown")
+        main { assertEquals(CodingActivity.Unknown, controller.ui.codingActivity) }
+        state(true, true, activity = "working")
+        main { controller.stop(); assertEquals(CodingActivity.Unknown, controller.ui.codingActivity) }
+        state(true, true, activity = "working")
+        main { assertEquals(CodingActivity.Unknown, controller.ui.codingActivity) }
+    }
 
     @Test fun releasedHoldNeverReopensFromItsLateReplyOrState() {
         start()
@@ -84,10 +99,10 @@ class CallControllerTest {
         start()
         state(true, true, "stopped")
         main { assertTrue(controller.ui.running); assertFalse(transport.cancelled); assertFalse(media.mic) }
-        receive("""{"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"$successor"}}""")
+        receive("""{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"$successor"}}""")
         main { media.connect(successor) }
         state(true, true)
-        receive("""{"v":2,"type":"client-media","message":{"type":"close","sessionId":"$session"}}""")
+        receive("""{"v":3,"type":"client-media","message":{"type":"close","sessionId":"$session"}}""")
         main { assertTrue(controller.ui.connected); assertEquals(successor, media.live); assertFalse(transport.cancelled) }
     }
     @Test fun transportLossImmediatelyClosesMediaAndOldCallbacksCannotRestartIt() {

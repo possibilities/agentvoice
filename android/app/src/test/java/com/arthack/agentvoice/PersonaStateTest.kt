@@ -15,4 +15,17 @@ class PersonaStateTest {
         assertEquals(PersonaState.Idle, personaState(CallUi(connected = true, speakerOpen = true)))
         assertEquals(PersonaState.Asleep, personaState(CallUi(running = true, phase = "Connecting voice")))
     }
+    @Test fun thinkingRequiresKnownWorkAndYieldsToAudibleVoiceOrHumanActivity() {
+        val working = CallUi(connected = true, codingActivity = CodingActivity.Working)
+        assertEquals(PersonaState.Thinking, personaState(working))
+        assertEquals(PersonaState.Thinking, personaState(working.copy(micOpen = true)))
+        assertEquals(PersonaState.Thinking, personaState(working.copy(speakerOpen = true)))
+        assertEquals(PersonaState.Listening, personaState(working.copy(micOpen = true, holding = true)))
+        assertEquals(PersonaState.Listening, personaState(working.copy(micOpen = true, inputLevel = .08f)))
+        assertEquals(PersonaState.Thinking, personaState(working.copy(inputLevel = .08f)))
+        assertEquals(PersonaState.Speaking, personaState(working.copy(speakerOpen = true, outputLevel = .08f, micOpen = true, holding = true)))
+        assertEquals(PersonaState.Asleep, personaState(working.copy(connected = false)))
+        for (activity in listOf(CodingActivity.Idle, CodingActivity.Blocked, CodingActivity.Unknown))
+            assertEquals(PersonaState.Idle, personaState(working.copy(codingActivity = activity)))
+    }
 }

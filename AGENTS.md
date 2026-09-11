@@ -12,7 +12,7 @@ identity, leases, operation journal and control/event transports; its disposable
 owns config/prompt/role loading and an owned stock Codex app-server. All clients
 own audio and WebRTC; no production server path loads native media ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
 Frontend disconnect closes the call before another can begin. The macOS installer supervises the waiting default server as a user LaunchAgent.
-Authenticated WSS client API v2 is opt-in behind a dedicated tailnet-only TLS
+Authenticated WSS transport v2 (frontend API v3) is opt-in behind a dedicated tailnet-only TLS
 proxy ([ADR 0034](docs/adr/0034-authenticated-client-network.md)). `client` and `phone --connect` load a private device grant;
 browser content stays loopback-only and never receives that grant. Never expose
 native Codex, MCP, attachment or event sockets through this gateway. Read [README.md](README.md), [CONTEXT.md](CONTEXT.md), the [decision index](docs/adr/README.md) and ADRs [0033](docs/adr/0033-client-owned-native-media.md)/[0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0024](docs/adr/0024-server-and-pointer-frontend.md)/[0022](docs/adr/0022-websocket-native-tui.md) for the active topologies; ADRs [0015](docs/adr/0015-retain-controller-replace-runtime.md)/[0016](docs/adr/0016-restart-handoff.md) describe retained MCP/API
@@ -88,7 +88,7 @@ when the phone is available again. Report any restoration problem immediately.
   profiles, gestures, reconnect or rendering. Preserve current operator choices
   and saved bytes; explicit Save stores a profile, never production defaults.
   Landing studio code does not adopt an experimental design into production.
-  Save captures every visual choice in profile 21; protocol 27 carries current,
+  Save captures every visual choice in profile 21; protocol 28 carries current,
   saved and adopted defaults. A debug-only durable working draft autosaves edits;
   Reset to production resets all four physical layouts without writing the explicit checkpoint.
   Only connection/gates/held pointers and synthetic

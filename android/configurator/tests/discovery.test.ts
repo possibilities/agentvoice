@@ -35,7 +35,7 @@ function state(): PhoneState {
   return parseState({
     ...p,
     ...visual,
-    protocol: 27,
+    protocol: 28,
     revision: 0,
     orientation: "portrait",
     orientationEpoch: 0,

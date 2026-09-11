@@ -30,7 +30,7 @@ internal data class CompactHaloColors(
     fun forState(state: PersonaState): Int = when (state) {
         PersonaState.Speaking -> speaking
         PersonaState.Listening -> listening
-        PersonaState.Idle -> idle
+        PersonaState.Idle, PersonaState.Thinking -> idle
         PersonaState.Asleep -> asleep
     }
 }

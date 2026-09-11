@@ -176,7 +176,13 @@ call running. Stock Codex TUI handles native approvals. See
   runs through native Rive, with no WebView or remote content. Violet speaking
   follows enabled playback RMS, with a short release hold between syllables;
   acid-green listening follows the open microphone gate. White idle is ambient
-  presence; disconnected uses the idle loop in its muted color. There is no inferred thinking state.
+  presence; disconnected uses the idle loop in its muted color. Thinking reflects
+  server-reported coding work, not silence or mute settings. Audible output takes
+  priority, then an open held PTT or microphone activity above the local threshold,
+  then verified work, then open-microphone readiness. Short speech gaps retain the
+  prior speech animation to avoid flashes. An open silent microphone alone does
+  not suppress Thinking. Blocked, idle and unknown work do not select Thinking.
+  Thinking uses the existing Idle size and color; there is no new saved tuning.
   The first native pose settles before drawing, avoiding a tiny startup ring.
   Window and system splash backgrounds use the same dark canvas.
   Disabled system animations and backgrounding settle the visual to one still

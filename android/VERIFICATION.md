@@ -2192,3 +2192,35 @@ An initial instrumentation run was interrupted by ADB transport loss; completed
 retries and final evidence are under `/tmp/agentvoice-disconnected-presence/`.
 The Thinking follow-up is queued separately: server thread/turn events exist,
 but an authoritative coding-work aggregate is not yet projected to Android.
+
+## Coding-work Thinking — 2026-09-10
+
+The implementation projects content-free coding activity from the root
+and verified direct children through frontend API 3. Android selects Thinking
+for known work when audible agent playback, detected human input and active PTT
+do not take precedence. Blocked, idle and unknown activity do not imply Thinking.
+Studio protocol 28 adds a transient Thinking audition using Idle size/color;
+saved profile 21 and the operator's checkpoint remain unchanged. Rive assets
+are unchanged. This round does not change disconnected Persona size.
+
+Completed host checks:
+- Combined root suite: 791 tests, zero failures, 11,410 assertions in 64.87s.
+- Studio suite: 126 tests, zero failures; root and Studio typechecks and root
+  lint pass.
+- Android: 140 JVM tests, zero failures; Production, Studio and instrumentation
+  assembly plus both application lint checks pass (final build 1m 42s).
+- Production selected-resource/JNI audit passes for APK SHA256
+  `d116f86a2d724c939a7cecca30c9496e94c1889190d1966f4ed8c9b6c5ec2598`.
+
+On the authorized S22, 21 native tests pass in 40.612s: Thinking on both Persona
+variants, speech/PTT transitions, blocked/idle/unknown/disconnect clearing, retained
+native instance, controller protocol and existing animation/lifecycle regressions.
+Full Studio samples show the authored sweeping arcs with a clear center on both
+variants. Original retains its existing conservative trace standoff; these sampled
+stills do not establish every-frame geometry or universal trace attachment.
+Draft, checkpoint and binding remain byte-identical after audition/restoration.
+
+Paired production installation and server delivery remain pending. Network transport,
+heartbeat and grants remain v2; frontend API 3 requires a coordinated app/server
+upgrade, without replacing the device grant. Private check logs are under
+`/tmp/agentvoice-thinking/`.

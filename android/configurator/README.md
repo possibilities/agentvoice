@@ -22,7 +22,7 @@ user rotation policy still applies outside an explicit capture.
 
 Geometry and appearance overrides are local to each slot. Shared spacing, shared
 appearance, sounds and the seven shared visual choices apply across all four.
-Protocol27 carries the visible slot, its facing-pair `otherLayout`, and the other
+Protocol28 carries the visible slot, its facing-pair `otherLayout`, and the other
 two in `remainingLayouts`, plus saved counterparts. Profile21 adds
 `portraitReverse` and `landscapeReverse` beside root portrait and `landscape`.
 Draft3 saves this complete profile. Readers clone legacy reverse slots from their
@@ -66,6 +66,14 @@ remain unchanged; their reverse defaults are synthesized from the matching axis.
 A future explicit promotion writes profile21/provenance2, including every slot.
 
 ## Continue from production
+
+**Thinking** auditions verified coding activity with the bundled Rive state.
+It shares Idle size/color (and Contained's shared size); these controls explicitly
+edit that shared tuning. This is a transient simulation, excluded from saved
+profiles. Muting a channel retains the simulated work; holding PTT temporarily
+shows Listening, and releasing returns to Thinking. Production uses the server's
+content-free coding-activity state, with audible voice and human input taking priority.
+Protocol28 adds this audition; profile21 and draft3 are unchanged.
 
 Disconnected and connecting previews keep the Persona's idle loop moving in its
 disconnected color and smaller size, matching production. Backgrounding and
@@ -510,7 +518,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol27 carries live/saved/default designs, sizes, vertical and
+Preview protocol28 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -520,7 +528,7 @@ horizontal offsets, Halo and `spirit` selections, plus transient
 `brightnessPercent` (−100–100), `driftPercent` (0–300), `breathPercent` (0–100),
 `cycleSeconds` (6–30), and `motion: float|ripple`. Adopted defaults are
 32/−19/196/100/13/ripple. Theme, indicator style, presence scope and muted tuning are required
-session-root fields on Preview/PhoneState, never Layout. Protocol is27;
+session-root fields on Preview/PhoneState, never Layout. Protocol is28;
 saved profile is version21 with separately saved shown/hidden extents and all
 shared visual settings.
 `spirit` is `{surface: still|soft, strengthPercent: 0..100, persona: fixed|follow}`.
@@ -552,7 +560,7 @@ current spacing to match `otherLayout` and saved spacing to match
 Legacy raw profiles through16 remain strict and unchanged, while their effective
 landscape spacing is copied from portrait. Resets use portrait spacing defaults
 in all four orientations.
-Protocol27's active fields describe the phone's visible orientation; it also
+Protocol28's active fields describe the phone's visible orientation; it also
 reports `orientation`, `orientationEpoch`, `personaSide`, `savedPersonaSide`,
 `defaultPersonaSide`, `otherLayout` and `savedOtherLayout`. Ordinary tuning follows only the phone’s displayed orientation. The explicit capture operation temporarily rotates it, then restores its rotation setting. Version21 profile receipts must
 include all four exact confirmed layouts, including design, geometry, side,
@@ -569,7 +577,7 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol27 is strict; Android restoration from
+never include it. Current live protocol28 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
 The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
@@ -608,7 +616,7 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol27 and profiles18–21 require both extent fields. Legacy profiles
+Current protocol28 and profiles18–21 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native

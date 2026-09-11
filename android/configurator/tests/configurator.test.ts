@@ -84,7 +84,7 @@ import {
 
 const defaults = { speaking: 78, listening: 58, idle: 78 };
 const initial = (): PhoneState => ({
-  protocol: 27,
+  protocol: 28,
   connectionPreview: "off",
   launcher: "current",
   savedAppearance: defaultVisualSettings(),
@@ -423,6 +423,20 @@ test("CLI opens a picker without a serial and isolates custom exports", () => {
   expect(parseArgs(["--device", "phone", "--port", "0"]).port).toBe(0);
 });
 
+test("Thinking audition shares Idle tuning without adding unsaved design fields", () => {
+  const state = initial();
+  const thinking = parsePreview({ ...previewOf(state), mode: "thinking" });
+  expect(thinking.mode).toBe("thinking");
+  expect(thinking.scales).toEqual(state.scales);
+  expect(thinking.halo).toEqual(state.halo);
+  const changed = { ...thinking, scales: { ...thinking.scales, idle: 65 } };
+  const reset = resetPreview(changed, state, "size");
+  expect(reset.mode).toBe("thinking");
+  expect(reset.scales.idle).toBe(state.defaults.idle);
+  expect(Object.keys(reset.scales).sort()).toEqual(["idle", "listening", "speaking"]);
+  expect(() => parseScales({ ...state.scales, thinking: 65 })).toThrow();
+});
+
 test("preview protocol rejects out of range, fractional, unknown, or non-finite values", () => {
   expect(parseState(initial()).scales).toEqual(defaults);
   expect(() => parseScales({ ...defaults, listening: 121 })).toThrow();
@@ -434,7 +448,7 @@ test("preview protocol rejects out of range, fractional, unknown, or non-finite 
     parsePreview({
       ...previewOf(initial()),
       connection: "connected",
-      mode: "thinking",
+      mode: "dreaming",
       scales: defaults,
       verticalOffsetDp: 35,
       design: defaultDesign,
@@ -2546,7 +2560,7 @@ test("debug reply framing accepts65535 bytes and rejects65536 with or without a 
   const accepted = await wire();
   const pending = accepted.phone.request({ method: "get" });
   accepted.peer.write(`${frame}${" ".repeat(65535 - frame.length)}\n`);
-  expect((await pending).state.protocol).toBe(27);
+  expect((await pending).state.protocol).toBe(28);
   for (const newline of ["", "\n"]) {
     const rejected = await wire();
     const pending = rejected.phone.request({ method: "get" });

@@ -1,4 +1,4 @@
-# AgentVoice client API, version 2
+# AgentVoice client API, version 3
 
 The production client/server boundary is **session control, never media**.
 `src/frontend/protocol.ts` and `media-protocol.ts` own the Zod contracts;
@@ -11,10 +11,10 @@ regenerate with `bun scripts/generate-client-schema.ts`. A drift test pins it.
 
 Local transport: UTF-8 newline-delimited JSON on an owned mode-0600 Unix socket
 under the private AgentVoice state directory. Each request has
-`{v:2,type:"request",id,method,params?}`. Responses correlate `id` and return
-`{v:2,type:"response",id,ok:true,result}` or `ok:false,error:{message}`.
-State updates are `{v:2,type:"state",state}`; media events are
-`{v:2,type:"client-media",message}`. The control-plane socket framing cap is
+`{v:3,type:"request",id,method,params?}`. Responses correlate `id` and return
+`{v:3,type:"response",id,ok:true,result}` or `ok:false,error:{message}`.
+State updates are `{v:3,type:"state",state}`; media events are
+`{v:3,type:"client-media",message}`. The control-plane socket framing cap is
 1 MiB; SDP strings are capped at 192 KiB, peer IDs are UUIDs, failure details
 at 256 characters. No SDP is included in diagnostics, events or transcripts.
 
@@ -26,6 +26,11 @@ there is no NDJSON batching over WSS. Network-only ping/pong envelopes are inclu
 in `client.schema.json`. See [Android handoff](android-client-handoff.md) for TLS,
 heartbeat, limits, revocation and the complete deployment/import lifecycle.
 The prototype loopback URL is never remote authentication.
+
+Frontend v3 requires `codingActivity` on every state. Upgrade server and clients
+together; v2 frontend frames are incompatible. The network endpoint, subprotocol,
+device grants and network-only ping/pong remain v2; existing grants need no
+replacement. Authentication-only QR validation does not negotiate a call version.
 
 ## Android device enrollment
 
@@ -63,6 +68,14 @@ through `waiting-ready`, `negotiating`, `live`, `failed`, `stopped`.
 Observers receive `availability: idle|connected|closing|unavailable`, exact
 owner correlation and verified conversation identity. A closing call must finish
 cleanup before a successor is admitted; a cleanup failure poisons admission.
+
+`state.codingActivity` is `working`, `blocked`, `idle` or `unknown`. It describes
+observed native work on the root and verified direct coding-agent children,
+without tool text, transcripts or thread identifiers. Known work takes priority;
+incomplete observations remain unknown. Blocked means waiting for approval or
+input, not productive Thinking. This does not claim access to model cognition.
+Runtime replacement discards the old observation; voice-only renewal preserves
+activity while its coding runtime survives. Android clears it on call/media loss.
 
 ## Media negotiation
 

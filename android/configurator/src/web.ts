@@ -37,6 +37,7 @@ import {
   profileVisualSettings,
   sameOrientation,
   savedStateLayouts,
+  scaleMode,
   stateLayouts,
   type Theme,
 } from "./protocol.ts";
@@ -624,22 +625,24 @@ function render() {
   }
   document.documentElement.style.setProperty(
     "--accent",
-    contained ? draft.halo.colors[draft.mode] : colors[draft.mode],
+    contained ? draft.halo.colors[scaleMode(draft.mode)] : colors[scaleMode(draft.mode)],
   );
   for (const mode of modes) {
     const button = document.querySelector<HTMLButtonElement>(`button[data-mode="${mode}"]`)!;
     button.setAttribute("aria-pressed", String(draft.mode === mode));
     element(`${mode}-value`).textContent =
-      `${contained ? draft.halo.containedSizePercent : draft.scales[mode]}%`;
+      `${contained ? draft.halo.containedSizePercent : draft.scales[scaleMode(mode)]}%`;
   }
   element("size-label").textContent = contained
     ? "Contained size"
-    : `${draft.mode[0]!.toUpperCase()}${draft.mode.slice(1)} size`;
+    : draft.mode === "thinking"
+      ? "Idle / Thinking size"
+      : `${draft.mode[0]!.toUpperCase()}${draft.mode.slice(1)} size`;
   element("reset-size").setAttribute(
     "aria-label",
-    contained ? "Reset Contained size" : `Reset ${draft.mode} size`,
+    contained ? "Reset Contained size" : `Reset ${scaleMode(draft.mode)} size`,
   );
-  const size = contained ? draft.halo.containedSizePercent : draft.scales[draft.mode];
+  const size = contained ? draft.halo.containedSizePercent : draft.scales[scaleMode(draft.mode)];
   slider.value = String(size);
   element("size-value").replaceChildren(
     document.createTextNode(String(size)),
@@ -922,7 +925,7 @@ slider.addEventListener("input", () => {
   update((current) =>
     current.halo.variant === "contained"
       ? { ...current, halo: { ...current.halo, containedSizePercent: value } }
-      : { ...current, scales: { ...current.scales, [current.mode]: value } },
+      : { ...current, scales: { ...current.scales, [scaleMode(current.mode)]: value } },
   );
 });
 position.addEventListener("input", () => {
