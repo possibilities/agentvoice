@@ -2449,3 +2449,39 @@ in the Bold muted Robot; this is a polishing candidate if that pair is selected,
 not a Studio-audition blocker. Speaking profiles' square can suggest stop/status
 and its waves can suggest activity; do not treat that concept as a settled
 production mute-control design. Explicit audio labels and on/off states remain.
+
+## Contained Thinking arm reach — September 11, 2026
+
+Contained now narrows the four authored Thinking dash paths from scaleX 1.28
+to 1.05. The main circle, vertical geometry, sweep timing, layout size and trace
+spacing are unchanged. Source hash/per-float guards and a JVM test preserve the
+unrelated static geometry and complete Thinking timelines; Original remains
+byte-exact. Provenance and packaged modification notices describe the change.
+
+All 144 Studio JVM tests passed, along with Studio/Production and instrumentation
+assembly and both lints. Six focused native tests passed on the S22, covering
+Thinking activity priority, renderer continuity and motion geometry. At a
+256-pixel render target with Idle breathing disabled, the native baseline Idle
+bounds were 131×132. Maximum sampled Thinking width fell from 166 to 136 pixels;
+both versions retained the same Y envelope, 61–194. Sampling covered 5.507 seconds
+and seven distinct alpha frames per version. These are sampled native bounds,
+backed by exact source geometry tests, not an exhaustive per-frame proof.
+
+Parent reviewed four physical layouts and motion sequences in both landscape
+rotations with the Persona on either side. Arms stay near the circle without
+visible clipping in these captures; no additional landscape shrink was needed.
+This was synthetic Studio verification, with no voice call or service restart.
+The exact Production APK passes the shipping audit with selected resources only.
+Installed and reread SHA256:
+
+- Production: `dfb58c14c833c4e2da60fc495c29a5c2e2ddda86baba370fc8a45ecfed91bdf5`
+- Studio: `62db28cf8fdcef135cfe902a144c28c7af190682c3b31c980106561ff010dd5d`
+
+The original Boatman/Datum/Listening landscape session and gates were restored.
+Draft, explicit checkpoint and bridge binding compare byte-for-byte to the fresh
+backup. Auto-rotation 1, user_rotation 0, font_scale 1.0, animator_duration_scale
+1.0 and free window-manager rotation were restored and reread. Production was
+installed without launching it; its existing grant was preserved. Phone release
+notification sent. No emulator was created and no design profile was promoted.
+Evidence: `/tmp/agentvoice-thinking-arms/`, including native logs, before/after
+captures, both-sided motion sheets and restoration receipt.

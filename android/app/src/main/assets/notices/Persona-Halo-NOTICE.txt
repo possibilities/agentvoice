@@ -43,3 +43,7 @@ See the full Rive-LICENSE.txt in this directory.
 Those code/runtime licenses do not establish the external asset's terms.
 This notice does not relicense the asset or claim endorsement by Surge
 Studio, Hayden Barnett, Vercel or Rive.
+
+AgentVoice modification, 2026-09-11: Contained Thinking narrows only the four
+moving dash ellipses horizontally (scaleX 1.28 to 1.05), retaining the central
+circle, vertical geometry, authored sweep timing and unchanged Original asset.

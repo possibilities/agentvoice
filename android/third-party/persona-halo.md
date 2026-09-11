@@ -78,3 +78,21 @@ remain in `app/src/main/assets/notices` and are packaged in both APKs.
 AgentVoice modification and the asset-license evidence boundary. The adopted
 shipping profile now uses Contained in the release app, with its selected tuning
 applied in memory. The studio retains the Original comparison.
+
+## Contained Thinking geometry — September 11, 2026
+
+The four Thinking dash ellipses retain their 128×128 dimensions but use scaleX
+1.05 instead of the authored1.28. Their horizontal centerline reach beyond the
+64-unit frame radius falls from17.92 to3.2 artboard units; the frame circle and
+vertical geometry are unchanged. This affects only Contained. Original stays
+byte-exact, and no layout scale or saved tuning choice is changed.
+
+Verified against the pinned4,497-byte source hash above and public generated
+Rive property definitions at runtime commit
+`df5d96b7deb6af1822383171d566bc1e4949ab51`. The static float offsets304/364/436/496
+are scaleX on artboard ellipse components11/15/19/23 (Dash2 Mirror, Dash2,
+Dash1 Mirror, Dash1). Thinking loops2/1 animate only TrimPath start/end/offset
+(properties114/115/116), never geometry. Their0.2-length sweep,195-frame loop,
+color binding, inherited Idle breathing, and empty thinking_off timeline remain
+unchanged. Implicit zero start/end hides these dashes outside Thinking.
+The existing source hash and per-site raw-float guards apply before mutation.

@@ -24,6 +24,9 @@ internal fun compactHaloBytes(original: ByteArray, tuning: CompactHaloTuning): B
     patch(listeningPulse) { 128f - (it - 128f) * (tuning.listeningPulsePercent / 100f) }
     patch(speakingMotion) { 1f + (it - 1f) * (tuning.speakingMotionPercent / 100f) }
     patch(idleBreathing) { 1f + (it - 1f) * (tuning.idleBreathingPercent / 100f) }
+    // Thinking sweeps trimmed arcs along these paths. Narrow only the dash ellipses;
+    // the central circle, vertical reach, sweep timing and other states stay authored.
+    patch(thinkingDashWidth) { 1.05f }
     for (site in listeningEase) {
         check(result[site.typeOffset].toInt() == 4 && result[site.idOffset].toInt() == site.originalId)
         // Use the file's cubic (.42, 0, .58, 1) instead of elastic entry/exit overshoot.
@@ -35,6 +38,15 @@ internal fun compactHaloBytes(original: ByteArray, tuning: CompactHaloTuning): B
 
 private data class HaloFloatSite(val offset: Int, val value: Float)
 private data class HaloEaseSite(val typeOffset: Int, val idOffset: Int, val originalId: Int)
+
+// Static scaleX of Dash 2 Mirror / Dash 2 / Dash 1 Mirror / Dash 1 ellipses
+// (artboard components 11 / 15 / 19 / 23). No animation overrides their geometry.
+private val thinkingDashWidth = listOf(
+    HaloFloatSite(304, 1.27999997f),
+    HaloFloatSite(364, 1.27999997f),
+    HaloFloatSite(436, 1.27999997f),
+    HaloFloatSite(496, 1.27999997f),
+)
 
 // Byte offsets and source values were decoded against Rive's public format and generated
 // property definitions. Track labels below are animation / artboard object / property IDs.

@@ -110,6 +110,9 @@ captures the style; Reset to production restores it with every other design
 choice. Only the selected production style is used in the real app.
 
 **Thinking** auditions verified coding activity with the bundled Rive state.
+Contained keeps its moving dash paths close to the main circle (5% wider
+instead of the authored28%) without reducing the circle or changing timing.
+Original remains the unmodified comparison.
 It shares Idle size/color (and Contained's shared size); these controls explicitly
 edit that shared tuning. This is a transient simulation, excluded from saved
 profiles. Muting a channel retains the simulated work; holding PTT temporarily
