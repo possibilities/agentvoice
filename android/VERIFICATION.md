@@ -2150,5 +2150,13 @@ All 138 Studio JVM tests, production/Studio and instrumentation assembly, and
 production/Studio lint passed with full Kotlin compilation. The production
 selected-resource/JNI audit passed for APK SHA256
 `d2e16418453779f02e4c0a109a1dc0762306bc9ddf775dde41e25d441f80fb77`.
-Focused device instrumentation and installation await the next explicit phone
-handoff; this entry does not claim either has run.
+On the authorized S22, all five PreviewControlsTest instrumentation tests passed
+in 8.352s, covering pending labels in both orientations, touch feedback,
+release/cancel/exit/second-pointer handling, disposal and accessibility start/stop.
+Production and Studio were installed with exact on-device APK hash matches.
+Studio APK SHA256:
+`cbcc8af19bfcc70389c95f1cab179c06b771fd530a87d44a3814acf3bbe2e8ae`.
+Studio was reopened in its prior foreground; draft, checkpoint and binding stayed
+byte-identical before and after reopening. Rotation and font settings were
+unchanged. No production call was started. Phone access was released and notified.
+Private device evidence: `/tmp/agentvoice-stable-ptt/phone/`.
