@@ -12,7 +12,7 @@ export function buildClientSchema() {
         reused: "ref",
       },
     ),
-    title: "AgentVoice client API v2",
+    title: "AgentVoice frontend API v3 with network v2 heartbeats",
     description:
       "Exclusive call ownership and client-owned media signaling. See docs/client-api.md. No credentials or audio bytes.",
   };

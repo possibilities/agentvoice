@@ -24,7 +24,7 @@ const server = new VoiceServer(
       speaker: { muted: false, effectiveMuted: true },
     };
     return {
-      state: () => host?.state() ?? waiting,
+      state: () => ({ ...(host?.state() ?? waiting), codingActivity: "unknown" as const }),
       start: () => {
         run = runConsoleHost(h.config, "terminal-demo", {
           mediaFactory: h.mediaFactory,

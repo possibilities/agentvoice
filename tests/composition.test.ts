@@ -53,6 +53,7 @@ function live(clientId: string): FrontendObservation {
     threadId: "exact-thread",
     state: {
       available: true,
+      codingActivity: "unknown" as const,
       phase: "live",
       mic: { muted: false, effectiveMuted: false },
       speaker: { muted: false, effectiveMuted: false },

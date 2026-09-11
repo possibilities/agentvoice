@@ -239,6 +239,7 @@ async function harness() {
       identity: () => ({ workspace, threadId: selected.threadId }),
       state: () => ({
         available: true,
+        codingActivity: "unknown" as const,
         phase: "negotiating",
         mic: { muted: true, effectiveMuted: true },
         speaker: { muted: false, effectiveMuted: true },

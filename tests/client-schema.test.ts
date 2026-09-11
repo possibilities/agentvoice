@@ -7,7 +7,7 @@ test("client API schema is generated from the runtime contracts", async () => {
     buildClientSchema(),
   );
   const call = {
-    v: 2,
+    v: 3,
     type: "request",
     id: "1",
     method: "call",
@@ -21,7 +21,7 @@ test("client API schema is generated from the runtime contracts", async () => {
   ).toBe(false);
   expect(
     frontendServerFrameSchema.safeParse({
-      v: 2,
+      v: 3,
       type: "client-media",
       message: { type: "prepare", sessionId: crypto.randomUUID(), credential: "forbidden" },
     }).success,

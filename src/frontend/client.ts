@@ -66,6 +66,7 @@ export async function connectFrontend(
   const pendingResponses = new Map<string, ReturnType<typeof setTimeout>>();
   let partial = "";
   let state: FrontendState = {
+    codingActivity: "unknown",
     available: false,
     phase: "waiting-ready",
     mic: { muted: false, effectiveMuted: true },
@@ -166,7 +167,7 @@ export async function connectFrontend(
     pendingResponses.clear();
     if (!accepted)
       ready.reject(error ?? new Error("AgentVoice server disconnected before accepting the call"));
-    state = { ...state, available: false, phase: "stopped" };
+    state = { ...state, available: false, phase: "stopped", codingActivity: "unknown" };
     changed();
     ended.resolve();
   });

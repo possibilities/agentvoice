@@ -115,6 +115,7 @@ describe("persistent controller and disposable runtime", () => {
       const first = controller.status();
       expect(first.threadId).toBe("test-thread-1");
       await until(() => controller.lifecycle.snapshot().inventory === "ready");
+      await until(() => controller.state().codingActivity === "idle");
       expect(controller.lifecycle.snapshot().threads).toMatchObject([
         { id: first.threadId, status: "idle" },
       ]);
@@ -153,6 +154,7 @@ describe("persistent controller and disposable runtime", () => {
         const thread = controller.lifecycle.snapshot().threads[0];
         return thread?.turn?.id === "handoff-turn" && thread.status === "active";
       });
+      expect(controller.state().codingActivity).toBe("working");
       expect(controller.lifecycle.snapshot()).toMatchObject({
         generation: 2,
         threads: [{ id: first.threadId, status: "active" }],

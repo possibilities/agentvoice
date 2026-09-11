@@ -228,7 +228,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "type": {
               "type": "string",
@@ -246,7 +246,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "type": {
               "type": "string",
@@ -264,7 +264,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "type": {
               "type": "string",
@@ -355,7 +355,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "type": {
               "type": "string",
@@ -419,7 +419,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "type": {
               "type": "string",
@@ -473,7 +473,7 @@
   "$defs": {
     "__schema0": {
       "type": "number",
-      "const": 2
+      "const": 3
     },
     "__schema1": {
       "type": "string",
@@ -495,6 +495,10 @@
         "available": {
           "type": "boolean"
         },
+        "codingActivity": {
+          "type": "string",
+          "enum": ["working", "blocked", "idle", "unknown"]
+        },
         "phase": {
           "type": "string",
           "enum": ["waiting-ready", "negotiating", "live", "failed", "stopped"]
@@ -506,7 +510,7 @@
           "$ref": "#/$defs/__schema5"
         }
       },
-      "required": ["available", "phase", "mic", "speaker"],
+      "required": ["available", "codingActivity", "phase", "mic", "speaker"],
       "additionalProperties": false
     },
     "__schema5": {
@@ -592,6 +596,6 @@
       "additionalProperties": false
     }
   },
-  "title": "AgentVoice client API v2",
+  "title": "AgentVoice frontend API v3 with network v2 heartbeats",
   "description": "Exclusive call ownership and client-owned media signaling. See docs/client-api.md. No credentials or audio bytes."
 }

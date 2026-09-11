@@ -45,6 +45,7 @@ test("browser WebSocket relays media through the call owner and disconnect close
   let closes = 0;
   const state: FrontendState = {
     available: true,
+    codingActivity: "unknown" as const,
     phase: "live",
     mic: { muted: true, effectiveMuted: true },
     speaker: { muted: false, effectiveMuted: false },
@@ -133,6 +134,7 @@ test("controller relays browser media only for the active runtime incarnation", 
             event("identity", { workspace: root, threadId: "browser-thread" });
             event("state", {
               available: true,
+              codingActivity: "unknown" as const,
               phase: "live",
               mic: { muted: true, effectiveMuted: true },
               speaker: { muted: false, effectiveMuted: false },

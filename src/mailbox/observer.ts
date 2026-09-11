@@ -178,6 +178,10 @@ export class SubagentObserver {
         const status = row(params["status"]);
         // Terminal turn facts take precedence over a trailing coarse active-status event.
         if (!tracked.child.turnId) tracked.active = status["type"] === "active";
+        if (status["type"] === "notLoaded" || status["type"] === "systemError") {
+          tracked.active = false;
+          if (status["type"] === "systemError") this.gap("inventory");
+        }
         tracked.child.waitingOn = this.flags(status["activeFlags"]);
       }
       if (method === "thread/closed") tracked.active = false;

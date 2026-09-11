@@ -226,7 +226,7 @@ export class NetworkGateway {
         "params" in request ? request.params : undefined,
       );
       const frame = frontendServerFrameSchema.parse({
-        v: 2,
+        v: FRONTEND_VERSION,
         type: "response",
         id: request.id,
         ok: true,
@@ -235,7 +235,7 @@ export class NetworkGateway {
       this.send(ws, frame);
     } catch {
       this.send(ws, {
-        v: 2,
+        v: FRONTEND_VERSION,
         type: "response",
         id: request.id,
         ok: false,

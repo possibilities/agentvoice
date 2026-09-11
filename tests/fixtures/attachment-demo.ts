@@ -68,6 +68,7 @@ if (process.argv[2] === "__attach-agent") {
     identity: () => ({ workspace: root, threadId: "mobile-fixture-thread" }),
     state: () => ({
       available: true,
+      codingActivity: "unknown" as const,
       phase: "negotiating",
       mic: { muted: true, effectiveMuted: true },
       speaker: { muted: false, effectiveMuted: true },

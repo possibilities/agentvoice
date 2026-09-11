@@ -5,7 +5,7 @@ import { heartbeatSchema } from "../src/network/protocol.ts";
 
 describe("Android client shared server-frame fixtures", () => {
   const frame = frontendServerFrameSchema.or(heartbeatSchema);
-  test("accepted Android messages belong to the published v2 contract", () => {
+  test("accepted Android messages belong to the frontend v3 and heartbeat v2 contracts", () => {
     for (const value of fixtures.valid) expect(frame.safeParse(value).success).toBe(true);
   });
   test("hostile Android fixtures are rejected by the server contract too", () => {

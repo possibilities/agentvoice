@@ -169,6 +169,7 @@ async function fixture(timings = { interval: 20, timeout: 1000 }) {
   const server = new VoiceServer(frontendSocketPath(root), async () => ({
     state: () => ({
       available: true,
+      codingActivity: "unknown" as const,
       phase: "live",
       mic: { muted: true, effectiveMuted: true },
       speaker: { muted: true, effectiveMuted: true },
@@ -222,7 +223,7 @@ async function fixture(timings = { interval: 20, timeout: 1000 }) {
         const id = String(++next);
         ws.send(
           JSON.stringify({
-            v: 2,
+            v: 3,
             type: "request",
             id,
             method,

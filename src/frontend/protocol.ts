@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { clientMediaMessageSchema, serverMediaMessageSchema } from "../frontend/media-protocol.ts";
+import { codingActivitySchema } from "../runtime-control/coding-activity.ts";
 
-export const FRONTEND_VERSION = 2;
+export const FRONTEND_VERSION = 3;
 const channel = z.object({ muted: z.boolean(), effectiveMuted: z.boolean() }).strict();
 export const frontendStateSchema = z
   .object({
     available: z.boolean(),
+    codingActivity: codingActivitySchema,
     phase: z.enum(["waiting-ready", "negotiating", "live", "failed", "stopped"]),
     mic: channel,
     speaker: channel,
@@ -112,6 +114,7 @@ export function frontendSocketPath(stateDir: string, workspace?: string): string
 export function frontendState(state: FrontendState): FrontendState {
   return {
     available: state.available,
+    codingActivity: state.codingActivity,
     phase: state.phase,
     mic: { muted: state.mic.muted, effectiveMuted: state.mic.effectiveMuted },
     speaker: { muted: state.speaker.muted, effectiveMuted: state.speaker.effectiveMuted },

@@ -24,7 +24,13 @@ function fakeCall(changed: () => void) {
   let starts = 0;
   let closes = 0;
   const call: Call = {
-    state: () => ({ available: closes === 0, phase, mic: mic.state(), speaker: speaker.state() }),
+    state: () => ({
+      available: closes === 0,
+      codingActivity: "unknown" as const,
+      phase,
+      mic: mic.state(),
+      speaker: speaker.state(),
+    }),
     start: async () => {
       starts++;
       phase = "live";
@@ -166,6 +172,7 @@ test("frontend state projection excludes diagnostics, volume and native capabili
   const projected = frontendState(state);
   expect(frontendStateSchema.parse(projected)).toEqual({
     available: true,
+    codingActivity: "unknown" as const,
     phase: "waiting-ready",
     mic: { muted: true, effectiveMuted: true },
     speaker: { muted: false, effectiveMuted: false },
@@ -380,6 +387,7 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
             event("identity", { workspace: root, threadId: "same-thread" });
             event("state", {
               available: true,
+              codingActivity: "unknown" as const,
               phase: "live",
               mic: { muted: true, effectiveMuted: true },
               speaker: { muted: false, effectiveMuted: false },

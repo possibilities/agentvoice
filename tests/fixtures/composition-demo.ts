@@ -39,6 +39,7 @@ if (target === "client") {
       identity: () => ({ workspace, threadId: "fixture-thread" }),
       state: () => ({
         available: true,
+        codingActivity: "unknown" as const,
         phase,
         mic: { muted: false, effectiveMuted: false },
         speaker: { muted: false, effectiveMuted: false },

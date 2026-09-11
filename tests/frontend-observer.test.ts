@@ -25,6 +25,7 @@ test("read-only observer gets current and future call identity without owning or
       identity: () => ({ workspace: root, threadId: "thread" }),
       state: () => ({
         available: true,
+        codingActivity: "unknown" as const,
         phase,
         mic: { muted: false, effectiveMuted: false },
         speaker: { muted: false, effectiveMuted: false },
@@ -87,6 +88,7 @@ test("cleanup observation wait ends on server shutdown or observer disconnect", 
     const server = new VoiceServer(frontendSocketPath(root), async () => ({
       state: () => ({
         available: true,
+        codingActivity: "unknown" as const,
         phase: "live",
         mic: { muted: false, effectiveMuted: false },
         speaker: { muted: false, effectiveMuted: false },

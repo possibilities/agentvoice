@@ -41,6 +41,7 @@ const local = new VoiceServer(frontendSocketPath(root), async (_changed, _params
   return {
     state: () => ({
       available: true,
+      codingActivity: "unknown" as const,
       phase: "live",
       mic: { muted: true, effectiveMuted: true },
       speaker: { muted: true, effectiveMuted: true },

@@ -1,4 +1,5 @@
 import type { ReadyInfo, VoicePhase } from "../core/voice-types.ts";
+import type { CodingActivity } from "../runtime-control/coding-activity.ts";
 import type { AudioTarget } from "./audio-control.ts";
 
 export type VoiceInput = "pointer";
@@ -9,6 +10,8 @@ export interface VoiceChannelState {
 }
 
 export interface VoiceState {
+  /** Only the call controller observes coding work; disposable media hosts omit it. */
+  codingActivity?: CodingActivity;
   /** False once the foreground host has closed. */
   available: boolean;
   phase: VoicePhase;

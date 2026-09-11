@@ -1,24 +1,319 @@
 {
   "valid": [
-    {"v":2,"type":"ping","nonce":"0123456789abcdef0123456789abcdef"},
-    {"v":2,"type":"response","id":"1","ok":true,"result":null},
-    {"v":2,"type":"response","id":"2","ok":false,"error":{"message":"Call unavailable"}},
-    {"v":2,"type":"state","state":{"available":true,"phase":"waiting-ready","mic":{"muted":false,"effectiveMuted":true},"speaker":{"muted":false,"effectiveMuted":true}}},
-    {"v":2,"type":"state","state":{"available":true,"phase":"live","mic":{"muted":true,"effectiveMuted":false},"speaker":{"muted":false,"effectiveMuted":false}}},
-    {"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"11111111-1111-4111-8111-111111111111"}},
-    {"v":2,"type":"client-media","message":{"type":"answer","sessionId":"11111111-1111-4111-8111-111111111111","sdp":"v=0\r\n"}},
-    {"v":2,"type":"client-media","message":{"type":"state","sessionId":"11111111-1111-4111-8111-111111111111","mic":{"muted":true,"effectiveMuted":true},"speaker":{"muted":false,"effectiveMuted":false}}},
-    {"v":2,"type":"client-media","message":{"type":"close","sessionId":"11111111-1111-4111-8111-111111111111","reason":"replaced"}}
+    {
+      "v": 2,
+      "type": "ping",
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "v": 3,
+      "type": "response",
+      "id": "1",
+      "ok": true,
+      "result": null
+    },
+    {
+      "v": 3,
+      "type": "response",
+      "id": "2",
+      "ok": false,
+      "error": {
+        "message": "Call unavailable"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "waiting-ready",
+        "mic": {
+          "muted": false,
+          "effectiveMuted": true
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": true
+        },
+        "codingActivity": "unknown"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "unknown"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "prepare",
+        "sessionId": "11111111-1111-4111-8111-111111111111"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "answer",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "sdp": "v=0\r\n"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "state",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": true
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        }
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "close",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "reason": "replaced"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "working"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "blocked"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "idle"
+      }
+    }
   ],
   "invalid": [
-    {"v":1,"type":"ping","nonce":"0123456789abcdef0123456789abcdef"},
-    {"v":2,"type":"ping","nonce":"invalid"},
-    {"v":2,"type":"response","id":"1","ok":"true","result":null},
-    {"v":2,"type":"response","id":"1","ok":true,"result":null,"extra":true},
-    {"v":2,"type":"state","state":{"available":true,"phase":"unknown","mic":{"muted":true,"effectiveMuted":true},"speaker":{"muted":true,"effectiveMuted":true}}},
-    {"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"not-a-uuid"}},
-    {"v":2,"type":"client-media","message":{"type":"prepare","sessionId":"11111111-1111-0111-0111-111111111111"}},
-    {"v":2,"type":"client-media","message":{"type":"answer","sessionId":"11111111-1111-4111-8111-111111111111","sdp":""}},
-    {"v":2,"type":"client-media","message":{"type":"close","sessionId":"11111111-1111-4111-8111-111111111111","reason":""}}
+    {
+      "v": 1,
+      "type": "ping",
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "v": 2,
+      "type": "ping",
+      "nonce": "invalid"
+    },
+    {
+      "v": 3,
+      "type": "response",
+      "id": "1",
+      "ok": "true",
+      "result": null
+    },
+    {
+      "v": 3,
+      "type": "response",
+      "id": "1",
+      "ok": true,
+      "result": null,
+      "extra": true
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "unknown",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": true
+        },
+        "speaker": {
+          "muted": true,
+          "effectiveMuted": true
+        },
+        "codingActivity": "unknown"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "prepare",
+        "sessionId": "not-a-uuid"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "prepare",
+        "sessionId": "11111111-1111-0111-0111-111111111111"
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "answer",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "sdp": ""
+      }
+    },
+    {
+      "v": 3,
+      "type": "client-media",
+      "message": {
+        "type": "close",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "reason": ""
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": null
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "thinking"
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": 42
+      }
+    },
+    {
+      "v": 3,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        }
+      }
+    },
+    {
+      "v": 2,
+      "type": "state",
+      "state": {
+        "available": true,
+        "phase": "live",
+        "mic": {
+          "muted": true,
+          "effectiveMuted": false
+        },
+        "speaker": {
+          "muted": false,
+          "effectiveMuted": false
+        },
+        "codingActivity": "unknown"
+      }
+    },
+    {
+      "v": 3,
+      "type": "ping",
+      "nonce": "0123456789abcdef0123456789abcdef"
+    }
   ]
 }

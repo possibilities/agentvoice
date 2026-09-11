@@ -153,6 +153,24 @@ function turn(
   });
 }
 
+test("coding activity child inventory clears loaded turns on unload and system error", async () => {
+  for (const status of ["notLoaded", "systemError"]) {
+    const { o } = await observer();
+    try {
+      o.notification("thread/started", { thread: metadata("child") });
+      turn(o, "turn/started", "child", "work", "inProgress");
+      expect(o.snapshot().threads).toHaveLength(1);
+      o.notification("thread/status/changed", { threadId: "child", status: { type: status } });
+      expect(o.snapshot().threads).toHaveLength(0);
+      turn(o, "turn/started", "child", "work", "inProgress");
+      expect(o.snapshot().threads).toHaveLength(0);
+      if (status === "systemError") expect(o.snapshot().complete).toBe(false);
+    } finally {
+      o.stop();
+    }
+  }
+});
+
 test("native observation filters unrelated threads and grandparents, deduplicates turns, and strips results", async () => {
   const { o, events } = await observer();
   try {

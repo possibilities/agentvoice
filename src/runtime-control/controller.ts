@@ -69,6 +69,7 @@ import {
   type VoiceEdit,
   writeVoice,
 } from "../roles/store.ts";
+import { type CodingActivity, CodingActivityReducer } from "./coding-activity.ts";
 import { type JournalOperation, OperationJournal, publicOperation } from "./journal.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "./process.ts";
 import type { CandidateInfo, LaunchProvenance, RuntimeLaunch } from "./protocol.ts";
@@ -90,6 +91,7 @@ export class RuntimeController implements ControlBackend {
   readonly lifecycle: LifecycleFeed;
   private readonly journal: OperationJournal;
   private readonly mailbox: ThreadMailbox;
+  private readonly coding = new CodingActivityReducer();
   private readonly leases = new Map<string, () => void>();
   private active: RuntimeProcess | undefined;
   private candidate: RuntimeProcess | undefined;
@@ -191,10 +193,14 @@ export class RuntimeController implements ControlBackend {
     if (!current() || active !== this.active) throw new Error("Attachment target changed");
     return ticket;
   }
-  state(): VoiceState {
+  state(): VoiceState & { codingActivity: CodingActivity } {
     const ready = this.phase === "ready";
     return {
       ...this.voice,
+      codingActivity:
+        !this.closed && ["starting", "ready"].includes(this.phase)
+          ? this.coding.state()
+          : "unknown",
       available: !this.closed,
       workspace: this.workspace,
       mic: {
@@ -208,6 +214,7 @@ export class RuntimeController implements ControlBackend {
     };
   }
   private changed() {
+    if (this.closed || !["starting", "ready"].includes(this.phase)) this.coding.reset();
     this.lifecycle.runtime(this.generation, {
       phase: this.phase,
       workspace: this.workspace,
@@ -254,6 +261,8 @@ export class RuntimeController implements ControlBackend {
       const parsed = mailboxObservationSchema.safeParse(params);
       if (!parsed.success) {
         this.mailbox.gap("inventory");
+        this.coding.childrenGap();
+        this.changed();
         return;
       }
       if (!["starting", "ready"].includes(this.phase)) return;
@@ -261,6 +270,7 @@ export class RuntimeController implements ControlBackend {
       switch (observation.kind) {
         case "inventory":
           this.mailbox.update(observation.inventory);
+          this.coding.inFlight(observation.inventory);
           break;
         case "started":
           this.lifecycle.mailbox("mailbox.child.started", {
@@ -290,8 +300,10 @@ export class RuntimeController implements ControlBackend {
           break;
         case "gap":
           this.mailbox.gap(observation.reason);
+          this.coding.childrenGap();
           break;
       }
+      this.changed();
       return;
     }
     if (method === "conversation") {
@@ -310,9 +322,16 @@ export class RuntimeController implements ControlBackend {
       return;
     }
     if (method === "threads") {
+      if (!["starting", "ready"].includes(this.phase)) return;
       const checked = threadInventorySchema.safeParse(params);
-      if (checked.success) this.lifecycle.update(checked.data);
-      else this.lifecycle.update({ threads: this.lifecycle.snapshot().threads, complete: false });
+      if (checked.success) {
+        this.lifecycle.update(checked.data);
+        this.coding.threads(checked.data);
+      } else {
+        this.lifecycle.update({ threads: this.lifecycle.snapshot().threads, complete: false });
+        this.coding.rootGap();
+      }
+      this.changed();
       return;
     }
     if (method === "identity") {
@@ -326,6 +345,9 @@ export class RuntimeController implements ControlBackend {
         return;
       }
       this.threadId = identity.threadId;
+      this.coding.reset(identity.threadId);
+      const snapshot = this.lifecycle.snapshot();
+      this.coding.threads({ threads: snapshot.threads, complete: snapshot.inventory === "ready" });
     } else if (method === "state") {
       if (this.phase === "failed") return;
       const state = params as VoiceState;
@@ -822,9 +844,13 @@ export class RuntimeController implements ControlBackend {
         const inventory = inFlightSchema.parse(await runtime.request("mailbox-snapshot", {}, 2000));
         if (!current()) throw new Error("changed");
         this.mailbox.update(inventory);
+        this.coding.inFlight(inventory);
+        this.changed();
       } catch {
         if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
         this.mailbox.gap("inventory");
+        this.coding.childrenGap();
+        this.changed();
       }
     }
     if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
