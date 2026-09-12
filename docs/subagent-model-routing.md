@@ -22,10 +22,11 @@ judgment and acceptance, with task, model and context all sized to a verifiable
 deliverable. The model choices are recommendations synthesized from
 the sources below, not benchmark results for this fleet.
 
-[ADR 0043](adr/0043-adaptive-conversation-first-delegation.md) updates the
-conversation-first policy: the root chooses direct or delegated read-only work
-and thinking based on correctness, latency and useful parallelism. Implementation
-remains delegated; routine live call controls stay local. The model/effort/context
+[ADR 0047](adr/0047-adaptive-work-execution.md) extends
+[ADR 0043](adr/0043-adaptive-conversation-first-delegation.md)'s adaptive policy
+to all work, including implementation and edits. The root chooses direct or
+delegated execution based on correctness, handoff costs, useful parallelism and
+the current exchange; routine live call controls stay local. The model/effort/context
 selection procedure applies when a worker is chosen. Related lookups can share
 one assignment, and workers remain execution agents rather than compulsory managers.
 

@@ -1,5 +1,10 @@
 # 0043: Adapt delegation to the conversation and the work
 
+Partially superseded September 12, 2026 by
+[ADR 0047](0047-adaptive-work-execution.md): adaptive execution also covers
+implementation, edits and substantial work; mandatory delegation is removed.
+The earlier decision and its evidence are preserved below.
+
 Accepted September 10, 2026. Partially supersedes
 [ADR 0031](0031-role-owned-delegation.md)'s mandatory delegation for read-only
 work and thinking, and the same requirement retained by
