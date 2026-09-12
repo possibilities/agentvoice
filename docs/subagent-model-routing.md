@@ -1,11 +1,12 @@
 # Subagent model routing
 
-Researched September 8, 2026. The executable policy is the model guide and
-assignment procedure in
-[`roles/default/APPEND_SYSTEM_PROMPT.md`](../roles/default/APPEND_SYSTEM_PROMPT.md).
-It is inline so the selected role delivers it through the existing native
-`developerInstructions` control on start and resume. No extra prompt loader,
-model registry, worker dispatcher or account integration is introduced.
+Model evidence researched September 8, 2026; retained as a dated reference.
+[ADR 0048](adr/0048-universal-working-doctrine.md) keeps the operative assignment
+procedure in
+[`roles/default/APPEND_SYSTEM_PROMPT.md`](../roles/default/APPEND_SYSTEM_PROMPT.md)
+and removes the repeated model tables from its always-present text. Current
+native capabilities remain authoritative. No extra prompt loader, model
+registry, worker dispatcher or account integration is introduced.
 
 ## What changed and why
 
@@ -101,8 +102,9 @@ Current [retirement guidance](https://learn.chatgpt.com/docs/models#deprecated-c
 also marks GPT-5.2 and GPT-5.3-Codex deprecated, and GPT-5.4/mini retired August 31.
 Spark remains separately listed. API-only nano, Pro, Chat and specialized variants
 are not added to AgentVoice's worker menu simply because they share a family
-number. The default role includes guidance for every visible GPT-5/6 model in the
-observed Codex catalog, rather than the entire multi-product API catalog.
+number. This dated reference covers every visible GPT-5/6 model in the observed
+Codex catalog, rather than the entire multi-product API catalog. It is not a
+current availability promise or a required read before every assignment.
 
 ## Effort, context and quota are separate decisions
 

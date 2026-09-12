@@ -4,6 +4,10 @@ Partially superseded September 10, 2026 by
 [ADR 0043](0043-adaptive-conversation-first-delegation.md): read-only work and
 thinking use adaptive delegation, and routine live call controls stay local.
 
+Partially superseded September 12, 2026 by
+[ADR 0048](0048-universal-working-doctrine.md): dated model tables become
+reference material; deliberate assignment and native capability boundaries remain.
+
 Accepted September 8, 2026. Extends
 [ADR 0031](0031-role-owned-delegation.md) without changing its conversation-first
 delegation mode or the operator's lead model/effort settings.

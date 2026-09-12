@@ -1,5 +1,10 @@
 # 0047: Adapt work execution to the human's current intent
 
+Extended September 12, 2026 by
+[ADR 0048](0048-universal-working-doctrine.md): the adaptive execution decision
+remains within a broader working doctrine, with an explicit silence-only hold
+and mute contract for the working and voice agents.
+
 Accepted September 12, 2026. Partially supersedes
 [ADR 0043](0043-adaptive-conversation-first-delegation.md): implementation,
 edits and substantial execution no longer require delegation. The default

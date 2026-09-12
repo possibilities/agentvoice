@@ -51,7 +51,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0037: Native descendant navigation through TUI attachment](0037-descendant-tui-attachment.md) | Accepted | — |
 | [0038: Thread mailbox wake-ups](0038-thread-mailbox-wakeups.md) | Recorded | — |
 | [0039: Project memory is part of the default role](0039-project-memory-in-default-role.md) | Accepted | — |
-| [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) changes when to delegate; model/effort/context guidance remains. |
+| [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) changes when to delegate; [0048](0048-universal-working-doctrine.md) moves dated model tables to reference material and retains assignment/capability boundaries. |
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
 | [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
 | [0043: Adapt delegation to the conversation and the work](0043-adaptive-conversation-first-delegation.md) | Partially superseded | [0047](0047-adaptive-work-execution.md) extends adaptive execution to implementation and edits; useful parallelism, explicit handoffs and direct call controls remain. |
@@ -59,6 +59,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0045: Pair phone begins as a persistent native interaction preview](0045-native-pair-phone-preview.md) | Partially superseded | [0046](0046-durable-device-pairing.md) replaces the inert QR; the persistent window lifecycle remains. |
 | [0046: Pair phones with durable device keys](0046-durable-device-pairing.md) | Accepted | One-use enrollment, non-expiring device identity, signed WSS upgrades, and legacy-grant coexistence. |
 | [0047: Adapt work execution to the human's current intent](0047-adaptive-work-execution.md) | Accepted | Direct or delegated work by task and interaction needs; presentation follows supplied session context and human preferences. |
+| [0048: One working doctrine with explicit runtime boundaries](0048-universal-working-doctrine.md) | Accepted | Broad outcome ownership, proportional execution and verification, conditional completion semantics, and silence-only hold/mute in both agents. |
 
 ## Identifier history
 

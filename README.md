@@ -847,28 +847,42 @@ Select the repository's `roles/default` role with
 It is not automatically selected when `--role` and the config's `role` key
 are absent.
 
-The default role carries its conversation-first collaboration policy in
-`roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`. Selecting that role is
-sufficient; no server-config policy is needed. Another role without that file
-keeps native delegation policy. The role append alone cannot replace Codex's
-later mode message. See the [audit](docs/delegation-policy-audit.md) and
-[ADR 0031](docs/adr/0031-role-owned-delegation.md). The root chooses direct or
-delegated read-only work and thinking based on speed, correctness and useful
-parallelism, while implementation remains delegated and routine live call
-controls stay local. Handoffs are announced briefly, and paused work is
-distinguished from work actually running in the background
-([ADR 0043](docs/adr/0043-adaptive-conversation-first-delegation.md)). The stock
-base prompt and binary stay intact.
+The default role's `APPEND_SYSTEM_PROMPT.md` carries a common working doctrine
+for answers, research, artifacts, software, and tool actions. The lead owns the
+intended outcome, proportionate verification, authorized delivery, and retained
+work across follow-ups. It chooses direct or delegated execution for any task,
+including implementation, by correctness, handoff costs, useful parallelism,
+and the current exchange. Explicit session context and human preferences govern
+presentation; a typed message does not change a voice call's identity. See
+[ADR 0047](docs/adr/0047-adaptive-work-execution.md) and
+[ADR 0048](docs/adr/0048-universal-working-doctrine.md).
 
-The default append includes a dated Codex model guide and requires a deliberate
-model, effort, context fork and semantic name for each child assignment. Spark
-remains reference material for a future harness; current worker routing excludes
-it because its independent capacity cannot sustain the non-Spark Codex lead
-after main quota is exhausted. Quota remains unknown without a fresh observation
-tied to the call's account. See the
-[routing research and proposed quota integration](docs/subagent-model-routing.md)
-and [ADR 0040](docs/adr/0040-deliberate-subagent-routing.md). This is role guidance;
-it adds no quota feed or account switching.
+`roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` supplies the native mode
+needed for the role's proactive delegation and supported model/effort choices.
+The append alone cannot replace Codex's later mode message. Another role without
+that file keeps native delegation policy. See the
+[audit](docs/delegation-policy-audit.md) and
+[ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
+binary stay intact. The general doctrine is suitable for reuse across working
+surfaces; this source change does not deploy it to standalone TUIs or change
+global configuration. AgentVoice mailbox wake-ups remain conditional on the
+actual call runtime.
+
+Every child assignment gets a deliberate model, effort, context fork and
+semantic name. Current native capabilities govern choices; dated model evidence
+lives in the [routing reference](docs/subagent-model-routing.md). Spark worker
+routing remains outside the current Codex-led role's scope. Quota is unknown
+without a fresh, account-correlated observation; no quota feed or account
+switching is added.
+
+Hold and mute silence conversation while all feasible authorized work continues.
+Questions requiring the human and completion announcements wait for explicit
+resumption. A small `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` carries that same
+boundary to the speech model, leaving its stock base intact. This uses the
+existing voice-append startup-context slot described below; explicitly competing
+startup-context settings fail validation rather than being overwritten. These
+source files load on a later call or authorized runtime replacement and do not
+migrate existing workspace role snapshots or change a live call.
 
 | Role file | Effect in AgentVoice |
 | --- | --- |
