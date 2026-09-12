@@ -71,3 +71,13 @@ Include hold during execution, a child finishing while held, blocked input with
 independent work, explicit work cancellation, resume, and conflicting
 startup-context configuration. Do not run live trials or restart a call merely
 to validate a prompt without their own authorization.
+
+September 12, 2026 clarification: at useful conversational boundaries the lead
+briefly orients the human to active, finished, or waiting work and the next
+useful step. This exposes the retained work record when it helps a decision,
+without an unchanged status recital or a new permission gate. Planned app/call
+restart readiness distinguishes work and resource leases, landed versus loaded
+changes, outstanding checks/handoffs, and unknown state. Idle agents do not
+count as running work. Readiness is not restart authorization; unrelated
+exchanges and conversational hold still defer these updates. This is a prompt
+refinement, not a status service or a change to native restart semantics.
