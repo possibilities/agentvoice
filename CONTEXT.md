@@ -209,6 +209,14 @@ of role settings and authored assets, bound to a canonical workspace. Source fil
 cease to be runtime inputs. Export/import creates reusable independent copies;
 native authentication and history stay outside. See ADR 0042.
 
+**Worker role** — The shipped `roles/worker` directory, responsible for one
+assignment. Its owner/return recipient is the parent when delegated or the human
+when launched directly. It may delegate useful bounded subtasks within native
+capabilities. `roles/default` remains the manager role. Role responsibility does
+not determine native thread ancestry: a worker-role launch can be a call's root,
+and native subagent creation does not automatically select this directory.
+_Avoid_: runtime worker (the disposable controller/runtime process is unrelated).
+
 **Role revision** — An immutable saved settings/asset snapshot loaded at call
 startup or runtime restart. Voice-only application records its own revision,
 without claiming other pending settings loaded. Saved and applied are separate.

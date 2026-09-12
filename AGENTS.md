@@ -286,6 +286,9 @@ lives in two siblings, and some changes here must cascade:
   skill, every edge with evidence) in the same change.
 - General agent doctrine — collab, build, maintain, story, the resource
   skills — is `~/code/agentguidance`; tool-specific runbooks stay here.
+  The shipped `roles/default` manager and `roles/worker` responsibility variants
+  remain owned here for now ([ADR 0049](docs/adr/0049-worker-role.md)); keep their
+  shared standards aligned without adding a fragment loader or fleet rollout.
 
 
 ## Voice recording and attachment

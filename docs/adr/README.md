@@ -60,6 +60,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0046: Pair phones with durable device keys](0046-durable-device-pairing.md) | Accepted | One-use enrollment, non-expiring device identity, signed WSS upgrades, and legacy-grant coexistence. |
 | [0047: Adapt work execution to the human's current intent](0047-adaptive-work-execution.md) | Accepted | Direct or delegated work by task and interaction needs; presentation follows supplied session context and human preferences. |
 | [0048: One working doctrine with explicit runtime boundaries](0048-universal-working-doctrine.md) | Accepted | Broad outcome ownership, proportional execution and verification, conditional completion semantics, and silence-only hold/mute in both agents. |
+| [0049: Add a worker role with bounded assignment ownership](0049-worker-role.md) | Accepted | Existing default remains manager; one explicit worker role, parent-or-human return ownership, useful bounded delegation, and runtime-qualified completion. |
 
 ## Identifier history
 

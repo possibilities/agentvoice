@@ -847,6 +847,18 @@ Select the repository's `roles/default` role with
 It is not automatically selected when `--role` and the config's `role` key
 are absent.
 
+`default` remains the manager role. The repository also ships exactly one
+assignment-focused `worker` role, selected with `--role ./roles/worker` or
+`agentroles ./roles/worker -- codex` for a direct nonvoice launch. A delegated
+worker reports to its parent; without a parent it takes the human's assignment
+and responds to the human. It retains useful bounded delegation and verification
+without owning the manager's unrelated work. Every delegator establishes the
+child's default completion-return contract; native final delivery needs no
+redundant message. See the [shipped roles](roles/README.md) and
+[ADR 0049](docs/adr/0049-worker-role.md) for scope, role lookup, and the distinction
+between an explicit worker-role launch and a native subagent. Adding the role
+does not automatically apply it to children or register a global role name.
+
 The default role's `APPEND_SYSTEM_PROMPT.md` carries a common working doctrine
 for answers, research, artifacts, software, and tool actions. The lead owns the
 intended outcome, proportionate verification, authorized delivery, and retained
@@ -857,8 +869,8 @@ presentation; a typed message does not change a voice call's identity. See
 [ADR 0047](docs/adr/0047-adaptive-work-execution.md) and
 [ADR 0048](docs/adr/0048-universal-working-doctrine.md).
 
-`roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` supplies the native mode
-needed for the role's proactive delegation and supported model/effort choices.
+Each shipped role's `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` supplies the native
+mode needed for its proactive delegation and supported model/effort choices.
 The append alone cannot replace Codex's later mode message. Another role without
 that file keeps native delegation policy. See the
 [audit](docs/delegation-policy-audit.md) and
@@ -876,8 +888,9 @@ without a fresh, account-correlated observation; no quota feed or account
 switching is added.
 
 Hold and mute silence conversation while all feasible authorized work continues.
-Questions requiring the human and completion announcements wait for explicit
-resumption. A small `VOICE_AGENT_APPEND_SYSTEM_PROMPT.md` carries that same
+Questions requiring the human and human-facing completion announcements wait for
+explicit resumption; internal child returns continue. A small
+`VOICE_AGENT_APPEND_SYSTEM_PROMPT.md`, shared by the shipped roles, carries that same
 boundary to the speech model, leaving its stock base intact. This uses the
 existing voice-append startup-context slot described below; explicitly competing
 startup-context settings fail validation rather than being overwritten. These

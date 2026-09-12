@@ -1,5 +1,9 @@
 # 0048: One working doctrine with explicit runtime boundaries
 
+Extended by [ADR 0049](0049-worker-role.md): one explicit worker role shares the
+working standards with bounded assignment ownership and a default completion
+return contract. Both shipped roles remain in AgentVoice for now.
+
 Accepted September 12, 2026. Extends
 [ADR 0047](0047-adaptive-work-execution.md) from adaptive execution to a common
 working doctrine for broad tasks. Its direct/delegated judgment, conversational
