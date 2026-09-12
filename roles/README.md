@@ -43,8 +43,9 @@ still requires separate current authorization.
 AgentVoice loads `APPEND_SYSTEM_PROMPT.md` into the selected root thread's
 `developerInstructions`. The worker's `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`
 enables the existing adaptive native mode for that AgentVoice launch. Its mailbox
-section applies only if this thread is the actual root of a call supplying the
-mailbox. A worker launched as that root can use its direct-child completion
+guidance applies only if this thread is the actual root of a call supplying the
+mailbox. That root discovers the mailbox tool's complete procedure before
+dispatch. A worker launched as that root can use its direct-child completion
 notices. Ordinary native children cannot open their parent's mailbox and must
 use their own host's completion mechanism; the root's guarantee does not cover
 their descendants.
@@ -74,10 +75,19 @@ return recipients. Keep exact root mailbox semantics aligned with the
 [mailbox contract](../docs/thread-mailbox.md). Prefer the current plain role
 files and shared speech link over a new composition framework.
 
+Keep each native mode at or below 1,600 UTF-8 bytes. The inspected native
+`MultiAgentModeState` truncates custom text at 400 estimated tokens using four
+bytes per token. Put full working doctrine in the append and rely on the
+mailbox tool's existing contract for its procedure; a successful request mapping
+does not prove that an oversized mode reaches the model intact.
+
 The shipped-role tests load both actual directories, verify start/resume and
 speech request slots without replacing native base prompts or operator settings,
-and round-trip the worker through an independent workspace-role snapshot. They
-make no native inference or media calls and do not establish live model behavior.
+enforce that native mode bound, and round-trip the worker through an independent
+workspace-role snapshot. They make no native inference or media calls and do not
+establish live model behavior. The existing isolated native prompt-assembly
+probe also verified the shortened mode after the append on start and
+replacement/resume for both roles with Codex 0.154.0 and local fake Responses.
 Existing prompt-conflict tests remain the authority for incompatible settings.
 Role source edits load on a later launch or authorized runtime replacement;
 they do not migrate snapshots, change an existing TUI, or restart a call.

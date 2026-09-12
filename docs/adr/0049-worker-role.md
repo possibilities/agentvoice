@@ -22,7 +22,7 @@ child has the same obligation within its assignment. Native final-result deliver
 can satisfy reporting without another message. Blockers, failures, and important
 questions are raised when useful, not suppressed until success. Conversation
 hold delays human presentation, never internal result return or authorized work.
-The default append gains only this necessary return-chain clarification.
+The default append gains this necessary return-chain clarification.
 
 The worker uses the existing general append and AgentVoice mode conventions from
 [ADRs 0013](0013-convention-prompt-files.md), [0014](0014-roles.md), and
@@ -33,7 +33,22 @@ the root working thread of an AgentVoice call. Only that root, when supplied the
 actual mailbox contract, receives the direct-child no-wait/wake-up behavior.
 Ordinary native children cannot consume their parent's mailbox or assume that
 the root's completion guarantee covers grandchildren. No new executor, registry,
-worker-report service, or continuation guarantee is added.
+worker-report service, or continuation guarantee is added. The worker root
+discovers the mailbox tool's existing complete contract before dispatch rather
+than duplicating its procedure in the mode hint.
+
+Post-integration qualification found the inspected native `MultiAgentModeState`
+truncates custom modes at 400 estimated tokens, using four UTF-8 bytes per token.
+Both shipped modes exceeded that bound. Their mode files are shortened to native
+activation and concise routing, leaving the detailed doctrine in the append
+and mailbox tool contract. A shipped-role byte-bound check prevents request-mapping
+tests from overlooking this downstream loss. The default's adaptive meaning is
+unchanged. This is a source correction, not a claim that a live call was reloaded.
+The existing isolated prompt-assembly probe, also run with its role path changed
+to `worker` in a temporary copy, captured both shortened modes intact after the
+append on start and replacement/resume with installed Codex 0.154.0. Responses
+were local fixtures with external network denied; no hosted inference, credentials,
+audio, or active call was involved. The temporary copy was removed.
 
 The shared voice hold suffix is a relative link to the existing default role's
 file. Convention-file loading follows it; explicit workspace-role capture saves

@@ -29,6 +29,9 @@ for (const name of ["default", "worker"]) {
       const loaded = await readPrompts(config);
       const append = readFileSync(join(directory, "APPEND_SYSTEM_PROMPT.md"), "utf8");
       const mode = readFileSync(join(directory, "VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md"), "utf8");
+      // Native MultiAgentModeState truncates custom modes to 400 estimated tokens
+      // at four UTF-8 bytes each; request mapping alone cannot catch that loss.
+      expect(Buffer.byteLength(mode, "utf8")).toBeLessThanOrEqual(1_600);
       const speech = readFileSync(join(directory, "VOICE_AGENT_APPEND_SYSTEM_PROMPT.md"), "utf8");
       expect(await readRoleAssets(directory)).toEqual({ dir: directory });
       expect(loaded.prompts).toEqual({
