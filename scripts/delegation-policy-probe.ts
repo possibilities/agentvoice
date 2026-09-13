@@ -13,11 +13,10 @@ const codex = process.env["CODEX_PATH"];
 const catalogPath = process.env["CODEX_MODEL_CATALOG"];
 if (!codex?.startsWith("/") || !catalogPath?.startsWith("/"))
   throw new Error("Set absolute CODEX_PATH and CODEX_MODEL_CATALOG paths.");
-const repo = realpathSync(join(import.meta.dir, ".."));
-const policy = readFileSync(
-  join(repo, "roles/default/VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md"),
-  "utf8",
-);
+const rolePath = process.env["AGENTVOICE_PROBE_ROLE"];
+if (!rolePath?.startsWith("/"))
+  throw new Error("Set absolute AGENTVOICE_PROBE_ROLE to the role to audit.");
+const policy = readFileSync(join(rolePath, "VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md"), "utf8");
 const catalog = readFileSync(catalogPath, "utf8");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "av-delegation-probe-")));
 const workspace = join(root, "workspace");
@@ -124,7 +123,7 @@ try {
   );
   const config = resolveConfig(
     {
-      role: join(repo, "roles/default"),
+      role: rolePath,
       orchestrator: { workspace, sandbox: "read-only", "approval-policy": "never" },
     },
     {},

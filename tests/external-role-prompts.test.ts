@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lstatSync, readFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readPrompts, resolveConfig, STARTUP_CONTEXT_KEY } from "../src/core/config.ts";
 import { realtimeParams, threadParams } from "../src/core/params.ts";
@@ -7,10 +7,22 @@ import { readRoleAssets } from "../src/core/role.ts";
 import { captureFiles, createRole, materializeRole, readRole } from "../src/roles/store.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
-for (const name of ["default", "worker"]) {
+function fixtureRole(root: string): string {
+  const directory = join(root, "role");
+  mkdirSync(directory);
+  for (const [name, text] of Object.entries({
+    "APPEND_SYSTEM_PROMPT.md": "Fixture working doctrine",
+    "VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md": "Fixture native mode",
+    "VOICE_AGENT_APPEND_SYSTEM_PROMPT.md": "Fixture speech suffix",
+  }))
+    writeFileSync(join(directory, name), text);
+  return directory;
+}
+
+for (const name of ["external"]) {
   test(`${name} role delivers its working, native-mode, and speech instructions to separate slots`, async () => {
-    const directory = join(import.meta.dir, "..", "roles", name);
     const h = runtimeHarness();
+    const directory = fixtureRole(h.directory);
     try {
       const config = resolveConfig(
         { role: directory },
@@ -68,9 +80,9 @@ for (const name of ["default", "worker"]) {
   });
 }
 
-test("worker role snapshot captures its shared speech link as independent prompt bytes", async () => {
-  const directory = join(import.meta.dir, "..", "roles", "worker");
+test("external role snapshot captures independent prompt bytes", async () => {
   const h = runtimeHarness();
+  const directory = fixtureRole(h.directory);
   let projection: ReturnType<typeof materializeRole> | undefined;
   try {
     const original = await readPrompts({ ...h.config, role: directory });

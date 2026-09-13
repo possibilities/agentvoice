@@ -256,7 +256,7 @@ count-only wake-up: accumulated completion notices and the current number of
 children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
 and clears completion metadata; native Codex supplies the full results.
 Multiple pending notices and empty openings are expected. The mailbox survives
-runtime replacement and has no per-message read receipts. The default role and
+runtime replacement and has no per-message read receipts. AgentStart's manager role and
 mailbox tool description explicitly explain fire-and-forget dispatch: stay
 available to the human and process automatic notices without waiting or polling
 for completion. The runtime adds no system prompt of its own.
@@ -842,60 +842,18 @@ agentvoice server --role ./roles/researcher
 or a directory path. The `role` key in `server.json` is the file-level default;
 `--role` overrides it. Names use letters, digits, `_` and `-` only.
 
-Select the repository's `roles/default` role with
-`agentvoice server --role ./roles/default` from the repository directory.
-It is not automatically selected when `--role` and the config's `role` key
-are absent.
+AgentStart owns the manager (formerly default) and worker role definitions,
+including their prompts and independent MCP inventories. After its resource sync:
 
-`default` remains the manager role. The repository also ships exactly one
-assignment-focused `worker` role, selected with `--role ./roles/worker` or
-`agentroles ./roles/worker -- codex` for a direct nonvoice launch. A delegated
-worker reports to its parent; without a parent it takes the human's assignment
-and responds to the human. It retains useful bounded delegation and verification
-without owning the manager's unrelated work. Every delegator establishes the
-child's default completion-return contract; native final delivery needs no
-redundant message. See the [shipped roles](roles/README.md) and
-[ADR 0049](docs/adr/0049-worker-role.md) for scope, role lookup, and the distinction
-between an explicit worker-role launch and a native subagent. Adding the role
-does not automatically apply it to children or register a global role name.
+```sh
+agentvoice server --role ~/.local/share/agentstart/resources/roles/manager
+agentvoice server --role ~/.local/share/agentstart/resources/roles/worker
+```
 
-The default role's `APPEND_SYSTEM_PROMPT.md` carries a common working doctrine
-for answers, research, artifacts, software, and tool actions. The lead owns the
-intended outcome, proportionate verification, authorized delivery, and retained
-work across follow-ups. It chooses direct or delegated execution for any task,
-including implementation, by correctness, handoff costs, useful parallelism,
-and the current exchange. Explicit session context and human preferences govern
-presentation; a typed message does not change a voice call's identity. See
-[ADR 0047](docs/adr/0047-adaptive-work-execution.md) and
-[ADR 0048](docs/adr/0048-universal-working-doctrine.md).
-
-Each shipped role's `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md` supplies the native
-mode needed for its proactive delegation and supported model/effort choices.
-The append alone cannot replace Codex's later mode message. Another role without
-that file keeps native delegation policy. See the
-[audit](docs/delegation-policy-audit.md) and
-[ADR 0031](docs/adr/0031-role-owned-delegation.md). The stock base prompt and
-binary stay intact. The general doctrine is suitable for reuse across working
-surfaces; this source change does not deploy it to standalone TUIs or change
-global configuration. AgentVoice mailbox wake-ups remain conditional on the
-actual call runtime.
-
-Every child assignment gets a deliberate model, effort, context fork and
-semantic name. Current native capabilities govern choices; dated model evidence
-lives in the [routing reference](docs/subagent-model-routing.md). Spark worker
-routing remains outside the current Codex-led role's scope. Quota is unknown
-without a fresh, account-correlated observation; no quota feed or account
-switching is added.
-
-Hold and mute silence conversation while all feasible authorized work continues.
-Questions requiring the human and human-facing completion announcements wait for
-explicit resumption; internal child returns continue. A small
-`VOICE_AGENT_APPEND_SYSTEM_PROMPT.md`, shared by the shipped roles, carries that same
-boundary to the speech model, leaving its stock base intact. This uses the
-existing voice-append startup-context slot described below; explicitly competing
-startup-context settings fail validation rather than being overwritten. These
-source files load on a later call or authorized runtime replacement and do not
-migrate existing workspace role snapshots or change a live call.
+No role is selected when `--role` and the config's `role` key are absent.
+See [external working roles](roles/README.md) and
+[ADR 0051](docs/adr/0051-agentstart-owns-working-roles.md) for ownership.
+AgentVoice applies the selected directory through these generic conventions:
 
 | Role file | Effect in AgentVoice |
 | --- | --- |

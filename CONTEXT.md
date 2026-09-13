@@ -175,7 +175,7 @@ VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md, VOICE_ORCHESTRATOR_SESSION_START.md,
 VOICE_ORCHESTRATOR_SESSION_END.md), each one
 native Codex control. Absent sends nothing; an empty file sends an empty string;
 an override and an append for the same agent cannot coexist. Former names only
-trigger warnings. The explicitly selected default role carries its own mode
+trigger warnings. The explicitly selected AgentStart manager role carries its own mode
 and append. _Avoid_: prompt-files
 (retired config key), seed files.
 

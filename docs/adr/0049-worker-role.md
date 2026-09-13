@@ -1,5 +1,9 @@
 # 0049: Add a worker role with bounded assignment ownership
 
+Source ownership and naming superseded by [ADR 0051](0051-agentstart-owns-working-roles.md):
+AgentStart owns `manager` (formerly `default`) and `worker`. Responsibility
+and native runtime boundaries below remain in effect.
+
 Accepted September 12, 2026. Extends
 [ADR 0048](0048-universal-working-doctrine.md) with one new role, `worker`.
 The existing `default` remains the manager role; no separate manager role is

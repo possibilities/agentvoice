@@ -63,6 +63,8 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0049: Add a worker role with bounded assignment ownership](0049-worker-role.md) | Accepted | Existing default remains manager; one explicit worker role, parent-or-human return ownership, useful bounded delegation, and runtime-qualified completion. |
 | [0050: Correlate native TUI hook trust to its current inventory](0050-correlated-native-hook-trust.md) | Recorded | Only listed untrusted/modified key-hash pairs may cross the attachment's persistent config-write boundary. |
 
+| [0051: AgentStart owns manager and worker roles](0051-agentstart-owns-working-roles.md) | Accepted | Supersedes 0049's source ownership and default name. |
+
 ## Identifier history
 
 Corrected 2026-09-08. Each old filename below identifies one specific record;

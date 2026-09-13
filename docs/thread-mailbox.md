@@ -20,7 +20,7 @@ idle child threads and grandchildren are excluded. An incomplete inventory is
 explicitly qualified rather than presented as an exact count. The notification
 has no child names, task prompts, result summaries, output, or error bodies.
 The tool description explains automatic completion notices and opening. The
-default role's `APPEND_SYSTEM_PROMPT.md` explicitly tells the root to treat
+AgentStart manager role's `APPEND_SYSTEM_PROMPT.md` explicitly tells the root to treat
 successful direct-child dispatch as fire-and-forget: stay available to the human,
 keep assignments tracked, and process notices without blocking on wait tools or
 polling for completion. This covers new children and later turns on existing
@@ -33,7 +33,7 @@ are snapshots and are never cancelled or coalesced. An old notice can arrive
 after another opening has cleared those completions. An empty mailbox result is
 valid and creates no further wake-up. Native Codex continues delivering full
 child results independently, potentially after the wake notice has arrived.
-The default role reconciles entries and native results by child thread and turn,
+The manager role reconciles entries and native results by child thread and turn,
 silently ignoring already-processed completions to avoid repeating work or human
 updates, while still handling later substantive results and new child turns.
 
