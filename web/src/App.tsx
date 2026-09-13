@@ -1,5 +1,5 @@
 import { Transcript, TranscriptComposer } from "@agentchats/transcript/react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LiveView } from "./types.ts";
 
 const copy = {
@@ -11,6 +11,17 @@ const copy = {
 };
 
 export function App() {
+  const agentDock = useRef<HTMLDivElement>(null);
+  const [dockHeight, setDockHeight] = useState(0);
+  useLayoutEffect(() => {
+    const dock = agentDock.current;
+    if (!dock) return;
+    const measure = () => setDockHeight(dock.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, []);
   const [view, setView] = useState<LiveView>({
     phase: "connecting",
     id: "connecting",
@@ -66,69 +77,86 @@ export function App() {
     };
   }, []);
 
+  const holding =
+    view.phase === "connecting" ||
+    (view.phase === "live" && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
+    (view.phase !== "live" && view.agent.length === 0 && view.voice.length === 0);
+  const showStatus = holding || view.phase !== "live";
   return (
-    <main aria-label="AgentVoice live transcripts" className="dual-pane">
-      {(["agent", "voice"] as const).map((lane) => (
-        <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
-          <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
-          {view.phase !== "live" ? (
-            <p className="connection" role="status">
-              {copy[view.phase]}
-            </p>
-          ) : null}
-          <Transcript
-            transcriptId={`${view.id}:${lane}`}
-            messages={view[lane]}
-            // The first Agent history batch resets to the end; Voice and later refreshes keep their scroller.
-            loading={lane === "agent" && view.agentHistoryLoading}
-            detail="full"
-            showJumpToLatest
-            aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
-            header={
-              view[`${lane}Notice`] ? (
-                <p className="transcript-notice" role="status">
-                  {view[`${lane}Notice`]}
-                </p>
-              ) : null
-            }
-            empty={
-              view.phase === "live" && !view[`${lane}Notice`] ? (
-                <p className="transcript-notice">
-                  {lane === "voice" ? "Waiting for speech." : "Waiting for agent messages."}
-                </p>
-              ) : null
-            }
-          />
-          {lane === "agent" && view.agentControls ? (
-            <>
-              {view.agentControls.notice ? (
-                <p className="transcript-notice" role="status">
-                  {view.agentControls.notice}
-                </p>
+    <main aria-label="AgentVoice live transcripts" className="live-view">
+      {showStatus ? (
+        <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
+          {view.phase === "live" || view.phase === "connecting"
+            ? "Loading conversation…"
+            : copy[view.phase]}
+        </p>
+      ) : null}
+      <div className="dual-pane" hidden={!!holding}>
+        {(["agent", "voice"] as const).map((lane) => (
+          <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
+            <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
+            <Transcript
+              transcriptId={`${view.id}:${lane}`}
+              messages={view[lane]}
+              // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
+              loading={!!holding}
+              detail="full"
+              showJumpToLatest
+              aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
+              header={
+                view[`${lane}Notice`] ? (
+                  <p className="transcript-notice" role="status">
+                    {view[`${lane}Notice`]}
+                  </p>
+                ) : null
+              }
+              empty={
+                view.phase === "live" && !view[`${lane}Notice`] ? (
+                  <p className="transcript-notice">
+                    {lane === "voice" ? "Waiting for speech." : "Waiting for agent messages."}
+                  </p>
+                ) : null
+              }
+            />
+            <div
+              ref={lane === "agent" ? agentDock : undefined}
+              className={lane === "agent" ? "agent-dock" : "voice-dock"}
+              style={lane === "voice" ? { height: dockHeight } : undefined}
+              aria-hidden={lane === "voice" ? true : undefined}
+              hidden={lane === "voice" && dockHeight === 0}
+            >
+              {lane === "agent" && view.agentControls ? (
+                <>
+                  {view.agentControls.notice ? (
+                    <p className="transcript-notice" role="status">
+                      {view.agentControls.notice}
+                    </p>
+                  ) : null}
+                  <TranscriptComposer
+                    transcriptId={view.id}
+                    active={view.agentControls.active}
+                    pending={view.agentControls.pending}
+                    stopping={view.agentControls.stopping}
+                    disabled={view.phase !== "live" || !view.agentControls.available}
+                    aria-label="Message Agent"
+                    placeholder="Message Agent…"
+                    queue={view.agentControls.queue}
+                    onSend={(text) => agentCommand({ action: "send", text })}
+                    onSteer={(text) => agentCommand({ action: "steer", text })}
+                    onQueue={(text) => agentCommand({ action: "queue", text })}
+                    onInterrupt={() => agentCommand({ action: "interrupt" })}
+                    onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
+                    onResumeQueued={(id) => agentCommand({ action: "resume", id })}
+                    onRemoveQueued={(id) => agentCommand({ action: "remove", id })}
+                    onEditQueued={(id, text) => agentCommand({ action: "edit", id, text })}
+                    onEditingQueuedChange={(id) => agentCommand({ action: "editing", id })}
+                  />
+                </>
               ) : null}
-              <TranscriptComposer
-                transcriptId={view.id}
-                active={view.agentControls.active}
-                pending={view.agentControls.pending}
-                stopping={view.agentControls.stopping}
-                disabled={view.phase !== "live" || !view.agentControls.available}
-                aria-label="Message Agent"
-                placeholder="Message Agent…"
-                queue={view.agentControls.queue}
-                onSend={(text) => agentCommand({ action: "send", text })}
-                onSteer={(text) => agentCommand({ action: "steer", text })}
-                onQueue={(text) => agentCommand({ action: "queue", text })}
-                onInterrupt={() => agentCommand({ action: "interrupt" })}
-                onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
-                onResumeQueued={(id) => agentCommand({ action: "resume", id })}
-                onRemoveQueued={(id) => agentCommand({ action: "remove", id })}
-                onEditQueued={(id, text) => agentCommand({ action: "edit", id, text })}
-                onEditingQueuedChange={(id) => agentCommand({ action: "editing", id })}
-              />
-            </>
-          ) : null}
-        </section>
-      ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </main>
   );
 }

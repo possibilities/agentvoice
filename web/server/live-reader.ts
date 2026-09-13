@@ -311,7 +311,7 @@ export class LiveReader {
         for (let count = 0; count < 32; count++) {
           const lines = this.tail.read();
           for (const line of lines) this.voice.accept(line, identity.threadId);
-          if (lines.length === 0) break;
+          if (lines.length === 0 && this.tail.initialHistoryLoaded) break;
         }
       } else voiceNotice = "Waiting for the voice transcript.";
     } catch {
@@ -330,6 +330,7 @@ export class LiveReader {
       voice: this.voice.messages(),
       agent: [...messages.values()].filter((message) => message !== undefined),
       agentHistoryLoading: this.loadedRevision === -1,
+      voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,
       agentControls: this.controls.view(),
       voiceNotice: voiceNotice ?? this.voice.notice,
       agentNotice:

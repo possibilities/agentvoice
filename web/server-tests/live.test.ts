@@ -78,6 +78,35 @@ test("initial history pages stay private while live Agent and Voice items keep u
   }
 });
 
+test("overall readiness waits for the initial Voice file across bounded read passes", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    for (let index = 0; index < 40; index++)
+      h.voice("voice.item.completed", {
+        item: {
+          type: "transcriptSegment",
+          id: `voice-${index}`,
+          realtimeSessionId: "rt",
+          role: "user",
+          text: "Speech ".repeat(9000),
+        },
+      });
+    await h.start();
+    const first = await reader.read();
+    expect(first.voiceHistoryLoading).toBe(true);
+    expect(first.voice.length).toBeLessThan(40);
+    const ready = await until(
+      reader,
+      (view) => view.phase === "live" && !view.voiceHistoryLoading && !view.agentHistoryLoading,
+    );
+    expect(ready.voice).toHaveLength(40);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("history refresh retains the published batch until all replacement pages arrive", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);

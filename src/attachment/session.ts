@@ -59,6 +59,7 @@ export type AttachmentFrame = z.infer<typeof attachmentFrameSchema>;
 /** One opened inode, complete bounded records only; never follow replacement files. */
 export class VoiceRecordingTail {
   private readonly fd: number;
+  private readonly initialSize: number;
   private readonly inode: number;
   private readonly device: number;
   private offset = 0;
@@ -82,6 +83,10 @@ export class VoiceRecordingTail {
     }
     this.inode = info.ino;
     this.device = info.dev;
+    this.initialSize = info.size;
+  }
+  get initialHistoryLoaded(): boolean {
+    return this.offset >= this.initialSize;
   }
   read(): string[] {
     const info = lstatSync(this.path);

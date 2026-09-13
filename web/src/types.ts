@@ -25,6 +25,7 @@ export type LiveView = {
   agent: TranscriptMessage[];
   /** True until the first complete or viewer-bounded history pass is published. */
   agentHistoryLoading?: boolean;
+  voiceHistoryLoading?: boolean;
   agentControls?: AgentControlsView;
   voiceNotice?: string;
   agentNotice?: string;

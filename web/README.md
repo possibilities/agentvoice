@@ -6,6 +6,8 @@ Two equal, full-height lanes put Agent on the left and Voice on the right. They 
 disclosures. There is no toolbar or call control.
 The Agent lane includes the shared text composer with Send, Steer, Queue and Stop;
 the Voice lane has no composer. Stop interrupts Agent work, not the voice call.
+A quiet lined dock below Voice tracks the Agent composer's height, keeping the
+two transcript viewports aligned as drafts and queued messages expand.
 Both lanes always watch, open at the latest message and follow new text. Scrolling
 up lets you read earlier text and shows the shared jump-to-latest chip with a count
 of new messages. Using the chip or scrolling back to the bottom resumes following.
@@ -73,11 +75,15 @@ times describe transcript receipt; they do not prove when speech was heard.
 
 The Agent lane uses event protocol 2: subscribe first, validate `state.get`, then
 read `conversation.live.get` and page `conversation.items.list` newest first.
+First open shows one centered loading notice. Both panes remain hidden until the
+initial Agent history pass and the Voice file present at attachment are loaded,
+then appear together at the latest messages. Missing/unavailable Voice history
+uses its visible notice instead of holding the view indefinitely.
 Native history loads in the background, one bounded page per read, merged by turn
 and item ID. Pages accumulate privately until the pass finishes or reaches the
-viewer limit, then publish together. While the first pass loads, live items and a
-single loading notice remain visible; its publication resets only the Agent lane
-to the end without animated scrolling. Later refreshes retain the published history
+viewer limit, then publish together. The API continues to collect live items while
+the centered loading state holds the initial view. Both lanes open at the end
+without animated scrolling. Later refreshes retain the published history
 until their replacement is ready. Complete live projection items replace overlapping history; partial
 live text cannot overwrite canonical history. Completion, gap and revert events
 invalidate history; reverted content is cleared. A reconnect loads a new exact
