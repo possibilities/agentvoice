@@ -79,11 +79,14 @@ First open shows one centered loading notice. Both panes remain hidden until the
 initial Agent history pass and the Voice file present at attachment are loaded,
 then appear together at the latest messages. Missing/unavailable Voice history
 uses its visible notice instead of holding the view indefinitely.
-Native history loads in the background, one bounded page per read, merged by turn
+Native history loads continuously in the background, one bounded request at a time, merged by turn
 and item ID. Pages accumulate privately until the pass finishes or reaches the
 viewer limit, then publish together. The API continues to collect live items while
 the centered loading state holds the initial view. Both lanes open at the end
-without animated scrolling. Later refreshes retain the published history
+without animated scrolling. Initial Agent loading has a five-second budget: a
+slow or failed pass publishes the available batch once and reveals the view with
+a notice. Retries run in the background after a delay, never reopening the centered
+loader. Later refreshes retain the published history
 until their replacement is ready. Complete live projection items replace overlapping history; partial
 live text cannot overwrite canonical history. Completion, gap and revert events
 invalidate history; reverted content is cleared. A reconnect loads a new exact
@@ -93,6 +96,15 @@ items / 8 MiB with a visible notice. Unknown times are omitted. Native reasoning
 stays hidden, matching the shared transcript renderer. This view neither reads
 Codex databases directly nor resumes threads, answers approvals,
 loads launch configuration, starts media or changes server protocols.
+
+Canonical realtime delegation envelopes use the shared Codex presentation helper:
+the delegated input appears as “Via Voice”, with optional Voice context and an
+Original message disclosure. Session endings display as context handoffs. Unknown,
+malformed or mixed envelopes retain their ordinary presentation; original content
+is never rewritten. Column width, responsive padding and message spacing come
+from the shared package, including in the two narrow lanes.
+Version 0.3.1 supplies the larger monospaced console theme, compact spacing and
+composer focus treatment.
 
 ## Agent input
 
@@ -106,6 +118,7 @@ text. No native endpoint, token, method selector or thread selector reaches the 
 
 Idle input sends immediately. While Agent works, the shared desktop-style mode
 menu defaults to Steer; Queue saves a FIFO follow-up for the next idle turn.
+Native completion dispatches queued input even when the browser stops polling.
 Rows support Steer, Edit and Remove. Editing holds the row until the awaited
 save/cancel handshake releases it. Stop pauses queued work and remains stopping
 until the native terminal event. Resume explicitly releases paused rows.

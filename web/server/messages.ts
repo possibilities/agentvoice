@@ -1,4 +1,5 @@
 import type { TranscriptMessage } from "@agentchats/transcript";
+import { parseCodexMessagePresentation } from "@agentchats/transcript/codex";
 import type { z } from "zod";
 import type { conversationItemSchema } from "../../src/events/conversation.ts";
 import { recordedVoiceFrame } from "../../src/recording/writer.ts";
@@ -17,7 +18,7 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
         return `[${part.type === "image" || part.type === "localImage" ? "Image" : "Audio"}]`;
       })
       .join("\n\n");
-    return { ...base, role: "user", content };
+    return { ...base, role: "user", content, presentation: parseCodexMessagePresentation(content) };
   }
   if (item.type === "agentMessage") return { ...base, role: "assistant", content: item.text };
   if (item.type === "reasoning") return;

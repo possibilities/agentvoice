@@ -22,6 +22,7 @@ export function App() {
     observer.observe(dock);
     return () => observer.disconnect();
   }, []);
+  const [readRevision, setReadRevision] = useState(0);
   const [view, setView] = useState<LiveView>({
     phase: "connecting",
     id: "connecting",
@@ -44,7 +45,9 @@ export function App() {
       const body = await response.json().catch(() => undefined);
       throw new Error(body?.error ?? "Agent request failed. Check the current call.");
     }
+    setReadRevision((revision) => revision + 1);
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Acknowledged commands restart polling immediately to refresh native controls.
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -75,7 +78,7 @@ export function App() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, []);
+  }, [readRevision]);
 
   const holding =
     view.phase === "connecting" ||

@@ -91,8 +91,8 @@ async function agentFixture() {
       hold = true;
     },
     answer: () => answer(),
-    complete: () => {
-      if (turn) turn = { ...turn, status: "interrupted" };
+    complete: (status: "completed" | "interrupted" = "interrupted") => {
+      if (turn) turn = { ...turn, status };
       update();
       h.feed.conversation({
         event: "conversation.turn.completed",
@@ -142,6 +142,27 @@ test("web Agent commands reach the exact native thread through the real attachme
     expect(
       h.calls.some((call) => /account|thread\/start|thread\/resume|realtime/.test(call.method)),
     ).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("queued input dispatches on native completion without browser polling", async () => {
+  const h = await agentFixture();
+  try {
+    const view = await h.reader.read();
+    const command = (fields: object) =>
+      agentCommandSchema.parse({ viewId: view.id, requestId: randomUUID(), ...fields });
+    await h.reader.agentCommand(command({ action: "send", text: "First turn" }));
+    await h.reader.agentCommand(command({ action: "queue", text: "After this" }));
+    h.complete("completed");
+    for (
+      let n = 0;
+      n < 200 && h.calls.filter((call) => call.method === "turn/start").length < 2;
+      n++
+    )
+      await Bun.sleep(5);
+    expect(h.calls.filter((call) => call.method === "turn/start")).toHaveLength(2);
   } finally {
     await h.close();
   }

@@ -88,15 +88,8 @@ body,
   font-size: 13px;
   line-height: 1.7;
 }
-.lane .chat-transcript {
-  padding: 24px 40px 48px;
-}
 @media (max-width: 700px) {
   .lane > h1 {
     padding: 20px 16px 8px;
-  }
-  .lane .chat-transcript {
-    padding: 24px 16px 32px;
-    gap: 32px;
   }
 }

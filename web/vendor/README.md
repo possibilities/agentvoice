@@ -1,8 +1,8 @@
-# @agentchats/transcript 0.2.0
+# @agentchats/transcript 0.3.1
 
-Packed from [agentchats main b77c32c](https://github.com/possibilities/agentchats/commit/b77c32c434e4),
+Packed from [agentchats main e6bea54](https://github.com/possibilities/agentchats/commit/e6bea54),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
-Two first-consumer fixes landed upstream:
+Consumer fixes and shared features landed upstream:
 
 - `94e45fc`: optional message timestamps; unknown native times render without a clock.
 - `40ac3f3`: scoped transcript root flex sizing in a column host, with overflow/follow regression coverage.
@@ -10,6 +10,10 @@ Two first-consumer fixes landed upstream:
   and supplies the shared jump-to-latest chip; corrects packaged transcript canvas styling.
 - `b77c32c`: standalone Agent composer with queue/steer/interrupt affordances and awaited
   queue editing; omits the follow chip in empty and non-overflowing transcripts.
+- `2eb84b4`: readable Codex voice handoffs with original-content disclosures, wider
+  columns and tighter spacing, complete tool details, and composer label/focus polish.
+- `e6bea54`: larger monospaced reading and composer text, an 80ch prose cap inside
+  the 1120px outer column, compact gaps and at least 44px composer touch controls.
 
 Reproduce from that clean agentchats revision:
 

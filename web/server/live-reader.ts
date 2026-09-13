@@ -11,6 +11,7 @@ import { ControlSocket } from "../../src/ipc/control-client.ts";
 import { savedRecordings } from "../../src/recording/store.ts";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, AgentControls } from "./agent-controls.ts";
+import { sendAgentOperation } from "./agent-sender.ts";
 import { type AgentItem, agentMessage, itemKey, VoiceMessages } from "./messages.ts";
 
 const liveSchema = liveSnapshotSchema.extend({ instanceId: z.string(), generation: z.number() });
@@ -33,7 +34,7 @@ type Identity = {
 };
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
 
-/** One shared read-only adapter. The browser can neither choose sockets nor submit RPC methods. */
+/** Shared default-call adapter. The browser can neither choose sockets nor submit RPC methods. */
 export class LiveReader {
   private observer?: Observer;
   private eventClient?: ControlSocket;
@@ -45,6 +46,9 @@ export class LiveReader {
   private pass?: HistoryPass;
   private historyRevision = 0;
   private loadedRevision = -1;
+  private initialHistorySettled = false;
+  private historyTimer?: ReturnType<typeof setTimeout>;
+  private historyRetryAt = 0;
   private historyPending = false;
   private historyNotice?: string;
   private closed = false;
@@ -53,8 +57,18 @@ export class LiveReader {
   private readAt = 0;
   private readonly controls: AgentControls;
 
-  constructor(private readonly stateDir: string) {
-    this.controls = new AgentControls(stateDir);
+  constructor(
+    private readonly stateDir: string,
+    private readonly initialHistoryBudgetMs = 5_000,
+  ) {
+    this.controls = new AgentControls(stateDir, (target, operation, current) =>
+      sendAgentOperation(
+        stateDir,
+        target,
+        operation,
+        () => current() && !!this.identity && this.current(this.identity),
+      ),
+    );
   }
 
   async agentCommand(command: AgentCommand) {
@@ -99,6 +113,10 @@ export class LiveReader {
     this.pass = undefined;
     this.historyRevision = 0;
     this.loadedRevision = -1;
+    this.initialHistorySettled = false;
+    clearTimeout(this.historyTimer);
+    this.historyTimer = undefined;
+    this.historyRetryAt = 0;
     this.historyPending = false;
     this.historyNotice = undefined;
   }
@@ -204,8 +222,11 @@ export class LiveReader {
             frame["event"] === "conversation.turn.completed"
           ) {
             const turn = conversationTurnSchema.safeParse(data?.["turn"]);
-            if (turn.success && typeof data?.["sequence"] === "number")
+            if (turn.success && typeof data?.["sequence"] === "number") {
               this.controls.observe(turn.data, true, data["sequence"]);
+              // Queued input belongs to the host and still runs when the page stops polling.
+              if (frame["event"] === "conversation.turn.completed") void this.controls.drain();
+            }
           }
           if (
             [
@@ -329,7 +350,7 @@ export class LiveReader {
       id: this.viewId,
       voice: this.voice.messages(),
       agent: [...messages.values()].filter((message) => message !== undefined),
-      agentHistoryLoading: this.loadedRevision === -1,
+      agentHistoryLoading: !this.initialHistorySettled,
       voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,
       agentControls: this.controls.view(),
       voiceNotice: voiceNotice ?? this.voice.notice,
@@ -346,11 +367,26 @@ export class LiveReader {
     client: ControlSocket,
     params: Record<string, unknown>,
   ) {
-    if (this.historyPending || this.loadedRevision === this.historyRevision) return;
-    this.pass ??= { rows: [], bytes: 0, revision: this.historyRevision };
+    if (
+      this.historyPending ||
+      Date.now() < this.historyRetryAt ||
+      (this.loadedRevision === this.historyRevision && this.historyRetryAt === 0)
+    )
+      return;
+    if (!this.pass) {
+      this.pass = { rows: [], bytes: 0, revision: this.historyRevision };
+      if (!this.initialHistorySettled) {
+        const initial = this.pass;
+        this.historyTimer = setTimeout(() => {
+          if (!this.current(identity) || this.pass !== initial) return;
+          this.publishHistory(initial, "Showing recent messages while earlier history loads.");
+          this.historyRetryAt = Date.now() + 5_000;
+        }, this.initialHistoryBudgetMs);
+      }
+    }
     const pass = this.pass;
     this.historyPending = true;
-    this.historyNotice = "Loading earlier messages…";
+    if (!this.initialHistorySettled) this.historyNotice = "Loading earlier messages…";
     void client
       .request("conversation.items.list", {
         ...params,
@@ -378,18 +414,37 @@ export class LiveReader {
             : undefined;
         if (!page.nextCursor || bounded) {
           // Keep incomplete passes private: prepending every page makes the following scroller walk.
-          this.history = pass.rows.reverse();
-          this.loadedRevision = pass.revision;
-          this.pass = undefined;
+          this.publishHistory(pass, this.historyNotice);
         } else pass.cursor = page.nextCursor;
       })
       .catch(() => {
-        if (!this.current(identity)) return;
-        this.pass = undefined;
-        this.historyNotice = "Agent history unavailable. Retrying…";
+        if (!this.current(identity) || this.pass !== pass) return;
+        const notice = "Earlier Agent history is unavailable. Retrying in the background.";
+        if (!this.initialHistorySettled) this.publishHistory(pass, notice);
+        else {
+          this.pass = undefined;
+          this.historyNotice = notice;
+        }
+        this.historyRetryAt = Date.now() + 5_000;
       })
       .finally(() => {
-        if (this.current(identity)) this.historyPending = false;
+        if (this.current(identity)) {
+          this.historyPending = false;
+          // Paging is a host task, not one page per browser poll.
+          if (this.pass === pass) this.loadHistoryPage(identity, client, params);
+        }
       });
+  }
+
+  private publishHistory(pass: HistoryPass, notice?: string) {
+    this.history = [...pass.rows].reverse();
+    this.loadedRevision = pass.revision;
+    this.initialHistorySettled = true;
+    this.historyNotice = notice;
+    this.historyRetryAt = 0;
+    this.pass = undefined;
+    clearTimeout(this.historyTimer);
+    this.historyTimer = undefined;
+    this.readAt = 0;
   }
 }

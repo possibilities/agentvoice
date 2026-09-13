@@ -78,6 +78,67 @@ test("initial history pages stay private while live Agent and Voice items keep u
   }
 });
 
+test("initial history pages finish without waiting for further browser polls", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history(Array.from({ length: 9 }, (_, i) => user(`row-${i}`, `History ${i}`)));
+    await h.start();
+    await reader.read();
+    for (
+      let n = 0;
+      n < 100 && h.methods.filter((method) => method === "conversation.items.list").length < 5;
+      n++
+    )
+      await Bun.sleep(5);
+    expect(h.methods.filter((method) => method === "conversation.items.list")).toHaveLength(5);
+    const ready = await until(reader, (view) => !view.agentHistoryLoading);
+    expect(ready.agent).toHaveLength(9);
+    expect(ready.agentNotice).toBeUndefined();
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("a slow first history reply cannot hold the centered loader forever", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir, 50);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.delayHistory(delayed.promise);
+    await h.start();
+    expect((await reader.read()).agentHistoryLoading).toBe(true);
+    const ready = await until(reader, (view) => !view.agentHistoryLoading);
+    expect(ready.agentNotice).toContain("Showing recent messages");
+    delayed.resolve();
+    await Bun.sleep(30);
+    expect((await reader.read()).agentHistoryLoading).toBe(false);
+  } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+});
+
+test("failed initial history releases readiness with a notice and no immediate retry loop", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.delayHistory(delayed.promise);
+    await h.start();
+    await reader.read();
+    delayed.reject(new Error("History unavailable"));
+    const ready = await until(reader, (view) => !view.agentHistoryLoading);
+    expect(ready.agentNotice).toContain("unavailable");
+    expect(h.methods.filter((method) => method === "conversation.items.list")).toHaveLength(1);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("overall readiness waits for the initial Voice file across bounded read passes", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);

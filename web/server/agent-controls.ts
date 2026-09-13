@@ -84,7 +84,8 @@ export class AgentControls {
       if (
         !info.isFile() ||
         info.isSymbolicLink() ||
-        info.size > 2 * 1024 * 1024 ||
+        // JSON escaping can expand the bounded 20 × 64 KiB text queue sixfold.
+        info.size > 8 * 1024 * 1024 ||
         (info.mode & 0o077) !== 0 ||
         info.uid !== process.getuid?.()
       )
