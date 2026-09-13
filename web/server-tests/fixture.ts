@@ -20,7 +20,7 @@ import { VoiceServer } from "../../src/frontend/server.ts";
 import { recordingDirectory } from "../../src/recording/store.ts";
 import type { AgentItem } from "../server/messages.ts";
 
-export async function fixture() {
+export async function fixture(attachment?: (value: unknown) => Promise<unknown>) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-web-")));
   const stateDir = join(root, "agentvoice");
   const instanceId = randomUUID();
@@ -39,6 +39,7 @@ export async function fixture() {
   const control = await startControlServer({
     stateDir,
     instanceId,
+    attachment,
     backend: {
       status: () => ({
         protocolVersion: CONTROL_PROTOCOL_VERSION,

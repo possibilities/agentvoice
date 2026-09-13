@@ -25,8 +25,14 @@ export async function acquireAttachment(
   workspace: string,
   threadId?: string,
   expected?: z.infer<typeof attachmentTargetSchema>,
+  controlProtocolVersion?: 5 | 6,
 ) {
-  const { descriptor, status } = await discoverControllerStatus(stateDir, workspace, threadId);
+  const { descriptor, status } = await discoverControllerStatus(
+    stateDir,
+    workspace,
+    threadId,
+    controlProtocolVersion,
+  );
   const target = attachmentTargetSchema.parse({
     instanceId: status.instanceId,
     generation: status.generation,

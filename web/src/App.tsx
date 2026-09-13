@@ -1,4 +1,4 @@
-import { Transcript } from "@agentchats/transcript/react";
+import { Transcript, TranscriptComposer } from "@agentchats/transcript/react";
 import { useEffect, useState } from "react";
 import type { LiveView } from "./types.ts";
 
@@ -17,6 +17,23 @@ export function App() {
     voice: [],
     agent: [],
   });
+  const agentCommand = async (fields: object) => {
+    let response: Response;
+    try {
+      response = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ viewId: view.id, requestId: crypto.randomUUID(), ...fields }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new Error("Delivery is unknown. Check the transcript and queue before trying again.");
+    }
+    if (!response.ok) {
+      const body = await response.json().catch(() => undefined);
+      throw new Error(body?.error ?? "Agent request failed. Check the current call.");
+    }
+  };
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -65,7 +82,7 @@ export function App() {
             // The first Agent history batch resets to the end; Voice and later refreshes keep their scroller.
             loading={lane === "agent" && view.agentHistoryLoading}
             detail="full"
-            showJumpToLatest={view.phase === "live" && view[lane].length > 0}
+            showJumpToLatest
             aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
             header={
               view[`${lane}Notice`] ? (
@@ -82,6 +99,34 @@ export function App() {
               ) : null
             }
           />
+          {lane === "agent" && view.agentControls ? (
+            <>
+              {view.agentControls.notice ? (
+                <p className="transcript-notice" role="status">
+                  {view.agentControls.notice}
+                </p>
+              ) : null}
+              <TranscriptComposer
+                transcriptId={view.id}
+                active={view.agentControls.active}
+                pending={view.agentControls.pending}
+                stopping={view.agentControls.stopping}
+                disabled={view.phase !== "live" || !view.agentControls.available}
+                aria-label="Message Agent"
+                placeholder="Message Agent…"
+                queue={view.agentControls.queue}
+                onSend={(text) => agentCommand({ action: "send", text })}
+                onSteer={(text) => agentCommand({ action: "steer", text })}
+                onQueue={(text) => agentCommand({ action: "queue", text })}
+                onInterrupt={() => agentCommand({ action: "interrupt" })}
+                onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
+                onResumeQueued={(id) => agentCommand({ action: "resume", id })}
+                onRemoveQueued={(id) => agentCommand({ action: "remove", id })}
+                onEditQueued={(id, text) => agentCommand({ action: "edit", id, text })}
+                onEditingQueuedChange={(id) => agentCommand({ action: "editing", id })}
+              />
+            </>
+          ) : null}
         </section>
       ))}
     </main>

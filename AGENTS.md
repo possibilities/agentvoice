@@ -259,7 +259,7 @@ the [field guide](docs/field-guide.md) retains the underlying audit evidence.
 - Apply the [configuration and prompt rules](docs/native-defaults.md#configuration-and-prompt-rules)
   before changing any native settings, role or prompt path.
 - No AgentVoice worker execution tools, registry, archival or result reports.
-  Custom turn submission is limited to explicit MCP/API restart handoffs ([ADR 0016](docs/adr/0016-restart-handoff.md)) and immediate metadata-mailbox tally wake-ups ([ADR 0038](docs/adr/0038-thread-mailbox-wakeups.md)). For handoffs, submit once
+  Automated custom turn submission is limited to explicit MCP/API restart handoffs ([ADR 0016](docs/adr/0016-restart-handoff.md)) and immediate metadata-mailbox tally wake-ups ([ADR 0038](docs/adr/0038-thread-mailbox-wakeups.md)). Explicit human Agent composer input uses the exact-thread attachment gateway; see [web input](docs/web-agent-input.md). For handoffs, submit once
   after exact identity and live media checks; never retry ambiguous acceptance,
   echo the private prompt in status/errors or change prompt defaults.
   Native Codex tools, subagents and voice handoffs stay native.

@@ -3,17 +3,22 @@ import { z } from "zod";
 import { observeAttachmentServer, VoiceRecordingTail } from "../../src/attachment/session.ts";
 import { discoverControllerStatus } from "../../src/control/discovery.ts";
 import { EVENT_PROTOCOL_VERSION } from "../../src/events/contract.ts";
-import { readResultSchema } from "../../src/events/conversation.ts";
+import { conversationTurnSchema, readResultSchema } from "../../src/events/conversation.ts";
 import { liveSnapshotSchema } from "../../src/events/conversation-projection.ts";
 import { eventSnapshotSchema } from "../../src/events/schema.ts";
 import { eventSocketPath } from "../../src/events/socket.ts";
 import { ControlSocket } from "../../src/ipc/control-client.ts";
 import { savedRecordings } from "../../src/recording/store.ts";
 import type { LiveView } from "../src/types.ts";
+import { type AgentCommand, AgentControls } from "./agent-controls.ts";
 import { type AgentItem, agentMessage, itemKey, VoiceMessages } from "./messages.ts";
 
 const liveSchema = liveSnapshotSchema.extend({ instanceId: z.string(), generation: z.number() });
 const historySchema = readResultSchema.options[4]!.extend({
+  instanceId: z.string(),
+  generation: z.number(),
+});
+const turnsSchema = readResultSchema.options[3]!.extend({
   instanceId: z.string(),
   generation: z.number(),
 });
@@ -46,8 +51,19 @@ export class LiveReader {
   private pending?: Promise<LiveView>;
   private cached = empty("connecting");
   private readAt = 0;
+  private readonly controls: AgentControls;
 
-  constructor(private readonly stateDir: string) {}
+  constructor(private readonly stateDir: string) {
+    this.controls = new AgentControls(stateDir);
+  }
+
+  async agentCommand(command: AgentCommand) {
+    await this.read();
+    if (!this.identity || !this.current(this.identity))
+      throw new Error("The call changed. Nothing was sent.");
+    await this.controls.command(command);
+    this.readAt = 0;
+  }
 
   read(): Promise<LiveView> {
     if (this.closed) return Promise.resolve(empty("offline"));
@@ -72,6 +88,7 @@ export class LiveReader {
   }
 
   private resetCall() {
+    this.controls.disconnect();
     this.eventClient?.close();
     this.eventClient = undefined;
     this.identity = undefined;
@@ -165,6 +182,11 @@ export class LiveReader {
       };
       this.identity = identity;
       this.viewId = randomUUID();
+      this.controls.bind({
+        ...identity,
+        viewId: this.viewId,
+        controlProtocolVersion: selected.status.protocolVersion === 5 ? 5 : 6,
+      });
       const client = await ControlSocket.connect(
         eventSocketPath(this.stateDir, identity.instanceId),
         EVENT_PROTOCOL_VERSION,
@@ -177,6 +199,14 @@ export class LiveReader {
           )
             return;
           if (data?.["threadId"] != null && data["threadId"] !== identity.threadId) return;
+          if (
+            frame["event"] === "conversation.turn.started" ||
+            frame["event"] === "conversation.turn.completed"
+          ) {
+            const turn = conversationTurnSchema.safeParse(data?.["turn"]);
+            if (turn.success && typeof data?.["sequence"] === "number")
+              this.controls.observe(turn.data, true, data["sequence"]);
+          }
           if (
             [
               "conversation.item.completed",
@@ -217,6 +247,12 @@ export class LiveReader {
       this.resetCall();
       return empty("connecting");
     }
+    const root = before.threads.find((thread) => thread.id === identity.threadId);
+    this.controls.observe(
+      root?.turn ?? undefined,
+      root?.status === "idle" || (root?.status === "active" && root.turn?.status === "inProgress"),
+      before.sequence,
+    );
     const params = {
       expectedInstanceId: identity.instanceId,
       expectedGeneration: identity.generation,
@@ -233,6 +269,28 @@ export class LiveReader {
     ) {
       this.resetCall();
       return empty("connecting");
+    }
+    if (root?.status === "active" && !root.turn) {
+      try {
+        const turns = turnsSchema.parse(
+          await client.request("conversation.turns.list", {
+            ...params,
+            limit: 1,
+            sortDirection: "desc",
+          }),
+        );
+        if (
+          turns.instanceId === identity.instanceId &&
+          turns.generation === identity.generation &&
+          turns.threadId === identity.threadId &&
+          turns.rootThreadId === identity.threadId &&
+          this.current(identity)
+        ) {
+          this.controls.observe(turns.data[0], true, live.throughSequence);
+        }
+      } catch {
+        /* Transcript reads remain available while the active turn cannot be confirmed. */
+      }
     }
     const messages = new Map(this.history.map((entry) => [itemKey(entry), agentMessage(entry)]));
     for (const entry of live.items) {
@@ -265,12 +323,14 @@ export class LiveReader {
       this.resetCall();
       return empty("connecting");
     }
+    void this.controls.drain();
     return {
       phase: "live",
       id: this.viewId,
       voice: this.voice.messages(),
       agent: [...messages.values()].filter((message) => message !== undefined),
       agentHistoryLoading: this.loadedRevision === -1,
+      agentControls: this.controls.view(),
       voiceNotice: voiceNotice ?? this.voice.notice,
       agentNotice:
         this.historyNotice ??

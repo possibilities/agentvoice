@@ -1,0 +1,229 @@
+import { expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type AgentCommand, AgentControls, agentCommandSchema } from "../server/agent-controls.ts";
+import { type AgentOperation, AgentSendError } from "../server/agent-sender.ts";
+
+function setup() {
+  const directory = mkdtempSync(join(tmpdir(), "av-web-input-"));
+  const target = {
+    viewId: randomUUID(),
+    instanceId: randomUUID(),
+    generation: 1,
+    workspace: directory,
+    threadId: "main",
+    controlProtocolVersion: 6 as const,
+  };
+  const operations: AgentOperation[] = [];
+  let outcome: () => Promise<string | undefined> = async () => "accepted-turn";
+  const controls = new AgentControls(directory, async (_target, operation, current) => {
+    expect(current()).toBe(true);
+    operations.push(operation);
+    return outcome();
+  });
+  controls.bind(target);
+  controls.observe(undefined, true, 1);
+  return {
+    directory,
+    target,
+    operations,
+    controls,
+    command: (value: object): AgentCommand =>
+      agentCommandSchema.parse({ viewId: target.viewId, requestId: randomUUID(), ...value }),
+    outcome: (value: typeof outcome) => {
+      outcome = value;
+    },
+    close: () => rmSync(directory, { recursive: true, force: true }),
+  };
+}
+
+test("send, steer and queue have distinct native semantics; a duplicate request submits once", async () => {
+  const h = setup();
+  try {
+    const send = h.command({ action: "send", text: "First\nmessage" });
+    await Promise.all([h.controls.command(send), h.controls.command(send)]);
+    expect(h.operations).toEqual([{ action: "send", text: "First\nmessage" }]);
+    expect(h.controls.view().active).toBe(true);
+    h.controls.observe(undefined, true, 1);
+    expect(h.controls.view().active).toBe(true);
+    await expect(
+      h.controls.command(h.command({ action: "send", text: "Wrong mode" })),
+    ).rejects.toThrow("Steer or Queue");
+    await h.controls.command(h.command({ action: "queue", text: "After completion" }));
+    await h.controls.drain();
+    expect(h.operations).toHaveLength(1);
+    await h.controls.command(h.command({ action: "steer", text: "Adjust this turn" }));
+    expect(h.operations[1]).toEqual({
+      action: "steer",
+      text: "Adjust this turn",
+      turnId: "accepted-turn",
+    });
+    h.controls.observe({ id: "accepted-turn", status: "completed" }, true, 5);
+    await h.controls.drain();
+    expect(h.operations[2]).toEqual({ action: "send", text: "After completion" });
+    expect(h.controls.view().queue).toEqual([]);
+  } finally {
+    h.close();
+  }
+});
+
+test("Stop pauses queued messages, waits for terminal observation, and requires explicit resume", async () => {
+  const h = setup();
+  try {
+    h.controls.observe({ id: "busy", status: "inProgress" }, true, 2);
+    await h.controls.command(h.command({ action: "queue", text: "Later" }));
+    h.outcome(async () => undefined);
+    await h.controls.command(h.command({ action: "interrupt" }));
+    expect(h.operations).toEqual([{ action: "interrupt", turnId: "busy" }]);
+    expect(h.controls.view().stopping).toBe(true);
+    h.controls.observe({ id: "busy", status: "interrupted" }, true, 4);
+    await h.controls.drain();
+    expect(h.operations).toHaveLength(1);
+    expect(h.controls.view().stopping).toBe(false);
+    const row = h.controls.view().queue[0]!;
+    expect(row.pausedReason).toContain("Stopped");
+    await h.controls.command(h.command({ action: "resume", id: row.id }));
+    h.controls.observe({ id: "busy", status: "interrupted" }, true, 4);
+    h.outcome(async () => "next");
+    await h.controls.drain();
+    expect(h.operations[1]).toEqual({ action: "send", text: "Later" });
+  } finally {
+    h.close();
+  }
+});
+
+test("queue editing holds the FIFO, preserves position, and can steer a selected row", async () => {
+  const h = setup();
+  try {
+    await h.controls.command(h.command({ action: "queue", text: "First queued" }));
+    await h.controls.command(h.command({ action: "queue", text: "Second queued" }));
+    const [first, second] = h.controls.view().queue;
+    await h.controls.command(h.command({ action: "editing", id: first!.id }));
+    await h.controls.drain();
+    expect(h.operations).toEqual([]);
+    await h.controls.command(h.command({ action: "edit", id: first!.id, text: "First edited" }));
+    await h.controls.drain();
+    expect(h.operations).toEqual([]);
+    await h.controls.command(h.command({ action: "editing", id: null }));
+    expect(h.controls.view().queue.map((row) => row.text)).toEqual([
+      "First edited",
+      "Second queued",
+    ]);
+    h.controls.observe({ id: "busy", status: "inProgress" }, true, 2);
+    await h.controls.command(h.command({ action: "steerQueued", id: second!.id }));
+    expect(h.operations).toEqual([{ action: "steer", turnId: "busy", text: "Second queued" }]);
+    expect(h.controls.view().queue.map((row) => row.id)).toEqual([first!.id]);
+    await h.controls.command(h.command({ action: "remove", id: first!.id }));
+    expect(h.controls.view().queue).toEqual([]);
+  } finally {
+    h.close();
+  }
+});
+
+test("repeated steering does not fence out the next terminal event", async () => {
+  const h = setup();
+  try {
+    h.controls.observe({ id: "busy", status: "inProgress" }, true, 2);
+    h.outcome(async () => "busy");
+    for (let n = 0; n < 4; n++)
+      await h.controls.command(h.command({ action: "steer", text: `Update ${n}` }));
+    h.controls.observe({ id: "busy", status: "completed" }, true, 3);
+    expect(h.controls.view().active).toBe(false);
+  } finally {
+    h.close();
+  }
+});
+
+test("late acceptance cannot activate a replacement call", async () => {
+  const h = setup();
+  try {
+    let accept!: (turn: string) => void;
+    h.outcome(
+      () =>
+        new Promise((resolve) => {
+          accept = resolve;
+        }),
+    );
+    const send = h.controls.command(h.command({ action: "send", text: "Old call" }));
+    h.controls.bind({ ...h.target, viewId: randomUUID(), generation: 2 });
+    h.controls.observe(undefined, true, 1);
+    accept("old-turn");
+    await send;
+    expect(h.controls.view().active).toBe(false);
+    expect(h.controls.view().pending).toBe(false);
+  } finally {
+    h.close();
+  }
+});
+
+test("lost acceptance pauses delivery permanently and survives a web-server restart without replay", async () => {
+  const h = setup();
+  try {
+    await h.controls.command(h.command({ action: "queue", text: "Possibly sent" }));
+    h.outcome(async () => {
+      throw new AgentSendError("Delivery is unknown. Check the transcript.", "unknown");
+    });
+    await h.controls.drain();
+    await h.controls.drain();
+    expect(h.operations).toHaveLength(1);
+    const row = h.controls.view().queue[0]!;
+    expect(row.canResume).toBe(false);
+    expect(row.canSteer).toBe(false);
+    await expect(h.controls.command(h.command({ action: "resume", id: row.id }))).rejects.toThrow(
+      "unknown",
+    );
+    const restarted = new AgentControls(h.directory, async () => {
+      throw new Error("Must not replay");
+    });
+    restarted.bind({ ...h.target, viewId: randomUUID() });
+    restarted.observe(undefined, true, 1);
+    await restarted.drain();
+    expect(restarted.view().queue[0]?.pausedReason).toContain("unknown");
+    const path = join(h.directory, "web/queued-messages.json");
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(readFileSync(path, "utf8")).toContain("Possibly sent");
+  } finally {
+    h.close();
+  }
+});
+
+test("replacement fences old commands and queues, and definitive failures preserve retryable text", async () => {
+  const h = setup();
+  try {
+    await h.controls.command(h.command({ action: "queue", text: "Original call" }));
+    h.controls.bind({ ...h.target, viewId: randomUUID(), generation: 2 });
+    h.controls.observe(undefined, true, 1);
+    await h.controls.drain();
+    expect(h.operations).toEqual([]);
+    expect(h.controls.view().queue[0]?.pausedReason).toContain("call changed");
+    await expect(
+      h.controls.command(h.command({ action: "send", text: "Stale browser" })),
+    ).rejects.toThrow("call changed");
+    h.controls.bind(h.target);
+    h.controls.observe(undefined, true, 2);
+    const row = h.controls.view().queue[0]!;
+    await h.controls.command(h.command({ action: "resume", id: row.id }));
+    h.outcome(async () => {
+      throw new AgentSendError("Rejected", "rejected");
+    });
+    await h.controls.drain();
+    expect(h.controls.view().queue[0]?.canResume).toBe(true);
+    expect(h.controls.view().queue[0]?.text).toBe("Original call");
+  } finally {
+    h.close();
+  }
+});
+
+test("Agent requests reject empty/oversized input and arbitrary native parameters", () => {
+  const base = { viewId: randomUUID(), requestId: randomUUID(), action: "send" };
+  for (const fields of [
+    { text: " " },
+    { text: "x".repeat(65537) },
+    { text: "ok", threadId: "foreign" },
+    { text: "ok", method: "thread/start" },
+  ]) {
+    expect(agentCommandSchema.safeParse({ ...base, ...fields }).success).toBe(false);
+  }
+});

@@ -1,8 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LiveView } from "../src/types.ts";
+import { type AgentCommand, agentCommandSchema } from "./agent-controls.ts";
 import { isLocalRequest } from "./local-origin.ts";
 
-export function liveApi(reader: { read(): Promise<LiveView> }, env = process.env, nonce?: string) {
+export function liveApi(
+  reader: { read(): Promise<LiveView>; agentCommand?(command: AgentCommand): Promise<void> },
+  env = process.env,
+  nonce?: string,
+) {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
       response.writeHead(403).end("Forbidden");
@@ -20,6 +25,59 @@ export function liveApi(reader: { read(): Promise<LiveView> }, env = process.env
     );
     if (!request.url?.startsWith("/api/")) {
       next();
+      return;
+    }
+    if (request.url === "/api/agent") {
+      if (request.method !== "POST") {
+        response.writeHead(405, { Allow: "POST" }).end("Method not allowed");
+        return;
+      }
+      if (
+        !request.headers.origin ||
+        !/^application\/json(?:;|$)/i.test(request.headers["content-type"] ?? "")
+      ) {
+        response.writeHead(403).end("Forbidden");
+        return;
+      }
+      void (async () => {
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        for await (const chunk of request) {
+          bytes += chunk.length;
+          if (bytes > 512 * 1024) {
+            response.writeHead(413).end("Message too large");
+            return;
+          }
+          chunks.push(Buffer.from(chunk));
+        }
+        let command: AgentCommand;
+        try {
+          command = agentCommandSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          response.writeHead(400).end("Invalid Agent request");
+          return;
+        }
+        if (!reader.agentCommand) {
+          response.writeHead(503).end("Agent input unavailable");
+          return;
+        }
+        try {
+          await reader.agentCommand(command);
+          if (!response.destroyed)
+            response
+              .writeHead(200, { "Content-Type": "application/json" })
+              .end(JSON.stringify({ ok: true }));
+        } catch (error) {
+          if (!response.destroyed)
+            response.writeHead(409, { "Content-Type": "application/json" }).end(
+              JSON.stringify({
+                error: error instanceof Error ? error.message : "Agent request failed.",
+              }),
+            );
+        }
+      })().catch(() => {
+        if (!response.destroyed) response.writeHead(400).end("Invalid Agent request");
+      });
       return;
     }
     if (request.url !== "/api/live") {

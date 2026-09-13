@@ -1,8 +1,10 @@
 # Live Voice | Agent transcripts
 
-`agentvoice serve` opens a read-only web view at **https://agentvoice.localhost**.
+`agentvoice serve` opens a live web view at **https://agentvoice.localhost**.
 Two equal, full-height lanes use `@agentchats/transcript` with Human / Agent labels,
 Markdown and inline tool/diff disclosures. There is no toolbar or call control.
+The Agent lane includes the shared text composer with Send, Steer, Queue and Stop;
+the Voice lane has no composer. Stop interrupts Agent work, not the voice call.
 Both lanes always watch, open at the latest message and follow new text. Scrolling
 up lets you read earlier text and shows the shared jump-to-latest chip with a count
 of new messages. Using the chip or scrolling back to the bottom resumes following.
@@ -58,8 +60,8 @@ accepts control protocol 5 so an existing call need not restart to open this vie
 all other CLI discovery keeps the current protocol requirement. The browser cannot select
 a workspace, thread, path, endpoint or RPC method. Native sockets, descriptors,
 credentials and grants remain in the local process. Requests require a loopback
-peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins and
-mutations are refused. Remote Markdown images and embeds are blocked.
+peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins are
+refused. Remote Markdown images and embeds are blocked.
 
 The Voice lane incrementally tails the same private, identity-checked JSONL used
 by `attach voice`, including saved speech from previous calls on this exact thread.
@@ -82,8 +84,35 @@ snapshot, so there is no ambiguous delta replay. Every response and late history
 page is fenced to the call and runtime generation. History is bounded to 10,000
 items / 8 MiB with a visible notice. Unknown times are omitted. Native reasoning
 stays hidden, matching the shared transcript renderer. This view neither reads
-Codex databases directly nor resumes threads, submits work, answers approvals,
+Codex databases directly nor resumes threads, answers approvals,
 loads launch configuration, starts media or changes server protocols.
+
+## Agent input
+
+`POST /api/agent` accepts only named composer actions, a current view ID and a
+unique request ID. The host discovers the exact live controller and acquires the
+same identity-fenced attachment gateway used by `attach agent`. It sends native
+`turn/start`, `turn/steer` with `expectedTurnId`, or `turn/interrupt` with the active
+turn ID. It does not override native settings or answer approval requests; attach
+the stock TUI for approvals. Mutation bodies require same-origin JSON and bounded
+text. No native endpoint, token, method selector or thread selector reaches the browser.
+
+Idle input sends immediately. While Agent works, the shared desktop-style mode
+menu defaults to Steer; Queue saves a FIFO follow-up for the next idle turn.
+Rows support Steer, Edit and Remove. Editing holds the row until the awaited
+save/cancel handshake releases it. Stop pauses queued work and remains stopping
+until the native terminal event. Resume explicitly releases paused rows.
+
+The host saves at most 20 queued messages (64 KiB each) in private mode-0600
+`web/queued-messages.json` under AgentVoice state. Restart or call replacement
+restores them paused for review. Failed dispatch stays paused; unknown acceptance
+never retries automatically. Check native history before editing/removing a row
+whose delivery is unknown. Direct-send failures preserve the browser draft, and
+only native history creates transcript messages. Request IDs deduplicate a bounded
+in-process window; they are not a durable native exactly-once guarantee.
+
+See [Agent input semantics](../docs/web-agent-input.md) for source evidence and
+turn/queue boundaries.
 
 ## Shared package
 
