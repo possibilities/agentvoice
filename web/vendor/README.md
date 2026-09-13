@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.1
+# @agentchats/transcript 0.3.2
 
-Packed from [agentchats main e6bea54](https://github.com/possibilities/agentchats/commit/e6bea54),
+Packed from [agentchats f9036ac](https://github.com/possibilities/agentchats/commit/f9036ac),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
 
@@ -12,6 +12,8 @@ Consumer fixes and shared features landed upstream:
   queue editing; omits the follow chip in empty and non-overflowing transcripts.
 - `2eb84b4`: readable Codex voice handoffs with original-content disclosures, wider
   columns and tighter spacing, complete tool details, and composer label/focus polish.
+- `f9036ac`: modal voice-message inspection with complete source context, optional
+  passive Working status, and aligned composer inner padding.
 - `e6bea54`: larger monospaced reading and composer text, an 80ch prose cap inside
   the 1120px outer column, compact gaps and at least 44px composer touch controls.
 

@@ -1,16 +1,28 @@
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
-test("Voice dock follows composer and queue height while both transcript viewports stay aligned", async ({
+test("overlay docks leave full-height scrollbars and clear the final messages as the composer grows", async ({
   page,
 }) => {
   const view: LiveView = {
     phase: "live",
     id: "docked-call",
     voice: [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `v${i}`,
+        role: "assistant" as const,
+        status: "complete" as const,
+        content: `Earlier spoken message ${i}.`,
+      })),
       { id: "voice", role: "user", status: "complete", content: "Voice stays on the right." },
     ],
     agent: [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `a${i}`,
+        role: "assistant" as const,
+        status: "complete" as const,
+        content: `Earlier agent message ${i}.`,
+      })),
       {
         id: "agent",
         role: "assistant",
@@ -36,6 +48,46 @@ test("Voice dock follows composer and queue height while both transcript viewpor
       return Math.abs(left!.bottom - right!.bottom);
     });
   await expect.poll(alignment).toBeLessThan(1);
+  const verifyClearance = async () => {
+    for (const lane of [agent, voice]) {
+      const viewport = lane.getByRole("region", { name: /transcript$/ });
+      const bottom = await viewport.evaluate((el) => el.getBoundingClientRect().bottom);
+      expect(bottom).toBe(await page.evaluate(() => innerHeight));
+      const overlay = lane.locator(".agent-dock, .voice-dock");
+      const lastMessage = lane.locator('[data-slot="message"]').last();
+      await expect
+        .poll(
+          async () =>
+            (await lastMessage.boundingBox())!.y + (await lastMessage.boundingBox())!.height,
+        )
+        .toBeLessThan((await overlay.boundingBox())!.y);
+      const gutter = await lane.evaluate((el) => {
+        const scroller = el.querySelector('[role="region"]')!.getBoundingClientRect();
+        const dock = el.querySelector(".agent-dock, .voice-dock")!.getBoundingClientRect();
+        return scroller.right - dock.right;
+      });
+      expect(gutter).toBeGreaterThanOrEqual(8);
+    }
+  };
+  await verifyClearance();
+  const insetAlignment = await input.evaluate((textarea) => {
+    const group = textarea.parentElement!;
+    const mode = group.querySelector(".transcript-composer__mode")!;
+    const range = document.createRange();
+    range.selectNodeContents(mode.firstChild!);
+    const style = getComputedStyle(textarea);
+    const textLeft = textarea.getBoundingClientRect().left + parseFloat(style.paddingLeft);
+    return Math.abs(range.getBoundingClientRect().left - textLeft);
+  });
+  expect(insetAlignment).toBeLessThan(1);
+  await expect(agent.getByRole("heading", { name: "Agent", exact: true })).toHaveCSS(
+    "font-size",
+    "18px",
+  );
+  await expect(agent.getByRole("heading", { name: "Agent", exact: true })).toHaveCSS(
+    "font-family",
+    /Geist Mono/,
+  );
   const initialHeight = await height();
   expect(initialHeight).toBeGreaterThan(80);
   expect((await agent.boundingBox())!.x).toBeLessThan((await voice.boundingBox())!.x);
@@ -46,6 +98,7 @@ test("Voice dock follows composer and queue height while both transcript viewpor
     "A longer draft\nwith several lines\nthat expands the composer\nwhile keeping both lanes\naligned at their lower edge.",
   );
   await expect.poll(height).toBeGreaterThan(initialHeight);
+  await verifyClearance();
   await expect.poll(alignment).toBeLessThan(1);
   view.agentControls!.queue = [
     {
@@ -62,6 +115,7 @@ test("Voice dock follows composer and queue height while both transcript viewpor
   await page.setViewportSize({ width: 600, height: 700 });
   await expect.poll(alignment).toBeLessThan(1);
   await expect(input).toBeInViewport();
+  await verifyClearance();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/voice-dock-narrow.png", fullPage: true });
 });

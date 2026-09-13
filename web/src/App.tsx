@@ -1,5 +1,5 @@
 import { Transcript, TranscriptComposer } from "@agentchats/transcript/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LiveView } from "./types.ts";
 
 const copy = {
@@ -86,7 +86,11 @@ export function App() {
     (view.phase !== "live" && view.agent.length === 0 && view.voice.length === 0);
   const showStatus = holding || view.phase !== "live";
   return (
-    <main aria-label="AgentVoice live transcripts" className="live-view">
+    <main
+      aria-label="AgentVoice live transcripts"
+      className="live-view"
+      style={{ "--dock-height": `${dockHeight}px` } as CSSProperties}
+    >
       {showStatus ? (
         <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
           {view.phase === "live" || view.phase === "connecting"
@@ -105,6 +109,7 @@ export function App() {
               loading={!!holding}
               detail="full"
               showJumpToLatest
+              footer={<div className="transcript-dock-clearance" aria-hidden="true" />}
               aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
               header={
                 view[`${lane}Notice`] ? (
@@ -147,7 +152,6 @@ export function App() {
                     onSend={(text) => agentCommand({ action: "send", text })}
                     onSteer={(text) => agentCommand({ action: "steer", text })}
                     onQueue={(text) => agentCommand({ action: "queue", text })}
-                    onInterrupt={() => agentCommand({ action: "interrupt" })}
                     onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
                     onResumeQueued={(id) => agentCommand({ action: "resume", id })}
                     onRemoveQueued={(id) => agentCommand({ action: "remove", id })}

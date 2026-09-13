@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
-test("Agent-only shared composer sends, steers, queues, edits and stops through the host API", async ({
+test("Agent-only shared composer sends, steers, queues and edits without a Stop control through the host API", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -32,7 +32,6 @@ test("Agent-only shared composer sends, steers, queues, edits and stops through 
       });
     if (command.action === "edit") controls.queue[0]!.text = command.text;
     if (command.action === "remove") controls.queue = [];
-    if (command.action === "interrupt") controls.stopping = true;
     return route.fulfill({ json: { ok: true } });
   });
   await page.goto("/");
@@ -47,7 +46,8 @@ test("Agent-only shared composer sends, steers, queues, edits and stops through 
   reject = false;
   await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
-  await expect(agent.getByRole("button", { name: "Stop Agent" })).toBeVisible();
+  await expect(agent.getByRole("button", { name: "Stop Agent" })).toHaveCount(0);
+  await expect(agent.locator(".transcript-composer__progress")).toHaveText("Working…");
   await input.fill("Adjust direction");
   await agent.getByRole("button", { name: "Steer", exact: true }).click();
   await expect(input).toHaveValue("");
@@ -63,8 +63,6 @@ test("Agent-only shared composer sends, steers, queues, edits and stops through 
   await editInput.fill("Edited follow-up");
   await agent.getByRole("button", { name: "Save queued message" }).click();
   await expect(queue.getByText("Edited follow-up", { exact: true })).toBeVisible();
-  await agent.getByRole("button", { name: "Stop Agent" }).click();
-  await expect(input).toHaveAttribute("readonly");
   controls.active = false;
   controls.stopping = false;
   await expect(input).not.toHaveAttribute("readonly");
@@ -79,7 +77,6 @@ test("Agent-only shared composer sends, steers, queues, edits and stops through 
     "editing",
     "edit",
     "editing",
-    "interrupt",
     "remove",
   ]);
   expect(requests.every((row) => row.viewId === view.id && typeof row.requestId === "string")).toBe(

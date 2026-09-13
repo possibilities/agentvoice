@@ -98,13 +98,19 @@ Codex databases directly nor resumes threads, answers approvals,
 loads launch configuration, starts media or changes server protocols.
 
 Canonical realtime delegation envelopes use the shared Codex presentation helper:
-the delegated input appears as “Via Voice”, with optional Voice context and an
-Original message disclosure. Session endings display as context handoffs. Unknown,
+the delegated input appears as “Via Voice”, with an upper-right inspection button
+for displayed text, optional Voice context and the exact Original message. Session
+endings display as context handoffs. Unknown,
 malformed or mixed envelopes retain their ordinary presentation; original content
 is never rewritten. Column width, responsive padding and message spacing come
 from the shared package, including in the two narrow lanes.
-Version 0.3.1 supplies the larger monospaced console theme, compact spacing and
+Version 0.3.2 supplies the larger monospaced console theme, compact spacing and
 composer focus treatment.
+
+The Agent composer and matching Voice placeholder overlay the lane bottoms. Both
+scrollbars extend to the app edge; measured footer clearance keeps the final
+messages and jump-to-latest controls above the dock as drafts or queues grow.
+Headers use the transcript’s mono typography and shared reading alignment.
 
 ## Agent input
 
@@ -120,8 +126,10 @@ Idle input sends immediately. While Agent works, the shared desktop-style mode
 menu defaults to Steer; Queue saves a FIFO follow-up for the next idle turn.
 Native completion dispatches queued input even when the browser stops polling.
 Rows support Steer, Edit and Remove. Editing holds the row until the awaited
-save/cancel handshake releases it. Stop pauses queued work and remains stopping
-until the native terminal event. Resume explicitly releases paused rows.
+save/cancel handshake releases it. This UI omits Stop: an empty busy composer
+shows noninteractive Working status while typed follow-ups remain available.
+The underlying interrupt API and queued-work pause semantics remain supported.
+Resume explicitly releases paused rows.
 
 The host saves at most 20 queued messages (64 KiB each) in private mode-0600
 `web/queued-messages.json` under AgentVoice state. Restart or call replacement

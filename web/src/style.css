@@ -49,6 +49,8 @@ body,
   border: 1px solid #27312f;
 }
 .lane {
+  container: lane / inline-size;
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -59,14 +61,34 @@ body,
 }
 .agent-dock,
 .voice-dock {
-  flex: none;
+  position: absolute;
+  inset: auto 10px 0 0;
   min-width: 0;
-}
-.voice-dock {
-  position: relative;
-  overflow: hidden;
   border-top: 1px solid #27312f;
   background: #0b100f;
+}
+.agent-dock .transcript-composer {
+  background: transparent;
+}
+.agent-dock .transcript-composer__content {
+  padding: 18px 20px;
+}
+.agent-dock [data-slot="input-group"] {
+  border-color: #91b7b028;
+  background: #0e1412;
+}
+.lane .chat-transcript {
+  padding-bottom: 24px;
+}
+.transcript-dock-clearance {
+  flex: none;
+  height: var(--dock-height);
+}
+.lane .jump-latest {
+  bottom: calc(var(--dock-height) + 16px);
+}
+.voice-dock {
+  overflow: hidden;
 }
 .voice-dock::after {
   content: "";
@@ -77,9 +99,11 @@ body,
 }
 .lane > h1 {
   margin: 0;
-  padding: 24px 40px 12px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 22px 48px 12px;
+  font:
+    500 18px / 28px "Geist Mono Variable",
+    ui-monospace,
+    monospace;
   letter-spacing: -0.01em;
 }
 .transcript-notice {
@@ -88,8 +112,13 @@ body,
   font-size: 13px;
   line-height: 1.7;
 }
-@media (max-width: 700px) {
+@container lane (max-width: 800px) {
   .lane > h1 {
-    padding: 20px 16px 8px;
+    padding-inline: 36px;
+  }
+}
+@container lane (max-width: 400px) {
+  .lane > h1 {
+    padding: 18px 32px 8px;
   }
 }

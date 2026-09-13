@@ -45,11 +45,35 @@ test("voice delegation is readable, preserves original details and uses shared l
   ).toBeVisible();
   await expect(agent.getByText(content, { exact: true })).not.toBeVisible();
   await page.screenshot({ path: "test-results/readable-delegation.png", fullPage: true });
-  await agent.getByText("Voice context", { exact: true }).click();
-  await expect(agent.getByText("assistant: The build finished.", { exact: false })).toBeVisible();
-  await agent.getByText("Original message", { exact: true }).click();
-  await expect(agent.getByText(content, { exact: true })).toBeVisible();
+  await expect(agent.getByRole("button", { name: "Voice context", exact: true })).toHaveCount(0);
+  await expect(agent.getByRole("button", { name: "Original message", exact: true })).toHaveCount(0);
+  const inspect = agent.getByRole("button", { name: "Inspect voice message" });
+  await inspect.click();
+  const dialog = page.getByRole("dialog", { name: "Voice message details" });
+  for (const title of ["Displayed text", "Voice context", "Original message"])
+    await expect(dialog.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  await expect(dialog.locator("pre").nth(1)).toHaveText(
+    "assistant: The build finished.\nuser: Check the deployment and report what changed.",
+  );
+  await expect(dialog.locator("pre").nth(2)).toHaveText(content);
+  await page.screenshot({ path: "test-results/voice-message-details.png", fullPage: true });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(inspect).toBeFocused();
   await page.setViewportSize({ width: 600, height: 700 });
   await expect(agent.getByRole("textbox", { name: "Message Agent" })).toBeInViewport();
+  await inspect.click();
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(() => dialog.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true);
+  await page.keyboard.press("Shift+Tab");
+  await expect
+    .poll(() => dialog.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true);
+  await expect(dialog).toBeInViewport();
+  await page.screenshot({ path: "test-results/voice-message-details-narrow.png", fullPage: true });
+  await dialog.getByRole("button", { name: "Close voice message details" }).click();
+  await expect(inspect).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

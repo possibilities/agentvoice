@@ -32,6 +32,10 @@ thread before obtaining a short-lived attachment ticket. Immediately before the
 one native mutation it checks call and turn identity again. It never sends model,
 permissions, cwd or other launch overrides. Native approvals remain stock TUI-owned.
 
+The browser omits the optional Stop callback, so an empty active composer shows
+noninteractive Working status. Send, Steer, Queue and queue recovery remain
+available. The host API retains interrupt support and its lifecycle below.
+
 Queue draining requires confirmed idle state and dispatches one row at a time.
 Rows keep their FIFO position during editing; the shared component awaits a host
 hold before restoring text and awaits release after save/cancel. A page lost
