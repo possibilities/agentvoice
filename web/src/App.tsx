@@ -65,7 +65,7 @@ export function App() {
             // The first Agent history batch resets to the end; Voice and later refreshes keep their scroller.
             loading={lane === "agent" && view.agentHistoryLoading}
             detail="full"
-            showJumpToLatest={false}
+            showJumpToLatest={view.phase === "live" && view[lane].length > 0}
             aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
             header={
               view[`${lane}Notice`] ? (

@@ -4,7 +4,8 @@
 Two equal, full-height lanes use `@agentchats/transcript` with Human / Agent labels,
 Markdown and inline tool/diff disclosures. There is no toolbar or call control.
 Both lanes always watch, open at the latest message and follow new text. Scrolling
-up lets you read earlier text; scrolling back to the bottom resumes following.
+up lets you read earlier text and shows the shared jump-to-latest chip with a count
+of new messages. Using the chip or scrolling back to the bottom resumes following.
 
 The view observes the existing **default local AgentVoice server**, independent of
 the launch directory. A missing server shows “No agent voice server to connect to.”

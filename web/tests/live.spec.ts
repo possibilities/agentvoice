@@ -179,3 +179,58 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
   fail = false;
   await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(0);
 });
+
+test("both lanes use the shared unread count and resume following after jumping", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const view: LiveView = {
+    phase: "live",
+    id: "follow-call",
+    voice: [],
+    agent: [],
+  };
+  for (const lane of ["voice", "agent"] as const) {
+    view[lane] = Array.from({ length: 25 }, (_, i) =>
+      message(
+        `${lane}-${i}`,
+        `${lane} message ${i}. ${"Text to make the lane scroll. ".repeat(15)}`,
+      ),
+    );
+  }
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
+  for (const lane of ["voice", "agent"] as const) {
+    const title = lane === "voice" ? "Voice" : "Agent";
+    const section = page.getByRole("region", { name: title, exact: true });
+    const viewport = page.getByRole("region", { name: `${title} transcript`, exact: true });
+    const gap = () => viewport.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+    await expect.poll(gap).toBeLessThan(2);
+    view[lane].push(message(`${lane}-following`, `${title} follows at bottom`));
+    await expect(viewport.getByText(`${title} follows at bottom`)).toBeInViewport();
+    await viewport.hover();
+    await page.mouse.wheel(0, -100_000);
+    await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
+    view[lane].push(message(`${lane}-new-1`, `${title} unread one`));
+    await expect(
+      section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+    ).toBeVisible();
+    view[lane][view[lane].length - 1] = message(`${lane}-new-1`, `${title} unread one completed`);
+    view[lane].push(message(`${lane}-new-2`, `${title} unread two`));
+    const chip = section.getByRole("button", {
+      name: "2 new messages. Jump to latest",
+      exact: true,
+    });
+    await expect(chip).toBeVisible();
+    expect(await viewport.evaluate((el) => el.scrollTop)).toBeLessThan(2);
+    await chip.click();
+    await expect.poll(gap).toBeLessThan(2);
+    await expect(chip).toHaveCount(0);
+    view[lane].push(message(`${lane}-resumed`, `${title} follows again`));
+    await expect(viewport.getByText(`${title} follows again`)).toBeInViewport();
+    await expect(
+      section.getByRole("button", { name: /new messages?\. Jump to latest/ }),
+    ).toHaveCount(0);
+  }
+  await page.screenshot({ path: "test-results/follow-chip.png", fullPage: true });
+});
