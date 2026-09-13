@@ -107,9 +107,9 @@ from the shared package, including in the two narrow lanes.
 Version 0.3.2 supplies the larger monospaced console theme, compact spacing and
 composer focus treatment.
 
-The Agent composer and matching Voice placeholder overlay the lane bottoms. Both
-scrollbars extend to the app edge; measured footer clearance keeps the final
-messages and jump-to-latest controls above the dock as drafts or queues grow.
+The Agent composer and matching Voice placeholder sit below the scroll areas,
+separated by full-width dividers. Both scrollbars end at those dividers, and the
+viewports stay aligned as drafts or queues grow. There is no overlay clearance.
 Headers use the transcript’s mono typography and shared reading alignment.
 
 ## Agent input

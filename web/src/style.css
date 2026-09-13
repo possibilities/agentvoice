@@ -50,7 +50,6 @@ body,
 }
 .lane {
   container: lane / inline-size;
-  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -61,8 +60,8 @@ body,
 }
 .agent-dock,
 .voice-dock {
-  position: absolute;
-  inset: auto 10px 0 0;
+  flex: none;
+  width: 100%;
   min-width: 0;
   border-top: 1px solid #27312f;
   background: #0b100f;
@@ -77,17 +76,8 @@ body,
   border-color: #91b7b028;
   background: #0e1412;
 }
-.lane .chat-transcript {
-  padding-bottom: 24px;
-}
-.transcript-dock-clearance {
-  flex: none;
-  height: var(--dock-height);
-}
-.lane .jump-latest {
-  bottom: calc(var(--dock-height) + 16px);
-}
 .voice-dock {
+  position: relative;
   overflow: hidden;
 }
 .voice-dock::after {

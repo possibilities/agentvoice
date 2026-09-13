@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
-test("overlay docks leave full-height scrollbars and clear the final messages as the composer grows", async ({
+test("full-width dock dividers end both scroll areas and stay aligned as the composer grows", async ({
   page,
 }) => {
   const view: LiveView = {
@@ -48,28 +48,32 @@ test("overlay docks leave full-height scrollbars and clear the final messages as
       return Math.abs(left!.bottom - right!.bottom);
     });
   await expect.poll(alignment).toBeLessThan(1);
-  const verifyClearance = async () => {
+  const verifyDivider = async () => {
     for (const lane of [agent, voice]) {
       const viewport = lane.getByRole("region", { name: /transcript$/ });
       const bottom = await viewport.evaluate((el) => el.getBoundingClientRect().bottom);
-      expect(bottom).toBe(await page.evaluate(() => innerHeight));
-      const overlay = lane.locator(".agent-dock, .voice-dock");
+      const bottomDock = lane.locator(".agent-dock, .voice-dock");
+      expect(bottom).toBe((await bottomDock.boundingBox())!.y);
+      expect((await bottomDock.boundingBox())!.y + (await bottomDock.boundingBox())!.height).toBe(
+        await page.evaluate(() => innerHeight),
+      );
       const lastMessage = lane.locator('[data-slot="message"]').last();
       await expect
         .poll(
           async () =>
             (await lastMessage.boundingBox())!.y + (await lastMessage.boundingBox())!.height,
         )
-        .toBeLessThan((await overlay.boundingBox())!.y);
-      const gutter = await lane.evaluate((el) => {
+        .toBeLessThan((await bottomDock.boundingBox())!.y);
+      const dividerEdges = await lane.evaluate((el) => {
         const scroller = el.querySelector('[role="region"]')!.getBoundingClientRect();
         const dock = el.querySelector(".agent-dock, .voice-dock")!.getBoundingClientRect();
-        return scroller.right - dock.right;
+        return { left: scroller.left - dock.left, right: scroller.right - dock.right };
       });
-      expect(gutter).toBeGreaterThanOrEqual(8);
+      expect(dividerEdges).toEqual({ left: 0, right: 0 });
+      await expect(lane.locator(".transcript-dock-clearance")).toHaveCount(0);
     }
   };
-  await verifyClearance();
+  await verifyDivider();
   const insetAlignment = await input.evaluate((textarea) => {
     const group = textarea.parentElement!;
     const mode = group.querySelector(".transcript-composer__mode")!;
@@ -98,7 +102,7 @@ test("overlay docks leave full-height scrollbars and clear the final messages as
     "A longer draft\nwith several lines\nthat expands the composer\nwhile keeping both lanes\naligned at their lower edge.",
   );
   await expect.poll(height).toBeGreaterThan(initialHeight);
-  await verifyClearance();
+  await verifyDivider();
   await expect.poll(alignment).toBeLessThan(1);
   view.agentControls!.queue = [
     {
@@ -115,7 +119,7 @@ test("overlay docks leave full-height scrollbars and clear the final messages as
   await page.setViewportSize({ width: 600, height: 700 });
   await expect.poll(alignment).toBeLessThan(1);
   await expect(input).toBeInViewport();
-  await verifyClearance();
+  await verifyDivider();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/voice-dock-narrow.png", fullPage: true });
 });

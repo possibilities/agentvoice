@@ -1,5 +1,5 @@
 import { Transcript, TranscriptComposer } from "@agentchats/transcript/react";
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LiveView } from "./types.ts";
 
 const copy = {
@@ -86,11 +86,7 @@ export function App() {
     (view.phase !== "live" && view.agent.length === 0 && view.voice.length === 0);
   const showStatus = holding || view.phase !== "live";
   return (
-    <main
-      aria-label="AgentVoice live transcripts"
-      className="live-view"
-      style={{ "--dock-height": `${dockHeight}px` } as CSSProperties}
-    >
+    <main aria-label="AgentVoice live transcripts" className="live-view">
       {showStatus ? (
         <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
           {view.phase === "live" || view.phase === "connecting"
@@ -109,7 +105,6 @@ export function App() {
               loading={!!holding}
               detail="full"
               showJumpToLatest
-              footer={<div className="transcript-dock-clearance" aria-hidden="true" />}
               aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
               header={
                 view[`${lane}Notice`] ? (
