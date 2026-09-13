@@ -111,6 +111,16 @@ Bounds: 2 MiB per bridge frame, 1 MiB per voice record, 64 MiB per transcript,
 stdout write. SSH also uses bounded connect and keepalive timeouts. A malformed,
 truncated, oversized or stalled stream fails visibly without reconnecting.
 
+## Live web view
+
+`agentvoice serve` composes the same Voice and Agent presentation as a browser
+view, using the default server’s private read-only observation and conversation
+APIs plus the saved voice transcript. It always watches and automatically follows
+new calls and runtime generations. It owns no call, audio, stock TUI or smolmux
+process. It exports only transcript presentation data through an exact-origin
+loopback API at `https://agentvoice.localhost`. Vite dev is the default;
+`--production` is optional. See [web/README.md](../web/README.md).
+
 ## Verification
 
 `bun run test` covers the socket ownership and startup ordering with fake calls,

@@ -1,0 +1,124 @@
+import type { TranscriptMessage } from "@agentchats/transcript";
+import { expect, test } from "@playwright/test";
+import type { LiveView } from "../src/types.ts";
+
+const message = (
+  id: string,
+  content: string,
+  role: TranscriptMessage["role"] = "assistant",
+): TranscriptMessage => ({ id, role, content, status: "complete" });
+test("two independent transcripts follow live updates, retain disclosures, and reconnect without controls", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let reads = 0;
+  let view: LiveView = { phase: "offline", id: "offline", voice: [], agent: [] };
+  await page.route("**/api/live", async (route) => {
+    reads++;
+    await route.fulfill({ json: view });
+  });
+  await page.goto("/");
+  await expect(page.getByText("No agent voice server to connect to.")).toHaveCount(2);
+  await expect(page.getByRole("button")).toHaveCount(0);
+  view = { ...view, phase: "waiting", id: "waiting" };
+  await expect(page.getByText("Waiting for a call.")).toHaveCount(2);
+  view = {
+    phase: "live",
+    id: "call-one",
+    voice: [
+      message("human", "Could you check the connection?", "user"),
+      message("answer", "The two transcripts are connected."),
+    ],
+    agent: [
+      message("prompt", "Verify the live transcript reader.", "user"),
+      ...Array.from({ length: 24 }, (_, i) =>
+        message(`old-${i}`, `Check ${i + 1}. ${"The observation is read-only. ".repeat(8)}`),
+      ),
+      message("tool", "", "tool"),
+    ],
+  };
+  view.agent.at(-1)!.toolActivity = {
+    name: "Command",
+    detail: "bun run test",
+    state: "complete",
+    sections: [{ label: "Output", content: "All checks passed" }],
+  };
+  const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
+  const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
+  await expect(voice.getByText("Could you check the connection?")).toBeVisible();
+  await expect
+    .poll(() =>
+      agent.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+    )
+    .toBeLessThan(2);
+  await expect(voice.locator(".message-author").first()).toHaveText("Human");
+  await expect(voice.locator(".message-author").last()).toHaveText("Agent");
+  await expect(agent.locator("time")).toHaveCount(0);
+  const lanes = page.locator(".lane");
+  const left = await lanes.nth(0).boundingBox();
+  const right = await lanes.nth(1).boundingBox();
+  expect(left!.y).toBe(right!.y);
+  expect(left!.width).toBe(right!.width);
+  expect(right!.x).toBeGreaterThan(left!.x);
+  expect(await agent.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  expect(await agent.evaluate((el) => el.clientHeight)).toBeLessThan(1000);
+  view.agent.push(message("draft", "Streaming draft"));
+  await expect(agent.getByText("Streaming draft", { exact: true })).toBeInViewport();
+  view.agent[view.agent.length - 1] = message("draft", "The canonical completion.");
+  view.voice.push(message("voice-live", "I can see the update.", "user"));
+  await expect(agent.getByText("The canonical completion.", { exact: true })).toBeInViewport();
+  await expect(agent.getByText("Streaming draft", { exact: true })).toHaveCount(0);
+  await expect(voice.getByText("I can see the update.")).toBeInViewport();
+  expect(reads).toBeGreaterThan(3);
+  await agent.locator(".tool-disclosure__trigger").click();
+  await expect(agent.getByText("All checks passed", { exact: true })).toBeVisible();
+  view.voice.push(message("still-watching", "Still watching."));
+  await expect(voice.getByText("Still watching.")).toBeVisible();
+  await expect(agent.getByText("All checks passed", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/dual-pane.png", fullPage: true });
+  view = {
+    phase: "live",
+    id: "call-two",
+    voice: [],
+    agent: [message("new", "A new call is connected.")],
+  };
+  await expect(agent.getByText("A new call is connected.")).toBeVisible();
+  await expect(agent.getByText("The canonical completion.")).toHaveCount(0);
+  await expect(voice.getByText("Waiting for speech.")).toBeVisible();
+  await page.setViewportSize({ width: 600, height: 600 });
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
+  const narrowLeft = await lanes.nth(0).boundingBox();
+  const narrowRight = await lanes.nth(1).boundingBox();
+  expect(narrowLeft!.y).toBe(narrowRight!.y);
+  expect(errors).toEqual([]);
+});
+
+test("HTTP failures show reconnect state, retain last text, and recover automatically", async ({
+  page,
+}) => {
+  let fail = false;
+  await page.route("**/api/live", (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, body: "Unavailable" }
+        : {
+            json: {
+              phase: "live",
+              id: "call",
+              voice: [message("v", "Voice remains readable.")],
+              agent: [],
+            },
+          },
+    ),
+  );
+  await page.goto("/");
+  await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  fail = true;
+  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(2);
+  await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  fail = false;
+  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(0);
+});

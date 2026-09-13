@@ -32,6 +32,12 @@ owns the current source map and recording/attachment implementation guidance.
 - src/workspace.ts: default/workspaces generations under XDG state; newest sortable
   timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
   reject unsafe selected directories. No reset/deletion or context-policy changes.
+- web/: read-only Voice | Agent browser composition using the packed `@agentchats/transcript`
+  API. `server/live-reader.ts` observes the default frontend, verifies the live
+  controller and fences native history/live snapshots and saved voice tails.
+  No browser-selected endpoints, native RPC forwarding or call ownership.
+  `src/web-serve.ts` owns the fixed portless URL and foreground process; Vite
+  dev is editable by default. See [the web contract](../web/README.md).
 - src/threads/: one-shot read-only loaded-thread table for `agentvoice threads` and
   `watch`. Reuse frontend/controller discovery and the event socket; at most four
   metadata reads in flight. Never start a call, resume, read history, or guess

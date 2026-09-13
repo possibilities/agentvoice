@@ -265,6 +265,23 @@ Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
 for external clients. See [thread mailbox](docs/thread-mailbox.md) for scope,
 retry semantics and bounds.
 
+### Watch Voice and Agent in a browser
+
+```sh
+npm --prefix web ci             # prepare the web dependencies once
+agentvoice serve               # https://agentvoice.localhost, editable Vite dev
+agentvoice serve --production  # optional, after bun run web:build
+```
+
+Two live transcripts sit side by side, labelled Voice and Agent, using shared
+`@agentchats/transcript` blocks with Human / Agent labels. The view watches the
+running default local server, follows the latest text, and reconnects through
+call changes. An absent server and an idle server have clear empty states.
+There are no surrounding controls, and closing the page leaves the call running.
+The shared portless HTTPS proxy must already be running. See the [web guide](web/README.md)
+for setup, local-only observation, package provenance, verification and future
+launchd ownership.
+
 ### Attach a stock Codex TUI
 
 Every active call supports stock Codex attachment from an additional terminal:

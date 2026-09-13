@@ -4,3 +4,7 @@ node_modules/
 /dist/
 .agentvoice-session
 .agentvoice-session.*.tmp
+
+/web/dist/
+/web/test-results/
+/web/playwright-report/

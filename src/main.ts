@@ -15,6 +15,7 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
+  agentvoice serve [--production]   Live Voice | Agent web transcripts at https://agentvoice.localhost
   agentvoice server [options]       Wait for a frontend to start a call
   agentvoice service status|restart|remove
                                    Manage the default macOS LaunchAgent
@@ -336,6 +337,18 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "help") {
       console.log(USAGE);
       return 0;
+    }
+    if (command === "serve") {
+      if (argv.length === 2 && argv[1] === "--help") {
+        console.log(
+          "Usage: agentvoice serve [--production]\nLive transcripts at https://agentvoice.localhost; Vite dev by default.",
+        );
+        return 0;
+      }
+      if (argv.length > 2 || (argv[1] !== undefined && argv[1] !== "--production"))
+        throw new UsageError("Usage: agentvoice serve [--production]");
+      const { serveWeb } = await import("./web-serve.ts");
+      return await serveWeb(process.env, argv[1] === "--production");
     }
     if (command === "role") {
       const { runRoleCommand } = await import("./roles/cli.ts");

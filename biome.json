@@ -7,7 +7,13 @@
       "scripts/**",
       "android/configurator/**",
       "!android/configurator/profiles",
-      "*.json"
+      "*.json",
+      "web/**",
+      "!web/vendor",
+      "!web/dist",
+      "!web/node_modules",
+      "!web/test-results",
+      "!web/package-lock.json"
     ]
   },
   "formatter": {
