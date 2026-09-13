@@ -80,6 +80,9 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
     instanceId: "attachment-integration",
     backend: {
       status: () => controller.status(),
+      newSession: async () => {
+        throw new Error("not used");
+      },
       voiceSet: async () => {
         throw new Error("not used");
       },
@@ -101,7 +104,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
         "--codex",
         join(import.meta.dir, "fixtures/controller-codex.ts"),
       ]),
-      options: { debug: false, fresh: false, continue: false },
+      options: { debug: false },
       launchCwd: root,
     },
     version: "test",

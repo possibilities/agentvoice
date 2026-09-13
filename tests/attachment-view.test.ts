@@ -228,6 +228,9 @@ async function harness() {
     redial: forbidden,
     restart: forbidden,
     mailboxOpen: forbidden,
+    newSession: async () => {
+      throw new Error("not used");
+    },
     voiceSet: forbidden,
   };
   const control = await startControlServer({ stateDir, instanceId: selected.instanceId, backend });

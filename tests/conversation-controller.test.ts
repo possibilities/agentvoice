@@ -30,7 +30,7 @@ test("history responses cannot cross runtime replacement and old content cannot 
     version: "test",
     provenance: {
       parsed: parseArgs([]),
-      options: { debug: false, fresh: false, continue: true },
+      options: { debug: false },
       launchCwd: root,
     },
     control: { name: "agentvoice_control", server: {}, tools: [], env: {} },

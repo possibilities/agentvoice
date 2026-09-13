@@ -196,16 +196,17 @@ thread start/resume; relative runtime roots use it too. Reject
 conflicting cwd and identity escape hatches. This is selection, not filesystem
 sandboxing or memory isolation.
 
-Ordinary launch creates a new conversation without resume-selection history
-lookup. Explicit --continue uses native unarchived history, newest updated first, with
-sourceKinds appServer plus vscode, all providers and exact cwd. Stock 0.153.3
-classifies this third-party app-server client as vscode and can omit threadSource
-from list rows, so verify candidate ownership with thread/read before selecting
-agentvoice-orchestrator, no-parent, non-ephemeral history. Explicit resume must
-be found in that inventory. Do not hide lookup/resume failures as Fresh.
+Every workspace keeps its exact main-thread ID in `.agentvoice-session`.
+Call startup resumes that marker after native thread/read verifies exact cwd,
+agentvoice-orchestrator source, no parent and non-ephemeral history. Absence creates
+and atomically saves a thread before readiness; invalid/unresumable markers fail
+without fallback. --resume/--continue/--fresh/--no-continue are retired.
+Workspace and thread leases serialize creation and replacement. Explicit MCP/API
+new_session preflights, drains the old runtime, clears the marker and mailbox,
+then creates and saves a thread and reconnects voice. Old history remains.
 
-Each frontend connection starts one call using the server's conversation selection
-flags. Explicit workspaces are pinned at server launch; otherwise the default
+Each frontend connection starts one call using the workspace session marker.
+Explicit workspaces are pinned at server launch; otherwise the default
 server resolves the current generation at call start. Every call pins its canonical
 workspace through runtime replacements. The default frontend socket stays stable
 across generations; explicit CLI workspaces use their own hashed sockets. Close its frontend to end audio,

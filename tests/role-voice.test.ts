@@ -64,7 +64,7 @@ test("real worker IPC applies the saved voice to its existing native child and c
         "--codex",
         join(import.meta.dir, "fixtures/controller-codex.ts"),
       ]),
-      options: { fresh: false, continue: false, debug: false },
+      options: { debug: false },
       launchCwd: root,
     },
     control: {
@@ -133,7 +133,7 @@ async function fixture() {
     version: "test",
     provenance: {
       parsed: parseArgs(["--workspace", workspace]),
-      options: { fresh: false, continue: false, debug: false },
+      options: { debug: false },
       launchCwd: root,
     },
     control: { name: "agentvoice_control", server: {}, tools: [], env: {} },

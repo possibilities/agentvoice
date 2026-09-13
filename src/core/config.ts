@@ -637,7 +637,7 @@ export function resolveConfig(
   for (const key of ["threadId", "path", "history"]) {
     if (extra && Object.hasOwn(extra, key))
       throw new ConfigError(
-        `orchestrator.extra.${key} cannot override conversation identity; use --resume`,
+        `orchestrator.extra.${key} cannot override conversation identity; the workspace .agentvoice-session marker selects the session`,
       );
   }
   const voiceExtra = pickVoice("extra");

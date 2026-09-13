@@ -76,7 +76,7 @@ describe("WebRTC compatibility default", () => {
   test("invalid initial-item setup fails before any native connection, history lookup or resume", async () => {
     const h = runtimeHarness(
       { voice: { version: "v1", extra: { initialItems: [{ role: "user", text: "seed" }] } } },
-      { resume: "existing" },
+      { savedThread: "existing" },
     );
     try {
       await expect(h.runtime.start()).rejects.toThrow("require effective realtime v3");
@@ -91,7 +91,7 @@ describe("WebRTC compatibility default", () => {
   test("compatibility default and explicit overrides survive continue, resume, redial and Fresh", async () => {
     for (const resume of [undefined, "existing"]) {
       for (const extra of [{}, { version: "v1" }, { version: null }]) {
-        const h = runtimeHarness({ voice: { extra } }, resume ? { resume } : { continue: true });
+        const h = runtimeHarness({ voice: { extra } }, { savedThread: resume ?? "existing" });
         h.native.main("existing", h.directory);
         try {
           await h.runtime.start();

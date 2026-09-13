@@ -28,6 +28,7 @@ import {
   handoffResultSchema,
   handoffUnknown,
 } from "../core/handoff.ts";
+import { clearSessionMarker, readSessionMarker } from "../core/session-marker.ts";
 import { lockThread } from "../core/thread-lock.ts";
 import { threadInventorySchema } from "../events/contract.ts";
 import {
@@ -93,6 +94,7 @@ export class RuntimeController implements ControlBackend {
   private readonly mailbox: ThreadMailbox;
   private readonly coding = new CodingActivityReducer();
   private readonly leases = new Map<string, () => void>();
+  private workspaceLease: (() => void) | undefined;
   private active: RuntimeProcess | undefined;
   private candidate: RuntimeProcess | undefined;
   private generation = 1;
@@ -415,6 +417,12 @@ export class RuntimeController implements ControlBackend {
       if (this.loadedRole && info.role?.id !== this.loadedRole.id)
         throw new Error("Candidate changed the bound workspace role");
       this.workspace = info.workspace;
+      this.workspaceLease ??= lockThread(
+        join(this.options.stateDir, "thread-locks", "workspaces"),
+        this.workspace,
+      );
+      const newSession = operation?.kind === "new-session";
+      const previousMarker = newSession ? readSessionMarker(this.workspace) : null;
       if (operation) this.stage(operation, "quiescing");
       // Only successful preflight may touch the current call, mute holds, or incarnation.
       this.cancelHolds();
@@ -434,6 +442,13 @@ export class RuntimeController implements ControlBackend {
         this.stage(operation, forced ? "forced" : "interrupted");
       }
       this.assertOpen();
+      if (newSession) {
+        clearSessionMarker(this.workspace, previousMarker);
+        this.threadId = "";
+        this.voice.conversation = undefined;
+        this.coding.reset();
+        this.mailbox.clear();
+      }
       this.active = candidate.process;
       this.activeIncarnation = candidate.incarnation;
       this.candidate = undefined;
@@ -506,6 +521,9 @@ export class RuntimeController implements ControlBackend {
         ),
       );
     return this.accept("restart", request);
+  }
+  newSession(request: ControlMutationRequest) {
+    return this.accept("new-session", request);
   }
   private roleDatabasePath(): string {
     return rolePath(dataDirectory(process.env, homedir()), this.workspace);
@@ -639,10 +657,10 @@ export class RuntimeController implements ControlBackend {
     return this.accept("redial", request);
   }
   private async accept(
-    kind: "restart" | "redial",
+    kind: "restart" | "redial" | "new-session",
     request: ControlMutationRequest & { handoffPrompt?: string },
   ): Promise<ControlOperation> {
-    if (kind === "redial" && request.handoffPrompt !== undefined)
+    if (kind !== "restart" && request.handoffPrompt !== undefined)
       throw new ControlError(
         "invalid_params",
         "handoffPrompt is supported only by runtime restart",
@@ -683,7 +701,7 @@ export class RuntimeController implements ControlBackend {
       expectedGeneration: request.expectedGeneration,
       expectedInstanceId: request.expectedInstanceId,
       kind,
-      scope: kind === "restart" ? "runtime" : "voice",
+      scope: kind === "redial" ? "voice" : "runtime",
       phase: "accepted",
       acceptedAt: now,
       updatedAt: now,
@@ -705,7 +723,7 @@ export class RuntimeController implements ControlBackend {
     this.background = new Promise<void>((resolve) => setTimeout(resolve, 50)).then(async () => {
       try {
         this.assertOpen();
-        if (kind === "restart") await this.replace(operation);
+        if (kind !== "redial") await this.replace(operation);
         else {
           this.stage(operation, "starting");
           await this.active!.request("redial", {}, 35_000);
@@ -894,7 +912,8 @@ export class RuntimeController implements ControlBackend {
       throw new ObservationError("stale_generation");
     if (this.closed || this.phase !== "ready" || !this.active)
       throw new ObservationError("unavailable");
-    if (!this.leases.has(params.rootThreadId)) throw new ObservationError("forbidden_thread");
+    if (params.rootThreadId !== this.threadId || !this.leases.has(params.rootThreadId))
+      throw new ObservationError("forbidden_thread");
     if (this.observationPending >= 4) throw new ObservationError("busy");
     const active = this.active;
     const incarnation = this.activeIncarnation;
@@ -948,6 +967,8 @@ export class RuntimeController implements ControlBackend {
       await this.background;
       for (const release of this.leases.values()) release();
       this.leases.clear();
+      this.workspaceLease?.();
+      this.workspaceLease = undefined;
       this.mailbox.clear();
       this.journal.close();
       const failed = stopped.find((result) => result.status === "rejected");
@@ -999,6 +1020,7 @@ export async function createCall(
         mailboxOpen: (params, caller) => current().mailboxOpen(params, caller),
         redial: (request) => current().redial(request),
         restart: (request) => current().restart(request),
+        newSession: (request) => current().newSession(request),
         voiceSet: (request) => current().voiceSet(request),
       },
       stateDir,

@@ -190,7 +190,7 @@ function controllerHarness() {
     version: "test",
     provenance: {
       parsed: parseArgs([]),
-      options: { debug: false, fresh: false, continue: false },
+      options: { debug: false },
       launchCwd: root,
     },
     control: { name: "agentvoice_control", tools: [], server: {}, env: {} },

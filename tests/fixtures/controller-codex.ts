@@ -80,7 +80,7 @@ function handle(line: string, send: (text: string) => void) {
     result = {
       content: [],
       structuredContent: {
-        protocolVersion: 5,
+        protocolVersion: 6,
         instanceId: "fixture-controller",
         workspace: root,
         threadId: params.threadId,

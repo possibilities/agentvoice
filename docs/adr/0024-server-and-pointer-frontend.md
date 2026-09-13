@@ -1,6 +1,7 @@
 # 0024: Waiting local server and pointer-only frontend
 
 Status review 2026-09-08: partially superseded.
+[0052](0052-workspace-session-marker.md) adds explicit API/MCP new-session replacement.
 [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle and [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients. The waiting server and pointer frontend remain.
 
 Accepted 2026-09-06. Supersedes the foreground-only topology in ADRs [0009](0009-one-foreground-workspace.md)/[0015](0015-retain-controller-replace-runtime.md)

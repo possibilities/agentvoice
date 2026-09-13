@@ -79,14 +79,7 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
   const workspace = canonicalWorkspace(resolve(expandTilde(parsed.values["workspace"], homedir())));
   const path = rolePath(dataDirectory(process.env, homedir()), workspace);
   if (command === "eject") {
-    if (
-      parsed.fast !== undefined ||
-      parsed.values["device"] ||
-      parsed.values["output-device"] ||
-      parsed.values["resume"] ||
-      parsed.continue ||
-      parsed.fresh
-    )
+    if (parsed.fast !== undefined || parsed.values["device"] || parsed.values["output-device"])
       throw new UsageError("Ejection accepts role settings, not call/device/Fast selection flags");
     const { config, settings } = await loadLaunchSource(parsed);
     // Validate source identity before removing its redundant raw workspace selector.

@@ -4,7 +4,7 @@ import type { RoleRef, VoiceEdit } from "../roles/store.ts";
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 5;
+export const CONTROL_PROTOCOL_VERSION = 6;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -12,6 +12,7 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_status",
   "agentvoice_redial",
   "agentvoice_restart_runtime",
+  "agentvoice_new_session",
   "agentvoice_thread_mailbox_open",
   "agentvoice_voice_set",
 ] as const;
@@ -49,7 +50,7 @@ export type ControlOperation = {
     application: "pending" | "applied" | "deferred" | "failed" | "unknown";
   };
   operationId: string;
-  kind: "redial" | "restart" | "voice-set";
+  kind: "redial" | "restart" | "new-session" | "voice-set";
   scope: "voice" | "runtime";
   expectedGeneration: number;
   expectedInstanceId: string;
@@ -102,6 +103,7 @@ export interface ControlBackend {
   mailboxOpen(request: MailboxOpenParams, caller?: MailboxCaller): Promise<MailboxOpenResult>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;
   restart(request: ControlRestartRequest): Promise<ControlOperation>;
+  newSession(request: ControlMutationRequest): Promise<ControlOperation>;
 }
 
 /** A stable error suitable for both JSON socket and MCP error results. */

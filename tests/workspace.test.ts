@@ -76,25 +76,9 @@ describe("workspace launch", () => {
     expect(threadParams(config, {}, "start")["threadSource"]).toBe("agentvoice-orchestrator");
     expect(realtimeParams(config, {}, "t", "rt", "sdp")["threadId"]).toBe("t");
   });
-  test("preserves the console/fresh alias, explicit resume, and clear retirement errors", () => {
-    expect(parseServerCommand(["--allow-full-access", "--continue"])).toMatchObject({
-      options: { fresh: false, continue: true },
-    });
-    for (const args of [["--no-continue"], ["--fresh"], ["--resume", "id"]])
-      expect(() => parseArgs(["--continue", ...args])).toThrow("cannot be combined");
-    for (const flag of ["--fresh", "--no-continue"]) {
-      expect(parseServerCommand(["--allow-full-access", flag])).toMatchObject({
-        help: false,
-        options: { fresh: true, continue: false },
-      });
-      expect(() => parseServerCommand([flag, "--resume", "id"])).toThrow("cannot be combined");
-    }
-    expect(
-      parseServerCommand(["--allow-full-access", "--resume=id", "--workspace=/work"]),
-    ).toMatchObject({
-      options: { resume: "id", fresh: false, continue: false },
-    });
-    expect(() => parseArgs(["--resume="])).toThrow("non-empty");
+  test("retires history selection flags in favor of the workspace marker", () => {
+    for (const flag of ["--continue", "--no-continue", "--fresh", "--resume", "--resume=id"])
+      expect(() => parseServerCommand([flag])).toThrow("workspace .agentvoice-session");
     expect(() => parseJsonConfig('{"remote":{}}', "test")).toThrow("retired");
   });
 });

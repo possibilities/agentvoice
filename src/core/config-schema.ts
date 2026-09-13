@@ -102,7 +102,9 @@ export const orchestratorValuesSchema = z
       .optional(),
     ephemeral: z
       .boolean()
-      .describe("Leave no persisted thread history. Default: false.")
+      .describe(
+        "Native ephemeral setting. True is rejected at runtime preflight: workspace session markers require persisted history. Default: false.",
+      )
       .optional(),
     "history-mode": z
       .enum(HISTORY_MODES)

@@ -80,6 +80,9 @@ through `waiting-ready`, `negotiating`, `live`, `failed`, `stopped`.
 Observers receive `availability: idle|connected|closing|unavailable`, exact
 owner correlation and verified conversation identity. A closing call must finish
 cleanup before a successor is admitted; a cleanup failure poisons admission.
+Local call observations also include optional `generation`, incremented before
+runtime replacement so the terminal composition can recover its attachment panes.
+This field does not change the media state or the Android call protocol.
 
 `state.codingActivity` is `working`, `blocked`, `idle` or `unknown`. It describes
 observed native work on the root and verified direct coding-agent children,

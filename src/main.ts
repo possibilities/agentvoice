@@ -43,9 +43,6 @@ Usage:
 Server options:
   --workspace <dir>        Explicit conversation root (default: managed workspace)
   --config <path>          Config file (default: ~/.config/agentvoice/server.json)
-  --continue              Continue the latest eligible conversation for each call
-  --resume <id>            Resume this exact conversation for each call
-  --fresh, --no-continue   Start a new conversation for each call (default)
   --role <name|path>       Role directory for prompts, skills and MCP servers
   -c, --codex-config <key=value>  Native startup override (repeatable, TOML)
   --model <id>             Codex work model
@@ -71,6 +68,8 @@ The client has pointer controls only: microphone, speaker and hold-to-talk.
 Terminate its process or close its terminal to end a call. There are no app keybindings.
 Server settings and prompt files load for each call. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
+Calls resume the workspace .agentvoice-session thread. Remove the marker for a new
+session on the next call, or use the agentvoice_new_session MCP/control operation.
 Use agentvoice attach agent to answer native approvals and tool questions.
 `;
 
@@ -93,19 +92,9 @@ const LAUNCH_FLAGS: FlagSpec = {
     "--codex",
     "--device",
     "--output-device",
-    "--resume",
     "--role",
   ]),
-  bool: new Set([
-    "--allow-full-access",
-    "--debug",
-    "--fresh",
-    "--no-continue",
-    "--continue",
-    "--fast",
-    "--no-fast",
-    "--help",
-  ]),
+  bool: new Set(["--allow-full-access", "--debug", "--fast", "--no-fast", "--help"]),
 };
 
 export class UsageError extends Error {}
@@ -115,8 +104,6 @@ export interface ParsedArgs {
   codexConfig?: string[];
   configPath?: string;
   debug: boolean;
-  fresh: boolean;
-  continue: boolean;
   help: boolean;
   fast?: boolean;
   allowFullAccess?: boolean;
@@ -128,8 +115,6 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
   const codexConfig: string[] = [];
   let configPath: string | undefined;
   let debug = false;
-  let fresh = false;
-  let continueLatest = false;
   let help = false;
   let fast: boolean | undefined;
 
@@ -145,6 +130,10 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
       }
     }
     if (!spec.value.has(flag) && !spec.bool.has(flag)) {
+      if (["--resume", "--continue", "--fresh", "--no-continue"].includes(flag))
+        throw new UsageError(
+          `${flag} is retired; the workspace .agentvoice-session marker selects the session. Remove it or use agentvoice_new_session to start a new one.`,
+        );
       throw new UsageError(`unknown option "${flag}"`);
     }
     const nativeConfig = flag === "--codex-config" || flag === "-c";
@@ -155,8 +144,6 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     if (spec.bool.has(flag)) {
       if (inline !== undefined) throw new UsageError(`"${flag}" takes no value`);
       if (flag === "--debug") debug = true;
-      else if (flag === "--fresh" || flag === "--no-continue") fresh = true;
-      else if (flag === "--continue") continueLatest = true;
       else if (flag === "--fast" || flag === "--no-fast") fast = flag === "--fast";
       else if (flag === "--help") help = true;
       continue;
@@ -175,12 +162,6 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     else values[flag.slice(2)] = value;
   }
 
-  if (!help && fresh && values["resume"] !== undefined)
-    throw new UsageError("--resume cannot be combined with --no-continue/--fresh");
-  if (!help && seen.has("--continue") && (fresh || values["resume"] !== undefined))
-    throw new UsageError("--continue cannot be combined with --no-continue/--fresh or --resume");
-  if (!help && values["resume"] !== undefined && !values["resume"].trim())
-    throw new UsageError("--resume requires a non-empty id");
   if (!help && seen.has("--fast") && seen.has("--no-fast"))
     throw new UsageError("--fast cannot be combined with --no-fast");
   return {
@@ -188,8 +169,6 @@ export function parseArgs(argv: string[], spec: FlagSpec = LAUNCH_FLAGS): Parsed
     ...(codexConfig.length > 0 ? { codexConfig } : {}),
     configPath,
     debug,
-    fresh,
-    continue: continueLatest,
     help,
     ...(fast === undefined ? {} : { fast }),
     ...(seen.has("--allow-full-access") ? { allowFullAccess: true } : {}),
@@ -206,9 +185,6 @@ export function parseDeviceIndex(flag: string, value: string): number {
 
 export interface ServerOptions {
   debug: boolean;
-  fresh: boolean;
-  continue: boolean;
-  resume?: string;
 }
 export type ParsedServerCommand =
   | { help: true }
@@ -223,15 +199,11 @@ export function parseServerCommand(argv: string[]): ParsedServerCommand {
     throw new UsageError(
       "Audio devices belong to the client; use agentvoice client --device/--output-device",
     );
-  const resume = parsed.values["resume"];
   return {
     help: false,
     parsed,
     options: {
       debug: parsed.debug,
-      fresh: parsed.fresh,
-      continue: parsed.continue,
-      ...(resume === undefined ? {} : { resume }),
     },
   };
 }

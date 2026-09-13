@@ -16,7 +16,7 @@ describe("native Fast launch policy", () => {
     expect(parseArgs([])).not.toHaveProperty("fast");
     expect(parseArgs(["--fast"]).fast).toBe(true);
     expect(parseArgs(["--no-fast"]).fast).toBe(false);
-    expect(parseServerCommand(["--allow-full-access", "--resume=id", "--fast"])).toMatchObject({
+    expect(parseServerCommand(["--allow-full-access", "--fast"])).toMatchObject({
       parsed: { fast: true },
     });
     for (const args of [
@@ -186,7 +186,7 @@ describe("Fast runtime propagation", () => {
         {
           orchestrator: { "service-tier": "flex", extra: { serviceTier: "flex" } },
         },
-        { fast, continue: true },
+        { fast, savedThread: "existing" },
       );
       h.native.tiers = true;
       h.native.main("existing", h.directory);

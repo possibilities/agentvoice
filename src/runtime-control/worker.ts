@@ -210,9 +210,6 @@ export function runRuntimeWorker(
         debug: config!.debug,
         initialMute: { mic: true, speaker: true },
         runtime: {
-          fresh: params.threadId ? false : currentLaunch.provenance.options.fresh,
-          continue: params.threadId ? false : currentLaunch.provenance.options.continue,
-          resume: params.threadId ? undefined : currentLaunch.provenance.options.resume,
           exactResume: params.threadId,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,

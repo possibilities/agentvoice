@@ -24,6 +24,7 @@ export const observationSchema = z
     clientId: z.string().uuid().nullable(),
     workspace: z.string().nullable(),
     threadId: z.string().nullable(),
+    generation: z.number().int().positive().optional(),
     state: frontendStateSchema.nullable(),
   })
   .strict();

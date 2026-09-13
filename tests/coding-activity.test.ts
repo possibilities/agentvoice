@@ -149,7 +149,7 @@ test("coding activity reaches frontend clients and survives voice-only changes b
       provenance: {
         parsed: parseArgs([]),
         launchCwd: directory,
-        options: { debug: false, fresh: false, continue: false },
+        options: { debug: false },
       },
       control: { name: "agentvoice", server: {}, tools: [], env: {} },
       lease: () => () => {},

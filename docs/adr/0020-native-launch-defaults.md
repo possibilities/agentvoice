@@ -1,5 +1,8 @@
 # 0020: Native permissions and context, fresh ordinary launches
 
+[ADR 0052](0052-workspace-session-marker.md) supersedes fresh ordinary launches
+and the conversation-selection flags with an exact workspace session marker.
+
 **Startup-context update:** [ADR 0029](0029-desktop-startup-context.md) supersedes this document only for the startup-context default: AgentVoice now sends false to match the inspected desktop client. Other decisions remain in force.
 
 Accepted 2026-09-06 after the operator reviewed the defaults individually.

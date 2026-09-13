@@ -81,7 +81,7 @@
         },
         "ephemeral": {
           "type": "boolean",
-          "description": "Leave no persisted thread history. Default: false."
+          "description": "Native ephemeral setting. True is rejected at runtime preflight: workspace session markers require persisted history. Default: false."
         },
         "history-mode": {
           "type": "string",

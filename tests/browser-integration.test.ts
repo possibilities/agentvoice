@@ -111,7 +111,7 @@ test("controller relays browser media only for the active runtime incarnation", 
     stateDir: root,
     provenance: {
       parsed: parseArgs([]),
-      options: { debug: false, fresh: false, continue: false },
+      options: { debug: false },
       launchCwd: root,
     },
     version: "test",

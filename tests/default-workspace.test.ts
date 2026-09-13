@@ -49,7 +49,7 @@ test("newest generation name wins despite mutable mtimes; active call provenance
   const first = currentWorkspace(f.state);
   const provenance = {
     parsed: parseArgs([]),
-    options: { fresh: false, continue: false, debug: false },
+    options: { debug: false },
     launchCwd: f.root,
   };
   const pinned = pinCallWorkspace(provenance, first);

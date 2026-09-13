@@ -26,6 +26,8 @@ class FakeMux {
     const params = (raw ?? {}) as Record<string, unknown>;
     this.calls.push({ method, params });
     if (method === "instance.configure") return {};
+    if (method === "app.list")
+      return { apps: ["client", "voice", "agent"].map((name) => ({ name, state: "running" })) };
     if (method === "layout.get") return structuredClone(this.layout);
     if (method === "layout.apply") {
       if (this.conflict) {
@@ -37,7 +39,8 @@ class FakeMux {
       this.layout = { ...this.layout, ...params, revision: this.layout.revision + 1 };
       return this.layout;
     }
-    if (method === "app.create") return { name: params["name"], state: "running" };
+    if (method === "app.create" || method === "app.restart")
+      return { name: params["name"], state: "running" };
     throw new Error(method);
   }
   created() {
@@ -129,6 +132,76 @@ test("failed startup and client exit never launch attachments", async () => {
   await composition.drained();
   await composition.done;
   expect(mux.created()).toHaveLength(1);
+});
+
+test("a new runtime generation replaces exact-thread attachments while retaining the voice client", async () => {
+  const mux = new FakeMux();
+  const id = randomUUID();
+  const composition = new Composition(mux, id, ["agentvoice"]);
+  await composition.start();
+  composition.observe({ ...live(id), generation: 1 });
+  await composition.drained();
+  composition.observe({
+    ...live(id),
+    generation: 2,
+    state: { ...live(id).state!, phase: "waiting-ready" },
+  });
+  composition.event({
+    type: "event",
+    event: "app.state",
+    data: { app: { name: "agent", state: "exited" } },
+  });
+  await composition.drained();
+  expect(mux.calls.filter((c) => c.method === "app.restart")).toHaveLength(0);
+  composition.observe({ ...live(id), generation: 2, threadId: "new-thread" });
+  await composition.drained();
+  const restarted = mux.calls.filter((c) => c.method === "app.restart");
+  expect(restarted.map((c) => c.params["name"])).toEqual(["voice", "agent"]);
+  expect(restarted[1]!.params["command"]).toMatchObject({
+    argv: [
+      "agentvoice",
+      "attach",
+      "agent",
+      "--workspace",
+      "/exact/workspace",
+      "--thread",
+      "new-thread",
+    ],
+  });
+  expect(mux.created()).toHaveLength(3);
+  composition.observe({ ...live(id), generation: 2, threadId: "new-thread" });
+  await composition.drained();
+  expect(mux.calls.filter((c) => c.method === "app.restart")).toHaveLength(2);
+  composition.event({
+    type: "event",
+    event: "app.state",
+    data: { app: { name: "client", state: "exited" } },
+  });
+  await composition.done;
+});
+
+test("attachment exit arriving before the generation observation is checked against the current call", async () => {
+  const mux = new FakeMux();
+  const id = randomUUID();
+  const composition = new Composition(mux, id, ["agentvoice"], undefined, [], async () => ({
+    ...live(id),
+    generation: 2,
+    state: { ...live(id).state!, phase: "waiting-ready" },
+  }));
+  await composition.start();
+  composition.observe({ ...live(id), generation: 1 });
+  await composition.drained();
+  composition.event({
+    type: "event",
+    event: "app.state",
+    data: { app: { name: "agent", state: "exited" } },
+  });
+  await composition.drained();
+  composition.observe({ ...live(id), generation: 2, threadId: "successor" });
+  await composition.drained();
+  expect(mux.calls.filter((c) => c.method === "app.restart")).toHaveLength(2);
+  composition.stop();
+  await composition.drained();
 });
 
 test.each([

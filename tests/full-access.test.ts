@@ -153,7 +153,7 @@ describe("optional full access", () => {
           activePermissionProfile: { id: "custom" },
         },
       ]) {
-        const h = runtimeHarness({}, resume ? { resume: "persisted" } : { fresh: true });
+        const h = runtimeHarness({}, resume ? { savedThread: "persisted" } : {});
         h.native.main("persisted", h.directory);
         h.native.override = (method) =>
           method === (resume ? "thread/resume" : "thread/start")
@@ -171,7 +171,7 @@ describe("optional full access", () => {
     });
 
     test(`${resume ? "resume" : "start"} preserves managed requirement refusals with opt-in`, async () => {
-      const h = runtimeHarness({}, resume ? { resume: "persisted" } : { fresh: true });
+      const h = runtimeHarness({}, resume ? { savedThread: "persisted" } : {});
       h.config.allowFullAccess = true;
       h.native.main("persisted", h.directory);
       h.native.override = (method) =>

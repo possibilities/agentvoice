@@ -54,9 +54,9 @@ import {
 import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
+import { readSessionMarker, saveSessionMarker } from "./session-marker.ts";
 import { lockThread } from "./thread-lock.ts";
 import { ThreadObserver } from "./thread-observer.ts";
-import { type SessionSelection, selectThread } from "./thread-selection.ts";
 import type { ReadyInfo } from "./voice-types.ts";
 
 export type { ReadyInfo } from "./voice-types.ts";
@@ -93,7 +93,7 @@ export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | 
   readonly shutdownForced?: boolean;
   readonly nativeEndpoint?: import("./native-listener.ts").NativeEndpoint;
 };
-export interface RuntimeOptions extends SessionSelection {
+export interface RuntimeOptions {
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
   nativeStateDir?: string;
@@ -145,6 +145,10 @@ export async function prepareRuntime(
     warnings.push(...passthroughWarnings(config, loaded.prompts));
     for (const kind of ["start", "resume"] as const) {
       const params = threadParams(config, loaded.prompts, kind, role ?? {});
+      if (kind === "start" && params["ephemeral"] === true)
+        throw new Error(
+          "Workspace sessions require persisted Codex history; remove orchestrator.ephemeral or extra.ephemeral",
+        );
       if (control) {
         // Reject hidden reserved entries even when raw config would discard them.
         for (const servers of [config.orchestrator.config?.["mcp_servers"], role?.mcpServers]) {
@@ -178,6 +182,7 @@ export class VoiceRuntime {
   private shuttingDown = false;
   private tuiGateway: AttachmentGateway | undefined;
   private shutdownPromise: Promise<void> | null = null;
+  private workspaceLease: (() => void) | undefined;
   private readonly abort = new AbortController();
   private readonly locks = new Map<string, () => void>();
   private readonly activeTurns = new Map<string, string>();
@@ -282,6 +287,12 @@ export class VoiceRuntime {
         for (const message of warnings) this.events.onStatus(message);
         this.events.onWarning?.(warnings.join("\n"));
       }
+      if (!this.options.acquireLease) {
+        const directory =
+          this.options.locksDir ?? join(stateDirectory(process.env, homedir()), "thread-locks");
+        this.workspaceLease = lockThread(join(directory, "workspaces"), workspace);
+      }
+      const savedThread = readSessionMarker(workspace);
       await this.openConnection();
       const connection = this.requireConnection();
       // Process-local to this owned child: no other Codex process sees the root.
@@ -297,13 +308,7 @@ export class VoiceRuntime {
         }
         this.assertRunning();
       }
-      const id =
-        this.options.exactResume ??
-        (await selectThread(
-          (method, params) => connection.request(method, params),
-          workspace,
-          this.options,
-        ));
+      const id = this.options.exactResume ?? savedThread;
       this.assertRunning();
       this.threadId = id ? await this.resumeThread(id) : await this.startThread();
       this.options.onVerifiedThread?.({
@@ -469,6 +474,8 @@ export class VoiceRuntime {
         this.sessions.reset();
         for (const release of this.locks.values()) release();
         this.locks.clear();
+        this.workspaceLease?.();
+        this.workspaceLease = undefined;
         this.disposeRole?.();
       }
     })();
@@ -531,6 +538,7 @@ export class VoiceRuntime {
     this.assertRunning();
     const id = extractThreadId(result);
     await this.acquire(id);
+    saveSessionMarker(this.config.orchestrator.workspace, id);
     this.threadObserver?.seed((result as { thread?: unknown }).thread);
     const tier = await selection.confirm(result, params);
     this.assertRunning();

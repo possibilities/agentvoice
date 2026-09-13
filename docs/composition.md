@@ -20,20 +20,22 @@ placeholders. All three app declarations explicitly use `pty: "local"` and
 `whenHidden: "keep"`; being squeezed to zero width does not end a call. Layout
 replacement reads the current tree and passes its revision, retrying only an
 explicit conflict so divider drags survive. Keyboard focus moves to the stock
-agent attachment when it opens. Any pane app exit ends the composition and its call. There is no automatic
-attachment/input replay.
+agent attachment when it opens. Ordinary pane app exit ends the composition and
+its call. Runtime replacement reopens attachments on the exact current thread;
+typed input is never replayed.
 
 ## Frontend socket observation
 
-The existing private frontend socket uses protocol version 2. These methods
+The existing private frontend socket uses protocol version 3. These methods
 are additive; a server without `observe` refuses the composition before it
 starts smolmux or the voice client. Update the waiting server through an explicit
 installation/restart when adopting this command change.
 
 - `observe`, with no params, replies with the current observation and subscribes
-  the connection to subsequent `{v:2,type:"observation",observation:{...}}` frames.
+  the connection to subsequent `{v:3,type:"observation",observation:{...}}` frames.
   Observations contain `busy`, nullable `clientId`, `workspace`, `threadId`, and
-  nullable `state` using the existing frontend-state schema. The response and
+  nullable `state` using the existing frontend-state schema. Calls also publish
+  their runtime `generation` so the composition can identify replacement. The response and
   subsequent publications are ordered on one connection. No history is replayed.
 - `call` requires `{clientId:<UUID>}`. The UUID correlates a
   composition's spawned client with its call; it is not a permission or bearer
@@ -50,9 +52,14 @@ arrays contain explicit `--workspace` and `--thread`. A busy server at initial
 subscription is refused; a competing later client cannot satisfy this gate.
 
 Server/observer loss, pointer client exit or foreground termination ends the
-composition and its local apps. An attachment exit also ends this voice-owning composition and its call.
-Runtime restart may revoke the agent attachment; it stays disconnected rather
-than automatically reconnecting. Voice redial does not reopen attachment apps.
+composition and its local apps. An ordinary attachment exit also ends this
+voice-owning composition and its call. A newer generation permits the old
+attachments to exit while replacement runs. Once the same call is live, the
+composition uses `app.restart` to reopen both attachments with the exact current
+workspace/thread. It refreshes observation before treating an attachment exit as
+ordinary, since separate sockets can deliver exit before generation observation.
+Voice redial does not reopen attachment apps. Failed replacement keeps the
+client available for explicit recovery, without reopening attachments early.
 
 ## Desktop attachment view
 

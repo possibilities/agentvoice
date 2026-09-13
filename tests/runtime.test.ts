@@ -61,52 +61,35 @@ describe("foreground runtime ownership", () => {
       await h.cleanup();
     }
   });
-  test("explicit continue selects native history and verifies it before resuming", async () => {
-    const h = runtimeHarness({}, { continue: true });
+  test("the workspace marker selects exact history and verifies it before resuming", async () => {
+    const h = runtimeHarness({}, { savedThread: "existing" });
     h.native.main("existing", h.directory);
-    h.native.override = (method) =>
-      method === "thread/list"
-        ? Promise.resolve({
-            data: h.native.threads.map((thread) => ({ ...thread, threadSource: null })),
-            nextCursor: null,
-          })
-        : undefined;
     try {
       await h.runtime.start();
-      expect(h.native.calls.map((c) => c.method)).toEqual([
-        "thread/list",
-        "thread/read",
-        "thread/read",
-        "thread/resume",
-      ]);
+      expect(h.native.calls.map((c) => c.method)).toEqual(["thread/read", "thread/resume"]);
       expect(h.runtime.currentReady?.threadId).toBe("existing");
     } finally {
       await h.cleanup();
     }
   });
-  test("default and explicit fresh skip lookup, while resume errors never create a replacement", async () => {
+  test("missing markers skip lookup, while resume errors never create a replacement", async () => {
     const h = runtimeHarness();
-    const explicit = runtimeHarness({}, { fresh: true });
-    const missing = runtimeHarness({}, { resume: "missing" });
+    const missing = runtimeHarness({}, { savedThread: "missing" });
     try {
       await h.runtime.start();
       expect(h.native.calls[0]?.method).toBe("thread/start");
       expect(h.native.calls.some((c) => c.method === "thread/list")).toBe(false);
-      await explicit.runtime.start();
-      expect(explicit.native.calls[0]?.method).toBe("thread/start");
-      expect(explicit.native.calls.some((c) => c.method === "thread/list")).toBe(false);
-      await expect(missing.runtime.start()).rejects.toThrow("no unarchived AgentVoice");
+      await expect(missing.runtime.start()).rejects.toThrow("no longer matches");
       expect(missing.native.calls.some((c) => c.method === "thread/start")).toBe(false);
       expect(missing.native.closes).toBe(1);
     } finally {
       await h.cleanup();
-      await explicit.cleanup();
       await missing.cleanup();
     }
   });
   test("refuses a changed workspace or identity and releases failed-start locks", async () => {
     for (const failure of ["workspace", "identity", "resume"]) {
-      const h = runtimeHarness({}, { continue: true });
+      const h = runtimeHarness({}, { savedThread: "existing" });
       h.native.main("existing", h.directory);
       h.native.override = (m) => {
         if (m === "thread/read" && failure !== "resume")
@@ -130,7 +113,7 @@ describe("foreground runtime ownership", () => {
     }
   });
   test("two workspaces can run independently; two owners of the same conversation cannot", async () => {
-    const h = runtimeHarness({}, { continue: true });
+    const h = runtimeHarness({}, { savedThread: "shared" });
     const elsewhere = runtimeHarness();
     const secondNative = new NativeStub();
     h.native.main("shared", h.directory);
@@ -143,7 +126,7 @@ describe("foreground runtime ownership", () => {
       await h.runtime.start();
       await elsewhere.runtime.start();
       await expect(second.start()).rejects.toThrow("already open");
-      expect(secondNative.closes).toBe(1);
+      expect(secondNative.closes).toBe(0);
       expect(h.native.alive).toBe(true);
       expect(elsewhere.runtime.currentReady?.workspace).toBe(elsewhere.directory);
     } finally {
@@ -368,7 +351,7 @@ describe("launch configuration and reported identity", () => {
         orchestrator: { model: "requested", effort: "high" },
         voice: { version: "v3" },
       },
-      { continue: true },
+      { savedThread: "saved" },
     );
     h.native.main("saved", h.directory);
     h.native.override = (method) =>

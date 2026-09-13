@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ConfigValues, parseJsonConfig, resolveConfig } from "../src/core/config.ts";
 import { realtimeParams } from "../src/core/params.ts";
-import type { RuntimeOptions } from "../src/core/runtime.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 describe("voice context passthrough", () => {
@@ -44,16 +43,9 @@ describe("voice context passthrough", () => {
 });
 
 describe("native voice continuity without application replay", () => {
-  for (const mode of ["continue", "resume", "fresh"] as const) {
+  for (const mode of ["resume", "fresh"] as const) {
     test(`${mode}, redial and Fresh never read or inject speech history`, async () => {
-      const h = runtimeHarness(
-        {},
-        mode === "resume"
-          ? { resume: "existing" }
-          : mode === "continue"
-            ? { continue: true }
-            : { fresh: true },
-      );
+      const h = runtimeHarness({}, mode === "resume" ? { savedThread: "existing" } : {});
       h.native.main("existing", h.directory);
       h.native.override = (method) =>
         method === "thread/timeline/list"
@@ -101,7 +93,7 @@ describe("native voice continuity without application replay", () => {
     [{ version: "v1" }, { version: "v1" }],
   ] satisfies [NonNullable<ConfigValues["voice"]>, Record<string, unknown>][]) {
     test(`native overrides survive resume and redial: ${JSON.stringify(voice)}`, async () => {
-      const h = runtimeHarness({ voice }, { continue: true });
+      const h = runtimeHarness({ voice }, { savedThread: "existing" });
       h.native.main("existing", h.directory);
       try {
         await h.runtime.start();
@@ -196,16 +188,11 @@ for (const snapshot of ["", "Operator-provided startup context"]) {
 }
 
 describe("native voice context across call and conversation boundaries", () => {
-  for (const mode of ["fresh", "continue", "resume"] as const) {
+  for (const mode of ["fresh", "resume"] as const) {
     for (const scenario of cases) {
       test(`${mode}: ${scenario.label} survives automatic renewal`, async () => {
         const values = parseJsonConfig(JSON.stringify(scenario.values), "test config");
-        const options: RuntimeOptions =
-          mode === "resume"
-            ? { resume: "existing" }
-            : mode === "continue"
-              ? { continue: true }
-              : { fresh: true };
+        const options = mode === "resume" ? { savedThread: "existing" } : {};
         const h = runtimeHarness(values, options);
         h.native.main("existing", h.directory);
         try {

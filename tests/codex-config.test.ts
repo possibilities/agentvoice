@@ -139,7 +139,7 @@ describe("native startup configuration", () => {
     expect(resolved.codexConfig).toEqual(["approval_policy=on-request", "approval_policy=never"]);
   });
 
-  for (const mode of ["fresh", "continue", "resume"] as const) {
+  for (const mode of ["fresh", "resume"] as const) {
     test(`${mode}: startup values stay out of thread/realtime payloads and survive redial/Fresh`, async () => {
       const entries = [
         "model=startup-model",
@@ -151,11 +151,7 @@ describe("native startup configuration", () => {
           orchestrator: { model: "thread-model", config: { model_reasoning_effort: "high" } },
           voice: { extra: { prompt: "request prompt" } },
         },
-        mode === "resume"
-          ? { resume: "existing" }
-          : mode === "continue"
-            ? { continue: true }
-            : { fresh: true },
+        mode === "resume" ? { savedThread: "existing" } : {},
       );
       h.native.main("existing", h.directory);
       try {
@@ -226,7 +222,7 @@ describe("native startup configuration", () => {
     for (const fresh of [true, false]) {
       const h = runtimeHarness(
         { "codex-config": ["model=startup-model", "service_tier=default"] },
-        { fresh, continue: !fresh, fast: true },
+        { savedThread: fresh ? undefined : "existing", fast: true },
       );
       h.native.tiers = true;
       h.native.nativeConfig = { model: "startup-model", model_provider: "openai" };

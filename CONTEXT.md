@@ -25,8 +25,9 @@ frontend disconnect ends that call and returns the server to waiting.
 **Composition** — Bare `agentvoice`: one foreground smolmux process presenting the
 pointer frontend, voice transcript and stock agent attachment side by side. All
 three Apps use local PTYs and end with the smolmux process; there are no
-Companion-held Sessions. Any App exiting or failing ends the Composition and its
-call. Attachments start only after this launch's call is live.
+Companion-held Sessions. Ordinary App exit/failure ends the Composition and its
+call. Runtime replacement reopens exact-thread attachments after live media;
+input is never replayed. Attachments initially start only after this launch's call is live.
 
 **Attachment view** — `agentvoice --attach`, run on desktop: two local PTYs for
 voice transcript and stock agent, observing another frontend's call. It starts
@@ -121,8 +122,8 @@ are refused visibly.
 
 **Conversation / main thread** — A native Codex thread tagged
 agentvoice-orchestrator. Its saved history can continue across app launches.
-Ordinary launch creates a new thread; explicit --continue selects the latest
-eligible thread in the exact workspace.
+Ordinary launch resumes the exact thread in the workspace's `.agentvoice-session`
+marker, or creates and saves a thread when that file is absent.
 
 **Orchestrator agent** — The working Codex agent on that main thread: tools,
 filesystem work and native voice handoffs. The term is retained in config keys;
@@ -138,7 +139,8 @@ replaces it while preserving the voice runtime, Codex child and workspace.
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
 child only by environment variable. MCP and the control socket expose status, voice redial and full runtime restart
-with an optional handoff prompt, plus thread-mailbox opening. UI removal does not retire API controls. See `docs/api.md`.
+with an optional handoff prompt, plus explicit new session, voice selection and
+thread-mailbox opening. UI removal does not retire API controls. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -147,14 +149,20 @@ The app-server's omitted-version fallback (v1 in Codex 0.153.3/0.153.4) is a
 different reference, separate from the work model and --fast. Initial items
 require effective v3.
 
-**Fresh launch** — The server's default conversation policy: each call starts a
-new main thread. `--fresh` / `--no-continue` make that policy explicit; there is
-no in-call Fresh action.
+**Workspace session marker** — `.agentvoice-session` inside the canonical workspace,
+containing the exact native main-thread ID as plain text. Calls always resume it;
+absence creates and saves a thread. Invalid or unavailable saved history is an
+error. Deleting the marker selects a new session on the next call.
 
-**Continue / resume** — Explicitly resume native eligible working-thread history:
---continue selects the latest eligible thread, --resume chooses an exact ID.
-No global thread.json pointer. AgentVoice does not read or inject saved speech
-into new voice calls. Ordinary reconnects add no AgentVoice instruction.
+**New session** — An explicit MCP/API operation that preflights replacement, stops
+the old runtime, clears the workspace marker and mailbox, creates and saves a
+new main thread, and reconnects voice within the same frontend-owned call.
+Native history and old transcripts remain. _Avoid_: redial (voice only).
+
+**Resume** — Native restoration of the workspace marker's exact main thread,
+or the retained active thread during runtime restart. No latest-history selection,
+speech replay or AgentVoice reconnect instruction. Conversation-selection flags
+are retired.
 
 **Native voice context** — Explicit voice.extra.initialItems are passed through
 unchanged, including empty and null values. Automatic spoken-history replay was

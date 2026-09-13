@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { VoiceState } from "../src/console/state.ts";
 import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
+import { readSessionMarker, saveSessionMarker } from "../src/core/session-marker.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
 import type { ControllerEvent } from "../src/events/contract.ts";
 import { parseArgs } from "../src/main.ts";
@@ -85,7 +86,7 @@ describe("persistent controller and disposable runtime", () => {
           "--codex",
           join(import.meta.dir, "fixtures/controller-codex.ts"),
         ]),
-        options: { debug: false, fresh: false, continue: false },
+        options: { debug: false },
         launchCwd: root,
       },
       version: "test",
@@ -351,7 +352,7 @@ describe("persistent controller and disposable runtime", () => {
       version: "test",
       provenance: {
         parsed: parseArgs([]),
-        options: { debug: false, fresh: false, continue: false },
+        options: { debug: false },
         launchCwd: root,
       },
       control: registration,
@@ -502,7 +503,7 @@ test("mute preferences changed during activation reach the worker and its final 
     version: "test",
     provenance: {
       parsed: parseArgs([]),
-      options: { debug: false, fresh: false, continue: false },
+      options: { debug: false },
       launchCwd: root,
     },
     control: registration,
@@ -595,6 +596,7 @@ test("initial saved-thread MCP failure pins the verified ID before retry despite
   const configPath = join(root, "server.json");
   const worker = join(root, "worker.ts");
   const saved = { id: "saved-exact", cwd: root, threadSource: "agentvoice-orchestrator" };
+  saveSessionMarker(root, saved.id);
   writeFileSync(configPath, "{}");
   writeFileSync(join(root, "native-threads.json"), JSON.stringify([saved]));
   writeFileSync(join(root, "fail-mcp"), "");
@@ -613,7 +615,7 @@ test("initial saved-thread MCP failure pins the verified ID before retry despite
         "--codex",
         join(import.meta.dir, "fixtures/controller-codex.ts"),
       ]),
-      options: { debug: false, fresh: false, continue: true },
+      options: { debug: false },
       launchCwd: root,
     },
     spawn: (generation, event, lease) => spawnRuntimeProcess(generation, event, lease, worker),
@@ -679,7 +681,7 @@ describe("call controller and disposable runtime", () => {
           "--codex",
           join(import.meta.dir, "fixtures/controller-codex.ts"),
         ]),
-        options: { debug: false, fresh: false, continue: false },
+        options: { debug: false },
         launchCwd: root,
       },
       version: "test",
@@ -719,9 +721,41 @@ describe("call controller and disposable runtime", () => {
       later = new RuntimeController({ ...options, instanceId: "later-call" });
       await later.start();
       expect(later.status().runtime.phase).toBe("ready");
-      expect(later.status().threadId).not.toBe(first.threadId);
+      expect(later.status().threadId).toBe(first.threadId);
       expect(later.state().conversation?.model).toBe("after");
       expect(later.status().instanceId).not.toBe(first.instanceId);
+      const newRequest = {
+        operationId: "new-session",
+        expectedInstanceId: "later-call",
+        expectedGeneration: later.status().generation,
+      };
+      const oldPid = later.status().runtime.pid;
+      expect((await later.newSession(newRequest)).phase).toBe("accepted");
+      await until(() => later!.status().currentOperation?.phase === "ready");
+      expect(later.status().threadId).not.toBe(first.threadId);
+      expect(readSessionMarker(root)).toBe(later.status().threadId);
+      expect(later.status().runtime.pid).not.toBe(oldPid);
+      expect(later.state().mic.muted).toBe(true);
+      expect(later.status().currentOperation?.kind).toBe("new-session");
+      expect(await later.newSession(newRequest)).toMatchObject({
+        phase: "ready",
+        result: { threadId: later.status().threadId },
+      });
+      await expect(later.newSession({ ...newRequest, operationId: "stale-reset" })).rejects.toThrow(
+        "Read status",
+      );
+      expect(JSON.parse(readFileSync(join(root, "native-threads.json"), "utf8"))).toHaveLength(2);
+      const chosen = later.status().threadId;
+      writeFileSync(configPath, '{"accounts":{}}');
+      await later.newSession({
+        ...newRequest,
+        operationId: "invalid-new-session",
+        expectedGeneration: later.status().generation,
+      });
+      await until(() => later!.status().currentOperation?.phase === "failed");
+      expect(readSessionMarker(root)).toBe(chosen);
+      expect(later.status().threadId).toBe(chosen);
+      expect(later.status().runtime.phase).toBe("ready");
       await expect(later.start()).rejects.toThrow("already started");
     } finally {
       await later?.shutdown();

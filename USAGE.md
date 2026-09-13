@@ -41,6 +41,7 @@ Use the MCP tools when you are operating the conversation that supplied them:
 agentvoice_status({})
 agentvoice_redial({ operationId, expectedGeneration, expectedInstanceId })
 agentvoice_restart_runtime({ operationId, expectedGeneration, expectedInstanceId, scope: "runtime", handoffPrompt? })
+agentvoice_new_session({ operationId, expectedGeneration, expectedInstanceId })
 ```
 
 Start with `agentvoice_status`. It gives the controller-bound `instanceId`, the
@@ -50,6 +51,15 @@ invent a workspace, thread ID, process ID, socket path, or narrower component
 scope: the control plane is intentionally bound to its owning controller.
 
 ## Pick the smallest supported recovery
+
+Every call resumes the exact main thread named by `.agentvoice-session` in its
+workspace. Missing markers create and save a new thread; invalid/unresumable
+markers fail without fallback. Client/server restarts preserve the marker.
+Use `agentvoice_new_session` when the human requests a new session: it preflights,
+stops old work, removes the marker and clears the old mailbox, creates and saves
+a new thread, and reconnects voice on the same frontend. Old native history and
+transcripts remain. Read status to recover the journaled result; reuse the same
+operation ID only for the same request. No handoff prompt or speech replay is added.
 
 Use `agentvoice_redial` when voice/WebRTC needs to reconnect while the current
 runtime stays live. It preserves the runtime's loaded code and configuration.

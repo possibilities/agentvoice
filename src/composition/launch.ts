@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { streamRemoteAttachment } from "../attachment/bridge.ts";
 import { streamAttachmentSession } from "../attachment/session.ts";
 import { observeFrontend } from "../frontend/observer.ts";
-import { frontendSocketPath } from "../frontend/protocol.ts";
+import { frontendSocketPath, observationSchema } from "../frontend/protocol.ts";
 import { ControlSocket } from "../ipc/control-client.ts";
 import { stateDirectory } from "../paths.ts";
 import { AttachmentComposition } from "./attachment.ts";
@@ -93,7 +93,9 @@ export async function runComposition(
       throw new Error("smolmux did not identify the owned foreground process");
     composition = options.attach
       ? new AttachmentComposition(mux, command, options.host)
-      : new Composition(mux, clientId, command, workspace, clientArgs);
+      : new Composition(mux, clientId, command, workspace, clientArgs, async () =>
+          observationSchema.parse(await observation!.socket.request("observe")),
+        );
     await mux.request("event.subscribe", { events: ["app.state"] });
     const current = composition;
     work = (async () => {

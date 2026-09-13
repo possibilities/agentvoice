@@ -52,8 +52,10 @@ owns the current source map and recording/attachment implementation guidance.
   client's correlation ID, live media and exact workspace/thread. Correlation is
   not authorization. Observer disconnect cannot close a call or send input.
   Preserve divider revisions. Any pane app exiting or failing ends the entire
-  composition and call, including attachment revocation during runtime restart;
-  never automatically relaunch attachments or open audio/inference in composition tests.
+  composition and call, except attachment revocation during runtime replacement.
+  Generation observation gates exact-thread pane restarts after live media;
+  refresh observation when attachment exit races a generation publication.
+  Never replay typed input or open audio/inference in composition tests.
   `--attach` is the desktop-only two-pane variant for another client's call;
   it starts no client/audio and closing its apps never stops that call.
   `--host` uses verified SSH for bounded transcript observation and the backend's
@@ -148,13 +150,15 @@ owns the current source map and recording/attachment implementation guidance.
   Runtime restart and call shutdown revoke before teardown; redial and automatic
   renewal preserve attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
-- src/core/thread-selection.ts: paginated native history lookup in exact workspace,
-  AgentVoice main source only; no global pointer or separate session index.
+- src/core/session-marker.ts: private workspace `.agentvoice-session` marker,
+  bounded safe reads, exclusive atomic publication and fsynced deletion. Runtime
+  validates exact native main-thread ownership; no latest-history lookup or fallback.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/runtime-control/controller.ts: one server-owned call, exact thread leases,
+  workspace lease before startup, explicit new-session replacement and mailbox reset,
   native identity, readiness, MCP/API redial and full runtime replacement. Keep
   the frontend connected across restart; cancel pointer holds after successful
-  preflight and before teardown. In-call Fresh remains removed.
+  preflight and before teardown. Explicit new-session replacement clears the marker after cleanup.
 - src/runtime-control/journal.ts: fsynced call-controller-lifetime operations.
   Journal restart handoffs before teardown and submit once after exact resume
   and live media. Keep handoff outcome separate from readiness; never stop healthy
@@ -208,7 +212,7 @@ owns the current source map and recording/attachment implementation guidance.
   docs/thread-mailbox.md for capacity, ancestry, caller and retry boundaries.
 - src/core/runtime.ts: launch, exact restart resume, voice session, owned child
   lifecycle and runtime-cached settings. No account selection/rotation, custom
-  worker manager or in-call Fresh. Custom native turn submissions are limited to
+  worker manager. Custom native turn submissions are limited to
   explicit controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)) and immediate child
   completion-tally wake-ups ([ADR 0038](adr/0038-thread-mailbox-wakeups.md)).
 - src/core/session.ts: counted native voice starts/stops and attribution.

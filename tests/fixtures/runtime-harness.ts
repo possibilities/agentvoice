@@ -10,7 +10,7 @@ import {
   type RuntimeOptions,
   VoiceRuntime,
 } from "../../src/core/runtime.ts";
-import type { NativeThread } from "../../src/core/thread-selection.ts";
+import { saveSessionMarker } from "../../src/core/session-marker.ts";
 import type { ReadyInfo } from "../../src/core/voice-types.ts";
 
 export function deferred<T = void>() {
@@ -25,7 +25,13 @@ export class NativeStub implements RuntimeConnection {
   alive = true;
   closes = 0;
   calls: Array<{ method: string; params: Record<string, unknown> }> = [];
-  threads: NativeThread[] = [];
+  threads: {
+    id: string;
+    cwd: string;
+    threadSource?: string;
+    parentThreadId?: string | null;
+    ephemeral?: boolean;
+  }[] = [];
   /** Opt-in native tier protocol; existing lifecycle tests retain minimal responses. */
   tiers = false;
   nativeConfig: Record<string, unknown> = { model: "native-model", model_provider: "openai" };
@@ -98,13 +104,15 @@ export const nativeFullAccess = {
   activePermissionProfile: { id: ":danger-full-access", extends: null },
 };
 
-export function runtimeHarness(values: ConfigValues = {}, options: RuntimeOptions = {}) {
+export type FixtureOptions = RuntimeOptions & { savedThread?: string };
+export function runtimeHarness(values: ConfigValues = {}, options: FixtureOptions = {}) {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "agentvoice-test-")));
   const config = resolveConfig({}, values, {}, directory, {
     configDir: directory,
     launchCwd: directory,
   });
   const native = new NativeStub();
+  if (options.savedThread) saveSessionMarker(config.orchestrator.workspace, options.savedThread);
   const ready: ReadyInfo[] = [];
   const fatal: string[] = [];
   const closed: (string | undefined)[] = [];

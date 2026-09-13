@@ -352,6 +352,9 @@ describe("lifecycle event socket", () => {
           runtime: { phase: "failed" },
           recentOperations: [],
         }),
+        newSession: async () => {
+          throw new Error("not used");
+        },
         voiceSet: async () => {
           throw new Error("not used");
         },

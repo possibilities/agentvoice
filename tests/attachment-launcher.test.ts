@@ -49,6 +49,9 @@ for (const ending of ["revoked", "disconnected", "normal-close", "quit"] as cons
           runtime: { phase: "ready" },
           recentOperations: [],
         }),
+        newSession: async () => {
+          throw new Error("not used");
+        },
         voiceSet: async () => {
           throw new Error("not used");
         },

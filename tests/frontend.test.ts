@@ -355,7 +355,7 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
       stateDir: root,
       provenance: {
         parsed: parseArgs([]),
-        options: { debug: false, fresh: false, continue: false },
+        options: { debug: false },
         launchCwd: root,
       },
       version: "test",

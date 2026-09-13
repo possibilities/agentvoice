@@ -19,7 +19,7 @@ import {
 export interface Call {
   start(): Promise<void>;
   state(): FrontendState;
-  identity?(): { workspace: string; threadId: string };
+  identity?(): { workspace: string; threadId: string; generation?: number };
   command(command: FrontendCommand): void;
   clientMedia?(message: ClientMediaMessage): void;
   close(): Promise<void>;
@@ -165,6 +165,7 @@ export class VoiceServer {
       clientId: session?.clientId ?? null,
       workspace: identity?.workspace || null,
       threadId: identity?.threadId || null,
+      ...(identity?.generation === undefined ? {} : { generation: identity.generation }),
       state: session?.call && !session.closed ? frontendState(session.call.state()) : null,
     };
   }
@@ -178,7 +179,7 @@ export class VoiceServer {
     const changed = () => {
       if (session.closed || !session.call) return;
       const state = frontendState(session.call.state());
-      const serialized = JSON.stringify(state);
+      const serialized = JSON.stringify([state, session.call.identity?.()]);
       if (serialized === lastState) return;
       lastState = serialized;
       session.peer.send({ v: FRONTEND_VERSION, type: "state", state });
@@ -279,6 +280,7 @@ export async function runServer(
         identity: () => ({
           workspace: controller.status().workspace || pinned.parsed.values["workspace"]!,
           threadId: controller.status().threadId,
+          generation: controller.status().generation,
         }),
         close: call.close,
         clientMedia: (message) => call.controller.clientMedia(message),

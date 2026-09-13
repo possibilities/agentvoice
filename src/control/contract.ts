@@ -44,7 +44,7 @@ export const voiceEditSchema = mutation
 export const controlOperationSchema = z
   .object({
     operationId,
-    kind: z.enum(["redial", "restart", "voice-set"]),
+    kind: z.enum(["redial", "restart", "new-session", "voice-set"]),
     voiceEdit: voiceEditSchema
       .extend({
         saved: roleRefSchema,
@@ -132,6 +132,7 @@ export type ControlMethod =
   | "agentvoice.status"
   | "agentvoice.redial"
   | "agentvoice.restart"
+  | "agentvoice.new_session"
   | "agentvoice.thread_mailbox_open";
 
 export type ControlMethodEntry = {
@@ -144,6 +145,15 @@ export type ControlMethodEntry = {
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
+  "agentvoice.new_session": {
+    tool: "agentvoice_new_session",
+    description:
+      "Start a new workspace session only when the human requests it. Accept an idempotent operation that preflights replacement, stops current work, removes the workspace session marker, creates and saves a new Codex thread, and reconnects voice with the current mute preferences. Old native history remains saved. Read status first for instance/generation, then recover the outcome with agentvoice_status; acceptance is not readiness or speech confirmation.",
+    params: mutation,
+    result: controlOperationSchema,
+    readOnly: false,
+    invoke: (backend, params) => backend.newSession(params as ControlMutationRequest),
+  },
   "agentvoice.voice_set": {
     tool: "agentvoice_voice_set",
     description:

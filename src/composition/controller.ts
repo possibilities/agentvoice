@@ -6,6 +6,9 @@ import { initialLayout, layoutSchema, type MuxControl, names, replacePane } from
 export class Composition {
   private stopped = false;
   private attached = false;
+  private generation = 0;
+  private replacing = false;
+  private readonly restarting = new Set<string>();
   private started = false;
   private state?: FrontendObservation;
   private tail = Promise.resolve();
@@ -18,6 +21,7 @@ export class Composition {
     private readonly command: string[],
     private readonly workspace?: string,
     private readonly clientArgs: string[] = [],
+    private readonly refreshObservation?: () => Promise<FrontendObservation>,
   ) {}
 
   private enqueue(action: () => Promise<void>) {
@@ -43,6 +47,12 @@ export class Composition {
   }
   observe(state: FrontendObservation) {
     this.state = state;
+    if (
+      state.clientId === this.clientId &&
+      this.attached &&
+      (state.generation ?? 1) > this.generation
+    )
+      this.replacing = true;
     if (state.clientId === this.clientId && !state.state && this.attached) this.stop();
     if (this.started) this.enqueue(() => this.reconcile());
   }
@@ -53,6 +63,14 @@ export class Composition {
     const app = appSchema.parse(z.object({ app: z.unknown() }).parse(frame["data"]).app);
     if (!["exited", "failed"].includes(app.state)) return;
     if (!names.includes(app.name as (typeof names)[number])) return;
+    if (app.name !== "client" && (this.replacing || this.restarting.has(app.name))) return;
+    if (app.name !== "client" && this.attached && this.refreshObservation) {
+      this.enqueue(async () => {
+        this.observe(await this.refreshObservation!());
+        if (!this.replacing) this.stop(appFailure(app));
+      });
+      return;
+    }
     this.stop(appFailure(app));
   }
   private async create(index: number, args: string[], env: Record<string, string> = {}) {
@@ -78,7 +96,7 @@ export class Composition {
   private async reconcile() {
     const state = this.state;
     if (
-      this.attached ||
+      (this.attached && !this.replacing) ||
       !state ||
       state.clientId !== this.clientId ||
       !state.busy ||
@@ -88,14 +106,47 @@ export class Composition {
       !state.threadId
     )
       return;
+    const replacement = this.attached;
     this.attached = true;
+    this.generation = state.generation ?? 1;
     const selection = ["--workspace", state.workspace, "--thread", state.threadId];
     for (const index of [1, 2]) {
       if (this.stopped) return;
-      await this.create(index, ["attach", names[index]!, ...selection]);
+      const name = names[index]!;
+      if (replacement) {
+        this.restarting.add(name);
+        try {
+          const app = appSchema.parse(
+            await this.mux.request("app.restart", {
+              name,
+              command: {
+                argv: [...this.command, "attach", name, ...selection],
+                cwd: process.cwd(),
+                env: {},
+              },
+            }),
+          );
+          if (app.state !== "running") throw appFailure(app) ?? new Error(`${name}: ${app.state}`);
+        } finally {
+          this.restarting.delete(name);
+        }
+      } else await this.create(index, ["attach", name, ...selection]);
       if (this.stopped) return;
       await replacePane(this.mux, index, { app: names[index]! }, index === 2 ? "agent" : undefined);
     }
+    if (replacement) {
+      const { apps } = z
+        .object({ apps: z.array(appSchema) })
+        .parse(await this.mux.request("app.list"));
+      for (const name of ["voice", "agent"]) {
+        const app = apps.find((app) => app.name === name);
+        if (app?.state !== "running")
+          throw (
+            (app && appFailure(app)) ?? new Error(`${name} attachment exited during replacement`)
+          );
+      }
+    }
+    this.replacing = (this.state?.generation ?? 1) > this.generation;
   }
   stop(error?: Error) {
     this.failure ??= error;

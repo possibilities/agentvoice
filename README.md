@@ -19,8 +19,9 @@ Press Ctrl+C twice within three seconds to exit the entire composition. The
 first press shows a centered one-row overlay without resizing panes. Ctrl+C
 is reserved for this exit action and never reaches the individual apps.
 Divider drags survive placeholder replacement. Keyboard focus moves to the
-working agent when it opens. Attachments are not automatically relaunched;
-an attachment exit after runtime restart also ends the composition.
+working agent when it opens. Runtime replacement reopens both attachments on
+the current exact thread after voice reconnects. Ordinary pane exits still end
+the composition; typed input is never replayed.
 
 Bare `agentvoice` requires smolmux 0.9.2 or newer with its local PTY helper,
 and `codex-viewer`, on PATH. Their existing installers own those dependencies;
@@ -51,7 +52,7 @@ The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
 implements its own frontend, matching Codex can require the same explicit values
 that Codex's client sends; simply omitting fields does not establish parity.
-Ordinary launches start a new conversation, inherit native permissions, and
+Ordinary launches resume the workspace's saved session, inherit native permissions, and
 disable the generic voice startup snapshot to match the desktop client baseline.
 Raw native settings remain available, with visible warnings for modes
 that this frontend cannot implement; passthrough is not a claim of feature parity.
@@ -78,8 +79,8 @@ running. Run `agentvoice` whenever you want a call. For manual use, run
 installation, and future native-UI boundary.
 To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
-voice, permission, role and conversation-selection flags belong to
-`agentvoice server`, for example `agentvoice server --continue --fast`.
+voice, permission and role flags belong to
+`agentvoice server`, for example `agentvoice server --fast`.
 The composition and `client` also accept `--device` and `--output-device` for
 client-local audio. `client` and `phone` also accept `--connect <private-profile.json>`
 instead of `--workspace` for authenticated WSS access to the desktop server.
@@ -382,8 +383,8 @@ Automatic retries pause after three consecutive short-lived failures. The fronte
 shows FAILED and the server prints the cause. Use MCP/API redial to reconnect
 voice, or runtime restart to reload code/configuration and resume the same thread.
 Restart supports an optional caller-provided handoff prompt. These controls have
-no TUI buttons or keybindings; in-call Fresh remains removed. Control protocol 4
-exposes status, redial, restart and thread-mailbox opening with matching MCP tools; see the
+no TUI buttons or keybindings. Control protocol 6
+exposes status, redial, restart, new session, voice selection and thread-mailbox opening with matching MCP tools; see the
 [control API](docs/api.md) and [orchestrator guide](USAGE.md).
 
 ### Installation
@@ -507,21 +508,32 @@ are selected at server startup; restart the service to change that selection.
 Read-only discovery commands and `attach` still accept `--workspace <directory>`;
 their omitted workspace remains the invoking directory.
 
-Ordinary launch starts a new conversation without looking up a previous one.
-Explicit `--continue` lists native unarchived app-server history, newest-updated
-first, and continues the latest non-ephemeral AgentVoice main conversation whose cwd
-matches exactly. Legacy worker threads, child threads and other clients' threads are excluded.
-On Codex 0.153.3, app-server-created AgentVoice threads are listed under the
-`vscode` source kind and list rows can omit their saved `threadSource`; AgentVoice
-queries both native categories and confirms ownership with `thread/read`.
-If none exists, a new conversation starts. Lookup/resume failures are errors,
-not an excuse to silently create a replacement. Explicit `--resume` must match
-an eligible conversation in the selected workspace.
+Each workspace keeps its current Codex thread ID in `.agentvoice-session`, a
+private plain-text file containing the ID and a newline. Every call resumes that
+exact thread with `thread/read` and `thread/resume`, including after client or
+server restarts. There is no latest-history lookup. Native identity must still
+match this canonical workspace and an AgentVoice main thread.
 
-Explicit `--continue` or `--resume` resumes the selected working thread.
+If the marker is absent, the next call creates a new thread and saves its ID
+before readiness. Delete the marker to start a new session on the next call.
+Deleting it during a call does not interrupt that call; ordinary runtime restart
+still retains its active thread. An invalid or unresumable marker reports an
+error and stays intact. Native history, transcripts and workspace files remain
+untouched. Ephemeral threads are incompatible with persistent workspace sessions.
+
+For an immediate new session during a call, use the `agentvoice_new_session` MCP
+tool or `agentvoice.new_session` control API. It preflights a replacement, stops
+the old runtime and work, removes the marker, then creates and saves a new thread
+and reconnects voice. The frontend, workspace and mute preferences remain;
+the old thread's mailbox clears and transcripts stay separate. See [control API](docs/api.md).
+
+`--resume`, `--continue`, `--fresh` and `--no-continue` are retired and report
+marker guidance. Existing launch scripts using those flags must remove them.
+To select an existing session explicitly, put its exact thread ID in the marker
+while no call owns the workspace; native ownership checks still apply.
+
 Each voice connection starts without AgentVoice reading or injecting earlier
-speech or adding its own reconnect instruction. This applies to continue,
-explicit resume and automatic renewal. Native saved conversation history remains intact.
+speech or adding its own reconnect instruction. Native saved conversation history remains intact.
 
 AgentVoice defaults the native startup snapshot (including Recent Work) to off
 on every call, including renewal, matching the inspected desktop client. The
@@ -538,10 +550,8 @@ key. AgentVoice does not migrate or delete your configuration or saved history.
 See [ADR 0017](docs/adr/0017-remove-spoken-history-replay.md) for the decision.
 
 Each frontend connection begins a new call using the server's selected workspace
-and conversation policy. The default starts a new native conversation;
-`server --continue` selects the latest eligible one for every call, and
-`server --resume <id>` selects that exact saved conversation. There is no
-in-call conversation switch. A per-thread kernel lock protects each active call.
+and session marker. Workspace and thread kernel locks serialize call ownership,
+including the first call before a thread ID exists.
 
 Closing a call stops voice and app-owned work and closes its Codex child.
 **Work does not continue after the call ends.** Native saved history remains
@@ -598,7 +608,7 @@ Common launch options:
 ```sh
 agentvoice server --workspace ~/code/myapp --model <model-id> --effort high
 agentvoice server --fast
-agentvoice server --resume <thread-id> --no-fast
+agentvoice server --no-fast
 agentvoice server --voice <voice-name>
 agentvoice client --device 1 --output-device 2
 agentvoice server --config ./voice-settings.json --debug
@@ -798,7 +808,7 @@ the retired `prompt-files` config section no longer load anything: a leftover fi
 produces a visible warning without being read, and the config key is an unknown
 option. Rename or remove them yourself; nothing is migrated or deleted. Removing
 an override does not erase earlier instructions/messages from a resumed native
-conversation; use `--no-continue` for a new conversation when testing the
+conversation; remove `.agentvoice-session` before the next call when testing the
 baseline. Native global and workspace instructions, skills, MCPs and hooks still
 apply, even to new conversations. AgentVoice does not automatically enable AgentStart skills
 or isolate native state; a [role](#roles) adds its own skills and MCP servers to
@@ -888,7 +898,7 @@ overrides remain unset; no silence instruction or speech replay is added.
 The shipped `server.json.example` remains an unconfigured example.
 
 A saved conversation is not the same as a voice call: subsequent calls may
-resume the same conversation, while the default starts a new conversation. Codex can give
+resume the same conversation using the workspace marker. Codex can give
 each call a startup snapshot and can deliver leftover speech to the working
 agent when a call ends. AgentVoice adds no automatic speech replay between calls.
 
@@ -897,7 +907,7 @@ these controls do not hot reload.
 
 Explicitly request Codex's startup snapshot, including Recent Work. Codex 0.153.4 bundles
 that with current working-thread context and a machine/workspace map; there is
-no native Recent Work-only switch. This can inform even a `--no-continue` call
+no native Recent Work-only switch. This can inform even a new-session call
 about earlier conversations, while its working thread is still newly created:
 
 ```json
@@ -956,8 +966,8 @@ still pass through.
 both keys from old configuration, even when set to `false`. Existing conversation
 history is untouched. Codex can retain old dynamic tool definitions on resume;
 calls to `dispatch_worker`, `check_workers` or `cancel_worker` now receive an
-immediate failed tool result and a visible retirement notice in the server terminal. A server launched with
-`--no-continue` starts without the old definitions; there is no automatic switch,
+immediate failed tool result and a visible retirement notice in the server terminal. An explicit
+new session starts without the old definitions; there is no automatic switch,
 history rewrite or transcript copying.
 
 The native `orchestrator.extra.dynamicTools` escape hatch still passes through

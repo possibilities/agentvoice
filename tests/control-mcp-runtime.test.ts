@@ -16,7 +16,7 @@ const control = {
 const readyResponse = () => ({
   content: [],
   structuredContent: {
-    protocolVersion: 5,
+    protocolVersion: 6,
     instanceId: "test-controller",
     workspace: "",
     threadId: "",
@@ -71,16 +71,18 @@ test("direct readiness timeout is bounded and is not retried", async () => {
 describe("mandatory control registration", () => {
   test("start/resume inject independent of role, preserve other servers, and verify each exact thread", async () => {
     for (const resume of [false, true]) {
-      const h = runtimeHarness({
-        orchestrator: { config: { mcp_servers: { other: { command: "example" } } } },
-      });
+      const h = runtimeHarness(
+        {
+          orchestrator: { config: { mcp_servers: { other: { command: "example" } } } },
+        },
+        { savedThread: resume ? "saved" : undefined },
+      );
       if (resume) h.native.main("saved", h.directory);
       h.native.override = (method) =>
         method === "mcpServer/tool/call" ? Promise.resolve(readyResponse()) : undefined;
       const runtime = new VoiceRuntime(h.config, "test", h.events, {
         ...h.runtimeOptions,
         controlMcp: control,
-        resume: resume ? "saved" : undefined,
       });
       try {
         await runtime.start();

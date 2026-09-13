@@ -29,9 +29,9 @@ function observer() {
 }
 
 test("startup failure restores terminal and closes child/media", async () => {
-  const h = hostHarness({}, { continue: true });
+  const h = hostHarness({}, { savedThread: "existing" });
   h.native.override = (m) =>
-    m === "thread/list" ? Promise.reject(new Error("lookup failed")) : undefined;
+    m === "thread/read" ? Promise.reject(new Error("lookup failed")) : undefined;
   const setup = observer();
   try {
     await expect(
@@ -109,11 +109,11 @@ test("invalid prompt, protocol, native requirements and Fast readiness never ope
 });
 
 test("quit during native readiness closes the child without opening audio", async () => {
-  const h = hostHarness({}, { continue: true });
+  const h = hostHarness({}, { savedThread: "existing" });
   const pending = deferred<unknown>();
   const entered = deferred();
   h.native.override = (method) => {
-    if (method !== "thread/list") return undefined;
+    if (method !== "thread/read") return undefined;
     entered.resolve();
     return pending.promise;
   };

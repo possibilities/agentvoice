@@ -31,7 +31,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Recorded | — |
 | [0018: Observe lifecycle state through a separate Unix socket](0018-read-only-lifecycle-event-socket.md) | Partially superseded | [0026](0026-persistent-voice-transcripts.md) adds a separate persistent voice-transcript writer. The live event feed remains transient, lifecycle snapshots remain content-free, and their watermarks do not promise transcript replay. |
 | [0019: Compare defaults against the Codex client and server together](0019-client-server-default-baseline.md) | Recorded | — |
-| [0020: Native permissions and context, fresh ordinary launches](0020-native-launch-defaults.md) | Partially superseded | [0029](0029-desktop-startup-context.md) replaces only the startup-context default. |
+| [0020: Native permissions and context, fresh ordinary launches](0020-native-launch-defaults.md) | Partially superseded | [0029](0029-desktop-startup-context.md) replaces the startup-context default; [0052](0052-workspace-session-marker.md) replaces fresh launches and selection flags. |
 | [0021: Attach a stock TUI through a guarded local gateway](0021-guarded-tui-attachment.md) | Partially superseded | [0022](0022-websocket-native-tui.md) replaces opt-in transport and admission gates; the owned local attachment boundary remains. |
 | [0022: WebSocket-only RPC and native TUI interaction](0022-websocket-native-tui.md) | Accepted | — |
 | [0023: Conversation observation for independent UIs](0023-conversation-observation.md) | Recorded | — |
@@ -39,7 +39,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0025: LaunchAgent and default workspace generations](0025-launchagent-default-workspaces.md) | Accepted | — |
 | [0026: Persistent workspace voice transcripts](0026-persistent-voice-transcripts.md) | Recorded | — |
 | [0027: A microphone identity for the LaunchAgent](0027-service-microphone-identity.md) | Partially superseded | [0033](0033-client-owned-native-media.md) moves microphone use to the client. The installer-owned signed runtime, stable permission identity and operator-owned consent remain.
-| [0028: Bare command composes local terminal apps](0028-foreground-composition.md) | Accepted | — |
+| [0028: Bare command composes local terminal apps](0028-foreground-composition.md) | Partially superseded | [0052](0052-workspace-session-marker.md) replaces attachment-exit shutdown during runtime replacement with exact-thread pane reopening. |
 | [0029: Desktop startup-context default](0029-desktop-startup-context.md) | Recorded | — |
 | [0030: Conversation-first delegation through native operator configuration](0030-conversation-first-delegation.md) | Superseded for configuration ownership | [0031](0031-role-owned-delegation.md) moves delegation mode to the selected role. |
 | [0031: The selected role owns its native delegation mode](0031-role-owned-delegation.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) replaces mandatory read-only/thinking delegation; role ownership remains. |
@@ -64,6 +64,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0050: Correlate native TUI hook trust to its current inventory](0050-correlated-native-hook-trust.md) | Recorded | Only listed untrusted/modified key-hash pairs may cross the attachment's persistent config-write boundary. |
 
 | [0051: AgentStart owns manager and worker roles](0051-agentstart-owns-working-roles.md) | Accepted | Supersedes 0049's source ownership and default name. |
+| [0052: Persist one current session in each workspace](0052-workspace-session-marker.md) | Accepted | Exact marker-based resume, explicit API/MCP new session, and terminal panes following runtime replacement. Supersedes session selection in 0020/0024 and replacement exits in 0028. |
 
 ## Identifier history
 

@@ -24,6 +24,9 @@ for (const shutdown of ["disconnect", "signal"] as const) {
           runtime: { phase: "ready" },
           recentOperations: [],
         }),
+        newSession: async () => {
+          throw new Error("not used");
+        },
         voiceSet: async () => {
           throw new Error("not used");
         },

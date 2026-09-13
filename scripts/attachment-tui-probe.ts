@@ -272,6 +272,9 @@ try {
     instanceId: status.instanceId,
     backend: {
       status: () => status,
+      newSession: async () => {
+        throw new Error("not used");
+      },
       voiceSet: async () => {
         throw new Error("not used");
       },

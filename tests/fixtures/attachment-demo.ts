@@ -60,6 +60,9 @@ if (process.argv[2] === "__attach-agent") {
       redial: forbidden,
       restart: forbidden,
       mailboxOpen: forbidden,
+      newSession: async () => {
+        throw new Error("not used");
+      },
       voiceSet: forbidden,
     },
   });

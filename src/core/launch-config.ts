@@ -44,9 +44,7 @@ function loadBoundConfig(
   const path = rolePath(dataDirectory(process.env, home), workspace);
   if (!hasRoleDatabase(path)) return undefined;
   // Launch-only role overrides would otherwise mask persistent API changes.
-  const ignored = Object.keys(parsed.values).filter(
-    (key) => !["workspace", "codex", "resume"].includes(key),
-  );
+  const ignored = Object.keys(parsed.values).filter((key) => !["workspace", "codex"].includes(key));
   if (ignored.length || parsed.codexConfig || parsed.allowFullAccess)
     throw new ConfigError(
       "This workspace owns a database role; role-setting launch flags cannot override it. Use role voice or the control API.",
@@ -71,12 +69,7 @@ export async function loadLaunchSource(parsed: ParsedArgs, launchCwd = process.c
   const configPath = parsed.configPath
     ? resolve(launchCwd, expandTilde(parsed.configPath, home))
     : defaultConfigPath(process.env, home);
-  const {
-    device: _device,
-    "output-device": _outputDevice,
-    resume: _resume,
-    ...values
-  } = parsed.values;
+  const { device: _device, "output-device": _outputDevice, ...values } = parsed.values;
   const cliValues = cliToConfigValues(values);
   if (parsed.codexConfig) cliValues["codex-config"] = parsed.codexConfig;
   const fileValues = await loadConfigFile(configPath, parsed.configPath !== undefined);

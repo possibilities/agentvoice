@@ -72,6 +72,7 @@ function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
       runtime: { pid: 42, buildId: "build-a", phase: "ready" },
       recentOperations,
     }),
+    newSession: async (request) => accept("new-session", "runtime", request),
     voiceSet: async (request) => {
       const result = accept("voice-set", "voice", request);
       result.voiceEdit = {
@@ -159,6 +160,7 @@ describe("controller control transports", () => {
           "agentvoice_status",
           "agentvoice_redial",
           "agentvoice_restart_runtime",
+          "agentvoice_new_session",
           "agentvoice_thread_mailbox_open",
           "agentvoice_voice_set",
         ],
@@ -242,6 +244,35 @@ describe("controller control transports", () => {
       expect(requests).toHaveLength(2);
       expect(requests[0]).toEqual(requests[1]);
       expect(requests[0]).toHaveProperty("handoffPrompt", "After restart, check status.\n雪");
+      const reset = {
+        operationId: "new-1",
+        expectedGeneration: 7,
+        expectedInstanceId: "instance-a",
+      };
+      const newCall = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: "new-session",
+          method: "tools/call",
+          params: { name: "agentvoice_new_session", arguments: reset },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await newCall.text()).toContain('"kind":"new-session"');
+      expect(
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "new-duplicate",
+          method: "agentvoice.new_session",
+          params: reset,
+        }),
+      ).toMatchObject({
+        ok: true,
+        result: { operationId: "new-1", kind: "new-session", phase: "accepted" },
+      });
       let badRequestId = 4;
       for (const handoffPrompt of ["", " \n\t", null, "a".repeat(8193), "雪".repeat(2731)]) {
         const args = {
@@ -272,7 +303,7 @@ describe("controller control transports", () => {
         );
         expect(await mcp.text()).toContain('"isError":true');
       }
-      expect(requests).toHaveLength(2);
+      expect(requests).toHaveLength(4);
       const redialPrompt = await socketRequest(server.socketPath, {
         v: CONTROL_PROTOCOL_VERSION,
         type: "request",

@@ -2,3 +2,5 @@ node_modules/
 /build/
 /.droidedtui/
 /dist/
+.agentvoice-session
+.agentvoice-session.*.tmp

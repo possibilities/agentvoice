@@ -90,7 +90,7 @@ describe("convention prompt files", () => {
   });
 
   test("all legacy filenames are ignored across continue/redial/Fresh, including unreadable files", async () => {
-    const h = runtimeHarness({}, { continue: true });
+    const h = runtimeHarness({}, { savedThread: "existing" });
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);
     h.native.main("existing", h.directory);
@@ -191,7 +191,7 @@ describe("convention prompt files", () => {
     }
   });
 
-  for (const mode of ["fresh", "continue", "resume"] as const) {
+  for (const mode of ["fresh", "resume"] as const) {
     for (const raw of [false, true]) {
       test(`${mode}: override files map to native fields and are launch-cached; raw override=${raw}`, async () => {
         const h = runtimeHarness(
@@ -217,11 +217,7 @@ describe("convention prompt files", () => {
                 }
               : {}),
           },
-          mode === "resume"
-            ? { resume: "existing" }
-            : mode === "continue"
-              ? { continue: true }
-              : { fresh: true },
+          mode === "resume" ? { savedThread: "existing" } : {},
         );
         h.native.main("existing", h.directory);
         const warnings: string[] = [];
@@ -275,7 +271,7 @@ describe("convention prompt files", () => {
   }
 
   test("append files ride developerInstructions and the startup-context slot on resume, Fresh and every call", async () => {
-    const h = runtimeHarness({ orchestrator: { effort: "high" } }, { resume: "existing" });
+    const h = runtimeHarness({ orchestrator: { effort: "high" } }, { savedThread: "existing" });
     h.native.main("existing", h.directory);
     const warnings: string[] = [];
     h.events.onStatus = (line) => warnings.push(line);

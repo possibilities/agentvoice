@@ -32,8 +32,12 @@ export function recordCall(
       if (frame.event === "runtime.state.changed") {
         const runtime = feed.snapshot().runtime;
         if (runtime.workspace && runtime.mainThreadId) {
-          if (workspace && (workspace !== runtime.workspace || threadId !== runtime.mainThreadId))
+          if (workspace && workspace !== runtime.workspace)
             throw new Error("Call recording identity changed");
+          if (threadId && threadId !== runtime.mainThreadId) {
+            writer?.close("stopped");
+            writer = undefined;
+          }
           workspace = runtime.workspace;
           threadId = runtime.mainThreadId;
           writer ??= new VoiceRecording(workspace, recordingDirectory(stateDir, workspace));

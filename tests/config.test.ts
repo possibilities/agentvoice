@@ -634,20 +634,18 @@ describe("parseArgs characterization", () => {
 });
 
 describe("parseServerCommand", () => {
-  test("defaults to system devices, a fresh conversation, and no debug", () => {
+  test("defaults to workspace session selection and no debug", () => {
     expect(parseServerCommand(["--allow-full-access"])).toMatchObject({
       help: false,
-      options: { debug: false, fresh: false, continue: false },
+      options: { debug: false },
     });
   });
 
-  test("parses fresh and debug without server-owned device selection", () => {
-    const command = parseServerCommand(["--allow-full-access", "--fresh", "--debug"]);
+  test("parses debug without server-owned device selection", () => {
+    const command = parseServerCommand(["--allow-full-access", "--debug"]);
     if (command.help) throw new Error("expected a non-help parse");
     expect(command.options).toEqual({
       debug: true,
-      fresh: true,
-      continue: false,
     });
   });
 

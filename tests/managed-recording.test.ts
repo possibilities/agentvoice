@@ -93,6 +93,31 @@ test("foreign voice identity fails visibly without writing foreign content", () 
   expect(readFileSync(savedRecordings(state, workspace)[0]!.path, "utf8")).not.toContain("secret");
 });
 
+test("new sessions close the previous transcript and record only their own speech", () => {
+  const state = root(),
+    workspace = root();
+  const feed = new LifecycleFeed("call");
+  const notices: string[] = [];
+  const recorder = recordCall(feed, state, (value) => notices.push(value));
+  cleanup.push(() => recorder.close());
+  feed.runtime(1, { workspace, mainThreadId: "old-thread", phase: "ready" });
+  feed.voice(complete("old-thread", "old words"));
+  feed.runtime(2, { workspace, mainThreadId: "old-thread", phase: "quiescing" });
+  feed.runtime(2, { workspace, mainThreadId: "new-thread", phase: "starting" });
+  feed.voice(complete("new-thread", "new words"));
+  recorder.close();
+  const saved = savedRecordings(state, workspace);
+  expect(saved).toHaveLength(2);
+  for (const name of ["old", "new"]) {
+    const rows = content(join(recordingDirectory(state, workspace), `${name}-thread.jsonl`));
+    expect(rows.filter((row) => row.type === "event").map((row) => row.data.item.text)).toEqual([
+      `${name} words`,
+    ]);
+    expect(rows.at(-1).type).toBe("recording.ended");
+  }
+  expect(notices).toEqual([]);
+});
+
 test("disk failure is reported without throwing through the feed", () => {
   const state = root();
   const workspace = root();
