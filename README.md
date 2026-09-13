@@ -1,3 +1,5 @@
+> *Slop Made With Sweat: Made with a lot of love by someone who loves code but read none of it.*
+
 # AgentVoice
 
 A local Codex voice server with terminal and same-device browser frontends. `agentvoice server`
