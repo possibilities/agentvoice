@@ -52,7 +52,9 @@ and unregister its route. A static hosted build cannot connect to local sockets.
 `GET /api/live` returns the two host-owned message arrays and a browser-only view
 ID. Browsers serialize reads about once per second. One shared adapter deduplicates
 concurrent reads, observes the private frontend and discovers the exact live
-workspace/thread controller through its verified status. The browser cannot select
+workspace/thread controller through its verified status. Read-only discovery also
+accepts control protocol 5 so an existing call need not restart to open this view;
+all other CLI discovery keeps the current protocol requirement. The browser cannot select
 a workspace, thread, path, endpoint or RPC method. Native sockets, descriptors,
 credentials and grants remain in the local process. Requests require a loopback
 peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins and

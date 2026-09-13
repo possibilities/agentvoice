@@ -294,6 +294,7 @@ function readDescriptors(stateDir: string): ControlDiscoveryDescriptor[] {
 
 function statusFromSocket(
   descriptor: ControlDiscoveryDescriptor,
+  protocolVersion: number,
 ): Promise<ControlStatus | undefined> {
   return new Promise((resolve) => {
     let settled = false;
@@ -318,7 +319,7 @@ function statusFromSocket(
           peer.data = { text: "", decoder: new TextDecoder() };
           peer.write(
             `${JSON.stringify({
-              v: CONTROL_PROTOCOL_VERSION,
+              v: protocolVersion,
               type: "request",
               id: "mcp-config",
               method: "agentvoice.status",
@@ -340,7 +341,7 @@ function statusFromSocket(
               return finish();
             const status = response.result as ControlStatus;
             if (
-              status.protocolVersion !== CONTROL_PROTOCOL_VERSION ||
+              status.protocolVersion !== protocolVersion ||
               status.instanceId !== descriptor.instanceId ||
               typeof status.workspace !== "string" ||
               typeof status.threadId !== "string"
@@ -366,12 +367,13 @@ export async function discoverControllerStatus(
   stateDir: string,
   workspace: string,
   threadId?: string,
+  protocolVersion: typeof CONTROL_PROTOCOL_VERSION | 5 = CONTROL_PROTOCOL_VERSION,
 ): Promise<{ descriptor: ControlDiscoveryDescriptor; status: ControlStatus }> {
   const descriptors = readDescriptors(stateDir);
   const statuses = await Promise.all(
     descriptors.map(async (descriptor) => ({
       descriptor,
-      status: await statusFromSocket(descriptor),
+      status: await statusFromSocket(descriptor, protocolVersion),
     })),
   );
   const matches = statuses.filter(

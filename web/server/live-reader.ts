@@ -149,7 +149,12 @@ export class LiveReader {
         this.stateDir,
         state.workspace,
         state.threadId,
-      );
+      ).catch((error: unknown) => {
+        // Protocol 6 added mutations; the read-only status/event contracts of 5 remain usable.
+        if (!(error instanceof Error) || !error.message.startsWith("no live AgentVoice controller"))
+          throw error;
+        return discoverControllerStatus(this.stateDir, state.workspace!, state.threadId!, 5);
+      });
       if (this.closed) return empty("offline");
       const identity: Identity = {
         workspace: state.workspace,
