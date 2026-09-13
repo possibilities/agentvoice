@@ -5,6 +5,8 @@ export type LiveView = {
   id: string;
   voice: TranscriptMessage[];
   agent: TranscriptMessage[];
+  /** True until the first complete or viewer-bounded history pass is published. */
+  agentHistoryLoading?: boolean;
   voiceNotice?: string;
   agentNotice?: string;
 };

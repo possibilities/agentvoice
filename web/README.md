@@ -70,7 +70,11 @@ times describe transcript receipt; they do not prove when speech was heard.
 The Agent lane uses event protocol 2: subscribe first, validate `state.get`, then
 read `conversation.live.get` and page `conversation.items.list` newest first.
 Native history loads in the background, one bounded page per read, merged by turn
-and item ID. Complete live projection items replace overlapping history; partial
+and item ID. Pages accumulate privately until the pass finishes or reaches the
+viewer limit, then publish together. While the first pass loads, live items and a
+single loading notice remain visible; its publication resets only the Agent lane
+to the end without animated scrolling. Later refreshes retain the published history
+until their replacement is ready. Complete live projection items replace overlapping history; partial
 live text cannot overwrite canonical history. Completion, gap and revert events
 invalidate history; reverted content is cleared. A reconnect loads a new exact
 snapshot, so there is no ambiguous delta replay. Every response and late history

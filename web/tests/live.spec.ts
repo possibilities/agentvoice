@@ -7,7 +7,64 @@ const message = (
   content: string,
   role: TranscriptMessage["role"] = "assistant",
 ): TranscriptMessage => ({ id, role, content, status: "complete" });
-test("two independent transcripts follow live updates, retain disclosures, and reconnect without controls", async ({
+
+test("the first history batch opens at the end without walking or resetting Voice", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  let view: LiveView = {
+    phase: "live",
+    id: "loading-call",
+    agentHistoryLoading: true,
+    agentNotice: "Loading earlier messages…",
+    agent: [message("live", "Live Agent while history loads")],
+    voice: Array.from({ length: 25 }, (_, i) =>
+      message(`voice-${i}`, `Speech ${i}. ${"Words. ".repeat(80)}`),
+    ),
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
+  const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
+  const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
+  await expect(agent.getByText("Live Agent while history loads")).toBeInViewport();
+  await voice.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect.poll(() => voice.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+  const firstPaint = agent.evaluate(
+    (element) =>
+      new Promise<number>((resolve) => {
+        const parent = element.closest(".lane")!;
+        const check = () => {
+          const viewport = parent.querySelector<HTMLElement>("[role=region]")!;
+          if (
+            viewport.querySelector('[data-message-id="history-0"]') &&
+            !viewport.hasAttribute("data-pending-scroll")
+          ) {
+            resolve(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop);
+          } else requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      }),
+  );
+  view = {
+    ...view,
+    agentHistoryLoading: false,
+    agentNotice: undefined,
+    agent: [
+      ...Array.from({ length: 50 }, (_, i) =>
+        message(`history-${i}`, `History ${i}. ${"Earlier words. ".repeat(80)}`),
+      ),
+      ...view.agent,
+    ],
+  };
+  expect(await firstPaint).toBeLessThan(2);
+  await expect(agent.getByText("Live Agent while history loads")).toBeInViewport();
+  expect(await voice.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+  view.agent.push(message("after-history", "New Agent after history"));
+  await expect(agent.getByText("New Agent after history")).toBeInViewport();
+});
+
+test("two independent transcripts follow live updates, retain disclosures, and reconnect without call controls", async ({
   page,
 }) => {
   const errors: string[] = [];

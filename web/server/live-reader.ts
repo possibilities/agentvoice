@@ -270,6 +270,7 @@ export class LiveReader {
       id: this.viewId,
       voice: this.voice.messages(),
       agent: [...messages.values()].filter((message) => message !== undefined),
+      agentHistoryLoading: this.loadedRevision === -1,
       voiceNotice: voiceNotice ?? this.voice.notice,
       agentNotice:
         this.historyNotice ??
@@ -288,6 +289,7 @@ export class LiveReader {
     this.pass ??= { rows: [], bytes: 0, revision: this.historyRevision };
     const pass = this.pass;
     this.historyPending = true;
+    this.historyNotice = "Loading earlier messages…";
     void client
       .request("conversation.items.list", {
         ...params,
@@ -308,15 +310,14 @@ export class LiveReader {
         pass.rows.push(...page.data);
         pass.bytes += Buffer.byteLength(JSON.stringify(page.data));
         const bounded = pass.rows.length >= 10_000 || pass.bytes >= 8 * 1024 * 1024;
-        // Pages arrive newest-first. Publish older content before live items, preserving native ordering.
-        if (this.loadedRevision === -1 || !page.nextCursor || bounded)
-          this.history = [...pass.rows].reverse();
         this.historyNotice = bounded
           ? "Showing the latest available history (viewer limit reached)."
           : page.nextCursor
             ? "Loading earlier messages…"
             : undefined;
         if (!page.nextCursor || bounded) {
+          // Keep incomplete passes private: prepending every page makes the following scroller walk.
+          this.history = pass.rows.reverse();
           this.loadedRevision = pass.revision;
           this.pass = undefined;
         } else pass.cursor = page.nextCursor;

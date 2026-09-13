@@ -4,8 +4,8 @@ import { agentMessage, VoiceMessages } from "../server/messages.ts";
 import type { LiveView } from "../src/types.ts";
 import { fixture } from "./fixture.ts";
 
-async function until(reader: LiveReader, check: (view: LiveView) => boolean) {
-  const deadline = Date.now() + 5000;
+async function until(reader: LiveReader, check: (view: LiveView) => boolean, timeout = 5000) {
+  const deadline = Date.now() + timeout;
   let view = await reader.read();
   while (!check(view) && Date.now() < deadline) {
     await Bun.sleep(260);
@@ -18,6 +18,122 @@ const user = (id: string, text: string) => ({
   turnId: "turn",
   item: { type: "userMessage" as const, id, content: [{ type: "text" as const, text }] },
 });
+
+test("initial history pages stay private while live Agent and Voice items keep updating", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.history(Array.from({ length: 5 }, (_, i) => user(`old-${i}`, `History ${i}`)));
+    h.delayHistory(delayed.promise);
+    await h.start();
+    h.feed.conversation({
+      event: "conversation.item.started",
+      revision: 1,
+      data: {
+        threadId: "main",
+        turnId: "live-turn",
+        item: { type: "agentMessage", id: "live", text: "Live Agent" },
+      },
+    });
+    const first = await until(reader, (view) => view.phase === "live");
+    expect(first.agent.map((message) => message.content)).toEqual(["Live Agent"]);
+    expect(first.agentHistoryLoading).toBe(true);
+    expect(first.agentNotice).toBe("Loading earlier messages…");
+    h.voice("voice.item.completed", {
+      item: {
+        type: "transcriptSegment",
+        id: "speech",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: "Voice during history loading",
+      },
+    });
+    const during = await until(reader, (value) => value.voice.length === 1);
+    expect(during.voice[0]?.content).toBe("Voice during history loading");
+    expect(during.agent.map((message) => message.content)).toEqual(["Live Agent"]);
+    expect(during.agentHistoryLoading).toBe(true);
+    h.delayHistory();
+    delayed.resolve();
+    const view = await until(reader, (value) => {
+      if (!value.agentHistoryLoading) return true;
+      expect(value.agent.map((message) => message.content)).toEqual(["Live Agent"]);
+      return false;
+    });
+    expect(view.agent.map((message) => message.content)).toEqual([
+      "History 0",
+      "History 1",
+      "History 2",
+      "History 3",
+      "History 4",
+      "Live Agent",
+    ]);
+    expect(view.voice[0]?.content).toBe("Voice during history loading");
+    expect(view.agentNotice).toBeUndefined();
+    expect(h.methods.filter((method) => method === "conversation.items.list")).toHaveLength(3);
+  } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+});
+
+test("history refresh retains the published batch until all replacement pages arrive", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history([user("old", "Published history")]);
+    await h.start();
+    await until(reader, (view) => view.agent[0]?.content === "Published history");
+    h.history(Array.from({ length: 5 }, (_, i) => user(`new-${i}`, `Replacement ${i}`)));
+    h.feed.conversation({
+      event: "conversation.turn.completed",
+      revision: 1,
+      data: { threadId: "main", turnId: "turn", status: "completed" },
+    });
+    const view = await until(reader, (value) => {
+      expect(value.agentHistoryLoading).toBe(false);
+      if (value.agent.length === 5) return true;
+      expect(value.agent.map((message) => message.content)).toEqual(["Published history"]);
+      return false;
+    });
+    expect(view.agent.map((message) => message.content)).toEqual(
+      Array.from({ length: 5 }, (_, i) => `Replacement ${i}`),
+    );
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("a viewer-bounded history pass publishes once without requesting the remaining pages", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history(Array.from({ length: 36 }, (_, i) => user(`large-${i}`, "x".repeat(250_000))));
+    await h.start();
+    const view = await until(
+      reader,
+      (value) => {
+        if (value.agentNotice?.includes("viewer limit reached")) return true;
+        expect(value.agent).toEqual([]);
+        expect(value.agentHistoryLoading).toBe(true);
+        return false;
+      },
+      10_000,
+    );
+    expect(view.agent).toHaveLength(34);
+    expect(view.agent[0]?.id).toBe(JSON.stringify(["turn", "large-2"]));
+    expect(view.agent.at(-1)?.id).toBe(JSON.stringify(["turn", "large-35"]));
+    expect(view.agentHistoryLoading).toBe(false);
+    await Bun.sleep(260);
+    await reader.read();
+    expect(h.methods.filter((method) => method === "conversation.items.list")).toHaveLength(17);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+}, 15_000);
 
 test("running server discovery, native history + live drafts, call replacement, and observer-only teardown", async () => {
   const h = await fixture();

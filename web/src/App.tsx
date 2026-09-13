@@ -62,6 +62,8 @@ export function App() {
           <Transcript
             transcriptId={`${view.id}:${lane}`}
             messages={view[lane]}
+            // The first Agent history batch resets to the end; Voice and later refreshes keep their scroller.
+            loading={lane === "agent" && view.agentHistoryLoading}
             detail="full"
             showJumpToLatest={false}
             aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
