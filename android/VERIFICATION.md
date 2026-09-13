@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Participant icon auditions — September 11, 2026** (receipt at the end).
+Latest work: **Allow Android screen capture — September 13, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -71,7 +71,9 @@ opened microphone/inference.
   recording of the synthetic tuner exposed the asset's tiny introductory ring;
   settling the first native pose before drawing removes that ramp. The final
   recording shows its first visible Halo at the intended size and position.
-  No production `FLAG_SECURE` capture was bypassed.
+  At the time, production capture protection remained enabled; no capture
+  protection was bypassed. The September 13 screen-capture change below supersedes
+  that former application-wide restriction.
 
 ## Host browser configurator
 
@@ -2665,3 +2667,25 @@ promotion. Audited production SHA-256:
 `f297dd3ef240fce690b736d3fbbb531c721b22210db3ded68e85cc46a14a7f76`.
 Audited Studio SHA-256:
 `83e81f63f4d2df1bbac47f84ccff9fb43e7521ec041cd8e49f792ea2a90a8ca5`.
+
+
+## Allow Android screen capture — September 13, 2026
+
+Removed the application-wide secure-window flag from `MainActivity`. Screenshots,
+screen recording and display mirroring are now permitted on all app screens.
+The keep-awake flag during an active Persona call remains unchanged. No other
+capture-protection flags or policies were found in Android application sources.
+
+`assembleProduction`, `lintProduction` and `testStudioUnitTest` passed with JDK 17
+and Android SDK 36. The shipping APK audit passed with no Studio entrypoints or
+profile JSON in the real app. The local signed production build preserves
+`com.arthack.agentvoice.dev` and the existing paid-icon build setting. Its signing
+certificate matches the installed S22 app; the version name/code remain 0.1.0/1,
+so the APK hash identifies this update:
+`8a8d887752797f42a4541febbfa815ebc7e11c2b1422e6d7bdb5ef2a067b0a68`.
+
+Before the update, an authorized S22 capture confirmed a black application surface
+and the secure-window bit set. The phone disconnected before ADB accepted the
+in-place install. Build/source verification is complete; updated-device capture
+verification remains pending reconnection. No app data, pairing, Studio state,
+desktop call or server was changed by that unaccepted installation attempt.

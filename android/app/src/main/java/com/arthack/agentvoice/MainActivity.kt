@@ -83,7 +83,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         navigation = CallNavigation(
             route = savedInstanceState?.getString("callRoute")?.let { runCatching { CallRoute.valueOf(it) }.getOrNull() }
                 ?: CallRoute.Persona,

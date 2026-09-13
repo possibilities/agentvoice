@@ -142,7 +142,8 @@ pointer cancellation, a second pointer or focus loss closes the local hold
 immediately. A delayed acknowledgement cannot reopen it. TalkBack exposes explicit
 Start talking / Stop talking actions with the same gates.
 
-The screen stays awake during a call. System bars can be revealed by swiping.
+Screenshots, screen recording and display mirroring are allowed throughout the
+app. The screen stays awake during a call. System bars can be revealed by swiping.
 Back, backgrounding and lock release held PTT but preserve the call in a private
 microphone foreground service. An ongoing native notification has Hang up and
 microphone Mute/Unmute actions. Returning to the app reuses that call. Explicit
