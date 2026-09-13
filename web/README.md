@@ -1,8 +1,9 @@
-# Live Voice | Agent transcripts
+# Live Agent | Voice transcripts
 
 `agentvoice serve` opens a live web view at **https://agentvoice.localhost**.
-Two equal, full-height lanes use `@agentchats/transcript` with Human / Agent labels,
-Markdown and inline tool/diff disclosures. There is no toolbar or call control.
+Two equal, full-height lanes put Agent on the left and Voice on the right. They use
+`@agentchats/transcript` with Human / Agent labels, Markdown and inline tool/diff
+disclosures. There is no toolbar or call control.
 The Agent lane includes the shared text composer with Send, Steer, Queue and Stop;
 the Voice lane has no composer. Stop interrupts Agent work, not the voice call.
 Both lanes always watch, open at the latest message and follow new text. Scrolling

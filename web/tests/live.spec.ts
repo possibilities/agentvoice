@@ -113,6 +113,8 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   await expect(voice.locator(".message-author").last()).toHaveText("Agent");
   await expect(agent.locator("time")).toHaveCount(0);
   const lanes = page.locator(".lane");
+  await expect(lanes.nth(0).getByRole("heading", { level: 1 })).toHaveText("Agent");
+  await expect(lanes.nth(1).getByRole("heading", { level: 1 })).toHaveText("Voice");
   const left = await lanes.nth(0).boundingBox();
   const right = await lanes.nth(1).boundingBox();
   expect(left!.y).toBe(right!.y);

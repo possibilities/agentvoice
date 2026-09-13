@@ -68,7 +68,7 @@ export function App() {
 
   return (
     <main aria-label="AgentVoice live transcripts" className="dual-pane">
-      {(["voice", "agent"] as const).map((lane) => (
+      {(["agent", "voice"] as const).map((lane) => (
         <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
           <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
           {view.phase !== "live" ? (
