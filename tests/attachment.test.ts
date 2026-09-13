@@ -34,6 +34,14 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false, readThread?: Rea
   const reads: string[] = [];
   const calls: Record<string, unknown>[] = [];
   const held: Array<() => void> = [];
+  let hookListError = false;
+  let hookInventory: Record<string, unknown>[] = [
+    {
+      key: "fixture-hook",
+      currentHash: "sha256:fixture",
+      trustStatus: "untrusted",
+    },
+  ];
   const peers = new Set<import("bun").ServerWebSocket<undefined>>();
   const native = Bun.serve<undefined>({
     hostname: "127.0.0.1",
@@ -64,7 +72,17 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false, readThread?: Rea
           return;
         }
         if (frame.id !== undefined && frame.method !== undefined) {
-          const respond = () =>
+          const respond = () => {
+            if (frame.method === "hooks/list" && hookListError) {
+              hookListError = false;
+              peer.send(
+                JSON.stringify({
+                  id: frame.id,
+                  error: { code: -32600, message: "fixture hooks/list failure" },
+                }),
+              );
+              return;
+            }
             peer.send(
               JSON.stringify({
                 id: frame.id,
@@ -79,9 +97,21 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false, readThread?: Rea
                       ? { data: [...threads.keys()], nextCursor: null }
                       : frame.method === "thread/list"
                         ? { data: [...threads.values()], nextCursor: "next-native-page" }
-                        : {},
+                        : frame.method === "hooks/list"
+                          ? {
+                              data: [
+                                {
+                                  cwd: identity.workspace,
+                                  hooks: hookInventory,
+                                  warnings: [],
+                                  errors: [],
+                                },
+                              ],
+                            }
+                          : {},
               }),
             );
+          };
           if (holdUnsubscribe && frame.method === "thread/unsubscribe") held.push(respond);
           else respond();
         }
@@ -119,6 +149,12 @@ function fixture(holdUnsubscribe = false, rejectSpeech = false, readThread?: Rea
     calls,
     peers,
     client,
+    rejectNextHookList() {
+      hookListError = true;
+    },
+    setHookInventory(inventory: Record<string, unknown>[]) {
+      hookInventory = inventory;
+    },
     release() {
       for (const respond of held.splice(0)) respond();
     },
@@ -429,6 +465,156 @@ describe("guarded TUI attachment", () => {
         identity,
       ),
     ).toThrow();
+  });
+  test("allows only current listed hook hashes through the native trust write", async () => {
+    const f = fixture();
+    const write = {
+      edits: [
+        {
+          keyPath: "hooks.state",
+          value: { "fixture-hook": { trusted_hash: "sha256:fixture" } },
+          mergeStrategy: "upsert",
+        },
+      ],
+      filePath: null,
+      expectedVersion: null,
+      reloadUserConfig: true,
+    };
+    try {
+      const client = await f.client(f.gateway.issue(identity));
+      let id = 1;
+      const request = async (method: string, params: Record<string, unknown>) => {
+        const requestId = ++id;
+        client.socket.send(JSON.stringify({ id: requestId, method, params }));
+        await until(() => client.frames.some((frame) => frame["id"] === requestId));
+        return client.frames.find((frame) => frame["id"] === requestId)!;
+      };
+      expect((await request("config/batchWrite", write))["error"]).toBeDefined();
+      expect(
+        (await request("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeUndefined();
+      expect((await request("config/batchWrite", write))["error"]).toBeUndefined();
+      expect(f.calls.find((frame) => frame["method"] === "config/batchWrite")?.["params"]).toEqual(
+        write,
+      );
+      for (const params of [
+        { ...write, filePath: "/tmp/config.toml" },
+        { ...write, edits: [{ ...write.edits[0], keyPath: "features.hooks" }] },
+        {
+          ...write,
+          edits: [
+            {
+              ...write.edits[0],
+              value: { "fixture-hook": { trusted_hash: "sha256:other" } },
+            },
+          ],
+        },
+        {
+          ...write,
+          edits: [
+            {
+              ...write.edits[0],
+              value: { "unknown-hook": { trusted_hash: "sha256:fixture" } },
+            },
+          ],
+        },
+      ]) {
+        expect(
+          (await request("hooks/list", { cwds: [identity.workspace] }))["error"],
+        ).toBeUndefined();
+        const writes = f.calls.filter((frame) => frame["method"] === "config/batchWrite").length;
+        expect((await request("config/batchWrite", params))["error"]).toBeDefined();
+        expect(f.calls.filter((frame) => frame["method"] === "config/batchWrite")).toHaveLength(
+          writes,
+        );
+      }
+    } finally {
+      f.close();
+    }
+  });
+  test("hook trust inventory is peer-local, one-use, and invalidated by a failed refresh", async () => {
+    const f = fixture();
+    const write = {
+      edits: [
+        {
+          keyPath: "hooks.state",
+          value: { "fixture-hook": { trusted_hash: "sha256:fixture" } },
+          mergeStrategy: "upsert",
+        },
+      ],
+      filePath: null,
+      expectedVersion: null,
+      reloadUserConfig: true,
+    };
+    try {
+      const first = await f.client(f.gateway.issue(identity));
+      const second = await f.client(f.gateway.issue(identity));
+      let firstId = 1;
+      const firstRequest = async (method: string, params: Record<string, unknown>) => {
+        const requestId = ++firstId;
+        first.socket.send(JSON.stringify({ id: requestId, method, params }));
+        await until(() => first.frames.some((frame) => frame["id"] === requestId));
+        return first.frames.find((frame) => frame["id"] === requestId)!;
+      };
+      expect(
+        (await firstRequest("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeUndefined();
+
+      second.socket.send(JSON.stringify({ id: 2, method: "config/batchWrite", params: write }));
+      await until(() => second.frames.some((frame) => frame["id"] === 2));
+      expect(second.frames.find((frame) => frame["id"] === 2)?.["error"]).toBeDefined();
+
+      expect((await firstRequest("config/batchWrite", write))["error"]).toBeUndefined();
+      expect((await firstRequest("config/batchWrite", write))["error"]).toBeDefined();
+
+      expect(
+        (await firstRequest("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeUndefined();
+      f.rejectNextHookList();
+      expect(
+        (await firstRequest("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeDefined();
+      expect((await firstRequest("config/batchWrite", write))["error"]).toBeDefined();
+
+      f.setHookInventory([
+        { key: "modified-hook", currentHash: "sha256:modified", trustStatus: "modified" },
+        { key: "trusted-hook", currentHash: "sha256:trusted", trustStatus: "trusted" },
+      ]);
+      expect(
+        (await firstRequest("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeUndefined();
+      expect(
+        (
+          await firstRequest("config/batchWrite", {
+            ...write,
+            edits: [
+              {
+                ...write.edits[0],
+                value: { "trusted-hook": { trusted_hash: "sha256:trusted" } },
+              },
+            ],
+          })
+        )["error"],
+      ).toBeDefined();
+      expect(
+        (await firstRequest("hooks/list", { cwds: [identity.workspace] }))["error"],
+      ).toBeUndefined();
+      expect(
+        (
+          await firstRequest("config/batchWrite", {
+            ...write,
+            edits: [
+              {
+                ...write.edits[0],
+                value: { "modified-hook": { trusted_hash: "sha256:modified" } },
+              },
+            ],
+          })
+        )["error"],
+      ).toBeUndefined();
+    } finally {
+      f.close();
+    }
   });
   test("filters realtime and unrelated thread notifications", () => {
     expect(

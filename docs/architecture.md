@@ -133,7 +133,12 @@ owns the current source map and recording/attachment implementation guidance.
   root/descendant native human requests and their correlated answers. Native owns
   first-answer resolution and pending-request replay on resume. Joining strips
   local TUI resume overrides to preserve live settings; subsequent native settings
-  changes, including permissions, are allowed. Do not gate attachment on full access.
+  changes, including permissions, are allowed. Native hook trust is the sole
+  persistent config write: allow only untrusted or modified key/hash pairs from
+  that peer's latest workspace-bound hooks inventory. Reject arbitrary config
+  edits, alternate config paths and hashes that were not just listed. A new list
+  attempt invalidates the prior inventory and one trust attempt consumes it. Do
+  not gate attachment on full access.
   scripts/voice-speak.ts uses the same gateway with exact-root admission for explicit
   root-only thread/realtime/appendSpeech (nonempty text, 64 KiB maximum); other realtime
   mutations remain denied. Never retry speech automatically or report acceptance

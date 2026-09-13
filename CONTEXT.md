@@ -77,6 +77,10 @@ thread's settings; explicit native setting changes and human answers flow throug
 It validates the root or native descendant ancestry in the exact workspace before
 dispatch, filters unrelated/realtime
 notifications, and forwards native human questions and correlated TUI answers.
+Hook trust is the only persistent native-config write: the gateway accepts only
+an untrusted or modified key/hash pair returned by that attachment's current
+`hooks/list` result for the selected workspace, and consumes that inventory on
+one trust attempt.
 Native Codex owns pending requests and replay; AgentVoice never races the TUI
 with a refusal. A private controller bootstrap issues a short-lived admission
 ticket; its native listener credential is never given to the TUI. The grant stays

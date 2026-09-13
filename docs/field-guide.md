@@ -80,6 +80,9 @@ network and it opens no media:
 CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-tui-probe.ts
 ```
 
+Set `AGENTVOICE_TUI_PROBE_COMPOSITION=1` to run the real three-pane smolmux
+composition with no-media fake pointer and voice panes around the stock TUI.
+
 Its READY line gives the isolated HOME/CODEX_HOME/workspace/state for a separate
 terminal running this checkout's `attach` command. Set HOME, CODEX_HOME and
 XDG_STATE_HOME to those fixture paths. Stdin commands `hold`, `stream`, `owner`, `release`,
@@ -110,6 +113,18 @@ output, and pending-request survival across TUI loss and reattachment. These
 isolated checks establish neither audible response delivery nor simultaneous
 live voice behavior. The TUI intentionally
 shows native orchestrator messages, not a voice transcript.
+
+Stock 0.154.0 added a startup hook-review screen. A disposable PTY check on
+2026-09-12 established that review and continue-without-trusting reach the exact
+resumed thread, while trust-all sends `config/batchWrite` for `hooks.state` before
+resume. The gateway now records only untrusted or modified key/hash pairs from
+that attachment peer's workspace-bound `hooks/list` result and accepts only the
+matching native upsert. Arbitrary config edits, alternate files, unknown keys and
+different hashes remain rejected. The check trusted a harmless `/usr/bin/true`
+fixture hook, resumed the local fake-model thread, and then reattached without a
+second review prompt. It used disposable state, external network denial, no audio
+and no hosted inference. The no-media three-pane composition remained open after
+Escape dismissed the review and after trust-all completed.
 
 Upstream `core/src/session/turn.rs::realtime_text_for_event` excludes user messages;
 `core/src/session/mod.rs::maybe_mirror_event_text_to_realtime` relays assistant

@@ -39,6 +39,7 @@ type Peer = {
   serverRequests: Set<string | number>;
   initializing: boolean;
   unsubscribed: boolean;
+  hookTrusts: Map<string, string>;
   sequence: number;
   incoming: Promise<void>;
   outgoing: Promise<void>;
@@ -95,6 +96,7 @@ export class AttachmentGateway {
           serverRequests: new Set(),
           initializing: false,
           unsubscribed: false,
+          hookTrusts: new Map(),
           sequence: 0,
           incoming: Promise.resolve(),
           outgoing: Promise.resolve(),
@@ -249,6 +251,28 @@ export class AttachmentGateway {
         state.pending.delete(id as string | number);
         clearTimeout(request.timer);
         if (!frame["error"]) {
+          if (request.method === "hooks/list") {
+            state.hookTrusts.clear();
+            const rows = object(frame["result"])["data"];
+            if (!Array.isArray(rows)) throw new Error("Invalid hooks inventory");
+            const row = rows.find(
+              (candidate) => object(candidate)["cwd"] === request.identity.workspace,
+            );
+            if (row) {
+              const hooks = object(row)["hooks"];
+              if (!Array.isArray(hooks) || hooks.length > 256)
+                throw new Error("Invalid hooks inventory");
+              for (const raw of hooks) {
+                const hook = object(raw);
+                if (
+                  ["untrusted", "modified"].includes(hook["trustStatus"] as string) &&
+                  typeof hook["key"] === "string" &&
+                  typeof hook["currentHash"] === "string"
+                )
+                  state.hookTrusts.set(hook["key"], hook["currentHash"]);
+              }
+            }
+          }
           if (request.method === "thread/list" || request.method === "thread/loaded/list") {
             const rows = object(frame["result"])["data"];
             if (!Array.isArray(rows) || rows.length > 512)
@@ -337,7 +361,9 @@ export class AttachmentGateway {
           typeof target === "string" && !method.startsWith("thread/realtime/")
             ? { ...identity, threadId: target }
             : identity;
-        validateAttachmentRequest(method, params, candidate);
+        validateAttachmentRequest(method, params, candidate, state.hookTrusts);
+        // A new inventory supersedes the old one; a permitted trust write consumes it.
+        if (method === "hooks/list" || method === "config/batchWrite") state.hookTrusts.clear();
         if (candidate.threadId !== identity.threadId) {
           if (!(await state.grant.scope.allows(candidate.threadId)))
             throw new Error("Attachment requires a verified descendant in the selected workspace");

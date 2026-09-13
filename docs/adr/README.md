@@ -61,6 +61,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0047: Adapt work execution to the human's current intent](0047-adaptive-work-execution.md) | Accepted | Direct or delegated work by task and interaction needs; presentation follows supplied session context and human preferences. |
 | [0048: One working doctrine with explicit runtime boundaries](0048-universal-working-doctrine.md) | Accepted | Broad outcome ownership, proportional execution and verification, conditional completion semantics, and silence-only hold/mute in both agents. |
 | [0049: Add a worker role with bounded assignment ownership](0049-worker-role.md) | Accepted | Existing default remains manager; one explicit worker role, parent-or-human return ownership, useful bounded delegation, and runtime-qualified completion. |
+| [0050: Correlate native TUI hook trust to its current inventory](0050-correlated-native-hook-trust.md) | Recorded | Only listed untrusted/modified key-hash pairs may cross the attachment's persistent config-write boundary. |
 
 ## Identifier history
 

@@ -4,10 +4,14 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import { AttachmentGateway } from "../src/attachment/gateway.ts";
+import { runComposition } from "../src/composition/launch.ts";
 import { startControlServer } from "../src/control/index.ts";
 import { CONTROL_PROTOCOL_VERSION, type ControlStatus } from "../src/control/types.ts";
 import { AppServerConnection, appServerArgv } from "../src/core/attach.ts";
+import { frontendSocketPath } from "../src/frontend/protocol.ts";
+import { VoiceServer } from "../src/frontend/server.ts";
 
 if (process.platform !== "darwin")
   throw new Error("This isolated fixture requires macOS sandbox-exec");
@@ -22,6 +26,7 @@ let gateway: AttachmentGateway | undefined;
 let control: Awaited<ReturnType<typeof startControlServer>> | undefined;
 let model: ReturnType<typeof Bun.serve> | undefined;
 let input: ReturnType<typeof createInterface> | undefined;
+let frontend: VoiceServer | undefined;
 let deadline: ReturnType<typeof setTimeout> | undefined;
 const done = Promise.withResolvers<void>();
 const stop = () => done.resolve();
@@ -189,7 +194,20 @@ try {
   });
   writeFileSync(
     join(nativeHome, "config.toml"),
-    `model = "gpt-6-astra"\nmodel_provider = "attachment-probe"\n[features]\nmulti_agent_v2 = true\n[multi_agent_v2]\ntool_namespace = "collaboration"\n[model_providers.attachment-probe]\nname = "Local mock"\nbase_url = "http://127.0.0.1:${model.port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
+    `model = "gpt-6-astra"\nmodel_provider = "attachment-probe"\n[features]\nhooks = true\nmulti_agent_v2 = true\n[multi_agent_v2]\ntool_namespace = "collaboration"\n[model_providers.attachment-probe]\nname = "Local mock"\nbase_url = "http://127.0.0.1:${model.port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
+  );
+  writeFileSync(
+    join(nativeHome, "hooks.json"),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "^exec_command$",
+            hooks: [{ type: "command", command: "/usr/bin/true" }],
+          },
+        ],
+      },
+    }),
   );
   deadline = setTimeout(stop, 10 * 60_000);
   process.on("SIGTERM", stop);
@@ -272,53 +290,79 @@ try {
   console.log(
     `READY ${JSON.stringify({ root, workspace, state: join(root, "state"), nativeHome, threadId })}`,
   );
-  // Local controls arm fake responses/tool calls; "owner" submits them through the native thread.
-  input = createInterface({ input: process.stdin });
-  input.on("line", (line) => {
-    if (line === "hold") {
-      holdNext = true;
-      console.log("ARMED");
-    }
-    if (line === "release") {
-      held?.resolve();
-      console.log("RELEASED");
-    }
-    if (line === "stream") {
-      streamNext = true;
-      console.log("STREAM ARMED");
-    }
-    if (line === "approval") {
-      approvalNext = true;
-      console.log("APPROVAL ARMED");
-    }
-    if (line === "subagent") {
-      spawnNext = true;
-      console.log("SUBAGENT ARMED");
-    }
-    if (line === "owner") {
-      void connection!
-        .request("turn/start", {
-          threadId,
-          input: [{ type: "text", text: "Owner-originated test message." }],
-        })
-        .catch((error) => {
-          console.error(error);
-          stop();
-        });
-    }
-    if (line === "revoke") {
-      gateway?.revoke();
-      console.log("REVOKED");
-    }
-    if (line === "quit") stop();
-  });
-  input.on("close", stop);
-  await done.promise;
+  if (process.env["AGENTVOICE_TUI_PROBE_COMPOSITION"] === "1") {
+    process.env["XDG_STATE_HOME"] = join(root, "state");
+    process.env["AGENTVOICE_TUI_PROBE_ROOT"] = root;
+    frontend = new VoiceServer(frontendSocketPath(stateDir), async () => ({
+      identity: () => ({ workspace, threadId }),
+      state: () => ({
+        available: true,
+        codingActivity: "unknown" as const,
+        phase: "live" as const,
+        mic: { muted: true, effectiveMuted: true },
+        speaker: { muted: false, effectiveMuted: false },
+      }),
+      start: async () => {},
+      command: () => {},
+      close: async () => {},
+    }));
+    await frontend.start();
+    await runComposition(undefined, [
+      process.execPath,
+      fileURLToPath(
+        new URL("../tests/fixtures/attachment-tui-composition-child.ts", import.meta.url),
+      ),
+    ]);
+  } else {
+    // Local controls arm fake responses/tool calls; "owner" submits them through the native thread.
+    input = createInterface({ input: process.stdin });
+    input.on("line", (line) => {
+      if (line === "hold") {
+        holdNext = true;
+        console.log("ARMED");
+      }
+      if (line === "release") {
+        held?.resolve();
+        console.log("RELEASED");
+      }
+      if (line === "stream") {
+        streamNext = true;
+        console.log("STREAM ARMED");
+      }
+      if (line === "approval") {
+        approvalNext = true;
+        console.log("APPROVAL ARMED");
+      }
+      if (line === "subagent") {
+        spawnNext = true;
+        console.log("SUBAGENT ARMED");
+      }
+      if (line === "owner") {
+        void connection!
+          .request("turn/start", {
+            threadId,
+            input: [{ type: "text", text: "Owner-originated test message." }],
+          })
+          .catch((error) => {
+            console.error(error);
+            stop();
+          });
+      }
+      if (line === "revoke") {
+        gateway?.revoke();
+        console.log("REVOKED");
+      }
+      if (line === "quit") stop();
+    });
+    input.on("close", stop);
+    await done.promise;
+  }
 } finally {
   clearTimeout(deadline);
   process.off("SIGTERM", stop);
   process.off("SIGINT", stop);
   input?.close();
+  await frontend?.close();
   held?.resolve();
   gateway?.close();
   try {

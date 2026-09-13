@@ -4,6 +4,7 @@ import { nativeHumanRequest } from "../core/human-input.ts";
 
 export type Json = Record<string, unknown>;
 export type AttachmentIdentity = { threadId: string; workspace: string };
+export type HookTrusts = ReadonlyMap<string, string>;
 export function object(value: unknown): Json {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Expected object");
@@ -44,11 +45,39 @@ function settings(params: Json, identity: AttachmentIdentity): void {
   }
 }
 
+function hookTrustWrite(params: Json, hookTrusts?: HookTrusts): void {
+  keys(params, ["edits", "filePath", "expectedVersion", "reloadUserConfig"]);
+  if (
+    params["filePath"] != null ||
+    params["expectedVersion"] != null ||
+    params["reloadUserConfig"] !== true ||
+    !Array.isArray(params["edits"]) ||
+    params["edits"].length !== 1
+  )
+    throw new Error("Attachment supports only native hook trust updates");
+  const edit = object(params["edits"][0]);
+  keys(edit, ["keyPath", "value", "mergeStrategy"]);
+  if (edit["keyPath"] !== "hooks.state" || edit["mergeStrategy"] !== "upsert")
+    throw new Error("Attachment supports only native hook trust updates");
+  const value = object(edit["value"]);
+  const updates = Object.entries(value);
+  if (!hookTrusts || updates.length === 0 || updates.length > 256)
+    throw new Error("Attachment hook trust requires a current hooks/list result");
+  for (const [key, raw] of updates) {
+    const state = object(raw);
+    keys(state, ["trusted_hash"]);
+    const hash = state["trusted_hash"];
+    if (typeof hash !== "string" || hookTrusts.get(key) !== hash)
+      throw new Error("Attachment hook trust does not match the current hooks/list result");
+  }
+}
+
 /** Reject before native dispatch. Unknown mutations never acquire an implementation by forwarding. */
 export function validateAttachmentRequest(
   method: string,
   params: Json,
   identity: AttachmentIdentity,
+  hookTrusts?: HookTrusts,
 ): void {
   if (
     (method.startsWith("thread/") && !["thread/list", "thread/loaded/list"].includes(method)) ||
@@ -118,6 +147,9 @@ export function validateAttachmentRequest(
     case "config/read":
       keys(params, ["cwd", "includeLayers"]);
       cwd(params["cwd"], identity.workspace);
+      break;
+    case "config/batchWrite":
+      hookTrustWrite(params, hookTrusts);
       break;
     case "configRequirements/read":
     case "account/rateLimits/read":
