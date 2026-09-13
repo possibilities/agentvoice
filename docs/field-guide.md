@@ -199,7 +199,7 @@ On September 5, 2026, native WebRTC omission on stock 0.153.3 was rejected with
 `invalid_quicksilver_alpha_header`; explicit v3 connected and the operator
 confirmed it works. v3 also honors Codex's configured voice name; native WebRTC
 omission ignores it. Speech-model resolution stays native to the chosen protocol.
-See the [compatibility explanation](../README.md#webrtc-compatibility-default).
+See the [compatibility explanation](manual.md#webrtc-compatibility-default).
 Retry exhaustion preserves the cause and stops after three failures; readiness
 notifications do not bypass the retry delay.
 

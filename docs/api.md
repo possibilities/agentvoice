@@ -90,7 +90,7 @@ can change native permissions.
 Runtime restart and call shutdown revoke all grants before stopping
 media. Redial keeps them. Lost connections require explicit reattachment and do
 not replay input. See [ADR 0022](adr/0022-websocket-native-tui.md) for scope and
-[README](../README.md#attach-a-stock-codex-tui) for launch instructions.
+[manual](manual.md#attach-a-stock-codex-tui) for launch instructions.
 
 ## Unix socket transport
 
