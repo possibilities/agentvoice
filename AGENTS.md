@@ -303,6 +303,11 @@ lives in two siblings, and some changes here must cascade:
 AgentStart owns the `manager` and `worker` roles, including prompts and separate
 MCP inventories ([ADR 0051](docs/adr/0051-agentstart-owns-working-roles.md)).
 AgentVoice consumes selected role directories through its generic loader.
+For role prompt or system-append changes, edit the canonical sources under
+`~/code/agentstart/roles/manager/` or `~/code/agentstart/roles/worker/`, following
+AgentStart's guidance and rendering checks. These include `APPEND_SYSTEM_PROMPT.md`,
+`VOICE_AGENT_APPEND_SYSTEM_PROMPT.md`, and `VOICE_ORCHESTRATOR_MULTI_AGENT_MODE.md`.
+Do not edit deployed role copies or recreate these prompt files in AgentVoice.
 
 
 ## Voice recording and attachment
