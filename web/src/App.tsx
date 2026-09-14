@@ -5,9 +5,17 @@ import {
   useDeferredValue,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import {
+  type OptimisticSubmission,
+  observed,
+  optimisticMessages,
+  optimisticQueue,
+} from "./optimistic.ts";
+import { reconcileView } from "./reconcile-view.ts";
 import type { AgentControlsView, LiveView } from "./types.ts";
 
 const copy = {
@@ -37,6 +45,37 @@ export function App() {
     voice: [],
     agent: [],
   });
+  const latestView = useRef(view);
+  latestView.current = view;
+  const [submissions, setSubmissions] = useState<OptimisticSubmission[]>([]);
+  const beginSubmission = useCallback((row: Omit<OptimisticSubmission, "anchor" | "state">) => {
+    setSubmissions((current) => [
+      ...current,
+      {
+        ...row,
+        anchor: optimisticMessages(
+          latestView.current.agent,
+          current.filter((entry) => entry.viewId === row.viewId),
+        ).at(-1)?.id,
+        state: "pending",
+      },
+    ]);
+  }, []);
+  const settleSubmission = useCallback(
+    (id: string, state: OptimisticSubmission["state"] | "rejected") => {
+      setSubmissions((current) =>
+        state === "rejected"
+          ? current.filter((row) => row.id !== id)
+          : current.map((row) => (row.id === id ? { ...row, state } : row)),
+      );
+    },
+    [],
+  );
+  const submissionObserved = useCallback(
+    (viewId: string, id: string) =>
+      latestView.current.id === viewId && observed(latestView.current, id),
+    [],
+  );
   const commandAccepted = useCallback(() => setReadRevision((revision) => revision + 1), []);
   // Transcript rendering can yield to typing; controls use the current view immediately.
   const renderedView = useDeferredValue(view);
@@ -55,15 +94,7 @@ export function App() {
         const text = await response.text();
         if (!controller.signal.aborted && text !== previous) {
           const next: LiveView = JSON.parse(text);
-          setView((current) => ({
-            ...next,
-            // Controls are a small independent snapshot. Transcript-only polls
-            // must not invalidate the input boundary or its action callbacks.
-            agentControls:
-              JSON.stringify(current.agentControls) === JSON.stringify(next.agentControls)
-                ? current.agentControls
-                : next.agentControls,
-          }));
+          setView((current) => reconcileView(current, next));
           previous = text;
         }
       } catch {
@@ -95,6 +126,31 @@ export function App() {
     renderedView.voiceHistoryLoading
       ? view
       : renderedView;
+  const localSubmissions = useMemo(
+    () => submissions.filter((row) => row.viewId === view.id),
+    [submissions, view.id],
+  );
+  const displayedAgent = useMemo(
+    () => optimisticMessages(transcriptView.agent, localSubmissions),
+    [transcriptView.agent, localSubmissions],
+  );
+  const displayedControls = useMemo(() => {
+    const controls = view.agentControls;
+    if (!controls) return undefined;
+    const queue = optimisticQueue(controls.queue, localSubmissions, view.agent);
+    return queue === controls.queue ? controls : { ...controls, queue };
+  }, [view.agentControls, localSubmissions, view.agent]);
+  // Keep placeholders until the rendered native snapshot contains their exact identity.
+  useEffect(() => {
+    setSubmissions((current) => {
+      const next = current.filter(
+        (row) =>
+          row.viewId === view.id &&
+          !observed({ ...transcriptView, agentControls: view.agentControls }, row.id),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [transcriptView, view.id, view.agentControls]);
   return (
     <main aria-label="AgentVoice live transcripts" className="live-view">
       {showStatus ? (
@@ -108,7 +164,14 @@ export function App() {
         {(["agent", "voice"] as const).map((lane) => (
           <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
             <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
-            <TranscriptLane lane={lane} view={transcriptView} holding={!!holding} />
+            <TranscriptLane
+              lane={lane}
+              viewId={transcriptView.id}
+              phase={transcriptView.phase}
+              notice={transcriptView[`${lane}Notice`]}
+              messages={lane === "agent" ? displayedAgent : transcriptView.voice}
+              holding={!!holding}
+            />
             <div
               ref={lane === "agent" ? agentDock : undefined}
               className={lane === "agent" ? "agent-dock" : "voice-dock"}
@@ -116,12 +179,15 @@ export function App() {
               aria-hidden={lane === "voice" ? true : undefined}
               hidden={lane === "voice" && dockHeight === 0}
             >
-              {lane === "agent" && view.agentControls ? (
+              {lane === "agent" && displayedControls ? (
                 <AgentInput
                   viewId={view.id}
-                  controls={view.agentControls}
-                  disabled={view.phase !== "live" || !view.agentControls.available}
+                  controls={displayedControls}
+                  disabled={view.phase !== "live" || !displayedControls.available}
                   onAccepted={commandAccepted}
+                  onBegin={beginSubmission}
+                  onSettle={settleSubmission}
+                  isObserved={submissionObserved}
                 />
               ) : null}
             </div>
@@ -134,31 +200,38 @@ export function App() {
 
 const TranscriptLane = memo(function TranscriptLane({
   lane,
-  view,
+  viewId,
+  phase,
+  notice,
+  messages,
   holding,
 }: {
   lane: "agent" | "voice";
-  view: LiveView;
+  viewId: string;
+  phase: LiveView["phase"];
+  notice?: string;
+  messages: LiveView["agent"];
   holding: boolean;
 }) {
   return (
     <Transcript
-      transcriptId={`${view.id}:${lane}`}
-      messages={view[lane]}
+      transcriptId={`${viewId}:${lane}`}
+      messages={messages}
       // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
       loading={!!holding}
       detail="full"
+      windowed
       showJumpToLatest
       aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
       header={
-        view[`${lane}Notice`] ? (
+        notice ? (
           <p className="transcript-notice" role="status">
-            {view[`${lane}Notice`]}
+            {notice}
           </p>
         ) : null
       }
       empty={
-        view.phase === "live" && !view[`${lane}Notice`] ? (
+        phase === "live" && !notice ? (
           <p className="transcript-notice">
             {lane === "voice" ? "Waiting for speech." : "Waiting for agent messages."}
           </p>
@@ -173,28 +246,60 @@ const AgentInput = memo(function AgentInput({
   controls,
   disabled,
   onAccepted,
+  onBegin,
+  onSettle,
+  isObserved,
 }: {
   viewId: string;
   controls: AgentControlsView;
   disabled: boolean;
   onAccepted: () => void;
+  onBegin: (row: Omit<OptimisticSubmission, "anchor" | "state">) => void;
+  onSettle: (id: string, state: OptimisticSubmission["state"] | "rejected") => void;
+  isObserved: (viewId: string, id: string) => boolean;
 }) {
-  const agentCommand = async (fields: object) => {
+  const agentCommand = async (
+    fields: object,
+    submission?: { clientId: string; mode: "send" | "steer" | "queue" },
+  ) => {
+    const requestId = submission?.clientId ?? crypto.randomUUID();
+    if (submission)
+      onBegin({
+        id: requestId,
+        viewId,
+        text: (fields as { text: string }).text,
+        action: submission.mode,
+      });
     let response: Response;
     try {
       response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ viewId, requestId: crypto.randomUUID(), ...fields }),
+        body: JSON.stringify({ viewId, requestId, ...fields }),
         signal: AbortSignal.timeout(15_000),
       });
     } catch {
+      if (submission && isObserved(viewId, requestId)) {
+        onAccepted();
+        return;
+      }
+      if (submission) onSettle(requestId, "unknown");
       throw new Error("Delivery is unknown. Check the transcript and queue before trying again.");
     }
     if (!response.ok) {
       const body = await response.json().catch(() => undefined);
+      if (submission && isObserved(viewId, requestId)) {
+        onAccepted();
+        return;
+      }
+      if (submission)
+        onSettle(
+          requestId,
+          body?.delivery === "unknown" || response.status >= 500 ? "unknown" : "rejected",
+        );
       throw new Error(body?.error ?? "Agent request failed. Check the current call.");
     }
+    if (submission) onSettle(requestId, "accepted");
     onAccepted();
   };
   return (
@@ -206,6 +311,8 @@ const AgentInput = memo(function AgentInput({
       ) : null}
       <TranscriptComposer
         transcriptId={viewId}
+        alwaysShowSend
+        optimisticSubmit
         active={controls.active}
         pending={controls.pending}
         stopping={controls.stopping}
@@ -213,9 +320,9 @@ const AgentInput = memo(function AgentInput({
         aria-label="Message Agent"
         placeholder="Message Agent…"
         queue={controls.queue}
-        onSend={(text) => agentCommand({ action: "send", text })}
-        onSteer={(text) => agentCommand({ action: "steer", text })}
-        onQueue={(text) => agentCommand({ action: "queue", text })}
+        onSend={(text, submission) => agentCommand({ action: "send", text }, submission)}
+        onSteer={(text, submission) => agentCommand({ action: "steer", text }, submission)}
+        onQueue={(text, submission) => agentCommand({ action: "queue", text }, submission)}
         onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
         onResumeQueued={(id) => agentCommand({ action: "resume", id })}
         onRemoveQueued={(id) => agentCommand({ action: "remove", id })}

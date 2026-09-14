@@ -71,6 +71,10 @@ body,
 .agent-dock .agentchats-transcript.transcript-composer {
   background: transparent;
 }
+.agent-dock .transcript-composer__working {
+  top: 2px;
+  right: var(--dock-inset-inline);
+}
 .agent-dock .transcript-composer__content {
   padding: var(--dock-inset-block) var(--dock-inset-inline);
 }
@@ -81,6 +85,9 @@ body,
 }
 .agent-dock .agentchats-transcript.transcript-composer textarea {
   padding: 0 0 8px;
+}
+.agent-dock .agentchats-transcript.transcript-composer[data-always-show-send] textarea {
+  padding-right: 0;
 }
 .agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group-addon"] {
   padding: 0;

@@ -116,11 +116,11 @@ test("web Agent commands reach the exact native thread through the real attachme
     expect(view.agentControls?.available).toBe(true);
     const command = (fields: object) =>
       agentCommandSchema.parse({ viewId: view.id, requestId: randomUUID(), ...fields });
-    await h.reader.agentCommand(
-      command({ action: "send", text: "Typed text\nwith a second line" }),
-    );
+    const send = command({ action: "send", text: "Typed text\nwith a second line" });
+    await h.reader.agentCommand(send);
     const start = h.calls.find((call) => call.method === "turn/start")!;
     expect(start.params.threadId).toBe("main");
+    expect(start.params.clientUserMessageId).toBe(send.requestId);
     expect(start.params.input).toEqual([
       { type: "text", text: "Typed text\nwith a second line", text_elements: [] },
     ]);

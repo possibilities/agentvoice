@@ -11,8 +11,8 @@ export type AgentTarget = {
   controlProtocolVersion: ReadableControlProtocol;
 };
 export type AgentOperation =
-  | { action: "send"; text: string }
-  | { action: "steer"; text: string; turnId: string }
+  | { action: "send"; text: string; clientUserMessageId?: string }
+  | { action: "steer"; text: string; turnId: string; clientUserMessageId?: string }
   | { action: "interrupt"; turnId: string };
 
 export class AgentSendError extends Error {
@@ -145,7 +145,7 @@ export async function dispatchAgentOperation(
                     : {
                         threadId: ticket.threadId,
                         input: [{ type: "text", text: operation.text, text_elements: [] }],
-                        clientUserMessageId: randomUUID(),
+                        clientUserMessageId: operation.clientUserMessageId ?? randomUUID(),
                         ...(operation.action === "steer"
                           ? { expectedTurnId: operation.turnId }
                           : {}),

@@ -20,7 +20,13 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
         return `[${part.type === "image" || part.type === "localImage" ? "Image" : "Audio"}]`;
       })
       .join("\n\n");
-    return { ...base, role: "user", content, presentation: parseCodexMessagePresentation(content) };
+    return {
+      ...base,
+      id: item.clientId ? `client:${item.clientId}` : base.id,
+      role: "user",
+      content,
+      presentation: parseCodexMessagePresentation(content),
+    };
   }
   if (item.type === "agentMessage") return { ...base, role: "assistant", content: item.text };
   if (item.type === "reasoning") return;

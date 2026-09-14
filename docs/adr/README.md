@@ -71,6 +71,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0055: One durable Work owner with an independent HUD](0055-durable-work-hud.md) | Partially superseded | [0056](0056-independent-agenthud.md) transfers source and delivery to independent AgentHUD; native execution remains native. |
 
 | [0056: Transfer durable Work and HUD into independent AgentHUD](0056-independent-agenthud.md) | Accepted | Independent source owner, versioned native observation boundary and managed HUD service. |
+| [0057: Responsive web transcripts with correlated submissions](0057-responsive-web-transcripts.md) | Accepted | Windowed rendering, stable disclosures and exact native identity reconcile immediate local submissions. |
 
 ## Identifier history
 

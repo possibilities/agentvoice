@@ -44,25 +44,34 @@ test("send, steer and queue have distinct native semantics; a duplicate request 
   try {
     const send = h.command({ action: "send", text: "First\nmessage" });
     await Promise.all([h.controls.command(send), h.controls.command(send)]);
-    expect(h.operations).toEqual([{ action: "send", text: "First\nmessage" }]);
+    expect(h.operations).toMatchObject([{ action: "send", text: "First\nmessage" }]);
+    expect(h.operations[0]?.action === "send" && h.operations[0].clientUserMessageId).toBe(
+      send.requestId,
+    );
     expect(h.controls.view().active).toBe(true);
     h.controls.observe(undefined, true, 1);
     expect(h.controls.view().active).toBe(true);
     await expect(
       h.controls.command(h.command({ action: "send", text: "Wrong mode" })),
     ).rejects.toThrow("Steer or Queue");
-    await h.controls.command(h.command({ action: "queue", text: "After completion" }));
+    const queued = h.command({ action: "queue", text: "After completion" });
+    await h.controls.command(queued);
+    expect(h.controls.view().queue[0]?.id).toBe(queued.requestId);
     await h.controls.drain();
     expect(h.operations).toHaveLength(1);
     await h.controls.command(h.command({ action: "steer", text: "Adjust this turn" }));
-    expect(h.operations[1]).toEqual({
+    expect(h.operations[1]).toMatchObject({
       action: "steer",
       text: "Adjust this turn",
       turnId: "accepted-turn",
     });
     h.controls.observe({ id: "accepted-turn", status: "completed" }, true, 5);
     await h.controls.drain();
-    expect(h.operations[2]).toEqual({ action: "send", text: "After completion" });
+    expect(h.operations[2]).toMatchObject({
+      action: "send",
+      text: "After completion",
+      clientUserMessageId: queued.requestId,
+    });
     expect(h.controls.view().queue).toEqual([]);
   } finally {
     h.close();
@@ -76,7 +85,7 @@ test("Stop pauses queued messages, waits for terminal observation, and requires 
     await h.controls.command(h.command({ action: "queue", text: "Later" }));
     h.outcome(async () => undefined);
     await h.controls.command(h.command({ action: "interrupt" }));
-    expect(h.operations).toEqual([{ action: "interrupt", turnId: "busy" }]);
+    expect(h.operations).toMatchObject([{ action: "interrupt", turnId: "busy" }]);
     expect(h.controls.view().stopping).toBe(true);
     h.controls.observe({ id: "busy", status: "interrupted" }, true, 4);
     await h.controls.drain();
@@ -88,7 +97,7 @@ test("Stop pauses queued messages, waits for terminal observation, and requires 
     h.controls.observe({ id: "busy", status: "interrupted" }, true, 4);
     h.outcome(async () => "next");
     await h.controls.drain();
-    expect(h.operations[1]).toEqual({ action: "send", text: "Later" });
+    expect(h.operations[1]).toMatchObject({ action: "send", text: "Later" });
   } finally {
     h.close();
   }
@@ -102,10 +111,10 @@ test("queue editing holds the FIFO, preserves position, and can steer a selected
     const [first, second] = h.controls.view().queue;
     await h.controls.command(h.command({ action: "editing", id: first!.id }));
     await h.controls.drain();
-    expect(h.operations).toEqual([]);
+    expect(h.operations).toMatchObject([]);
     await h.controls.command(h.command({ action: "edit", id: first!.id, text: "First edited" }));
     await h.controls.drain();
-    expect(h.operations).toEqual([]);
+    expect(h.operations).toMatchObject([]);
     await h.controls.command(h.command({ action: "editing", id: null }));
     expect(h.controls.view().queue.map((row) => row.text)).toEqual([
       "First edited",
@@ -113,7 +122,9 @@ test("queue editing holds the FIFO, preserves position, and can steer a selected
     ]);
     h.controls.observe({ id: "busy", status: "inProgress" }, true, 2);
     await h.controls.command(h.command({ action: "steerQueued", id: second!.id }));
-    expect(h.operations).toEqual([{ action: "steer", turnId: "busy", text: "Second queued" }]);
+    expect(h.operations).toMatchObject([
+      { action: "steer", turnId: "busy", text: "Second queued" },
+    ]);
     expect(h.controls.view().queue.map((row) => row.id)).toEqual([first!.id]);
     await h.controls.command(h.command({ action: "remove", id: first!.id }));
     expect(h.controls.view().queue).toEqual([]);
@@ -196,7 +207,7 @@ test("replacement fences old commands and queues, and definitive failures preser
     h.controls.bind({ ...h.target, viewId: randomUUID(), generation: 2 });
     h.controls.observe(undefined, true, 1);
     await h.controls.drain();
-    expect(h.operations).toEqual([]);
+    expect(h.operations).toMatchObject([]);
     expect(h.controls.view().queue[0]?.pausedReason).toContain("call changed");
     await expect(
       h.controls.command(h.command({ action: "send", text: "Stale browser" })),
@@ -225,5 +236,38 @@ test("Agent requests reject empty/oversized input and arbitrary native parameter
     { text: "ok", method: "thread/start" },
   ]) {
     expect(agentCommandSchema.safeParse({ ...base, ...fields }).success).toBe(false);
+  }
+});
+
+test("editing an unknown queue delivery creates a new native identity without moving the row", async () => {
+  const h = setup();
+  try {
+    const queued = h.command({ action: "queue", text: "Original" });
+    await h.controls.command(queued);
+    h.outcome(async () => {
+      throw new AgentSendError("Unknown", "unknown");
+    });
+    await h.controls.drain();
+    expect(h.controls.view().queue[0]?.id).toBe(queued.requestId);
+    const edit = h.command({
+      action: "edit",
+      id: queued.requestId,
+      text: "Corrected after review",
+    });
+    await h.controls.command(edit);
+    const saved = JSON.parse(
+      readFileSync(join(h.directory, "web", "queued-messages.json"), "utf8"),
+    );
+    expect(saved[0].clientUserMessageId).toBe(edit.requestId);
+    h.outcome(async () => "next-turn");
+    await h.controls.drain();
+    expect(h.operations[0]).toMatchObject({ clientUserMessageId: queued.requestId });
+    expect(h.operations[1]).toMatchObject({
+      clientUserMessageId: edit.requestId,
+      text: "Corrected after review",
+    });
+    expect(h.controls.view().queue).toEqual([]);
+  } finally {
+    h.close();
   }
 });

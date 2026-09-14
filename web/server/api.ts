@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, agentCommandSchema } from "./agent-controls.ts";
+import { AgentSendError } from "./agent-sender.ts";
 import { isLocalRequest } from "./local-origin.ts";
 
 export function liveApi(
@@ -72,6 +73,7 @@ export function liveApi(
             response.writeHead(409, { "Content-Type": "application/json" }).end(
               JSON.stringify({
                 error: error instanceof Error ? error.message : "Agent request failed.",
+                delivery: error instanceof AgentSendError ? error.delivery : "rejected",
               }),
             );
         }

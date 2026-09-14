@@ -90,7 +90,7 @@ test("typing, selection and composition survive streaming history and control up
   const selectionRevision = revision;
   view.agentControls!.active = true;
   await expect.poll(() => revision).toBeGreaterThan(selectionRevision + 1);
-  await expect(page.getByRole("button", { name: "Steer", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await continuousInput();
   expect(
     await input.evaluate((el) => {
@@ -110,7 +110,7 @@ test("typing, selection and composition survive streaming history and control up
   expect(commands).toHaveLength(0);
   await input.dispatchEvent("compositionend", { data: "日本語" });
   const finalDraft = await input.inputValue();
-  await page.getByRole("button", { name: "Steer", exact: true }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
   expect(commands[0]).toMatchObject({
     action: "steer",

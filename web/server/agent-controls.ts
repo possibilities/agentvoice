@@ -36,7 +36,14 @@ export const agentCommandSchema = z.discriminatedUnion("action", [
 ]);
 export type AgentCommand = z.infer<typeof agentCommandSchema>;
 type Target = AgentTarget & { viewId: string };
-type Row = { id: string; text: string; target: Target; pausedReason?: string; unknown?: boolean };
+type Row = {
+  id: string;
+  text: string;
+  target: Target;
+  pausedReason?: string;
+  unknown?: boolean;
+  clientUserMessageId?: string;
+};
 type Turn = { id: string; status: "inProgress" | "completed" | "interrupted" | "failed" };
 type Send = (
   target: AgentTarget,
@@ -54,6 +61,7 @@ const savedRow = z.object({
     threadId: z.string(),
     controlProtocolVersion: z.union([z.literal(5), z.literal(6)]),
   }),
+  clientUserMessageId: z.string().uuid().optional(),
   pausedReason: z.string().optional(),
   unknown: z.boolean().optional(),
 });
@@ -190,7 +198,7 @@ export class AgentControls {
       if (this.notice) throw new Error(this.notice);
       if (this.queue.length >= 20) throw new Error("The queue is full (20 messages).");
       this.queue.push({
-        id: randomUUID(),
+        id: command.requestId,
         text: command.text,
         target: { ...this.target },
         pausedReason: this.stopping ? "Stopped. Resume this message when ready." : undefined,
@@ -205,6 +213,7 @@ export class AgentControls {
       else if (command.action === "edit") {
         Object.assign(row, {
           text: command.text,
+          clientUserMessageId: command.requestId,
           target: { ...this.target },
           pausedReason: undefined,
           unknown: false,
@@ -236,11 +245,20 @@ export class AgentControls {
     } else if (command.action === "steer") {
       if (this.turn?.status !== "inProgress")
         throw new Error("The turn finished. Use Send to start the next turn.");
-      await this.dispatch({ action: "steer", text: command.text, turnId: this.turn.id });
+      await this.dispatch({
+        action: "steer",
+        text: command.text,
+        turnId: this.turn.id,
+        clientUserMessageId: command.requestId,
+      });
     } else {
       if (this.turn?.status === "inProgress")
         throw new Error("Agent is working. Choose Steer or Queue.");
-      await this.dispatch({ action: "send", text: command.text });
+      await this.dispatch({
+        action: "send",
+        text: command.text,
+        clientUserMessageId: command.requestId,
+      });
     }
   }
 
@@ -273,8 +291,17 @@ export class AgentControls {
     try {
       await this.dispatch(
         this.turn?.status === "inProgress"
-          ? { action: "steer", turnId: this.turn.id, text: row.text }
-          : { action: "send", text: row.text },
+          ? {
+              action: "steer",
+              turnId: this.turn.id,
+              text: row.text,
+              clientUserMessageId: row.clientUserMessageId ?? row.id,
+            }
+          : {
+              action: "send",
+              text: row.text,
+              clientUserMessageId: row.clientUserMessageId ?? row.id,
+            },
       );
       this.queue = this.queue.filter((entry) => entry !== row);
     } catch (error) {

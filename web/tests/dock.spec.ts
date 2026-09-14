@@ -148,6 +148,8 @@ for (const width of [1440, 600]) {
     );
     await input.focus();
     await expect(dock.locator('[data-slot="input-group"]')).toHaveCSS("box-shadow", "none");
+    await expect(dock.locator(".transcript-composer__content")).toHaveCSS("padding-top", "24px");
+    await expect(dock.locator(".transcript-composer__content")).toHaveCSS("padding-left", "26px");
     const initial = await height();
     const stable = async () => {
       await expect.poll(height).toBe(initial);
@@ -156,15 +158,22 @@ for (const width of [1440, 600]) {
         .toBe(initial);
     };
     view.agentControls!.active = true;
-    await expect(page.locator(".transcript-composer__progress")).toHaveText("Working…");
+    await expect(page.locator(".transcript-composer__working")).toHaveText("Working");
     await stable();
+    const working = page.locator(".transcript-composer__working");
+    const workingBox = (await working.boundingBox())!;
+    const dockBox = (await dock.boundingBox())!;
+    const inputBox = (await input.boundingBox())!;
+    expect(workingBox.x + workingBox.width).toBeLessThanOrEqual(dockBox.x + dockBox.width - 20);
+    expect(workingBox.y + workingBox.height).toBeLessThanOrEqual(inputBox.y);
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
     await page.screenshot({ path: `test-results/composer-working-${width}.png` });
     await input.fill("Hello");
-    await expect(page.getByRole("button", { name: "Steer", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
     await stable();
     await page.getByRole("button", { name: "Follow-up behavior" }).click();
     await page.getByRole("menuitemradio", { name: "Queue for next turn" }).click();
-    await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
     await stable();
     await input.fill(Array.from({ length: 30 }, () => "Draft line").join("\n"));
     const expanded = await height();

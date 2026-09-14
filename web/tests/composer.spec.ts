@@ -14,7 +14,6 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
   const controls = view.agentControls!;
   const requests: Record<string, unknown>[] = [];
   let reject = true;
-  const queuedId = "254aa7ef-a83e-4341-b2e3-da45f444990a";
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.route("**/api/agent", (route) => {
     const command = route.request().postDataJSON();
@@ -24,7 +23,7 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
     if (command.action === "send") controls.active = true;
     if (command.action === "queue")
       controls.queue.push({
-        id: queuedId,
+        id: command.requestId,
         text: command.text,
         canSteer: true,
         canResume: false,
@@ -47,14 +46,14 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
   await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
   await expect(agent.getByRole("button", { name: "Stop Agent" })).toHaveCount(0);
-  await expect(agent.locator(".transcript-composer__progress")).toHaveText("Working…");
+  await expect(agent.locator(".transcript-composer__working")).toHaveText("Working");
   await input.fill("Adjust direction");
-  await agent.getByRole("button", { name: "Steer", exact: true }).click();
+  await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
   await agent.getByRole("button", { name: "Follow-up behavior" }).click();
   await page.getByRole("menuitemradio", { name: "Queue for next turn" }).click();
   await input.fill("Work later");
-  await agent.getByRole("button", { name: "Queue", exact: true }).click();
+  await agent.getByRole("button", { name: "Send", exact: true }).click();
   const queue = agent.getByRole("region", { name: "Queued messages" });
   await expect(queue.getByText("Work later", { exact: true })).toBeVisible();
   await queue.getByRole("button", { name: "Edit", exact: true }).click();

@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.2
+# @agentchats/transcript 0.3.4
 
-Packed from [agentchats f9036ac](https://github.com/possibilities/agentchats/commit/f9036ac),
+Packed from [agentchats b2e0511](https://github.com/possibilities/agentchats/commit/b2e05114b2d7636f1c201ccd4376bb6dbd0d5ec3),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
 
@@ -16,6 +16,14 @@ Consumer fixes and shared features landed upstream:
   passive Working status, and aligned composer inner padding.
 - `e6bea54`: larger monospaced reading and composer text, an 80ch prose cap inside
   the 1120px outer column, compact gaps and at least 44px composer touch controls.
+
+- `cc47e4e`: optional measured transcript windowing, stable disclosure and Markdown
+  identities, always-visible Send, separate Working status, optimistic submission
+  metadata and recoverable drafts. Preserves the inherited console theme.
+- `b2e0511`: retains exact reading anchors when varied-height history is prepended,
+  with bounded retries until the saved row is mounted and measured.
+
+Archive SHA-256: `b16d16ac6ede815a26329d8c790bbbe8efb245c377bb3fdce20b50489a294fe3`.
 
 Reproduce from that clean agentchats revision:
 

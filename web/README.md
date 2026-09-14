@@ -4,11 +4,16 @@
 Two equal, full-height lanes put Agent on the left and Voice on the right. They use
 `@agentchats/transcript` with Human / Agent labels, Markdown and inline tool/diff
 disclosures. There is no toolbar or call control.
-The Agent lane includes the shared text composer with Send, Steer, Queue and Stop;
-the Voice lane has no composer. Stop interrupts Agent work, not the voice call.
+The Agent lane includes the shared text composer with an always-visible Send
+button and Steer / Queue choices while Agent is working. Send is disabled when
+its action is unavailable. Working sits in the upper-right composer gutter; the
+Voice lane has no composer.
 A quiet lined dock below Voice tracks the Agent composer's height, keeping the
 two transcript viewports aligned as drafts and queued messages expand.
-Both lanes always watch, open at the latest message and follow new text. Scrolling
+Both lanes window measured message blocks, open at the latest message and follow
+new text. Stable row identities retain tool expansion across polls, appends and
+group changes. Browser find sees mounted history; the API retains the complete
+loaded transcript. A single expanded activity group remains one measured block. Scrolling
 up lets you read earlier text and shows the shared jump-to-latest chip with a count
 of new messages. Using the chip or scrolling back to the bottom resumes following.
 
@@ -105,8 +110,9 @@ endings display as context handoffs. Unknown,
 malformed or mixed envelopes retain their ordinary presentation; original content
 is never rewritten. Column width, responsive padding and message spacing come
 from the shared package, including in the two narrow lanes.
-Version 0.3.2 supplies the larger monospaced console theme, compact spacing and
-composer focus treatment.
+Version 0.3.4 retains the larger monospaced console theme, compact spacing and
+composer focus treatment while adding windowing, stable disclosure state and
+optimistic submission support. See [ADR 0057](../docs/adr/0057-responsive-web-transcripts.md).
 
 Function, MCP and dynamic tool outputs have readable sections ahead of their
 complete Original record. The display mapper unwraps at most two JSON-string
@@ -127,8 +133,8 @@ separated by full-width dividers. Both scrollbars end at those dividers, and the
 viewports stay aligned as drafts or queues grow. There is no overlay clearance.
 Headers use the transcript’s mono typography and shared reading alignment.
 The composer uses the dock canvas directly, with focus on its top divider instead
-of a nested input frame. Actions and passive Working share a 44px row so turn
-state changes do not move either divider. Multiline drafts and queue content can
+of a nested input frame. Actions retain a 44px touch row; passive Working sits
+in the existing top gutter so turn state changes do not move either divider. Multiline drafts and queue content can
 expand both docks together; long drafts scroll within the capped text field.
 
 ## Agent input
@@ -145,8 +151,9 @@ Idle input sends immediately. While Agent works, the shared desktop-style mode
 menu defaults to Steer; Queue saves a FIFO follow-up for the next idle turn.
 Native completion dispatches queued input even when the browser stops polling.
 Rows support Steer, Edit and Remove. Editing holds the row until the awaited
-save/cancel handshake releases it. This UI omits Stop: an empty busy composer
-shows noninteractive Working status while typed follow-ups remain available.
+save/cancel handshake releases it. This UI omits Stop and always shows Send, disabled when not actionable.
+The follow-up selector determines Steer or Queue behavior while running; Working
+sits at the upper-right of the composer without moving its controls.
 The underlying interrupt API and queued-work pause semantics remain supported.
 Resume explicitly releases paused rows.
 
@@ -154,8 +161,9 @@ The host saves at most 20 queued messages (64 KiB each) in private mode-0600
 `web/queued-messages.json` under AgentVoice state. Restart or call replacement
 restores them paused for review. Failed dispatch stays paused; unknown acceptance
 never retries automatically. Check native history before editing/removing a row
-whose delivery is unknown. Direct-send failures preserve the browser draft, and
-only native history creates transcript messages. Request IDs deduplicate a bounded
+whose delivery is unknown. Submitted text appears immediately with a pending status, reconciled by the
+native client message identity. Failures preserve recoverable text without
+overwriting a newer draft; native history supplies the confirmed message. Request IDs deduplicate a bounded
 in-process window; they are not a durable native exactly-once guarantee.
 
 See [Agent input semantics](../docs/web-agent-input.md) for source evidence and

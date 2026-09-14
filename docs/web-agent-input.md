@@ -32,9 +32,11 @@ thread before obtaining a short-lived attachment ticket. Immediately before the
 one native mutation it checks call and turn identity again. It never sends model,
 permissions, cwd or other launch overrides. Native approvals remain stock TUI-owned.
 
-The browser omits the optional Stop callback, so an empty active composer shows
-noninteractive Working status. Send, Steer, Queue and queue recovery remain
-available. The host API retains interrupt support and its lifecycle below.
+The browser always shows Send, disabled when input is empty or submission is
+unavailable. The follow-up selector chooses Steer or Queue while Agent works.
+Working appears at the upper-right of the composer, independently of the Send
+control. No Stop control is shown; the host API retains interrupt support and
+its lifecycle below.
 
 Queue draining requires confirmed idle state and dispatches one row at a time.
 Rows keep their FIFO position during editing; the shared component awaits a host
@@ -54,8 +56,10 @@ Queued rows are saved before dispatch with unknown acceptance, and removed only
 after native acknowledgment. Failed writes disable automatic draining. Restart,
 call replacement, interruptions and rejected/unknown dispatches require review
 before resuming. Unknown acceptance cannot be resumed or steered directly: inspect
-native history, then edit or remove deliberately. Direct input stays in the shared
-composer on request failure. No failure retries native input automatically.
+native history, then edit or remove deliberately. Submitted input clears immediately so the person can prepare another draft.
+A definitive failure restores the submitted text only when the current draft is
+empty; otherwise a recovery action preserves both texts. No failure retries
+native input automatically.
 
 The server caches 128 request identities in memory; identical HTTP retries reuse
 the result, and identity reuse with different text is rejected. This is bounded
@@ -65,3 +69,28 @@ lost response can leave unknown delivery, which the UI reports explicitly.
 Tests use fake native WebSockets behind the real attachment gateway and private
 control/event fixtures, plus the actual packed shared composer in browser tests.
 They start no audio, inference, call service or account flow.
+
+## Optimistic display and reconciliation
+
+Send and Steer add a browser-local Human row before HTTP acknowledgment, marked
+Sending or Steering. Queue adds a disabled local queue row immediately, without
+claiming native submission. Accepted requests remain marked until observed.
+The HTTP request UUID is passed as native `clientUserMessageId`; a queued row
+uses that UUID for its first dispatch. Editing gives the next dispatch a fresh
+client identity while preserving the queue row and its position, so explicit
+recovery from unknown delivery cannot collide with an earlier accepted input. Native `userMessage.clientId` maps
+to the same display identity, so authoritative text and order replace the local
+placeholder even when text is corrected or two requests have identical bodies.
+Unrelated matching text never acknowledges a request.
+
+The native source carries this identity through `turn_processor.rs` into user
+turn input and preserves it in `app-server-protocol/src/protocol/thread_history.rs`
+(verified in the local Codex source). No native request fields or settings are
+invented. Input without a reported client identity retains its native item key.
+
+A rejection removes the local transcript/queue placeholder; unknown delivery
+remains visibly unresolved until its exact native identity appears. A native
+echo observed before an HTTP failure establishes acceptance and prevents a
+spurious draft restoration. View replacement fences all local placeholders and
+late replies. Browser refresh discards local pending state; the persisted host
+queue and native history remain authoritative.
