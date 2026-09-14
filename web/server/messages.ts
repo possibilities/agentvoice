@@ -4,6 +4,8 @@ import type { z } from "zod";
 import type { conversationItemSchema } from "../../src/events/conversation.ts";
 import { recordedVoiceFrame } from "../../src/recording/writer.ts";
 
+import { toolOutputSections } from "./tool-output.ts";
+
 export type AgentItem = { turnId: string; item: z.infer<typeof conversationItemSchema> };
 export const itemKey = ({ turnId, item }: AgentItem) => JSON.stringify([turnId, item.id]);
 
@@ -59,9 +61,20 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
         ? { movePath: change.kind.move_path }
         : {}),
     }));
+  } else if (item.type === "functionCallOutput") {
+    message.toolActivity!.name = item.name;
+    message.toolActivity!.detail = item.namespace ? `${item.namespace}.${item.name}` : item.name;
+    message.toolActivity!.sections = [
+      ...toolOutputSections(item.output),
+      { label: "Original record", content: JSON.stringify(item, null, 2) },
+    ];
   } else if (item.type === "mcpToolCall" || item.type === "dynamicToolCall") {
     message.toolActivity!.name = item.tool;
     message.toolActivity!.detail = item.tool;
+    message.toolActivity!.sections = [
+      ...toolOutputSections(item.type === "mcpToolCall" ? item.result : item.contentItems),
+      { label: "Original record", content: JSON.stringify(item, null, 2) },
+    ];
   }
   return message;
 }

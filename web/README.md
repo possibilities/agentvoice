@@ -107,6 +107,13 @@ from the shared package, including in the two narrow lanes.
 Version 0.3.2 supplies the larger monospaced console theme, compact spacing and
 composer focus treatment.
 
+Function, MCP and dynamic tool outputs have readable sections ahead of their
+complete Original record. The display mapper unwraps at most two JSON-string
+layers per known output envelope, expands only known text/content/output fields
+through three levels, and keeps plain or malformed text intact. Nested arbitrary
+string properties are not rewritten. Oversized encoded strings and unsafe numeric
+values remain in their original representation.
+
 Live snapshots keep composer controls separate from transcript rendering. Unchanged
 controls retain their identity, so transcript-only polls do not rerender the input
 owner or replace its callbacks. Subsequent transcript rendering is deferred so
