@@ -70,6 +70,10 @@ control clients can open the mailbox too. Event-socket observation never clears 
 Mailbox contents and cached openings belong to the workspace-session controller
 and survive frontend detach and runtime replacement. They are cleared by explicit
 `new_session` or server shutdown and are not recovered by a new server lifetime.
+The “call” identity in transport fields names that retained controller lifetime,
+not a frontend media attachment. Conversational hold is separate prompt policy;
+neither physical mute nor push-to-talk clears this mailbox.
+
 If the bounded opening cache is exhausted, use one of those explicit boundaries;
 automatic eviction would break lost-response recovery. The native child inventory is rebuilt for each runtime. Old runtime
 callbacks and delayed reads cannot change a successor's mailbox inventory or
