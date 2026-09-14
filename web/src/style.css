@@ -60,6 +60,8 @@ body,
 }
 .agent-dock,
 .voice-dock {
+  --dock-inset-block: 24px;
+  --dock-inset-inline: 26px;
   flex: none;
   width: 100%;
   min-width: 0;
@@ -70,15 +72,19 @@ body,
   background: transparent;
 }
 .agent-dock .transcript-composer__content {
-  padding: 18px 20px;
+  padding: var(--dock-inset-block) var(--dock-inset-inline);
 }
 .agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group"] {
-  border-color: transparent;
+  border: 0;
   border-radius: 0;
   background: transparent;
 }
+.agent-dock .agentchats-transcript.transcript-composer textarea {
+  padding: 0 0 8px;
+}
 .agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group-addon"] {
-  min-height: 52px;
+  padding: 0;
+  min-height: 44px;
 }
 .agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group-addon"] button {
   min-height: 44px;
@@ -99,7 +105,7 @@ body,
 .voice-dock::after {
   content: "";
   position: absolute;
-  inset: 18px 20px;
+  inset: var(--dock-inset-block) var(--dock-inset-inline);
   border: 1px solid #91b7b00b;
   background: repeating-linear-gradient(135deg, transparent 0 23px, #91b7b010 23px 24px);
 }
