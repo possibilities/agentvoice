@@ -26,6 +26,10 @@ test("blank Agent dock clicks focus the composer without intercepting its contro
   await page.getByRole("heading", { name: "AgentVoice" }).focus();
   await dock.click({ position: { x: 6, y: 6 } });
   await expect(input).toBeFocused();
+  await page.getByRole("heading", { name: "AgentVoice" }).focus();
+  const dockBounds = (await dock.boundingBox())!;
+  await dock.click({ position: { x: 6, y: dockBounds.height - 6 } });
+  await expect(input).toBeFocused();
 
   const mode = agent.getByRole("button", { name: "Follow-up behavior" });
   await mode.click();
