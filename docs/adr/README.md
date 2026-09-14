@@ -28,7 +28,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0014: Roles are directories delivered to the owned child](0014-roles.md) | Partially superseded | [0042](0042-workspace-role-databases.md) captures explicitly ejected workspace roles in SQLite; unbound roles retain directory behavior. |
 | [0015: Retain the foreground controller, replace the voice runtime](0015-retain-controller-replace-runtime.md) | Partially superseded | [0024](0024-server-and-pointer-frontend.md) moves the retained controller/runtime under the waiting server; [0033](0033-client-owned-native-media.md) moves native media to clients. Runtime replacement, owned Codex cleanup and journaled operations remain. |
 | [0016: Submit an optional handoff after runtime restart](0016-restart-handoff.md) | Accepted | — |
-| [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Recorded | — |
+| [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Partially superseded | [0066](0066-same-thread-voice-continuity.md) restores bounded same-root context; retired keys remain retired. |
 | [0018: Observe lifecycle state through a separate Unix socket](0018-read-only-lifecycle-event-socket.md) | Partially superseded | [0026](0026-persistent-voice-transcripts.md) adds a separate persistent voice-transcript writer. The live event feed remains transient, lifecycle snapshots remain content-free, and their watermarks do not promise transcript replay. |
 | [0019: Compare defaults against the Codex client and server together](0019-client-server-default-baseline.md) | Recorded | — |
 | [0020: Native permissions and context, fresh ordinary launches](0020-native-launch-defaults.md) | Partially superseded | [0029](0029-desktop-startup-context.md) replaces the startup-context default; [0052](0052-workspace-session-marker.md) replaces fresh launches and selection flags. |
@@ -106,3 +106,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0064: Browser presentation preferences](0064-browser-presentation-preferences.md)
 
 - [0065: Explicit server lifecycle controls in the native menu](0065-native-menu-server-lifecycle.md)
+
+- [0066: Restore bounded same-thread voice context](0066-same-thread-voice-continuity.md)

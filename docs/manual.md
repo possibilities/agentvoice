@@ -838,7 +838,8 @@ regular files work. Contents are cached by the active runtime across frontend
 attachments, then reread by explicit runtime replacement, `new_session`, or a
 later server lifetime. Session-boundary instructions and voice prompts ride every realtime start,
 including automatic renewal. Explicit voice context items use raw `voice.extra.initialItems`,
-not prompt files; AgentVoice generates no history items of its own.
+not prompt files; when absent, AgentVoice restores bounded completed same-root
+speech as historical v3 context ([ADR 0066](adr/0066-same-thread-voice-continuity.md)).
 
 The former names (`VOICE.md`, `ORCHESTRATOR.md`, `ORCHESTRATOR_BASE.md`,
 `ORCHESTRATOR_SESSION_START.md`, `ORCHESTRATOR_SESSION_END.md`,
@@ -933,13 +934,18 @@ client's startup baseline; omitting the field would select the app-server defaul
 of true. The desktop also has optional continuity machinery that this choice does
 not copy. See [ADR 0029](adr/0029-desktop-startup-context.md) for exact bundled
 JavaScript evidence and the scope of this decision. Tail flush and startup-text
-overrides remain unset; no silence instruction or speech replay is added.
+overrides remain unset. Same-root v3 continuity adds historical/wait framing.
 The shipped `server.json.example` remains an unconfigured example.
 
 A saved conversation is not the same as a voice call: subsequent calls may
 resume the same conversation using the workspace marker. Codex can give
 each call a startup snapshot and can deliver leftover speech to the working
-agent when a call ends. AgentVoice adds no automatic speech replay between calls.
+agent when a call ends. AgentVoice restores bounded recent completed speech into
+each v3 call with historical/wait framing. This includes redial and same-root
+server resume, and generates no audio playback or new work turn. Raw
+`voice.extra.initialItems` remains authoritative, including `[]`/`null` to
+suppress restoration. Other protocols and existingCall attachment skip it. Missing, incomplete or older
+context still needs the working agent; this does not promise perfect recall.
 
 The following are optional overrides. Merge the setting into your config and relaunch;
 these controls do not hot reload.

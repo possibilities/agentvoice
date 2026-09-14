@@ -1,5 +1,9 @@
 # Persistent workspace voice transcripts
 
+**Context update:** [ADR 0066](0066-same-thread-voice-continuity.md) supersedes only
+the prohibition on reusing these files as model context, permitting bounded
+completed same-root speech on v3 starts. Other recording guarantees remain.
+
 Each call controller records native voice items from verified identity through
 teardown into private workspace/thread JSONL, retaining recordings across calls
 and runtime replacements. This supersedes the no-automatic-persistence clause in

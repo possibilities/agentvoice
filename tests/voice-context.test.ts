@@ -42,9 +42,9 @@ describe("voice context passthrough", () => {
   });
 });
 
-describe("native voice continuity without application replay", () => {
+describe("voice context without recorded speech", () => {
   for (const mode of ["resume", "fresh"] as const) {
-    test(`${mode}, redial and Fresh never read or inject speech history`, async () => {
+    test(`${mode}, redial and Fresh omit context when no speech is recorded`, async () => {
       const h = runtimeHarness({}, mode === "resume" ? { savedThread: "existing" } : {});
       h.native.main("existing", h.directory);
       h.native.override = (method) =>

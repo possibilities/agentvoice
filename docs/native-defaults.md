@@ -89,7 +89,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
    never rejected. A misspelled key in an `extra:` block fails silently, and
    `thread/resume` quietly drops start-only fields rather than erroring
    — hence `params.ts` filters known fields after the raw extra merge (0.153.3).
-9. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
+9. AgentVoice restores bounded same-root completed speech as historical initial
+   context on each v3 call ([ADR 0066](adr/0066-same-thread-voice-continuity.md));
+   explicit raw initialItems owns the slot. `initialItems` is realtime v3 only, capped at 128 items and 8,192 estimated
    text tokens. Require effective v3 for nonempty initial items. AgentVoice
    supplies v3 for WebRTC when version is unset;
    explicit voice.extra.version:null still reaches native fallback. In Codex

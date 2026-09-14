@@ -1,5 +1,7 @@
 # Remove automatic spoken-history replay
 
+**Continuity update:** [ADR 0066](0066-same-thread-voice-continuity.md) restores bounded same-root speech context with historical framing at the operator’s request.
+
 **Partial policy update:** [ADR 0020](0020-native-launch-defaults.md) replaces the retained startup-context false default with native resolution and makes ordinary launch fresh. The replay removal remains current.
 
 2026-09-05. Supersedes the replay decisions in ADRs [0011](0011-spoken-history-continuity.md) and [0012](0012-vanilla-voice-reconnects.md). The operator

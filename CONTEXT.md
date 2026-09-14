@@ -55,8 +55,8 @@ server configuration or thread leases. Both clients use frontend API v3 ([ADR 00
 **Frontend attachment** — One exclusive, disposable media owner connected to the
 workspace session. Disconnect releases its hold and closes realtime voice and
 client devices, without stopping the native runtime or work. A later attachment
-may use a fresh clientId and negotiates fresh media; there is no replay or
-automatic reconnect. _Avoid_: controller lifetime, native session.
+may use a fresh clientId and negotiates fresh media with bounded same-root voice
+context; there is no audio/input replay or automatic reconnect. _Avoid_: controller lifetime, native session.
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
@@ -180,12 +180,14 @@ Native history and old transcripts remain. _Avoid_: redial (voice only).
 
 **Resume** — Native restoration of the workspace marker's exact main thread,
 or the retained active thread during runtime restart. No latest-history selection,
-speech replay or AgentVoice reconnect instruction. Conversation-selection flags
+input resubmission. Bounded speech context is restored separately. Conversation-selection flags
 are retired.
 
-**Native voice context** — Explicit voice.extra.initialItems are passed through
-unchanged, including empty and null values. Automatic spoken-history replay was
-removed ([ADR 0017](docs/adr/0017-remove-spoken-history-replay.md)); voice.replay-spoken-history is retired and errors at load.
+**Native voice context** — Bounded recent completed speech from the exact workspace/root
+voice transcript initializes each v3 call with historical, wait-for-new-input framing
+([ADR 0066](docs/adr/0066-same-thread-voice-continuity.md)). Explicit voice.extra.initialItems
+owns that slot unchanged, including empty/null values; other protocols and existingCall attachments bypass restoration.
+This is not audio or input replay. voice.replay-spoken-history remains retired.
 Native saved history and working-thread continuation remain intact.
 
 **Startup context / Recent Work** — Codex's bundled snapshot of working-thread
@@ -319,7 +321,8 @@ _Avoid_: worker registry, transcript store.
 items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.
 Resumed conversations append to the same file; recordings survive server shutdown.
 `agentvoice attach voice` opens them with codex-viewer, independently of recording.
-This is observed text, not proof of what was heard, and never model context.
+This is observed text, not proof of what was heard. Its bounded recent completed
+speech supplies same-root voice context under ADR 0066, independently of the viewer.
 
 **AgentHUD** — Independent durable Work, Assignment and Result owner in
 `~/code/agenthud`, observed through its own web UI. AgentVoice supplies only

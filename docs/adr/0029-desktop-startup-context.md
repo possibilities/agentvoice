@@ -1,5 +1,7 @@
 # Desktop startup-context default
 
+**Continuity update:** [ADR 0066](0066-same-thread-voice-continuity.md) restores bounded same-root speech context with historical framing at the operator’s request.
+
 2026-09-08. Supersedes [ADR 0020](0020-native-launch-defaults.md) only for the generic voice startup-context
 setting. The operator selected the inspected desktop-client baseline after
 investigating an unsolicited repetition immediately after automatic renewal.

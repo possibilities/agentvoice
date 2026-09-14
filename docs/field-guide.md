@@ -290,8 +290,9 @@ continuity machinery; stock app-server does not supply those semantics.
 quiet-resume instruction that briefly addressed it; [ADR 0011](adr/0011-spoken-history-continuity.md) added saved-speech
 restoration. [ADR 0012](adr/0012-vanilla-voice-reconnects.md) then retired the
 instruction. [ADR 0017](adr/0017-remove-spoken-history-replay.md) subsequently
-removed automatic saved-speech replay entirely. AgentVoice now adds neither
-replay items nor reconnect instructions. [ADR 0020](adr/0020-native-launch-defaults.md) separately restores native
+removed automatic saved-speech replay entirely at that time.
+[ADR 0066](adr/0066-same-thread-voice-continuity.md) now restores bounded same-root speech
+context with an explicit historical/wait boundary at the operator’s request. [ADR 0020](adr/0020-native-launch-defaults.md) separately restores native
 startup-context resolution; [ADR 0029](adr/0029-desktop-startup-context.md) later selects the desktop false default. Neither restores AgentVoice replay.
 
 ## Native voice context levers retained
@@ -309,10 +310,11 @@ request or skip it; raw null restores native server resolution.
 Native tail flush and startup-text overrides stay unset by default.
 Global/workspace instructions still apply.
 
-AgentVoice generates no initial items and does not read saved speech at voice
-startup. Explicit raw `voice.extra.initialItems` (including `[]`/`null`) still
-pass through; populated initial items require effective v3. Native thread resume
-and explicit prompt/config customization are unchanged.
+AgentVoice restores bounded completed speech from its exact workspace/root private
+voice transcript as initial items on v3 starts. Explicit raw `voice.extra.initialItems`
+(including `[]`/`null`) remains authoritative; other protocols skip restoration.
+No audio/input resubmission or working-agent turn is generated. Native thread resume
+and explicit prompt/config customization are unchanged (ADR 0066).
 
 The former `voice.replay-spoken-history` key is retired ([ADR 0017](adr/0017-remove-spoken-history-replay.md)), alongside
 `voice.quiet-resume` ([ADR 0012](adr/0012-vanilla-voice-reconnects.md)). Remove either key even when set to false; launch

@@ -230,8 +230,10 @@ own hashed sockets. Closing a frontend releases holds, closes its audio/WebRTC,
 and stops realtime speech only. The controller, runtime, owned Codex child, native
 work, attachment gateway, mailbox, operation journal, endpoints, and workspace/thread
 leases remain. After detach fencing, one later frontend with any fresh clientId
-may attach new media to that same session; no input, controls, SDP, prompts or
-speech are replayed. Successful detach requires acknowledged native voice stop;
+may attach new media to that same session; no input, controls, SDP or audio are
+replayed. Bounded completed same-root speech initializes v3 context with a
+historical/wait boundary ([ADR 0066](docs/adr/0066-same-thread-voice-continuity.md)).
+Successful detach requires acknowledged native voice stop;
 refusal or timeout reports an unknown stop outcome and blocks later media owners
 until server restart while retaining native work. Persistent mute assignments
 remain and detached channels are effectively muted. Redial and immediate voice application require an attached

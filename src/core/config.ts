@@ -489,7 +489,7 @@ export function parseJsonConfig(text: string, source: string): ConfigValues {
     for (const key of ["quiet-resume", "replay-spoken-history"]) {
       if (Object.hasOwn(voice, key))
         throw new ConfigError(
-          `${source}: voice.${key} has been retired; remove this key. AgentVoice no longer injects speech history or its own reconnect instructions. Native working-thread continuation is unchanged.`,
+          `${source}: voice.${key} has been retired; remove this key. Same-root v3 continuity is automatic; use voice.extra.initialItems:[] to suppress it. Native working-thread continuation is unchanged.`,
         );
     }
   }
