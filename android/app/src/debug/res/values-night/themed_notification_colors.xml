@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="themed_notification_human">#E1F3CC</color>
+    <color name="themed_notification_human_face">#334125</color>
+    <color name="themed_notification_agent">#E6DDFB</color>
+    <color name="themed_notification_agent_face">#414049</color>
+    <color name="themed_notification_agent_line">#696674</color>
+    <color name="themed_notification_end">#FFE9ED</color>
+    <color name="themed_notification_end_face">#57363C</color>
+    <color name="themed_notification_phase">#DADBE3</color>
+    <color name="themed_notification_feedback">#24FFFFFF</color>
+</resources>

@@ -27,33 +27,22 @@ internal fun buildThemedCallNotification(
 
     fun content(expanded: Boolean) = RemoteViews(context.packageName,
         if (expanded) R.layout.themed_notification_expanded else R.layout.themed_notification_compact).apply {
-        setTextViewText(R.id.themed_notification_title, state.identity)
-        setTextViewText(R.id.themed_notification_phase, state.phase)
         setContentDescription(R.id.themed_notification_microphone, description(false, micMuted, state.micAction))
         setOnClickPendingIntent(R.id.themed_notification_microphone, microphone)
         setOnClickPendingIntent(R.id.themed_notification_hang_up, hangUp)
+        setTextViewText(R.id.themed_notification_microphone,
+            context.getString(R.string.themed_notification_microphone_label, state.micAction))
         if (expanded) {
-            setTextViewText(R.id.themed_notification_microphone_label, state.micAction)
-            setTextViewText(R.id.themed_notification_speaker_label, speakerAction)
-            setInt(R.id.themed_notification_human_face, "setBackgroundResource",
-                if (micMuted) R.drawable.themed_notification_human_muted else R.drawable.themed_notification_human_open)
-            setInt(R.id.themed_notification_agent_face, "setBackgroundResource",
-                if (speakerMuted) R.drawable.themed_notification_agent_muted else R.drawable.themed_notification_agent_open)
-            setImageViewResource(R.id.themed_notification_mic_icon,
-                if (micMuted) R.drawable.themed_notification_mic_muted else R.drawable.themed_notification_mic)
-            setImageViewResource(R.id.themed_notification_speaker_icon,
-                if (speakerMuted) R.drawable.themed_notification_speaker_muted else R.drawable.themed_notification_speaker)
+            setTextViewText(R.id.themed_notification_phase, state.phase)
+            setTextViewText(R.id.themed_notification_speaker,
+                context.getString(R.string.themed_notification_speaker_label, speakerAction))
             setContentDescription(R.id.themed_notification_speaker, description(true, speakerMuted, speakerAction))
             setOnClickPendingIntent(R.id.themed_notification_speaker, speaker)
-        } else {
-            setTextViewText(R.id.themed_notification_microphone,
-                context.getString(R.string.themed_notification_mic_compact, state.micAction))
-            setInt(R.id.themed_notification_microphone, "setBackgroundResource",
-                if (micMuted) R.drawable.themed_notification_human_muted else R.drawable.themed_notification_human_open)
         }
     }
 
-    // SystemUI owns the surrounding header/frame. The inner deck owns every ink/face pair.
+    // Keep the root transparent: SystemUI already supplies the card and app identity.
+    // Button ink and surfaces are paired in values/values-night, independently of OEM action tints.
     return builder.setCategory(Notification.CATEGORY_CALL)
         .setContentTitle(state.identity)
         .setContentText(state.phase)

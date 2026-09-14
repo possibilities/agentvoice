@@ -2760,3 +2760,40 @@ Source validation:185 Android unit tests,136 configurator tests,713 root tests,
 TypeScript/Biome, production and Studio lint, APK capability/release audits.
 Only Studio was installed during this lease; the running production call was
 preserved. Production renderer behavior remains custom until explicit promotion.
+
+### Themed Studio notification and both-app delivery — September 14, 2026
+
+The Studio-only `themed` catalog choice retains the original CallStyle and custom
+options. Production promotion rejects the experiment; the release APK audit
+confirms that its renderer and resources are absent from Production.
+
+Physical Samsung Galaxy S22, Android16/API36, One UI8: all20 scoped notification,
+shipping-profile and draft instrumentation tests passed. Actual RemoteViews are
+checked at220/280dp widths, light/dark, font scales1.0/1.3 and all microphone/audio
+gate combinations, including48dp targets, label fit, transparent roots, at least
+7:1 button contrast, independent actions and rehearsal cleanup. Studio assembly
+and lint passed; prior integration checks passed185 Android unit tests and138
+configurator tests with TypeScript/Biome. Separate app and release APK audits passed.
+
+The revised experiment uses Android's outer surface and simple rounded controls.
+Actual compact/expanded notifications were inspected in both themes, and manual
+microphone/audio toggles changed independently; Hang Up ended only the rehearsal.
+Evidence: [expanded dark](design/themed-notification-expanded-dark.png),
+[expanded light](design/themed-notification-expanded-light.png),
+[compact dark](design/themed-notification-compact-dark.png),
+[compact light](design/themed-notification-compact-light.png).
+This remains a design experiment, not production design adoption.
+
+Both APKs include the existing merged-main work through d51b6f7. Installed APK
+SHA256 values matched the audited artifacts:
+
+- Production: `edf91335998c9fc89b41d2ca4fd9dc8a4b003b8a94b2c60f80ee1a1246b1a434`
+- Studio: `f8d158e2d330926cb35742d9c46a4d010900905b0c2477155c9157a74aba5d94`
+
+Production reconnected using existing saved access after its update; both gates
+remained muted and voice-communication audio focus was observed. Studio updates
+preserved app data. The original binding, working draft and explicit profile
+were restored byte-for-byte; notification permission/flags, dark mode, font1.0
+and rotation settings were restored. No Studio rehearsal service remained, the
+owned ADB forward was removed, and the phone was returned to Production with both
+gates muted before releasing the lease.

@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="themed_notification_human">HUMAN / MIC</string>
-    <string name="themed_notification_agent">AGENT / AUDIO</string>
     <string name="themed_notification_hang_up">Hang Up</string>
     <string name="themed_notification_mute">Mute</string>
     <string name="themed_notification_unmute">Unmute</string>
-    <string name="themed_notification_mic_compact">%1$s\nmic</string>
+    <string name="themed_notification_microphone_label">%1$s mic</string>
+    <string name="themed_notification_speaker_label">%1$s agent audio</string>
     <string name="themed_notification_microphone_action">Human microphone %1$s. %2$s microphone.</string>
     <string name="themed_notification_speaker_action">Agent audio %1$s. %2$s audio.</string>
-    <string name="themed_notification_on">ON</string>
-    <string name="themed_notification_off">OFF</string>
     <string name="themed_notification_muted_state">muted</string>
     <string name="themed_notification_open_state">on</string>
 </resources>

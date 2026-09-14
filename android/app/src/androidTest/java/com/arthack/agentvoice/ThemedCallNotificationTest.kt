@@ -15,7 +15,6 @@ import android.os.SystemClock
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -25,7 +24,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ThemedCallNotificationTest {
-    @Test fun brandedDeckFitsNotificationBudgetsAndKeepsAllThreeActionsIndependent() {
+    @Test fun tonalControlsFitNativeCardsAndKeepAllThreeActionsIndependent() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val received = LinkedBlockingQueue<String>()
@@ -64,9 +63,12 @@ class ThemedCallNotificationTest {
                         assertTrue(notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
                         assertTrue(notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
                         val density = themed.resources.displayMetrics.density
-                        fun layout(view: View) {
-                            view.measure(View.MeasureSpec.makeMeasureSpec((280 * density).toInt(), View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                        fun layout(view: View, widthDp: Int = 280) {
+                            // A direct root.measure() must enforce the XML height as its SystemUI parent does.
+                            val height = view.layoutParams?.height ?: -1
+                            val heightSpec = if (height >= 0) View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+                                else View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                            view.measure(View.MeasureSpec.makeMeasureSpec((widthDp * density).toInt(), View.MeasureSpec.EXACTLY), heightSpec)
                             view.layout(0, 0, view.measuredWidth, view.measuredHeight)
                         }
                         val expanded = notification.bigContentView.apply(themed, FrameLayout(themed))
@@ -84,45 +86,53 @@ class ThemedCallNotificationTest {
                             mic.contentDescription.toString())
                         assertEquals("Agent audio ${if (speakerMuted) "muted" else "on"}. ${if (speakerMuted) "Unmute" else "Mute"} audio.",
                             audio.contentDescription.toString())
-                        for ((id, expected) in listOf(
-                            R.id.themed_notification_microphone_label to state.micAction,
-                            R.id.themed_notification_speaker_label to if (speakerMuted) "Unmute" else "Mute",
-                            R.id.themed_notification_hang_up_label to "Hang Up")) {
-                            val label = expanded.findViewById<TextView>(id)
-                            assertEquals(expected, label.text.toString())
-                            assertEquals("Primary action must not ellipsize", 0, label.layout.getEllipsisCount(0))
-                            assertTrue("Primary action must not clip vertically", label.layout.height <= label.height)
-                        }
-                        fun color(id: Int) = themed.getColor(id)
-                        val humanInk = expanded.findViewById<TextView>(R.id.themed_notification_microphone_label).currentTextColor
-                        val agentInk = expanded.findViewById<TextView>(R.id.themed_notification_speaker_label).currentTextColor
-                        val endInk = expanded.findViewById<TextView>(R.id.themed_notification_hang_up_label).currentTextColor
-                        // Check both rocker faces because the label crosses their geometric seam.
-                        for (face in listOf(0xFF101311.toInt(), 0xFF1B211B.toInt(), 0xFF1E2814.toInt(), 0xFF211C30.toInt())) {
-                            assertTrue(contrast(humanInk, face) >= 7.0)
-                            assertTrue(contrast(agentInk, face) >= 7.0)
-                        }
-                        assertTrue(contrast(endInk, color(R.color.themed_notification_end)) >= 7.0)
-                        assertTrue(contrast(color(R.color.themed_notification_muted), color(R.color.themed_notification_ground)) >= 4.5)
-                        val compact = notification.contentView.apply(themed, FrameLayout(themed))
-                        layout(compact)
-                        assertTrue("Compact content has only 48dp on some Android versions", compact.height <= (48 * density).toInt())
-                        for (id in listOf(R.id.themed_notification_microphone, R.id.themed_notification_hang_up)) {
-                            val button = compact.findViewById<Button>(id)
+                        assertEquals("${state.micAction} mic", mic.text.toString())
+                        assertEquals("${if (speakerMuted) "Unmute" else "Mute"} agent audio", audio.text.toString())
+                        assertEquals("Hang Up", end.text.toString())
+                        assertNull("SystemUI supplies the card surface", expanded.background)
+                        fun checkButton(button: Button, face: Int) {
                             assertTrue(button.height >= (48 * density).toInt())
-                            assertTrue(button.layout.height <= button.height - button.paddingTop - button.paddingBottom)
-                            for (line in 0 until button.layout.lineCount) assertEquals(0, button.layout.getEllipsisCount(line))
+                            assertTrue(button.width >= (48 * density).toInt())
+                            assertTrue("Action must not clip vertically", button.layout.height <=
+                                button.height - button.paddingTop - button.paddingBottom)
+                            assertEquals(1, button.layout.lineCount)
+                            assertEquals("Action must not ellipsize", 0, button.layout.getEllipsisCount(0))
+                            assertTrue("Action must fit its visible width", button.layout.getLineWidth(0) <=
+                                button.width - button.paddingLeft - button.paddingRight)
+                            assertEquals("Action must display all of its text", button.text.length, button.layout.getLineEnd(0))
+                            assertTrue("Action contrast must survive either SystemUI theme",
+                                contrast(button.currentTextColor, themed.getColor(face)) >= 7.0)
                         }
-                        assertEquals("${state.micAction}\nmic", compact.findViewById<Button>(R.id.themed_notification_microphone).text.toString())
-                        assertNull(compact.findViewById<View>(R.id.themed_notification_speaker))
                         val suffix = "${if (night) "dark" else "light"}-$fontScale-mic-$micMuted-speaker-$speakerMuted"
-                        for ((size, view) in listOf("expanded" to expanded, "compact" to compact)) {
+                        fun capture(size: String, view: View) {
                             val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                            view.draw(Canvas(bitmap))
+                            val canvas = Canvas(bitmap)
+                            canvas.drawColor(if (night) Color.rgb(59, 59, 59) else Color.rgb(250, 249, 255))
+                            view.draw(canvas)
                             File(context.cacheDir, "themed-notification-$size-$suffix.png").outputStream().use {
                                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
                             }
                             bitmap.recycle()
+                        }
+                        for (widthDp in listOf(220, 280)) {
+                            layout(expanded, widthDp)
+                            assertTrue("Expanded content must fit SystemUI", expanded.height <= 252 * density)
+                            checkButton(mic, R.color.themed_notification_human_face)
+                            checkButton(audio, R.color.themed_notification_agent_face)
+                            checkButton(end, R.color.themed_notification_end_face)
+                            capture("expanded-$widthDp", expanded)
+                        }
+                        val compact = notification.contentView.apply(themed, FrameLayout(themed))
+                        assertNull("Compact content must not add an inset panel", compact.background)
+                        for (widthDp in listOf(220, 280)) {
+                            layout(compact, widthDp)
+                            assertTrue("Compact content has only 48dp on some Android versions", compact.height <= (48 * density).toInt())
+                            checkButton(compact.findViewById(R.id.themed_notification_microphone), R.color.themed_notification_human_face)
+                            checkButton(compact.findViewById(R.id.themed_notification_hang_up), R.color.themed_notification_end_face)
+                            assertEquals("${state.micAction} mic", compact.findViewById<Button>(R.id.themed_notification_microphone).text.toString())
+                            assertNull(compact.findViewById<View>(R.id.themed_notification_phase))
+                            assertNull(compact.findViewById<View>(R.id.themed_notification_speaker))
+                            capture("compact-$widthDp", compact)
                         }
                         assertTrue(mic.performClick())
                         assertTrue(audio.performClick())

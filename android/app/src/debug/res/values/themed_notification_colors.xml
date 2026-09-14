@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The bright VoiceInk palette, paired with app-owned faces in every SystemUI theme. -->
-    <color name="themed_notification_ground">#050607</color>
-    <color name="themed_notification_surface">#101311</color>
-    <color name="themed_notification_text">#F0F2E9</color>
-    <color name="themed_notification_muted">#90988F</color>
-    <color name="themed_notification_line">#343B33</color>
-    <color name="themed_notification_human">#D4FF72</color>
-    <color name="themed_notification_agent">#BBAAFF</color>
-    <color name="themed_notification_end">#55222A</color>
-    <color name="themed_notification_end_line">#B06C76</color>
+    <color name="themed_notification_human">#263714</color>
+    <color name="themed_notification_human_face">#E3EDCF</color>
+    <color name="themed_notification_agent">#554568</color>
+    <color name="themed_notification_agent_face">#EEEBF4</color>
+    <color name="themed_notification_agent_line">#C8BEDA</color>
+    <color name="themed_notification_end">#6B2533</color>
+    <color name="themed_notification_end_face">#F8D9DE</color>
+    <color name="themed_notification_phase">#4A4B50</color>
+    <color name="themed_notification_feedback">#18202A12</color>
 </resources>

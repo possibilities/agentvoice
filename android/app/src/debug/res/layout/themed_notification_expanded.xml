@@ -1,43 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="wrap_content"
-    android:orientation="vertical" android:padding="10dp"
-    android:background="@drawable/themed_notification_panel">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:gravity="center_vertical" android:orientation="horizontal">
-        <ImageView android:layout_width="36dp" android:layout_height="36dp" android:layout_marginEnd="10dp" android:src="@drawable/themed_notification_relay" android:importantForAccessibility="no" />
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-            <TextView android:id="@+id/themed_notification_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="@font/ibm_plex_mono_regular" android:textSize="14sp" android:textColor="@color/themed_notification_text" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
-            <TextView android:id="@+id/themed_notification_phase" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:fontFamily="sans-serif" android:textSize="11sp" android:textColor="@color/themed_notification_muted" android:includeFontPadding="false" android:maxLines="2" android:ellipsize="end" />
-        </LinearLayout>
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView android:id="@+id/themed_notification_phase" style="@android:style/TextAppearance.Material.Notification.Line2"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp"
+        android:textSize="13sp" android:textColor="@color/themed_notification_phase" android:includeFontPadding="false" android:maxLines="2" android:ellipsize="end" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:orientation="horizontal">
+        <Button android:id="@+id/themed_notification_microphone" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:layout_marginEnd="8dp"
+            android:background="@drawable/themed_notification_human_button" android:textColor="@color/themed_notification_human" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:minWidth="48dp" android:minHeight="48dp" android:paddingHorizontal="8dp" android:paddingVertical="4dp"
+        android:fontFamily="sans-serif" android:textSize="14sp" android:textStyle="bold" android:textAllCaps="false" android:includeFontPadding="false" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="12sp" android:autoSizeMaxTextSize="14sp" android:autoSizeStepGranularity="1sp" />
+        <Button android:id="@+id/themed_notification_hang_up" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp"
+            android:background="@drawable/themed_notification_end_button" android:textColor="@color/themed_notification_end" android:text="@string/themed_notification_hang_up" android:contentDescription="@string/themed_notification_hang_up" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:minWidth="48dp" android:minHeight="48dp" android:paddingHorizontal="8dp" android:paddingVertical="4dp"
+        android:fontFamily="sans-serif" android:textSize="14sp" android:textStyle="bold" android:textAllCaps="false" android:includeFontPadding="false" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="12sp" android:autoSizeMaxTextSize="14sp" android:autoSizeStepGranularity="1sp" />
     </LinearLayout>
-    <ImageView android:layout_width="match_parent" android:layout_height="18dp" android:src="@drawable/themed_notification_traces" android:scaleType="fitXY" android:importantForAccessibility="no" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="80dp" android:orientation="horizontal">
-        <FrameLayout android:id="@+id/themed_notification_human_face" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="8dp" android:background="@drawable/themed_notification_human_muted">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:paddingHorizontal="12dp" android:paddingVertical="12dp" android:orientation="vertical" android:gravity="center_vertical" android:importantForAccessibility="noHideDescendants">
-                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/themed_notification_human" android:fontFamily="@font/ibm_plex_mono_regular" android:textSize="10sp" android:textColor="@color/themed_notification_human" android:includeFontPadding="false" android:importantForAccessibility="no" android:maxLines="1" android:ellipsize="end" />
-                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:layout_marginTop="5dp" android:orientation="horizontal" android:gravity="center_vertical">
-                    <ImageView android:id="@+id/themed_notification_mic_icon" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp" android:src="@drawable/themed_notification_mic_muted" android:importantForAccessibility="no" />
-                    <TextView android:id="@+id/themed_notification_microphone_label" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center_vertical" android:fontFamily="sans-serif" android:textSize="16sp" android:textStyle="bold" android:textColor="@color/themed_notification_human" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="12sp" android:autoSizeMaxTextSize="16sp" android:autoSizeStepGranularity="1sp" android:includeFontPadding="false" android:importantForAccessibility="no" android:maxLines="1" android:ellipsize="end" />
-                </LinearLayout>
-            </LinearLayout>
-            <Button android:id="@+id/themed_notification_microphone" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/themed_notification_touch" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:padding="0dp" android:minWidth="0dp" android:minHeight="48dp" android:importantForAccessibility="yes" />
-        </FrameLayout>
-        <FrameLayout android:id="@+id/themed_notification_agent_face" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"  android:background="@drawable/themed_notification_agent_muted">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:paddingHorizontal="12dp" android:paddingVertical="12dp" android:orientation="vertical" android:gravity="center_vertical" android:importantForAccessibility="noHideDescendants">
-                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/themed_notification_agent" android:fontFamily="@font/ibm_plex_mono_regular" android:textSize="10sp" android:textColor="@color/themed_notification_agent" android:includeFontPadding="false" android:importantForAccessibility="no" android:maxLines="1" android:ellipsize="end" />
-                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:layout_marginTop="5dp" android:orientation="horizontal" android:gravity="center_vertical">
-                    <ImageView android:id="@+id/themed_notification_speaker_icon" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp" android:src="@drawable/themed_notification_speaker_muted" android:importantForAccessibility="no" />
-                    <TextView android:id="@+id/themed_notification_speaker_label" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center_vertical" android:fontFamily="sans-serif" android:textSize="16sp" android:textStyle="bold" android:textColor="@color/themed_notification_agent" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="12sp" android:autoSizeMaxTextSize="16sp" android:autoSizeStepGranularity="1sp" android:includeFontPadding="false" android:importantForAccessibility="no" android:maxLines="1" android:ellipsize="end" />
-                </LinearLayout>
-            </LinearLayout>
-            <Button android:id="@+id/themed_notification_speaker" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/themed_notification_touch" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:padding="0dp" android:minWidth="0dp" android:minHeight="48dp" android:importantForAccessibility="yes" />
-        </FrameLayout>
-    </LinearLayout>
-    <FrameLayout android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" android:background="@drawable/themed_notification_end_button">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center" android:importantForAccessibility="noHideDescendants">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp" android:src="@drawable/themed_notification_hang_up" android:importantForAccessibility="no" />
-            <TextView android:id="@+id/themed_notification_hang_up_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/themed_notification_hang_up" android:fontFamily="sans-serif" android:textSize="16sp" android:textStyle="bold" android:textColor="@color/themed_notification_text" android:includeFontPadding="false" android:importantForAccessibility="no" android:maxLines="1" android:ellipsize="end" />
-        </LinearLayout>
-        <Button android:id="@+id/themed_notification_hang_up" android:layout_width="match_parent" android:layout_height="match_parent" android:contentDescription="@string/themed_notification_hang_up" android:background="@drawable/themed_notification_touch" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:padding="0dp" android:minWidth="0dp" android:minHeight="48dp" android:importantForAccessibility="yes" />
-    </FrameLayout>
+    <Button android:id="@+id/themed_notification_speaker" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp"
+        android:background="@drawable/themed_notification_agent_button" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp"
+        android:minWidth="48dp" android:minHeight="48dp" android:paddingHorizontal="12dp" android:paddingVertical="4dp"
+        android:fontFamily="sans-serif" android:textSize="13sp" android:textAllCaps="false" android:textColor="@color/themed_notification_agent" android:includeFontPadding="false" android:maxLines="1" />
 </LinearLayout>

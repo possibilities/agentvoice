@@ -2,7 +2,7 @@
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/themed_notification_feedback">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/themed_notification_end_face" />
+            <solid android:color="@color/themed_notification_human_face" />
             <corners android:radius="24dp" />
         </shape>
     </item>

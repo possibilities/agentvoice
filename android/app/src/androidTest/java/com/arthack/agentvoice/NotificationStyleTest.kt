@@ -121,8 +121,8 @@ class NotificationStyleTest {
             while (matched == null && android.os.SystemClock.elapsedRealtime() < deadline) {
                 notification()?.let { posted -> instrumentation.runOnMainSync {
                     val view = posted.bigContentView.apply(context, android.widget.FrameLayout(context))
-                    if (view.findViewById<android.widget.TextView>(R.id.themed_notification_microphone_label).text.toString() == microphone &&
-                        view.findViewById<android.widget.TextView>(R.id.themed_notification_speaker_label).text.toString() == speaker) matched = view
+                    if (view.findViewById<android.widget.TextView>(R.id.themed_notification_microphone).text.toString() == "$microphone mic" &&
+                        view.findViewById<android.widget.TextView>(R.id.themed_notification_speaker).text.toString() == "$speaker agent audio") matched = view
                 } }
                 if (matched == null) android.os.SystemClock.sleep(25)
             }

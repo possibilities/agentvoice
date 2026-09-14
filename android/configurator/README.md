@@ -869,9 +869,9 @@ other additive Studio visual choices. It saves with the complete design but is
 Studio-only: promotion rejects it explicitly, and production packaging excludes
 its renderer and artwork. Existing custom and original CallStyle choices remain.
 
-Signal deck draws on the main call screen's dark surface, lime Human control,
-purple Agent control, angular outlines and circuit details. Hang Up and microphone
-Mute/Unmute remain primary; expanded content also offers independent Agent audio
+Signal deck uses restrained lime Human and purple Agent accents from the main
+call screen, with rounded controls on Android's own notification surface.
+Hang Up and microphone Mute/Unmute remain primary; expanded content also offers independent Agent audio
 Mute/Unmute. These actions change only the synthetic notification rehearsal.
 Push-to-talk is omitted because notification clicks cannot reliably represent a
 press-and-hold gesture. Android still supplies the outer notification frame.
