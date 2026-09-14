@@ -111,6 +111,10 @@ The Agent composer and matching Voice placeholder sit below the scroll areas,
 separated by full-width dividers. Both scrollbars end at those dividers, and the
 viewports stay aligned as drafts or queues grow. There is no overlay clearance.
 Headers use the transcript’s mono typography and shared reading alignment.
+The composer uses the dock canvas directly, with focus on its top divider instead
+of a nested input frame. Actions and passive Working share a 44px row so turn
+state changes do not move either divider. Multiline drafts and queue content can
+expand both docks together; long drafts scroll within the capped text field.
 
 ## Agent input
 

@@ -123,3 +123,66 @@ test("full-width dock dividers end both scroll areas and stay aligned as the com
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/voice-dock-narrow.png", fullPage: true });
 });
+
+for (const width of [1440, 600]) {
+  test(`composer remains still across Send, Working, Steer and Queue at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const view: LiveView = {
+      phase: "live",
+      id: "stable-composer",
+      voice: [],
+      agent: [],
+      agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+    };
+    await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+    await page.goto("/");
+    const input = page.getByRole("textbox", { name: "Message Agent" });
+    const dock = page.locator(".agent-dock");
+    const height = () => dock.evaluate((el) => el.getBoundingClientRect().height);
+    await expect(input).toBeVisible();
+    await expect(dock.locator('[data-slot="input-group"]')).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+    await input.focus();
+    await expect(dock.locator('[data-slot="input-group"]')).toHaveCSS("box-shadow", "none");
+    const initial = await height();
+    const stable = async () => {
+      await expect.poll(height).toBe(initial);
+      await expect
+        .poll(() => page.locator(".voice-dock").evaluate((el) => el.getBoundingClientRect().height))
+        .toBe(initial);
+    };
+    view.agentControls!.active = true;
+    await expect(page.locator(".transcript-composer__progress")).toHaveText("Working…");
+    await stable();
+    await page.screenshot({ path: `test-results/composer-working-${width}.png` });
+    await input.fill("Hello");
+    await expect(page.getByRole("button", { name: "Steer", exact: true })).toBeVisible();
+    await stable();
+    await page.getByRole("button", { name: "Follow-up behavior" }).click();
+    await page.getByRole("menuitemradio", { name: "Queue for next turn" }).click();
+    await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
+    await stable();
+    await input.fill(Array.from({ length: 30 }, () => "Draft line").join("\n"));
+    const expanded = await height();
+    expect(expanded).toBeGreaterThan(initial);
+    expect(await input.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(240);
+    expect(await input.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    await expect
+      .poll(() => page.locator(".voice-dock").evaluate((el) => el.getBoundingClientRect().height))
+      .toBe(expanded);
+    await page.screenshot({ path: `test-results/composer-multiline-${width}.png` });
+    await input.fill("");
+    await stable();
+    view.agentControls!.active = false;
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+    await stable();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({ path: `test-results/composer-idle-${width}.png` });
+  });
+}

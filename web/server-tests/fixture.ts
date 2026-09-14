@@ -106,6 +106,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
         speaker: { muted: true, effectiveMuted: true },
       }),
       start: async () => {},
+      setFrontendAttached: async () => {},
       command: (command) => {
         if (command.action !== "release") throw new Error("No pointer input");
       },

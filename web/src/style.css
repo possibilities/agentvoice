@@ -66,15 +66,31 @@ body,
   border-top: 1px solid #27312f;
   background: #0b100f;
 }
-.agent-dock .transcript-composer {
+.agent-dock .agentchats-transcript.transcript-composer {
   background: transparent;
 }
 .agent-dock .transcript-composer__content {
   padding: 18px 20px;
 }
-.agent-dock [data-slot="input-group"] {
-  border-color: #91b7b028;
-  background: #0e1412;
+.agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group"] {
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+}
+.agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group-addon"] {
+  min-height: 52px;
+}
+.agent-dock .agentchats-transcript.transcript-composer [data-slot="input-group-addon"] button {
+  min-height: 44px;
+}
+.agent-dock
+  .agentchats-transcript.transcript-composer
+  [data-slot="input-group"]:has(textarea:focus-visible) {
+  border-color: transparent;
+  box-shadow: none;
+}
+.agent-dock:has(textarea:focus-visible) {
+  border-top-color: #c5e791;
 }
 .voice-dock {
   position: relative;

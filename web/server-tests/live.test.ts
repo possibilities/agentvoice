@@ -297,7 +297,7 @@ test("running server discovery, native history + live drafts, call replacement, 
     await h.start();
     await until(reader, (value) => value.phase === "live");
     reader.close();
-    expect(h.counts()).toEqual({ starts: 2, closes: 1 });
+    expect(h.counts()).toEqual({ starts: 1, closes: 0 });
     expect(new Set(h.methods)).toEqual(
       new Set(["conversation.items.list", "conversation.live.get"]),
     );
