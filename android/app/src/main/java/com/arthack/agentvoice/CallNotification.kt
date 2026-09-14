@@ -29,7 +29,7 @@ internal fun buildCallNotification(
 
     // Own both sides of button contrast: Samsung CallStyle can render white on white.
     // The microphone service and VoicePeer own call lifetime/audio, independently of this style.
-    require(style in previewNotificationStyles)
+    require(style in productionNotificationStyles)
     builder
         .setCategory(Notification.CATEGORY_CALL)
         .setContentTitle(state.identity)

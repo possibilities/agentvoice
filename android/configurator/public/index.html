@@ -465,11 +465,13 @@
                 </div>
                 <div class="mixing">
                   <label for="notification-style">Call notification</label>
-                  <select id="notification-style">
+                  <select id="notification-style" aria-describedby="notification-style-hint">
                     <option value="custom">Custom · readable controls</option>
                     <option value="call-style">Original Android CallStyle</option>
+                    <option value="themed">Signal deck · Studio experiment</option>
                   </select>
                 </div>
+                <p id="notification-style-hint" class="control-hint">Choose App view → Call notification to compare in the phone’s notification shade. Signal deck adds independent Human and Agent controls; Hang Up ends only the rehearsal. Save keeps this choice in Studio.</p>
                 <div class="mixing">
                   <label for="connection-style">Connection display</label>
                   <select id="connection-style">

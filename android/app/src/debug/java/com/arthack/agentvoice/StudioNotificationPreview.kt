@@ -20,6 +20,7 @@ internal class StudioNotificationPreview(private val context: Context, private v
     private var incarnation: String? = null
     private var started = 0L
     private var muted = true
+    private var speakerMuted = false
     private var style = "custom"
     private val action = "${context.packageName}.STUDIO_NOTIFICATION"
     private val pending = mutableListOf<PendingIntent>()
@@ -29,6 +30,7 @@ internal class StudioNotificationPreview(private val context: Context, private v
             when (intent.getStringExtra("control")) {
                 "hang-up" -> { close(); ended() }
                 "microphone" -> { muted = !muted; post() }
+                "speaker" -> { speakerMuted = !speakerMuted; post() }
             }
         }
     }
@@ -43,8 +45,9 @@ internal class StudioNotificationPreview(private val context: Context, private v
             handler.postDelayed(expiry, 120_000)
             started = SystemClock.elapsedRealtime()
             muted = true
+            speakerMuted = false
             ContextCompat.registerReceiver(context, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
-            for ((index, control) in listOf("hang-up", "microphone").withIndex()) {
+            for ((index, control) in listOf("hang-up", "microphone", "speaker").withIndex()) {
                 pending += PendingIntent.getBroadcast(context, index, Intent(action).setPackage(context.packageName)
                     .putExtra("incarnation", incarnation).putExtra("control", control),
                     PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -58,9 +61,10 @@ internal class StudioNotificationPreview(private val context: Context, private v
         if (incarnation == null) return
         val state = CallNotificationState("AgentVoice Studio", "Notification rehearsal · no call",
             if (muted) "Unmute" else "Mute", started)
-        val notification = buildCallNotification(context,
-            Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_notification_agentvoice),
-            state, pending[0], pending[1], style)
+        val builder = Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_notification_agentvoice)
+        val notification = if (style == "themed") buildThemedCallNotification(context, builder,
+            state, pending[0], pending[1], pending[2], speakerMuted)
+        else buildCallNotification(context, builder, state, pending[0], pending[1], style)
         ContextCompat.startForegroundService(context, Intent(context, StudioNotificationService::class.java)
             .putExtra("incarnation", incarnation).putExtra("notification", notification))
     }

@@ -448,3 +448,21 @@ test("notification renderer changes production only in an explicit promoted prof
   );
   expect(generateKotlin(old)).toContain('const val notificationStyle = "custom"');
 });
+
+test("themed notification cannot enter production through profile or session promotion", () => {
+  const profile = completeShippingProfile(snapshot());
+  expect(() =>
+    createShippingSnapshot(
+      JSON.stringify({ ...profile, notificationStyle: "themed" }),
+      "studio-experiment.json",
+      { kind: "profile" },
+    ),
+  ).toThrow("Studio-only experiment");
+  expect(() =>
+    createShippingSnapshot(JSON.stringify(profile), "profile.json", {
+      kind: "file",
+      path: "session.json",
+      text: JSON.stringify({ ...session, notificationStyle: "themed" }),
+    }),
+  ).toThrow("Studio-only experiment");
+});

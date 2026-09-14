@@ -31,7 +31,8 @@ internal fun shippingAppearance() = DesignAppearance(ShippingDesign.theme, Shipp
     ShippingDesign.launcher, ShippingDesign.connectionStyle, ShippingDesign.notificationStyle)
 
 internal val previewLaunchers = setOf("current", "duplex-halo", "relay-aperture", "voice-carrier")
-internal val previewNotificationStyles = setOf("custom", "call-style")
+internal val productionNotificationStyles = setOf("custom", "call-style")
+internal val previewNotificationStyles = productionNotificationStyles + "themed"
 internal val previewConnectionStyles = setOf("relay", "beacon", "datum")
 
 internal fun decodeDesignAppearance(data: JSONObject, legacy: Boolean = false,

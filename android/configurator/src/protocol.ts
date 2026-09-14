@@ -74,7 +74,7 @@ export type Scales = Record<(typeof scaleModes)[number], number>;
 export const scaleMode = (mode: Mode): keyof Scales => (mode === "thinking" ? "idle" : mode);
 export const connections = ["connected", "connecting", "disconnected", "failed"] as const;
 export type Connection = (typeof connections)[number];
-export const notificationStyles = ["custom", "call-style"] as const;
+export const notificationStyles = ["custom", "call-style", "themed"] as const;
 export type NotificationStyle = (typeof notificationStyles)[number];
 export function parseNotificationStyle(value: unknown): NotificationStyle {
   if (!notificationStyles.includes(value as NotificationStyle))

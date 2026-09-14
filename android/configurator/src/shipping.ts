@@ -200,6 +200,10 @@ export function createShippingSnapshot(
         : { ...state, launcher: "current", connectionStyle: "relay" },
     );
   }
+  if (appearance.notificationStyle === "themed")
+    throw Error(
+      "The themed notification is a Studio-only experiment; choose custom or call-style before promotion",
+    );
   return {
     version: 3,
     source: {

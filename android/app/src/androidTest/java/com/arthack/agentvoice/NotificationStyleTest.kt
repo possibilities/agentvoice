@@ -57,6 +57,22 @@ class NotificationStyleTest {
         } finally { file.delete() }
     }
 
+    @Test fun themedSelectionIsDurableButProductionRendererRefusesIt() {
+        val selected = PersonaPreviewState(notificationStyle = "themed", connectionPreview = "notification")
+        assertEquals("themed", decodeDesignAppearanceProfile(selected.designProfile()).notificationStyle)
+        assertEquals("themed", restorePersonaPreview(selected.json(), selected.saved).notificationStyle)
+        assertEquals("off", restorePersonaPreview(selected.json(), selected.saved).connectionPreview)
+        assertEquals("custom", ShippingDesign.notificationStyle)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val action = PendingIntent.getBroadcast(context, 903, Intent("test.theme").setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE)
+        try {
+            assertTrue(runCatching {
+                buildCallNotification(context, Notification.Builder(context, "test").setSmallIcon(R.drawable.ic_notification_agentvoice),
+                    CallNotificationState("AgentVoice", "Connected", "Unmute", 0), action, action, "themed")
+            }.exceptionOrNull() is IllegalArgumentException)
+        } finally { action.cancel() }
+    }
+
     @Test fun rehearsalActionsAreFencedAndCloseRemovesOnlyItsNotification() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val manager = context.getSystemService(android.app.NotificationManager::class.java)
@@ -86,6 +102,44 @@ class NotificationStyleTest {
             awaitNotification { it?.actions?.any { action -> action.title.toString() == "Unmute" } == true }
             notification()!!.actions.single { it.title.toString() != "Unmute" }.actionIntent.send()
             awaitNotification { it == null }
+            assertEquals(1, ended.get())
+        } finally { preview.close() }
+    }
+
+
+    @Test fun themedSpeakerAndMicrophoneControlOnlyTheirOwnRehearsalGates() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        assertTrue("Allow Studio notifications before running this device test", manager.areNotificationsEnabled())
+        val ended = java.util.concurrent.atomic.AtomicInteger()
+        val preview = StudioNotificationPreview(context) { ended.incrementAndGet() }
+        fun notification() = manager.activeNotifications.firstOrNull { it.id == StudioNotificationPreview.ID }?.notification
+        fun awaitLabels(microphone: String, speaker: String): android.view.View {
+            val deadline = android.os.SystemClock.elapsedRealtime() + 3000
+            var matched: android.view.View? = null
+            while (matched == null && android.os.SystemClock.elapsedRealtime() < deadline) {
+                notification()?.let { posted -> instrumentation.runOnMainSync {
+                    val view = posted.bigContentView.apply(context, android.widget.FrameLayout(context))
+                    if (view.findViewById<android.widget.TextView>(R.id.themed_notification_microphone_label).text.toString() == microphone &&
+                        view.findViewById<android.widget.TextView>(R.id.themed_notification_speaker_label).text.toString() == speaker) matched = view
+                } }
+                if (matched == null) android.os.SystemClock.sleep(25)
+            }
+            return requireNotNull(matched) { "Rehearsal gate labels did not match" }
+        }
+        try {
+            preview.show("themed")
+            val initial = awaitLabels("Unmute", "Mute")
+            instrumentation.runOnMainSync { assertTrue(initial.findViewById<android.view.View>(R.id.themed_notification_speaker).performClick()) }
+            val speakerMuted = awaitLabels("Unmute", "Unmute")
+            instrumentation.runOnMainSync { assertTrue(speakerMuted.findViewById<android.view.View>(R.id.themed_notification_microphone).performClick()) }
+            val microphoneOpen = awaitLabels("Mute", "Unmute")
+            instrumentation.runOnMainSync { assertTrue(microphoneOpen.findViewById<android.view.View>(R.id.themed_notification_hang_up).performClick()) }
+            val deadline = android.os.SystemClock.elapsedRealtime() + 3000
+            while (notification() != null && android.os.SystemClock.elapsedRealtime() < deadline) android.os.SystemClock.sleep(25)
+            instrumentation.waitForIdleSync()
+            assertNull(notification())
             assertEquals(1, ended.get())
         } finally { preview.close() }
     }

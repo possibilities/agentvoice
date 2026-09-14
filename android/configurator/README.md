@@ -21,8 +21,8 @@ even when Android's portrait/landscape configuration does not change. Android's
 user rotation policy still applies outside an explicit capture.
 
 Geometry and appearance overrides are local to each slot. Shared spacing, shared
-appearance, sounds and the eight shared visual choices apply across all four.
-Protocol30 carries the visible slot, its facing-pair `otherLayout`, and the other
+appearance, sounds and the shared visual choices apply across all four.
+Protocol31 carries the visible slot, its facing-pair `otherLayout`, and the other
 two in `remainingLayouts`, plus saved counterparts. Profile21 added
 `portraitReverse` and `landscapeReverse` beside root portrait and `landscape`.
 Draft3 saves this complete profile. Readers clone legacy reverse slots from their
@@ -860,3 +860,18 @@ Android requires foreground ownership for CallStyle. Studio therefore uses a pri
 non-sticky `shortService` solely for the two-minute notification rehearsal, with
 notification and foreground-service permissions. It has no call service, audio or
 network permissions. The real app and its call notification remain isolated.
+
+
+### Signal deck notification experiment
+
+The `themed` choice is an additional catalog value in profile24/protocol31, like
+other additive Studio visual choices. It saves with the complete design but is
+Studio-only: promotion rejects it explicitly, and production packaging excludes
+its renderer and artwork. Existing custom and original CallStyle choices remain.
+
+Signal deck draws on the main call screen's dark surface, lime Human control,
+purple Agent control, angular outlines and circuit details. Hang Up and microphone
+Mute/Unmute remain primary; expanded content also offers independent Agent audio
+Mute/Unmute. These actions change only the synthetic notification rehearsal.
+Push-to-talk is omitted because notification clicks cannot reliably represent a
+press-and-hold gesture. Android still supplies the outer notification frame.

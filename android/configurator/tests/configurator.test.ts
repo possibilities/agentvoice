@@ -3903,3 +3903,18 @@ test("notification style saves exactly, stays shared, and old profiles default w
   expect((await post("connection-preview", { scene: "notification" })).status).toBe(200);
   expect(await readFile(saveTo, "utf8")).toBe(checkpoint);
 });
+
+test("themed notification is a saved shared Studio choice with no rehearsal state in the profile", async () => {
+  const { phone, post, saveTo } = await fixture();
+  expect(
+    (await post("preview", { ...previewOf(phone.state), notificationStyle: "themed" })).status,
+  ).toBe(200);
+  phone.rotate();
+  expect(phone.state.notificationStyle).toBe("themed");
+  expect((await post("save", { revision: phone.state.revision })).status).toBe(200);
+  const saved = parseProfile(await readFile(saveTo, "utf8"));
+  expect(profileVisualSettings(saved).notificationStyle).toBe("themed");
+  expect(saved).not.toHaveProperty("connectionPreview");
+  expect(saved).not.toHaveProperty("speakerMuted");
+  expect(phone.state.defaultAppearance.notificationStyle).toBe("custom");
+});

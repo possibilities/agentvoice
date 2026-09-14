@@ -50,11 +50,12 @@ with zipfile.ZipFile(apk) as bundle:
     for descriptor in ('Lorg/jni_zero/JniZero;', 'Lorg/jni_zero/CommonApis;', 'Lorg/webrtc/PeerConnectionFactory;'):
         assert descriptor in classes, f'WebRTC JNI class removed or renamed: {descriptor}'
 
-    for symbol in (b'PersonaPreviewActivity', b'PersonaPreviewBridge', b'PersonaPreviewSession', b'DesignPreviewActivity', b'StudioDraft', b'StudioProduction'):
+    for symbol in (b'PersonaPreviewActivity', b'PersonaPreviewBridge', b'PersonaPreviewSession', b'DesignPreviewActivity', b'StudioDraft', b'StudioProduction', b'StudioNotificationService', b'StudioNotificationPreview', b'ThemedCallNotification'):
         assert symbol not in dex, symbol
     sdk = Path(os.environ['ANDROID_HOME'])
     aapt = sdk / 'build-tools/36.0.0/aapt2'
     resources = subprocess.check_output([str(aapt), 'dump', 'resources', str(apk)], text=True)
+    assert 'themed_notification' not in resources, 'Studio notification experiment leaked'
     assert not re.search(r'drawable/preview_(engraved|phosphor|noun|participant)', resources), 'audition icon resources leaked'
     shipped = set(re.findall(r'drawable/(shipping_channel_[a-z_]+)', resources))
     expected_icons = {p.stem for p in (root / 'app/src/release/res/drawable').glob('shipping_channel_*.xml')}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="48dp" android:orientation="horizontal"
+    android:gravity="center_vertical" android:background="@drawable/themed_notification_panel">
+    <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:paddingStart="8dp" android:paddingEnd="6dp" android:orientation="vertical" android:gravity="center_vertical">
+        <TextView android:id="@+id/themed_notification_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="@font/ibm_plex_mono_regular" android:textSize="12sp" android:textColor="@color/themed_notification_text" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/themed_notification_phase" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:fontFamily="sans-serif" android:textSize="10sp" android:textColor="@color/themed_notification_muted" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <Button android:id="@+id/themed_notification_microphone" android:layout_width="78dp" android:layout_height="48dp" android:layout_marginEnd="6dp"
+        android:background="@drawable/themed_notification_human_muted" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:minWidth="0dp" android:minHeight="48dp" android:padding="2dp"
+        android:fontFamily="sans-serif" android:textStyle="bold" android:textSize="12sp" android:textAllCaps="false" android:textColor="@color/themed_notification_human" android:includeFontPadding="false" android:maxLines="2" />
+    <Button android:id="@+id/themed_notification_hang_up" android:layout_width="80dp" android:layout_height="48dp"
+        android:background="@drawable/themed_notification_end_button" android:backgroundTint="@null" android:stateListAnimator="@null" android:elevation="0dp" android:minWidth="0dp" android:minHeight="48dp" android:padding="2dp"
+        android:fontFamily="sans-serif" android:text="@string/themed_notification_hang_up" android:textStyle="bold" android:textSize="12sp" android:textAllCaps="false" android:textColor="@color/themed_notification_text" android:includeFontPadding="false" android:maxLines="1" />
+</LinearLayout>
