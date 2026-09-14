@@ -104,8 +104,14 @@ access, quota, eviction or explicit clearing can prevent recovery.
 
 A recoverable observer failure preserves the last verified same-call history and
 browser entry scope. Sending is disabled while reconnecting, while drafting stays
-available. The reader revalidates exact native and frontend identity before
+available. The reader revalidates exact native session identity before
 resuming; verified replacement fences old actions and selects a separate thread
 scope. Background history failures do not close the live-read socket. Bounded
 diagnostics retain future failure reasons without conversation bodies or secrets.
 See [ADR 0058](adr/0058-durable-web-composer-and-reader-recovery.md).
+
+Voice frontend attachment is independent of text interaction. Send, Steer and
+Queue remain available against a reachable, verified retained native session after
+media disconnect; media changes alone do not replace the view or pause its queue.
+A server with no session yet remains empty and cannot accept scoped input.
+See [ADR 0062](adr/0062-web-text-interaction-without-voice-attachment.md).

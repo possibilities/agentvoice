@@ -5,6 +5,9 @@ Accepted 2026-09-14 at the operator's request. Refines
 workspace-session ownership established in
 [0053](0053-retain-workspace-session-across-frontend-detach.md).
 
+The voice-attachment requirement for composer actions below is superseded by
+[0062](0062-web-text-interaction-without-voice-attachment.md). Other decisions remain active.
+
 ## Evidence
 
 The running web reader served an old optimized transcript package after the new
