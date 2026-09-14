@@ -1,6 +1,7 @@
 import { discoverControllerStatus } from "../control/discovery.ts";
 import {
   EVENT_PROTOCOL_VERSION,
+  MAX_THREADS,
   type ThreadSnapshot,
   type ThreadView,
 } from "../events/contract.ts";
@@ -10,10 +11,17 @@ import { eventSocketPath } from "../events/socket.ts";
 import { discoverServer } from "../frontend/discovery.ts";
 import { ControlSocket, SocketFailure } from "../ipc/control-client.ts";
 
+export type ParentageSource = "live_inventory" | "native_history";
+export type NativeParentage =
+  | { state: "root"; sources: ParentageSource[] }
+  | { state: "verified"; parentThreadId: string; sources: ParentageSource[] }
+  | { state: "missing"; reason: "not_reported"; sources: ParentageSource[] }
+  | { state: "conflict"; parentThreadIds: string[]; sources: ParentageSource[] };
 export type ThreadRow = ThreadView & {
   model?: string | null;
   effort?: string | null;
   nickname?: string | null;
+  parentage?: NativeParentage;
 };
 export type ThreadMonitor = {
   instanceId?: string;
@@ -22,17 +30,160 @@ export type ThreadMonitor = {
   rootThreadId?: string;
   phase: string;
   workspace?: string;
+  /** Stable only for the exact native root revalidated by this AgentVoice workspace. */
+  nativeSessionId?: string;
   inventory: ThreadSnapshot["inventory"];
+  historyCoverage?: "complete" | "partial" | "unavailable";
   threads: ThreadRow[];
   missingSettings: number;
 };
 type Reader = Pick<ControlSocket, "request">;
 
-/** One bounded observation. Never resume a thread or read its conversation history. */
+type ObservedRow = Omit<ThreadRow, "parentage"> & { source: ParentageSource };
+
+function rowFromHistory(value: unknown): ObservedRow {
+  const row = threadDetailsSchema.parse(value);
+  return {
+    id: row.id,
+    parentThreadId: row.parentThreadId ?? null,
+    name: row.name ?? null,
+    status: row.status.type,
+    activeFlags: row.status.activeFlags ?? [],
+    turn: null,
+    model: row.model,
+    effort: row.reasoningEffort,
+    nickname: row.agentNickname,
+    source: "native_history",
+  };
+}
+
+async function readNativeDescendants(
+  client: Reader,
+  identity: { instanceId: string; generation: number; rootThreadId: string },
+  deadline: number,
+): Promise<{
+  rows: ObservedRow[];
+  coverage: NonNullable<ThreadMonitor["historyCoverage"]>;
+}> {
+  const rows: ObservedRow[] = [];
+  let complete = true;
+  let succeeded = false;
+  let revision: number | undefined;
+  for (const archived of [false, true]) {
+    let cursor: string | undefined;
+    const cursors = new Set<string>();
+    do {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0 || rows.length >= MAX_THREADS) {
+        complete = false;
+        break;
+      }
+      try {
+        const result = (await client.request("conversation.threads.list", {
+          expectedInstanceId: identity.instanceId,
+          expectedGeneration: identity.generation,
+          rootThreadId: identity.rootThreadId,
+          archived,
+          limit: Math.min(25, MAX_THREADS - rows.length),
+          ...(cursor ? { cursor } : {}),
+        })) as Record<string, unknown>;
+        if (
+          result["method"] !== "conversation.threads.list" ||
+          result["instanceId"] !== identity.instanceId ||
+          result["generation"] !== identity.generation ||
+          result["rootThreadId"] !== identity.rootThreadId ||
+          !Array.isArray(result["data"]) ||
+          !Number.isSafeInteger(result["revisionBefore"]) ||
+          !Number.isSafeInteger(result["revisionAfter"]) ||
+          typeof result["changedDuringRead"] !== "boolean"
+        )
+          throw new Error("invalid native descendant page");
+        succeeded = true;
+        const revisionBefore = result["revisionBefore"] as number;
+        const revisionAfter = result["revisionAfter"] as number;
+        if (
+          result["changedDuringRead"] ||
+          revisionBefore !== revisionAfter ||
+          (revision !== undefined && revisionBefore !== revision)
+        )
+          complete = false;
+        revision = revisionAfter;
+        for (const value of result["data"]) rows.push(rowFromHistory(value));
+        const next = result["nextCursor"];
+        if (next !== null && (typeof next !== "string" || !next || cursors.has(next)))
+          throw new Error("invalid native descendant cursor");
+        cursor = typeof next === "string" ? next : undefined;
+        if (cursor) cursors.add(cursor);
+      } catch {
+        complete = false;
+        break;
+      }
+    } while (cursor);
+  }
+  return {
+    rows,
+    coverage: complete ? "complete" : succeeded ? "partial" : "unavailable",
+  };
+}
+
+function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
+  const grouped = new Map<string, ObservedRow[]>();
+  for (const row of rows) grouped.set(row.id, [...(grouped.get(row.id) ?? []), row]);
+  return [...grouped.entries()].map(([id, observed]) => {
+    const live = observed.find((row) => row.source === "live_inventory");
+    const base = live ?? observed[0]!;
+    const parents = [
+      ...new Set(
+        observed.map((row) => row.parentThreadId).filter((parent): parent is string => !!parent),
+      ),
+    ].sort();
+    const sourcesFor = (parent?: string) =>
+      [
+        ...new Set(
+          observed
+            .filter((row) =>
+              parent === undefined ? !row.parentThreadId : row.parentThreadId === parent,
+            )
+            .map((row) => row.source),
+        ),
+      ].sort() as ParentageSource[];
+    let parentage: NativeParentage;
+    if (id === rootThreadId && parents.length === 0)
+      parentage = { state: "root", sources: sourcesFor() };
+    else if (parents.length === 1)
+      parentage = {
+        state: "verified",
+        parentThreadId: parents[0]!,
+        sources: sourcesFor(parents[0]!),
+      };
+    else if (parents.length === 0)
+      parentage = { state: "missing", reason: "not_reported", sources: sourcesFor() };
+    else
+      parentage = {
+        state: "conflict",
+        parentThreadIds: parents,
+        sources: [...new Set(parents.flatMap((parent) => sourcesFor(parent)))].sort(),
+      };
+    return {
+      id,
+      parentThreadId: parentage.state === "verified" ? parentage.parentThreadId : null,
+      name: base.name,
+      status: live?.status ?? "notLoaded",
+      activeFlags: live?.activeFlags ?? [],
+      turn: live?.turn ?? null,
+      model: live?.model ?? base.model,
+      effort: live?.effort ?? base.effort,
+      nickname: live?.nickname ?? base.nickname,
+      parentage,
+    };
+  });
+}
+
+/** One bounded observation. Reads metadata only; never resumes a thread or reads item bodies. */
 export async function readThreadMonitor(
   client: Reader,
   expected: { instanceId: string; workspace: string; threadId: string },
-  budgetMs = 4_000,
+  budgetMs = 12_000,
 ): Promise<ThreadMonitor> {
   const before = eventSnapshotSchema.parse(await client.request("state.get", {}));
   if (
@@ -43,7 +194,8 @@ export async function readThreadMonitor(
     throw new Error("AgentVoice call changed during discovery; retry");
   const settings = new Map<string, Pick<ThreadRow, "model" | "effort" | "nickname">>();
   let next = 0;
-  const deadline = Date.now() + budgetMs;
+  const settingsBudget = Math.min(4_000, Math.max(0, Math.floor(budgetMs / 3)));
+  const deadline = Date.now() + settingsBudget;
   await Promise.all(
     Array.from({ length: Math.min(4, before.threads.length) }, async () => {
       while (Date.now() < deadline) {
@@ -92,15 +244,53 @@ export async function readThreadMonitor(
     after.runtime.workspace !== before.runtime.workspace
   )
     throw new Error("AgentVoice runtime changed during observation; retry");
-  const threads = after.threads.map((thread) => ({ ...thread, ...settings.get(thread.id) }));
+  const history =
+    budgetMs > 0
+      ? await readNativeDescendants(
+          client,
+          {
+            instanceId: after.instanceId,
+            generation: after.generation,
+            rootThreadId: after.runtime.mainThreadId,
+          },
+          Date.now() + Math.max(0, budgetMs - settingsBudget),
+        )
+      : { rows: [], coverage: "unavailable" as const };
+  const final =
+    budgetMs > 0 ? eventSnapshotSchema.parse(await client.request("state.get", {})) : after;
+  if (
+    final.instanceId !== before.instanceId ||
+    final.generation !== before.generation ||
+    final.runtime.mainThreadId !== before.runtime.mainThreadId ||
+    final.runtime.workspace !== before.runtime.workspace
+  )
+    throw new Error("AgentVoice runtime changed during native history observation; retry");
+  const liveRows = final.threads.map((thread) => ({
+    ...thread,
+    ...settings.get(thread.id),
+    source: "live_inventory" as const,
+  }));
+  let historyRows = history.rows;
+  let historyCoverage = history.coverage;
+  if (new Set([...liveRows, ...historyRows].map((row) => row.id)).size > MAX_THREADS) {
+    const liveIds = new Set(liveRows.map((row) => row.id));
+    historyRows = historyRows
+      .filter((row) => !liveIds.has(row.id))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, Math.max(0, MAX_THREADS - liveIds.size));
+    historyCoverage = "partial";
+  }
+  const threads = mergeRows(after.runtime.mainThreadId, [...liveRows, ...historyRows]);
   return {
-    instanceId: after.instanceId,
-    generation: after.generation,
-    sequence: after.sequence,
-    rootThreadId: after.runtime.mainThreadId,
-    phase: after.runtime.phase,
-    workspace: after.runtime.workspace,
-    inventory: after.inventory,
+    instanceId: final.instanceId,
+    generation: final.generation,
+    sequence: final.sequence,
+    rootThreadId: final.runtime.mainThreadId,
+    phase: final.runtime.phase,
+    workspace: final.runtime.workspace,
+    nativeSessionId: final.runtime.mainThreadId,
+    inventory: final.inventory,
+    historyCoverage,
     threads,
     missingSettings: threads.filter((thread) => thread.model == null || thread.effort == null)
       .length,
@@ -148,6 +338,7 @@ export async function discoverThreadMonitor(
     phase,
     workspace,
     inventory: "unavailable",
+    historyCoverage: "unavailable",
     threads: [],
     missingSettings: 0,
   });
@@ -212,6 +403,8 @@ export function formatThreadMonitor(snapshot: ThreadMonitor): string {
   }
   if (snapshot.inventory !== "ready")
     lines.push(`Thread inventory: ${snapshot.inventory} (partial).`);
+  if (snapshot.historyCoverage && snapshot.historyCoverage !== "complete")
+    lines.push(`Native parentage history: ${snapshot.historyCoverage}.`);
   if (snapshot.missingSettings)
     lines.push("? = setting unset or unavailable; model/effort are current thread settings.");
   const row = (name: string, model: string, effort: string, turn: string, id: string) =>

@@ -8,9 +8,11 @@ const monitor: ThreadMonitor = {
   generation: 2,
   sequence: 9,
   rootThreadId: "root",
+  nativeSessionId: "root",
   workspace: "/fixture",
   phase: "ready",
   inventory: "ready",
+  historyCoverage: "complete",
   missingSettings: 1,
   threads: [
     {
@@ -20,6 +22,7 @@ const monitor: ThreadMonitor = {
       status: "active",
       activeFlags: [],
       turn: { id: "turn", status: "inProgress" },
+      parentage: { state: "root", sources: ["live_inventory"] },
     },
   ],
 };
@@ -40,8 +43,8 @@ test("JSON command exports versioned exact metadata and excludes incidental priv
     }),
   ).toBe(0);
   const exported = threadMonitorExportSchema.parse(JSON.parse(output));
-  expect(exported.schemaVersion).toBe(1);
-  expect(exported.monitor).toEqual(monitor);
+  expect(exported.schemaVersion).toBe(2);
+  expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
   expect(output).not.toContain("secret");
   expect(output).not.toContain("socket");
 });
@@ -60,6 +63,7 @@ test("JSON observation failure exports unavailable and exits nonzero without lea
   expect(JSON.parse(output).monitor).toEqual({
     phase: "unavailable",
     inventory: "unavailable",
+    historyCoverage: "unavailable",
     threads: [],
     missingSettings: 0,
   });
@@ -94,6 +98,18 @@ test("export validates identity and all-depth rows without inventing availabilit
   const offline = exportThreadMonitor({ ...monitor, inventory: "unavailable" });
   expect(offline.monitor.threads).toEqual([]);
   expect(offline.monitor.inventory).toBe("unavailable");
+  expect(() =>
+    exportThreadMonitor({
+      ...monitor,
+      historyCoverage: "unavailable",
+      threads: [
+        {
+          ...monitor.threads[0]!,
+          parentage: { state: "root", sources: ["native_history"] },
+        },
+      ],
+    }),
+  ).toThrow("cannot source thread parentage");
 });
 test("ready inventory must include its parentless root; incomplete cuts can omit it", () => {
   expect(() => exportThreadMonitor({ ...monitor, threads: [] })).toThrow("parentless root");
@@ -107,7 +123,7 @@ test("ready inventory must include its parentless root; incomplete cuts can omit
     exportThreadMonitor({ ...monitor, inventory: "incomplete", threads: [] }).monitor.inventory,
   ).toBe("incomplete");
 });
-test("version one freezes native row ID/name/turn bounds independently of internal schemas", () => {
+test("version two freezes native row ID/name/turn bounds independently of internal schemas", () => {
   const root = monitor.threads[0]!;
   for (const patch of [
     { id: "bad/id" },
@@ -141,6 +157,14 @@ test("oversized escaped JSON is rejected and command returns bounded unavailable
       ...monitor.threads[0]!,
       id: index === 0 ? "root" : `thread-${index}`,
       parentThreadId: index === 0 ? null : "root",
+      parentage:
+        index === 0
+          ? { state: "root" as const, sources: ["live_inventory" as const] }
+          : {
+              state: "verified" as const,
+              parentThreadId: "root",
+              sources: ["live_inventory" as const],
+            },
       name: escaped,
       model: escaped,
       effort: escaped,

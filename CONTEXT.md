@@ -142,6 +142,12 @@ agentvoice-orchestrator. Its saved history can continue across app launches.
 Ordinary launch resumes the exact thread in the workspace's `.agentvoice-session`
 marker, or creates and saves a thread when that file is absent.
 
+**Native parentage** — The exact Codex thread ancestry beneath the revalidated
+main thread, observed from live inventory and bounded persisted native metadata.
+It survives controller replacement when the same root resumes. Missing or
+conflicting source evidence remains explicit. It does not select semantic Work or
+prove an exact receiving turn. _Avoid_: Work assignment, name-derived ownership.
+
 **Orchestrator agent** — The working Codex agent on that main thread: tools,
 filesystem work and native voice handoffs. The term is retained in config keys;
 it does not imply an external orchestration daemon or custom continuation message.

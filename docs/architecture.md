@@ -9,9 +9,13 @@ owns the current source map and recording/attachment implementation guidance.
 ## Source map
 
 - src/threads/: native observer, terminal thread display and versioned `threads --json`
-  export for independent metadata consumers. AgentHUD owns its durable Work and UI
-  in a separate repository, with no cross-checkout imports or source ownership here.
-  See [ADR 0056](adr/0056-independent-agenthud.md).
+  export for independent metadata consumers. A fenced read combines the live
+  inventory with persisted native descendant pages and reports per-row parentage
+  provenance or missing/conflicting evidence. It never infers semantic Work or an
+  exact receiving turn. AgentHUD owns its durable Work and UI in a separate
+  repository, with no cross-checkout imports or source ownership here. See
+  [ADRs 0056](adr/0056-independent-agenthud.md) and
+  [0068](adr/0068-durable-native-parentage-export.md).
 
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt, followed by
@@ -48,10 +52,11 @@ owns the current source map and recording/attachment implementation guidance.
   No browser-selected endpoints, native RPC forwarding or call ownership.
   `src/web-serve.ts` owns the fixed portless URL and foreground process; Vite
   dev is editable by default. See [the web contract](../web/README.md).
-- src/threads/: one-shot read-only loaded-thread table for `agentvoice threads` and
+- src/threads/: one-shot read-only native-thread table for `agentvoice threads` and
   `watch`. Reuse frontend/controller discovery and the event socket; at most four
-  metadata reads in flight. Never start a call, resume, read history, or guess
-  model/effort. Keep idle threads and unresolved parent links visible.
+  metadata reads in flight. Read only bounded metadata pages from native persisted
+  history; never start a call, resume a thread, read item bodies, or guess Work,
+  model or effort. Keep idle threads and unresolved parent evidence visible.
 - src/main.ts: server/frontend CLI and workspace canonicalization; former
   accounts/resident/remote/console verbs error.
 - src/frontend/: strict private workspace socket, one retained workspace session,

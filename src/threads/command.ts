@@ -18,7 +18,7 @@ export async function runThreadsCommand(
   });
   if (args.help) {
     write(
-      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json]\nShow loaded threads in the retained workspace session, with children indented.\nMonitor with: watch -n 1 agentvoice threads\n--json exports versioned metadata with exact observed identity; no socket or credential fields.\n",
+      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json]\nShow loaded and persisted native descendant threads, with children indented.\nMonitor with: watch -n 1 agentvoice threads\n--json exports versioned metadata with exact observed identity and parentage diagnostics; no socket or credential fields.\n",
     );
     return 0;
   }
@@ -43,7 +43,7 @@ export async function runThreadsCommand(
   } catch (error) {
     if (!argv.includes("--json")) throw error;
     write(
-      `${JSON.stringify(exportThreadMonitor({ phase: "unavailable", inventory: "unavailable", threads: [], missingSettings: 0 }))}\n`,
+      `${JSON.stringify(exportThreadMonitor({ phase: "unavailable", inventory: "unavailable", historyCoverage: "unavailable", threads: [], missingSettings: 0 }))}\n`,
     );
     return 1;
   }

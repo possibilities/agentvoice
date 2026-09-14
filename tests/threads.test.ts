@@ -93,7 +93,10 @@ describe("watchable thread inventory", () => {
       activeFlags: ["waitingOnApproval"],
     });
     expect(result.missingSettings).toBe(1);
-    expect(new Set(methods)).toEqual(new Set(["state.get", "conversation.thread.get"]));
+    expect(result.historyCoverage).toBe("unavailable");
+    expect(new Set(methods)).toEqual(
+      new Set(["state.get", "conversation.thread.get", "conversation.threads.list"]),
+    );
   });
 
   test("unavailable or mismatched metadata never supplies guessed settings", async () => {
@@ -112,6 +115,107 @@ describe("watchable thread inventory", () => {
     );
     expect(result.missingSettings).toBe(3);
     expect(result.threads.every((row) => row.model === undefined)).toBe(true);
+  });
+
+  test("rehydrates persisted and archived descendants with exact parentage and preserves conflicts", async () => {
+    const live = snapshot([thread("root"), thread("child"), thread("conflict", "root")]);
+    const detail = (id: string, parentThreadId: string) => ({
+      id,
+      parentThreadId,
+      cwd: "/workspace",
+      status: { type: "notLoaded" },
+    });
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          if (method === "state.get") return live;
+          const input = params as Record<string, unknown>;
+          if (method === "conversation.thread.get") return metadata(String(input["threadId"]));
+          expect(method).toBe("conversation.threads.list");
+          const archived = input["archived"] === true;
+          const cursor = input["cursor"];
+          const data = archived
+            ? [detail("archived", "child")]
+            : cursor
+              ? [detail("conflict", "other")]
+              : [detail("child", "root")];
+          return {
+            instanceId: "call",
+            generation: 1,
+            method,
+            rootThreadId: "root",
+            revisionBefore: 4,
+            revisionAfter: 4,
+            changedDuringRead: false,
+            data,
+            nextCursor: !archived && !cursor ? "next" : null,
+          };
+        },
+      },
+      expected,
+    );
+    expect(result.nativeSessionId).toBe("root");
+    expect(result.historyCoverage).toBe("complete");
+    expect(result.threads.map((row) => row.id).sort()).toEqual([
+      "archived",
+      "child",
+      "conflict",
+      "root",
+    ]);
+    expect(result.threads.find((row) => row.id === "archived")).toMatchObject({
+      status: "notLoaded",
+      parentage: {
+        state: "verified",
+        parentThreadId: "child",
+        sources: ["native_history"],
+      },
+    });
+    expect(result.threads.find((row) => row.id === "child")?.parentage).toEqual({
+      state: "verified",
+      parentThreadId: "root",
+      sources: ["native_history"],
+    });
+    expect(result.threads.find((row) => row.id === "conflict")).toMatchObject({
+      parentThreadId: null,
+      parentage: {
+        state: "conflict",
+        parentThreadIds: ["other", "root"],
+        sources: ["live_inventory", "native_history"],
+      },
+    });
+  });
+
+  test("marks native history partial when descendant pages cross a native revision", async () => {
+    const live = snapshot([thread("root"), thread("child", "root")]);
+    let page = 0;
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          if (method === "state.get") return live;
+          const input = params as Record<string, unknown>;
+          if (method === "conversation.thread.get") return metadata(String(input["threadId"]));
+          page++;
+          return {
+            instanceId: "call",
+            generation: 1,
+            method,
+            rootThreadId: "root",
+            revisionBefore: page,
+            revisionAfter: page,
+            changedDuringRead: false,
+            data: [],
+            nextCursor: null,
+          };
+        },
+      },
+      expected,
+    );
+    expect(result.historyCoverage).toBe("partial");
+    expect(result.threads.find((row) => row.id === "child")?.parentage).toEqual({
+      state: "verified",
+      parentThreadId: "root",
+      sources: ["live_inventory"],
+    });
   });
 
   test("rejects changed call/generation instead of combining runtimes", async () => {
@@ -185,7 +289,7 @@ describe("watchable thread inventory", () => {
       expect(output.split("\n").filter((line) => line.includes(`  ${row.id}`))).toHaveLength(1);
   });
 
-  test("reads the actual private event socket without subscription, history, or control mutation", async () => {
+  test("reads the actual private event socket without subscription or control mutation", async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "av-thread-monitor-")));
     const path = join(dir, "events.sock");
     const feed = new LifecycleFeed("call");
@@ -203,7 +307,12 @@ describe("watchable thread inventory", () => {
       const result = await readThreadMonitor(client, expected);
       expect(result.threads).toHaveLength(2);
       expect(result.missingSettings).toBe(0);
-      expect(reads).toEqual(["conversation.thread.get", "conversation.thread.get"]);
+      expect(reads).toEqual([
+        "conversation.thread.get",
+        "conversation.thread.get",
+        "conversation.threads.list",
+        "conversation.threads.list",
+      ]);
     } finally {
       client?.close();
       server.close();
