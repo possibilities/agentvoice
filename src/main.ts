@@ -38,7 +38,7 @@ Usage:
                                    Print live read-only MCP configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
                                    Print a live read-only event socket
-  agentvoice threads [--workspace <dir>] [--thread <root-id>]
+  agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json]
                                    Show loaded threads and activity for watch
 
 Server options:

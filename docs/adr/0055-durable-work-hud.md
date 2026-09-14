@@ -9,6 +9,13 @@ former blanket prohibition on result reports: declared work results now belong
 to this separate Work owner; AgentVoice's execution runtime still owns no custom
 worker execution, worker registry, result archive, or dispatcher.
 
+## Supersession
+
+[ADR 0056](0056-independent-agenthud.md) supersedes source colocation and the
+initial no-resident-service delivery choice by explicit human request on 2026-09-14.
+AgentHUD now owns implementation and delivery in its own project. The original
+Work/native ownership semantics below remain historical rationale.
+
 ## Decision
 
 `src/hud/` owns one local transactional SQLite store for Work, Assignment and
@@ -57,8 +64,21 @@ source/resource convergence is not proof of loaded-session uptake.
 `scripts/install-hud.sh --install` prepares dependencies and web assets, then
 publishes only the owned editable `agenthud` command and deployment receipt from
 a clean checkout. It never invokes AgentVoice's app/LaunchAgent installer.
-`agenthud serve` is a foreground read-only view at the fixed local URL; no new
-resident service is implied. Live AgentVoice restart remains a separate action.
+The initial delivery kept `agenthud serve` as a foreground read-only view and
+deferred resident service installation. The operator explicitly lifted that
+deferral on 2026-09-14: HUD should be continuously available and editable in the
+same way as the AgentChats and AgentVoice web UIs. This supersedes only the
+no-resident-service delivery choice, preserving the separate Work/runtime owners.
+
+AgentStart now owns `io.arthack.agenthud.serve`, running the installed editable
+CLI at fixed `https://agenthud.localhost` through the existing Portless proxy.
+Default serving uses Vite with HMR; `--production` retains prepared static assets.
+The foreground CLI remains the service entrypoint, owns and reaps its process
+tree, and never installs dependencies or the shared proxy at runtime. The tool's
+installer prepares dependencies/build and the source link; AgentStart alone owns
+launchd rendering, convergence and status. Targeted HUD lifecycle changes do not
+restart AgentVoice, AgentChats, or the proxy. Live AgentVoice restart remains a
+separate action.
 
 ## Verification
 

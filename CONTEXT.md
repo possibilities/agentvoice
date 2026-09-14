@@ -321,18 +321,7 @@ Resumed conversations append to the same file; recordings survive server shutdow
 `agentvoice attach voice` opens them with codex-viewer, independently of recording.
 This is observed text, not proof of what was heard, and never model context.
 
-**Work** — AgentHUD's durable objective, authority/scope, lead, dependencies,
-disposition and next action. It survives native runtime and frontend loss.
-_Avoid_: native goal, worker registry, live execution state.
-
-**Assignment** — A bounded result contract under Work, prepared before native
-dispatch and bound to exact observed controller/generation/root/thread/turn IDs.
-A reused child gets a new assignment. Missing binding is unresolved dispatch.
-
-**Work result** — Returned outcome and evidence, with separate lead review and
-human presentation histories. A terminal native turn does not create these facts.
-_Avoid_: mailbox result, automatic completion.
-
-**HUD** — The independent `agenthud` CLI/MCP Work owner and sibling `hud/`
-read-only web projection. Native observations come from AgentVoice's thread
-monitor; stale or missing observation never settles durable work.
+**AgentHUD** — Independent durable Work, Assignment and Result owner in
+`~/code/agenthud`, observed through its own web UI. AgentVoice supplies only
+bounded versioned native metadata through `threads --json`. _Avoid_: runtime
+work registry, AgentVoice-owned HUD, Board redirect.

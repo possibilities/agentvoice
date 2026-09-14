@@ -8,11 +8,10 @@ owns the current source map and recording/attachment implementation guidance.
 
 ## Source map
 
-- src/hud/ + hud/: independent durable Work store, CLI/MCP and read-only sibling
-  HUD UI. Native execution is observed through src/threads; result return, review,
-  presentation and work disposition are independent facts. See [HUD](hud.md) and
-  [ADR 0055](adr/0055-durable-work-hud.md). `scripts/install-hud.*` publishes only
-  this command and assets, without a service or live-runtime restart.
+- src/threads/: native observer, terminal thread display and versioned `threads --json`
+  export for independent metadata consumers. AgentHUD owns its durable Work and UI
+  in a separate repository, with no cross-checkout imports or source ownership here.
+  See [ADR 0056](adr/0056-independent-agenthud.md).
 
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt, followed by
