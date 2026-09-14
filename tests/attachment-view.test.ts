@@ -232,6 +232,9 @@ async function harness() {
     newSession: async () => {
       throw new Error("not used");
     },
+    voiceGet: async () => {
+      throw new Error("Voice inspection is not used by this fixture");
+    },
     voiceSet: forbidden,
   };
   const control = await startControlServer({ stateDir, instanceId: selected.instanceId, backend });

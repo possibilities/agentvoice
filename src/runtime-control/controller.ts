@@ -1,11 +1,12 @@
 /** Server-owned call authority. Media and UI remain in separate processes. */
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { attachmentTargetSchema } from "../attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
 import { MuteGate } from "../console/audio-control.ts";
 import type { VoiceState } from "../console/state.ts";
+import { voiceEditRecordSchema } from "../control/contract.ts";
 import { startControlServer, voiceEditSchema } from "../control/index.ts";
 import {
   CONTROL_MCP_SERVER_NAME,
@@ -19,6 +20,8 @@ import {
   type ControlRestartRequest,
   type ControlServer,
   type ControlStatus,
+  type VoiceGetResult,
+  type VoiceSetRequest,
 } from "../control/types.ts";
 import type { ControlMcpRegistration } from "../core/control-mcp.ts";
 import {
@@ -30,6 +33,12 @@ import {
 } from "../core/handoff.ts";
 import { clearSessionMarker, readSessionMarker } from "../core/session-marker.ts";
 import { lockThread } from "../core/thread-lock.ts";
+import { compatibleVoiceCatalog } from "../core/voice-catalog.ts";
+import {
+  type VoiceInspection,
+  voiceInspectionSchema,
+  voiceProtocol,
+} from "../core/voice-inspection.ts";
 import { threadInventorySchema } from "../events/contract.ts";
 import {
   type ConversationReadMethod,
@@ -65,6 +74,7 @@ import { recordCall } from "../recording/call.ts";
 import {
   type RoleRef,
   readRoleHead,
+  readVoiceReceipt,
   rolePath,
   roleRefSchema,
   type VoiceEdit,
@@ -88,6 +98,8 @@ export interface ControllerOptions {
   onMedia?(message: ServerMediaMessage): void;
   /** Server sessions may start without a media owner. Standalone fixtures default attached. */
   frontendAttached?: boolean;
+  /** Deterministic boundary for random-selection tests. */
+  chooseVoiceIndex?: (length: number) => number;
 }
 
 export class RuntimeController implements ControlBackend {
@@ -108,6 +120,7 @@ export class RuntimeController implements ControlBackend {
   private loadedRole: RoleRef | undefined;
   private voiceRevision = 1;
   private loadedVoice: string | null = null;
+  private voiceOutcomeUnknown = false;
   private phase = "starting";
   private nativeThreadReady = false;
   private operation: ControlOperation | undefined;
@@ -485,6 +498,7 @@ export class RuntimeController implements ControlBackend {
       this.loadedRole = info.role;
       this.voiceRevision = info.role?.revision ?? 1;
       this.loadedVoice = info.voice ?? null;
+      this.voiceOutcomeUnknown = false;
       this.syncMute();
       if (operation) this.stage(operation, "ready");
       this.changed();
@@ -534,21 +548,57 @@ export class RuntimeController implements ControlBackend {
     return rolePath(dataDirectory(process.env, homedir()), this.workspace);
   }
 
-  async voiceSet(input: VoiceEdit): Promise<ControlOperation> {
+  private async inspectVoice(refresh = false): Promise<VoiceInspection> {
+    const active = this.active;
+    if (!active || this.closed || this.phase !== "ready")
+      throw new ControlError("unavailable", "Voice inspection requires a ready runtime");
+    const inspection = voiceInspectionSchema.parse(
+      await active.request("voice-inspect", { refresh }, 3000),
+    );
+    if (active !== this.active || this.closed)
+      throw new ControlError("unavailable", "Runtime changed during voice inspection; read again");
+    if (!this.frontendAttached || this.voice.phase !== "live" || this.voiceOutcomeUnknown)
+      return { ...inspection, requestedVoice: null, selectionSource: "unknown" };
+    return inspection;
+  }
+
+  async voiceGet(request: { refresh?: boolean } = {}): Promise<VoiceGetResult> {
+    const inspection = await this.inspectVoice(request.refresh);
+    const status = this.status();
+    const editError = !this.loadedRole
+      ? "Workspace role has not been ejected"
+      : status.role?.error
+        ? status.role.error
+        : inspection.masked
+          ? "Raw voice.extra.voice masks the managed selection"
+          : this.busy
+            ? "Another control operation is in progress"
+            : undefined;
+    return {
+      instanceId: this.options.instanceId,
+      generation: this.generation,
+      workspace: this.workspace,
+      threadId: this.threadId,
+      ...(this.active?.nativePid ? { nativePid: this.active.nativePid } : {}),
+      phase: this.voice.phase,
+      editable: editError === undefined,
+      canApplyNow: editError === undefined && this.frontendAttached,
+      ...(editError ? { editError } : {}),
+      inspection,
+      ...(status.role ? { role: status.role } : {}),
+    };
+  }
+
+  async voiceSet(input: VoiceSetRequest): Promise<ControlOperation> {
     const checked = voiceEditSchema.safeParse(input);
     if (!checked.success) throw new ControlError("invalid_params", "Invalid voice edit");
-    const request = checked.data;
+    const request: VoiceSetRequest = checked.data;
     if (request.expectedInstanceId !== this.options.instanceId)
       throw new ControlError("instance_mismatch", "Control request targets another controller");
     const prior = this.journal.get(request.operationId);
     if (prior) {
       const edit = prior.voiceEdit;
-      if (
-        !edit ||
-        Object.entries(request).some(
-          ([key, value]) => (edit as unknown as Record<string, unknown>)[key] !== value,
-        )
-      )
+      if (!edit || !sameVoiceRequest(request, edit))
         throw new ControlError(
           "operation_conflict",
           "Operation ID already names a different immutable request",
@@ -578,11 +628,80 @@ export class RuntimeController implements ControlBackend {
     this.busy = true;
     const active = this.active;
     let operation: JournalOperation;
+    let resolved: VoiceEdit;
     try {
-      if (request.apply === "voice") await active.request("voice-validate", request.voice, 5000);
+      const path = this.roleDatabasePath();
+      const receipt = readVoiceReceipt(
+        path,
+        this.loadedRole.id,
+        request.expectedInstanceId,
+        request.operationId,
+      );
+      if (receipt) {
+        resolved = voiceEditRecordSchema.parse(receipt.edit);
+        if (!sameVoiceRequest(request, resolved))
+          throw new Error("Operation ID names a different role edit");
+      } else {
+        const desired = readRoleHead(path);
+        if (desired.ref.id !== this.loadedRole.id) throw new Error("Role identity changed");
+        if (desired.ref.revision !== request.expectedRoleRevision)
+          throw new Error("Stale role revision; read voice_get before editing");
+        if (Object.hasOwn(desired.voiceSettings.extra ?? {}, "voice"))
+          throw new Error("Raw voice.extra.voice masks the managed voice selection");
+        const inspection = await this.inspectVoice();
+        if (inspection.masked)
+          throw new Error("Raw voice.extra.voice masks the managed voice selection");
+        const protocol =
+          request.apply === "voice" ? inspection.protocol : voiceProtocol(desired.voiceSettings);
+        const compatible = compatibleVoiceCatalog(inspection.catalog, protocol);
+        let name: string | null;
+        if (request.selection) {
+          if (
+            inspection.selectionSource !== "explicit-request" ||
+            inspection.requestedVoice === null
+          )
+            throw new Error(
+              "Current effective voice is unknown; random-different cannot be guaranteed",
+            );
+          if (inspection.catalog.status !== "available")
+            throw new Error("Native voice catalog is unavailable");
+          if (protocol === null)
+            throw new Error("Cannot validate voices for this realtime transport/protocol");
+          const candidates = compatible.choices.filter(
+            (voice) => voice !== inspection.requestedVoice,
+          );
+          if (!candidates.length) throw new Error("No different compatible voice is available");
+          const index = (this.options.chooseVoiceIndex ?? randomInt)(candidates.length);
+          if (!Number.isSafeInteger(index) || index < 0 || index >= candidates.length)
+            throw new Error("Invalid random voice choice");
+          name = candidates[index]!;
+        } else name = request.voice;
+        if (name !== null) {
+          if (inspection.catalog.status !== "available")
+            throw new Error("Native voice catalog is unavailable");
+          if (protocol === null)
+            throw new Error("Cannot validate voices for this realtime transport/protocol");
+          if (!compatible.choices.includes(name))
+            throw new Error("Voice is not supported by this native runtime/protocol");
+        }
+        resolved = {
+          ...request,
+          voice: name,
+          ...(name !== null && inspection.catalog.status === "available" && protocol !== null
+            ? {
+                catalog: {
+                  source: inspection.catalog.source,
+                  fetchedAt: inspection.catalog.fetchedAt,
+                  protocol,
+                },
+              }
+            : {}),
+        };
+      }
+      if (request.apply === "voice") await active.request("voice-validate", resolved.voice, 3000);
       this.assertOpen();
       if (active !== this.active) throw new Error("Voice runtime changed before save");
-      const saved = writeVoice(this.roleDatabasePath(), this.loadedRole.id, request);
+      const saved = writeVoice(path, this.loadedRole.id, resolved);
       const now = new Date().toISOString();
       operation = {
         operationId: request.operationId,
@@ -594,7 +713,7 @@ export class RuntimeController implements ControlBackend {
         acceptedAt: now,
         updatedAt: now,
         voiceEdit: {
-          ...request,
+          ...resolved,
           saved,
           application: request.apply === "voice" ? "pending" : "deferred",
         },
@@ -614,7 +733,6 @@ export class RuntimeController implements ControlBackend {
     }
     this.background = new Promise<void>((resolve) => setTimeout(resolve, 50)).then(async () => {
       let dispatched = false;
-      let rejected = false;
       try {
         this.assertOpen();
         if (request.apply === "voice") {
@@ -624,14 +742,14 @@ export class RuntimeController implements ControlBackend {
           dispatched = true;
           const result = await active.request<{ applied?: boolean }>(
             "voice-apply",
-            request.voice,
+            resolved.voice,
             35_000,
           );
-          rejected = result?.applied === false;
           if (result?.applied !== true) throw new Error("Voice application was not confirmed");
           this.assertOpen();
           if (this.active !== active) throw new Error("Voice runtime changed during application");
-          this.loadedVoice = request.voice;
+          this.loadedVoice = resolved.voice;
+          this.voiceOutcomeUnknown = false;
           this.voiceRevision = operation.voiceEdit!.saved.revision;
           operation.voiceEdit!.application = "applied";
         }
@@ -640,7 +758,8 @@ export class RuntimeController implements ControlBackend {
         const applied = operation.voiceEdit!.application === "applied";
         if (!applied)
           operation.voiceEdit!.application =
-            request.apply !== "voice" ? "deferred" : dispatched && !rejected ? "unknown" : "failed";
+            request.apply !== "voice" ? "deferred" : dispatched ? "unknown" : "failed";
+        if (operation.voiceEdit!.application === "unknown") this.voiceOutcomeUnknown = true;
         operation.error = {
           code: applied ? "journal_failed" : "voice_apply_failed",
           message: String(error),
@@ -1056,6 +1175,7 @@ export async function createCall(
         restart: (request) => current().restart(request),
         newSession: (request) => current().newSession(request),
         voiceSet: (request) => current().voiceSet(request),
+        voiceGet: (request) => current().voiceGet(request),
       },
       stateDir,
       instanceId,
@@ -1085,4 +1205,18 @@ export async function createCall(
     await close();
     throw error;
   }
+}
+
+/** Selection intent is immutable; a random operation's concrete voice is output, not new input. */
+function sameVoiceRequest(request: VoiceSetRequest, edit: VoiceEdit): boolean {
+  return (
+    request.operationId === edit.operationId &&
+    request.expectedInstanceId === edit.expectedInstanceId &&
+    request.expectedGeneration === edit.expectedGeneration &&
+    request.expectedRoleRevision === edit.expectedRoleRevision &&
+    request.apply === edit.apply &&
+    (request.selection
+      ? edit.selection?.kind === "random" && edit.selection.excludeCurrent === true
+      : edit.selection === undefined && request.voice === edit.voice)
+  );
 }

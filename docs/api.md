@@ -1,6 +1,6 @@
 # AgentVoice control API
 
-Control protocol **6** provides new session, status, voice redial and runtime restart with an
+Control protocol **7** provides new session, status, voice redial and runtime restart with an
 optional handoff prompt, thread-mailbox opening, and persistent workspace voice selection. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
 and control/event endpoints across runtime replacements and frontend detach. A
@@ -100,14 +100,14 @@ The socket is newline-delimited JSON (NDJSON). A request is one UTF-8 line;
 responses may finish out of order and retain the caller-selected `id`.
 
 ```json
-{"v":6,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
+{"v":7,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
 ```
 
 ```json
-{"v":6,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":6,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
+{"v":7,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":7,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
 ```
 
-`v` must be `6`; `type` must be `request`; `id` is a nonempty string of at
+`v` must be `7`; `type` must be `request`; `id` is a nonempty string of at
 most 128 characters. Unknown envelope fields are rejected. Input frames are
 capped at 1 MiB, a connection may have at most 128 requests in flight, and
 unwritten response data is capped at 4 MiB. A slow peer is disconnected.
@@ -115,7 +115,7 @@ unwritten response data is capped at 4 MiB. A slow peer is disconnected.
 Failure responses retain the request `id` where it can be recovered:
 
 ```json
-{"v":6,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
+{"v":7,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
 ```
 
 Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
@@ -124,7 +124,7 @@ and `internal_error`. A timeout or disconnected socket says nothing about
 whether a mutation was accepted; query status before retrying.
 
 The separate [lifecycle event socket](events.md) serves read-only state subscribers.
-There are no unsolicited event frames in control version 6. Poll `agentvoice.status`
+There are no unsolicited event frames in control version 7. Poll `agentvoice.status`
 for an operation's state. This keeps a replacement runtime from inheriting a
 caller connection, event subscription, or pending request.
 
@@ -134,7 +134,8 @@ caller connection, event subscription, or pending request.
 | --- | --- | --- |
 | `agentvoice.status` | `{}` | `ControlStatus` |
 | `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` | Completion batch, remaining tally, in-flight snapshot |
-| `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice`, `apply` | saved/apply `ControlOperation` |
+| `agentvoice.voice_get` | `{refresh?: boolean}` | `VoiceGetResult` |
+| `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice` or `selection`, `apply` | saved/apply `ControlOperation` |
 | `agentvoice.redial` | `MutationRequest` | accepted/current `ControlOperation` |
 | `agentvoice.new_session` | `MutationRequest` | accepted/current `ControlOperation` |
 | `agentvoice.restart` | `MutationRequest` plus `scope: "runtime"` and optional `handoffPrompt` | accepted/current `ControlOperation` |
@@ -157,7 +158,7 @@ runtime incarnation from bouncing a replacement runtime.
 
 ```ts
 {
-  protocolVersion: 6;
+  protocolVersion: 7;
   instanceId: string;
   workspace: string; // empty while initial candidate startup has not identified it
   threadId: string;  // empty while initial candidate startup has not identified it
@@ -309,13 +310,14 @@ Zod validation and dispatch implementation:
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
 | `agentvoice_thread_mailbox_open` | `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` |
-| `agentvoice_voice_set` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice`, `apply` |
+| `agentvoice_voice_get` | `agentvoice.voice_get` | `{refresh?: boolean}` |
+| `agentvoice_voice_set` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice` or `selection`, `apply` |
 | `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
 | `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` and optional `handoffPrompt` |
 | `agentvoice_new_session` | `agentvoice.new_session` | `MutationRequest` |
 
 MCP tool results carry the same result object as structured content. Validation
-or controller failures are MCP tool errors. `agentvoice_status` is read-only;
+or controller failures are MCP tool errors. `agentvoice_status` and `agentvoice_voice_get` are read-only;
 mutation tools are deliberately not marked idempotent at MCP level because the
 caller must supply the durable operation ID.
 
@@ -388,10 +390,51 @@ never discard cached results automatically because callers rely on idempotent re
 
 ## Workspace voice selection
 
+`agentvoice.voice_get` / `agentvoice_voice_get` is a read-only dedicated query for
+available choices, current requested voice and write fences. `{refresh:true}` rereads
+the native catalog without changing voice. The response is:
+
+```ts
+{
+  instanceId: string; generation: number; workspace: string; threadId: string;
+  nativePid?: number; phase: string;
+  editable: boolean; canApplyNow: boolean; editError?: string;
+  inspection: {
+    managedVoice: string | null; requestedVoice: string | null;
+    selectionSource: "explicit-request" | "native-resolution" | "unknown";
+    masked: boolean; protocol: "v1" | "v3" | null;
+    choices: string[]; defaultVoice: string | null;
+    catalog:
+      | { status: "available"; source: "thread/realtime/listVoices"; fetchedAt: string;
+          voices: {v1: string[]; v2: string[]; defaultV1: string; defaultV2: string} }
+      | { status: "unavailable"; source: "thread/realtime/listVoices"; error: string };
+  };
+  role?: ControlStatus["role"];
+}
+```
+
+The catalog is declared by the owned Codex child, cached per runtime generation,
+and never substituted from a static/public API list. WebRTC v3 maps native v1
+voices; alternate unsupported protocols have empty choices. The native catalog
+is not a guarantee of account eligibility or successful audio. `defaultVoice`
+is the native fallback, separate from requested/effective voice. Native startup
+notifications do not report the resolved voice when the request leaves it unset.
+`requestedVoice` therefore stays null with `native-resolution` or `unknown`;
+explicit requests require matching startup and live media before being reported.
+`nativePid` and controller/generation bind provenance without guessing a native version.
+
 `agentvoice.voice_set` / `agentvoice_voice_set` requires an explicitly ejected
 workspace role. Pass operationId, expectedInstanceId, expectedGeneration,
 expectedRoleRevision, voice (a bounded name or null to clear), and apply
-(`voice` or `next-session`). Save commits before asynchronous application.
+(`voice` or `next-session`). Alternatively omit voice and pass
+`selection:{kind:"random",excludeCurrent:true}`. Both selectors together are invalid.
+Named choices are checked against the native compatible catalog before saving.
+Random selection excludes the known active voice, chooses once, and records the
+resolved `voice`, selector and catalog provenance in `voiceEdit` and the durable
+SQLite receipt. Unknown current voice, ambiguous application, unsupported catalog
+or no alternative fails before save. A repeated operation ID returns the original
+choice; recovery after a journal-write failure also reuses the saved choice.
+Save commits before asynchronous application.
 `voice` requires an attached frontend and reconnects only the voice session; the
 working child and TUI remain. `next-session` applies on the next explicit runtime
 replacement, `new_session`, or server lifetime, not on ordinary frontend reattachment.
@@ -400,3 +443,9 @@ saved-versus-applied, failure and status contracts. The operation adds kind
 `voice-set` and a `voiceEdit` result; status optionally adds `role` with loaded
 and desired references, desiredVoice, voiceRevision, voice and a database error
 when needed.
+
+
+Control protocol 7 replaces version 6 for this schema extension. Existing loaded
+controllers retain their old code and MCP catalog; a later explicitly authorized
+server restart loads this API. A voice-only redial or runtime restart cannot replace
+the retained controller. Publishing/building the command does not activate it.

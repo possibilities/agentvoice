@@ -2,7 +2,7 @@
 
 Each server-owned workspace-session controller exposes a **separate read-only Unix socket**
 for thread state, transient voice items, conversation observation and the thread mailbox. The event
-protocol remains 2; the separate control API uses protocol 6 for status, redial, restart and mailbox opening. A new
+protocol remains 2; the separate control API uses protocol 7 for status, redial, restart and mailbox opening. A new
 server workspace session creates a new controller and socket. Frontend detach
 preserves it; rediscover after server restart.
 Protocol-1 event clients must update.

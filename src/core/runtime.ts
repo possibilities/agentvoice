@@ -57,6 +57,8 @@ import { VoiceSessionManager } from "./session.ts";
 import { readSessionMarker, saveSessionMarker } from "./session-marker.ts";
 import { lockThread } from "./thread-lock.ts";
 import { ThreadObserver } from "./thread-observer.ts";
+import { compatibleVoiceCatalog, NativeVoiceCatalog } from "./voice-catalog.ts";
+import { type VoiceInspection, voiceProtocol } from "./voice-inspection.ts";
 import type { ReadyInfo } from "./voice-types.ts";
 
 export type { ReadyInfo } from "./voice-types.ts";
@@ -194,6 +196,8 @@ export class VoiceRuntime {
   private readonly conversationReader: ConversationReader;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
+  private readonly voiceCatalog: NativeVoiceCatalog;
+  private voiceRequest: { id: string; voice: string | null; confirmed: boolean } | undefined;
 
   constructor(
     private readonly config: ServerConfig,
@@ -201,6 +205,9 @@ export class VoiceRuntime {
     private readonly events: RuntimeEvents,
     private readonly options: RuntimeOptions = {},
   ) {
+    this.voiceCatalog = new NativeVoiceCatalog((method, params) =>
+      this.requireConnection().request(method, params, 2000),
+    );
     this.conversationReader = new ConversationReader(
       (method, params, timeout) => this.requireConnection().request(method, params, timeout),
       config.orchestrator.workspace,
@@ -223,10 +230,13 @@ export class VoiceRuntime {
         const threadId = this.threadId;
         if (!connection || !threadId || this.shuttingDown)
           throw new AppServerError("Codex is not ready");
-        await connection.request(
-          "thread/realtime/start",
-          realtimeParams(this.config, this.prompts, threadId, sessionId, sdp),
-        );
+        const params = realtimeParams(this.config, this.prompts, threadId, sessionId, sdp);
+        this.voiceRequest = {
+          id: sessionId,
+          voice: typeof params["voice"] === "string" ? params["voice"] : null,
+          confirmed: false,
+        };
+        await connection.request("thread/realtime/start", params);
       },
       stopRealtime: async () => {
         const connection = this.attachment;
@@ -250,6 +260,37 @@ export class VoiceRuntime {
       voiceVersion: this.sessions.version,
       prompts: this.foundPrompts,
     };
+  }
+
+  async inspectVoice(refresh = false): Promise<VoiceInspection> {
+    const catalog = await this.voiceCatalog.read(refresh);
+    const protocol = voiceProtocol(this.config.voice);
+    const request = this.voiceRequest;
+    const confirmed = request?.confirmed === true && this.sessions.version !== null;
+    return {
+      managedVoice: this.config.voice.name ?? null,
+      requestedVoice: confirmed ? request.voice : null,
+      selectionSource: confirmed
+        ? request.voice === null
+          ? "native-resolution"
+          : "explicit-request"
+        : "unknown",
+      masked: Object.hasOwn(this.config.voice.extra ?? {}, "voice"),
+      catalog,
+      ...compatibleVoiceCatalog(catalog, protocol),
+    };
+  }
+
+  async validateVoiceSelection(name: string | null): Promise<void> {
+    this.validateVoice(name);
+    if (name === null) return;
+    const state = await this.inspectVoice();
+    if (state.catalog.status !== "available")
+      throw new Error("Native voice catalog is unavailable");
+    if (state.protocol === null)
+      throw new Error("Cannot validate voices for this realtime transport/protocol");
+    if (!state.choices.includes(name))
+      throw new Error("Voice is not supported by this native runtime/protocol");
   }
 
   validateVoice(name: string | null): void {
@@ -634,8 +675,20 @@ export class VoiceRuntime {
       if (method === "turn/started" && typeof turn["id"] === "string")
         this.activeTurns.set(id, turn["id"]);
       if (method === "turn/completed") this.activeTurns.delete(id);
-      if (id === this.threadId && method.startsWith("thread/realtime/"))
+      if (id === this.threadId && method.startsWith("thread/realtime/")) {
         this.sessions.handleNotification(method, params);
+        if (
+          method === "thread/realtime/started" &&
+          this.voiceRequest &&
+          this.voiceRequest.id === params["realtimeSessionId"]
+        )
+          this.voiceRequest.confirmed = true;
+        if (
+          (method === "thread/realtime/closed" || method === "thread/realtime/error") &&
+          this.voiceRequest
+        )
+          this.voiceRequest.confirmed = false;
+      }
       if (method === "thread/settings/updated" && this.locks.has(id)) {
         const settings = params["threadSettings"] as Record<string, unknown> | undefined;
         if (settings && id === this.threadId) {

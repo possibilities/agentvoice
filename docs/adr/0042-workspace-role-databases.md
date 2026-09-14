@@ -4,6 +4,10 @@ Accepted September 8, 2026 for the operator-requested first slice. For explicitl
 ejected workspaces, supersedes ADR 0014's live directory inputs and skill-watcher
 authoring behavior. Unejected workspaces retain the existing directory behavior.
 
+[ADR 0054](0054-native-voice-discovery.md) adds native catalog discovery, validates
+controller-managed named edits before saving, and persists one random-different choice.
+Its current-voice certainty rules refine application outcomes below.
+
 A workspace explicitly captures complete role/settings contents into a private
 SQLite database in XDG data. The canonical workspace selects the database;
 portable contents contain no binding authority. Prompts and assets are stored

@@ -357,6 +357,15 @@ export function runRuntimeWorker(
           throw new Error("Voice redial is unavailable");
         await host.redial();
         return null;
+      case "voice-inspect": {
+        const request = z
+          .object({ refresh: z.boolean().optional() })
+          .strict()
+          .parse(params ?? {});
+        if (terminalFailure || stopping || !voiceSettings)
+          throw new Error("Voice settings are unavailable");
+        return voiceSettings.inspect(request.refresh);
+      }
       case "voice-validate":
       case "voice-apply": {
         const name = z
@@ -368,7 +377,7 @@ export function runRuntimeWorker(
           .parse(params);
         if (terminalFailure || stopping || !mediaEnabled || !frontendAttached || !voiceSettings)
           throw new Error("Voice settings are unavailable");
-        voiceSettings.validate(name);
+        await voiceSettings.validate(name);
         if (method === "voice-apply") {
           try {
             await voiceSettings.apply(name);

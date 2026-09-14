@@ -1,18 +1,25 @@
 import { z } from "zod";
 import { handoffPromptSchema } from "../core/handoff.ts";
 import {
+  randomVoiceSelectionSchema,
+  voiceCatalogReceiptSchema,
+  voiceInspectionSchema,
+  voiceNameSchema,
+} from "../core/voice-inspection.ts";
+import {
   type MailboxCaller,
   type MailboxOpenParams,
   mailboxOpenParams,
   mailboxOpenResultSchema,
 } from "../mailbox/contract.ts";
-import { roleRefSchema, type VoiceEdit } from "../roles/store.ts";
+import { roleRefSchema } from "../roles/store.ts";
 import {
   CONTROL_PROTOCOL_VERSION,
   type ControlBackend,
   ControlError,
   type ControlMutationRequest,
   type ControlRestartRequest,
+  type VoiceSetRequest,
 } from "./types.ts";
 
 const operationId = z
@@ -28,16 +35,19 @@ const mutation = z
   })
   .strict();
 
-export const voiceEditSchema = mutation
+const voiceEditBase = mutation.extend({
+  expectedRoleRevision: z.number().int().positive(),
+  apply: z.enum(["voice", "next-session"]),
+});
+export const voiceEditSchema = z.union([
+  voiceEditBase.extend({ voice: voiceNameSchema.nullable() }).strict(),
+  voiceEditBase.extend({ selection: randomVoiceSelectionSchema }).strict(),
+]);
+export const voiceEditRecordSchema = voiceEditBase
   .extend({
-    expectedRoleRevision: z.number().int().positive(),
-    voice: z
-      .string()
-      .min(1)
-      .max(128)
-      .refine((value) => value.trim().length > 0)
-      .nullable(),
-    apply: z.enum(["voice", "next-session"]),
+    voice: voiceNameSchema.nullable(),
+    selection: randomVoiceSelectionSchema.optional(),
+    catalog: voiceCatalogReceiptSchema.optional(),
   })
   .strict();
 
@@ -45,7 +55,7 @@ export const controlOperationSchema = z
   .object({
     operationId,
     kind: z.enum(["redial", "restart", "new-session", "voice-set"]),
-    voiceEdit: voiceEditSchema
+    voiceEdit: voiceEditRecordSchema
       .extend({
         saved: roleRefSchema,
         application: z.enum(["pending", "applied", "deferred", "failed", "unknown"]),
@@ -127,7 +137,24 @@ const restart = mutation
   .extend({ scope: z.literal("runtime"), handoffPrompt: handoffPromptSchema.optional() })
   .strict();
 
+export const voiceGetSchema = z
+  .object({
+    instanceId: z.string().min(1),
+    generation: z.number().int().nonnegative(),
+    workspace: z.string(),
+    threadId: z.string(),
+    nativePid: z.number().int().positive().optional(),
+    phase: z.string(),
+    editable: z.boolean(),
+    canApplyNow: z.boolean(),
+    editError: z.string().optional(),
+    inspection: voiceInspectionSchema,
+    role: controlStatusSchema.shape.role,
+  })
+  .strict();
+
 export type ControlMethod =
+  | "agentvoice.voice_get"
   | "agentvoice.voice_set"
   | "agentvoice.status"
   | "agentvoice.redial"
@@ -145,6 +172,15 @@ export type ControlMethodEntry = {
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
+  "agentvoice.voice_get": {
+    tool: "agentvoice_voice_get",
+    description:
+      "Read current requested voice, saved selection, native-compatible choices, native fallback and mutation fences. Choices are declared by this owned Codex runtime, not verified account availability. Null requestedVoice with native-resolution or unknown does not identify the audible voice. Refresh rereads the native catalog without reconnecting.",
+    params: z.object({ refresh: z.boolean().optional() }).strict(),
+    result: voiceGetSchema,
+    readOnly: true,
+    invoke: (backend, params) => backend.voiceGet(params as { refresh?: boolean }),
+  },
   "agentvoice.new_session": {
     tool: "agentvoice_new_session",
     description:
@@ -157,11 +193,11 @@ export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
   "agentvoice.voice_set": {
     tool: "agentvoice_voice_set",
     description:
-      "Save this workspace role's voice selection. apply=voice reconnects only voice, preserving the working agent; next-session saves without reconnecting. Null clears the managed selection. Read status for controller/generation/desired role revision and application outcome. Acceptance is not audible confirmation. Requires an ejected workspace role.",
+      'Save this workspace role\'s voice selection. apply=voice reconnects only voice, preserving the working agent; next-session saves without reconnecting. Null clears the managed selection. Read status for controller/generation/desired role revision and application outcome. Acceptance is not audible confirmation. Requires an ejected workspace role. Read voice_get for native-compatible choices. Supply voice/null OR selection:{kind:"random",excludeCurrent:true}; random selection excludes the known active requested voice and is resolved once per operation. Random requests require a known current voice; named and random selections require the native compatible catalog before saving.',
     params: voiceEditSchema,
     result: controlOperationSchema,
     readOnly: false,
-    invoke: (backend, params) => backend.voiceSet(params as VoiceEdit),
+    invoke: (backend, params) => backend.voiceSet(params as VoiceSetRequest),
   },
   "agentvoice.thread_mailbox_open": {
     tool: "agentvoice_thread_mailbox_open",

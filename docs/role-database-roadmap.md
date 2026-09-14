@@ -17,6 +17,10 @@ the remaining scope is delivered or explicitly changed by the operator.
 - CLI voice save and equivalent API/MCP voice mutation support immediate
   voice-only application or saving for the next session. Saved and applied
   state are distinct; working thread/process/attachment survive voice changes.
+- Dedicated API/MCP `voice_get` reads current requested voice, compatible native choices
+  and write fences. Managed named edits validate before save; random-different resolves
+  once in the durable receipt. Loaded controllers need a later authorized server restart
+  to advertise protocol 7. See [ADR 0054](adr/0054-native-voice-discovery.md).
 - Schema settings have a mechanical impact classification. Only the voice-name
   change currently has a narrow apply implementation.
 - Adaptive read-only/thinking delegation, useful parallelism and clear handoff

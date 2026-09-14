@@ -6,6 +6,7 @@ import type { MediaStreamTrack } from "werift";
 import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
 import { type RuntimeOptions, VoiceRuntime } from "../core/runtime.ts";
+import type { VoiceInspection } from "../core/voice-inspection.ts";
 import type {
   ConversationReadMethod,
   ConversationReadParams,
@@ -52,7 +53,8 @@ export interface ConsoleHostOptions {
   observe: (host: VoiceHost & { redial(): Promise<void> }) => Promise<VoiceView>;
   onStarted?: () => void;
   onVoiceSettingsReady?: (controls: {
-    validate(name: string | null): void;
+    inspect(refresh?: boolean): Promise<VoiceInspection>;
+    validate(name: string | null): Promise<void>;
     apply(name: string | null): Promise<void>;
   }) => void;
   onHandoffReady?: (submit: (request: HandoffRequest) => Promise<HandoffResult>) => void;
@@ -221,12 +223,19 @@ export async function runConsoleHost(
     return runtime.submitHandoff(request);
   });
   options.onVoiceSettingsReady?.({
-    validate: (name) => {
+    inspect: async (refresh) => {
       if (closed || fatal || !runtime) throw new Error("Voice runtime is unavailable");
-      runtime.validateVoice(name);
+      const state = await runtime.inspectVoice(refresh);
+      if (phase !== "live") return { ...state, requestedVoice: null, selectionSource: "unknown" };
+      return state;
+    },
+    validate: async (name) => {
+      if (closed || fatal || !runtime) throw new Error("Voice runtime is unavailable");
+      await runtime.validateVoiceSelection(name);
     },
     apply: async (name) => {
       if (closed || fatal || !runtime) throw new Error("Voice runtime is unavailable");
+      await runtime.validateVoiceSelection(name);
       const previous = runtime.setVoice(name);
       try {
         await transport.redialAndWait("voice-change");

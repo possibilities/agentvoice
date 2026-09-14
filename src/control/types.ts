@@ -1,10 +1,11 @@
+import type { VoiceInspection } from "../core/voice-inspection.ts";
 import type { MailboxCaller, MailboxOpenParams, MailboxOpenResult } from "../mailbox/contract.ts";
 import type { RoleRef, VoiceEdit } from "../roles/store.ts";
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 6;
+export const CONTROL_PROTOCOL_VERSION = 7;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -15,6 +16,7 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_new_session",
   "agentvoice_thread_mailbox_open",
   "agentvoice_voice_set",
+  "agentvoice_voice_get",
 ] as const;
 
 export type ControlOperationPhase =
@@ -94,11 +96,31 @@ export type ControlStatus = {
   recentOperations: ControlOperation[];
 };
 
+export type VoiceSetRequest = Omit<VoiceEdit, "voice" | "catalog" | "selection"> &
+  (
+    | { voice: string | null; selection?: never }
+    | { selection: { kind: "random"; excludeCurrent: true }; voice?: never }
+  );
+export type VoiceGetResult = {
+  instanceId: string;
+  generation: number;
+  workspace: string;
+  threadId: string;
+  nativePid?: number;
+  phase: string;
+  editable: boolean;
+  canApplyNow: boolean;
+  editError?: string;
+  inspection: VoiceInspection;
+  role?: NonNullable<ControlStatus["role"]>;
+};
+
 type MaybePromise<T> = T | Promise<T>;
 
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
-  voiceSet(request: VoiceEdit): Promise<ControlOperation>;
+  voiceGet(request: { refresh?: boolean }): Promise<VoiceGetResult>;
+  voiceSet(request: VoiceSetRequest): Promise<ControlOperation>;
   status(): MaybePromise<ControlStatus>;
   mailboxOpen(request: MailboxOpenParams, caller?: MailboxCaller): Promise<MailboxOpenResult>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;

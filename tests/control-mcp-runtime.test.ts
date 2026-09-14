@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
+import {
+  CONTROL_MCP_SERVER_NAME,
+  CONTROL_MCP_TOOLS,
+  CONTROL_PROTOCOL_VERSION,
+} from "../src/control/types.ts";
 import { AppServerError } from "../src/core/attach.ts";
 import { requireControlMcpReady } from "../src/core/control-mcp.ts";
 import { prepareRuntime, VoiceRuntime } from "../src/core/runtime.ts";
@@ -16,7 +20,7 @@ const control = {
 const readyResponse = () => ({
   content: [],
   structuredContent: {
-    protocolVersion: 6,
+    protocolVersion: CONTROL_PROTOCOL_VERSION,
     instanceId: "test-controller",
     workspace: "",
     threadId: "",

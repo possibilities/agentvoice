@@ -56,7 +56,11 @@ requires that revision still be current; otherwise it checks the revision read
 by the command. A raw `voice.extra.voice`, including null, makes managed voice
 editing fail instead of changing a masked value.
 
-For an active database-backed call, read `agentvoice_status` and call MCP tool
+For an active call, read `agentvoice_voice_get` (Unix method `agentvoice.voice_get`)
+with `{}` for compatible choices, current requested voice, native fallback and
+saved-versus-loaded role revisions. `refresh:true` rereads the owned native child's
+catalog. File-backed calls support inspection but cannot save. For a database-backed
+call, use the returned instance/generation and `role.desired.revision`, then call MCP tool
 `agentvoice_voice_set` (Unix method `agentvoice.voice_set`):
 
 ```json
@@ -72,8 +76,29 @@ For an active database-backed call, read `agentvoice_status` and call MCP tool
 
 Use `role.desired.revision` from status. Null clears the managed selection to
 native resolution. `apply: "next-session"` saves without reconnecting; it means
-the next runtime generation or server workspace session, not media reattachment. Codex
-validates voice availability; there is no local catalog or watcher.
+the next runtime generation or server workspace session, not media reattachment.
+Named API edits validate against the owned native catalog before save: loaded protocol
+for immediate application, saved role protocol for deferred application. Missing or
+invalid native catalogs reject named edits without a static list fallback; clearing
+remains supported. The offline CLI keeps save-only behavior with native validation
+at the eventual startup. There is no configuration watcher.
+
+For a random different voice, omit `voice` and pass
+`"selection":{"kind":"random","excludeCurrent":true}` with the same fences and
+apply mode. The controller excludes the known active requested voice, chooses once,
+and stores the concrete `voice`, selector intent and catalog provenance in its durable
+receipt. The same operation ID never rerolls, including after save succeeded but
+controller journaling failed. Unknown current voice, ambiguous prior application or
+no compatible alternative rejects without saving. Pending desired voice is not the
+exclusion target. Choosing randomly for `next-session` excludes today's known current
+voice; it does not predict a later call's voice.
+
+`inspection.requestedVoice` identifies an explicit request only after the matching
+native started notification and live client media. `selectionSource:native-resolution`
+with null means Codex chose it; `defaultVoice` is merely the native fallback, not proof
+of the effective voice. `unknown` also covers reconnects, detach and ambiguous apply.
+The native notification does not report resolved timbre. Catalog names are declared
+runtime compatibility, not account eligibility or audible verification.
 
 The controller commits the edit and retry receipt before returning acceptance.
 Immediate application requires an attached frontend and replaces only the voice session, preserving the working

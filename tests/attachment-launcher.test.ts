@@ -52,6 +52,9 @@ for (const ending of ["revoked", "disconnected", "normal-close", "quit"] as cons
         newSession: async () => {
           throw new Error("not used");
         },
+        voiceGet: async () => {
+          throw new Error("Voice inspection is not used by this fixture");
+        },
         voiceSet: async () => {
           throw new Error("not used");
         },

@@ -108,9 +108,13 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
 
 ## Configuration and prompt rules
 
-- Settings and prompt contents load once per runtime generation. No voice-name watcher or
-  local catalog; Codex validates voice selection. Native identity and settings
-  remain available through server diagnostics and read-only observation.
+- Settings and prompt contents load once per runtime generation, except explicit managed
+  voice-only application. No voice-name watcher. `voice_get` reads the owned child's
+  `thread/realtime/listVoices` catalog, cached per runtime generation; explicit refresh
+  rereads it. This native declaration is protocol compatibility, not account availability.
+  Managed API edits validate membership before save; Codex still validates live startup.
+  Unknown native catalogs return unavailable without a static/public API replacement.
+  See [voice selection](api.md#workspace-voice-selection) and [ADR 0054](adr/0054-native-voice-discovery.md).
 - server.schema.json is generated and drift-tested. server.json.example remains
   a verbatim-copy no-op. Unset fields are not sent, except explicit documented
   application defaults; do not imply the vanilla-defaults audit is complete.

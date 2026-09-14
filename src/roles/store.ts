@@ -21,7 +21,7 @@ import {
 import { dirname, join, posix } from "node:path";
 import { z } from "zod";
 import { PROMPT_FILES, parseJsonConfig } from "../core/config.ts";
-import type { ConfigValues } from "../core/config-schema.ts";
+import type { ConfigValues, VoiceValues } from "../core/config-schema.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "../private-files.ts";
 
 const MAX_BYTES = 32 * 1024 * 1024;
@@ -243,7 +243,11 @@ export function readRole(path: string): RoleSnapshot {
 export function readRoleRef(path: string): RoleRef {
   return readRoleHead(path).ref;
 }
-export function readRoleHead(path: string): { ref: RoleRef; voice: string | null } {
+export function readRoleHead(path: string): {
+  ref: RoleRef;
+  voice: string | null;
+  voiceSettings: VoiceValues;
+} {
   const db = open(path);
   try {
     const rows = db
@@ -253,9 +257,11 @@ export function readRoleHead(path: string): { ref: RoleRef; voice: string | null
       .all();
     if (rows.length !== 1) throw new Error("Invalid role identity or revision");
     const row = rows[0]!;
+    const voiceSettings = settings(JSON.parse(row.settings)).voice ?? {};
     return {
       ref: roleRefSchema.parse({ id: row.id, revision: row.revision }),
-      voice: settings(JSON.parse(row.settings)).voice?.name ?? null,
+      voice: voiceSettings.name ?? null,
+      voiceSettings,
     };
   } finally {
     db.close();
@@ -322,7 +328,38 @@ export interface VoiceEdit {
   expectedRoleRevision: number;
   voice: string | null;
   apply: "voice" | "next-session";
+  selection?: { kind: "random"; excludeCurrent: true };
+  catalog?: { source: "thread/realtime/listVoices"; fetchedAt: string; protocol: "v1" | "v3" };
 }
+
+/** Recover the concrete choice after save succeeded but controller journaling failed. */
+export function readVoiceReceipt(
+  path: string,
+  roleId: string,
+  instance: string,
+  operation: string,
+): { edit: VoiceEdit; saved: RoleRef } | undefined {
+  const db = open(path);
+  try {
+    return db.transaction(() => {
+      const meta = roleRefSchema.parse(db.query("SELECT id, revision FROM role").get());
+      if (meta.id !== roleId) throw new Error("Role identity changed");
+      const prior = db
+        .query<{ request: string; revision: number }, [string, string]>(
+          "SELECT request, revision FROM receipts WHERE instance=? AND operation=?",
+        )
+        .get(instance, operation);
+      if (!prior) return undefined;
+      return {
+        edit: JSON.parse(prior.request) as VoiceEdit,
+        saved: { id: roleId, revision: prior.revision },
+      };
+    })();
+  } finally {
+    db.close();
+  }
+}
+
 export function writeVoice(path: string, roleId: string, request: VoiceEdit): RoleRef {
   const db = open(path, false);
   try {
@@ -335,6 +372,8 @@ export function writeVoice(path: string, roleId: string, request: VoiceEdit): Ro
           expectedRoleRevision: request.expectedRoleRevision,
           voice: request.voice,
           apply: request.apply,
+          ...(request.selection ? { selection: request.selection } : {}),
+          ...(request.catalog ? { catalog: request.catalog } : {}),
         });
         const prior = db
           .query<{ request: string; revision: number }, [string, string]>(

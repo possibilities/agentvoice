@@ -83,6 +83,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
       newSession: async () => {
         throw new Error("not used");
       },
+      voiceGet: (request) => controller.voiceGet(request),
       voiceSet: async () => {
         throw new Error("not used");
       },

@@ -70,6 +70,16 @@ function handle(line: string, send: (text: string) => void) {
       model: params.model ?? "native-default",
     };
   }
+  if (request.method === "thread/realtime/listVoices") {
+    result = {
+      voices: {
+        v1: ["cove", "maple", "sol"],
+        v2: ["marin"],
+        defaultV1: "cove",
+        defaultV2: "marin",
+      },
+    };
+  }
   if (request.method === "mcpServer/tool/call") {
     if (existsSync(join(root, "fail-mcp"))) {
       send(
@@ -80,7 +90,7 @@ function handle(line: string, send: (text: string) => void) {
     result = {
       content: [],
       structuredContent: {
-        protocolVersion: 6,
+        protocolVersion: 7,
         instanceId: "fixture-controller",
         workspace: root,
         threadId: params.threadId,

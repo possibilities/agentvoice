@@ -67,6 +67,8 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0052: Persist one current session in each workspace](0052-workspace-session-marker.md) | Partially superseded | Exact marker-based resume, explicit API/MCP new session, and terminal panes following runtime replacement remain. [0053](0053-retain-workspace-session-across-frontend-detach.md) replaces frontend-scoped call lifetime and lease release. |
 | [0053: Retain one workspace session across frontend detach](0053-retain-workspace-session-across-frontend-detach.md) | Accepted | One server-lifetime controller/runtime and pinned workspace; disposable one-owner media attachments; explicit replacement and shutdown boundaries. |
 
+| [0054: Discover native voices and persist one random choice](0054-native-voice-discovery.md) | Accepted | Dedicated native-backed voice inspection, pre-save compatibility validation, and durable random selection; refines [0042](0042-workspace-role-databases.md). |
+
 ## Identifier history
 
 Corrected 2026-09-08. Each old filename below identifies one specific record;

@@ -302,3 +302,12 @@ re-sign Homebrew Bun or write TCC grants. Keep the bundle's stable signing ident
 receipt checks and transactional rollback. Restart validates the persisted bundle
 path even if the invoking XDG state differs. Packaging tests use temporary copies,
 signing inspection and --version only; actual microphone consent remains macOS-owned.
+
+
+Voice discovery is owned by `src/core/voice-catalog.ts`: query the owned native child,
+validate bounded protocol families/defaults, cache successful declarations per child,
+and retain explicit unavailable results. `voice-inspection.ts` owns the shared inspection
+shape and final WebRTC protocol mapping. Runtime tracks the matching started request;
+the media host qualifies it with live media. Control exposes dedicated `voice_get` and
+validates `voice_set` before saving. SQLite receipts retain resolved random choices,
+while the controller journal separately owns saved/application outcomes (ADR 0054).

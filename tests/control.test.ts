@@ -30,7 +30,10 @@ function operation(
   };
 }
 
-function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
+function fakeBackend(
+  observe?: (request: unknown) => void,
+  observeVoiceGet?: (request: { refresh?: boolean }) => void,
+): ControlBackend {
   const recentOperations: ControlOperation[] = [];
   const byId = new Map<string, ControlOperation>();
   const accept = (
@@ -73,10 +76,53 @@ function fakeBackend(observe?: (request: unknown) => void): ControlBackend {
       recentOperations,
     }),
     newSession: async (request) => accept("new-session", "runtime", request),
+    voiceGet: async (request) => {
+      observeVoiceGet?.(request);
+      return {
+        instanceId: "instance-a",
+        generation: 7,
+        workspace: "/work",
+        threadId: "thread-a",
+        nativePid: 42,
+        phase: "live",
+        editable: true,
+        canApplyNow: true,
+        inspection: {
+          managedVoice: "arbor",
+          requestedVoice: "arbor",
+          selectionSource: "explicit-request" as const,
+          masked: false,
+          protocol: "v3" as const,
+          catalog: {
+            status: "available" as const,
+            source: "thread/realtime/listVoices" as const,
+            fetchedAt: "2026-09-13T00:00:00.000Z",
+            voices: {
+              v1: ["arbor", "breeze"],
+              v2: ["marin"],
+              defaultV1: "arbor",
+              defaultV2: "marin",
+            },
+          },
+          choices: ["arbor", "breeze"],
+          defaultVoice: "arbor",
+        },
+      };
+    },
     voiceSet: async (request) => {
       const result = accept("voice-set", "voice", request);
       result.voiceEdit = {
         ...request,
+        voice: request.selection ? "breeze" : request.voice,
+        ...(request.selection
+          ? {
+              catalog: {
+                source: "thread/realtime/listVoices",
+                fetchedAt: "2026-09-13T00:00:00.000Z",
+                protocol: "v3" as const,
+              },
+            }
+          : {}),
         saved: { id: "11111111-1111-4111-8111-111111111111", revision: 2 },
         application: "deferred",
       };
@@ -163,6 +209,7 @@ describe("controller control transports", () => {
           "agentvoice_new_session",
           "agentvoice_thread_mailbox_open",
           "agentvoice_voice_set",
+          "agentvoice_voice_get",
         ],
       });
       const status = await socketRequest(server.socketPath, {
@@ -393,6 +440,147 @@ describe("controller control transports", () => {
         });
         expect(legacy).toMatchObject({ ok: false, error: { code: "invalid_request" } });
       }
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("voice_get is read-only across socket and MCP, and random voice_set resolves once", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
+    const reads: Array<{ refresh?: boolean }> = [];
+    const server = await startControlServer({
+      backend: fakeBackend(undefined, (request) => reads.push(request)),
+      stateDir,
+      instanceId: "instance-a",
+    });
+    try {
+      const initial = await mcpRequest(server.httpUrl, server.bearerToken, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      });
+      const sessionId = initial.headers.get("mcp-session-id");
+      expect(sessionId).toBeString();
+      await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+        sessionId ?? undefined,
+      );
+      const tools = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+        sessionId ?? undefined,
+      );
+      const toolText = await tools.text();
+      expect(toolText).toContain("agentvoice_voice_get");
+      expect(toolText).toContain('"readOnlyHint":true');
+
+      const socketVoiceGet = await socketRequest(server.socketPath, {
+        v: CONTROL_PROTOCOL_VERSION,
+        type: "request",
+        id: "voice-get-socket",
+        method: "agentvoice.voice_get",
+        params: {},
+      });
+      expect(socketVoiceGet).toMatchObject({
+        ok: true,
+        result: {
+          instanceId: "instance-a",
+          generation: 7,
+          workspace: "/work",
+          threadId: "thread-a",
+          inspection: {
+            requestedVoice: "arbor",
+            catalog: {
+              status: "available",
+              source: "thread/realtime/listVoices",
+              voices: { v1: ["arbor", "breeze"], defaultV1: "arbor" },
+            },
+            choices: ["arbor", "breeze"],
+            defaultVoice: "arbor",
+          },
+        },
+      });
+      const mcpVoiceGet = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "agentvoice_voice_get", arguments: { refresh: true } },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await mcpVoiceGet.text()).toContain('"requestedVoice":"arbor"');
+      expect(reads).toEqual([{}, { refresh: true }]);
+
+      const randomSocket = {
+        operationId: "voice-random-socket",
+        expectedGeneration: 7,
+        expectedInstanceId: "instance-a",
+        expectedRoleRevision: 1,
+        selection: { kind: "random", excludeCurrent: true },
+        apply: "next-session",
+      };
+      expect(
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "voice-random-socket",
+          method: "agentvoice.voice_set",
+          params: randomSocket,
+        }),
+      ).toMatchObject({
+        ok: true,
+        result: { voiceEdit: { voice: "breeze", selection: randomSocket.selection } },
+      });
+      const randomMcp = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: {
+            name: "agentvoice_voice_set",
+            arguments: { ...randomSocket, operationId: "voice-random-mcp" },
+          },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await randomMcp.text()).toContain('"voice":"breeze"');
+
+      const invalid = { ...randomSocket, operationId: "voice-both", voice: "arbor" };
+      expect(
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "voice-both",
+          method: "agentvoice.voice_set",
+          params: invalid,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+      const invalidMcp = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: 5,
+          method: "tools/call",
+          params: { name: "agentvoice_voice_set", arguments: invalid },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await invalidMcp.text()).toContain('"isError":true');
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
