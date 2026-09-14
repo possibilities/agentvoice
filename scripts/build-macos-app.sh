@@ -26,6 +26,8 @@ cp "$repo_root/macos/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :AgentVoiceSourceRevision $revision" "$app/Contents/Info.plist"
 /usr/bin/plutil -replace AgentVoiceStateDirectory -string "$state_directory" "$app/Contents/Info.plist"
+/usr/bin/plutil -replace AgentVoiceServiceExecutable -string "$state_directory/default/service/runtime/AgentVoice.app/Contents/MacOS/agentvoice" "$app/Contents/Info.plist"
+/usr/bin/plutil -replace AgentVoiceServiceEntrypoint -string "$repo_root/src/main.ts" "$app/Contents/Info.plist"
 swift "$repo_root/scripts/macos-icon.swift" "$stage/AgentVoice.iconset"
 iconutil -c icns "$stage/AgentVoice.iconset" -o "$app/Contents/Resources/AgentVoice.icns"
 codesign --force --sign "${AGENTVOICE_APP_SIGNING_IDENTITY:--}" --options runtime \

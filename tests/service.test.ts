@@ -308,3 +308,95 @@ test.skipIf(process.platform !== "darwin")(
   },
   30_000,
 );
+
+test("load and unload keep installation, logs and environment and are idempotent", async () => {
+  const f = fixture();
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "notInstalled" });
+  await f.service.change("install");
+  const previous = readFileSync(f.paths.plist, "utf8");
+  const log = join(f.paths.logs, "stderr.log");
+  writeFileSync(log, "retained diagnostics");
+  const start = f.calls.length;
+  await f.service.change("load");
+  expect(f.calls.slice(start).map((args) => args[0])).toEqual(["print"]);
+  f.delayUnload();
+  await f.service.change("unload");
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "unloaded" });
+  const unloaded = f.calls.length;
+  await f.service.change("unload");
+  expect(f.calls.slice(unloaded).map((args) => args[0])).toEqual(["print"]);
+  f.options.env = { CODEX_HOME: "/must/not/replace/saved/environment" };
+  await f.service.change("load");
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "running" });
+  expect(readFileSync(f.paths.plist, "utf8")).toBe(previous);
+  expect(readFileSync(log, "utf8")).toBe("retained diagnostics");
+});
+
+test("inspection failures and unknown launchd states never claim unloaded", async () => {
+  const f = fixture();
+  await f.service.change("install");
+  f.fail("print");
+  await expect(f.service.snapshot()).rejects.toThrow("Cannot inspect");
+  const original = f.options.launchctl;
+  f.options.launchctl = async (args) => {
+    const result = await original(args);
+    return { ...result, out: result.out.replace("state = running", "state = throttled") };
+  };
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "loaded" });
+  f.foreign();
+  await expect(f.service.snapshot()).rejects.toThrow("unrelated plist");
+});
+
+test("failed load preserves an unloaded installation, and failed unload preserves a loaded job", async () => {
+  const f = fixture();
+  await f.service.change("install");
+  const previous = readFileSync(f.paths.plist, "utf8");
+  f.fail("bootout");
+  await expect(f.service.change("unload")).rejects.toThrow("injected failure");
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "running" });
+  await f.service.change("unload");
+  f.fail("bootstrap");
+  await expect(f.service.change("load")).rejects.toThrow("injected failure");
+  expect(await f.service.snapshot()).toEqual({ version: 1, state: "unloaded" });
+  expect(readFileSync(f.paths.plist, "utf8")).toBe(previous);
+});
+
+test("load and unload refuse missing or edited installations without mutating launchd", async () => {
+  const f = fixture();
+  for (const action of ["load", "unload"] as const)
+    await expect(f.service.change(action)).rejects.toThrow("not installed");
+  expect(f.calls.every((args) => args[0] === "print")).toBe(true);
+  await f.service.change("install");
+  writeFileSync(f.paths.plist, "unrelated plist");
+  const start = f.calls.length;
+  for (const action of ["load", "unload"] as const)
+    await expect(f.service.change(action)).rejects.toThrow("edited LaunchAgent");
+  expect(f.calls.slice(start)).toEqual([]);
+});
+
+test("menu and CLI lifecycle changes share the installer lock", async () => {
+  const f = fixture();
+  await f.service.change("install");
+  const original = f.options.launchctl;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  f.options.launchctl = async (args) => {
+    if (args[0] === "bootout") {
+      entered.resolve();
+      await release.promise;
+    }
+    return original(args);
+  };
+  const first = f.service.change("unload");
+  await entered.promise;
+  try {
+    await expect(new VoiceService(f.options).change("load")).rejects.toThrow(
+      "operation lock exists",
+    );
+  } finally {
+    release.resolve();
+    await first;
+  }
+  await f.service.change("load");
+  expect(f.loaded()).toBe(true);
+});

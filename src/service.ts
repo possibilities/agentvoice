@@ -21,6 +21,11 @@ import {
 export const SERVICE_LABEL = "io.arthack.agentvoice.server";
 const PREVIOUS_SERVICE_LABEL = "dev.agentvoice.default";
 type Result = { code: number; out: string; err: string };
+export type ServiceAction = "install" | "load" | "unload" | "restart" | "remove";
+export interface ServiceSnapshot {
+  version: 1;
+  state: "running" | "loaded" | "unloaded" | "notInstalled";
+}
 export type Launchctl = (args: string[]) => Promise<Result>;
 export interface ServiceOptions {
   home: string;
@@ -240,6 +245,23 @@ export class VoiceService {
       await Bun.sleep(100);
     }
   }
+  async snapshot(): Promise<ServiceSnapshot> {
+    const { directory, plist } = servicePaths(this.options, this.label);
+    safeAncestors(directory);
+    const installed = readManaged(plist, this.label);
+    const loaded = await this.loaded();
+    if (loaded && !installed) throw new Error("Loaded LaunchAgent has no owned installation");
+    return {
+      version: 1,
+      state: !installed
+        ? "notInstalled"
+        : !loaded
+          ? "unloaded"
+          : /^\s*state = running\s*$/m.test(loaded.out)
+            ? "running"
+            : "loaded",
+    };
+  }
   async status(): Promise<string> {
     const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
@@ -249,7 +271,7 @@ export class VoiceService {
     const state = loaded ? (/^\s*state = (.+)$/m.exec(loaded.out)?.[1] ?? "loaded") : "not loaded";
     return `${this.label}: ${installed ? state : "not installed"}\nPlist: ${plist}\nLogs: ${installed ? installedLogs(installed).join(", ") : logs}\n`;
   }
-  async change(action: "install" | "restart" | "remove"): Promise<void> {
+  async change(action: ServiceAction): Promise<void> {
     const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
     mkdirSync(directory, { recursive: true, mode: 0o755 });
@@ -335,6 +357,11 @@ export class VoiceService {
           throw error;
         }
         runtime?.commit();
+      } else if (action === "unload") {
+        if (loaded) await this.unload();
+      } else if (action === "load" && loaded) {
+        // Loading an already loaded job must never interrupt its retained work.
+        return;
       } else if (action === "remove") {
         if (loaded) await this.unload();
         unlinkSync(plist);

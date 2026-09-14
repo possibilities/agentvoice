@@ -2,8 +2,8 @@ import Foundation
 
 public enum AgentVoiceMenuCopy {
     public static let pairPhone = "Pair phone…"
-    public static let runAtLogin = "Run at login"
-    public static let quit = "Quit menu"
+    public static let runAtLogin = "Show menu at login"
+    public static let quit = "Quit AgentVoice menu"
 }
 
 public enum PairPhoneCopy {
@@ -15,44 +15,82 @@ public enum PairPhoneCopy {
     public static let durableNote = "This code expires in 5 minutes. Your phone stays paired until you remove it."
 }
 
-public enum WaitingServerState: Equatable, Sendable {
-    case running
-    case loaded(String)
-    case unavailable
+public enum WaitingServerState: String, Equatable, Sendable, Decodable {
+    case running, loaded, unloaded, notInstalled, unavailable, checking
 
     public var menuTitle: String {
         switch self {
-        case .running:
-            return "AgentVoice is running"
-        case .loaded(let state):
-            return "Waiting server: \(state)"
-        case .unavailable:
-            return "Waiting server is not loaded"
+        case .running: return "AgentVoice is running"
+        case .loaded: return "AgentVoice is loaded"
+        case .unloaded: return "AgentVoice is unloaded"
+        case .notInstalled: return "AgentVoice needs installation"
+        case .unavailable: return "AgentVoice status is unavailable"
+        case .checking: return "Checking AgentVoice…"
         }
     }
 
     public var accessibilitySummary: String {
+        menuTitle + (self == .running ? ". Server status only; call availability may differ." : "")
+    }
+
+    public var actions: [ServerAction] {
         switch self {
-        case .running:
-            return "AgentVoice, waiting server running"
-        case .loaded(let state):
-            return "AgentVoice, waiting server \(state)"
-        case .unavailable:
-            return "AgentVoice, waiting server not loaded"
+        case .running, .loaded: return [.restart, .unload]
+        case .unloaded: return [.load]
+        case .notInstalled, .unavailable, .checking: return []
         }
     }
 }
 
-public func parseLaunchctlState(_ output: String) -> WaitingServerState {
-    guard let line = output.split(separator: "\n").first(where: {
-        $0.trimmingCharacters(in: .whitespaces).hasPrefix("state =")
-    }) else {
-        return .unavailable
+public enum ServerAction: String, CaseIterable, Sendable {
+    case load, restart, unload
+
+    public var title: String {
+        switch self {
+        case .load: return "Load AgentVoice"
+        case .restart: return "Restart AgentVoice…"
+        case .unload: return "Unload AgentVoice…"
+        }
     }
-    let value = line.split(separator: "=", maxSplits: 1).last?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if value == "running" { return .running }
-    return value.isEmpty ? .unavailable : .loaded(value)
+
+    public var progress: String {
+        switch self {
+        case .load: return "Loading AgentVoice…"
+        case .restart: return "Restarting AgentVoice…"
+        case .unload: return "Unloading AgentVoice…"
+        }
+    }
+
+    public var failure: String {
+        switch self {
+        case .load: return "Couldn’t load AgentVoice"
+        case .restart: return "Couldn’t restart AgentVoice"
+        case .unload: return "Couldn’t unload AgentVoice"
+        }
+    }
+
+    public var confirmation: String? {
+        switch self {
+        case .load: return nil
+        case .restart:
+            return "This ends any call and stops background work in the default server. AgentVoice will then start again. Reconnect from your phone or terminal to call again."
+        case .unload:
+            return "This ends any call and stops background work in the default server. AgentVoice stays unloaded until you load it again or sign in to your Mac again. Your settings and paired phones are kept."
+        }
+    }
+
+    public func accepts(_ state: WaitingServerState) -> Bool {
+        self == .unload ? state == .unloaded : state == .loaded || state == .running
+    }
+}
+
+public func decodeServiceSnapshot(_ data: Data) throws -> WaitingServerState {
+    struct Snapshot: Decodable { let version: Int; let state: WaitingServerState }
+    guard let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
+          snapshot.version == 1,
+          [.running, .loaded, .unloaded, .notInstalled].contains(snapshot.state)
+    else { throw ServiceCommandError.invalidResponse }
+    return snapshot.state
 }
 
 public enum LoginItemState: Equatable, Sendable {
@@ -119,12 +157,12 @@ public struct LoginItemPresentation: Equatable, Sendable {
             enabled = true
             action = .unregister
         case .approvalRequired:
-            title = "Open Login Item Settings…"
+            title = "Open login item settings…"
             checked = false
             enabled = true
             action = .openSettings
         case .unavailable:
-            title = "Login Item Unavailable"
+            title = "Menu login setting is unavailable"
             checked = false
             enabled = false
             action = .none

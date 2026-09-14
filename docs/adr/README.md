@@ -55,7 +55,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
 | [0042: Workspace-owned role snapshots and explicit voice application](0042-workspace-role-databases.md) | Accepted, first slice implemented | Explicit ejection and voice changes; broader editing and automatic ejection remain follow-up work. |
 | [0043: Adapt delegation to the conversation and the work](0043-adaptive-conversation-first-delegation.md) | Partially superseded | [0047](0047-adaptive-work-execution.md) extends adaptive execution to implementation and edits; useful parallelism, explicit handoffs and direct call controls remain. |
-| [0044: A native macOS menu app observes the waiting server](0044-native-macos-menu-app.md) | Accepted | The AppKit login item stays independent from LaunchAgent and call lifetime. |
+| [0044: A native macOS menu app observes the waiting server](0044-native-macos-menu-app.md) | Extended | [0065](0065-native-menu-server-lifecycle.md) adds explicit server lifecycle actions; the AppKit login item stays independent from LaunchAgent and call lifetime. |
 | [0045: Pair phone begins as a persistent native interaction preview](0045-native-pair-phone-preview.md) | Partially superseded | [0046](0046-durable-device-pairing.md) replaces the inert QR; the persistent window lifecycle remains. |
 | [0046: Pair phones with durable device keys](0046-durable-device-pairing.md) | Accepted | One-use enrollment, non-expiring device identity, signed WSS upgrades, and legacy-grant coexistence. |
 | [0047: Adapt work execution to the human's current intent](0047-adaptive-work-execution.md) | Accepted | Direct or delegated work by task and interaction needs; presentation follows supplied session context and human preferences. |
@@ -104,3 +104,5 @@ complete relative file links; a title change must not redirect a citation to a
 different decision. Keep this navigation index and the record's status together.
 
 - [0064: Browser presentation preferences](0064-browser-presentation-preferences.md)
+
+- [0065: Explicit server lifecycle controls in the native menu](0065-native-menu-server-lifecycle.md)

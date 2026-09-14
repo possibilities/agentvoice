@@ -19,7 +19,8 @@ owns the current source map and recording/attachment implementation guidance.
   skips both app and service management.
   No configuration, prompt/skill setup or legacy command cleanup.
 - macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
-  registration, read-only launchd state, reusable SwiftUI pairing window,
+  registration, versioned service-state observation and explicit load/unload/restart
+  through the existing ownership-checked service command, reusable SwiftUI pairing window,
   private render-gated pairing-socket client and signed application packaging.
   The menu is not a frontend or server supervisor; quitting
   it must not end a call. Follow AgentNotify for native panels, windows and shared

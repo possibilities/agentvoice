@@ -5,6 +5,9 @@ without changing the waiting server or workspace lifecycle, and preserves the
 microphone identity retained by [0027](0027-service-microphone-identity.md) and
 [0033](0033-client-owned-native-media.md).
 
+Extended by [0065](0065-native-menu-server-lifecycle.md), which adds explicit
+load/unload/restart controls while retaining the independence described here.
+
 ## Decision
 
 The macOS installer places a signed `AgentVoice.app` in the user's Applications

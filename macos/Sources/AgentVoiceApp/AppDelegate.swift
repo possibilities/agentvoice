@@ -2,34 +2,6 @@ import AgentVoiceAppCore
 import AppKit
 import ServiceManagement
 
-private let serverLabel = "io.arthack.agentvoice.server"
-
-private final class WaitingServerProbe {
-    func read(completion: @escaping @Sendable (WaitingServerState) -> Void) {
-        DispatchQueue.global(qos: .utility).async {
-            let process = Process()
-            let output = Pipe()
-            process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            process.arguments = ["print", "gui/\(getuid())/\(serverLabel)"]
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-                let data = output.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                guard process.terminationStatus == 0 else {
-                    completion(.unavailable)
-                    return
-                }
-                let text = String(decoding: data, as: UTF8.self)
-                completion(parseLaunchctlState(text))
-            } catch {
-                completion(.unavailable)
-            }
-        }
-    }
-}
-
 private final class LoginItemController {
     private static let defaultWasRecordedKey = "loginItemDefaultWasRecorded"
     private let service = SMAppService.mainApp
@@ -84,13 +56,26 @@ private final class LoginItemController {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
-    private let serverItem = NSMenuItem(title: "Checking waiting server…", action: nil, keyEquivalent: "")
+    private let serverItem = NSMenuItem(title: WaitingServerState.checking.menuTitle, action: nil, keyEquivalent: "")
     private let pairPhoneItem = NSMenuItem(title: AgentVoiceMenuCopy.pairPhone, action: #selector(showPairPhone), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: AgentVoiceMenuCopy.runAtLogin, action: #selector(toggleLoginItem), keyEquivalent: "")
-    private let probe = WaitingServerProbe()
+    private let command = ServiceCommand(
+        executable: Bundle.main.object(forInfoDictionaryKey: "AgentVoiceServiceExecutable") as? String ?? "",
+        entrypoint: Bundle.main.object(forInfoDictionaryKey: "AgentVoiceServiceEntrypoint") as? String ?? ""
+    )
+    private var serverState: WaitingServerState = .checking
+    private var operation: ServerAction?
+    private var confirming = false
+    private var lastError: String?
+    private var lastFailure: String?
+    private var actionItems: [ServerAction: NSMenuItem] = [:]
+    private let checkItem = NSMenuItem(title: "Check status again", action: #selector(checkStatus), keyEquivalent: "")
+    private let errorItem = NSMenuItem(title: "Show details…", action: #selector(showDetails), keyEquivalent: "")
+    private let quitItem = NSMenuItem(title: AgentVoiceMenuCopy.quit, action: #selector(quitMenu), keyEquivalent: "q")
     private let login = LoginItemController()
     private var pairPhoneWindow: PairPhoneWindowController?
     private var probeRevision = 0
+    private var checkingStatus = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -106,14 +91,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         serverItem.isEnabled = false
         pairPhoneItem.target = self
         loginItem.target = self
+        menu.autoenablesItems = false
         menu.addItem(serverItem)
+        for action in ServerAction.allCases {
+            let item = NSMenuItem(title: action.title, action: #selector(changeServer(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = action.rawValue
+            actionItems[action] = item
+            menu.addItem(item)
+        }
+        checkItem.target = self
+        errorItem.target = self
+        menu.addItem(checkItem)
+        menu.addItem(errorItem)
         menu.addItem(.separator())
         menu.addItem(pairPhoneItem)
         menu.addItem(loginItem)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: AgentVoiceMenuCopy.quit, action: #selector(quitMenu), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        quitItem.target = self
+        menu.addItem(quitItem)
         menu.delegate = self
         // The attached menu owns native tracking and selected highlighting.
         statusItem.menu = menu
@@ -131,16 +127,109 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = presentation.checked ? .on : .off
         loginItem.isEnabled = presentation.enabled
 
+        guard operation == nil, !confirming, !checkingStatus else { return }
+        checkingStatus = true
         probeRevision += 1
         let revision = probeRevision
-        probe.read { [weak self] state in
-            DispatchQueue.main.async {
-                guard let self, self.probeRevision == revision else { return }
-                self.serverItem.title = state.menuTitle
-                self.statusItem.button?.toolTip = state.accessibilitySummary
-                self.statusItem.button?.setAccessibilityLabel(state.accessibilitySummary)
+        Task {
+            defer {
+                checkingStatus = false
+                updateServerMenu()
+            }
+            do {
+                let state = try await command.run()
+                guard probeRevision == revision else { return }
+                serverState = state
+                if lastFailure == nil { lastError = nil }
+                // A fresh status does not erase an operation error the person has
+                // not inspected. Starting another explicit action clears it.
+            } catch {
+                guard probeRevision == revision else { return }
+                serverState = .unavailable
+                lastError = error.localizedDescription
+            }
+            updateServerMenu()
+        }
+        updateServerMenu()
+    }
+
+    private func updateServerMenu() {
+        let busy = operation != nil || confirming
+        serverItem.title = operation?.progress ?? serverState.menuTitle
+        serverItem.toolTip = serverState.accessibilitySummary
+        let summary = operation?.progress ?? serverState.accessibilitySummary
+        statusItem.button?.toolTip = summary
+        statusItem.button?.setAccessibilityLabel(summary)
+        for (action, item) in actionItems {
+            item.isHidden = !serverState.actions.contains(action)
+            item.isEnabled = !busy
+        }
+        checkItem.isHidden = serverState != .unavailable && lastError == nil
+        checkItem.isEnabled = !busy && !checkingStatus
+        errorItem.title = lastFailure.map { "\($0)…" } ?? "Show details…"
+        errorItem.isHidden = lastError == nil
+        errorItem.isEnabled = !busy
+        pairPhoneItem.isEnabled = !busy
+        quitItem.isEnabled = !busy
+    }
+
+    @objc private func checkStatus() { refresh() }
+
+    @objc private func showDetails() {
+        guard let lastError else { return }
+        showAlert(title: lastFailure ?? "Couldn’t check AgentVoice", detail: lastError)
+    }
+
+    @objc private func changeServer(_ sender: NSMenuItem) {
+        guard operation == nil, !confirming,
+              let raw = sender.representedObject as? String,
+              let action = ServerAction(rawValue: raw), serverState.actions.contains(action)
+        else { return }
+        confirming = true
+        probeRevision += 1
+        updateServerMenu()
+        if let explanation = action.confirmation {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = action.title.replacingOccurrences(of: "…", with: "?")
+            alert.informativeText = explanation
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: action.title.replacingOccurrences(of: "…", with: ""))
+            guard alert.runModal() == .alertSecondButtonReturn else {
+                confirming = false
+                refresh()
+                return
             }
         }
+        confirming = false
+        operation = action
+        lastError = nil
+        lastFailure = nil
+        updateServerMenu()
+        Task {
+            do {
+                serverState = try await command.run(action: action)
+            } catch {
+                lastFailure = action.failure
+                lastError = error.localizedDescription
+                // Reconcile once after any failure, without retrying the mutation.
+                serverState = (try? await command.run()) ?? .unavailable
+            }
+            operation = nil
+            updateServerMenu()
+            if let lastError {
+                showAlert(title: action.failure, detail: lastError)
+            }
+        }
+    }
+
+    private func showAlert(title: String, detail: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.runModal()
     }
 
     @objc private func toggleLoginItem() {
@@ -159,15 +248,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func show(_ error: Error) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Could Not Change Login Setting"
-        alert.informativeText = error.localizedDescription
-        alert.runModal()
+        showAlert(title: "Couldn’t change the menu login setting", detail: error.localizedDescription)
         refresh()
     }
 
     @objc private func quitMenu() {
+        guard operation == nil, !confirming else { return }
         NSApplication.shared.terminate(nil)
     }
 }

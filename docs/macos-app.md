@@ -5,19 +5,33 @@ in the macOS menu bar. It is deliberately independent from the waiting server:
 opening or quitting the menu does not start or stop a call, and it never opens
 audio or Codex to test readiness.
 
-The menu currently contains:
+The menu shows **AgentVoice is running**, **AgentVoice is loaded**, or
+**AgentVoice is unloaded**, followed by the actions available for that state:
 
-- the default LaunchAgent's current launchd state;
-- **Pair phone…**, which opens a reusable native pairing window;
-- **Run at login**, backed by `SMAppService.mainApp` and enabled by
-  default on the app's first launch;
-- **Open Login Item Settings…** when macOS requires approval; and
-- **Quit menu**, which leaves the server and any call running.
+- **Load AgentVoice** loads the existing server installation. It does not start a call.
+- **Restart AgentVoice…** ends any call and background work in the default server,
+  then starts the server again. Reconnect a client to call again.
+- **Unload AgentVoice…** ends any call and background work, keeping the installation,
+  settings, logs, and paired phones. It stays unloaded until you load it or sign in
+  to your Mac again. This does not disable its next-login LaunchAgent behavior.
+- **Pair phone…** opens the reusable native pairing window.
+- **Show menu at login** controls only the menu app and is enabled on its first launch.
+  **Open login item settings…** appears when macOS requires approval.
+- **Quit AgentVoice menu** leaves the server and any call running.
 
-“AgentVoice is running” reports the job state only. It does not establish
+Restart and unload ask for confirmation because both stop retained background
+work, even when no call is attached. Progress is visible when reopening the menu;
+other server actions and quitting the menu are disabled until the request finishes.
+Errors have a details action and a status recheck; a failed request is never
+retried automatically. Unknown inspection results never appear as unloaded.
+
+“AgentVoice is running” describes launchd's server job only. “AgentVoice is loaded”
+means the job is registered but running status is not confirmed. Neither establishes
 account authentication, media readiness, frontend admission, or a live call.
-Use the existing terminal clients to start calls and `agentvoice service` for
-explicit service management.
+A missing installation asks for reinstallation rather than offering to fabricate
+one. The equivalent terminal commands are `agentvoice service load`, `unload`,
+and `restart`; `status --json` returns a version-1 machine-readable state.
+`remove` remains a separate CLI operation that deletes the owned LaunchAgent plist.
 
 The pairing window asks the waiting server for a five-minute, one-use enrollment
 code through a private Unix socket. It makes the code redeemable only after the QR
@@ -37,8 +51,10 @@ dist/AgentVoice.app/Contents/MacOS/AgentVoice --version
 
 The build uses AppKit, SwiftUI, Core Image, ServiceManagement, SF Symbols, and a
 generated original application icon. The bundle records the exact AgentVoice
-state directory selected by the installer so its private pairing socket matches
-the LaunchAgent. Building alone creates no login item and starts no service or
+state directory and fixed service executable/source selected by the installer.
+The private pairing socket matches the LaunchAgent, and lifecycle actions invoke
+that fixed command without a shell or PATH lookup. The existing service layer
+validates installation ownership and serializes changes with the installer's lock. Building alone creates no login item and starts no service or
 media. The first menu-app launch registers it to run at login once; a later user
 opt-out is preserved. The full editable installer adds the signed bundle to
 `~/Applications`; use

@@ -17,7 +17,7 @@ const USAGE = `agentvoice — a local Codex voice server and frontend
 Usage:
   agentvoice serve [--production]   Live Voice | Agent web transcripts at https://agentvoice.localhost
   agentvoice server [options]       Wait for a frontend to start a call
-  agentvoice service status|restart|remove
+  agentvoice service status|load|unload|restart|remove [--json]
                                    Manage the default macOS LaunchAgent
   agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
   agentvoice --attach [--host <ssh-host>] [--workspace <dir>]
@@ -373,12 +373,19 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (command === "server") return await runServerCommand(argv.slice(1));
     if (command === "service") {
       const action = argv[1];
-      if (argv.length !== 2 || !["status", "restart", "remove"].includes(action ?? ""))
-        throw new UsageError("Usage: agentvoice service status|restart|remove");
+      const json = argv.length === 3 && argv[2] === "--json";
+      if (
+        (!json && argv.length !== 2) ||
+        !["status", "load", "unload", "restart", "remove"].includes(action ?? "")
+      )
+        throw new UsageError(
+          "Usage: agentvoice service status|load|unload|restart|remove [--json]",
+        );
       const { VoiceService, serviceOptions } = await import("./service.ts");
       const service = new VoiceService(serviceOptions(import.meta.path));
-      if (action === "restart" || action === "remove") await service.change(action);
-      console.log(await service.status());
+      if (action === "load" || action === "unload" || action === "restart" || action === "remove")
+        await service.change(action);
+      console.log(json ? JSON.stringify(await service.snapshot()) : await service.status());
       return 0;
     }
     if (command === "network") {

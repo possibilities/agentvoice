@@ -181,6 +181,8 @@ when running the server manually.
 
 ```sh
 agentvoice service status
+agentvoice service load
+agentvoice service unload
 agentvoice service restart
 agentvoice service remove
 ```
@@ -438,7 +440,7 @@ caller cwd. On macOS, it also installs the signed native menu bundle at
 `~/Applications/AgentVoice.app`, then installs
 `~/Library/LaunchAgents/io.arthack.agentvoice.server.plist` and bootstraps the
 waiting server in the logged-in user's GUI domain. The menu app and LaunchAgent
-have independent login lifecycles: **Run at login** controls only the
+have independent login lifecycles: **Show menu at login** controls only the
 menu app and is enabled by default on its first launch, while the LaunchAgent keeps
 its existing RunAtLoad and KeepAlive policy. An explicit later opt-out is preserved.
 Quitting or disabling the menu app never ends a call. Rerunning installation
