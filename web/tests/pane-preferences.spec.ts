@@ -36,6 +36,12 @@ test("mode keeps mounted drafts and reading state through hidden updates, reconn
   await modes.getByRole("button", { name: "Voice", exact: true }).click();
   await expect(page.getByRole("region", { name: "Agent", exact: true })).toHaveCount(0);
   await expect(page.locator('[data-lane="agent"] textarea')).toHaveCount(1);
+  await expect(page.locator(".voice-dock")).toBeHidden();
+  const voiceBottom = () =>
+    page
+      .getByRole("region", { name: "Voice transcript", exact: true })
+      .evaluate((el) => el.getBoundingClientRect().bottom);
+  await expect.poll(voiceBottom).toBe(await page.evaluate(() => innerHeight));
   view.agent.push({
     id: "new",
     role: "assistant",
@@ -51,6 +57,19 @@ test("mode keeps mounted drafts and reading state through hidden updates, reconn
   view.phase = "detached";
   await modes.getByRole("button", { name: "Both", exact: true }).click();
   await expect(input).toHaveValue("Keep this draft while Voice is selected");
+  await expect(page.locator(".voice-dock")).toBeVisible();
+  await expect(page.locator(".voice-dock")).toHaveCSS(
+    "border-top-color",
+    "rgba(197, 231, 145, 0.32)",
+  );
+  await expect
+    .poll(async () =>
+      Math.abs(
+        (await page.locator(".voice-dock").boundingBox())!.y -
+          (await page.locator(".agent-dock").boundingBox())!.y,
+      ),
+    )
+    .toBeLessThan(1);
   expect(Math.abs((await scroll.evaluate((el) => el.scrollTop)) - offset)).toBeLessThan(2);
   await expect(
     page.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
@@ -62,6 +81,11 @@ test("mode keeps mounted drafts and reading state through hidden updates, reconn
     "true",
   );
   await expect(page.getByRole("region", { name: "Voice", exact: true })).toBeVisible();
+  await expect(page.locator(".voice-dock")).toBeHidden();
+  await expect.poll(voiceBottom).toBe(await page.evaluate(() => innerHeight));
+  await expect(
+    page.getByRole("region", { name: "Voice", exact: true }).getByText("Voice fixture"),
+  ).toBeVisible();
   await page.screenshot({ path: "test-results/panes-voice.png" });
   await modes.getByRole("button", { name: "Agent", exact: true }).click();
   await expect(input).toHaveValue("Keep this draft while Voice is selected");

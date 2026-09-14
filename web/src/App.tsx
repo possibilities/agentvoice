@@ -240,7 +240,7 @@ export function App() {
                 className={lane === "agent" ? "agent-dock" : "voice-dock"}
                 style={lane === "voice" ? { height: dockHeight } : undefined}
                 aria-hidden={lane === "voice" ? true : undefined}
-                hidden={lane === "voice" && dockHeight === 0}
+                hidden={lane === "voice" && (panePreference !== "both" || dockHeight === 0)}
               >
                 {lane === "agent" && displayedControls ? (
                   <AgentInput

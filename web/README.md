@@ -254,8 +254,9 @@ Hidden panes remain mounted and keep their draft, disclosures and reading state
 while new history arrives. One responsive app header contains AgentVoice branding,
 the current view label, connection status and the square segmented selector. Pane
 names remain accessible without duplicate sticky headings. Status has a reserved
-line, so connection changes do not move the transcript. Both bottom docks share
-a three-pixel divider and matching geometry.
+line, so connection changes do not move the transcript. In Both mode, the bottom docks share
+a three-pixel divider and matching geometry; the Voice line uses translucent lime.
+Voice-only hides its alignment placeholder and reclaims the full transcript height.
 
 Text and native controls use the same monospace stack, including portal dialogs.
 Voice details open in a square-cornered dialog with an inset inspection control;
