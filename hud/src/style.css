@@ -577,7 +577,7 @@ footer span {
 
 .native-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px 20px;
   padding: 18px 0;
   border-bottom: 1px solid var(--line);
@@ -683,6 +683,137 @@ footer span {
   line-height: 1.5;
 }
 
+.audit-disclosure {
+  color: var(--text-quiet);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.audit-disclosure summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-faint);
+  list-style-position: outside;
+}
+
+.audit-disclosure summary:hover,
+.audit-disclosure summary:focus-visible,
+.audit-disclosure[open] summary {
+  color: var(--text);
+}
+
+.audit-disclosure summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.work-audit {
+  padding-top: 11px;
+}
+
+.assignment-audit {
+  grid-column: 1 / -1;
+}
+
+.result-audit {
+  margin-top: 8px;
+}
+
+.audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin-top: 12px;
+  padding: 14px;
+  border-left: 1px solid var(--line-strong);
+  background: var(--canvas-raised);
+}
+
+.audit-field {
+  min-width: 0;
+}
+
+.audit-label,
+.audit-field p,
+.receipt-list,
+.evidence-list,
+.audit-values,
+.binding-grid {
+  margin: 0;
+}
+
+.audit-label {
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.audit-field p,
+.evidence-list li,
+.audit-values li,
+.binding-grid dd {
+  overflow-wrap: anywhere;
+}
+
+.evidence-list,
+.audit-values,
+.receipt-list {
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-list li + li,
+.audit-values li + li,
+.receipt-list li + li {
+  margin-top: 6px;
+}
+
+.evidence-list a {
+  color: var(--positive);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.evidence-list code,
+.audit-values code,
+.binding-grid dd {
+  color: var(--text-quiet);
+  font: inherit;
+}
+
+.evidence-list span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-faint);
+}
+
+.binding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin-bottom: 10px;
+}
+
+.binding-grid > div {
+  min-width: 0;
+}
+
+.binding-grid dt {
+  color: var(--text-faint);
+}
+
+.binding-grid dd {
+  margin: 1px 0 0;
+}
+
+.receipt-list > li > p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-bottom: 5px;
+}
+
 footer {
   display: flex;
   justify-content: space-between;
@@ -771,7 +902,8 @@ footer {
 
   .queue-grid,
   .work-details,
-  .work-brief {
+  .work-brief,
+  .audit-grid {
     grid-template-columns: 1fr;
   }
 

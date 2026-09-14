@@ -5,6 +5,9 @@ execution. It polls `GET /api/hud`, preserves the last successful snapshot when 
 refresh fails, and keeps returned results, lead acceptance, and human presentation
 as separate visible states. Native counts marked with `≥` are observed minimums;
 unavailable observation never becomes a zero or a completion claim.
+Closed audit disclosures preserve Work authority and relations, assignment contracts
+and exact bindings, plus returned, review, and presentation evidence. Only `http:`
+and `https:` evidence references become links; every other reference remains text.
 
 ```sh
 npm ci

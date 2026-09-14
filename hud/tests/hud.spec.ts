@@ -20,7 +20,11 @@ test("renders durable outcomes and every hierarchy depth", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Work", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Awaiting acceptance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Awaiting presentation" })).toBeVisible();
-  await expect(page.getByText("Accepted", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Awaiting presentation" })
+      .getByText("Accepted", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Return a fourth-depth nested result")).toBeVisible();
   await expect(page.getByText("Depth 4", { exact: true })).toBeVisible();
   await expect(page.getByText("Dense-state review")).toBeVisible();
@@ -41,6 +45,37 @@ test("labels incomplete inventory and minimum counts", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Native inventory is incomplete", { exact: false })).toBeVisible();
   await expect(page.getByText("≥3", { exact: true }).first()).toBeVisible();
+});
+
+test("opens audit evidence by keyboard and never links unsafe protocols", async ({ page }) => {
+  await serveSnapshot(page);
+  await page.goto("/");
+  const work = page.locator("article.work").first();
+  const workContext = work.locator("details.work-audit");
+  const summary = workContext.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(workContext).toHaveAttribute("open", "");
+  await expect(
+    workContext.getByRole("link", { name: "https://example.com/request-evidence" }),
+  ).toHaveAttribute("href", "https://example.com/request-evidence");
+  const hostile = workContext.getByText("javascript:alert(document.domain)", { exact: true });
+  await expect(hostile).toBeVisible();
+  expect(await hostile.evaluate((node) => node.tagName)).toBe("CODE");
+  await expect(workContext.locator('a[href^="javascript:"]')).toHaveCount(0);
+
+  const assignmentAudit = work.locator("details.assignment-audit").first();
+  await assignmentAudit.locator("summary").click();
+  await expect(assignmentAudit.getByText("root-agentvoice", { exact: true })).toBeVisible();
+  await expect(assignmentAudit.getByText("turn-thread-research", { exact: true })).toBeVisible();
+
+  const resultAudit = work
+    .locator(".result-list > li")
+    .filter({ hasText: "Recovered the durable work boundaries" })
+    .locator("details.result-audit");
+  await resultAudit.locator("summary").click();
+  await expect(resultAudit.getByText("wiki:durable-work-owner", { exact: true })).toBeVisible();
+  await expect(resultAudit.getByText("None recorded.", { exact: true }).first()).toBeVisible();
 });
 
 test("labels a stale observation without hiding durable work", async ({ page }) => {

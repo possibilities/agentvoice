@@ -3,7 +3,9 @@ import type {
   Assignment,
   AssignmentView,
   Counts,
+  Evidence,
   HudSnapshot,
+  NativeBinding,
   Result,
   Work,
 } from "../../src/hud/types.ts";
@@ -352,6 +354,26 @@ function WorkView({
         </div>
       </dl>
 
+      <details className="audit-disclosure work-audit">
+        <summary>Work context</summary>
+        <div className="audit-grid">
+          <AuditField label="Authority">
+            <EvidenceList evidence={work.authority} />
+          </AuditField>
+          <AuditField label="Relations">
+            <AuditValues
+              values={[
+                work.parentId ? `Parent: ${work.parentId}` : "No parent Work",
+                ...work.dependencies.map((dependency) => `Depends on: ${dependency}`),
+              ]}
+            />
+          </AuditField>
+          <AuditField label="Attention references">
+            <ReferenceList refs={work.attentionRefs} empty="None." />
+          </AuditField>
+        </div>
+      </details>
+
       {view ? (
         <CountLine
           counts={view.counts}
@@ -432,6 +454,25 @@ function AssignmentRow({
         <span>{result ? resultStateText(result) : "No return"}</span>
         {result ? <span>{reviewLabel(result)}</span> : null}
       </div>
+      <details className="audit-disclosure assignment-audit">
+        <summary>Assignment contract and binding</summary>
+        <div className="audit-grid">
+          <AuditField label="Result contract">
+            <p>{assignment.resultContract}</p>
+          </AuditField>
+          <AuditField label="Issuance">
+            <AuditValues
+              values={[
+                `Issuer: ${assignment.issuer}`,
+                assignment.parentAssignmentId
+                  ? `Parent assignment: ${assignment.parentAssignmentId}`
+                  : "No parent assignment",
+              ]}
+            />
+          </AuditField>
+          <BindingAudit binding={assignment.binding} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -449,6 +490,53 @@ function ResultRow({ result }: { result: Result }) {
         <span>{result.evidence.length} evidence ref.</span>
         <time dateTime={result.updatedAt}>{formatDate(result.updatedAt)}</time>
       </p>
+      <details className="audit-disclosure result-audit">
+        <summary>Returned evidence and receipts</summary>
+        <div className="audit-grid">
+          <AuditField label="Returned evidence">
+            <EvidenceList evidence={result.evidence} />
+          </AuditField>
+          <BindingAudit binding={result.binding} />
+          <AuditField label="Lead reviews">
+            {result.reviews.length ? (
+              <ul className="receipt-list">
+                {result.reviews.map((review) => (
+                  <li key={`${review.at}:${review.actor}:${review.decision}`}>
+                    <p>
+                      <span>
+                        {review.decision === "accepted" ? "Accepted" : "Changes required"}
+                      </span>
+                      <span className="mono">{review.actor}</span>
+                      <time dateTime={review.at}>{formatDate(review.at)}</time>
+                    </p>
+                    <EvidenceList evidence={review.evidence} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>None recorded.</p>
+            )}
+          </AuditField>
+          <AuditField label="Human presentations">
+            {result.presentations.length ? (
+              <ul className="receipt-list">
+                {result.presentations.map((presentation) => (
+                  <li key={`${presentation.at}:${presentation.actor}`}>
+                    <p>
+                      <span>Presented</span>
+                      <span className="mono">{presentation.actor}</span>
+                      <time dateTime={presentation.at}>{formatDate(presentation.at)}</time>
+                    </p>
+                    <EvidenceList evidence={presentation.evidence} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>None recorded.</p>
+            )}
+          </AuditField>
+        </div>
+      </details>
     </li>
   );
 }
@@ -474,9 +562,11 @@ function NativeView({ snapshot }: { snapshot: HudSnapshot }) {
         </div>
         <div>
           <span>Generation</span>
-          <strong className="mono">
-            {native.generation == null ? "unknown" : `${native.generation}:${native.seq ?? "?"}`}
-          </strong>
+          <strong className="mono">{native.generation ?? "unknown"}</strong>
+        </div>
+        <div>
+          <span>Sequence</span>
+          <strong className="mono">{native.seq ?? "unknown"}</strong>
         </div>
         <div className="native-workspace">
           <span>Workspace</span>
@@ -624,6 +714,110 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
       <p>{detail}</p>
     </div>
   );
+}
+
+function AuditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="audit-field">
+      <p className="audit-label">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function BindingAudit({ binding }: { binding: NativeBinding | null }) {
+  return (
+    <AuditField label="Exact native binding">
+      {binding ? (
+        <>
+          <dl className="binding-grid">
+            <div>
+              <dt>Instance</dt>
+              <dd>{binding.instanceId}</dd>
+            </div>
+            <div>
+              <dt>Generation</dt>
+              <dd>{binding.generation}</dd>
+            </div>
+            <div>
+              <dt>Root thread</dt>
+              <dd>{binding.rootThreadId}</dd>
+            </div>
+            <div>
+              <dt>Thread</dt>
+              <dd>{binding.threadId}</dd>
+            </div>
+            <div>
+              <dt>Turn</dt>
+              <dd>{binding.turnId}</dd>
+            </div>
+          </dl>
+          <EvidenceList evidence={binding.evidence} />
+        </>
+      ) : (
+        <p>No native binding recorded.</p>
+      )}
+    </AuditField>
+  );
+}
+
+function AuditValues({ values }: { values: string[] }) {
+  return (
+    <ul className="audit-values">
+      {values.map((value) => (
+        <li key={value}>
+          <code>{value}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReferenceList({ refs, empty }: { refs: string[]; empty: string }) {
+  if (!refs.length) return <p>{empty}</p>;
+  return (
+    <ul className="evidence-list">
+      {refs.map((ref) => (
+        <li key={ref}>
+          <EvidenceReference value={ref} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EvidenceList({ evidence }: { evidence: Evidence[] }) {
+  if (!evidence.length) return <p>None recorded.</p>;
+  return (
+    <ul className="evidence-list">
+      {evidence.map((item) => (
+        <li key={`${item.ref}:${item.note ?? ""}`}>
+          <EvidenceReference value={item.ref} />
+          {item.note ? <span>{item.note}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EvidenceReference({ value }: { value: string }) {
+  const href = safeHttpHref(value);
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer">
+      {value}
+    </a>
+  ) : (
+    <code>{value}</code>
+  );
+}
+
+function safeHttpHref(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function reviewLabel(result: Result): string {

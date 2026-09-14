@@ -58,7 +58,11 @@ export function completeSnapshot(observedAt = new Date().toISOString()): HudSnap
       objective: "Make durable work and native execution legible at a glance",
       scope:
         "A local, read-only HUD for work outcomes, exact thread hierarchy, and honest recovery state.",
-      authority: [{ ref: "session:request" }],
+      authority: [
+        { ref: "session:request" },
+        { ref: "https://example.com/request-evidence", note: "Safe-link fixture" },
+        { ref: "javascript:alert(document.domain)", note: "Untrusted protocol fixture" },
+      ],
       lead: "root/hud-recovery",
       parentId: null,
       dependencies: [],
