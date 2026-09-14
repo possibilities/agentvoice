@@ -95,3 +95,69 @@ test("export validates identity and all-depth rows without inventing availabilit
   expect(offline.monitor.threads).toEqual([]);
   expect(offline.monitor.inventory).toBe("unavailable");
 });
+test("ready inventory must include its parentless root; incomplete cuts can omit it", () => {
+  expect(() => exportThreadMonitor({ ...monitor, threads: [] })).toThrow("parentless root");
+  expect(() =>
+    exportThreadMonitor({
+      ...monitor,
+      threads: [{ ...monitor.threads[0]!, parentThreadId: "other" }],
+    }),
+  ).toThrow("parentless root");
+  expect(
+    exportThreadMonitor({ ...monitor, inventory: "incomplete", threads: [] }).monitor.inventory,
+  ).toBe("incomplete");
+});
+test("version one freezes native row ID/name/turn bounds independently of internal schemas", () => {
+  const root = monitor.threads[0]!;
+  for (const patch of [
+    { id: "bad/id" },
+    { id: "x".repeat(257) },
+    { parentThreadId: "bad/id" },
+    { name: "x".repeat(257) },
+    { turn: { id: "bad/id", status: "inProgress" as const } },
+    { turn: { id: "x".repeat(257), status: "inProgress" as const } },
+  ])
+    expect(() => exportThreadMonitor({ ...monitor, threads: [{ ...root, ...patch }] })).toThrow();
+  const accepted = exportThreadMonitor({
+    ...monitor,
+    threads: [
+      {
+        ...root,
+        name: "x".repeat(256),
+        model: "x".repeat(256),
+        effort: "x".repeat(256),
+        nickname: "x".repeat(256),
+        turn: { id: "x".repeat(256), status: "inProgress" },
+      },
+    ],
+  });
+  expect(accepted.monitor.threads).toHaveLength(1);
+});
+test("oversized escaped JSON is rejected and command returns bounded unavailable instead of truncating", async () => {
+  const escaped = String.fromCharCode(0).repeat(256);
+  const oversized: ThreadMonitor = {
+    ...monitor,
+    threads: Array.from({ length: 256 }, (_, index) => ({
+      ...monitor.threads[0]!,
+      id: index === 0 ? "root" : `thread-${index}`,
+      parentThreadId: index === 0 ? null : "root",
+      name: escaped,
+      model: escaped,
+      effort: escaped,
+      nickname: escaped,
+    })),
+  };
+  expect(() => exportThreadMonitor(oversized)).toThrow("output bound");
+  let output = "";
+  expect(
+    await runThreadsCommand(["--json"], "/fixture/state", {
+      observe: async () => oversized,
+      write: (text) => {
+        output += text;
+      },
+    }),
+  ).toBe(1);
+  expect(JSON.parse(output).monitor.inventory).toBe("unavailable");
+  expect(JSON.parse(output).monitor.threads).toEqual([]);
+  expect(Buffer.byteLength(output)).toBeLessThan(1024 * 1024);
+});

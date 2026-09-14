@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { MAX_THREADS, threadViewSchema } from "../events/contract.ts";
 import type { ThreadMonitor } from "./monitor.ts";
 
 /** Public metadata contract for independent read-only clients; never a socket descriptor. */
 export const THREAD_MONITOR_EXPORT_VERSION = 1;
+export const THREAD_MONITOR_EXPORT_MAX_BYTES = 1024 * 1024;
+const MAX_THREADS = 256;
 const identity = z
   .string()
   .min(1)
@@ -20,8 +21,20 @@ const monitorSchema = z
     inventory: z.enum(["pending", "ready", "incomplete", "unavailable"]),
     threads: z
       .array(
-        threadViewSchema
-          .extend({
+        z
+          .object({
+            id: identity,
+            parentThreadId: identity.nullable(),
+            name: z.string().max(256).nullable(),
+            status: z.enum(["unknown", "notLoaded", "idle", "active", "systemError"]),
+            activeFlags: z.array(z.enum(["waitingOnApproval", "waitingOnUserInput"])).max(2),
+            turn: z
+              .object({
+                id: identity,
+                status: z.enum(["inProgress", "completed", "interrupted", "failed"]),
+              })
+              .strict()
+              .nullable(),
             model: z.string().max(256).nullable().optional(),
             effort: z.string().max(256).nullable().optional(),
             nickname: z.string().max(256).nullable().optional(),
@@ -51,6 +64,9 @@ const monitorSchema = z
       ctx.addIssue({ code: "custom", message: "Unavailable inventory cannot retain thread rows" });
     if (new Set(monitor.threads.map((thread) => thread.id)).size !== monitor.threads.length)
       ctx.addIssue({ code: "custom", message: "Thread identities must be unique" });
+    const root = monitor.threads.find((thread) => thread.id === monitor.rootThreadId);
+    if (monitor.inventory === "ready" && (!root || root.parentThreadId !== null))
+      ctx.addIssue({ code: "custom", message: "Ready inventory requires its parentless root row" });
     if (monitor.missingSettings > monitor.threads.length)
       ctx.addIssue({ code: "custom", message: "Missing settings cannot exceed observed rows" });
   });
@@ -80,7 +96,7 @@ export function exportThreadMonitor(
           effort: thread.effort,
           nickname: thread.nickname,
         }));
-  return threadMonitorExportSchema.parse({
+  const exported = threadMonitorExportSchema.parse({
     schemaVersion: THREAD_MONITOR_EXPORT_VERSION,
     observedAt,
     monitor: {
@@ -96,4 +112,8 @@ export function exportThreadMonitor(
         .length,
     },
   });
+  // Include the command's trailing newline in the public byte budget.
+  if (Buffer.byteLength(JSON.stringify(exported)) + 1 > THREAD_MONITOR_EXPORT_MAX_BYTES)
+    throw new Error("Native observation exceeds its output bound");
+  return exported;
 }
