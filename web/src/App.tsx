@@ -144,6 +144,13 @@ export function App() {
     (hasSession && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
     (!hasSession && view.agent.length === 0 && view.voice.length === 0);
   const showStatus = holding || view.phase !== "live";
+  const statusText = !preferenceSaved
+    ? "View saved for this visit only."
+    : showStatus
+      ? holding && hasSession
+        ? "Loading conversation…"
+        : copy[view.phase]
+      : "";
   // Initial reveal and incarnation replacement stay atomic; only subsequent
   // history updates may lag behind the immediately available input controls.
   const transcriptView =
@@ -190,27 +197,10 @@ export function App() {
     <DocumentViewerProvider load={loadDocument} resetKey={view.id}>
       <main aria-label="AgentVoice live transcripts" className="live-view">
         <header className="app-header">
-          <div className="app-heading">
-            <div className="app-identity">
-              <h1 className="app-brand">AgentVoice</h1>
-              <span className="app-view-label">
-                {panePreference === "agent"
-                  ? "Agent chat"
-                  : panePreference === "voice"
-                    ? "Voice chat"
-                    : "Agent + Voice chat"}
-              </span>
-            </div>
-            <p className="app-status" role="status">
-              {!preferenceSaved
-                ? "View saved for this visit only."
-                : showStatus
-                  ? holding && hasSession
-                    ? "Loading conversation…"
-                    : copy[view.phase]
-                  : ""}
-            </p>
-          </div>
+          <h1 className="app-brand">AgentVoice</h1>
+          <p className="app-status" data-visible={statusText ? true : undefined} role="status">
+            {statusText}
+          </p>
           <fieldset className="pane-switch" aria-label="Transcript view">
             {(["agent", "voice", "both"] as const).map((mode) => (
               <button

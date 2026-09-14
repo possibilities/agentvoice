@@ -120,21 +120,12 @@ body,
 
 .app-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px 24px;
+  gap: 12px 24px;
   flex: none;
   padding: 10px 24px;
   border-bottom: 1px solid #27312f;
-}
-.app-heading {
-  min-width: 0;
-}
-.app-identity {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0 20px;
 }
 .app-brand {
   margin: 0;
@@ -142,21 +133,26 @@ body,
   font-weight: 600;
   line-height: 28px;
 }
-.app-view-label {
-  color: #969d91;
-  font-size: 13px;
-  line-height: 20px;
-}
 .app-status {
-  min-height: 18px;
+  justify-self: center;
+  max-width: min(100%, 680px);
   margin: 0;
-  color: #969d91;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  color: transparent;
   font-size: 12px;
   line-height: 18px;
+  text-align: center;
   overflow-wrap: anywhere;
+}
+.app-status[data-visible] {
+  border-color: #454545;
+  background: #101513;
+  color: #c7cbc2;
 }
 .pane-switch {
   display: flex;
+  justify-self: end;
   gap: 4px;
   margin: 0;
   padding: 4px;
@@ -187,10 +183,16 @@ body,
   outline: 2px solid #c5e791;
   outline-offset: -3px;
 }
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .app-header {
     grid-template-columns: minmax(0, 1fr);
     padding: 10px 16px;
+  }
+  .app-status {
+    justify-self: stretch;
+  }
+  .pane-switch {
+    justify-self: stretch;
   }
   .pane-switch-button {
     flex: 1;

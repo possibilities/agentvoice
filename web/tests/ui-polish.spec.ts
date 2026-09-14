@@ -36,24 +36,29 @@ for (const width of [1440, 390]) {
     const header = page.locator(".app-header");
     const modes = page.getByRole("group", { name: "Transcript view" });
     await expect(header.getByRole("heading", { name: "AgentVoice" })).toBeVisible();
-    await expect(header.getByText("Agent + Voice chat", { exact: true })).toBeVisible();
+    await expect(header.getByText(/Agent \+ Voice chat|Agent chat|Voice chat/)).toHaveCount(0);
     await expect(page.locator(".lane h1, .lane h2")).toHaveCount(0);
     const input = page.getByRole("textbox", { name: "Message Agent" });
     await input.fill("Retained polish draft");
     const headerHeight = (await header.boundingBox())!.height;
     view.phase = "detached";
-    await expect(header.getByRole("status")).toContainText("Voice client detached");
-    expect((await header.boundingBox())!.height).toBe(headerHeight);
+    const status = header.getByRole("status");
+    await expect(status).toContainText("Voice client detached");
+    await expect(status).toHaveAttribute("data-visible", "true");
+    await expect(status).toHaveCSS("text-align", "center");
+    await expect(status).toHaveCSS("border-radius", "0px");
+    const headerBox = (await header.boundingBox())!;
+    const statusBox = (await status.boundingBox())!;
+    expect(
+      Math.abs(statusBox.x + statusBox.width / 2 - (headerBox.x + headerBox.width / 2)),
+    ).toBeLessThan(1);
+    expect((await header.boundingBox())!.height).toBeGreaterThanOrEqual(headerHeight);
     for (const label of ["Voice", "Agent", "Both"]) {
       const button = modes.getByRole("button", { name: label, exact: true });
       await button.focus();
       await page.keyboard.press("Space");
       await expect(button).toHaveAttribute("aria-pressed", "true");
-      await expect(
-        header.getByText(label === "Both" ? "Agent + Voice chat" : `${label} chat`, {
-          exact: true,
-        }),
-      ).toBeVisible();
+      await expect(header.getByText(`${label} chat`, { exact: true })).toHaveCount(0);
     }
     const headerBottom = (await header.boundingBox())!.y + (await header.boundingBox())!.height;
     for (const lane of ["Agent", "Voice"]) {
