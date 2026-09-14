@@ -8,7 +8,7 @@ RPC forwarding. Codex remains the owner of execution and persisted history.
 Use `agentvoice event-socket --workspace <directory>` to discover the endpoint.
 Frames use the [event protocol](events.md); [events.schema.json](../events.schema.json)
 is the complete request/response/event schema. Protocol 1 clients must update;
-start a new call to obtain a controller using the current event protocol.
+restart the server to obtain a controller using the current event protocol.
 
 ## Identity and thread selection
 
@@ -27,8 +27,9 @@ reads. Children may use a different cwd; their native ancestry establishes scope
 Cycles, missing links, more than 32 ancestors, unowned roots, and late replies from
 replaced runtimes fail explicitly. Reads never acquire a lease or resume a thread.
 
-Each call retains its root lease until shutdown. After a call ends, only roots
-acquired by the new call controller are available. Loaded inventory is bounded
+Each workspace session retains its root lease until server shutdown. Frontend
+detach leaves the same roots available; a new server controller acquires its own.
+Loaded inventory is bounded
 and is not a historical directory; use descendant listing to find stored children
 that have unloaded. Native descendant listing covers spawned descendants, not
 every review/Guardian/fork relationship. Preserve other native references as

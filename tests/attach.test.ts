@@ -210,7 +210,7 @@ describe("owned native WebSocket", () => {
         expect(message).toContain(`Refused ${tool}`);
         expect(message).toContain("retired");
         expect(message).toContain(
-          "use agentvoice_new_session or remove the workspace .agentvoice-session marker before the next call",
+          "use agentvoice_new_session or stop the server before removing the workspace .agentvoice-session marker",
         );
         expect(responses.at(-1)!["result"]).toEqual({
           success: false,

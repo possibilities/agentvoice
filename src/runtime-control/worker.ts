@@ -59,6 +59,8 @@ export function runRuntimeWorker(
   let mediaEnabled = false;
   let terminalFailure = false;
   let desiredMute = { mic: true, speaker: true };
+  let frontendAttached = true;
+  let setFrontendAttached: ((attached: boolean) => Promise<void>) | undefined;
   let threadInventory: ThreadInventory | undefined;
   let next = 1;
   const leases = new Map<
@@ -175,7 +177,7 @@ export function runRuntimeWorker(
       lastState = serialized;
       event("state", state);
     }
-    if (mediaStarted && state.phase === "live") bootReady?.();
+    if (mediaStarted && (state.phase === "live" || !frontendAttached)) bootReady?.();
     if (state.phase === "failed")
       bootFailed?.(new Error(state.notice ?? "Voice connection failed"));
   }
@@ -184,6 +186,7 @@ export function runRuntimeWorker(
       throw new Error("Runtime is not an unused prepared candidate");
     starting = true;
     desiredMute = params.mute;
+    frontendAttached = params.frontendAttached ?? true;
     const currentLaunch = launch;
     await new Promise<void>((resolve, reject) => {
       let deadline: ReturnType<typeof setTimeout> | undefined;
@@ -209,6 +212,10 @@ export function runRuntimeWorker(
         mediaFactory: factory,
         debug: config!.debug,
         initialMute: { mic: true, speaker: true },
+        initialFrontendAttached: frontendAttached,
+        onFrontendReady: (setAttached) => {
+          setFrontendAttached = setAttached;
+        },
         runtime: {
           exactResume: params.threadId,
           fast: currentLaunch.provenance.parsed.fast,
@@ -321,11 +328,17 @@ export function runRuntimeWorker(
         return activate(params as RuntimeActivation);
       case "shutdown":
         return shutdown();
+      case "frontend": {
+        frontendAttached = (params as { attached: boolean }).attached;
+        await setFrontendAttached?.(frontendAttached);
+        publish();
+        return null;
+      }
       case "mute":
       case "enable-media": {
         desiredMute = params as { mic: boolean; speaker: boolean };
         if (method === "enable-media") {
-          if (terminalFailure || stopping || !mediaStarted || host?.state().phase !== "live")
+          if (terminalFailure || stopping || !mediaStarted)
             throw new Error("Cannot enable media on a runtime that is not live");
           mediaEnabled = true;
         }
@@ -340,7 +353,7 @@ export function runRuntimeWorker(
         receiveMedia(clientMediaMessageSchema.parse(params));
         return null;
       case "redial":
-        if (terminalFailure || stopping || !mediaEnabled || !host)
+        if (terminalFailure || stopping || !mediaEnabled || !frontendAttached || !host)
           throw new Error("Voice redial is unavailable");
         await host.redial();
         return null;
@@ -353,7 +366,7 @@ export function runRuntimeWorker(
           .refine((value) => value.trim().length > 0)
           .nullable()
           .parse(params);
-        if (terminalFailure || stopping || !mediaEnabled || !voiceSettings)
+        if (terminalFailure || stopping || !mediaEnabled || !frontendAttached || !voiceSettings)
           throw new Error("Voice settings are unavailable");
         voiceSettings.validate(name);
         if (method === "voice-apply") {

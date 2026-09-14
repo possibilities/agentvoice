@@ -86,6 +86,8 @@ export interface ControllerOptions {
   spawn?: typeof spawnRuntimeProcess;
   lease?: (threadId: string) => () => void;
   onMedia?(message: ServerMediaMessage): void;
+  /** Server sessions may start without a media owner. Standalone fixtures default attached. */
+  frontendAttached?: boolean;
 }
 
 export class RuntimeController implements ControlBackend {
@@ -113,6 +115,7 @@ export class RuntimeController implements ControlBackend {
   private started = false;
   private observationPending = 0;
   private closed = false;
+  private frontendAttached: boolean;
   private shutdownPromise: Promise<void> | undefined;
   private background: Promise<void> | undefined;
   private voice: VoiceState = {
@@ -125,6 +128,7 @@ export class RuntimeController implements ControlBackend {
   readonly speaker = new MuteGate();
 
   constructor(private readonly options: ControllerOptions) {
+    this.frontendAttached = options.frontendAttached ?? true;
     this.lifecycle = options.lifecycle ?? new LifecycleFeed(options.instanceId);
     this.mailbox = new ThreadMailbox(options.instanceId, (event, data) =>
       this.lifecycle.mailbox(event, data),
@@ -207,11 +211,11 @@ export class RuntimeController implements ControlBackend {
       workspace: this.workspace,
       mic: {
         muted: this.microphone.muted,
-        effectiveMuted: !ready || this.microphone.effectiveMuted,
+        effectiveMuted: !ready || !this.frontendAttached || this.microphone.effectiveMuted,
       },
       speaker: {
         muted: this.speaker.muted,
-        effectiveMuted: !ready || this.speaker.effectiveMuted,
+        effectiveMuted: !ready || !this.frontendAttached || this.speaker.effectiveMuted,
       },
     };
   }
@@ -256,7 +260,7 @@ export class RuntimeController implements ControlBackend {
     if (incarnation !== this.activeIncarnation || (this.closed && method !== "voice")) return;
     if (method === "client-media") {
       const parsed = serverMediaMessageSchema.safeParse(params);
-      if (parsed.success) this.options.onMedia?.(parsed.data);
+      if (parsed.success && this.frontendAttached) this.options.onMedia?.(parsed.data);
       return;
     }
     if (method === "mailbox") {
@@ -459,6 +463,7 @@ export class RuntimeController implements ControlBackend {
         "activate",
         {
           threadId: handoffTarget?.threadId ?? (this.threadId || undefined),
+          frontendAttached: this.frontendAttached,
           mute: { mic: this.microphone.muted, speaker: this.speaker.muted },
         },
         90_000,
@@ -560,10 +565,15 @@ export class RuntimeController implements ControlBackend {
         "unavailable",
         "Voice editing requires a ready call with an ejected workspace role",
       );
+    if (request.apply === "voice" && !this.frontendAttached)
+      throw new ControlError(
+        "unavailable",
+        "Voice application requires an attached frontend; save for restart instead",
+      );
     if (this.journal.all().length >= 256)
       throw new ControlError(
         "unavailable",
-        "Controller operation limit reached; start another call",
+        "Controller operation limit reached; restart the server",
       );
     this.busy = true;
     const active = this.active;
@@ -691,8 +701,11 @@ export class RuntimeController implements ControlBackend {
         "unavailable",
         "Controller mutation already in progress or shutting down",
       );
-    if (kind === "redial" && this.phase !== "ready")
-      throw new ControlError("unavailable", "Runtime is not ready for redial");
+    if (kind === "redial" && (this.phase !== "ready" || !this.frontendAttached))
+      throw new ControlError(
+        "unavailable",
+        "Redial requires an attached frontend and ready runtime",
+      );
     if (request.handoffPrompt !== undefined && (!this.threadId || !this.workspace))
       throw new ControlError("unavailable", "A handoff requires an established conversation");
     const now = new Date().toISOString();
@@ -885,6 +898,25 @@ export class RuntimeController implements ControlBackend {
     }
     this.changed();
   }
+  async setFrontendAttached(attached: boolean): Promise<void> {
+    this.assertOpen();
+    this.frontendAttached = attached;
+    if (!attached) this.cancelHolds();
+    this.syncMute();
+    // Desired attachment state also initializes any replacement candidate. A stopped
+    // incarnation cannot fail detachment of its successor or poison server admission.
+    const runtime = this.active;
+    const incarnation = this.activeIncarnation;
+    if (runtime && incarnation !== 0) {
+      try {
+        await runtime.request("frontend", { attached }, 12_000);
+      } catch (error) {
+        if (!this.closed && this.active === runtime && this.activeIncarnation === incarnation)
+          throw error;
+      }
+    }
+    this.changed();
+  }
   private cancelHolds() {
     this.microphone.releaseUnmute("frontend");
     this.speaker.releaseUnmute("frontend");
@@ -892,13 +924,13 @@ export class RuntimeController implements ControlBackend {
   syncMute() {
     if (this.phase === "ready" || this.phase === "starting")
       this.active?.notify("mute", {
-        mic: this.microphone.effectiveMuted,
-        speaker: this.speaker.effectiveMuted,
+        mic: !this.frontendAttached || this.microphone.effectiveMuted,
+        speaker: !this.frontendAttached || this.speaker.effectiveMuted,
       });
     this.changed();
   }
   clientMedia(message: ClientMediaMessage): void {
-    if (this.closed || !this.active) return;
+    if (this.closed || !this.active || !this.frontendAttached) return;
     const parsed = clientMediaMessageSchema.safeParse(message);
     if (!parsed.success) return;
     this.active.notify("client-media", parsed.data);
@@ -984,6 +1016,8 @@ export async function createCall(
   changed: () => void,
   options: {
     onMedia?(message: ServerMediaMessage): void;
+    /** Server sessions may start without a media owner. Standalone fixtures default attached. */
+    frontendAttached?: boolean;
   } = {},
 ): Promise<{ controller: RuntimeController; close(): Promise<void> }> {
   const instanceId = randomUUID();

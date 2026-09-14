@@ -114,7 +114,7 @@ export async function discoverThreadMonitor(
   });
   if (workspace === undefined) {
     if (!server) return empty("offline");
-    if (!server.busy) return empty("waiting");
+    if (!server.busy && !server.threadId) return empty("waiting");
     if (!server.workspace || !server.threadId) return empty("starting");
     workspace = server.workspace;
     threadId ??= server.threadId;

@@ -67,19 +67,24 @@ notification Hang up end it. See [call navigation](android-call-navigation.md).
 
 | Method | Parameters | Authority / effect |
 | --- | --- | --- |
-| `discover` | none | Read-only busy/workspace/thread discovery |
+| `discover` | none | Read-only media-owner plus retained workspace/thread discovery |
 | `observe` | none | Read-only lifecycle snapshot and subsequent observations; cannot become owner |
-| `call` | `{clientId: UUID}` | Reserve one exclusive call until this connection closes |
+| `call` | optional `{clientId: UUID}` | Create the lazy workspace session if needed, then reserve its one media attachment until this connection closes |
 | `input` | `{action:"mute",target:"mic"|"speaker",muted:boolean}` or `{action:"hold"|"release"}` | Owner only; update server-authoritative mute gates |
 | `client-media` | Media message below | Owner only; session-correlated signaling to active runtime |
 
-Call acceptance means reservation, not live audio. `state.phase` progresses
+Call acceptance means media reservation, not a new backend session or live audio.
+The first accepted frontend lazily starts the server's workspace session; later
+frontends attach to that retained session. `clientId` is optional correlation and
+a fresh value is allowed; it is not continuation identity. `state.phase` progresses
 through `waiting-ready`, `negotiating`, `live`, `failed`, `stopped`.
 `state.available` indicates call availability; each channel has persistent
 `muted` and computed `effectiveMuted`. Only `effectiveMuted` drives devices.
 Observers receive `availability: idle|connected|closing|unavailable`, exact
-owner correlation and verified conversation identity. A closing call must finish
-cleanup before a successor is admitted; a cleanup failure poisons admission.
+owner correlation and verified conversation identity. `idle` may include the
+retained workspace/thread identity while no media owner is attached. A closing
+attachment must finish realtime teardown before a successor is admitted; a detach
+failure poisons admission until server shutdown.
 Local call observations also include optional `generation`, incremented before
 runtime replacement so the terminal composition can recover its attachment panes.
 This field does not change the media state or the Android call protocol.
@@ -89,8 +94,9 @@ observed native work on the root and verified direct coding-agent children,
 without tool text, transcripts or thread identifiers. Known work takes priority;
 incomplete observations remain unknown. Blocked means waiting for approval or
 input, not productive Thinking. This does not claim access to model cognition.
-Runtime replacement discards the old observation; voice-only renewal preserves
-activity while its coding runtime survives. Android clears it on call/media loss.
+Runtime replacement discards the old observation; frontend detach and voice-only
+renewal preserve backend activity while its coding runtime survives. Android may
+clear its displayed activity on media loss until it attaches again.
 
 ## Media negotiation
 
@@ -111,16 +117,27 @@ The server serializes native offers, correlates pending sessions, bounds retries
 and renews before the upstream ceiling. A client may retain one live peer and one
 pending peer; replace the live peer only after the successor connects. Old
 session messages and completions are ignored. Runtime replacement changes the
-media session but preserves call ownership, exact conversation and transcripts.
+media session when attached but preserves frontend ownership, exact conversation
+and transcripts. Frontend detach closes realtime voice without replacing the
+native runtime.
 
 Local microphone and speaker start effectively muted. A client disconnect must
 immediately mute, stop capture/playback and close every peer even if the server
 is unavailable. Close during permission or SDP setup must fence late completions.
-Call reconnect is explicit: never replay controls, prompts or speech automatically.
+The server also releases transient holds and stops its realtime voice session,
+while retaining native work and persistent mute assignments. Reattachment is
+explicit, negotiates a fresh peer, may use a fresh clientId, and never replays
+controls, prompts, SDP or speech. Successful detach requires acknowledgement of
+the native realtime stop, after which no realtime speech exists while detached.
+A refusal or timeout makes the backend stop outcome unknown and blocks another
+media owner until server restart; the disconnected client still closes its devices.
 
 ## Preserved interfaces
 
 Lifecycle restart/redial, native interaction and transcripts retain their existing
 controller, attachment and event APIs. They are not arbitrary client-side Codex
-access. A future native Android UI can implement the media contract without
+access. Redial and immediate voice application require a current frontend owner;
+runtime restart and `new_session` remain intentional native replacement operations
+and may run while detached. Server shutdown closes the retained workspace session
+and all endpoints. A future native Android UI can implement the media contract without
 porting the terminal renderer, the browser page or server internals.

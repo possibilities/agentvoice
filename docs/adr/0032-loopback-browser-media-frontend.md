@@ -6,6 +6,11 @@ topology or restoring the remote console retired by [ADR 0002](0002-remote-conso
 The terminal-media asymmetry below is superseded by [ADR 0033](0033-client-owned-native-media.md): both clients now
 own media. This ADR still governs the same-device browser proof's security boundary.
 
+The page-loss teardown described below is superseded by
+[ADR 0053](0053-retain-workspace-session-across-frontend-detach.md): the browser
+still disposes its media and ownership, while the server retains the workspace
+session and native work.
+
 ## Decision
 
 `agentvoice phone` is a second call-owning frontend for a browser on the same

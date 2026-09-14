@@ -136,11 +136,14 @@ async function until(predicate: () => boolean) {
   expect(predicate()).toBe(true);
 }
 
-test("coding activity reaches frontend clients and survives voice-only changes but not replacement or disconnect", async () => {
+test("coding activity survives frontend reconnect and voice-only changes, then resets on runtime replacement", async () => {
   const directory = mkdtempSync(join(tmpdir(), "av-coding-"));
   const callbacks: Array<(method: string, params: unknown) => void> = [];
+  const frontendAttachments: boolean[] = [];
+  let calls = 0;
   let controller!: RuntimeController;
   const server = new VoiceServer(frontendSocketPath(directory), async (changed) => {
+    calls++;
     controller = new RuntimeController({
       instanceId: "coding",
       stateDir: directory,
@@ -157,7 +160,11 @@ test("coding activity reaches frontend clients and survives voice-only changes b
         callbacks.push(event);
         const process = {
           pid: 100 + callbacks.length,
-          request: async (method: string) => {
+          request: async (method: string, params?: unknown) => {
+            if (method === "frontend") {
+              frontendAttachments.push((params as { attached: boolean }).attached);
+              return null;
+            }
             if (method === "preflight") return { workspace: directory, buildId: "test" };
             if (method === "activate") {
               await lease("root");
@@ -180,6 +187,7 @@ test("coding activity reaches frontend clients and survives voice-only changes b
     return {
       state: () => controller.state(),
       start: () => controller.start(),
+      setFrontendAttached: (attached) => controller.setFrontendAttached(attached),
       command() {},
       close: () => controller.shutdown(),
     };
@@ -195,6 +203,24 @@ test("coding activity reaches frontend clients and survives voice-only changes b
     await until(() => client!.state().codingActivity === "idle");
     emit("mailbox", { kind: "inventory", inventory: children(2) });
     await until(() => client!.state().codingActivity === "working");
+    const retained = controller;
+    const retainedIdentity = {
+      workspace: controller.status().workspace,
+      threadId: controller.status().threadId,
+    };
+    await client.close();
+    await until(() => frontendAttachments.includes(false));
+    expect(controller).toBe(retained);
+    expect(controller.state().codingActivity).toBe("working");
+    client = await connectFrontend(server.path);
+    await until(() => client!.state().codingActivity === "working");
+    expect(calls).toBe(1);
+    expect(controller).toBe(retained);
+    expect({
+      workspace: controller.status().workspace,
+      threadId: controller.status().threadId,
+    }).toEqual(retainedIdentity);
+    expect(frontendAttachments).toEqual([true, false, true]);
     emit("mailbox", { kind: "inventory", inventory: children(3, true) });
     await until(() => client!.state().codingActivity === "blocked");
     emit("mailbox", { kind: "gap", reason: "inventory" });

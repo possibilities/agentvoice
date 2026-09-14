@@ -34,10 +34,13 @@ assert(address && typeof address !== "string");
 const endpoint = `wss://localhost:${address.port}/v2/client`;
 let starts = 0;
 let closes = 0;
+let creates = 0;
+const attachments: boolean[] = [];
 let received = 0;
 let sendMedia: ((message: ServerMediaMessage) => void) | undefined;
 const local = new VoiceServer(frontendSocketPath(root), async (_changed, _params, outgoing) => {
   sendMedia = outgoing;
+  creates++;
   return {
     state: () => ({
       available: true,
@@ -55,6 +58,9 @@ const local = new VoiceServer(frontendSocketPath(root), async (_changed, _params
     command() {},
     clientMedia: () => {
       received++;
+    },
+    setFrontendAttached: async (attached: boolean) => {
+      attachments.push(attached);
     },
   };
 });
@@ -79,9 +85,11 @@ try {
     assert.equal(starts, 0);
   } else {
     const client = await connectFrontend(profile);
-    await until(() => starts === 1);
+    await until(() => starts === 1 && attachments.length === 1);
+    assert.equal(creates, 1);
     await client.close();
-    await until(() => closes === 1);
+    await until(() => attachments.at(-1) === false);
+    assert.equal(closes, 0);
     const frames: ServerMediaMessage[] = [];
     browser = runBrowserFrontend(undefined, {
       connection: profile,
@@ -98,7 +106,9 @@ try {
         ws.addEventListener("message", (event) => frames.push(JSON.parse(String(event.data))));
       },
     });
-    await until(() => starts === 2);
+    await until(() => attachments.length === 3);
+    assert.equal(starts, 1);
+    assert.equal(creates, 1);
     const sessionId = crypto.randomUUID();
     sendMedia!({ type: "prepare", sessionId });
     await until(() =>
@@ -107,21 +117,28 @@ try {
     ws!.send(JSON.stringify({ type: "connected", sessionId }));
     await until(() => received === 1);
     ws!.close();
-    await until(() => closes === 2);
+    await until(() => attachments.length === 4 && attachments.at(-1) === false);
+    assert.equal(closes, 0);
     const connectionsBeforeLocal = tlsConnections;
     ws = new WebSocket(`${browserUrl.replace("http:", "ws:")}ws?server=local`, {
       headers: { Origin: new URL(browserUrl).origin },
     });
-    await until(() => starts === 3);
+    await until(() => attachments.length === 5);
+    assert.equal(starts, 1);
+    assert.equal(creates, 1);
     assert.equal(
       tlsConnections,
       connectionsBeforeLocal,
       "Local selection must not connect over TLS",
     );
     ws.close();
-    await until(() => closes === 3);
+    await until(() => attachments.length === 6 && attachments.at(-1) === false);
+    assert.deepEqual(attachments, [true, false, true, false, true, false]);
+    assert.equal(closes, 0);
     abort.abort();
     await browser;
+    await local.close();
+    assert.equal(closes, 1);
   }
   console.log("TLS verification and client lifecycle passed");
 } finally {

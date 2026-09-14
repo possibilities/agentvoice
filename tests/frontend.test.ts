@@ -23,6 +23,7 @@ function fakeCall(changed: () => void) {
   let phase: FrontendState["phase"] = "waiting-ready";
   let starts = 0;
   let closes = 0;
+  const attachments: boolean[] = [];
   const call: Call = {
     state: () => ({
       available: closes === 0,
@@ -40,6 +41,11 @@ function fakeCall(changed: () => void) {
       closes++;
       phase = "stopped";
     },
+    setFrontendAttached: async (attached) => {
+      attachments.push(attached);
+      if (!attached) mic.releaseUnmute("frontend");
+      changed();
+    },
     command: (command) => {
       if (command.action === "mute")
         (command.target === "mic" ? mic : speaker).setMuted(command.muted);
@@ -48,10 +54,10 @@ function fakeCall(changed: () => void) {
       changed();
     },
   };
-  return { call, mic, speaker, starts: () => starts, closes: () => closes };
+  return { call, mic, speaker, attachments, starts: () => starts, closes: () => closes };
 }
 
-test("server waits, grants one call, releases PTT on disconnect and accepts a subsequent call", async () => {
+test("server retains one call across frontend reconnects, releases PTT, and closes it once", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-frontend-"));
   const path = frontendSocketPath(root, root);
   const calls: ReturnType<typeof fakeCall>[] = [];
@@ -80,14 +86,17 @@ test("server waits, grants one call, releases PTT on disconnect and accepts a su
     client.command({ action: "hold" });
     await until(() => !client!.state().mic.effectiveMuted);
     await client.close();
-    await until(() => calls[0]!.closes() === 1);
+    await until(() => calls[0]!.attachments.includes(false));
     expect(calls[0]!.mic.effectiveMuted).toBe(true);
+    expect(calls[0]!.closes()).toBe(0);
     second = await connectFrontend(path);
     await until(() => second!.state().phase === "live");
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.starts()).toBe(1);
+    expect(calls[0]!.attachments).toEqual([true, false, true]);
     await server.close();
     await second.done;
-    expect(calls[1]!.closes()).toBe(1);
+    expect(calls[0]!.closes()).toBe(1);
   } finally {
     await client?.close();
     await second?.close();
@@ -96,7 +105,7 @@ test("server waits, grants one call, releases PTT on disconnect and accepts a su
   }
 });
 
-test("disconnect during asynchronous call creation prevents startup and reserves the slot until cleanup", async () => {
+test("startup disconnect retains its call and a later frontend reuses it", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-frontend-"));
   const created = Promise.withResolvers<Call>();
   const called = Promise.withResolvers<void>();
@@ -115,8 +124,17 @@ test("disconnect during asynchronous call creation prevents startup and reserves
       connectFrontend(server.path, () => {}, undefined, { timeoutMs: 20 }),
     ).rejects.toThrow("cleanup");
     created.resolve(call.call);
-    await until(() => call.closes() === 1);
-    expect(call.starts()).toBe(0);
+    await until(() => call.attachments.includes(false));
+    expect(call.starts()).toBe(1);
+    expect(call.closes()).toBe(0);
+    const second = await connectFrontend(server.path);
+    await until(() => second.state().phase === "live");
+    expect(call.attachments).toEqual([false, true]);
+    await second.close();
+    await until(() => call.attachments.at(-1) === false);
+    expect(call.closes()).toBe(0);
+    await server.close();
+    expect(call.closes()).toBe(1);
   } finally {
     created.resolve(call.call);
     await server.close();
@@ -124,14 +142,80 @@ test("disconnect during asynchronous call creation prevents startup and reserves
   }
 });
 
-test("disconnect interrupts activation and server waits for complete teardown", async () => {
+test("a frontend can retry call creation after the factory rejects", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-create-retry-"));
+  const errors: string[] = [];
+  let attempts = 0;
+  const successful = fakeCall(() => {});
+  const server = new VoiceServer(
+    frontendSocketPath(root, root),
+    async () => {
+      if (++attempts === 1) throw new Error("temporary creation failure");
+      return successful.call;
+    },
+    (message) => errors.push(message),
+  );
+  try {
+    await server.start();
+    const first = await connectFrontend(server.path);
+    await first.done;
+    await until(() => errors.some((message) => message.includes("temporary creation failure")));
+
+    const second = await connectFrontend(server.path);
+    await until(() => second.state().phase === "live");
+    expect(attempts).toBe(2);
+    expect(successful.starts()).toBe(1);
+    await second.close();
+  } finally {
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("server shutdown waits for call creation and closes the late call without attaching it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-create-shutdown-"));
+  const creating = Promise.withResolvers<Call>();
+  const entered = Promise.withResolvers<void>();
+  const call = fakeCall(() => {});
+  const server = new VoiceServer(frontendSocketPath(root, root), async () => {
+    entered.resolve();
+    return creating.promise;
+  });
+  try {
+    await server.start();
+    const client = await connectFrontend(server.path);
+    await entered.promise;
+    let finished = false;
+    const closing = server.close().then(() => {
+      finished = true;
+    });
+    await client.done;
+    await Bun.sleep(10);
+    expect(finished).toBe(false);
+    creating.resolve(call.call);
+    await closing;
+    expect(call.attachments).toEqual([false]);
+    expect(call.attachments).not.toContain(true);
+    expect(call.starts()).toBe(0);
+    expect(call.closes()).toBe(1);
+    expect(existsSync(server.path)).toBe(false);
+  } finally {
+    creating.resolve(call.call);
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("disconnect waits for media detach while server shutdown closes the retained call", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-frontend-"));
   const boot = Promise.withResolvers<void>();
   const stopping = Promise.withResolvers<void>();
   const stopped = Promise.withResolvers<void>();
   const call = fakeCall(() => {});
   call.call.start = () => boot.promise;
-  call.call.close = async () => {
+  call.call.setFrontendAttached = async (attached) => {
+    call.attachments.push(attached);
+    if (attached) return;
     stopping.resolve();
     await stopped.promise;
     boot.resolve();
@@ -140,6 +224,7 @@ test("disconnect interrupts activation and server waits for complete teardown", 
   try {
     await server.start();
     const client = await connectFrontend(server.path);
+    await until(() => call.attachments.includes(true));
     await client.close();
     await stopping.promise;
     await expect(
@@ -153,6 +238,8 @@ test("disconnect interrupts activation and server waits for complete teardown", 
     expect(closed).toBe(false);
     stopped.resolve();
     await closing;
+    expect(call.attachments).toEqual([true, false]);
+    expect(call.closes()).toBe(1);
   } finally {
     stopped.resolve();
     boot.resolve();
@@ -280,14 +367,16 @@ test("server recovers a private stale socket left by an exited owner", async () 
   }
 });
 
-test("a rejected startup cleans up and returns the server to waiting", async () => {
+test("a rejected retained startup detaches the frontend without creating a replacement call", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-failed-call-"));
   let attempts = 0;
+  let retained: ReturnType<typeof fakeCall> | undefined;
   const errors: string[] = [];
   const server = new VoiceServer(
     frontendSocketPath(root, root),
     async (changed) => {
-      const call = fakeCall(changed).call;
+      retained = fakeCall(changed);
+      const call = retained.call;
       if (++attempts === 1)
         call.start = async () => {
           throw new Error("startup refused");
@@ -300,26 +389,28 @@ test("a rejected startup cleans up and returns the server to waiting", async () 
     await server.start();
     const first = await connectFrontend(server.path);
     await first.done;
+    await until(() => errors.some((message) => message.includes("Frontend attachment failed")));
+    expect(retained?.attachments).toEqual([true, false]);
     const second = await connectFrontend(server.path);
-    await until(() => second.state().phase === "live");
-    await second.close();
-    expect(attempts).toBe(2);
-    expect(errors).toEqual(["Call failed: Error: startup refused"]);
+    await second.done;
+    expect(attempts).toBe(1);
+    expect(errors).toContain("Session startup failed: Error: startup refused");
+    expect(errors).toContain("Frontend attachment failed: Error: startup refused");
   } finally {
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("cleanup failure prevents a new call even after the frontend disconnects", async () => {
+test("media detach failure poisons admission while retaining workspace work", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-cleanup-failure-"));
   const errors: string[] = [];
   const server = new VoiceServer(
     frontendSocketPath(root, root),
     async (changed) => ({
       ...fakeCall(changed).call,
-      close: async () => {
-        throw new Error("owned child survived");
+      setFrontendAttached: async (attached) => {
+        if (!attached) throw new Error("media peer survived");
       },
     }),
     (message) => errors.push(message),
@@ -331,21 +422,19 @@ test("cleanup failure prevents a new call even after the frontend disconnects", 
     await client.close();
     await until(() => errors.length === 1);
     await expect(connectFrontend(server.path)).rejects.toThrow("unavailable");
-    expect(errors[0]).toContain("cleanup failed");
+    expect(errors[0]).toContain("Media detach failed; workspace work is retained");
   } finally {
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("API restart retains the frontend and mute preference; disconnect cancels an in-flight replacement", async () => {
+test("API restart retains the call and a disconnect during replacement leaves it reusable", async () => {
   const { RuntimeController } = await import("../src/runtime-control/controller.ts");
   const { parseArgs } = await import("../src/main.ts");
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-frontend-restart-")));
   const replacement = Promise.withResolvers<void>();
   const entering = Promise.withResolvers<void>();
-  const stopping = Promise.withResolvers<void>();
-  const cleanup = Promise.withResolvers<void>();
   const commands: Array<{ incarnation: number; method: string; params: unknown }> = [];
   let controller!: InstanceType<typeof RuntimeController>;
   let closed = false;
@@ -362,19 +451,13 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
       control: { name: "agentvoice_control", tools: [], server: {}, env: {} },
       lease: () => () => {},
       changed,
+      frontendAttached: false,
       spawn: (incarnation, event, lease) => ({
         pid: incarnation,
         nativePid: undefined,
         exited: Promise.resolve(),
         notify: (method, params) => commands.push({ incarnation, method, params }),
-        stop: async () => {
-          if (incarnation === 3) {
-            stopping.resolve();
-            await cleanup.promise;
-            replacement.resolve();
-          }
-          return false;
-        },
+        stop: async () => false,
         request: async <T>(method: string, params: unknown): Promise<T> => {
           commands.push({ incarnation, method, params });
           if (method === "preflight") return { workspace: root, buildId: "fake" } as T;
@@ -404,6 +487,7 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
         await controller.shutdown();
         closed = true;
       },
+      setFrontendAttached: (attached) => controller.setFrontendAttached(attached),
       command: (command) => {
         if (command.action === "mute")
           (command.target === "mic" ? controller.microphone : controller.speaker).setMuted(
@@ -416,6 +500,7 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
     };
   });
   let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let successor: Awaited<ReturnType<typeof connectFrontend>> | undefined;
   try {
     await server.start();
     client = await connectFrontend(server.path);
@@ -439,28 +524,41 @@ test("API restart retains the frontend and mute preference; disconnect cancels a
     expect(
       commands.find((command) => command.incarnation === 2 && command.method === "activate")
         ?.params,
-    ).toEqual({ threadId: "same-thread", mute: { mic: true, speaker: false } });
+    ).toEqual({
+      threadId: "same-thread",
+      frontendAttached: true,
+      mute: { mic: true, speaker: false },
+    });
     expect(closed).toBe(false);
     client.command({ action: "mute", target: "speaker", muted: true });
     await until(() => controller.speaker.muted);
-    await restart("disconnect-during-restart");
+    const replacing = restart("disconnect-during-restart");
     await entering.promise;
     await client.close();
-    await stopping.promise;
     expect(closed).toBe(false);
-    await expect(
-      connectFrontend(server.path, () => {}, undefined, { timeoutMs: 20 }),
-    ).rejects.toThrow("cleanup");
-    cleanup.resolve();
-    await until(() => closed);
-    expect(controller.status().currentOperation?.phase).toBe("failed");
+    successor = await connectFrontend(server.path);
+    replacement.resolve();
+    await replacing;
+    await until(() => controller.status().currentOperation?.phase === "ready");
+    expect(closed).toBe(false);
+    expect(controller.status().currentOperation?.phase).toBe("ready");
     expect(
-      commands.some((command) => command.incarnation === 3 && command.method === "enable-media"),
-    ).toBe(false);
+      commands.some(
+        (command) =>
+          command.incarnation === 3 &&
+          command.method === "frontend" &&
+          (command.params as { attached?: boolean }).attached === false,
+      ),
+    ).toBe(true);
+    await until(() => successor!.state().phase === "live");
+    expect(controller.status()).toMatchObject({ generation: 3, threadId: "same-thread" });
+    await successor.close();
+    await server.close();
+    expect(closed).toBe(true);
   } finally {
-    cleanup.resolve();
     replacement.resolve();
     await client?.close();
+    await successor?.close();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -498,7 +596,7 @@ test("default server CLI creates its generation and waits on the stable endpoint
   }
 });
 
-test("read-only attachment discovery retains active workspace while default selection advances", async () => {
+test("attachment discovery retains detached call identity while default selection advances", async () => {
   const { attachmentSelection } = await import("../src/attachment/command.ts");
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-pinned-")));
   let newest = root;
@@ -516,9 +614,14 @@ test("read-only attachment discovery retains active workspace while default sele
     await server.start();
     client = await connectFrontend(frontendSocketPath(root));
     newest = "/a/newer/workspace";
+    await client.close();
     const selected = await attachmentSelection(root);
-    expect(selected).toMatchObject({ workspace: root, threadId: "pinned-thread", active: true });
-    expect(client.state().available).toBe(true);
+    expect(selected).toMatchObject({
+      workspace: root,
+      threadId: "pinned-thread",
+      active: true,
+      busy: false,
+    });
   } finally {
     await client?.close();
     await server.close();
@@ -526,7 +629,7 @@ test("read-only attachment discovery retains active workspace while default sele
   }
 });
 
-test("clients wait for cleanup, compete for one slot, and can cancel without starting a call", async () => {
+test("clients wait for media detach, compete for one attachment, and never replace retained work", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-cleanup-"));
   const stopping = Promise.withResolvers<void>();
   const cleanup = Promise.withResolvers<void>();
@@ -534,7 +637,9 @@ test("clients wait for cleanup, compete for one slot, and can cancel without sta
   const server = new VoiceServer(frontendSocketPath(root), async (changed) => {
     const fake = fakeCall(changed);
     if (++calls === 1)
-      fake.call.close = async () => {
+      fake.call.setFrontendAttached = async (attached) => {
+        fake.attachments.push(attached);
+        if (attached) return;
         stopping.resolve();
         await cleanup.promise;
       };
@@ -572,7 +677,7 @@ test("clients wait for cleanup, compete for one slot, and can cancel without sta
     for (const result of settled) if (result.status === "fulfilled") clients.push(result.value);
     expect(clients).toHaveLength(1);
     expect(settled.filter((result) => result.status === "rejected")).toHaveLength(1);
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   } finally {
     cleanup.resolve();
     for (const client of clients) await client.close();
@@ -581,7 +686,7 @@ test("clients wait for cleanup, compete for one slot, and can cancel without sta
   }
 });
 
-test("cleanup failure makes waiting clients fail without starting another call", async () => {
+test("media detach failure makes waiting clients fail without replacing retained work", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-cleanup-failure-"));
   const stopping = Promise.withResolvers<void>();
   const cleanup = Promise.withResolvers<void>();
@@ -591,10 +696,12 @@ test("cleanup failure makes waiting clients fail without starting another call",
     async (changed) => {
       calls++;
       const fake = fakeCall(changed);
-      fake.call.close = async () => {
+      fake.call.setFrontendAttached = async (attached) => {
+        fake.attachments.push(attached);
+        if (attached) return;
         stopping.resolve();
         await cleanup.promise;
-        throw new Error("cleanup failed");
+        throw new Error("media detach failed");
       };
       return fake.call;
     },

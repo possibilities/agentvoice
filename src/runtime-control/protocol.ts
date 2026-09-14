@@ -29,6 +29,7 @@ export interface RuntimeLaunch {
 }
 export interface RuntimeActivation {
   threadId?: string;
+  frontendAttached?: boolean;
   mute: { mic: boolean; speaker: boolean };
 }
 export interface IpcMessage {

@@ -210,6 +210,7 @@ async function harness() {
   const selected = { ...identity, workspace };
   let starts = 0;
   let closes = 0;
+  const attachments: boolean[] = [];
   const inputs: string[] = [];
   const status: ControlStatus = {
     protocolVersion: CONTROL_PROTOCOL_VERSION,
@@ -248,6 +249,9 @@ async function harness() {
         speaker: { muted: false, effectiveMuted: true },
       }),
       start: async () => {},
+      setFrontendAttached: async (attached) => {
+        attachments.push(attached);
+      },
       command: (input) => {
         inputs.push(input.action);
       },
@@ -266,6 +270,7 @@ async function harness() {
     server,
     starts: () => starts,
     closes: () => closes,
+    attachments,
     inputs,
     close: async () => {
       await server.close();
@@ -305,11 +310,14 @@ test("view waits without owning a call, follows pre-media identity, and disconne
     await stream;
     expect(h.starts()).toBe(1);
     expect(h.closes()).toBe(0);
+    expect(h.attachments).toEqual([true]);
     expect(h.inputs).toEqual([]);
   } finally {
     abort.abort();
     await stream.catch(() => {});
     await client?.close();
+    await until(() => h.attachments.at(-1) === false);
+    expect(h.attachments).toEqual([true, false]);
     await h.close();
   }
 });

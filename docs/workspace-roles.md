@@ -50,7 +50,8 @@ agentvoice role voice --workspace /absolute/project --voice maple
 agentvoice role voice --workspace /absolute/project --clear-voice
 ```
 
-The CLI saves for the next call or full runtime restart. Optional `--revision N`
+The CLI saves for the next full runtime restart, `new_session`, or server workspace
+session. Frontend reattachment alone does not reload it. Optional `--revision N`
 requires that revision still be current; otherwise it checks the revision read
 by the command. A raw `voice.extra.voice`, including null, makes managed voice
 editing fail instead of changing a masked value.
@@ -70,11 +71,12 @@ For an active database-backed call, read `agentvoice_status` and call MCP tool
 ```
 
 Use `role.desired.revision` from status. Null clears the managed selection to
-native resolution. `apply: "next-session"` saves without reconnecting. Codex
+native resolution. `apply: "next-session"` saves without reconnecting; it means
+the next runtime generation or server workspace session, not media reattachment. Codex
 validates voice availability; there is no local catalog or watcher.
 
 The controller commits the edit and retry receipt before returning acceptance.
-Immediate application replaces only the voice session, preserving the working
+Immediate application requires an attached frontend and replaces only the voice session, preserving the working
 child, leased thread, attachment and mute preferences. Pointer holds are released.
 Renewal cannot supersede an in-progress voice change. Ordinary redial and renewal
 use loaded settings, not pending database edits.

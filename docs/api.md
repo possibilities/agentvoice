@@ -3,10 +3,12 @@
 Control protocol **6** provides new session, status, voice redial and runtime restart with an
 optional handoff prompt, thread-mailbox opening, and persistent workspace voice selection. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
-and control/event endpoints across runtime replacements. The separate pointer
-frontend remains connected. Closing it ends the call and all its endpoints.
+and control/event endpoints across runtime replacements and frontend detach. A
+frontend owns only its media attachment; closing it stops realtime voice and
+leaves native work and these endpoints available until server shutdown.
 
-Versions 1–5 Unix frames are rejected. Rediscover endpoints for each new call.
+Versions 1–5 Unix frames are rejected. Rediscover endpoints for each new server
+workspace session, not for each frontend attachment.
 Runtime restart reloads runtime code and settings; it cannot upgrade the retained
 controller API. Restart the server process to load changed controller code.
 The frontend, event and native voice protocols are separate contracts.
@@ -87,8 +89,8 @@ AgentVoice neither auto-refuses them nor stores another approval queue. TUI resu
 overrides are stripped to preserve the live settings; explicit settings updates
 can change native permissions.
 
-Runtime restart and call shutdown revoke all grants before stopping
-media. Redial keeps them. Lost connections require explicit reattachment and do
+Runtime restart and server shutdown revoke all grants before teardown. Frontend
+detach and redial keep them. Lost attachment connections require explicit reattachment and do
 not replay input. See [ADR 0022](adr/0022-websocket-native-tui.md) for scope and
 [manual](manual.md#attach-a-stock-codex-tui) for launch instructions.
 
@@ -145,8 +147,8 @@ caller connection, event subscription, or pending request.
 
 `operationId` is an opaque caller-created value matching
 `[A-Za-z0-9][A-Za-z0-9._:-]*`, at most 128 characters. It is durable idempotency
-identity, not a JSON-RPC/socket request ID. `expectedInstanceId` binds a call to
-one controller, and `expectedGeneration` prevents a caller attached to a prior
+identity, not a JSON-RPC/socket request ID. `expectedInstanceId` binds a request to
+one workspace-session controller, and `expectedGeneration` prevents a caller attached to a prior
 runtime incarnation from bouncing a replacement runtime.
 
 ### Result shapes
@@ -196,14 +198,18 @@ returns the latest 16 through `recentOperations`, alongside `currentOperation`.
 Reusing an ID with identical immutable arguments returns the same latest
 operation, even when its recorded generation is now old. Reuse with different
 kind, scope, instance, generation, or handoff prompt (including omission) fails with `operation_conflict`. Concurrent
-mutations are serialized by the controller. A new frontend call does not adopt
-the old journal. A completed operation retains its `result` identity snapshot,
+mutations are serialized by the controller. Frontend detach and reattachment
+retain the journal. A completed operation retains its `result` identity snapshot,
 including the activated build and PID, even after later replacements.
+At the 256-operation bound, explicit server restart begins a new controller and
+journal; deleting retry history automatically would break immutable-ID recovery.
 
 `accepted` means durable acceptance only. `quiescing` stops the current voice
 runtime; `interrupted` records graceful shutdown; `forced` records deadline
 termination; `starting` starts a replacement; `ready` for a restart confirms it
-resumed the controller-bound conversation and reached live media. For redial,
+resumed the controller-bound conversation and reached live media when a frontend
+is attached. While detached, it confirms native runtime readiness and makes no
+realtime speech or audible-media claim. For redial,
 `ready` confirms that its exact successor voice connection reached live media.
 Failed, superseded, stopped, or timed-out negotiation fails that operation. Read
 `runtime.voicePhase` when present for voice state, while `runtime.phase` is
@@ -212,11 +218,12 @@ on later states. No state promises exactly-once execution. Cleanup verifies capt
 identities, including detached sessions; descendants orphaned entirely between
 ownership samples cannot safely be discovered after abrupt parent death.
 
-`agentvoice.redial` has scope `voice`: it reconnects voice/WebRTC on the same
-runtime and does not reload configuration, prompts, native code, or Codex.
+`agentvoice.redial` has scope `voice`: it requires an attached frontend, reconnects
+voice/WebRTC on the same runtime, and does not reload configuration, prompts,
+native code, or Codex.
 `agentvoice.restart` accepts only scope `runtime`: it replaces audio/WebRTC,
 native AgentVoice code, configuration/prompt snapshot, and owned Codex child
-under the retained call controller and separate frontend. Audio-only, Codex-only, PID-targeted, and
+under the retained workspace-session controller and separate frontend. Audio-only, Codex-only, PID-targeted, and
 arbitrary-thread restart scopes do not exist in version 6.
 
 ## Optional restart handoff
@@ -224,8 +231,9 @@ arbitrary-thread restart scopes do not exist in version 6.
 `agentvoice.new_session` uses the same durable operation and instance/generation
 fences, with scope `runtime` in its result. After successful preflight and old
 runtime cleanup it removes the unchanged workspace `.agentvoice-session` marker,
-clears the old mailbox, creates and saves a new thread and reconnects voice.
-`ready` confirms the new thread and media readiness. Preflight/cleanup failure
+clears the old mailbox, creates and saves a new thread and reconnects voice when
+a frontend is attached. `ready` confirms the new thread and runtime readiness;
+it confirms media readiness only when attached. Preflight/cleanup failure
 preserves the marker; failure after removal leaves either no marker or the
 newly saved thread, which a later runtime retry uses. Old history and transcripts
 remain, and mute preferences are preserved. The terminal composition reopens
@@ -251,7 +259,9 @@ ordinary restart behavior. Redial does not accept a handoff prompt.
 The controller privately journals the prompt and the selected workspace/thread
 before accepting the restart. It submits the prompt at most once after the
 replacement resumes that exact conversation, reaches live voice, and enables
-media with the retained mute preferences. Submission uses the owned Codex
+media with the retained mute preferences. Without an attached frontend there is
+no live voice, so handoff delivery records a not-ready failure rather than speaking
+or replaying later. Submission uses the owned Codex
 connection's native `turn/start`, with a labeled restart-handoff text input and
 a stable `clientUserMessageId`. Native `turn/start` starts an idle backing agent
 or steers an active regular turn; a handoff is not necessarily a dedicated new
@@ -277,7 +287,8 @@ not a secret-storage mechanism.
 Duplicate operation requests return the recorded result and never submit again.
 There is no automatic retry after uncertain acceptance, later readiness events,
 redials, or further restarts. A failed restart does not carry its prompt into an
-unrelated retry. A new frontend call does not adopt old handoffs. This API does not
+unrelated retry. Frontend detach and reattachment do not create a new journal or
+adopt work from another controller. This API does not
 provide a separate mailbox, queue, cancellation method, or persistent prompt edit.
 
 ## Streamable HTTP MCP projection
@@ -298,8 +309,8 @@ Zod validation and dispatch implementation:
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
 | `agentvoice_thread_mailbox_open` | `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` |
-| `agentvoice_redial` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice`, `apply` | saved/apply `ControlOperation` |
-| `agentvoice.redial` | `MutationRequest` |
+| `agentvoice_voice_set` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice`, `apply` |
+| `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
 | `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` and optional `handoffPrompt` |
 | `agentvoice_new_session` | `agentvoice.new_session` | `MutationRequest` |
 
@@ -336,9 +347,13 @@ ignore optional result fields they do not understand.
 
 `agentvoice server` binds a separate mode-0600 socket in the mode-0700
 `frontend/` directory, selected by a hash of the canonical workspace. Its version
-is 1. `agentvoice` sends `{v:1,type:"request",id:"1",method:"call"}` to begin
-one call. The server rejects additional callers while that call starts, runs or
-tears down. It opens no runtime, native child or audio while waiting.
+is 3. `agentvoice` sends a strict `call` request with an optional UUID `clientId`
+for correlation and owns the media attachment. A new attachment may use a fresh
+UUID; it is not backend continuation identity. The first accepted owner lazily creates the server's
+workspace session; a later owner attaches to the retained controller and may use
+a different clientId. The server rejects additional callers while an attachment
+starts, runs or detaches. Before the first attachment it opens no runtime, native
+child or audio. After detach it retains the runtime and native child but no media.
 
 Only the owning connection can send `input` with one of:
 
@@ -349,12 +364,16 @@ Only the owning connection can send `input` with one of:
 ```
 
 Strict validation runs before dispatch. The server publishes changed
-`{v:1,type:"state",state}` frames containing only `available`, connection `phase`,
-and each channel's persistent/effective mute booleans. No audio, volume samples,
-thread content, diagnostics or credentials cross this socket. Disconnect releases
-push-to-talk, stops the entire call and returns the server to waiting only after
-cleanup finishes. If cleanup cannot be established, the server refuses new calls
-until its process is restarted. There is no frontend reconnect or replay loop.
+`{v:3,type:"state",state}` frames with bounded media and coding-activity state;
+see [the client API](client-api.md) for the complete contract. No audio, volume
+samples, thread content, diagnostics or credentials cross this socket. Disconnect
+releases push-to-talk, forces effective mute, stops realtime voice and returns
+media admission to idle only after the native stop is acknowledged. It preserves persistent mute
+assignments, native work, controller endpoints and the pinned workspace/thread.
+If the stop is refused or times out, its outcome is unknown and the server reports
+the failure and refuses new attachments until its process is restarted. The
+disconnected client still closes local devices. A later client explicitly negotiates fresh media; there is
+no reconnect or replay loop.
 
 ## Thread mailbox opening
 
@@ -363,6 +382,9 @@ read-only event API. Unlike runtime mutations, mailbox openings are scoped to
 the controller instance and survive runtime generation changes. Reusing an
 operation ID returns the same batch; use a new ID for a new opening. The native
 MCP caller is correlated to an orchestrator tool item before consumption.
+The bounded opening cache survives frontend detach and runtime restart. If it is
+exhausted, use explicit `new_session` to clear the mailbox or restart the server;
+never discard cached results automatically because callers rely on idempotent recovery.
 
 ## Workspace voice selection
 
@@ -370,7 +392,9 @@ MCP caller is correlated to an orchestrator tool item before consumption.
 workspace role. Pass operationId, expectedInstanceId, expectedGeneration,
 expectedRoleRevision, voice (a bounded name or null to clear), and apply
 (`voice` or `next-session`). Save commits before asynchronous application.
-`voice` reconnects only the voice session; the working child and TUI remain.
+`voice` requires an attached frontend and reconnects only the voice session; the
+working child and TUI remain. `next-session` applies on the next explicit runtime
+replacement, `new_session`, or server lifetime, not on ordinary frontend reattachment.
 See [workspace roles](workspace-roles.md#voice-editing) for examples and retry,
 saved-versus-applied, failure and status contracts. The operation adds kind
 `voice-set` and a `voiceEdit` result; status optionally adds `role` with loaded

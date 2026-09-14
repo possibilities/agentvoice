@@ -128,7 +128,7 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
           expect(exit).toBe(1);
           expect(stdout).toBe("");
           expect(stderr).toContain(`Event protocol mismatch: controller uses ${version}`);
-          expect(stderr).toContain("close the frontend and start a new call");
+          expect(stderr).toContain("restart the server, then reconnect the frontend");
         } else {
           expect(exit).toBe(0);
           expect(stdout).toBe("user: Hello café\nassistant: Hi 👋\n");

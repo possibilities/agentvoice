@@ -19,14 +19,24 @@ selection, app-server omission fallback and deliberate AgentVoice policy; omissi
 alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
 
 **Server** — The `agentvoice server` process, supervised by a macOS user LaunchAgent
-or run manually, waiting on a private local socket. Each frontend owns one call;
-frontend disconnect ends that call and returns the server to waiting.
+or run manually, waiting on a private local socket. Its first frontend lazily
+creates one retained workspace session. Frontend detach ends realtime media,
+while server shutdown ends the workspace session and native work.
+
+**Workspace session** — The server-lifetime controller, runtime and exact native
+conversation created lazily by the first frontend. It pins one canonical workspace
+and retains the Codex child, verified native work, leases, gateway, mailbox,
+operation journal, transcripts and control/event endpoints across frontend detach.
+Only explicit runtime replacement, `new_session`, or server shutdown changes the
+parts named by those operations. _Avoid_: workspace session marker (the marker is
+only the persisted root-thread pointer).
 
 **Composition** — Bare `agentvoice`: one foreground smolmux process presenting the
 pointer frontend, voice transcript and stock agent attachment side by side. All
 three Apps use local PTYs and end with the smolmux process; there are no
 Companion-held Sessions. Ordinary App exit/failure ends the Composition and its
-call. Runtime replacement reopens exact-thread attachments after live media;
+media attachment; native work remains in the server's workspace session. Runtime
+replacement reopens exact-thread attachments after live media;
 input is never replayed. Attachments initially start only after this launch's call is live.
 
 **Attachment view** — `agentvoice --attach`, run on desktop: two local PTYs for
@@ -38,22 +48,28 @@ and generation; disconnect/replacement ends the view without replay. Native
 attachment readiness is independent of media readiness. See ADR 0036.
 
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
-starts a call; its only controls are microphone mute, speaker mute and pointer
+attaches media to the retained workspace session; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,
-server configuration or thread leases. Both clients use frontend API v2 ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
+server configuration or thread leases. Both clients use frontend API v3 ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
+
+**Frontend attachment** — One exclusive, disposable media owner connected to the
+workspace session. Disconnect releases its hold and closes realtime voice and
+client devices, without stopping the native runtime or work. A later attachment
+may use a fresh clientId and negotiates fresh media; there is no replay or
+automatic reconnect. _Avoid_: controller lifetime, native session.
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;
 the page requests microphone access only after an explicit tap and owns capture,
-playback, codecs and WebRTC. Its WebSocket owns the call lifecycle. With a private
+playback, codecs and WebRTC. Its WebSocket owns the media-attachment lifecycle. With a private
 `--connect` profile, the bridge connects to the desktop WSS API instead of local
 Termux; browser content and credentials remain separated. See ADRs [0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0034](docs/adr/0034-authenticated-client-network.md).
 
-**AgentVoice controller** — The server-owned authority for one call: exact
-workspace/thread identity, thread leases, operation journal, private control and
-event transports retained across runtime replacements.
+**AgentVoice controller** — The server-owned authority for one workspace session:
+exact workspace/thread identity, thread leases, operation journal, private control
+and event transports retained across runtime replacements and frontend detach.
 
-**Voice runtime** — The disposable child of a call controller, owning
+**Voice runtime** — The replaceable child of a workspace-session controller, owning
 configuration/prompt/role loading and its stock Codex child. For every call the
 client owns media and the runtime relays bounded SDP signaling only. Audio never crosses the frontend
 socket or controller IPC.
@@ -70,7 +86,7 @@ owned child/process group.
 orchestrator thread and its verified native descendants through a guarded local
 gateway. It follows native work and
 submits typed input without owning voice or the child. Always available through
-`agentvoice attach agent`; no launch opt-in or full-access requirement. Runtime restart, call shutdown and native loss revoke it; redial and automatic
+`agentvoice attach agent`; no launch opt-in or full-access requirement. Runtime restart, server shutdown and native loss revoke it; frontend detach, redial and automatic
 renewal preserve it. Joining preserves the live
 thread's settings; explicit native setting changes and human answers flow through.
 
@@ -87,9 +103,9 @@ with a refusal. A private controller bootstrap issues a short-lived admission
 ticket; its native listener credential is never given to the TUI. The grant stays
 bound to the root while the TUI navigates subagents. See ADRs [0022](docs/adr/0022-websocket-native-tui.md)/[0037](docs/adr/0037-descendant-tui-attachment.md).
 
-**Workspace** — The canonical existing root pinned for one call. Explicit
+**Workspace** — The canonical existing root pinned for one server workspace session. Explicit
 --workspace wins over configuration; otherwise the default server selects its
-current workspace directory at call start. Used for native conversation lookup
+current workspace directory when the first frontend starts the lazy session. Used for native conversation lookup
 and all AgentVoice-created threads. Not a sandbox or necessarily a Git worktree.
 
 **Workspace base** — `$XDG_STATE_HOME/agentvoice/default/workspaces/` (falling back
@@ -98,8 +114,9 @@ workspace generations. The `default` namespace reserves room for named voice age
 
 **Current workspace directory** — The generation with the newest sortable UTC
 timestamp-and-UUID directory name inside the workspace base. Created initially
-when absent, then selected afresh for each default call; file edits do not change
-selection and active calls retain their selected directory.
+when absent, then selected afresh for each default server lifetime when its first
+frontend creates the workspace session; file edits do not change selection and
+the retained session keeps its selected directory.
 
 **LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that
 starts the waiting default server at login and restarts it on exit. Its private,
@@ -150,13 +167,15 @@ different reference, separate from the work model and --fast. Initial items
 require effective v3.
 
 **Workspace session marker** — `.agentvoice-session` inside the canonical workspace,
-containing the exact native main-thread ID as plain text. Calls always resume it;
+containing the exact native main-thread ID as plain text. New server workspace sessions resume it;
 absence creates and saves a thread. Invalid or unavailable saved history is an
-error. Deleting the marker selects a new session on the next call.
+error. Deleting the marker while no server session owns the workspace selects a
+new session on the next lazy server start.
 
 **New session** — An explicit MCP/API operation that preflights replacement, stops
 the old runtime, clears the workspace marker and mailbox, creates and saves a
-new main thread, and reconnects voice within the same frontend-owned call.
+new main thread, and reconnects voice when attached within the same retained
+workspace session.
 Native history and old transcripts remain. _Avoid_: redial (voice only).
 
 **Resume** — Native restoration of the workspace marker's exact main thread,
@@ -199,9 +218,9 @@ inherited unchanged from the launch environment. Codex resolves its default when
 unset. AgentVoice does not manage login, profile homes or account switching.
 
 **Runtime settings** — AgentVoice configuration and prompt contents read during
-runtime preflight and cached for that generation. Runtime restart and later calls
-reload files using the server's
-pinned launch arguments; each call pins its own canonical workspace.
+runtime preflight and cached for that generation. Explicit runtime restart,
+`new_session`, or a later server lifetime reloads files using the server's pinned
+launch arguments. Frontend detach and reattach do not reload them.
 
 **Startup config** — Explicit codex-config string array or repeatable -c /
 --codex-config key=value, forwarded as native Codex -c arguments. File entries
@@ -249,7 +268,8 @@ keeping the runtime, loaded settings, native thread and stock TUI attachment.
 
 **Runtime restart** — An MCP/API operation that preflights a replacement, stops
 the old runtime and resumes its exact leased thread with reloaded code/settings.
-The frontend and controller endpoints persist; active native work is interrupted.
+The controller endpoints persist, whether or not a frontend is attached; active
+native work is interrupted. Detached readiness does not imply live voice.
 
 **Restart handoff** — Optional caller-provided work submitted once after restart
 resumes the exact thread and reaches live media. Its separately journaled outcome
@@ -262,13 +282,13 @@ these retired implementations do not define its lifecycle.
 
 **Lifecycle feed** — The retained controller's read-only Unix event endpoint for
 current native thread state, inventory completeness, and runtime availability.
-It lasts for one call, projects only bounded metadata, and provides
+It lasts for one workspace session across frontend attachments, projects only bounded metadata, and provides
 sequence-watermarked snapshots rather than a conversation log. _Avoid_: pipe,
 control socket.
 
 **Live voice item stream** — Typed native realtime item starts, transcript deltas,
 and completions on the same read-only event endpoint. Preserves native identity
-and content on the event socket with bounded best-effort delivery; the call controller
+and content on the event socket with bounded best-effort delivery; the workspace-session controller
 also saves received speech in its voice transcript. No backfill or replay; lifecycle snapshots never supersede voice events.
 _Avoid_: transcript database, speech-history replay, delivery guarantee.
 
@@ -287,7 +307,7 @@ or items through the owned Codex child, scoped to an owned root and verified
 descendants. Native reads are not atomic cuts of the event stream; revision fences
 report observed overlap without inventing native snapshot guarantees.
 
-**Thread mailbox** — The call-controller-owned collection of pending completion
+**Thread mailbox** — The workspace-session-controller-owned collection of pending completion
 metadata for the orchestrator's direct native children. Opening returns and
 clears a batch; each child terminal turn immediately sends a count-only wake-up
 with a current working-child tally. It is not native child-result delivery or a
@@ -295,8 +315,8 @@ per-message read-receipt system.
 _Avoid_: worker registry, transcript store.
 
 
-**Voice transcript** — Automatic private JSONL observation of a call's native voice
+**Voice transcript** — Automatic private JSONL observation of a workspace session's native voice
 items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.
-Resumed conversations append to the same file; recordings survive call shutdown.
+Resumed conversations append to the same file; recordings survive server shutdown.
 `agentvoice attach voice` opens them with codex-viewer, independently of recording.
 This is observed text, not proof of what was heard, and never model context.

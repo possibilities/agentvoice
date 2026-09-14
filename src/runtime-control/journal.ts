@@ -40,7 +40,7 @@ export class OperationJournal {
   save(operation: JournalOperation): void {
     if (!this.records.has(operation.operationId) && this.records.size >= 256)
       throw new Error(
-        "Controller operation limit reached; quit and relaunch before further mutations",
+        "Controller operation limit reached; restart the server before further mutations",
       );
     const bytes = Buffer.from(`${JSON.stringify(operation)}\n`);
     let offset = 0;

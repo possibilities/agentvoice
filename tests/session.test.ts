@@ -167,6 +167,33 @@ describe("errors", () => {
     expect(calls.at(-2)?.kind).toBe("closed");
     expect(calls.at(-1)?.kind).toBe("ready");
   });
+
+  test.each([
+    {
+      name: "definitive refusal",
+      error: new AppServerError("stop refused", -32600),
+      lateCloseForwarded: true,
+    },
+    {
+      name: "ambiguous timeout",
+      error: new AppServerError("stop timed out", undefined, true),
+      lateCloseForwarded: false,
+    },
+  ])("strict shutdown rejects a $name and keeps its exact close attribution", async (value) => {
+    const { manager, startIds, kinds } = harness({
+      stopRealtime: () => Promise.reject(value.error),
+    });
+    await manager.handleOffer("detaching");
+    await expect(manager.shutdown(true)).rejects.toBe(value.error);
+
+    await manager.handleOffer("replacement");
+    manager.handleNotification("thread/realtime/started", {
+      realtimeSessionId: startIds.at(-1),
+    });
+    manager.handleNotification("thread/realtime/closed", { reason: "requested" });
+    expect(kinds().includes("closed")).toBe(value.lateCloseForwarded);
+    expect(kinds().includes("ready")).toBe(value.lateCloseForwarded);
+  });
 });
 
 describe("reset", () => {

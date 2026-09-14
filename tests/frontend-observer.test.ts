@@ -12,17 +12,26 @@ import {
 } from "../src/frontend/protocol.ts";
 import { VoiceServer } from "../src/frontend/server.ts";
 
-test("read-only observer gets current and future call identity without owning or closing a call", async () => {
+async function until(predicate: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!predicate() && Date.now() < deadline) await Bun.sleep(5);
+  expect(predicate()).toBe(true);
+}
+
+test("observer retains call identity across frontend disconnect and reconnect without owning it", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-observe-")));
   const path = frontendSocketPath(root);
   const id = randomUUID();
   let changed = () => {};
   let phase: FrontendState["phase"] = "negotiating";
   let closed = false;
+  let creates = 0;
+  const attachments: boolean[] = [];
   const server = new VoiceServer(path, async (notify) => {
+    creates++;
     changed = notify;
     return {
-      identity: () => ({ workspace: root, threadId: "thread" }),
+      identity: () => ({ workspace: root, threadId: "thread", generation: 7 }),
       state: () => ({
         available: true,
         codingActivity: "unknown" as const,
@@ -31,6 +40,9 @@ test("read-only observer gets current and future call identity without owning or
         speaker: { muted: false, effectiveMuted: false },
       }),
       start: async () => {},
+      setFrontendAttached: async (attached) => {
+        attachments.push(attached);
+      },
       close: async () => {
         closed = true;
       },
@@ -40,6 +52,7 @@ test("read-only observer gets current and future call identity without owning or
   const states: FrontendObservation[] = [];
   let observer: Awaited<ReturnType<typeof observeFrontend>> | undefined;
   let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let reconnected: typeof client;
   try {
     await server.start();
     observer = await observeFrontend(path, (state) => states.push(state));
@@ -61,6 +74,7 @@ test("read-only observer gets current and future call identity without owning or
       clientId: id,
       workspace: root,
       threadId: "thread",
+      generation: 7,
       state: { phase: "live" },
     });
     const second = await observeFrontend(path, () => {});
@@ -70,17 +84,33 @@ test("read-only observer gets current and future call identity without owning or
     expect(closed).toBe(false);
     await client.close();
     while (states.at(-1)?.busy && Date.now() < deadline) await Bun.sleep(5);
-    expect(states.at(-1)).toMatchObject({ busy: false, clientId: null, state: null });
+    expect(states.at(-1)).toMatchObject({
+      busy: false,
+      clientId: null,
+      workspace: root,
+      threadId: "thread",
+      generation: 7,
+      state: null,
+    });
+    expect(closed).toBe(false);
+    expect(attachments).toEqual([true, false]);
+    reconnected = await connectFrontend(path, () => {}, randomUUID());
+    await until(() => attachments.at(-1) === true);
+    expect(creates).toBe(1);
+    expect(states.at(-1)).toMatchObject({ workspace: root, threadId: "thread", generation: 7 });
+    await reconnected.close();
+    await server.close();
     expect(closed).toBe(true);
   } finally {
     observer?.socket.close();
     await client?.close();
+    await reconnected?.close();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("cleanup observation wait ends on server shutdown or observer disconnect", async () => {
+test("media detach observation wait ends on server shutdown or observer disconnect", async () => {
   for (const end of ["server", "observer"] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "av-observe-close-")));
     const stopping = Promise.withResolvers<void>();
@@ -95,10 +125,12 @@ test("cleanup observation wait ends on server shutdown or observer disconnect", 
       }),
       start: async () => {},
       command: () => {},
-      close: async () => {
+      setFrontendAttached: async (attached) => {
+        if (attached) return;
         stopping.resolve();
         await cleanup.promise;
       },
+      close: async () => {},
     }));
     let observer: Awaited<ReturnType<typeof observeFrontend>> | undefined;
     let shutdown: Promise<void> | undefined;

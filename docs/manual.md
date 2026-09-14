@@ -119,7 +119,9 @@ bridge holds the device grant and connects over verified WSS/Tailscale; the page
 and its media stay on the phone. No local Termux server is needed in that mode.
 Codex, workspace, configuration and transcripts belong to the desktop server.
 With `--connect`, the web Server selector can switch between Phone (Termux) and
-Desktop (Tailscale). Switching ends the call; Start voice begins a new one.
+Desktop (Tailscale). Switching detaches media from the prior server; Start voice
+creates a fresh media attachment on the selected server. Each server retains its
+own workspace session until it shuts down.
 The bridge remains running between calls so switching/retrying needs no new
 terminal command. Without `--connect`, the desktop option is disabled.
 Hold to talk stays visible but disabled until the microphone is muted and voice
@@ -155,17 +157,21 @@ The shared Agentwiki playbook explains this live design workflow for Android, we
 and native desktop apps. Retrieve it with
 `agentwiki get design-studio-playbook-for-android-web-and-native-apps`.
 
-One server and one active frontend are allowed per canonical workspace.
+One server workspace session and one active frontend attachment are allowed per canonical workspace.
 Local `agentvoice`, `agentvoice client` and `agentvoice phone` wait up to 30 seconds when the
-previous frontend has disconnected but its call is still cleaning up, displaying
-“Closing previous call…”. An active frontend still blocks a second call. Waiting
-does not reserve a call, reconnect a disconnected client, or retry a refused call.
+previous frontend has disconnected but media is still detaching, displaying
+“Detaching previous frontend…”. An active frontend still blocks a second owner. Waiting
+does not reserve media, reconnect a disconnected client, or retry a refused request.
 Network clients request admission once; busy/closing refusals require an explicit retry.
 This requires a server running the same frontend observation contract; update
-and restart an older server explicitly before using the updated client. Closing
+and restart an older server explicitly before using the updated client. The first
+accepted frontend lazily creates and pins the server's workspace session. Closing
 the terminal frontend, closing or navigating away from the phone page, or
-terminating its owning process ends the call, closes media and the owned Codex
-child, and returns the server to waiting. There are no
+terminating its owning process releases holds and closes client media. After the
+native realtime stop is acknowledged, the server retains the controller, runtime,
+Codex child, native work, gateway, mailbox and endpoints without realtime speech.
+A stop refusal or timeout reports an unknown outcome and blocks another frontend
+until server restart while retaining native work. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.
 The attached stock Codex TUI retains its own keyboard controls.
 The default endpoint is independent of the current workspace generation. Without
@@ -179,7 +185,8 @@ agentvoice service restart
 agentvoice service remove
 ```
 
-Restart ends an active call and returns the server to waiting. Removal unloads
+Restart ends any frontend media and the retained workspace session, then starts
+a new waiting server. Removal unloads
 only the owned LaunchAgent and removes its plist; workspace directories, logs,
 configuration, command installation and native history remain. The TUI does not
 automatically reconnect after server loss.
@@ -250,8 +257,9 @@ of conversation events, and page native thread/turn/item history without resumin
 threads or submitting work. Use `runtime.mainThreadId` and native parent links to
 select a conversation family. See the [conversation contract](conversations.md)
 for the methods and reconnect algorithm. Voice events remain live-only.
-Event clients must match the event protocol. A new call creates new event and
-control endpoints; rediscover them after a call ends.
+Event clients must match the event protocol. A new server workspace session creates
+new event and control endpoints. Frontend detach preserves them; rediscover after
+server restart.
 
 ### Child completion wake-ups
 
@@ -287,7 +295,8 @@ launchd ownership.
 
 ### Attach a stock Codex TUI
 
-Every active call supports stock Codex attachment from an additional terminal:
+Every active workspace session supports stock Codex attachment from an additional terminal,
+including while its frontend media is detached:
 
 ```sh
 # Server terminal, from this prepared checkout:
@@ -516,9 +525,10 @@ The initial empty generation is created atomically using the base's creation tim
 and a zero UUID, so concurrent initializers agree. Other namespaces are reserved
 for future named voice agents; there is no named-agent selector yet.
 
-The default server selects the current generation at each call start and pins it
-through runtime restarts. A later generation takes effect on the next call; old
-directories and native history remain. There is no reset, deletion or transcript
+The default server selects the current generation once when its first frontend
+creates the lazy workspace session and pins it through detach and runtime restarts.
+A later generation takes effect after server shutdown, when the next server
+lifetime receives its first frontend; old directories and native history remain. There is no reset, deletion or transcript
 cleanup operation. Native context policy is unchanged.
 
 An explicit CLI workspace selects a separate workspace socket; pass the same
@@ -529,22 +539,23 @@ Read-only discovery commands and `attach` still accept `--workspace <directory>`
 their omitted workspace remains the invoking directory.
 
 Each workspace keeps its current Codex thread ID in `.agentvoice-session`, a
-private plain-text file containing the ID and a newline. Every call resumes that
-exact thread with `thread/read` and `thread/resume`, including after client or
+private plain-text file containing the ID and a newline. Every server workspace
+session resumes that exact thread with `thread/read` and `thread/resume`, including after client or
 server restarts. There is no latest-history lookup. Native identity must still
 match this canonical workspace and an AgentVoice main thread.
 
-If the marker is absent, the next call creates a new thread and saves its ID
-before readiness. Delete the marker to start a new session on the next call.
-Deleting it during a call does not interrupt that call; ordinary runtime restart
-still retains its active thread. An invalid or unresumable marker reports an
+If the marker is absent, the next server workspace session creates a new thread
+and saves its ID before readiness. Delete the marker while the server has no
+workspace session to select a new thread for its next lazy start. Deleting it
+during a retained session does not interrupt that session, and frontend reattachment
+does not reread it; ordinary runtime restart still retains its active thread. An invalid or unresumable marker reports an
 error and stays intact. Native history, transcripts and workspace files remain
 untouched. Ephemeral threads are incompatible with persistent workspace sessions.
 
-For an immediate new session during a call, use the `agentvoice_new_session` MCP
+For an immediate new session in a retained workspace session, use the `agentvoice_new_session` MCP
 tool or `agentvoice.new_session` control API. It preflights a replacement, stops
 the old runtime and work, removes the marker, then creates and saves a new thread
-and reconnects voice. The frontend, workspace and mute preferences remain;
+and reconnects voice when a frontend is attached. The workspace, controller and mute preferences remain;
 the old thread's mailbox clears and transcripts stay separate. See [control API](api.md).
 
 `--resume`, `--continue`, `--fresh` and `--no-continue` are retired and report
@@ -569,13 +580,15 @@ It errors at load with removal guidance, as does the older `voice.quiet-resume`
 key. AgentVoice does not migrate or delete your configuration or saved history.
 See [ADR 0017](adr/0017-remove-spoken-history-replay.md) for the decision.
 
-Each frontend connection begins a new call using the server's selected workspace
-and session marker. Workspace and thread kernel locks serialize call ownership,
-including the first call before a thread ID exists.
+The first frontend connection begins the server's workspace session using the
+selected workspace and marker. Workspace and thread kernel locks remain held
+until server shutdown. Later frontend attachments use that retained identity.
 
-Closing a call stops voice and app-owned work and closes its Codex child.
-**Work does not continue after the call ends.** Native saved history remains
-available to a subsequent call; ephemeral/unpersisted threads cannot be resumed.
+Closing a frontend stops client media and, after acknowledged native stop,
+realtime voice. Native work continues in the retained Codex child. Explicit
+runtime restart or `new_session` interrupts the work those operations replace;
+server shutdown closes all owned work. Native saved history remains available to
+a later server session; ephemeral/unpersisted threads cannot be resumed.
 Workspace selection is not a memory or security sandbox.
 
 ## Features and controls
@@ -593,17 +606,18 @@ Workspace selection is not a memory or security sandbox.
   signaling cross the private frontend path. Automatic renewal maintains either
   connection without changing its conversation or configuration.
 - Server settings and prompt files load once per runtime generation. Runtime
-  restart or a later call reloads file contents; changing launch flags or the workspace requires a new server.
+  restart, `new_session`, or a later server lifetime reloads file contents;
+  frontend reattachment does not. Changing launch flags or the workspace requires a new server.
 
-Warnings appear in the server terminal. With `--debug`, private per-call logs
+Warnings appear in the server terminal. With `--debug`, private per-workspace-session logs
 also capture protocol/media details. Native item deltas remain available through
 the read-only event socket; the frontend does not display them.
 
-Call startup validates prompts and protocol before opening media. A terminal call
+Workspace-session startup validates prompts and protocol before opening media. A terminal attachment
 also validates native device readiness before its WebRTC offer; a phone call asks
 the browser to prepare its peer and never loads the native duplex library. Media
-failure closes the owned child; native conversation creation or resume may already
-have happened.
+failure closes client media; native conversation creation or resume may already
+have happened and the retained runtime may require explicit recovery.
 
 ## Configuration and prompts
 
@@ -702,8 +716,10 @@ metadata already saved in native history. `--fast`/`--no-fast` retain their expl
 launch-tier precedence.
 
 All AgentVoice settings, including `voice.name`, and prompt-file contents are
-read during call preflight and cached until the call ends. A later call reloads
-files using the server's launch arguments and pinned canonical workspace.
+read during runtime preflight and cached for that generation. Frontend detach
+and reattachment preserve them. Explicit runtime restart, `new_session`, or the
+next server workspace session reloads files using the server's launch arguments
+and pinned canonical workspace.
 
 ### Native voice protocol
 
@@ -816,8 +832,9 @@ tokens. Contents load once per runtime generation.
 
 A present name must load: an unreadable file, a directory or a broken link fails
 before Codex starts, even if a raw field would override the contents. Symlinks to
-regular files work. Contents are cached by the active runtime for the call,
-then reread by the next call. Session-boundary instructions and voice prompts ride every realtime start,
+regular files work. Contents are cached by the active runtime across frontend
+attachments, then reread by explicit runtime replacement, `new_session`, or a
+later server lifetime. Session-boundary instructions and voice prompts ride every realtime start,
 including automatic renewal. Explicit voice context items use raw `voice.extra.initialItems`,
 not prompt files; AgentVoice generates no history items of its own.
 
@@ -828,8 +845,8 @@ the retired `prompt-files` config section no longer load anything: a leftover fi
 produces a visible warning without being read, and the config key is an unknown
 option. Rename or remove them yourself; nothing is migrated or deleted. Removing
 an override does not erase earlier instructions/messages from a resumed native
-conversation; remove `.agentvoice-session` before the next call when testing the
-baseline. Native global and workspace instructions, skills, MCPs and hooks still
+conversation; use explicit `new_session`, or stop the server and remove
+`.agentvoice-session`, when testing the baseline. Native global and workspace instructions, skills, MCPs and hooks still
 apply, even to new conversations. AgentVoice does not automatically enable AgentStart skills
 or isolate native state; a [role](#roles) adds its own skills and MCP servers to
 this launch without changing what other Codex processes see.
@@ -1036,7 +1053,7 @@ configuration, services or other account tools are changed by this removal.
 Native conversation history stays in Codex's own store. AgentVoice state under
 `$XDG_STATE_HOME/agentvoice` (default `~/.local/state/agentvoice`) contains
 `default/workspaces/` generations, `default/service/` logs,
-`frontend/` default and explicit-workspace sockets, `thread-locks/`, private per-call controller
+`frontend/` default and explicit-workspace sockets, `thread-locks/`, private workspace-session controller
 discovery records under `control/`, and
 `runs/<time>-<pid>.log` with `--debug`. Every runtime also creates a
 private `native-ws-*` directory holding the owned listener token; normal runtime
@@ -1246,10 +1263,11 @@ session. Other realtime mutations remain unavailable through attachment.
 `allow-full-access` and `debug` are optional top-level booleans in `server.json`.
 Both default to false. `allow-full-access: true` uses the same permission-selector
 override as `--allow-full-access`, including native startup and thread requests;
-managed native requirements still apply. `debug: true` enables private per-call
+managed native requirements still apply. `debug: true` enables private per-workspace-session
 protocol/media logs. CLI `--allow-full-access` and `--debug` win over false in the
-file. New calls and explicit runtime restarts reload these settings; redial keeps
-the current runtime's settings. Model, effort and role retain their existing config keys.
+file. New server workspace sessions, explicit runtime restarts and `new_session`
+reload these settings; frontend reattachment and redial keep the current runtime's
+settings. Model, effort and role retain their existing config keys.
 
 
 ### Attach to the working agent or voice transcript

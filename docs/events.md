@@ -1,9 +1,10 @@
 # AgentVoice event socket
 
-Each server-owned call controller exposes a **separate read-only Unix socket**
+Each server-owned workspace-session controller exposes a **separate read-only Unix socket**
 for thread state, transient voice items, conversation observation and the thread mailbox. The event
-protocol remains 2; the separate control API uses protocol 4 for status, redial, restart and mailbox opening. A new
-call creates a new controller and socket, so rediscover after frontend disconnect.
+protocol remains 2; the separate control API uses protocol 6 for status, redial, restart and mailbox opening. A new
+server workspace session creates a new controller and socket. Frontend detach
+preserves it; rediscover after server restart.
 Protocol-1 event clients must update.
 
 For typed orchestrator/subagent content, live snapshots, bounded conversation
@@ -55,7 +56,8 @@ may still wait for completion. Streaming reflects native text events, not audio
 playback timing.
 
 The script and controller must use the current event protocol. After a protocol
-change, close the frontend and start a new call from the current checkout. There is no version
+change, restart the server from the current checkout. Frontend reattachment keeps
+the retained controller version. There is no version
 negotiation or legacy compatibility path.
 
 The endpoint is `<controller-hash>.events.sock` beside the control socket under
@@ -368,7 +370,7 @@ retain the reliable lane; hard overflow fails the runtime visibly and marks the
 recording interruption.
 Later events may still arrive, including a completed item. Accepted events retain
 native arrival order. Socket backpressure can disconnect a slow subscriber;
-call shutdown can also lose trailing items. Sequence gaps alone cannot
+runtime or server shutdown can also lose trailing items. Sequence gaps alone cannot
 distinguish filtering from missing content, and drops before publication do not
 allocate a sequence.
 

@@ -35,6 +35,8 @@ const inventory = (): InFlight => ({
 async function setup() {
   const directory = mkdtempSync("/tmp/av-mailbox-controller-");
   const callbacks: Array<(method: string, params: unknown) => void> = [];
+  const activations: Array<{ frontendAttached?: boolean }> = [];
+  const frontendAttachments: boolean[] = [];
   const wakes: WakeRequest[] = [];
   let snapshotRead: Promise<InFlight> | undefined;
   let mode: "accepted" | "refused" | "unknown" = "accepted";
@@ -66,9 +68,12 @@ async function setup() {
           if (method === "preflight")
             return { workspace: directory, pid: number, buildId: "test" } as T;
           if (method === "activate") {
+            activations.push(input as { frontendAttached?: boolean });
             await lease("root");
             event("identity", { threadId: "root", workspace: directory });
           }
+          if (method === "frontend")
+            frontendAttachments.push((input as { attached: boolean }).attached);
           if (method === "mailbox-snapshot")
             return (snapshotRead ? await snapshotRead : inventory()) as T;
           if (method === "mailbox-authorize")
@@ -100,6 +105,8 @@ async function setup() {
     directory,
     wakes,
     callbacks,
+    activations,
+    frontendAttachments,
     emit,
     holdSnapshot: (value?: Promise<InFlight>) => {
       snapshotRead = value;
@@ -153,6 +160,7 @@ test("mailbox survives exact runtime replacement, while delayed old events and r
   const h = await setup();
   const wait = Promise.withResolvers<InFlight>();
   try {
+    await h.c.setFrontendAttached(false);
     h.emit("saved");
     h.holdSnapshot(wait.promise);
     const opening = h.c.mailboxOpen({
@@ -169,6 +177,7 @@ test("mailbox survives exact runtime replacement, while delayed old events and r
     for (let n = 0; n < 100 && h.c.status().currentOperation?.phase !== "ready"; n++)
       await Bun.sleep(5);
     expect(h.c.status().generation).toBe(2);
+    expect(h.activations.map((activation) => activation.frontendAttached)).toEqual([true, false]);
     h.emit("obsolete", h.callbacks[0]);
     expect(h.c.lifecycle.mailboxSnapshot().state.completed).toBe(1);
     wait.resolve(inventory());
@@ -180,6 +189,8 @@ test("mailbox survives exact runtime replacement, while delayed old events and r
         await h.c.mailboxOpen({ expectedInstanceId: "instance", operationId: "current" })
       ).entries.map((e) => e.turnId),
     ).toEqual(["saved", "new"]);
+    await h.c.setFrontendAttached(true);
+    expect(h.frontendAttachments).toEqual([false, true]);
     await h.c.shutdown();
     h.emit("shutdown");
     expect(h.wakes).toHaveLength(2);

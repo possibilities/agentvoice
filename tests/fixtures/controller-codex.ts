@@ -104,6 +104,18 @@ function handle(line: string, send: (text: string) => void) {
       mode === "malformed" ? { turn: {} } : { turn: { id: "handoff-turn", status: "inProgress" } };
   }
   send(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
+  if (request.method === "thread/realtime/start") {
+    send(
+      `${JSON.stringify({ method: "thread/realtime/started", params: { threadId: params.threadId, realtimeSessionId: params.realtimeSessionId, version: "v3" } })}\n`,
+    );
+    send(
+      `${JSON.stringify({ method: "thread/realtime/sdp", params: { threadId: params.threadId, sdp: `answer:${params.transport?.sdp}` } })}\n`,
+    );
+  }
+  if (request.method === "thread/realtime/stop")
+    send(
+      `${JSON.stringify({ method: "thread/realtime/closed", params: { threadId: params.threadId, reason: "requested" } })}\n`,
+    );
   if (request.method === "turn/start" && (result as { turn?: { id?: string } }).turn?.id) {
     const item = {
       id: "voice-fixture-item",

@@ -158,9 +158,10 @@ a claim that everything passed.
 
 Observe naturally as opportunities arise:
 
-- A saved voice survives closing/reopening; a next-session choice leaves the
-  current voice alone until the next call.
-- A new prompt revision loads after reopening or explicit runtime replacement.
+- A saved voice survives frontend closing/reopening; a next-session choice leaves
+  the current voice alone until explicit runtime replacement or a new server session.
+- A new prompt revision loads after explicit runtime replacement or server restart,
+  not frontend reattachment.
 - Quick read-only work stays local when sensible, independent work overlaps,
   handoffs are announced, and attention shifts without losing prior requests.
 - Voice changes and completion reports become quicker and less repetitive.

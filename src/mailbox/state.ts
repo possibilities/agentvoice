@@ -13,7 +13,7 @@ import {
   type WakeState,
 } from "./contract.ts";
 
-/** One call's consumable metadata, independent of disposable native runtimes. */
+/** One workspace session's consumable metadata, independent of disposable native runtimes. */
 export class ThreadMailbox {
   private entries: MailboxEntry[] = [];
   private unavailable = 0;
@@ -127,7 +127,10 @@ export class ThreadMailbox {
     if (cached) return cached;
     // Refuse before consuming rather than evicting retry results and consuming a newer batch.
     if (this.opened.size >= 4096 || this.openedBytes >= 16 * 1024 * 1024)
-      throw new ControlError("unavailable", "Mailbox opening retry cache is full for this call");
+      throw new ControlError(
+        "unavailable",
+        "Mailbox opening retry cache is full; new session or server restart required",
+      );
     const entries: MailboxEntry[] = [];
     let bytes = 0;
     for (const entry of this.entries) {

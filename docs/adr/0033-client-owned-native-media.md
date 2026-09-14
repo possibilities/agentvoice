@@ -4,6 +4,11 @@ Accepted September 8, 2026 by the operator. Supersedes the native-media ownershi
 in ADRs [0024](0024-server-and-pointer-frontend.md) and [0032](0032-loopback-browser-media-frontend.md). The browser proof remains a disposable UI, not a second
 server architecture.
 
+The call-lifetime statements below are partially superseded by
+[ADR 0053](0053-retain-workspace-session-across-frontend-detach.md). Frontend
+media remains disposable and client-owned; the controller, runtime, native work
+and endpoints now survive frontend detach until server shutdown.
+
 ## Boundary
 
 `agentvoice server` and its runtime own configuration, authentication to Codex,

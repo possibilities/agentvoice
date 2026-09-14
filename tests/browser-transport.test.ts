@@ -202,7 +202,38 @@ describe("browser-owned voice transport", () => {
         sessionId: "session-1",
       });
       expect(h.errors).toContain("voice negotiation timed out");
+      for (let n = 0; n < 20 && h.prepares().at(-1)?.sessionId !== "session-2"; n++) await delay(5);
       expect(h.prepares().at(-1)?.sessionId).toBe("session-2");
+    } finally {
+      await h.transport.stop();
+    }
+  });
+
+  test("detach closes media, suppresses negotiation, and reattach creates a fresh session", async () => {
+    const h = harness();
+    try {
+      h.transport.handleReady(ready);
+      expect(h.transport.handleClientOffer("session-1", "offer-1")).toBe(true);
+      expect(h.transport.handleClientConnected("session-1")).toBe(true);
+
+      h.transport.setAttached(false);
+      expect(h.transport.currentPhase).toBe("waiting-ready");
+      expect(h.commands).toContainEqual({ type: "close", sessionId: "session-1" });
+      const preparesWhileDetached = h.prepares().length;
+      h.transport.redial("manual");
+      h.transport.handleReady(ready);
+      await delay(15);
+      expect(h.prepares()).toHaveLength(preparesWhileDetached);
+
+      h.transport.setAttached(true);
+      expect(h.prepares().at(-1)).toEqual({ type: "prepare", sessionId: "session-2" });
+      expect(h.transport.handleClientOffer("session-1", "stale-offer")).toBe(false);
+      expect(h.transport.handleClientConnected("session-1")).toBe(false);
+      expect(h.transport.handleClientFailed("session-1", "stale failure")).toBe(false);
+      expect(h.transport.handleClientOffer("session-2", "offer-2")).toBe(true);
+      expect(h.transport.handleClientConnected("session-2")).toBe(true);
+      expect(h.transport.currentPhase).toBe("live");
+      expect(h.offers).toEqual(["offer-1", "offer-2"]);
     } finally {
       await h.transport.stop();
     }

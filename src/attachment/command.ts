@@ -49,7 +49,7 @@ export async function attachmentSelection(stateDir: string, workspace?: string, 
           : realpathSync(resolve(expandTilde(configured, homedir())));
     }
   }
-  let liveThread = server?.busy ? (server.threadId ?? undefined) : undefined;
+  let liveThread = server?.threadId ?? undefined;
   // Explicit workspaces can also belong to a server using the stable default endpoint.
   if (!server) {
     try {

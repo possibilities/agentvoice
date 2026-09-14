@@ -8,7 +8,7 @@ export async function runThreadsCommand(argv: string[], stateDir: string): Promi
   });
   if (args.help) {
     console.log(
-      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>]\nShow loaded threads in the active call, with children indented.\nMonitor with: watch -n 1 agentvoice threads",
+      "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>]\nShow loaded threads in the retained workspace session, with children indented.\nMonitor with: watch -n 1 agentvoice threads",
     );
     return 0;
   }

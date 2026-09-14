@@ -31,6 +31,9 @@ export function hostHarness(values: ConfigValues = {}, runtimeOptions: FixtureOp
     },
   };
   const transport: HostTransport = {
+    setAttached(attached) {
+      calls.push(`transport:attached:${attached}`);
+    },
     async redialAndWait() {
       calls.push("redial");
     },
@@ -72,5 +75,6 @@ export function hostHarness(values: ConfigValues = {}, runtimeOptions: FixtureOp
       transportOptions.onError(message);
       transportOptions.onPhase("failed");
     },
+    offer: (sdp: string) => transportOptions.signal.offer(sdp),
   };
 }

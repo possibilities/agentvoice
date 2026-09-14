@@ -35,21 +35,21 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0021: Attach a stock TUI through a guarded local gateway](0021-guarded-tui-attachment.md) | Partially superseded | [0022](0022-websocket-native-tui.md) replaces opt-in transport and admission gates; the owned local attachment boundary remains. |
 | [0022: WebSocket-only RPC and native TUI interaction](0022-websocket-native-tui.md) | Accepted | — |
 | [0023: Conversation observation for independent UIs](0023-conversation-observation.md) | Recorded | — |
-| [0024: Waiting local server and pointer-only frontend](0024-server-and-pointer-frontend.md) | Partially superseded | [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle and [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients. The waiting server and pointer frontend remain. |
-| [0025: LaunchAgent and default workspace generations](0025-launchagent-default-workspaces.md) | Accepted | — |
+| [0024: Waiting local server and pointer-only frontend](0024-server-and-pointer-frontend.md) | Partially superseded | [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle, [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients, and [0053](0053-retain-workspace-session-across-frontend-detach.md) retains the workspace session across frontend detach. The waiting server and pointer frontend remain. |
+| [0025: LaunchAgent and default workspace generations](0025-launchagent-default-workspaces.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) pins the selected default generation for the server lifetime after the first frontend. |
 | [0026: Persistent workspace voice transcripts](0026-persistent-voice-transcripts.md) | Recorded | — |
 | [0027: A microphone identity for the LaunchAgent](0027-service-microphone-identity.md) | Partially superseded | [0033](0033-client-owned-native-media.md) moves microphone use to the client. The installer-owned signed runtime, stable permission identity and operator-owned consent remain.
 | [0028: Bare command composes local terminal apps](0028-foreground-composition.md) | Partially superseded | [0052](0052-workspace-session-marker.md) replaces attachment-exit shutdown during runtime replacement with exact-thread pane reopening. |
 | [0029: Desktop startup-context default](0029-desktop-startup-context.md) | Recorded | — |
 | [0030: Conversation-first delegation through native operator configuration](0030-conversation-first-delegation.md) | Superseded for configuration ownership | [0031](0031-role-owned-delegation.md) moves delegation mode to the selected role. |
 | [0031: The selected role owns its native delegation mode](0031-role-owned-delegation.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) replaces mandatory read-only/thinking delegation; role ownership remains. |
-| [0032: A loopback browser may own phone media](0032-loopback-browser-media-frontend.md) | Partially superseded | [0033](0033-client-owned-native-media.md) makes both clients media owners; [0034](0034-authenticated-client-network.md) adds authenticated network transport. |
-| [0033: All call clients own audio and WebRTC](0033-client-owned-native-media.md) | Accepted | — |
-| [0034: Authenticated WSS transports the same client API](0034-authenticated-client-network.md) | Accepted | — |
+| [0032: A loopback browser may own phone media](0032-loopback-browser-media-frontend.md) | Partially superseded | [0033](0033-client-owned-native-media.md) makes both clients media owners; [0034](0034-authenticated-client-network.md) adds authenticated network transport; [0053](0053-retain-workspace-session-across-frontend-detach.md) replaces page-loss teardown of the backend session. |
+| [0033: All call clients own audio and WebRTC](0033-client-owned-native-media.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) makes frontend ownership disposable while retaining the backend workspace session. Client media ownership remains. |
+| [0034: Authenticated WSS transports the same client API](0034-authenticated-client-network.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) replaces network-loss teardown of the backend workspace session; authentication and transport boundaries remain. |
 | [0035: A native Android client is one voice instrument](0035-native-android-voice-client.md) | Implemented | Preview tuning continues in [0041](0041-host-persona-configurator.md). |
-| [0036: Desktop attachment to a mobile-owned call](0036-desktop-mobile-attachment.md) | Accepted | — |
+| [0036: Desktop attachment to a mobile-owned call](0036-desktop-mobile-attachment.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) retains controller endpoints after mobile media detach; explicit attachment views still do not reconnect automatically. |
 | [0037: Native descendant navigation through TUI attachment](0037-descendant-tui-attachment.md) | Accepted | — |
-| [0038: Thread mailbox wake-ups](0038-thread-mailbox-wakeups.md) | Recorded | — |
+| [0038: Thread mailbox wake-ups](0038-thread-mailbox-wakeups.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) extends mailbox/controller lifetime beyond one frontend attachment. Wake-up semantics remain. |
 | [0039: Project memory is part of the default role](0039-project-memory-in-default-role.md) | Accepted | — |
 | [0040: The default role guides deliberate subagent routing](0040-deliberate-subagent-routing.md) | Partially superseded | [0043](0043-adaptive-conversation-first-delegation.md) changes when to delegate; [0048](0048-universal-working-doctrine.md) moves dated model tables to reference material and retains assignment/capability boundaries. |
 | [0041: Configure the native phone preview from a host browser](0041-host-persona-configurator.md) | Accepted | Studio profiles remain exploratory; landing code does not select production defaults. |
@@ -64,7 +64,8 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0050: Correlate native TUI hook trust to its current inventory](0050-correlated-native-hook-trust.md) | Recorded | Only listed untrusted/modified key-hash pairs may cross the attachment's persistent config-write boundary. |
 
 | [0051: AgentStart owns manager and worker roles](0051-agentstart-owns-working-roles.md) | Accepted | Supersedes 0049's source ownership and default name. |
-| [0052: Persist one current session in each workspace](0052-workspace-session-marker.md) | Accepted | Exact marker-based resume, explicit API/MCP new session, and terminal panes following runtime replacement. Supersedes session selection in 0020/0024 and replacement exits in 0028. |
+| [0052: Persist one current session in each workspace](0052-workspace-session-marker.md) | Partially superseded | Exact marker-based resume, explicit API/MCP new session, and terminal panes following runtime replacement remain. [0053](0053-retain-workspace-session-across-frontend-detach.md) replaces frontend-scoped call lifetime and lease release. |
+| [0053: Retain one workspace session across frontend detach](0053-retain-workspace-session-across-frontend-detach.md) | Accepted | One server-lifetime controller/runtime and pinned workspace; disposable one-owner media attachments; explicit replacement and shutdown boundaries. |
 
 ## Identifier history
 

@@ -67,6 +67,7 @@ if (process.argv[2] === "__attach-agent") {
     },
   });
   let closed = false;
+  let attached = false;
   const server = new VoiceServer(frontendSocketPath(stateDir), async () => ({
     identity: () => ({ workspace: root, threadId: "mobile-fixture-thread" }),
     state: () => ({
@@ -78,6 +79,9 @@ if (process.argv[2] === "__attach-agent") {
     }),
     start: async () => {},
     command: () => {},
+    setFrontendAttached: async (next) => {
+      attached = next;
+    },
     close: async () => {
       closed = true;
     },
@@ -100,7 +104,7 @@ if (process.argv[2] === "__attach-agent") {
     const live = await discoverServer(stateDir);
     writeFileSync(
       join(root, "result.json"),
-      JSON.stringify({ ownerStillConnected: live?.busy && !closed }),
+      JSON.stringify({ ownerStillConnected: live?.busy && attached && !closed }),
       { mode: 0o600 },
     );
   } finally {

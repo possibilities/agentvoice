@@ -178,10 +178,12 @@ ends it. The notification also offers microphone Mute/Unmute and return-to-call.
 Process death never automatically reopens media. See
 [call navigation](android-call-navigation.md) for the lifecycle and permission policy.
 
-Call disconnect closes server-owned Codex and work; the waiting server survives.
-Cleanup must complete before another call is admitted. Reconnect means a new call
-under server conversation-selection settings, not an implicit resume of the last
-thread. In-call server restart/redial retains the owner connection and changes
+Client disconnect immediately closes local media and the server's realtime voice;
+the server-owned Codex child and native work survive in the pinned workspace
+session. Detach must complete before another media owner is admitted. Reconnect
+means a fresh media attachment, possibly with a fresh clientId, to the same
+controller/workspace/thread. Server restart creates a new workspace session;
+runtime restart/redial retains the owner connection and changes
 media sessions; close only peers named by stale/close events, not their successors.
 
 ## Handoff acceptance

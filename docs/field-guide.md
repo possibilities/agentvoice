@@ -8,24 +8,29 @@ References to in-call Fresh describe a retired UI control; restart remains in MC
 
 ```text
 agentvoice frontend → private workspace socket → agentvoice server
-  → call controller (leases, lifecycle control, read-only events)
+  → retained workspace-session controller (leases, lifecycle control, read-only events)
     → disposable runtime → private native WebSocket → owned stock Codex child
       microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
       stock Codex TUI → guarded gateway → private native WebSocket
 ```
 
-The server waits without starting a runtime or opening audio until the frontend
-connects. The frontend has static monochrome mute/PTT buttons and connection
-phase only. Closing it stops the call and owned work, then the server waits again.
+The server waits without starting a runtime or opening audio until its first
+frontend connects. That frontend lazily creates and pins one workspace session.
+The frontend has static monochrome mute/PTT buttons and connection phase only.
+Closing it releases holds and stops client media and realtime voice after an
+acknowledged native stop; the controller, Codex child and native work remain.
+A later sole frontend negotiates fresh media to the same session. A stop failure
+has an unknown outcome and blocks media admission until server restart.
 There are no keybindings or in-call Fresh. MCP/API redial and runtime restart
 remain, including optional restart handoffs. Restart reloads the runtime under
 the connected frontend and resumes the same thread. Guarded stock TUI input and
 explicit handoffs use native turns.
 
-Server launch flags select a canonical workspace and conversation policy. Each
-call starts a new native conversation by default; `server --continue` or
-`server --resume` selects eligible saved history. Automatic WebRTC renewal keeps
-an ongoing call connected. Workspace is a selection boundary, not a sandbox.
+Server launch flags select a canonical workspace and conversation policy. The
+lazy workspace session resumes the exact `.agentvoice-session` thread or creates
+one when absent. The retired `--continue` and `--resume` flags no longer select
+history. Automatic WebRTC renewal keeps an attached frontend connected. Workspace
+is a selection boundary, not a sandbox.
 
 ## Stock TUI attachment boundary probe
 
@@ -177,7 +182,9 @@ responses confirm the applied setting when available. Native reported settings
 remain distinct from requested settings; the frontend displays no tier label.
 
 All AgentVoice settings and prompt contents load once per runtime generation. There is no
-config watcher; voice-name edits take effect on the next call. Prompts load from convention-named files in the selected config directory,
+config watcher; voice-name edits take effect on the next explicit runtime replacement,
+`new_session`, or server workspace session. Frontend reattachment does not reload
+them. Prompts load from convention-named files in the selected config directory,
 never the workspace; a present name that is unreadable, a directory or a broken
 link fails before native startup. Former names only produce visible migration
 warnings, with no content reads. Main prompt settings ride thread/start or resume;

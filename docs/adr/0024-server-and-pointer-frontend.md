@@ -4,6 +4,10 @@ Status review 2026-09-08: partially superseded.
 [0052](0052-workspace-session-marker.md) adds explicit API/MCP new-session replacement.
 [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle and [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients. The waiting server and pointer frontend remain.
 
+Status review 2026-09-13: [0053](0053-retain-workspace-session-across-frontend-detach.md)
+supersedes frontend-disconnect teardown. The server now retains the workspace
+session and native work while the media-owning frontend is absent.
+
 Accepted 2026-09-06. Supersedes the foreground-only topology in ADRs [0009](0009-one-foreground-workspace.md)/[0015](0015-retain-controller-replace-runtime.md)
 and the animated keyboard UI. Lifecycle API controls retain [ADR 0016](0016-restart-handoff.md) semantics.
 

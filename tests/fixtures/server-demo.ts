@@ -17,6 +17,8 @@ const server = new VoiceServer(
     const ended = Promise.withResolvers<void>();
     let host: VoiceHost | undefined;
     let run: Promise<void> | undefined;
+    let frontendAttached = true;
+    let setHostFrontendAttached: ((attached: boolean) => Promise<void>) | undefined;
     const waiting: VoiceState = {
       available: false,
       phase: "waiting-ready",
@@ -41,6 +43,10 @@ const server = new VoiceServer(
               },
             };
           },
+          onFrontendReady: (setAttached) => {
+            setHostFrontendAttached = setAttached;
+            void setAttached(frontendAttached);
+          },
         });
         void run.catch(started.reject);
         return started.promise;
@@ -49,6 +55,10 @@ const server = new VoiceServer(
         if (command.action === "mute") host?.setMuted(command.target, command.muted);
         else if (command.action === "hold") host?.beginUnmute("mic", "pointer");
         else host?.releaseUnmute("mic", "pointer");
+      },
+      setFrontendAttached: async (attached) => {
+        frontendAttached = attached;
+        await setHostFrontendAttached?.(attached);
       },
       close: async () => {
         await host?.shutdown();

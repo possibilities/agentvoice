@@ -114,7 +114,8 @@ whether ordinary requests reached the correct operation without coaching.
 Check protocol 5 and the bound workspace; successful voice-only changes should
 advance saved/applied voice revisions while preserving the working child,
 thread, runtime generation and attachment. A deferred change should advance
-only saved state until the next call loads it. Distinguish acceptance, completed
+only saved state until the next runtime replacement or server workspace session
+loads it; frontend reattachment alone must not. Distinguish acceptance, completed
 application, unknown outcomes and the operator's listening observations.
 
 Also review unnecessary delegation, latency, repeated confirmations, guessed

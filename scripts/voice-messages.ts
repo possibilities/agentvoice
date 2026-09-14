@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         const frame = JSON.parse(line);
         if (frame.v !== EVENT_PROTOCOL_VERSION)
           throw new Error(
-            `Event protocol mismatch: controller uses ${frame.v}, viewer requires ${EVENT_PROTOCOL_VERSION}. Run both from the current checkout and close the frontend and start a new call.`,
+            `Event protocol mismatch: controller uses ${frame.v}, viewer requires ${EVENT_PROTOCOL_VERSION}. Run both from the current checkout and restart the server, then reconnect the frontend.`,
           );
         if (frame.type === "response" && frame.id === "subscribe") {
           if (!frame.ok) throw new Error(frame.error?.message ?? "Voice subscription failed");

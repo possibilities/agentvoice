@@ -7,11 +7,14 @@ connects and starts a call. Bare `agentvoice` composes that client, voice transc
 and stock agent attachment in one foreground smolmux process with local PTYs only.
 `agentvoice phone` serves one capability-bearing loopback page; its browser owns
 audio and WebRTC while Termux retains the controller and Codex child.
-The server-owned call controller retains exact thread
+The server-owned workspace-session controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
 owns config/prompt/role loading and an owned stock Codex app-server. All clients
 own audio and WebRTC; no production server path loads native media ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
-Frontend disconnect closes the call before another can begin. The macOS installer
+The first frontend lazily creates the workspace session; disconnect disposes only
+that frontend's media while the controller, runtime, native work and endpoints
+remain until server shutdown. A later sole frontend attaches fresh media to the
+same pinned workspace and thread ([ADR 0053](docs/adr/0053-retain-workspace-session-across-frontend-detach.md)). The macOS installer
 supervises the waiting default server as a user LaunchAgent and installs a separate
 native menu app ([ADR 0044](docs/adr/0044-native-macos-menu-app.md)). The menu app's
 login item controls only its own menu-bar presence; quitting or disabling it must
@@ -205,16 +208,25 @@ Workspace and thread leases serialize creation and replacement. Explicit MCP/API
 new_session preflights, drains the old runtime, clears the marker and mailbox,
 then creates and saves a thread and reconnects voice. Old history remains.
 
-Each frontend connection starts one call using the workspace session marker.
-Explicit workspaces are pinned at server launch; otherwise the default
-server resolves the current generation at call start. Every call pins its canonical
-workspace through runtime replacements. The default frontend socket stays stable
-across generations; explicit CLI workspaces use their own hashed sockets. Close its frontend to end audio,
-app-owned work and the Codex child; native history remains untouched. The server
-waits for complete teardown before accepting another call. MCP/API runtime restart
-retains the frontend, exact thread leases and controller endpoints while replacing
-the runtime. Leases last until call shutdown. A cleanup failure prevents subsequent
-calls until server termination.
+The first frontend connection lazily starts the server's one workspace session
+using the workspace session marker. Explicit workspaces are pinned at server
+launch; otherwise the default server resolves the current generation once, at
+that first attachment. The selected canonical workspace remains pinned until
+server shutdown, including through detach and runtime replacement. The default
+frontend socket stays stable across generations; explicit CLI workspaces use their
+own hashed sockets. Closing a frontend releases holds, closes its audio/WebRTC,
+and stops realtime speech only. The controller, runtime, owned Codex child, native
+work, attachment gateway, mailbox, operation journal, endpoints, and workspace/thread
+leases remain. After detach fencing, one later frontend with any fresh clientId
+may attach new media to that same session; no input, controls, SDP, prompts or
+speech are replayed. Successful detach requires acknowledged native voice stop;
+refusal or timeout reports an unknown stop outcome and blocks later media owners
+until server restart while retaining native work. Persistent mute assignments
+remain and detached channels are effectively muted. Redial and immediate voice application require an attached
+frontend. MCP/API runtime restart and new_session deliberately replace the runtime;
+new_session also replaces the exact root and clears the old mailbox. Explicit
+server shutdown closes the retained session and releases all ownership. A detach
+failure prevents subsequent frontend attachments until server termination.
 Other workspace servers may run independently; other clients do not honor this guard.
 
 App state: default/workspaces/ generations, default/service/ logs, frontend/ sockets,
@@ -255,7 +267,8 @@ the [field guide](docs/field-guide.md) retains the underlying audit evidence.
 - The TUI is pointer-only: two full-height monochrome channel buttons, with
   a bottom push-to-talk button while the mic is muted. Keep existing text labels,
   grey out muted channels, show only connection phase above them. No keybindings,
-  modal, animation, meters or additional status. Signals/terminal close end a call.
+  modal, animation, meters or additional status. Signals/terminal close detach
+  frontend media; the server retains native work.
 - Apply the [configuration and prompt rules](docs/native-defaults.md#configuration-and-prompt-rules)
   before changing any native settings, role or prompt path.
 - No AgentVoice worker execution tools, registry, archival or result reports.

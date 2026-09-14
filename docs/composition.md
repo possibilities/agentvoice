@@ -12,7 +12,8 @@ Before creating any apps, Composition enables
 first press displays its centered single-row bottom overlay, and a second within
 three seconds stops every Session and the Runtime. The overlay never changes
 pane sizes; individual apps cannot receive physical Ctrl+C. The voice client
-disconnecting closes its call through the existing frontend ownership path.
+disconnecting detaches its media through the existing frontend ownership path;
+the server's native workspace session remains.
 An older smolmux that refuses configuration fails before starting the client.
 
 The three equal-width initial panes contain `agentvoice client` and two text
@@ -21,7 +22,7 @@ placeholders. All three app declarations explicitly use `pty: "local"` and
 replacement reads the current tree and passes its revision, retrying only an
 explicit conflict so divider drags survive. Keyboard focus moves to the stock
 agent attachment when it opens. Ordinary pane app exit ends the composition and
-its call. Runtime replacement reopens attachments on the exact current thread;
+its media attachment. Runtime replacement reopens attachments on the exact current thread;
 typed input is never replayed.
 
 ## Frontend socket observation
@@ -38,11 +39,11 @@ installation/restart when adopting this command change.
   their runtime `generation` so the composition can identify replacement. The response and
   subsequent publications are ordered on one connection. No history is replayed.
 - `call` requires `{clientId:<UUID>}`. The UUID correlates a
-  composition's spawned client with its call; it is not a permission or bearer
+  composition's spawned client with its media attachment; it is not a permission or bearer
   capability. Existing private-socket and exclusive-peer ownership checks remain.
 - An observer cannot acquire a call or send pointer input. Closing an observer
   only ends observation. Closing the owning client still releases holds and
-  completes call cleanup before another client can start.
+  completes media detach before another client can attach.
 
 The composition subscribes before spawning its client and passes a fresh UUID
 only to that client's environment as `AGENTVOICE_CLIENT_ID`. It launches the two
@@ -53,7 +54,7 @@ subscription is refused; a competing later client cannot satisfy this gate.
 
 Server/observer loss, pointer client exit or foreground termination ends the
 composition and its local apps. An ordinary attachment exit also ends this
-voice-owning composition and its call. A newer generation permits the old
+voice-owning composition and its media attachment. A newer generation permits the old
 attachments to exit while replacement runs. Once the same call is live, the
 composition uses `app.restart` to reopen both attachments with the exact current
 workspace/thread. It refreshes observation before treating an attachment exit as

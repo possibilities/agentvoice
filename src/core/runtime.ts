@@ -393,8 +393,16 @@ export class VoiceRuntime {
     }
   }
 
+  private voiceAttached = true;
+
+  /** Stop only realtime media. Native turns, child agents, observers and leases remain live. */
+  async setVoiceAttached(attached: boolean): Promise<void> {
+    this.voiceAttached = attached;
+    if (!attached) await this.sessions.shutdown(true);
+  }
+
   async offer(sdp: string): Promise<void> {
-    if (!this.threadReady || this.shuttingDown) return;
+    if (!this.threadReady || this.shuttingDown || !this.voiceAttached) return;
     await this.sessions.handleOffer(sdp);
   }
 

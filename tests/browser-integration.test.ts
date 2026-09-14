@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runBrowserFrontend } from "../src/browser/frontend.ts";
+import { connectFrontend } from "../src/frontend/client.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../src/frontend/media-protocol.ts";
 import type { FrontendState } from "../src/frontend/protocol.ts";
 import { frontendSocketPath } from "../src/frontend/protocol.ts";
@@ -37,12 +38,14 @@ function nextMessage(socket: WebSocket): Promise<unknown> {
   });
 }
 
-test("browser WebSocket relays media through the call owner and disconnect closes the call", async () => {
+test("browser WebSocket relays media, detaches on disconnect, and reuses its backend", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-browser-integration-"));
   const received: ClientMediaMessage[] = [];
   let sendRuntime: ((message: ServerMediaMessage) => void) | undefined;
+  let creates = 0;
   let starts = 0;
   let closes = 0;
+  const attachments: boolean[] = [];
   const state: FrontendState = {
     available: true,
     codingActivity: "unknown" as const,
@@ -53,6 +56,7 @@ test("browser WebSocket relays media through the call owner and disconnect close
   const server = new VoiceServer(frontendSocketPath(root), async (_changed, params, sendMedia) => {
     expect(params?.clientId).toBeString();
     sendRuntime = sendMedia;
+    creates++;
     return {
       state: () => state,
       start: async () => {
@@ -60,6 +64,9 @@ test("browser WebSocket relays media through the call owner and disconnect close
       },
       command() {},
       clientMedia: (message) => received.push(message),
+      setFrontendAttached: async (attached) => {
+        attachments.push(attached);
+      },
       close: async () => {
         closes++;
       },
@@ -89,9 +96,22 @@ test("browser WebSocket relays media through the call owner and disconnect close
     expect(received).toEqual([{ type: "connected", sessionId }]);
 
     socket!.close();
-    await until(() => closes === 1);
+    await until(() => attachments.at(-1) === false);
+    expect({ creates, starts, closes, attachments }).toEqual({
+      creates: 1,
+      starts: 1,
+      closes: 0,
+      attachments: [true, false],
+    });
     abort.abort();
     await browser;
+    const successor = await connectFrontend(server.path);
+    await until(() => attachments.at(-1) === true);
+    expect({ creates, starts, closes }).toEqual({ creates: 1, starts: 1, closes: 0 });
+    await successor.close();
+    await until(() => attachments.at(-1) === false);
+    await server.close();
+    expect(closes).toBe(1);
   } finally {
     abort.abort();
     socket?.close();
@@ -150,6 +170,15 @@ test("controller relays browser media only for the active runtime incarnation", 
     const firstSession = "11111111-1111-4111-8111-111111111111";
     callbacks[0]!("client-media", { type: "prepare", sessionId: firstSession });
     expect(outgoing).toEqual([{ type: "prepare", sessionId: firstSession }]);
+
+    await controller.setFrontendAttached(false);
+    callbacks[0]!("client-media", { type: "answer", sessionId: firstSession, sdp: "detached" });
+    controller.clientMedia({ type: "connected", sessionId: firstSession });
+    expect(outgoing).toHaveLength(1);
+    expect(notifications.some((message) => message.method === "client-media")).toBe(false);
+    expect(controller.state().mic.effectiveMuted).toBe(true);
+    expect(controller.state().speaker.effectiveMuted).toBe(true);
+    await controller.setFrontendAttached(true);
 
     await controller.restart({
       operationId: "browser-restart",

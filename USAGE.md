@@ -1,9 +1,11 @@
 # Using AgentVoice from an orchestrator
 
 Run `agentvoice server` in the workspace and `agentvoice` in another terminal.
-The frontend starts a call. Its server-owned controller retains exact identity,
-leases, API/MCP endpoints and operation journal across runtime replacements.
-Closing the frontend ends the call and owned work; the server waits for another.
+The first frontend lazily starts the server's retained workspace session. Its
+controller keeps exact identity, leases, API/MCP endpoints, native work and the
+operation journal across runtime replacements and frontend detach. Closing the
+frontend stops realtime voice and client media; a later frontend attaches fresh
+media to the same backend.
 
 Your orchestration thread receives a built-in `agentvoice_control` MCP entry on
 start and resume. It is required, but connection/catalog readiness is
@@ -32,8 +34,8 @@ AgentVoice, load launch settings, open media, or require
 `--allow-full-access`. It can export a controller whose voice runtime is failed,
 which permits inspection and recovery through the still-live control endpoint.
 The JSON contains a bearer capability, so do not log or retain it beyond that
-controller session. Regenerate it after every frontend call because the token and
-controller identity are fresh even if the operating system reuses a port.
+controller session. Regenerate it after server restart, not frontend reattachment;
+the token and controller identity last for the retained workspace session.
 
 Use the MCP tools when you are operating the conversation that supplied them:
 
@@ -52,17 +54,18 @@ scope: the control plane is intentionally bound to its owning controller.
 
 ## Pick the smallest supported recovery
 
-Every call resumes the exact main thread named by `.agentvoice-session` in its
+Every server workspace session resumes the exact main thread named by `.agentvoice-session` in its
 workspace. Missing markers create and save a new thread; invalid/unresumable
 markers fail without fallback. Client/server restarts preserve the marker.
 Use `agentvoice_new_session` when the human requests a new session: it preflights,
 stops old work, removes the marker and clears the old mailbox, creates and saves
-a new thread, and reconnects voice on the same frontend. Old native history and
+a new thread, and reconnects voice when a frontend is attached. Old native history and
 transcripts remain. Read status to recover the journaled result; reuse the same
 operation ID only for the same request. No handoff prompt or speech replay is added.
 
 Use `agentvoice_redial` when voice/WebRTC needs to reconnect while the current
-runtime stays live. It preserves the runtime's loaded code and configuration.
+runtime stays live. It requires an attached frontend and preserves the runtime's
+loaded code and configuration.
 
 Use `agentvoice_restart_runtime` only when the runtime must be replaced: for
 example, to reload the AgentVoice configuration/prompt snapshot, native audio
@@ -93,8 +96,9 @@ exact-thread resume; active execution does not continue.
 Poll `agentvoice_status` after reconnecting. Operation states proceed through
 `accepted`, `quiescing`, `interrupted` or `forced`, `starting`, then `ready` or
 `failed`. A `forced` shutdown records that the bounded graceful interval
-expired. For a runtime restart, `ready` confirms the exact-thread replacement
-has reached live media. For redial, `ready` confirms that the exact replacement
+expired. For a runtime restart, `ready` confirms the exact-thread replacement is
+ready and, when a frontend is attached, has reached live media. Detached readiness
+makes no speech or audible-media claim. For redial, `ready` confirms that the exact replacement
 voice connection reached live media; a failed, superseded, stopped, or timed-out
 successor fails the operation. Check `runtime.voicePhase` when present
 for the voice state, and `runtime.phase` for process readiness. If an operation

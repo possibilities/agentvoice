@@ -43,6 +43,7 @@ if (target === "client") {
   const workspace = realpathSync(root);
   let phase: FrontendState["phase"] = "negotiating";
   let generation = 1;
+  let frontendAttached = true;
   let changed = () => {};
   const watcher = watch(root, () => {
     if (existsSync(join(root, "replace"))) {
@@ -66,11 +67,16 @@ if (target === "client") {
         available: true,
         codingActivity: "unknown" as const,
         phase,
-        mic: { muted: false, effectiveMuted: false },
-        speaker: { muted: false, effectiveMuted: false },
+        mic: { muted: false, effectiveMuted: !frontendAttached },
+        speaker: { muted: false, effectiveMuted: !frontendAttached },
       }),
       start: async () => {},
       command: () => {},
+      setFrontendAttached: async (attached) => {
+        frontendAttached = attached;
+        if (!attached) writeFileSync(join(root, "call-detached"), "detached", { mode: 0o600 });
+        notify();
+      },
       close: async () => {
         writeFileSync(join(root, "call-closed"), "closed", { mode: 0o600 });
       },

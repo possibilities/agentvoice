@@ -372,7 +372,7 @@ export class AppServerConnection {
       method === "item/tool/call" &&
       (tool === "dispatch_worker" || tool === "check_workers" || tool === "cancel_worker");
     const message = retired
-      ? `Refused ${tool}: AgentVoice's custom worker tools have been retired. This saved conversation may retain their definitions; use agentvoice_new_session or remove the workspace .agentvoice-session marker before the next call for a conversation without them. Native Codex tools and voice handoffs are unchanged; no work was started or cancelled.`
+      ? `Refused ${tool}: AgentVoice's custom worker tools have been retired. This saved conversation may retain their definitions; use agentvoice_new_session or stop the server before removing the workspace .agentvoice-session marker for a conversation without them. Native Codex tools and voice handoffs are unchanged; no work was started or cancelled.`
       : method === "item/tool/call"
         ? "Refused item/tool/call: AgentVoice does not implement client-defined dynamic tools. Use a Codex client that implements this tool."
         : `Refused ${method}: AgentVoice does not support this client request. Use a Codex client that implements it.`;

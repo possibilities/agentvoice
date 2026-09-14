@@ -296,6 +296,7 @@ try {
   if (process.env["AGENTVOICE_TUI_PROBE_COMPOSITION"] === "1") {
     process.env["XDG_STATE_HOME"] = join(root, "state");
     process.env["AGENTVOICE_TUI_PROBE_ROOT"] = root;
+    let frontendAttached = true;
     frontend = new VoiceServer(frontendSocketPath(stateDir), async () => ({
       identity: () => ({ workspace, threadId }),
       state: () => ({
@@ -303,10 +304,13 @@ try {
         codingActivity: "unknown" as const,
         phase: "live" as const,
         mic: { muted: true, effectiveMuted: true },
-        speaker: { muted: false, effectiveMuted: false },
+        speaker: { muted: false, effectiveMuted: !frontendAttached },
       }),
       start: async () => {},
       command: () => {},
+      setFrontendAttached: async (attached) => {
+        frontendAttached = attached;
+      },
       close: async () => {},
     }));
     await frontend.start();

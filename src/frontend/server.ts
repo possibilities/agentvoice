@@ -22,6 +22,8 @@ export interface Call {
   identity?(): { workspace: string; threadId: string; generation?: number };
   command(command: FrontendCommand): void;
   clientMedia?(message: ClientMediaMessage): void;
+  /** Detach media without stopping native work; reattach starts a fresh media peer. */
+  setFrontendAttached(attached: boolean): Promise<void>;
   close(): Promise<void>;
 }
 type Session = {
@@ -33,10 +35,14 @@ type Session = {
   end(): void;
 };
 
-/** One socket owner per workspace; one frontend owns each complete call lifetime. */
+/** One retained workspace session; a single frontend owns its disposable media attachment. */
 export class VoiceServer {
   private readonly socket: JsonSocketServer;
   private session?: Session;
+  private call?: Call;
+  private creating?: Promise<Call>;
+  private boot?: Promise<void>;
+  private closing?: Promise<void>;
   private closed = false;
   private poisoned = false;
   private readonly observers = new Set<JsonPeer>();
@@ -63,10 +69,10 @@ export class VoiceServer {
           });
         if (request.method === "discover" && request.params === undefined) {
           try {
-            const identity = this.session?.call?.identity?.();
+            const identity = this.call?.identity?.();
             reply(true, {
               busy: !!this.session,
-              workspace: this.session ? identity?.workspace || null : this.workspace?.() || null,
+              workspace: identity?.workspace || this.workspace?.() || null,
               threadId: identity?.threadId || null,
             });
           } catch (error) {
@@ -141,7 +147,7 @@ export class VoiceServer {
         this.session.closed = true;
         this.publish();
         this.session.end();
-        // End a hold immediately, before asynchronous owned-process cleanup.
+        // End a hold immediately, before asynchronous media detachment.
         this.session.call?.command({ action: "release" });
       },
     });
@@ -151,7 +157,7 @@ export class VoiceServer {
   }
   private observation() {
     const session = this.session;
-    const identity = session?.call?.identity?.();
+    const identity = this.call?.identity?.();
     return {
       busy: !!session,
       availability:
@@ -174,65 +180,91 @@ export class VoiceServer {
     for (const peer of this.observers)
       peer.send({ v: FRONTEND_VERSION, type: "observation", observation });
   }
-  private async run(session: Session, ended: Promise<void>) {
-    let lastState = "";
-    const changed = () => {
-      if (session.closed || !session.call) return;
-      const state = frontendState(session.call.state());
-      const serialized = JSON.stringify([state, session.call.identity?.()]);
-      if (serialized === lastState) return;
-      lastState = serialized;
-      session.peer.send({ v: FRONTEND_VERSION, type: "state", state });
-      this.publish();
-    };
-    let boot: Promise<void> | undefined;
-    try {
-      const params = session.clientId
-        ? {
-            clientId: session.clientId,
-          }
-        : undefined;
-      session.call = await this.create(changed, params, (message) => {
-        if (!session.closed)
-          session.peer.send({ v: FRONTEND_VERSION, type: "client-media", message });
+  private changed() {
+    const session = this.session;
+    if (session && !session.closed && this.call)
+      session.peer.send({
+        v: FRONTEND_VERSION,
+        type: "state",
+        state: frontendState(this.call.state()),
       });
+    this.publish();
+  }
+  private retain(params: { clientId: string } | undefined): Promise<Call> {
+    if (this.creating) return this.creating;
+    this.creating = this.create(
+      () => this.changed(),
+      params,
+      (message) => {
+        const session = this.session;
+        if (session && !session.closed)
+          session.peer.send({ v: FRONTEND_VERSION, type: "client-media", message });
+      },
+    )
+      .then((call) => {
+        this.call = call;
+        if (!this.closed) {
+          this.boot = call.start();
+          // Observe rejection even if the first frontend has already detached.
+          void this.boot.catch((error) => this.report(`Session startup failed: ${String(error)}`));
+        }
+        return call;
+      })
+      .catch((error) => {
+        // Factory failure owns its cleanup; a later frontend may retry creation.
+        if (!this.call) this.creating = undefined;
+        throw error;
+      });
+    return this.creating;
+  }
+  private async run(session: Session, ended: Promise<void>) {
+    try {
+      session.call = await this.retain(
+        session.clientId ? { clientId: session.clientId } : undefined,
+      );
       if (session.closed) return;
-      changed();
-      boot = session.call.start();
-      await Promise.race([boot, ended]);
-      changed();
+      await session.call.setFrontendAttached(true);
+      this.changed();
+      await Promise.race([this.boot, ended]);
+      this.changed();
       await ended;
     } catch (error) {
-      this.report(`Call failed: ${String(error)}`);
+      this.report(`Frontend attachment failed: ${String(error)}`);
       session.peer.close();
     } finally {
       session.closed = true;
       this.publish();
       try {
-        await session.call?.close();
-        await boot?.catch(() => {});
+        // Admission remains reserved until the old realtime session has been fenced/stopped.
+        await session.call?.setFrontendAttached(false);
       } catch (error) {
         this.poisoned = true;
-        this.report(`Call cleanup failed; restart the server: ${String(error)}`);
+        this.report(`Media detach failed; workspace work is retained: ${String(error)}`);
       }
       if (this.session === session) this.session = undefined;
       this.publish();
     }
   }
-  async close() {
-    this.closed = true;
-    this.publish();
-    const session = this.session;
-    try {
-      if (session) {
-        session.closed = true;
-        session.peer.close();
-        session.end();
-        await session.done;
+  close(): Promise<void> {
+    this.closing ??= (async () => {
+      this.closed = true;
+      this.publish();
+      const session = this.session;
+      try {
+        if (session) {
+          session.closed = true;
+          session.peer.close();
+          session.end();
+          await session.done;
+        }
+        const call = await this.creating?.catch(() => undefined);
+        await call?.close();
+        await this.boot?.catch(() => {});
+      } finally {
+        this.socket.close();
       }
-    } finally {
-      this.socket.close();
-    }
+    })();
+    return this.closing;
   }
 }
 
@@ -271,6 +303,7 @@ export async function runServer(
         },
         {
           onMedia: sendMedia,
+          frontendAttached: false,
         },
       );
       const controller = call.controller;
@@ -283,6 +316,7 @@ export async function runServer(
           generation: controller.status().generation,
         }),
         close: call.close,
+        setFrontendAttached: (attached) => controller.setFrontendAttached(attached),
         clientMedia: (message) => call.controller.clientMedia(message),
         command: (command) => {
           if (command.action === "mute") {

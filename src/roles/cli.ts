@@ -28,7 +28,7 @@ const HELP = `agentvoice role — workspace-owned SQLite roles (no audio or infe
   status --workspace <dir>
       Show saved role identity, revision and voice.
   voice --workspace <dir> --voice <name> | --clear-voice [--revision <n>]
-      Save for the next call/restart; use MCP/API voice_set to reconnect a live call.
+      Save for the next runtime/server restart; use MCP/API voice_set to reconnect a live call.
 
 Bound workspaces use SQLite, not the original config/prompts/skills. --codex,
 --debug and --fast remain local launch controls; source files are not deleted.

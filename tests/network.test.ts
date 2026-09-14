@@ -162,31 +162,39 @@ test("profiles refuse unsafe permissions, links, invalid endpoints and secret-be
 
 async function fixture(timings = { interval: 20, timeout: 1000 }) {
   const root = mkdtempSync(join(tmpdir(), "av-network-"));
+  let creates = 0;
   let starts = 0;
   let closes = 0;
+  const attachments: boolean[] = [];
   const inputs: unknown[] = [];
   const media: unknown[] = [];
-  const server = new VoiceServer(frontendSocketPath(root), async () => ({
-    state: () => ({
-      available: true,
-      codingActivity: "unknown" as const,
-      phase: "live",
-      mic: { muted: true, effectiveMuted: true },
-      speaker: { muted: true, effectiveMuted: true },
-    }),
-    start: async () => {
-      starts++;
-    },
-    close: async () => {
-      closes++;
-    },
-    command: (command) => {
-      inputs.push(command);
-    },
-    clientMedia: (message) => {
-      media.push(message);
-    },
-  }));
+  const server = new VoiceServer(frontendSocketPath(root), async () => {
+    creates++;
+    return {
+      state: () => ({
+        available: true,
+        codingActivity: "unknown" as const,
+        phase: "live",
+        mic: { muted: true, effectiveMuted: true },
+        speaker: { muted: true, effectiveMuted: true },
+      }),
+      start: async () => {
+        starts++;
+      },
+      close: async () => {
+        closes++;
+      },
+      command: (command) => {
+        inputs.push(command);
+      },
+      clientMedia: (message) => {
+        media.push(message);
+      },
+      setFrontendAttached: async (attached) => {
+        attachments.push(attached);
+      },
+    };
+  });
   await server.start();
   const credentials = new DeviceCredentials(root);
   const path = join(root, "profile.json");
@@ -245,6 +253,8 @@ async function fixture(timings = { interval: 20, timeout: 1000 }) {
     open,
     inputs,
     media,
+    attachments,
+    creates: () => creates,
     starts: () => starts,
     closes: () => closes,
     close: async () => {
@@ -277,7 +287,7 @@ test("gateway authenticates before local admission and refuses browser origins a
   }
 });
 
-test("network shares local exclusivity, observer restrictions, media/input and disconnect cleanup", async () => {
+test("network disconnect detaches frontend media while retaining the backend for a local successor", async () => {
   const f = await fixture();
   let local: Awaited<ReturnType<typeof connectFrontend>> | undefined;
   try {
@@ -301,11 +311,22 @@ test("network shares local exclusivity, observer restrictions, media/input and d
     expect(f.closes()).toBe(0);
     owner.ws.close();
     await owner.ended;
-    await until(() => f.closes() === 1);
+    await until(() => f.attachments.at(-1) === false);
+    expect(f.creates()).toBe(1);
+    expect(f.starts()).toBe(1);
+    expect(f.closes()).toBe(0);
+    expect(f.attachments).toEqual([true, false]);
     local = await connectFrontend(f.server.path);
     const remote = await f.open();
     expect((await remote.request("call", { clientId: crypto.randomUUID() })).ok).toBe(false);
-    expect(f.starts()).toBe(2);
+    await until(() => f.attachments.at(-1) === true);
+    expect(f.creates()).toBe(1);
+    expect(f.starts()).toBe(1);
+    await local.close();
+    local = undefined;
+    await until(() => f.attachments.at(-1) === false);
+    await f.server.close();
+    expect(f.closes()).toBe(1);
   } finally {
     await local?.close();
     await f.close();
@@ -320,8 +341,10 @@ test("revocation and heartbeat loss tear down active calls, requiring explicit n
       expect((await owner.request("call", { clientId: crypto.randomUUID() })).ok).toBe(true);
       if (mode === "revoke") f.credentials.revoke(f.id);
       expect(await owner.ended).toBe(mode === "revoke" ? 4403 : 4408);
-      await until(() => f.closes() === 1);
+      await until(() => f.attachments.at(-1) === false);
       expect(f.starts()).toBe(1);
+      expect(f.closes()).toBe(0);
+      expect(f.attachments).toEqual([true, false]);
     } finally {
       await f.close();
     }

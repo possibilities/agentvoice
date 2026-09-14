@@ -40,6 +40,7 @@ export type HostTransport = Pick<
   | "redialAndWait"
   | "sendOpusFrame"
   | "stop"
+  | "setAttached"
   | "handleReady"
   | "handleAnswer"
   | "handleClosed"
@@ -62,6 +63,8 @@ export interface ConsoleHostOptions {
     ) => Promise<ConversationReadResult>,
   ) => void;
   initialMute?: { mic: boolean; speaker: boolean };
+  initialFrontendAttached?: boolean;
+  onFrontendReady?: (setAttached: (attached: boolean) => Promise<void>) => void;
   runtime?: RuntimeOptions;
   debug?: boolean;
   /** Injectable media boundary for tests that must not capture a microphone. */
@@ -108,6 +111,7 @@ export async function runConsoleHost(
   let phase: ClientSessionPhase = "waiting-ready";
   let transport: HostTransport | null = null;
   let audioReady = false;
+  let frontendAttached = options.initialFrontendAttached ?? true;
   const showNotice = (message: string) => {
     if (closed) return;
     feed(message);
@@ -179,6 +183,38 @@ export async function runConsoleHost(
     },
     options.runtime,
   );
+  let attachmentEpoch = 0;
+  let attachmentTransition = Promise.resolve();
+  let attachmentFailure: unknown;
+  const setFrontendAttached = (attached: boolean): Promise<void> => {
+    frontendAttached = attached;
+    const epoch = ++attachmentEpoch;
+    // Fence the old peer immediately, including during a pending native stop.
+    if (!attached) transport?.setAttached(false);
+    audio.micMuted = !attached || microphone.effectiveMuted;
+    audio.speakerMuted = !attached || speaker.effectiveMuted;
+    observer?.refresh();
+    const transition = attachmentTransition.then(async () => {
+      if (closed || (attached && epoch !== attachmentEpoch)) return;
+      if (attachmentFailure) throw attachmentFailure;
+      // Every detach must stop native realtime, even if a successor is already queued.
+      await runtime!.setVoiceAttached(attached);
+      if (closed || epoch !== attachmentEpoch) return;
+      if (attached) transport?.setAttached(true);
+      observer?.refresh();
+    });
+    attachmentTransition = transition.catch((error) => {
+      attachmentFailure = error;
+    });
+    return transition;
+  };
+  if (!frontendAttached) {
+    transport.setAttached(false);
+    attachmentTransition = runtime.setVoiceAttached(false);
+    audio.micMuted = true;
+    audio.speakerMuted = true;
+  }
+  options.onFrontendReady?.(setFrontendAttached);
   options.onHandoffReady?.(async (request) => {
     if (closed || fatal || !audioReady || phase !== "live" || !runtime)
       return handoffFailure("not_ready");
@@ -206,8 +242,8 @@ export async function runConsoleHost(
     return target === "mic" ? microphone : speaker;
   }
   function syncMute(target: AudioTarget): void {
-    if (target === "mic") audio.micMuted = microphone.effectiveMuted;
-    else audio.speakerMuted = speaker.effectiveMuted;
+    if (target === "mic") audio.micMuted = !frontendAttached || microphone.effectiveMuted;
+    else audio.speakerMuted = !frontendAttached || speaker.effectiveMuted;
     observer?.refresh();
   }
   function state(): VoiceState {
@@ -217,8 +253,14 @@ export async function runConsoleHost(
       workspace: config.orchestrator.workspace,
       conversation: runtime?.currentReady ?? undefined,
       phase,
-      mic: { muted: microphone.muted, effectiveMuted: microphone.effectiveMuted },
-      speaker: { muted: speaker.muted, effectiveMuted: speaker.effectiveMuted },
+      mic: {
+        muted: microphone.muted,
+        effectiveMuted: !frontendAttached || microphone.effectiveMuted,
+      },
+      speaker: {
+        muted: speaker.muted,
+        effectiveMuted: !frontendAttached || speaker.effectiveMuted,
+      },
     };
   }
   function shutdown(): Promise<void> {

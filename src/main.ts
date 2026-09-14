@@ -55,7 +55,7 @@ Server options:
   --approval-policy <p>    Native approval policy
   --allow-full-access     Explicit unrestricted files/network and no approvals
   --codex <path>           Stock Codex executable
-  --debug                 Private per-call protocol/media log
+  --debug                 Private runtime protocol/media log
   --help                  Show help
 
 Client options (agentvoice or agentvoice client):
@@ -64,13 +64,14 @@ Client options (agentvoice or agentvoice client):
 
 The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
 For manual use, run agentvoice server. It opens no audio or Codex child while waiting.
-Closing the frontend ends its call; the server returns to waiting.
+Closing the frontend stops media; the server retains native work for the next client.
 The client has pointer controls only: microphone, speaker and hold-to-talk.
-Terminate its process or close its terminal to end a call. There are no app keybindings.
-Server settings and prompt files load for each call. Permissions follow native
+Terminate its process or close its terminal to detach media. There are no app keybindings.
+Server settings and prompt files load for each runtime. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
-Calls resume the workspace .agentvoice-session thread. Remove the marker for a new
-session on the next call, or use the agentvoice_new_session MCP/control operation.
+The first frontend resumes the workspace .agentvoice-session thread; reconnects retain it.
+Use the agentvoice_new_session MCP/control operation for an explicit new session.
+Stopping the server ends native work; runtime restart also replaces the native child.
 Use agentvoice attach agent to answer native approvals and tool questions.
 `;
 

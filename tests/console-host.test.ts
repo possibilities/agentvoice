@@ -25,7 +25,13 @@ function observer() {
       void host.shutdown();
       end.resolve();
     },
+    state: () => host.state(),
   };
+}
+
+async function until(predicate: () => boolean) {
+  for (let n = 0; n < 200 && !predicate(); n++) await Bun.sleep(5);
+  expect(predicate()).toBe(true);
 }
 
 test("startup failure restores terminal and closes child/media", async () => {
@@ -155,6 +161,89 @@ test("audio-open failure closes the prepared child without negotiating", async (
     expect(h.native.closes).toBe(1);
     expect(h.calls).not.toContain("ready");
   } finally {
+    await h.cleanup();
+  }
+});
+
+test("rapid frontend detach and reattach fences old media and settles on the latest state", async () => {
+  const h = hostHarness();
+  const stopped = deferred();
+  h.native.override = (method) => (method === "thread/realtime/stop" ? stopped.promise : undefined);
+  const setup = observer();
+  const started = deferred();
+  let setAttached!: (attached: boolean) => Promise<void>;
+  const run = runConsoleHost(h.config, "test", {
+    mediaFactory: h.mediaFactory,
+    runtime: h.runtimeOptions,
+    observe: setup.create,
+    onStarted: started.resolve,
+    onFrontendReady: (set) => {
+      setAttached = set;
+    },
+  });
+  try {
+    await started.promise;
+    h.offer("offer");
+    await until(() => h.native.calls.some((call) => call.method === "thread/realtime/start"));
+
+    const detaching = setAttached(false);
+    expect(h.calls.at(-1)).toBe("transport:attached:false");
+    expect(h.audio.micMuted).toBe(true);
+    expect(h.audio.speakerMuted).toBe(true);
+    expect(setup.state().mic.effectiveMuted).toBe(true);
+    expect(setup.state().speaker.effectiveMuted).toBe(true);
+    await until(() => h.native.calls.some((call) => call.method === "thread/realtime/stop"));
+
+    const attaching = setAttached(true);
+    expect(h.audio.micMuted).toBe(false);
+    expect(h.audio.speakerMuted).toBe(false);
+    stopped.resolve();
+    await Promise.all([detaching, attaching]);
+    expect(h.calls.filter((call) => call.startsWith("transport:attached:"))).toEqual([
+      "transport:attached:false",
+      "transport:attached:true",
+    ]);
+  } finally {
+    stopped.resolve();
+    setup.close();
+    await run;
+    await h.cleanup();
+  }
+});
+
+test("failed strict detach keeps queued and future attachments fenced", async () => {
+  const h = hostHarness();
+  const stopped = Promise.withResolvers<void>();
+  h.native.override = (method) => (method === "thread/realtime/stop" ? stopped.promise : undefined);
+  const setup = observer();
+  const started = deferred();
+  let setAttached!: (attached: boolean) => Promise<void>;
+  const run = runConsoleHost(h.config, "test", {
+    mediaFactory: h.mediaFactory,
+    runtime: h.runtimeOptions,
+    observe: setup.create,
+    onStarted: started.resolve,
+    onFrontendReady: (set) => {
+      setAttached = set;
+    },
+  });
+  try {
+    await started.promise;
+    h.offer("offer");
+    await until(() => h.native.calls.some((call) => call.method === "thread/realtime/start"));
+    const detached = setAttached(false);
+    const attached = setAttached(true);
+    const outcomes = Promise.allSettled([detached, attached]);
+    stopped.reject(new Error("stop not acknowledged"));
+    expect((await outcomes).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    await expect(setAttached(true)).rejects.toThrow("stop not acknowledged");
+    expect(h.calls.filter((call) => call.startsWith("transport:attached:"))).toEqual([
+      "transport:attached:false",
+    ]);
+  } finally {
+    stopped.resolve();
+    setup.close();
+    await run;
     await h.cleanup();
   }
 });

@@ -16,6 +16,7 @@ import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types
 import { readSessionMarker, saveSessionMarker } from "../src/core/session-marker.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
 import type { ControllerEvent } from "../src/events/contract.ts";
+import type { ServerMediaMessage } from "../src/frontend/media-protocol.ts";
 import { parseArgs } from "../src/main.ts";
 import { type ControllerOptions, RuntimeController } from "../src/runtime-control/controller.ts";
 import { type RuntimeProcess, spawnRuntimeProcess } from "../src/runtime-control/process.ts";
@@ -61,6 +62,136 @@ function buildLibrary(root: string, version: number): string {
 }
 
 describe("persistent controller and disposable runtime", () => {
+  test("real worker retains native work across detached startup and fresh media reattachments", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "av-detached-worker-")));
+    const configPath = join(root, "server.json");
+    writeFileSync(configPath, "{}");
+    const children: RuntimeProcess[] = [];
+    const media: ServerMediaMessage[] = [];
+    const controller = new RuntimeController({
+      instanceId: "detached-integration",
+      stateDir: root,
+      provenance: {
+        parsed: parseArgs([
+          "--config",
+          configPath,
+          "--workspace",
+          root,
+          "--codex",
+          join(import.meta.dir, "fixtures/controller-codex.ts"),
+        ]),
+        options: { debug: false },
+        launchCwd: root,
+      },
+      version: "test",
+      control: registration,
+      frontendAttached: false,
+      onMedia: (message) => media.push(message),
+      spawn: (generation, event, lease) => {
+        const child = spawnRuntimeProcess(generation, event, lease);
+        children.push(child);
+        return child;
+      },
+    });
+    const audit = () =>
+      readFileSync(join(root, "native-audit.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { pid: number; method: string; params: unknown });
+    try {
+      await controller.start();
+      await until(() => children[0]?.nativePid !== undefined);
+      const retained = controller.status();
+      const workerPid = retained.runtime.pid!;
+      const nativePid = children[0]!.nativePid!;
+      expect(retained).toMatchObject({
+        instanceId: "detached-integration",
+        generation: 1,
+        threadId: "test-thread-1",
+        runtime: { phase: "ready", pid: workerPid, attachmentReady: true },
+      });
+      expect(controller.state().phase).toBe("waiting-ready");
+      expect(controller.state().mic.effectiveMuted).toBe(true);
+      expect(controller.state().speaker.effectiveMuted).toBe(true);
+      expect(media).toEqual([]);
+
+      const target = {
+        instanceId: retained.instanceId,
+        generation: retained.generation,
+        threadId: retained.threadId,
+        workspace: root,
+      };
+      expect(await controller.attachmentTicket(target)).toMatchObject({
+        threadId: retained.threadId,
+        workspace: root,
+      });
+      expect(
+        await controller.mailboxOpen({
+          expectedInstanceId: retained.instanceId,
+          operationId: "detached-mailbox",
+        }),
+      ).toMatchObject({ instanceId: retained.instanceId, entries: [] });
+
+      await controller.setFrontendAttached(true);
+      await until(() => media.some((message) => message.type === "prepare"));
+      const first = media.find((message) => message.type === "prepare")!;
+      expect(first.type).toBe("prepare");
+      controller.clientMedia({ type: "offer", sessionId: first.sessionId, sdp: "offer-one" });
+      await until(() =>
+        media.some(
+          (message) =>
+            message.type === "answer" &&
+            message.sessionId === first.sessionId &&
+            message.sdp === "answer:offer-one",
+        ),
+      );
+      controller.clientMedia({ type: "connected", sessionId: first.sessionId });
+      await until(() => controller.state().phase === "live");
+
+      await controller.setFrontendAttached(false);
+      await until(
+        () => audit().filter((call) => call.method === "thread/realtime/stop").length === 1,
+      );
+      expect(controller.state().mic.effectiveMuted).toBe(true);
+      expect(controller.state().speaker.effectiveMuted).toBe(true);
+      expect(controller.status()).toMatchObject({
+        instanceId: retained.instanceId,
+        generation: retained.generation,
+        threadId: retained.threadId,
+        runtime: { pid: workerPid, attachmentReady: true },
+      });
+      expect(children[0]!.nativePid).toBe(nativePid);
+
+      await controller.setFrontendAttached(true);
+      await until(() => media.filter((message) => message.type === "prepare").length === 2);
+      const second = media.filter((message) => message.type === "prepare")[1]!;
+      expect(second.sessionId).not.toBe(first.sessionId);
+      controller.clientMedia({ type: "offer", sessionId: second.sessionId, sdp: "offer-two" });
+      await until(() =>
+        media.some(
+          (message) =>
+            message.type === "answer" &&
+            message.sessionId === second.sessionId &&
+            message.sdp === "answer:offer-two",
+        ),
+      );
+      controller.clientMedia({ type: "connected", sessionId: second.sessionId });
+      await until(() => controller.state().phase === "live");
+      expect(audit().filter((call) => call.method === "thread/realtime/start")).toHaveLength(2);
+      expect(controller.status().runtime.pid).toBe(workerPid);
+      expect(children[0]!.nativePid).toBe(nativePid);
+
+      await controller.setFrontendAttached(false);
+      await until(
+        () => audit().filter((call) => call.method === "thread/realtime/stop").length === 2,
+      );
+    } finally {
+      await controller.shutdown();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test("real Bun + native children replace code/config on the exact leased thread and keep durable operation recovery", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "av-controller-")));
     const configPath = join(root, "server.json");
@@ -428,8 +559,16 @@ describe("persistent controller and disposable runtime", () => {
       await controller.restart(retryRequest);
       await until(() => controller.status().currentOperation?.phase === "ready");
       expect(activations.slice(1)).toEqual([
-        { threadId: "saved", mute: { mic: true, speaker: false } },
-        { threadId: "saved", mute: { mic: true, speaker: false } },
+        {
+          threadId: "saved",
+          frontendAttached: true,
+          mute: { mic: true, speaker: false },
+        },
+        {
+          threadId: "saved",
+          frontendAttached: true,
+          mute: { mic: true, speaker: false },
+        },
       ]);
       expect((await controller.restart(first)).phase).toBe("failed");
       const completedRetry = await controller.restart(retryRequest);

@@ -14,7 +14,7 @@
     },
     "debug": {
       "type": "boolean",
-      "description": "Write private per-call protocol/media logs. Loaded once per runtime generation. Default: false. --debug wins over false here."
+      "description": "Write private runtime protocol/media logs. Loaded once per runtime generation. Default: false. --debug wins over false here."
     },
     "codex-config": {
       "type": "array",
@@ -37,7 +37,7 @@
       "properties": {
         "workspace": {
           "type": "string",
-          "description": "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: current directory under the XDG state agentvoice/default/workspaces base, selected per call. --workspace overrides this value."
+          "description": "The conversation workspace: native session selection and the Codex thread use this root. Tilde-expanded; relative paths use the launch directory. Default: current directory under the XDG state agentvoice/default/workspaces base, selected when the server creates its retained workspace session. --workspace overrides this value."
         },
         "model": {
           "type": "string",
@@ -123,7 +123,7 @@
         },
         "name": {
           "type": "string",
-          "description": "Voice timbre, validated by Codex when voice starts. File-based launches load once per runtime generation. Database-backed workspace roles additionally support persistent MCP/API voice_set with voice-only reconnection; runtime restart or another call loads the full saved revision. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through."
+          "description": "Voice timbre, validated by Codex when voice starts. File-based launches load once per runtime generation. Database-backed workspace roles additionally support persistent MCP/API voice_set with voice-only reconnection; runtime or server restart loads the full saved revision. Current v1/v3 timbres: arbor breeze cove ember juniper maple sol spruce vale. Legacy v2 timbres are incompatible with WebRTC. With AgentVoice's v3 default, unset honors Codex's configured realtime voice, then its v3 timbre default. Raw version:null restores the native WebRTC v1 fallback and ignores that configured voice (Codex 0.153.3); explicit voice.name still passes through."
         },
         "version": {
           "type": "string",

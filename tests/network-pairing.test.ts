@@ -456,6 +456,7 @@ test("HTTP enrollment and signed auth-only WSS upgrade never start a call", asyn
     close: async () => {},
     command: () => {},
     clientMedia: () => {},
+    setFrontendAttached: async () => {},
   }));
   await voice.start();
   const gateway = new NetworkGateway(

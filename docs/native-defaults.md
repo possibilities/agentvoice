@@ -131,8 +131,9 @@ bumping the supported codex version (`codex-rs/core/src/realtime_conversation.rs
   AgentVoice-shaped prompt overlays (the seed files were removed for that reason).
   Preserve empty contents and final raw extra precedence; a present name that
   cannot load fails before native startup even when extra would replace its value.
-  Contents load once per runtime generation and are reused until explicit runtime
-  replacement, never watched or copied
+  Contents load once per runtime generation and are reused across frontend detach
+  and reattachment until explicit runtime replacement, `new_session`, or server
+  shutdown, never watched or copied
   between sessions. Legacy names and the retired prompt-files key are metadata-only
   warnings/errors, visible without debug; never silently delete/migrate user files.
   Removing overrides does not rewrite saved history or suppress native

@@ -141,11 +141,11 @@ export class VoiceSessionManager {
     this.pendingRequestedCloses.clear();
   }
 
-  /** Bounded by the caller; resolves when the stop RPC is acknowledged. */
-  async shutdown(): Promise<void> {
+  /** Detachment requires an acknowledged stop; final runtime teardown can be best effort. */
+  async shutdown(requireAcknowledgement = false): Promise<void> {
     if (!this.session) return;
     this.clearSession();
-    await this.stopCounted();
+    await this.stopCounted(requireAcknowledgement);
   }
 
   private fail(session: Session, message: string): void {
@@ -167,7 +167,7 @@ export class VoiceSessionManager {
     void this.stopCounted();
   }
 
-  private async stopCounted(): Promise<void> {
+  private async stopCounted(requireAcknowledgement = false): Promise<void> {
     const stop = Symbol();
     this.pendingRequestedCloses.add(stop);
     try {
@@ -178,6 +178,7 @@ export class VoiceSessionManager {
       // Delete this stop only: its close or a reset may already have consumed it.
       if (error instanceof AppServerError && typeof error.code === "number" && !error.timedOut)
         this.pendingRequestedCloses.delete(stop);
+      if (requireAcknowledgement) throw error;
     }
   }
 }

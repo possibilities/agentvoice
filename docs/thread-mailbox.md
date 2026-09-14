@@ -1,10 +1,10 @@
 # Thread mailbox
 
-During a call, each observed `turn/completed` from a verified direct child of the
+During a server workspace session, each observed `turn/completed` from a verified direct child of the
 orchestrator adds a completion notice and immediately submits a native
 `turn/start`. The notice counts finished turns (`completed`, `failed`, or
 `interrupted`), not unique threads or only successful results. Reusing a child
-for another turn produces another notice. Runtime teardown and call shutdown
+for another turn produces another notice. Runtime teardown and server shutdown
 do not generate wake-ups.
 
 The model receives a named standalone `agentvoice.thread_mailbox_notice` tool
@@ -67,9 +67,11 @@ the root mailbox. Caller metadata is not authentication: the private Unix socket
 and MCP bearer remain controller capabilities, and explicitly authorized external
 control clients can open the mailbox too. Event-socket observation never clears it.
 
-Mailbox contents and cached openings belong to the call controller and survive
-runtime replacement; they are cleared on call shutdown and are not recovered by
-a new call. The native child inventory is rebuilt for each runtime. Old runtime
+Mailbox contents and cached openings belong to the workspace-session controller
+and survive frontend detach and runtime replacement. They are cleared by explicit
+`new_session` or server shutdown and are not recovered by a new server lifetime.
+If the bounded opening cache is exhausted, use one of those explicit boundaries;
+automatic eviction would break lost-response recovery. The native child inventory is rebuilt for each runtime. Old runtime
 callbacks and delayed reads cannot change a successor's mailbox inventory or
 consume its entries. No old wake-up is automatically resubmitted after restart.
 

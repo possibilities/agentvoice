@@ -31,7 +31,9 @@ owns the current source map and recording/attachment implementation guidance.
   Never adopt an unrelated loaded job or edited/unsafe plist, or open audio as a check.
 - src/workspace.ts: default/workspaces generations under XDG state; newest sortable
   timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
-  reject unsafe selected directories. No reset/deletion or context-policy changes.
+  reject unsafe selected directories. Resolve the current generation once when
+  the first frontend creates a server's lazy workspace session, then pin it until
+  server shutdown. No reset/deletion or context-policy changes.
 - web/: Agent | Voice browser composition using the packed `@agentchats/transcript`
   API. `server/live-reader.ts` observes the default frontend, verifies the live
   controller and fences native history/live snapshots and saved voice tails.
@@ -46,21 +48,24 @@ owns the current source map and recording/attachment implementation guidance.
   model/effort. Keep idle threads and unresolved parent links visible.
 - src/main.ts: server/frontend CLI and workspace canonicalization; former
   accounts/resident/remote/console verbs error.
-- src/frontend/: strict private workspace socket, exclusive call ownership and
-  minimal state/input protocol. It also carries validated browser SDP/control
-  messages for every call over version 2, never RTP/Opus/PCM. Disconnect
-  releases PTT and stops the call; never
-  accept a successor until cleanup completes or automatically reconnect/replay.
+- src/frontend/: strict private workspace socket, one retained workspace session,
+  exclusive disposable media ownership and minimal state/input protocol. It also
+  carries validated browser SDP/control messages for every attachment over frontend
+  version 3, never RTP/Opus/PCM. The first owner lazily starts and pins the backend.
+  Disconnect releases PTT, forces effective mute and stops realtime media while
+  preserving the controller, runtime, native work and endpoints. Never accept a
+  successor until detach completes or automatically reconnect/replay. A successor
+  may use a fresh clientId and negotiates fresh media against the same backend.
   Fresh clients observe explicit closing state and wait at most 30 seconds before
-  requesting a call; observation never reserves admission. Connected and unavailable
-  states fail immediately. The composition shares this client readiness handling.
+  requesting ownership; observation never reserves admission. Connected and
+  unavailable states fail immediately. The composition shares this readiness handling.
 - src/composition/: bare-command foreground smolmux launcher and three-pane layout.
   All apps use local PTYs, never Companion ownership; shutdown reaps the exact
   foreground child. Read-only frontend observation gates attachments on this
   client's correlation ID, live media and exact workspace/thread. Correlation is
   not authorization. Observer disconnect cannot close a call or send input.
   Preserve divider revisions. Any pane app exiting or failing ends the entire
-  composition and call, except attachment revocation during runtime replacement.
+  composition and its media attachment, except attachment revocation during runtime replacement.
   Generation observation gates exact-thread pane restarts after live media;
   refresh observation when attachment exit races a generation publication.
   Never replay typed input or open audio/inference in composition tests.
@@ -75,7 +80,8 @@ owns the current source map and recording/attachment implementation guidance.
 - src/browser/: same-device phone page, loopback HTTP/WebSocket gateway and
   bounded browser-media protocol. Bind only `127.0.0.1`; retain the random token
   path, exact Host/Origin checks, one-owner reservation, browser security headers,
-  explicit Start gesture and session IDs. Page/socket loss owns call teardown.
+  explicit Start gesture and session IDs. Page/socket loss owns media detach;
+  it does not tear down the retained workspace session.
   Never persist or expose its URL through discovery, accept arbitrary content,
   rebind for LAN/tailnet/ADB access. The bridge may connect to authenticated WSS
   while the page remains same-device. See ADRs [0032](adr/0032-loopback-browser-media-frontend.md)/[0034](adr/0034-authenticated-client-network.md).
@@ -85,7 +91,7 @@ owns the current source map and recording/attachment implementation guidance.
   a separate private UDS and activate it only after rendering. Network and local
   owners share the same VoiceServer.
   Fail closed on invalid credentials, Origin, protocol, frames and liveness;
-  close local ownership immediately without waiting for a network close handshake.
+  close local media ownership immediately without waiting for a network close handshake.
   No automatic reconnect, secret logging, TLS bypass or public Funnel deployment.
 - src/paths.ts: config/state locations and tilde expansion.
 - src/core/config-schema.ts: single source of truth for config keys and docs;
@@ -155,26 +161,29 @@ owns the current source map and recording/attachment implementation guidance.
   as playback confirmation.
   Validate before native dispatch; unknown null placeholders are stripped.
   Watcher revocation terminates the TUI before automatic reconnect can replay input.
-  Runtime restart and call shutdown revoke before teardown; redial and automatic
-  renewal preserve attachment. Ordinary
+  Runtime restart and server shutdown revoke before teardown; frontend detach,
+  redial and automatic renewal preserve attachment. Ordinary
   acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
 - src/core/session-marker.ts: private workspace `.agentvoice-session` marker,
   bounded safe reads, exclusive atomic publication and fsynced deletion. Runtime
   validates exact native main-thread ownership; no latest-history lookup or fallback.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
-- src/runtime-control/controller.ts: one server-owned call, exact thread leases,
+- src/runtime-control/controller.ts: one server-owned workspace session, exact thread leases,
   workspace lease before startup, explicit new-session replacement and mailbox reset,
-  native identity, readiness, MCP/API redial and full runtime replacement. Keep
-  the frontend connected across restart; cancel pointer holds after successful
-  preflight and before teardown. Explicit new-session replacement clears the marker after cleanup.
-- src/runtime-control/journal.ts: fsynced call-controller-lifetime operations.
+  native identity, readiness, MCP/API redial and full runtime replacement. Preserve
+  controller ownership across frontend detach; cancel pointer holds on detach and
+  after successful replacement preflight. Redial and immediate voice application
+  require an attached frontend. Explicit new-session replacement clears the marker after cleanup.
+- src/runtime-control/journal.ts: fsynced controller-lifetime operations retained
+  across frontend attachments.
   Journal restart handoffs before teardown and submit once after exact resume
   and live media. Keep handoff outcome separate from readiness; never stop healthy
-  media on refusal or ambiguous acceptance. Never adopt old journals in a new call.
+  media on refusal or ambiguous acceptance. Never adopt old journals in a new server session.
 - src/runtime-control/process.ts + worker.ts + protocol.ts: private bounded
-  controller/worker IPC. All calls select the no-device client media adapter
+  controller/worker IPC. All workspace sessions select the no-device client media adapter
   and relay validated SDP/control; no audio/RTP/PCM or bearer capabilities enter
-  UI events. Compiled Android workers must dispatch through the executable, not
+  UI events. Detach stops only realtime voice; explicit restart/new-session or
+  server shutdown owns worker teardown. Compiled Android workers must dispatch through the executable, not
   virtual `/$bunfs` paths.
 - src/runtime-control/sender.ts: bounded worker writes; drop transient voice deltas
   at the soft limit; preserve starts/completions without replacing deltas or failing healthy media.
@@ -183,14 +192,14 @@ owns the current source map and recording/attachment implementation guidance.
   and typed conversation observation. Conversation content has bounded in-memory
   replay and live-item snapshots; native history pages come from the owned child.
   The controller automatically saves private workspace/thread-namespaced voice JSONL
-  from call startup; no automatic speech replay or transcript UI.
+  from workspace-session startup; no automatic speech replay or transcript UI.
   The explicit scripts/voice-record.ts observer may additionally export received voice events to
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history, voice startup context, or automatic replay. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
   No audio/bearer capabilities or mutation/MCP methods. The separate mailbox
   snapshot/replay is controller-owned and survives runtime replacement. Replacement resets
-  native inventory; stale incarnations never publish into a successor or another call. See docs/events.md.
+  native inventory; stale incarnations never publish into a successor or another server session. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
@@ -209,17 +218,19 @@ owns the current source map and recording/attachment implementation guidance.
   authenticated server and its statically registered enabled catalog. Never gate
   voice startup on `mcpServerStatus/list`: native Codex rebuilds the global MCP
   inventory for that request and waits for unrelated servers.
-- src/mailbox/: verified direct-child lifecycle observation, call-owned completion
+- src/mailbox/: verified direct-child lifecycle observation, workspace-session-owned completion
   metadata and count-only wake-ups. Each child terminal turn immediately submits
   a named standalone tool output through native turn/start; multiple pending
   notices are expected. The control/MCP mailbox opening atomically consumes only
   returned entries, caches opening results by operation ID, and never creates
   per-message receipts. Working counts are fresh native snapshots, not cleared
-  counters. Mailbox state/replay survives runtime replacement; stale generations
-  cannot publish or consume. Native owns full child results. See [ADR 0038](adr/0038-thread-mailbox-wakeups.md) and
+  counters. Mailbox state/replay survives frontend detach and runtime replacement;
+  `new_session` and server shutdown clear it. Stale generations cannot publish or
+  consume. Native owns full child results. See [ADR 0038](adr/0038-thread-mailbox-wakeups.md) and
   docs/thread-mailbox.md for capacity, ancestry, caller and retry boundaries.
-- src/core/runtime.ts: launch, exact restart resume, voice session, owned child
-  lifecycle and runtime-cached settings. No account selection/rotation, custom
+- src/core/runtime.ts: launch, exact restart resume, attach/detach of realtime voice,
+  owned child lifecycle and runtime-cached settings. Frontend detach stops only
+  realtime voice; native work and attachment gateway remain. No account selection/rotation, custom
   worker manager. Custom native turn submissions are limited to
   explicit controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)) and immediate child
   completion-tally wake-ups ([ADR 0038](adr/0038-thread-mailbox-wakeups.md)).
@@ -227,7 +238,9 @@ owns the current source map and recording/attachment implementation guidance.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.
 - src/console/host.ts: media-adapter readiness before media starts, negotiation
-  after readiness, visible media notices, worker-local media wiring and quit cleanup.
+  after readiness, visible media notices, worker-local media wiring and explicit
+  frontend attach/detach. Detach fences offers before stopping realtime voice and
+  never tears down native work.
 - src/frontend/native-media.ts + native-peer.ts: client-owned device and WebRTC,
   bounded peer lifecycle and stale completion fences. client-runtime.ts uses the
   installer-owned signed macOS runtime for microphone permission identity.

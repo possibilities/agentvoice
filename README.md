@@ -3,7 +3,8 @@
 # AgentVoice
 
 AgentVoice is an experimental local voice frontend for Codex. A waiting server
-owns the exact workspace, conversation, and stock `codex app-server` child; the
+creates one retained workspace session when its first frontend connects, owning
+the exact workspace, conversation, and stock `codex app-server` child; the
 connected terminal, phone browser, or native Android client owns audio and
 WebRTC.
 
@@ -21,12 +22,19 @@ macOS service installation, private-network pairing, and Android development.
   microphone capture, playback, and WebRTC.
 - The native Android client supports private WSS pairing and foreground calls,
   but remains a development build.
-- Each workspace resumes one exact Codex thread. Closing the active frontend ends
-  the call and app-owned work, while native history remains in Codex.
+- Each workspace resumes one exact Codex thread. Closing the active frontend stops
+  realtime speech and client media, while the server retains native work and its
+  endpoints. A later sole frontend attaches fresh media to the same session.
 
 The server never owns production audio. Network access is opt-in, authenticated,
 and limited to the client API; native Codex, attachment, MCP, and event sockets
 remain local.
+
+The first frontend pins the server's workspace until server shutdown. For the
+managed default this means a newer workspace generation is selected on the next
+server lifetime, not between frontend attachments. Redial is voice-only and
+requires an attached frontend; explicit runtime restart and new session remain
+the intentional native replacement operations.
 
 ## Try it from a prepared checkout
 

@@ -72,6 +72,7 @@ export class ClientMediaSession {
   #rapidFailures = 0;
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #stopping = false;
+  #attached = true;
   #changingVoice = false;
   readonly #redialWaiters = new Map<string, RedialWaiter>();
 
@@ -88,7 +89,7 @@ export class ClientMediaSession {
   sendOpusFrame(_frame: Buffer): void {}
 
   redial(reason: string): void {
-    if (this.#stopping) return;
+    if (this.#stopping || !this.#attached) return;
     if (this.#changingVoice && reason !== "voice-change") return;
     this.#rapidFailures = 0;
     this.#options.onInfo(`redial (${reason})`);
@@ -98,7 +99,7 @@ export class ClientMediaSession {
 
   /** Resolve only when the successor created by this call connects. */
   async redialAndWait(reason: string): Promise<void> {
-    if (this.#stopping || !this.#ready)
+    if (this.#stopping || !this.#attached || !this.#ready)
       throw new Error("Browser voice transport is not ready for redial");
     if (this.#changingVoice) throw new Error("Voice change already in progress");
     this.#changingVoice = reason === "voice-change";
@@ -116,6 +117,18 @@ export class ClientMediaSession {
     } finally {
       this.#changingVoice = false;
     }
+  }
+
+  /** Client lifetime is independent of native work and this reusable signaling adapter. */
+  setAttached(attached: boolean): void {
+    if (this.#stopping || this.#attached === attached) return;
+    this.#attached = attached;
+    this.#rapidFailures = 0;
+    this.#clearRetry();
+    if (!attached) {
+      this.#dropSessions("Frontend detached");
+      this.#setPhase("waiting-ready");
+    } else if (this.#ready) this.#negotiate();
   }
 
   async stop(): Promise<void> {
@@ -218,7 +231,13 @@ export class ClientMediaSession {
   }
 
   #negotiate(): void {
-    if (this.#stopping || !this.#ready || this.#rapidFailures >= MAX_RAPID_FAILURES) return;
+    if (
+      this.#stopping ||
+      !this.#attached ||
+      !this.#ready ||
+      this.#rapidFailures >= MAX_RAPID_FAILURES
+    )
+      return;
     this.#clearRetry();
     const stale = this.#pending;
     this.#pending = null;
