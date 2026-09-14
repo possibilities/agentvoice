@@ -46,7 +46,10 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
   await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
   await expect(agent.getByRole("button", { name: "Stop Agent" })).toHaveCount(0);
-  await expect(agent.locator(".transcript-composer__working")).toHaveText("Working");
+  await expect(agent.locator(".transcript-composer__activity-line")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
   await input.fill("Adjust direction");
   await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");

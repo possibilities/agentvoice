@@ -72,6 +72,7 @@ no status claim beyond the record; it does not certify every detail as current.
 
 | [0056: Transfer durable Work and HUD into independent AgentHUD](0056-independent-agenthud.md) | Accepted | Independent source owner, versioned native observation boundary and managed HUD service. |
 | [0057: Responsive web transcripts with correlated submissions](0057-responsive-web-transcripts.md) | Accepted | Windowed rendering, stable disclosures and exact native identity reconcile immediate local submissions. |
+| [0058: Durable web composer drafts and reader recovery](0058-durable-web-composer-and-reader-recovery.md) | Accepted | Same-call history survives recoverable reader failures; browser entry recovery is separate from native delivery. |
 | [0059: Clarify mailbox and conversation-hold guidance](0059-clarify-mailbox-and-conversation-hold-guidance.md) | Accepted | Wording follows retained workspace-session ownership; no runtime hold mechanism. |
 
 ## Identifier history

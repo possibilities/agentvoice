@@ -114,7 +114,6 @@ export function App() {
   }, [readRevision]);
 
   const holding =
-    view.phase === "connecting" ||
     (view.phase === "live" && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
     (view.phase !== "live" && view.agent.length === 0 && view.voice.length === 0);
   const showStatus = holding || view.phase !== "live";
@@ -133,6 +132,15 @@ export function App() {
   const displayedAgent = useMemo(
     () => optimisticMessages(transcriptView.agent, localSubmissions),
     [transcriptView.agent, localSubmissions],
+  );
+  const observedSubmissionKey = JSON.stringify([
+    ...view.agent.filter((row) => row.id.startsWith("client:")).map((row) => row.id.slice(7)),
+    ...(view.agentControls?.queue.map((row) => row.id) ?? []),
+  ]);
+  // Streaming text must not invalidate the input boundary when exact acknowledgments are unchanged.
+  const observedSubmissionIds = useMemo(
+    () => JSON.parse(observedSubmissionKey) as string[],
+    [observedSubmissionKey],
   );
   const displayedControls = useMemo(() => {
     const controls = view.agentControls;
@@ -155,7 +163,7 @@ export function App() {
     <main aria-label="AgentVoice live transcripts" className="live-view">
       {showStatus ? (
         <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
-          {view.phase === "live" || view.phase === "connecting"
+          {holding && (view.phase === "live" || view.phase === "connecting")
             ? "Loading conversation…"
             : copy[view.phase]}
         </p>
@@ -182,6 +190,8 @@ export function App() {
               {lane === "agent" && displayedControls ? (
                 <AgentInput
                   viewId={view.id}
+                  persistenceScope={view.persistenceScope}
+                  observedSubmissionIds={observedSubmissionIds}
                   controls={displayedControls}
                   disabled={view.phase !== "live" || !displayedControls.available}
                   onAccepted={commandAccepted}
@@ -243,6 +253,8 @@ const TranscriptLane = memo(function TranscriptLane({
 
 const AgentInput = memo(function AgentInput({
   viewId,
+  persistenceScope,
+  observedSubmissionIds,
   controls,
   disabled,
   onAccepted,
@@ -251,6 +263,8 @@ const AgentInput = memo(function AgentInput({
   isObserved,
 }: {
   viewId: string;
+  persistenceScope?: string;
+  observedSubmissionIds: string[];
   controls: AgentControlsView;
   disabled: boolean;
   onAccepted: () => void;
@@ -311,12 +325,14 @@ const AgentInput = memo(function AgentInput({
       ) : null}
       <TranscriptComposer
         transcriptId={viewId}
+        persistenceScope={persistenceScope}
+        observedSubmissionIds={observedSubmissionIds}
         alwaysShowSend
         optimisticSubmit
         active={controls.active}
         pending={controls.pending}
         stopping={controls.stopping}
-        disabled={disabled}
+        actionsDisabled={disabled}
         aria-label="Message Agent"
         placeholder="Message Agent…"
         queue={controls.queue}

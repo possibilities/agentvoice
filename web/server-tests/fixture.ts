@@ -33,6 +33,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
   const methods: string[] = [];
   let history: AgentItem[] = [];
   let delayHistory: Promise<void> | undefined;
+  let delayLive: Promise<void> | undefined;
   const forbidden = async (): Promise<never> => {
     throw new Error("Mutation forbidden");
   };
@@ -58,10 +59,8 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
       voiceGet: forbidden,
     },
   });
-  const events = new EventSocketServer(
-    eventSocketPath(stateDir, instanceId),
-    feed,
-    async (method, params) => {
+  const createEvents = () =>
+    new EventSocketServer(eventSocketPath(stateDir, instanceId), feed, async (method, params) => {
       methods.push(method);
       if (
         params.expectedInstanceId !== instanceId ||
@@ -71,7 +70,10 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
         params.threadId !== threadId
       )
         throw new ObservationError("stale_generation");
-      if (method === "conversation.live.get") return feed.live(threadId);
+      if (method === "conversation.live.get") {
+        await delayLive;
+        return feed.live(threadId);
+      }
       if (method !== "conversation.items.list") throw new Error(`Unexpected method ${method}`);
       const selected = history;
       const selectedThread = threadId;
@@ -91,8 +93,8 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
         changedDuringRead: false,
         nextCursor: offset + 2 < selected.length ? String(offset + 2) : null,
       };
-    },
-  );
+    });
+  let events: EventSocketServer | undefined = createEvents();
   await events.start();
   const server = new VoiceServer(frontendSocketPath(stateDir), async (notify) => {
     starts++;
@@ -146,6 +148,18 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
     delayHistory: (delay?: Promise<void>) => {
       delayHistory = delay;
     },
+    delayLive: (delay?: Promise<void>) => {
+      delayLive = delay;
+    },
+    stopEvents: () => {
+      events?.close();
+      events = undefined;
+    },
+    startEvents: async () => {
+      if (events) return;
+      events = createEvents();
+      await events.start();
+    },
     voice: (event: string, data: object) =>
       appendFileSync(
         recordingPath,
@@ -168,7 +182,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
     close: async () => {
       await owner?.close();
       await server.close();
-      events.close();
+      events?.close();
       await control.close();
       rmSync(root, { recursive: true, force: true });
     },

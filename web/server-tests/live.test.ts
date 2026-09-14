@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { LiveReader } from "../server/live-reader.ts";
 import { agentMessage, VoiceMessages } from "../server/messages.ts";
 import type { LiveView } from "../src/types.ts";
@@ -287,10 +290,12 @@ test("running server discovery, native history + live drafts, call replacement, 
     for (const secret of [h.root, h.control.bearerToken, h.control.socketPath])
       expect(privateView).not.toContain(secret);
     const oldId = view.id;
+    const oldScope = view.persistenceScope;
     h.history([user("new", "New generation")]);
     h.replace("successor");
     view = await until(reader, (value) => value.agent[0]?.content === "New generation");
     expect(view.id).not.toBe(oldId);
+    expect(view.persistenceScope).not.toBe(oldScope);
     expect(view.voice).toEqual([]);
     await h.hangup();
     await until(reader, (value) => value.phase === "waiting" && value.agent.length === 0);
@@ -328,6 +333,185 @@ test("late native history cannot populate a successor and a missing server recon
     absent.close();
   } finally {
     delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+});
+
+test("event transport reconnect preserves one verified view while fencing actions", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history([user("kept", "Verified cached history")]);
+    await h.start();
+    const live = await until(
+      reader,
+      (view) => view.agent[0]?.content === "Verified cached history",
+    );
+    const { id, persistenceScope } = live;
+    expect(persistenceScope).toMatch(/^[a-f0-9]{64}$/);
+
+    h.stopEvents();
+    const unavailable = await until(reader, (view) => view.phase === "unavailable");
+    expect(unavailable.id).toBe(id);
+    expect(unavailable.persistenceScope).toBe(persistenceScope);
+    expect(unavailable.agent.map((message) => message.content)).toEqual([
+      "Verified cached history",
+    ]);
+    expect(unavailable.agentControls?.available).toBe(false);
+    await expect(
+      reader.agentCommand({
+        action: "send",
+        viewId: id,
+        requestId: randomUUID(),
+        text: "must stay local",
+      }),
+    ).rejects.toThrow("call changed");
+
+    await h.startEvents();
+    const recovered = await until(reader, (view) => view.phase === "live");
+    expect(recovered.id).toBe(id);
+    expect(recovered.persistenceScope).toBe(persistenceScope);
+    expect(recovered.agent.map((message) => message.content)).toEqual(["Verified cached history"]);
+
+    const diagnosticsPath = join(h.stateDir, "web", "reader-diagnostics.jsonl");
+    const diagnostics = readFileSync(diagnosticsPath, "utf8");
+    expect(lstatSync(diagnosticsPath).mode & 0o077).toBe(0);
+    expect(diagnostics).toContain('"stage":"events.closed"');
+    expect(diagnostics).toContain('"error":"disconnected"');
+    for (const secret of [
+      h.root,
+      h.control.bearerToken,
+      h.control.socketPath,
+      "Verified cached history",
+    ])
+      expect(diagnostics).not.toContain(secret);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("a timed-out history socket cannot kill live observation and retries independently", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir, 50, 50);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.history([user("published", "Published before timeout")]);
+    await h.start();
+    const initial = await until(
+      reader,
+      (view) => view.agent[0]?.content === "Published before timeout",
+    );
+    h.history([user("replacement", "Recovered history")]);
+    h.delayHistory(delayed.promise);
+    h.feed.conversation({
+      event: "conversation.turn.completed",
+      revision: 1,
+      data: { threadId: "main", turnId: "turn", status: "completed" },
+    });
+    await Bun.sleep(260);
+    await reader.read();
+    await Bun.sleep(5_100);
+    h.feed.conversation({
+      event: "conversation.item.started",
+      revision: 2,
+      data: {
+        threadId: "main",
+        turnId: "live-turn",
+        item: { type: "agentMessage", id: "still-live", text: "Live after history timeout" },
+      },
+    });
+    const during = await until(reader, (view) =>
+      view.agent.some((message) => message.content === "Live after history timeout"),
+    );
+    expect(during.phase).toBe("live");
+    expect(during.id).toBe(initial.id);
+    expect(during.agent.some((message) => message.content === "Published before timeout")).toBe(
+      true,
+    );
+    expect(during.agentNotice).toContain("Retrying in the background");
+
+    h.delayHistory();
+    delayed.resolve();
+    const recovered = await until(reader, (view) =>
+      view.agent.some((message) => message.content === "Recovered history"),
+    );
+    expect(recovered.id).toBe(initial.id);
+    expect(recovered.agent.some((message) => message.content === "Published before timeout")).toBe(
+      false,
+    );
+  } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+}, 10_000);
+
+test("a timed-out live read retains verified rows and reconnects the same incarnation", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.history([user("verified", "Visible through live timeout")]);
+    await h.start();
+    const initial = await until(
+      reader,
+      (view) => view.agent[0]?.content === "Visible through live timeout",
+    );
+    h.delayLive(delayed.promise);
+    await Bun.sleep(260);
+    const unavailable = await reader.read();
+    expect(unavailable.phase).toBe("unavailable");
+    expect(unavailable.id).toBe(initial.id);
+    expect(unavailable.agent.map((message) => message.content)).toEqual([
+      "Visible through live timeout",
+    ]);
+    expect(unavailable.agentControls?.available).toBe(false);
+    const diagnostics = readFileSync(join(h.stateDir, "web", "reader-diagnostics.jsonl"), "utf8");
+    expect(diagnostics).toContain('"stage":"conversation.live"');
+    expect(diagnostics).toContain('"error":"timeout"');
+
+    h.delayLive();
+    delayed.resolve();
+    const recovered = await until(reader, (view) => view.phase === "live");
+    expect(recovered.id).toBe(initial.id);
+    expect(recovered.agent.map((message) => message.content)).toEqual([
+      "Visible through live timeout",
+    ]);
+  } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+}, 10_000);
+
+test("replacement during reader recovery cannot inherit cache, actions, or incarnation", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history([user("old", "Old verified call")]);
+    await h.start();
+    const old = await until(reader, (view) => view.agent[0]?.content === "Old verified call");
+    h.stopEvents();
+    await until(reader, (view) => view.phase === "unavailable");
+    await Bun.sleep(260);
+    await reader.read();
+
+    h.replace();
+    h.history([user("new", "Successor only")]);
+    const fenced = await until(reader, (view) => view.id !== old.id);
+    expect(fenced.id).not.toBe(old.id);
+    expect(fenced.persistenceScope).toBe(old.persistenceScope);
+    expect(JSON.stringify(fenced.agent)).not.toContain("Old verified call");
+    expect(fenced.agentControls?.available).toBe(false);
+
+    await h.startEvents();
+    const successor = await until(reader, (view) => view.agent[0]?.content === "Successor only");
+    expect(successor.id).toBe(fenced.id);
+    expect(successor.persistenceScope).toBe(fenced.persistenceScope);
+    expect(JSON.stringify(successor)).not.toContain("Old verified call");
+  } finally {
     reader.close();
     await h.close();
   }

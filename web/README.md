@@ -6,8 +6,12 @@ Two equal, full-height lanes put Agent on the left and Voice on the right. They 
 disclosures. There is no toolbar or call control.
 The Agent lane includes the shared text composer with an always-visible Send
 button and Steer / Queue choices while Agent is working. Send is disabled when
-its action is unavailable. Working sits in the upper-right composer gutter; the
-Voice lane has no composer.
+its action is unavailable. The divider above the composer shows work without
+changing padding or layout; reduced motion keeps it still. The Voice lane has no
+composer. Browser-local entry recovery preserves drafts, failed submissions and
+queued edits across reloads for the verified workspace/thread. Storage is best
+effort in the same browser profile and origin; it cannot survive unavailable or
+cleared storage. Recovered input is never automatically resent.
 A quiet lined dock below Voice tracks the Agent composer's height, keeping the
 two transcript viewports aligned as drafts and queued messages expand.
 Both lanes window measured message blocks, open at the latest message and follow

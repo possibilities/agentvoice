@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.4
+# @agentchats/transcript 0.3.5
 
-Packed from [agentchats b2e0511](https://github.com/possibilities/agentchats/commit/b2e05114b2d7636f1c201ccd4376bb6dbd0d5ec3),
+Packed from [agentchats b0b827e](https://github.com/possibilities/agentchats/commit/b0b827ed0f1d86f9d53a375142d4f8e152024d26),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
 
@@ -23,7 +23,11 @@ Consumer fixes and shared features landed upstream:
 - `b2e0511`: retains exact reading anchors when varied-height history is prepended,
   with bounded retries until the saved row is mounted and measured.
 
-Archive SHA-256: `b16d16ac6ede815a26329d8c790bbbe8efb245c377bb3fdce20b50489a294fe3`.
+- `b0b827e`: durable scoped composer entry recovery, exact pending reconciliation,
+  full-width loading divider with reduced-motion support, and faithful empty
+  prose-fence rendering. Native text shortcut defaults remain unhandled.
+
+Archive SHA-256: `2294b673eddb6949f5995b1741ec6b6051cb9e33bcfd3a2ff83943840620cb6d`.
 
 Reproduce from that clean agentchats revision:
 

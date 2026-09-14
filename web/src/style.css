@@ -69,11 +69,9 @@ body,
   background: #0b100f;
 }
 .agent-dock .agentchats-transcript.transcript-composer {
+  --transcript-composer-divider: #27312f;
+  --transcript-composer-progress: #c5e791;
   background: transparent;
-}
-.agent-dock .transcript-composer__working {
-  top: 2px;
-  right: var(--dock-inset-inline);
 }
 .agent-dock .transcript-composer__content {
   padding: var(--dock-inset-block) var(--dock-inset-inline);

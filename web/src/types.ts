@@ -21,6 +21,8 @@ export type AgentControlsView = {
 export type LiveView = {
   phase: "offline" | "waiting" | "connecting" | "live" | "unavailable";
   id: string;
+  /** Opaque workspace/thread scope for browser-local composer recovery. */
+  persistenceScope?: string;
   voice: TranscriptMessage[];
   agent: TranscriptMessage[];
   /** True until the first complete or viewer-bounded history pass is published. */

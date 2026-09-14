@@ -158,13 +158,29 @@ for (const width of [1440, 600]) {
         .toBe(initial);
     };
     view.agentControls!.active = true;
-    await expect(page.locator(".transcript-composer__working")).toHaveText("Working");
+    await expect(page.locator(".transcript-composer__activity-line")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
     await stable();
-    const working = page.locator(".transcript-composer__working");
+    const working = page.locator(".transcript-composer__activity-line");
     const workingBox = (await working.boundingBox())!;
     const dockBox = (await dock.boundingBox())!;
     const inputBox = (await input.boundingBox())!;
-    expect(workingBox.x + workingBox.width).toBeLessThanOrEqual(dockBox.x + dockBox.width - 20);
+    expect(workingBox.x).toBe(dockBox.x);
+    expect(workingBox.width).toBe(dockBox.width);
+    expect(Math.abs(workingBox.y - dockBox.y)).toBeLessThanOrEqual(1);
+    expect(workingBox.height).toBe(2);
+    expect(await working.evaluate((el) => getComputedStyle(el, "::after").animationName)).toBe(
+      "none",
+    );
+    await expect(page.locator(".transcript-composer__working")).toHaveCount(0);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    expect(await working.evaluate((el) => getComputedStyle(el, "::after").animationName)).toBe(
+      "transcript-composer-progress",
+    );
+    await stable();
+    await page.emulateMedia({ reducedMotion: "reduce" });
     expect(workingBox.y + workingBox.height).toBeLessThanOrEqual(inputBox.y);
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
     await page.screenshot({ path: `test-results/composer-working-${width}.png` });

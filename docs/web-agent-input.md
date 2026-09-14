@@ -34,8 +34,8 @@ permissions, cwd or other launch overrides. Native approvals remain stock TUI-ow
 
 The browser always shows Send, disabled when input is empty or submission is
 unavailable. The follow-up selector chooses Steer or Queue while Agent works.
-Working appears at the upper-right of the composer, independently of the Send
-control. No Stop control is shown; the host API retains interrupt support and
+A fixed full-width divider above the composer indicates work, with a still
+reduced-motion state and no Working label or reserved text padding. No Stop control is shown; the host API retains interrupt support and
 its lifecycle below.
 
 Queue draining requires confirmed idle state and dispatches one row at a time.
@@ -92,5 +92,20 @@ A rejection removes the local transcript/queue placeholder; unknown delivery
 remains visibly unresolved until its exact native identity appears. A native
 echo observed before an HTTP failure establishes acceptance and prevents a
 spurious draft restoration. View replacement fences all local placeholders and
-late replies. Browser refresh discards local pending state; the persisted host
-queue and native history remain authoritative.
+late replies. Browser refresh restores entry recovery data under its opaque workspace/thread
+scope. Pending text is retained for review and reconciled only by exact native
+or queue identity; it is never automatically resent. The persisted host queue
+and native history remain authoritative. Newer drafts remain independent of
+acknowledgments and failed-input recovery. Browser storage is best effort: denied
+access, quota, eviction or explicit clearing can prevent recovery.
+
+
+## Reader recovery
+
+A recoverable observer failure preserves the last verified same-call history and
+browser entry scope. Sending is disabled while reconnecting, while drafting stays
+available. The reader revalidates exact native and frontend identity before
+resuming; verified replacement fences old actions and selects a separate thread
+scope. Background history failures do not close the live-read socket. Bounded
+diagnostics retain future failure reasons without conversation bodies or secrets.
+See [ADR 0058](adr/0058-durable-web-composer-and-reader-recovery.md).
