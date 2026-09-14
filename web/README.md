@@ -24,7 +24,8 @@ Both lanes window measured message blocks, open at the latest message and follow
 new text. Stable row identities retain tool expansion across polls, appends and
 group changes. Browser find sees mounted history; the API retains the complete
 loaded transcript. A single expanded activity group remains one measured block. Scrolling
-up lets you read earlier text and shows the shared jump-to-latest chip with a count
+up releases follow on the first deliberate upward wheel, touch, or keyboard input,
+even within a pixel of the bottom. It lets you read earlier text and shows the shared jump-to-latest chip with a count
 of new messages. Using the chip or scrolling back to the bottom resumes following.
 
 The view observes the existing **default local AgentVoice server**, independent of

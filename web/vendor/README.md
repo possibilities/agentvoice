@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.8
+# @agentchats/transcript 0.3.9
 
-Packed from AgentChats candidate `3cc0b9e`, based on
+Packed from AgentChats candidate `e57ab1f`, based on
 [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
@@ -38,7 +38,10 @@ Consumer fixes and shared features landed upstream:
 - `3cc0b9e`: opt-in Markdown document viewer with host loading, relative navigation,
   keyboard focus, frontmatter and source disclosure, while preserving external links.
 
-Archive SHA-256: `4142eee0208d710e1f6ad2340fe3b9a069ef62c823593f783df8ffecf6c26b3a`.
+- `e57ab1f`: first upward wheel, touch, or keyboard intent releases follow immediately;
+  appended and streaming text preserve the reading anchor even near the bottom.
+
+Archive SHA-256: `0a004ef29d14593aba2cd7c78efba2635885e08b0ed4ccc793ea7622e840d394`.
 
 Reproduce from that clean agentchats revision:
 
