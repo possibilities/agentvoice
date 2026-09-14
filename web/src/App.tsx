@@ -1,4 +1,8 @@
-import { Transcript, TranscriptComposer } from "@agentchats/transcript/react";
+import {
+  DocumentViewerProvider,
+  Transcript,
+  TranscriptComposer,
+} from "@agentchats/transcript/react";
 import {
   memo,
   useCallback,
@@ -9,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { loadDocument } from "./document-loader.ts";
 import { kioskPersistenceInstanceId } from "./kiosk-context.ts";
 import {
   type OptimisticSubmission,
@@ -164,53 +169,55 @@ export function App() {
     });
   }, [transcriptView, view.id, view.agentControls]);
   return (
-    <main aria-label="AgentVoice live transcripts" className="live-view">
-      {showStatus ? (
-        <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
-          {holding && hasSession ? "Loading conversation…" : copy[view.phase]}
-        </p>
-      ) : null}
-      <div className="dual-pane" hidden={!!holding}>
-        {(["agent", "voice"] as const).map((lane) => (
-          <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
-            <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
-            <TranscriptLane
-              lane={lane}
-              viewId={transcriptView.id}
-              phase={transcriptView.phase}
-              notice={transcriptView[`${lane}Notice`]}
-              messages={lane === "agent" ? displayedAgent : transcriptView.voice}
-              holding={!!holding}
-            />
-            <div
-              ref={lane === "agent" ? agentDock : undefined}
-              className={lane === "agent" ? "agent-dock" : "voice-dock"}
-              style={lane === "voice" ? { height: dockHeight } : undefined}
-              aria-hidden={lane === "voice" ? true : undefined}
-              hidden={lane === "voice" && dockHeight === 0}
-            >
-              {lane === "agent" && displayedControls ? (
-                <AgentInput
-                  viewId={view.id}
-                  persistenceScope={view.persistenceScope}
-                  persistenceInstanceId={persistenceInstanceId}
-                  observedSubmissionIds={observedSubmissionIds}
-                  controls={displayedControls}
-                  disabled={
-                    (view.phase !== "live" && view.phase !== "detached") ||
-                    !displayedControls.available
-                  }
-                  onAccepted={commandAccepted}
-                  onBegin={beginSubmission}
-                  onSettle={settleSubmission}
-                  isObserved={submissionObserved}
-                />
-              ) : null}
-            </div>
-          </section>
-        ))}
-      </div>
-    </main>
+    <DocumentViewerProvider load={loadDocument} resetKey={view.id}>
+      <main aria-label="AgentVoice live transcripts" className="live-view">
+        {showStatus ? (
+          <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
+            {holding && hasSession ? "Loading conversation…" : copy[view.phase]}
+          </p>
+        ) : null}
+        <div className="dual-pane" hidden={!!holding}>
+          {(["agent", "voice"] as const).map((lane) => (
+            <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
+              <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
+              <TranscriptLane
+                lane={lane}
+                viewId={transcriptView.id}
+                phase={transcriptView.phase}
+                notice={transcriptView[`${lane}Notice`]}
+                messages={lane === "agent" ? displayedAgent : transcriptView.voice}
+                holding={!!holding}
+              />
+              <div
+                ref={lane === "agent" ? agentDock : undefined}
+                className={lane === "agent" ? "agent-dock" : "voice-dock"}
+                style={lane === "voice" ? { height: dockHeight } : undefined}
+                aria-hidden={lane === "voice" ? true : undefined}
+                hidden={lane === "voice" && dockHeight === 0}
+              >
+                {lane === "agent" && displayedControls ? (
+                  <AgentInput
+                    viewId={view.id}
+                    persistenceScope={view.persistenceScope}
+                    persistenceInstanceId={persistenceInstanceId}
+                    observedSubmissionIds={observedSubmissionIds}
+                    controls={displayedControls}
+                    disabled={
+                      (view.phase !== "live" && view.phase !== "detached") ||
+                      !displayedControls.available
+                    }
+                    onAccepted={commandAccepted}
+                    onBegin={beginSubmission}
+                    onSettle={settleSubmission}
+                    isObserved={submissionObserved}
+                  />
+                ) : null}
+              </div>
+            </section>
+          ))}
+        </div>
+      </main>
+    </DocumentViewerProvider>
   );
 }
 

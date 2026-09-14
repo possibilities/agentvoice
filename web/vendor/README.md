@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.7
+# @agentchats/transcript 0.3.8
 
-Packed from AgentChats candidate `7135145`, based on
+Packed from AgentChats candidate `3cc0b9e`, based on
 [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
@@ -35,7 +35,10 @@ Consumer fixes and shared features landed upstream:
 - `7135145`: readable Codex subagent lifecycle rows preserve distinct activity
   identities and expose the agent path, action, thread, and event ID.
 
-Archive SHA-256: `6b4c81cf38b18781a5a48de1472c45f13c58d85f3c2f25ad24dd500101c8d94c`.
+- `3cc0b9e`: opt-in Markdown document viewer with host loading, relative navigation,
+  keyboard focus, frontmatter and source disclosure, while preserving external links.
+
+Archive SHA-256: `4142eee0208d710e1f6ad2340fe3b9a069ef62c823593f783df8ffecf6c26b3a`.
 
 Reproduce from that clean agentchats revision:
 

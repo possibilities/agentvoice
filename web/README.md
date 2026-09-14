@@ -89,11 +89,19 @@ concurrent reads, observes the private frontend and discovers the exact live
 workspace/thread controller through its verified status. Read-only discovery also
 accepts control protocols 5 and 6 so an existing call need not restart to open this view;
 the thread monitor/HUD also accepts these read-only status versions, while
-mutation discovery keeps the current protocol requirement. The browser cannot select
-a workspace, thread, path, endpoint or RPC method. Native sockets, descriptors,
+mutation discovery keeps the current protocol requirement. For transcript and action
+requests, the browser cannot select a workspace, thread, path, endpoint or RPC method. Native sockets, descriptors,
 credentials and grants remain in the local process. Requests require a loopback
 peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins are
 refused. Remote Markdown images and embeds are blocked.
+
+Local Markdown links open an in-app document viewer with Back and Close. The
+shared package owns rendering; `POST /api/document` resolves only linked documents
+under host-granted roots. Relative links use a previously served document as their
+base. Original links and canonical source paths remain visible. Ordinary external
+links keep browser navigation. Unsupported, unavailable or disallowed documents
+show an error; there is no arbitrary file browser or remote-page proxy. See
+[ADR 0063](../docs/adr/0063-linked-markdown-document-viewer.md) for the access boundary.
 
 The Voice lane incrementally tails the same private, identity-checked JSONL used
 by `attach voice`, including saved speech from previous calls on this exact thread.
