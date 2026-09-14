@@ -75,7 +75,7 @@ function safePath(path: string): void {
   }
 }
 
-function directory(path: string): void {
+export function directory(path: string): void {
   safePath(path);
   const stat = info(path);
   if (stat && (stat.uid !== uid || (stat.mode & 0o022) !== 0)) {
@@ -99,7 +99,7 @@ function git(checkout: string, ...args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function checkoutHead(checkout: string): string {
+export function checkoutHead(checkout: string): string {
   directory(checkout);
   if (git(checkout, "rev-parse", "--show-toplevel") !== realpathSync(checkout)) {
     refuse(`source must be an exact Git checkout: ${checkout}`);

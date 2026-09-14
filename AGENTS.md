@@ -153,6 +153,15 @@ a full install restarts the LaunchAgent and ends a call. Quit only the exact men
 app when replacement requires it; do not terminate a call to make room for an app
 update. Preserve Studio, phone, grants, and unrelated services.
 
+## Durable Work HUD
+
+`agenthud` owns durable Work, Assignment and Result records in independent state.
+Read [the HUD contract](docs/hud.md) and [ADR 0055](docs/adr/0055-durable-work-hud.md)
+before editing this owner. The sibling `hud/` UI reads snapshots. Run `hud:check`,
+`hud:test`, and the root checks for HUD changes. `scripts/install-hud.sh --install`
+prepares and publishes only HUD; never substitute the default service installer.
+AgentStart owns distribution/cutover of the HUD skill and MCP inventory.
+
 ## Source map
 
 Read [architecture and source ownership](docs/architecture.md) before editing a
@@ -271,7 +280,9 @@ the [field guide](docs/field-guide.md) retains the underlying audit evidence.
   frontend media; the server retains native work.
 - Apply the [configuration and prompt rules](docs/native-defaults.md#configuration-and-prompt-rules)
   before changing any native settings, role or prompt path.
-- No AgentVoice worker execution tools, registry, archival or result reports.
+- No AgentVoice runtime worker execution tools, registry, archival or result reports.
+  The separate `src/hud/` Work owner stores declared assignments/results and projects
+  native observations; see [ADR 0055](docs/adr/0055-durable-work-hud.md). It never executes agents.
   Automated custom turn submission is limited to explicit MCP/API restart handoffs ([ADR 0016](docs/adr/0016-restart-handoff.md)) and immediate metadata-mailbox tally wake-ups ([ADR 0038](docs/adr/0038-thread-mailbox-wakeups.md)). Explicit human Agent composer input uses the exact-thread attachment gateway; see [web input](docs/web-agent-input.md). For handoffs, submit once
   after exact identity and live media checks; never retry ambiguous acceptance,
   echo the private prompt in status/errors or change prompt defaults.

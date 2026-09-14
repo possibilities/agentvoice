@@ -13,7 +13,13 @@
       "!web/dist",
       "!web/node_modules",
       "!web/test-results",
-      "!web/package-lock.json"
+      "!web/package-lock.json",
+      "hud/**",
+      "!hud/dist",
+      "!hud/node_modules",
+      "!hud/test-results",
+      "!hud/playwright-report",
+      "!hud/package-lock.json"
     ]
   },
   "formatter": {

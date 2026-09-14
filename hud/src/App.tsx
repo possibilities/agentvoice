@@ -357,6 +357,9 @@ function WorkView({
       <details className="audit-disclosure work-audit">
         <summary>Work context</summary>
         <div className="audit-grid">
+          <AuditField label="Scope revision">
+            <p>{work.scopeRevision ?? 1}</p>
+          </AuditField>
           <AuditField label="Authority">
             <EvidenceList evidence={work.authority} />
           </AuditField>
@@ -464,6 +467,7 @@ function AssignmentRow({
             <AuditValues
               values={[
                 `Issuer: ${assignment.issuer}`,
+                `Assigned scope revision: ${assignment.scopeRevision ?? 1}`,
                 assignment.parentAssignmentId
                   ? `Parent assignment: ${assignment.parentAssignmentId}`
                   : "No parent assignment",
@@ -493,6 +497,9 @@ function ResultRow({ result }: { result: Result }) {
       <details className="audit-disclosure result-audit">
         <summary>Returned evidence and receipts</summary>
         <div className="audit-grid">
+          <AuditField label="Returned scope revision">
+            <p>{result.scopeRevision ?? 1}</p>
+          </AuditField>
           <AuditField label="Returned evidence">
             <EvidenceList evidence={result.evidence} />
           </AuditField>

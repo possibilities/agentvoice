@@ -10,7 +10,8 @@
   "type": "module",
   "description": "Local Codex voice server and pointer TUI with managed default workspaces.",
   "bin": {
-    "agentvoice": "./src/main.ts"
+    "agentvoice": "./src/main.ts",
+    "agenthud": "./src/hud/main.ts"
   },
   "scripts": {
     "server": "bun run src/main.ts server",
@@ -40,7 +41,11 @@
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build",
     "web:check": "npm --prefix web run check",
-    "web:test": "npm --prefix web test"
+    "web:test": "npm --prefix web test",
+    "hud:install": "bash scripts/install-hud.sh --install",
+    "hud:build": "npm --prefix hud run build",
+    "hud:check": "npm --prefix hud run check",
+    "hud:test": "npm --prefix hud test"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",

@@ -16,6 +16,10 @@ export type ThreadRow = ThreadView & {
   nickname?: string | null;
 };
 export type ThreadMonitor = {
+  instanceId?: string;
+  generation?: number;
+  sequence?: number;
+  rootThreadId?: string;
   phase: string;
   workspace?: string;
   inventory: ThreadSnapshot["inventory"];
@@ -90,6 +94,10 @@ export async function readThreadMonitor(
     throw new Error("AgentVoice runtime changed during observation; retry");
   const threads = after.threads.map((thread) => ({ ...thread, ...settings.get(thread.id) }));
   return {
+    instanceId: after.instanceId,
+    generation: after.generation,
+    sequence: after.sequence,
+    rootThreadId: after.runtime.mainThreadId,
     phase: after.runtime.phase,
     workspace: after.runtime.workspace,
     inventory: after.inventory,
@@ -97,6 +105,37 @@ export async function readThreadMonitor(
     missingSettings: threads.filter((thread) => thread.model == null || thread.effort == null)
       .length,
   };
+}
+
+/** Read-only status compatibility; never used for mutation discovery. */
+export async function discoverObservedController(
+  stateDir: string,
+  workspace: string,
+  threadId?: string,
+  discover = discoverControllerStatus,
+) {
+  const matches = new Map<string, Awaited<ReturnType<typeof discoverControllerStatus>>>();
+  for (const version of [undefined, 6, 5] as const) {
+    try {
+      const candidate = await discover(stateDir, workspace, threadId, version);
+      const status = candidate.status;
+      const identity = JSON.stringify([
+        status.instanceId,
+        status.generation,
+        status.workspace,
+        status.threadId,
+      ]);
+      matches.set(identity, candidate);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("no live AgentVoice controller"))
+        throw error;
+    }
+  }
+  if (matches.size > 1)
+    throw new Error("ambiguous AgentVoice controllers across compatible read-only protocols");
+  const match = matches.values().next().value;
+  if (!match) throw new Error("no live AgentVoice controller");
+  return match;
 }
 
 export async function discoverThreadMonitor(
@@ -121,7 +160,7 @@ export async function discoverThreadMonitor(
   }
   let live: Awaited<ReturnType<typeof discoverControllerStatus>>;
   try {
-    live = await discoverControllerStatus(stateDir, workspace, threadId);
+    live = await discoverObservedController(stateDir, workspace, threadId);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("no live AgentVoice controller"))
       return empty(server?.busy ? "starting" : server ? "waiting" : "offline");

@@ -8,6 +8,12 @@ owns the current source map and recording/attachment implementation guidance.
 
 ## Source map
 
+- src/hud/ + hud/: independent durable Work store, CLI/MCP and read-only sibling
+  HUD UI. Native execution is observed through src/threads; result return, review,
+  presentation and work disposition are independent facts. See [HUD](hud.md) and
+  [ADR 0055](adr/0055-durable-work-hud.md). `scripts/install-hud.*` publishes only
+  this command and assets, without a service or live-runtime restart.
+
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt, followed by
   the native menu app and default LaunchAgent installation on macOS. --command-only

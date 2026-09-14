@@ -64,6 +64,8 @@ configuration, permissions, attachment, and troubleshooting.
 
 ## Documentation
 
+- [Durable Work HUD](docs/hud.md) — independent work records and native observations
+
 - [Manual](docs/manual.md) — detailed operation and reference
 - [Architecture and source ownership](docs/architecture.md)
 - [Configuration schema](server.schema.json) and [field guide](docs/field-guide.md)

@@ -68,6 +68,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0053: Retain one workspace session across frontend detach](0053-retain-workspace-session-across-frontend-detach.md) | Accepted | One server-lifetime controller/runtime and pinned workspace; disposable one-owner media attachments; explicit replacement and shutdown boundaries. |
 
 | [0054: Discover native voices and persist one random choice](0054-native-voice-discovery.md) | Accepted | Dedicated native-backed voice inspection, pre-save compatibility validation, and durable random selection; refines [0042](0042-workspace-role-databases.md). |
+| [0055: One durable Work owner with an independent HUD](0055-durable-work-hud.md) | Accepted | Separate durable Work authority; native execution remains native. |
 
 ## Identifier history
 
