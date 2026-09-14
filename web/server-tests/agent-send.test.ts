@@ -8,6 +8,19 @@ import { liveApi } from "../server/api.ts";
 import { LiveReader } from "../server/live-reader.ts";
 import { fixture } from "./fixture.ts";
 
+async function until(
+  reader: LiveReader,
+  check: (view: Awaited<ReturnType<LiveReader["read"]>>) => boolean,
+) {
+  let view = await reader.read();
+  for (let count = 0; !check(view) && count < 30; count++) {
+    await Bun.sleep(260);
+    view = await reader.read();
+  }
+  expect(check(view)).toBe(true);
+  return view;
+}
+
 async function agentFixture() {
   let gateway: AttachmentGateway;
   const h = await fixture(async (target) => {
@@ -38,6 +51,7 @@ async function agentFixture() {
       ],
     });
   let hold = false;
+  let holdInitialize = false;
   let answer = () => {};
   const native = Bun.serve({
     hostname: "127.0.0.1",
@@ -70,7 +84,11 @@ async function agentFixture() {
           }
           peer.send(JSON.stringify({ id: frame.id, result }));
         };
-        if (!hold || frame.method === "initialize") answer();
+        if (
+          (!hold || frame.method === "initialize") &&
+          !(holdInitialize && frame.method === "initialize")
+        )
+          answer();
       },
     },
   });
@@ -89,6 +107,9 @@ async function agentFixture() {
     gateway,
     hold: () => {
       hold = true;
+    },
+    holdInitialize: () => {
+      holdInitialize = true;
     },
     answer: () => answer(),
     complete: (status: "completed" | "interrupted" = "interrupted") => {
@@ -109,10 +130,13 @@ async function agentFixture() {
   };
 }
 
-test("web Agent commands reach the exact native thread through the real attachment gateway", async () => {
+test("detached web Agent send and steer reach the retained exact native thread", async () => {
   const h = await agentFixture();
   try {
-    const view = await h.reader.read();
+    const attached = await h.reader.read();
+    await h.hangup();
+    const view = await until(h.reader, (current) => current.phase === "detached");
+    expect(view.id).toBe(attached.id);
     expect(view.agentControls?.available).toBe(true);
     const command = (fields: object) =>
       agentCommandSchema.parse({ viewId: view.id, requestId: randomUUID(), ...fields });
@@ -147,10 +171,14 @@ test("web Agent commands reach the exact native thread through the real attachme
   }
 });
 
-test("queued input dispatches on native completion without browser polling", async () => {
+test("detached queued input dispatches on native completion without browser polling", async () => {
   const h = await agentFixture();
   try {
-    const view = await h.reader.read();
+    const attached = await h.reader.read();
+    await h.hangup();
+    const view = await until(h.reader, (current) => current.phase === "detached");
+    expect(view.id).toBe(attached.id);
+    expect(view.agentControls?.available).toBe(true);
     const command = (fields: object) =>
       agentCommandSchema.parse({ viewId: view.id, requestId: randomUUID(), ...fields });
     await h.reader.agentCommand(command({ action: "send", text: "First turn" }));
@@ -163,6 +191,65 @@ test("queued input dispatches on native completion without browser polling", asy
     )
       await Bun.sleep(5);
     expect(h.calls.filter((call) => call.method === "turn/start")).toHaveLength(2);
+  } finally {
+    await h.close();
+  }
+});
+
+test("detached actions reject once the retained event transport is unreachable", async () => {
+  const h = await agentFixture();
+  try {
+    const attached = await h.reader.read();
+    await h.hangup();
+    const detached = await until(h.reader, (view) => view.phase === "detached");
+    expect(detached.id).toBe(attached.id);
+    h.stopEvents();
+    const unavailable = await until(h.reader, (view) => view.phase === "unavailable");
+    expect(unavailable.agentControls?.available).toBe(false);
+    await expect(
+      h.reader.agentCommand(
+        agentCommandSchema.parse({
+          viewId: unavailable.id,
+          requestId: randomUUID(),
+          action: "send",
+          text: "Must remain local",
+        }),
+      ),
+    ).rejects.toThrow("call changed");
+    expect(h.calls.some((call) => call.method === "turn/start")).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a detached action waiting on native initialization cannot cross a replacement", async () => {
+  const h = await agentFixture();
+  try {
+    const attached = await h.reader.read();
+    await h.hangup();
+    const detached = await until(h.reader, (view) => view.phase === "detached");
+    expect(detached.id).toBe(attached.id);
+    h.holdInitialize();
+    const result = h.reader.agentCommand(
+      agentCommandSchema.parse({
+        viewId: detached.id,
+        requestId: randomUUID(),
+        action: "send",
+        text: "Must not cross replacement",
+      }),
+    );
+    for (
+      let count = 0;
+      count < 200 && !h.calls.some((call) => call.method === "initialize");
+      count++
+    )
+      await Bun.sleep(5);
+    expect(h.calls.some((call) => call.method === "initialize")).toBe(true);
+    h.replace("successor");
+    await Bun.sleep(20);
+    h.answer();
+    await expect(result).rejects.toMatchObject({ delivery: "not-sent" });
+    expect(h.calls.some((call) => call.method === "turn/start")).toBe(false);
   } finally {
     await h.close();
   }
@@ -199,7 +286,11 @@ test("Agent HTTP writes require exact origin, JSON, bounded fields and the curre
   const address = server.address() as { port: number };
   const origin = `http://127.0.0.1:${address.port}`;
   try {
-    const view = await h.reader.read();
+    const attached = await h.reader.read();
+    await h.hangup();
+    const view = await until(h.reader, (current) => current.phase === "detached");
+    expect(view.id).toBe(attached.id);
+    expect(view.agentControls?.available).toBe(true);
     const command = { viewId: view.id, requestId: randomUUID(), action: "send", text: "From HTTP" };
     const send = (body: object, headers = { Origin: origin, "Content-Type": "application/json" }) =>
       fetch(`${origin}/api/agent`, { method: "POST", headers, body: JSON.stringify(body) });

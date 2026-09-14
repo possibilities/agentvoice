@@ -22,7 +22,7 @@ import type { AgentControlsView, LiveView } from "./types.ts";
 const copy = {
   offline: "No agent voice server to connect to.",
   empty: "AgentVoice is ready. Start a client to begin a workspace session.",
-  detached: "Voice client detached. Agent history remains available.",
+  detached: "Voice client detached. Agent remains available.",
   connecting: "Connecting to AgentVoice…",
   unavailable: "AgentVoice is unavailable. Reconnecting…",
   live: "",
@@ -196,7 +196,10 @@ export function App() {
                   persistenceInstanceId={persistenceInstanceId}
                   observedSubmissionIds={observedSubmissionIds}
                   controls={displayedControls}
-                  disabled={view.phase !== "live" || !displayedControls.available}
+                  disabled={
+                    (view.phase !== "live" && view.phase !== "detached") ||
+                    !displayedControls.available
+                  }
                   onAccepted={commandAccepted}
                   onBegin={beginSubmission}
                   onSettle={settleSubmission}

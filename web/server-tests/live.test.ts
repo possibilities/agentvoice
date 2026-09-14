@@ -306,18 +306,11 @@ test("server and workspace-session lifecycle matrix preserves only authoritative
     const successorScope = view.persistenceScope;
     await h.hangup();
     view = await until(reader, (value) => value.phase === "detached");
-    expect(view.id).not.toBe(attachedId);
+    expect(view.id).toBe(attachedId);
     expect(view.persistenceScope).toBe(successorScope);
     expect(view.agent.map((message) => message.content)).toEqual(["New generation"]);
+    // This projection intentionally has no root turn state; reachability alone cannot invent it.
     expect(view.agentControls?.available).toBe(false);
-    await expect(
-      reader.agentCommand({
-        action: "send",
-        viewId: view.id,
-        requestId: randomUUID(),
-        text: "Do not submit while detached",
-      }),
-    ).rejects.toThrow("call changed");
     h.feed.conversation({
       event: "conversation.item.started",
       revision: 3,
@@ -333,7 +326,7 @@ test("server and workspace-session lifecycle matrix preserves only authoritative
     const detachedId = view.id;
     await h.start();
     view = await until(reader, (value) => value.phase === "live");
-    expect(view.id).not.toBe(detachedId);
+    expect(view.id).toBe(detachedId);
     expect(view.persistenceScope).toBe(successorScope);
     expect(view.agent.some((message) => message.content === "Native work continued")).toBe(true);
     const reattachedId = view.id;
@@ -341,7 +334,7 @@ test("server and workspace-session lifecycle matrix preserves only authoritative
     h.hideCallIdentity();
     await h.hangup();
     view = await until(reader, (value) => value.phase === "unavailable");
-    expect(view.id).not.toBe(reattachedId);
+    expect(view.id).toBe(reattachedId);
     expect(view.persistenceScope).toBe(successorScope);
     expect(view.agent.some((message) => message.content === "Native work continued")).toBe(true);
     expect(view.agentControls?.available).toBe(false);

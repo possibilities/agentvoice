@@ -17,7 +17,7 @@ const initial = (): LiveView => ({
   agentControls: { available: true, active: false, stopping: false, pending: false, queue: [] },
 });
 
-test("detached and unavailable sessions retain history and editable drafts until reattachment", async ({
+test("detached sessions retain interactive drafts while unavailable sessions disable delivery", async ({
   page,
 }) => {
   const view = initial();
@@ -25,15 +25,14 @@ test("detached and unavailable sessions retain history and editable drafts until
   await page.goto("/");
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await input.fill("Unsent draft before reconnect");
-  view.id = "detached-action-incarnation";
   view.phase = "detached";
-  view.agentControls!.available = false;
+  view.agentControls!.available = true;
   await expect(
-    page.getByText("Voice client detached. Agent history remains available.", { exact: true }),
+    page.getByText("Voice client detached. Agent remains available.", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Existing history remains readable.", { exact: true })).toBeVisible();
   await expect(input).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await input.fill("Typed while detached 日本語");
   view.agent.push({
     id: "detached-native-work",
@@ -43,11 +42,12 @@ test("detached and unavailable sessions retain history and editable drafts until
   });
   await expect(page.getByText("Native work continued while voice was detached.")).toBeVisible();
   view.phase = "unavailable";
+  view.agentControls!.available = false;
   await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await expect(input).toHaveValue("Typed while detached 日本語");
   await page.reload();
   await expect(input).toHaveValue("Typed while detached 日本語");
-  view.id = "reattached-action-incarnation";
   view.phase = "live";
   view.agentControls!.available = true;
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();

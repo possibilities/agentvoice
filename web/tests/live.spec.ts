@@ -165,9 +165,7 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   expect(errors).toEqual([]);
 });
 
-test("an empty retained session keeps both lanes and an editable disabled composer", async ({
-  page,
-}) => {
+test("an empty retained session keeps both lanes and an interactive composer", async ({ page }) => {
   let posts = 0;
   const view: LiveView = {
     phase: "detached",
@@ -176,7 +174,7 @@ test("an empty retained session keeps both lanes and an editable disabled compos
     voice: [],
     agent: [],
     agentControls: {
-      available: false,
+      available: true,
       active: false,
       stopping: false,
       pending: false,
@@ -191,7 +189,7 @@ test("an empty retained session keeps both lanes and an editable disabled compos
   await page.goto("/");
 
   await expect(
-    page.getByText("Voice client detached. Agent history remains available.", { exact: true }),
+    page.getByText("Voice client detached. Agent remains available.", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toBeVisible();
@@ -200,8 +198,8 @@ test("an empty retained session keeps both lanes and an editable disabled compos
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await expect(input).toBeEnabled();
   await input.fill("Editable while voice is detached");
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
-  expect(posts).toBe(0);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => posts).toBe(1);
 });
 
 test("HTTP failures show reconnect state, retain last text, and recover automatically", async ({
@@ -216,19 +214,34 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
             json: {
               phase: "live",
               id: "call",
+              persistenceScope: "http-failure-workspace-thread",
               voice: [message("v", "Voice remains readable.")],
               agent: [],
+              agentControls: {
+                available: true,
+                active: false,
+                stopping: false,
+                pending: false,
+                queue: [],
+              },
             },
           },
     ),
   );
   await page.goto("/");
   await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  const input = page.getByRole("textbox", { name: "Message Agent" });
+  await input.fill("Retained through browser failure");
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(send).toBeEnabled();
   fail = true;
   await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(1);
   await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  await expect(input).toHaveValue("Retained through browser failure");
+  await expect(send).toBeDisabled();
   fail = false;
   await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(0);
+  await expect(send).toBeEnabled();
 });
 
 test("both lanes use the shared unread count and resume following after jumping", async ({
