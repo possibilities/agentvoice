@@ -37,7 +37,9 @@ notification surfaces. Android controls outer-frame and lock-screen presentation
 
 The original Android CallStyle is retained as a saved Studio choice alongside the
 custom renderer. An explicit synthetic notification rehearsal uses the selected
-shared renderer with private, incarnation-fenced controls and no service or media.
+shared renderer with private, incarnation-fenced controls and no media. Android
+requires CallStyle foreground ownership, so Studio uses an isolated, non-sticky
+short foreground service with a two-minute limit; it never opens the call service.
 Only explicit design promotion changes the production renderer; existing profiles
 and production continue to select custom. Studio preview visibility is transient.
 

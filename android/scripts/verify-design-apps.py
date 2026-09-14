@@ -23,9 +23,16 @@ for variant, package, label, activity in (
     if variant == 'studio':
         assert 'android.permission.POST_NOTIFICATIONS' in manifest
         for permission in ('INTERNET', 'ACCESS_NETWORK_STATE', 'RECORD_AUDIO', 'BLUETOOTH_CONNECT',
-                           'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_MICROPHONE',
+                           'FOREGROUND_SERVICE_MICROPHONE',
                            'WAKE_LOCK'):
             assert f'android.permission.{permission}' not in manifest, permission
+        assert 'android.permission.FOREGROUND_SERVICE' in manifest
+        components = re.split(r'(?m)(?=^          E: )', manifest)
+        rehearsal = next(component for component in components
+                         if component.startswith('          E: service')
+                         and 'com.arthack.agentvoice.StudioNotificationService' in component)
+        assert 'android:exported(0x01010010)=false' in rehearsal
+        assert 'android:foregroundServiceType(0x01010599)=0x00000800' in rehearsal
         assert 'com.arthack.agentvoice.MainActivity' not in manifest
         assert 'com.arthack.agentvoice.CallService' not in manifest
     else:

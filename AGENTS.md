@@ -40,7 +40,9 @@ A saved credential gets one automatic attempt on a cold launch. Back opens
 connections without hanging up; the private microphone foreground service keeps
 the call through backgrounding and Activity recreation. Disconnect or notification
 Hang up ends it. Notification actions are call-incarnation fenced. Studio rehearses
-this flow without service, network, grants or microphone. Failed, revoked or
+this flow without the call service, network, grants or microphone. Its explicit
+notification comparison uses an isolated two-minute short foreground service,
+required by Android for original CallStyle rendering. Failed, revoked or
 unreadable access is retained; there is no delete/replace UI yet.
 
 ## What vanilla Codex means

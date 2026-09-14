@@ -12,8 +12,10 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import java.util.UUID
 
-/** Activity-owned rehearsal; no service, real call state, media, or durable pending actions. */
+/** Activity-owned rehearsal; no real call state, media, or durable pending actions. */
 internal class StudioNotificationPreview(private val context: Context, private val ended: () -> Unit) : AutoCloseable {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val expiry = Runnable { close(); ended() }
     private val manager = context.getSystemService(NotificationManager::class.java)
     private var incarnation: String? = null
     private var started = 0L
@@ -37,6 +39,8 @@ internal class StudioNotificationPreview(private val context: Context, private v
         if (incarnation == null) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL, "Call notification rehearsal", NotificationManager.IMPORTANCE_LOW))
             incarnation = UUID.randomUUID().toString()
+            StudioNotificationService.activeIncarnation = incarnation
+            handler.postDelayed(expiry, 120_000)
             started = SystemClock.elapsedRealtime()
             muted = true
             ContextCompat.registerReceiver(context, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -54,12 +58,19 @@ internal class StudioNotificationPreview(private val context: Context, private v
         if (incarnation == null) return
         val state = CallNotificationState("AgentVoice Studio", "Notification rehearsal · no call",
             if (muted) "Unmute" else "Mute", started)
-        manager.notify(ID, buildCallNotification(context,
+        val notification = buildCallNotification(context,
             Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_notification_agentvoice),
-            state, pending[0], pending[1], style))
+            state, pending[0], pending[1], style)
+        ContextCompat.startForegroundService(context, Intent(context, StudioNotificationService::class.java)
+            .putExtra("incarnation", incarnation).putExtra("notification", notification))
     }
 
     override fun close() {
+        handler.removeCallbacks(expiry)
+        if (ownsNotificationAction(StudioNotificationService.activeIncarnation, incarnation)) {
+            StudioNotificationService.activeIncarnation = null
+            context.stopService(Intent(context, StudioNotificationService::class.java))
+        }
         if (incarnation != null) {
             incarnation = null
             context.unregisterReceiver(receiver)

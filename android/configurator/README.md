@@ -854,7 +854,9 @@ Choose **Call notification** under visual choices, then **App view → Call noti
 Allow Studio notifications when Android asks, and pull down/expand the notification
 shade to compare actual SystemUI rendering. Both buttons belong only to this
 synthetic rehearsal: Mute/Unmute changes its label; Hang Up removes it. Select another
-App view to hide it. Leaving Studio or recreating its Activity cancels the preview;
+App view to hide it. Leaving Studio, recreating its Activity, or reaching two minutes cancels the preview;
 notification visibility and its microphone label are never saved or replayed.
-Studio adds only notification permission; it still has no call service, audio or
+Android requires foreground ownership for CallStyle. Studio therefore uses a private,
+non-sticky `shortService` solely for the two-minute notification rehearsal, with
+notification and foreground-service permissions. It has no call service, audio or
 network permissions. The real app and its call notification remain isolated.

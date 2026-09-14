@@ -2728,3 +2728,35 @@ CallStyle Unmute action with custom expanded controls; see
 This verifies the contrast fix and existing lifecycle/audio-mode retention on
 this phone. It does not establish Telecom integration, companion-device controls,
 other OEM rendering, long Doze survival, or a new end-to-end spoken-audio result.
+
+
+### Original CallStyle Studio comparison — September 14, 2026
+
+Galaxy S22 SM-S901U, Android16/API36, One UI8. Studio profile24/protocol31 retains
+`custom` and original `call-style`; production still adopts custom. Both native
+notifications were inspected expanded in light/dark themes. Original CallStyle
+reproduced white Unmute text on an almost-white button in dark mode; custom
+controls retained their explicit contrast. Evidence: [dark original](design/callstyle-studio-dark.png),
+[light original](design/callstyle-studio-light.png).
+
+Android rejected a plain posted CallStyle notification: it requires a foreground
+service, user-initiated job or full-screen intent. Studio now uses its own private
+non-sticky shortService, isolated from the real call, with a two-minute rehearsal
+limit and Activity-stop cleanup. No microphone, audio, network or full-screen
+intent is used. The merged APK audit verifies the private shortService type and
+absence of the real call service/media/network permissions.
+
+All17 `NotificationStyleTest`, `CallNotificationTest`, `ShippingProfileTest` and
+`StudioDraftTest` device tests passed. This includes original action metadata,
+custom contrast/actions, stale/canceled rehearsal intents, Hang Up cleanup,
+profile migration and exact saved bytes. Manual Home/return and theme recreation
+removed the rehearsal without replay. The existing real call continued with the
+same foreground service instance throughout. Original binding, draft and saved
+profile bytes were restored exactly, along with dark mode, rotation, font size
+and notification permission. Studio APK SHA256:
+`b5b4f4294c649473441bc0b9556a2a428c6756235983468b0055b8442a26ed78`.
+
+Source validation:185 Android unit tests,136 configurator tests,713 root tests,
+TypeScript/Biome, production and Studio lint, APK capability/release audits.
+Only Studio was installed during this lease; the running production call was
+preserved. Production renderer behavior remains custom until explicit promotion.
