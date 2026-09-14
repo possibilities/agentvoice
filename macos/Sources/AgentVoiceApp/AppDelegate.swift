@@ -127,7 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = presentation.checked ? .on : .off
         loginItem.isEnabled = presentation.enabled
 
-        guard operation == nil, !confirming, !checkingStatus else { return }
+        guard operation == nil, !confirming, !checkingStatus else {
+            updateServerMenu()
+            return
+        }
         checkingStatus = true
         probeRevision += 1
         let revision = probeRevision
