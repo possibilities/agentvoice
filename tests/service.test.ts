@@ -340,7 +340,13 @@ test("inspection failures and unknown launchd states never claim unloaded", asyn
   const original = f.options.launchctl;
   f.options.launchctl = async (args) => {
     const result = await original(args);
-    return { ...result, out: result.out.replace("state = running", "state = throttled") };
+    return {
+      ...result,
+      out: result.out.replace(
+        "state = running",
+        "state = throttled\nchild = {\n state = running\n}",
+      ),
+    };
   };
   expect(await f.service.snapshot()).toEqual({ version: 1, state: "loaded" });
   f.foreign();

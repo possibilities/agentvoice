@@ -257,7 +257,7 @@ export class VoiceService {
         ? "notInstalled"
         : !loaded
           ? "unloaded"
-          : /^\s*state = running\s*$/m.test(loaded.out)
+          : /^\s*state = (.+)$/m.exec(loaded.out)?.[1]?.trim() === "running"
             ? "running"
             : "loaded",
     };
