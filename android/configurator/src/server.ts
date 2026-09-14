@@ -224,6 +224,7 @@ export async function serveConfigurator(
             "icons",
             "launcher",
             "connectionStyle",
+            "notificationStyle",
             "showPushToTalk",
             "sounds",
             "theme",
@@ -248,6 +249,7 @@ export async function serveConfigurator(
             icons: input["icons"],
             launcher: input["launcher"],
             connectionStyle: input["connectionStyle"],
+            notificationStyle: input["notificationStyle"],
             showPushToTalk: input["showPushToTalk"],
             sounds: input["sounds"],
             theme: input["theme"],
@@ -333,6 +335,7 @@ export async function serveConfigurator(
               icons: input["icons"],
               launcher: input["launcher"],
               connectionStyle: input["connectionStyle"],
+              notificationStyle: input["notificationStyle"],
               showPushToTalk: input["showPushToTalk"],
               sounds: input["sounds"],
               theme: input["theme"],
@@ -387,7 +390,7 @@ export async function serveConfigurator(
           if (!reply.profile) throw Error("Phone did not confirm the save.");
           const profile = parseProfile(reply.profile);
           if (
-            profile.version !== 23 ||
+            profile.version !== 24 ||
             !equalVisualSettings(profileVisualSettings(profile), expectedAppearance) ||
             !equalSounds(profileSounds(profile), expectedSounds) ||
             !equalSharedAppearance(profileSharedAppearance(profile), expectedShared) ||

@@ -59,7 +59,7 @@ class CallNotificationTest {
                         SystemClock.elapsedRealtime() - 60_000)!!
                     val notification = buildCallNotification(themed,
                         Notification.Builder(themed, "notification-test").setSmallIcon(R.drawable.ic_notification_agentvoice),
-                        state, hangUp, mic)
+                        state, hangUp, mic, "custom")
                     assertEquals(Notification.DecoratedCustomViewStyle::class.java.name,
                         notification.extras.getString(Notification.EXTRA_TEMPLATE))
                     assertTrue(notification.flags and Notification.FLAG_ONGOING_EVENT != 0)

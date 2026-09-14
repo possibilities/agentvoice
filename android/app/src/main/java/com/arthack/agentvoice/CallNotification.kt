@@ -1,6 +1,8 @@
 package com.arthack.agentvoice
 
 import android.app.Notification
+import android.app.Person
+import android.graphics.drawable.Icon
 import android.app.PendingIntent
 import android.content.Context
 import android.os.SystemClock
@@ -13,6 +15,7 @@ internal fun buildCallNotification(
     state: CallNotificationState,
     hangUp: PendingIntent,
     microphone: PendingIntent,
+    style: String = ShippingDesign.notificationStyle,
 ): Notification {
     fun content(expanded: Boolean) = RemoteViews(context.packageName, R.layout.call_notification).apply {
         setTextViewText(R.id.call_notification_title, state.identity)
@@ -26,7 +29,8 @@ internal fun buildCallNotification(
 
     // Own both sides of button contrast: Samsung CallStyle can render white on white.
     // The microphone service and VoicePeer own call lifetime/audio, independently of this style.
-    return builder
+    require(style in previewNotificationStyles)
+    builder
         .setCategory(Notification.CATEGORY_CALL)
         .setContentTitle(state.identity)
         .setContentText(state.phase)
@@ -37,7 +41,17 @@ internal fun buildCallNotification(
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-        .setStyle(Notification.DecoratedCustomViewStyle())
+
+    if (style == "call-style") {
+        val person = Person.Builder().setName(state.identity)
+            .setIcon(Icon.createWithResource(context, R.mipmap.ic_agentvoice))
+            .setImportant(true).build()
+        return builder.addAction(Notification.Action.Builder(
+            Icon.createWithResource(context, R.drawable.ic_notification_agentvoice),
+            state.micAction, microphone).build())
+            .setStyle(Notification.CallStyle.forOngoingCall(person, hangUp)).build()
+    }
+    return builder.setStyle(Notification.DecoratedCustomViewStyle())
         .setCustomContentView(content(false))
         .setCustomBigContentView(content(true))
         .setCustomHeadsUpContentView(content(false))

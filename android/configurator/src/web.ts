@@ -520,6 +520,7 @@ function render() {
   element("sound-volume").setAttribute("aria-valuetext", `${draft.sounds.volumePercent} percent`);
   element<HTMLSelectElement>("preview-theme").value = draft.theme;
   element<HTMLSelectElement>("connection-style").value = draft.connectionStyle;
+  element<HTMLSelectElement>("notification-style").value = draft.notificationStyle;
   element<HTMLSelectElement>("muted-presence").value = draft.mutedPresence;
   element("presence-scope-row").hidden =
     draft.mutedPresence === "tide" || draft.mutedPresence === "off";
@@ -677,7 +678,7 @@ function render() {
   const liveLayouts = { ...stateLayouts(phoneState), [draft.orientation]: layoutOf(draft) };
   const hostMatches =
     savedProfile !== null &&
-    savedProfile.version === 23 &&
+    savedProfile.version === 24 &&
     equalVisualSettings(profileVisualSettings(savedProfile), draft) &&
     equalSounds(profileSounds(savedProfile), draft.sounds) &&
     orientations.every((orientation) =>
@@ -883,6 +884,12 @@ for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-r
 element<HTMLSelectElement>("connection-preview").addEventListener("change", (event) => {
   const connection = (event.currentTarget as HTMLSelectElement).value as Connection;
   update((current) => ({ ...current, connection }));
+});
+
+element<HTMLSelectElement>("notification-style").addEventListener("change", (event) => {
+  const notificationStyle = (event.currentTarget as HTMLSelectElement)
+    .value as Preview["notificationStyle"];
+  update((current) => ({ ...current, notificationStyle }));
 });
 
 element<HTMLSelectElement>("connection-style").addEventListener("change", (event) => {

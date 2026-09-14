@@ -1,5 +1,9 @@
 package com.arthack.agentvoice
 
+import android.Manifest
+import android.app.NotificationManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.display.DisplayManager
@@ -26,6 +30,36 @@ import java.io.File
 class PersonaPreviewActivity : ComponentActivity() {
     private val selection get() = File(filesDir, "persona-tuning.json")
     private lateinit var session: PersonaPreviewSession
+    private val notificationPreview by lazy { StudioNotificationPreview(this) { stopNotificationPreview() } }
+    private var permissionPending = false
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        permissionPending = false
+        if (granted && session.state.connectionPreview == "notification" && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+            showNotificationPreview()
+        else stopNotificationPreview()
+    }
+    private fun stopNotificationPreview() {
+        notificationPreview.close()
+        if (session.state.connectionPreview == "notification") session.state = session.state.copy(connectionPreview = "off")
+    }
+    private fun showNotificationPreview() {
+        runCatching { notificationPreview.show(session.state.notificationStyle) }.onFailure {
+            stopNotificationPreview()
+            android.widget.Toast.makeText(this, it.message ?: "Notification preview unavailable", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    private fun updateNotificationPreview() {
+        if (session.state.connectionPreview != "notification") { notificationPreview.close(); return }
+        if (getSystemService(NotificationManager::class.java).areNotificationsEnabled()) {
+            showNotificationPreview()
+        } else if (Build.VERSION.SDK_INT >= 33 && !permissionPending && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            permissionPending = true
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else if (!permissionPending) {
+            stopNotificationPreview()
+            android.widget.Toast.makeText(this, "Enable Studio notifications to preview this design", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     private var draftReady = false
     private var bridge: PersonaPreviewBridge? = null
     private var binding: PersonaPreviewBinding? = null
@@ -104,9 +138,10 @@ class PersonaPreviewActivity : ComponentActivity() {
                 onScan = { setupReturn = session.state.connectionPreview },
                 onCredits = { session.showIconCredits = true },
                 showNavigationHint = showNavigationHint) { session.state = it }
+            LaunchedEffect(rehearsal, session.state.notificationStyle) { updateNotificationPreview() }
             LaunchedEffect(rehearsal) {
                 if (rehearsal == "off" || rehearsal in previewConnectionRoots) setupReturn = rehearsal
-                if (rehearsal != "off" && rehearsal !in previewConnectionRoots) android.widget.Toast.makeText(this@PersonaPreviewActivity,
+                if (rehearsal != "off" && rehearsal != "notification" && rehearsal !in previewConnectionRoots) android.widget.Toast.makeText(this@PersonaPreviewActivity,
                     "Connection preview · no server access", android.widget.Toast.LENGTH_SHORT).show()
             }
             val close = { selectRehearsal(setupReturn) }
@@ -191,6 +226,7 @@ class PersonaPreviewActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        stopNotificationPreview()
         displays.unregisterDisplayListener(displayListener)
         bridge?.close()
         bridge = null

@@ -109,7 +109,7 @@ internal fun currentPreviewOrientation(): String {
     return previewOrientation(configuration.orientation, rotation)
 }
 
-internal fun decodePreviewLayout(data: JSONObject, version: Int = 23): PreviewLayout {
+internal fun decodePreviewLayout(data: JSONObject, version: Int = 24): PreviewLayout {
     require(data.fields() == setOf("scales", "verticalOffsetDp", "design", "halo", "spirit", "personaSide") +
         if (version >= 15) setOf("horizontalOffsetDp", "appearanceOverrides") else emptySet<String>())
     val design = data.getJSONObject("design")
@@ -126,14 +126,14 @@ internal fun decodeLandscapeLayout(json: String): PreviewLayout = decodePreviewP
 internal fun decodeStoredLandscapeLayout(json: String): PreviewLayout {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..23)
+    require(version in 1..24)
     return if (version >= 11) decodePreviewLayout(data.getJSONObject("landscape"), version) else PreviewLayout()
 }
 
 internal fun decodePortraitSide(json: String): String {
     val data = JSONObject(json)
     val version = data.getInt("version")
-    require(version in 1..23)
+    require(version in 1..24)
     return (if (version >= 11) data.getString("personaSide") else "left")
         .also { require(it in previewPersonaSides) }
 }

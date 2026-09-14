@@ -12,46 +12,52 @@ internal data class DesignAppearance(
     val icons: PreviewIcons = PreviewIcons(),
     val launcher: String = "current",
     val connectionStyle: String = "relay",
+    val notificationStyle: String = "custom",
 ) {
     init {
         require(launcher in previewLaunchers)
+        require(notificationStyle in previewNotificationStyles)
         require(connectionStyle in previewConnectionStyles)
         require(theme in previewThemes && mutedPresence in previewMutedPresences && presenceScope in previewPresenceScopes)
     }
     fun json() = JSONObject().put("theme", theme).put("mutedPresence", mutedPresence)
         .put("mutedTuning", mutedTuning.json()).put("presenceScope", presenceScope)
         .put("showPushToTalk", showPushToTalk).put("icons", icons.json()).put("launcher", launcher)
-        .put("connectionStyle", connectionStyle)
+        .put("connectionStyle", connectionStyle).put("notificationStyle", notificationStyle)
 }
 
 internal fun shippingAppearance() = DesignAppearance(ShippingDesign.theme, ShippingDesign.mutedPresence,
     ShippingDesign.mutedTuning, ShippingDesign.presenceScope, ShippingDesign.showPushToTalk, ShippingDesign.icons,
-    ShippingDesign.launcher, ShippingDesign.connectionStyle)
+    ShippingDesign.launcher, ShippingDesign.connectionStyle, ShippingDesign.notificationStyle)
 
 internal val previewLaunchers = setOf("current", "duplex-halo", "relay-aperture", "voice-carrier")
+internal val previewNotificationStyles = setOf("custom", "call-style")
 internal val previewConnectionStyles = setOf("relay", "beacon", "datum")
 
 internal fun decodeDesignAppearance(data: JSONObject, legacy: Boolean = false,
-    legacyConnectionStyle: Boolean = legacy): DesignAppearance {
+    legacyConnectionStyle: Boolean = legacy, legacyNotificationStyle: Boolean = legacy): DesignAppearance {
     require(data.fields() == setOf("theme", "mutedPresence", "mutedTuning", "presenceScope", "showPushToTalk", "icons") +
         (if (legacy) emptySet<String>() else setOf("launcher")) +
-        (if (legacyConnectionStyle) emptySet<String>() else setOf("connectionStyle")))
+        (if (legacyConnectionStyle) emptySet<String>() else setOf("connectionStyle")) +
+        (if (legacyNotificationStyle) emptySet<String>() else setOf("notificationStyle")))
     return DesignAppearance(data.getString("theme"), data.getString("mutedPresence"),
         decodePreviewMutedTuning(data.getJSONObject("mutedTuning")), data.getString("presenceScope"),
         data.get("showPushToTalk").also { require(it is Boolean) } as Boolean,
         decodePreviewIcons(data.getJSONObject("icons")), if (legacy) "current" else data.getString("launcher"),
-        if (legacyConnectionStyle) "relay" else data.getString("connectionStyle"))
+        if (legacyConnectionStyle) "relay" else data.getString("connectionStyle"),
+        if (legacyNotificationStyle) "custom" else data.getString("notificationStyle"))
 }
 
 internal fun decodeDesignAppearanceProfile(json: String): DesignAppearance {
     val data = JSONObject(json)
-    require(data.getInt("version") in 1..23)
+    require(data.getInt("version") in 1..24)
     if (data.getInt("version") < 19) return DesignAppearance()
     val values = JSONObject()
     val legacyLauncher = data.getInt("version") == 19
     val legacyConnectionStyle = data.getInt("version") <= 21
+    val legacyNotificationStyle = data.getInt("version") <= 23
     for (key in DesignAppearance().json().fields())
-        if ((!legacyLauncher || key != "launcher") && (!legacyConnectionStyle || key != "connectionStyle"))
+        if ((!legacyLauncher || key != "launcher") && (!legacyConnectionStyle || key != "connectionStyle") && (!legacyNotificationStyle || key != "notificationStyle"))
             values.put(key, data.get(key))
-    return decodeDesignAppearance(values, legacyLauncher, legacyConnectionStyle)
+    return decodeDesignAppearance(values, legacyLauncher, legacyConnectionStyle, legacyNotificationStyle)
 }

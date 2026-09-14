@@ -95,9 +95,10 @@ export function createShippingSnapshot(
     profile.version !== 20 &&
     profile.version !== 21 &&
     profile.version !== 22 &&
-    profile.version !== 23
+    profile.version !== 23 &&
+    profile.version !== 24
   )
-    throw Error("Promotion requires profile18 through profile23");
+    throw Error("Promotion requires profile18 through profile24");
   const portrait = profileLayout(profile, "portrait");
   const landscape = profileLayout(profile, "landscape");
   const portraitReverse = profileLayout(profile, "portrait-reverse");
@@ -111,7 +112,8 @@ export function createShippingSnapshot(
       profile.version !== 20 &&
       profile.version !== 21 &&
       profile.version !== 22 &&
-      profile.version !== 23
+      profile.version !== 23 &&
+      profile.version !== 24
     )
       throw Error("Profile18 needs --session, --live-state or --default-session");
     appearance = profileVisualSettings(profile);
@@ -119,7 +121,13 @@ export function createShippingSnapshot(
   else {
     const wrapper = record(JSON.parse(choice.text));
     const state = record(wrapper["state"] ?? wrapper);
-    if (![21, 22, 23, 24, 25, 26, 27, 28, 29, 30].includes(state["protocol"] as number))
+    if ((state["protocol"] as number) < 31) {
+      state["notificationStyle"] = "custom";
+      for (const key of ["savedAppearance", "defaultAppearance"]) {
+        if (state[key]) record(state[key])["notificationStyle"] = "custom";
+      }
+    }
+    if (![21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31].includes(state["protocol"] as number))
       throw Error("Unsupported captured studio protocol");
     if ((state["protocol"] as number) < 30) migrateLegacyHaloFields(state);
     integer(state["revision"]);
@@ -134,11 +142,14 @@ export function createShippingSnapshot(
       state["protocol"] === 27 ||
       state["protocol"] === 28 ||
       state["protocol"] === 29 ||
-      state["protocol"] === 30
+      state["protocol"] === 30 ||
+      state["protocol"] === 31
         ? stateLayouts(
             parseState({
               ...state,
-              protocol: 30,
+              protocol: 31,
+              notificationStyle:
+                (state["protocol"] as number) >= 31 ? state["notificationStyle"] : "custom",
               connectionStyle:
                 (state["protocol"] as number) >= 29 ? state["connectionStyle"] : "relay",
               savedAppearance:
@@ -179,7 +190,8 @@ export function createShippingSnapshot(
         state["protocol"] === 27 ||
         state["protocol"] === 28 ||
         state["protocol"] === 29 ||
-        state["protocol"] === 30
+        state["protocol"] === 30 ||
+        state["protocol"] === 31
         ? {
             ...state,
             connectionStyle:
@@ -250,14 +262,23 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
   const legacyLauncher = !Object.hasOwn(rawAppearance, "launcher") && sourceVersion < 20;
   const legacyConnectionStyle =
     !Object.hasOwn(rawAppearance, "connectionStyle") && sourceVersion < 22;
+  const legacyNotificationStyle =
+    !Object.hasOwn(rawAppearance, "notificationStyle") && sourceVersion < 24;
   const appearance = parseVisualSettings({
     ...rawAppearance,
+    ...(legacyNotificationStyle ? { notificationStyle: "custom" } : {}),
     ...(legacyLauncher ? { launcher: "current" } : {}),
     ...(legacyConnectionStyle ? { connectionStyle: "relay" } : {}),
   });
   if (
     digest(session["valuesSha256"]) !==
-    sha256(canonicalJson(legacyLauncher || legacyConnectionStyle ? rawAppearance : appearance))
+    sha256(
+      canonicalJson(
+        legacyLauncher || legacyConnectionStyle || legacyNotificationStyle
+          ? rawAppearance
+          : appearance,
+      ),
+    )
   )
     throw Error("Session snapshot provenance mismatch");
   const original = createShippingSnapshot(profile["text"], profile["path"] as string, {
@@ -301,7 +322,7 @@ export function parseShippingSnapshot(text: string): ShippingSnapshot {
 }
 export function completeShippingProfile(
   snapshot: ShippingSnapshot,
-): Extract<Profile, { version: 23 }> {
+): Extract<Profile, { version: 24 }> {
   const source = parseProfile(snapshot.source.profile.text);
   if (
     source.version !== 18 &&
@@ -309,20 +330,24 @@ export function completeShippingProfile(
     source.version !== 20 &&
     source.version !== 21 &&
     source.version !== 22 &&
-    source.version !== 23
+    source.version !== 23 &&
+    source.version !== 24
   )
     throw Error("Unsupported shipping profile source");
   return {
     ...source,
-    version: 23,
+    version: 24,
     portraitReverse: snapshot.portraitReverse,
     landscapeReverse: snapshot.landscapeReverse,
     ...snapshot.appearance,
-  } as Extract<Profile, { version: 23 }>;
+  } as Extract<Profile, { version: 24 }>;
 }
 function validateShippingProfile(profile: Profile, snapshot: ShippingSnapshot): void {
   if (
-    (profile.version !== 21 && profile.version !== 22 && profile.version !== 23) ||
+    (profile.version !== 21 &&
+      profile.version !== 22 &&
+      profile.version !== 23 &&
+      profile.version !== 24) ||
     !equalLayout(profileLayout(profile, "portrait"), snapshot.portrait) ||
     !equalLayout(profileLayout(profile, "landscape"), snapshot.landscape) ||
     !equalLayout(profileLayout(profile, "portrait-reverse"), snapshot.portraitReverse) ||
@@ -392,6 +417,7 @@ export function generateKotlin(snapshot: ShippingSnapshot): string {
     `    val sounds = ${kotlinConstructor("PreviewSounds", snapshot.sounds)}`,
     `    val icons = ${kotlinConstructor("PreviewIcons", appearance.icons)}`,
     `    const val launcher = ${kotlinString(appearance.launcher)}`,
+    `    const val notificationStyle = ${kotlinString(appearance.notificationStyle)}`,
     `    const val connectionStyle = ${kotlinString(appearance.connectionStyle)}`,
     `    const val theme = ${kotlinString(appearance.theme)}`,
     `    const val mutedPresence = ${kotlinString(appearance.mutedPresence)}`,
@@ -631,7 +657,7 @@ export async function shippingCli(args: string[]): Promise<void> {
     const snapshot = parseShippingSnapshot(await readFile(receiptPath, "utf8"));
     const profile = parseProfile(await readFile(path, "utf8"));
     validateShippingProfile(profile, snapshot);
-    if (profile.version !== 23) {
+    if (profile.version < 23) {
       if (flags.has("--check"))
         throw Error(`Generated shipping file is missing or stale: ${snapshotPath}`);
       await atomicWrite(path, canonicalJson(completeShippingProfile(snapshot)));

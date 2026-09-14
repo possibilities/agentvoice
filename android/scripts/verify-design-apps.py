@@ -21,8 +21,9 @@ for variant, package, label, activity in (
     assert re.findall(r"launchable-activity: name='([^']+)'", badging) == [activity]
     manifest = subprocess.check_output([str(aapt), 'dump', 'xmltree', str(apk), '--file', 'AndroidManifest.xml'], text=True)
     if variant == 'studio':
+        assert 'android.permission.POST_NOTIFICATIONS' in manifest
         for permission in ('INTERNET', 'ACCESS_NETWORK_STATE', 'RECORD_AUDIO', 'BLUETOOTH_CONNECT',
-                           'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_MICROPHONE', 'POST_NOTIFICATIONS',
+                           'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_MICROPHONE',
                            'WAKE_LOCK'):
             assert f'android.permission.{permission}' not in manifest, permission
         assert 'com.arthack.agentvoice.MainActivity' not in manifest

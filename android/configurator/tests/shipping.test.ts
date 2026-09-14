@@ -93,6 +93,7 @@ test("legacy profile promotions emit provenance3 and provenance1/2 receipts migr
   const complete = completeShippingProfile(snapshot()) as unknown as Record<string, unknown>;
   for (const version of [18, 19, 20, 21, 22]) {
     const source = withoutThinkingWingspan({ ...complete, version }) as Record<string, unknown>;
+    delete source["notificationStyle"];
     if (version <= 20) {
       delete source["portraitReverse"];
       delete source["landscapeReverse"];
@@ -147,12 +148,12 @@ test("legacy promotion requires explicit session source while profile19 carries 
   expect(createShippingSnapshot(profileText, "old.json", { kind: "defaults" }).appearance).toEqual(
     defaultVisualSettings(),
   );
-  const { connectionStyle: _, ...legacySession } = session;
+  const { connectionStyle: _, notificationStyle: _notification, ...legacySession } = session;
   const complete = { ...JSON.parse(profileText), version: 20, ...legacySession };
   expect(
     createShippingSnapshot(JSON.stringify(complete), "complete.json", { kind: "profile" })
       .appearance,
-  ).toEqual({ ...legacySession, connectionStyle: "relay" });
+  ).toEqual({ ...legacySession, connectionStyle: "relay", notificationStyle: "custom" });
   expect(() =>
     createShippingSnapshot(
       JSON.stringify({ ...complete, connection: "connected" }),
@@ -262,7 +263,7 @@ test("promotion and regeneration are deterministic, check never writes, and sour
   const codePath = join(root, "android/app/src/main/java/com/arthack/agentvoice/ShippingDesign.kt");
   const code = await readFile(codePath, "utf8");
   const bytes = await readFile(canonical, "utf8");
-  expect(JSON.parse(bytes)).toMatchObject({ version: 23, connectionStyle: "relay" });
+  expect(JSON.parse(bytes)).toMatchObject({ version: 24, connectionStyle: "relay" });
   expect(code).toContain('const val connectionStyle = "relay"');
   await shippingCli(["generate", "--check", "--root", root]);
   await shippingCli(["generate", "--root", root]);
@@ -285,12 +286,13 @@ test("generation upgrades an adopted profile21 to relay without changing its pri
   const current = JSON.parse(await readFile(canonical, "utf8"));
   const legacy = withoutThinkingWingspan({ ...current, version: 21 });
   delete legacy.connectionStyle;
+  delete legacy.notificationStyle;
   await writeFile(canonical, canonicalJson(legacy));
   await shippingCli(["generate", "--root", root]);
   const upgraded = JSON.parse(await readFile(canonical, "utf8"));
   expect(upgraded).toEqual(current);
   expect(upgraded.connectionStyle).toBe("relay");
-  expect(upgraded.version).toBe(23);
+  expect(upgraded.version).toBe(24);
 });
 
 test("release inventory contains only adopted artwork and sounds, and re-promotion removes owned stale assets", async () => {
@@ -431,4 +433,18 @@ test("promotion generates a complete reset target without a Studio reset generat
 
 test("retired automatic-reset release command is rejected", async () => {
   expect(() => shippingCli(["release"])).toThrow();
+});
+
+test("notification renderer changes production only in an explicit promoted profile", () => {
+  const old = snapshot();
+  expect(old.appearance.notificationStyle).toBe("custom");
+  const profile = { ...completeShippingProfile(old), notificationStyle: "call-style" };
+  const promoted = createShippingSnapshot(JSON.stringify(profile), "notification.json", {
+    kind: "profile",
+  });
+  expect(generateKotlin(promoted)).toContain('const val notificationStyle = "call-style"');
+  expect(parseShippingSnapshot(canonicalJson(promoted)).appearance.notificationStyle).toBe(
+    "call-style",
+  );
+  expect(generateKotlin(old)).toContain('const val notificationStyle = "custom"');
 });

@@ -131,7 +131,7 @@ class StudioDraftTest {
             val file = File(dir, "draft.json")
             val current = JSONObject(edited().designProfile())
             val legacy = JSONObject(current.toString()).withoutThinkingWingspan().put("version", 20).apply {
-                remove("connectionStyle")
+                remove("connectionStyle"); remove("notificationStyle")
                 remove("portraitReverse")
                 remove("landscapeReverse")
             }
@@ -146,7 +146,7 @@ class StudioDraftTest {
             store.write(migrated.copy(horizontalOffsetDp = 17).designProfile())
             val saved = JSONObject(file.readText())
             assertEquals(3, saved.getInt("version"))
-            assertEquals(23, saved.getJSONObject("profile").getInt("version"))
+            assertEquals(24, saved.getJSONObject("profile").getInt("version"))
             assertTrue(saved.getJSONObject("profile").has("portraitReverse"))
             assertTrue(saved.getJSONObject("profile").has("landscapeReverse"))
         } finally { dir.deleteRecursively() }

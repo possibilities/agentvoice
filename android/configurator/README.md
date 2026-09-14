@@ -581,7 +581,7 @@ and coordinates saves; `src/device.ts` owns the selected ADB connection and
 renders shared `PreviewStudioScreen` with synthetic state; production supplies
 actual call state to the same renderer. The studio
 composes a connection notice and controls around the existing native Halo.
-Preview protocol30 carries live/saved/default designs, sizes, vertical and
+Preview protocol31 carries live/saved/default designs, sizes, vertical and
 horizontal offsets, Halo and `spirit` selections, plus transient
 `connection: connected|connecting|disconnected|failed`, `activity: steady|voice`,
 `theme: bright|quiet|grayscale`,
@@ -640,7 +640,7 @@ contain effective values and flags, never the shared base. The phone alone retur
 `defaultHorizontalOffsetDp`. Shared root `sounds`, `savedSounds` and
 `defaultSounds` have exactly `family: off|rocker-29|rocker-13` and integer
 `volumePercent` (0–100). Preview requires `sounds`; Layout and appearance groups
-never include it. Current live protocol30 is strict; Android restoration from
+never include it. Current live protocol31 is strict; Android restoration from
 protocol17 or earlier supplies Off/70. Profiles16–17 require root sounds, while
 profiles through version 15 forbid the field and default only in memory.
 The shared root boolean `showPushToTalk` appears in profiles19–20 and in the
@@ -679,7 +679,7 @@ corresponding hidden extent. The studio labels the current dimension and
 visibility scope. Reset button sizes restores only that extent, plus share when
 PTT is shown.
 
-Current protocol30 and profiles18–23 require both extent fields. Legacy profiles
+Current protocol31 and profiles18–24 require both extent fields. Legacy profiles
 through17 keep their strict original design fields and 240–480 dp bounds, and
 their raw saved bytes remain untouched. Effective readers seed
 `controlsWithoutPttDp` from that orientation’s `controlsHeightDp`. Native
@@ -839,3 +839,22 @@ New exports record `disconnectedArtboardScale: 1.9`, equal to connected scale.
 Older receipts with `1.5` remain readable without rewriting their source bytes;
 this field records renderer behavior, not a user-tunable size. Current rendering
 always preserves normal Idle size across connection changes.
+
+
+### Call notification rehearsal
+
+Profile24 adds the shared `notificationStyle` choice: `custom` (readable app-owned
+controls) or `call-style` (the original Android `Notification.CallStyle`). Protocol31
+carries current, saved and production defaults. Earlier profiles retain their exact
+saved bytes and default to `custom` in memory; explicit Save writes profile24.
+Normal shipping generation accepts the existing profile23 and its original receipt
+without rewriting either. Only explicit promotion changes production's renderer.
+
+Choose **Call notification** under visual choices, then **App view → Call notification**.
+Allow Studio notifications when Android asks, and pull down/expand the notification
+shade to compare actual SystemUI rendering. Both buttons belong only to this
+synthetic rehearsal: Mute/Unmute changes its label; Hang Up removes it. Select another
+App view to hide it. Leaving Studio or recreating its Activity cancels the preview;
+notification visibility and its microphone label are never saved or replayed.
+Studio adds only notification permission; it still has no call service, audio or
+network permissions. The real app and its call notification remain isolated.

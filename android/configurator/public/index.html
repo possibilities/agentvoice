@@ -376,6 +376,7 @@
                 <p class="scope-badge">Rehearsal · Not saved</p>
                 <label for="setup-preview">App view</label>
                 <select id="setup-preview" aria-describedby="setup-preview-hint">
+                  <option value="notification">Call notification · pull down the shade</option>
                   <option value="off">Voice controls</option>
                   <optgroup label="Connection screen">
                     <option value="root-unpaired">Unpaired</option>
@@ -402,7 +403,7 @@
                     <option value="microphone-denied">Microphone denied</option>
                   </optgroup>
                 </select>
-                <p id="setup-preview-hint" class="control-hint">Connection screen choices rehearse navigation and synthetic call state. Only Live camera opens the phone camera. Studio does not decode codes, enroll a device, store access or access the network. Close setup on the phone or choose Voice controls to return.</p>
+                <p id="setup-preview-hint" class="control-hint">Connection screen choices rehearse navigation and synthetic call state. Only Live camera opens the phone camera. Call notification asks for notification permission and shows a synthetic notification in the shade. Studio does not decode codes, enroll a device, store access or access the network. Close setup on the phone or choose Voice controls to return.</p>
               </fieldset>
               <fieldset class="shared-session">
                 <legend class="panel-title">Switch sounds</legend>
@@ -460,6 +461,13 @@
                     <option value="bright">Bright</option>
                     <option value="quiet">Quiet</option>
                     <option value="grayscale">Grayscale</option>
+                  </select>
+                </div>
+                <div class="mixing">
+                  <label for="notification-style">Call notification</label>
+                  <select id="notification-style">
+                    <option value="custom">Custom · readable controls</option>
+                    <option value="call-style">Original Android CallStyle</option>
                   </select>
                 </div>
                 <div class="mixing">

@@ -13,7 +13,7 @@ import java.io.File
 import java.util.UUID
 
 class ShippingProfileTest {
-    private val appearanceFields = setOf("theme", "mutedPresence", "mutedTuning", "presenceScope", "showPushToTalk", "icons", "launcher", "connectionStyle")
+    private val appearanceFields = setOf("theme", "mutedPresence", "mutedTuning", "presenceScope", "showPushToTalk", "icons", "launcher", "connectionStyle", "notificationStyle")
     private val portrait = PreviewLayout(
         placement = PersonaPlacement(.51f, .62f, .73f, (-39).dp),
         design = PreviewDesign(controlsHeightDp = 418, holdSharePercent = 49.0, controlsWithoutPttDp = 609),
@@ -66,7 +66,7 @@ class ShippingProfileTest {
         .put("activity", state.activity).put("orientation", state.orientation).put("orientationEpoch", state.orientationEpoch)
         .put("theme", state.theme).put("mutedPresence", state.mutedPresence).put("mutedTuning", state.mutedTuning.json())
         .put("presenceScope", state.presenceScope).put("showPushToTalk", state.showPushToTalk)
-        .put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle)
+        .put("icons", state.icons.json()).put("launcher", state.launcher).put("connectionStyle", state.connectionStyle).put("notificationStyle", state.notificationStyle)
         .put("sounds", state.sounds.json())
 
     private fun save(state: PersonaPreviewState) = JSONObject().put("id", 2).put("method", "save")
@@ -122,7 +122,7 @@ class ShippingProfileTest {
                 val reply = session.command(save(selected))
                 val text = reply.getString("profile")
                 val profile = JSONObject(text)
-                assertEquals(23, profile.getInt("version"))
+                assertEquals(24, profile.getInt("version"))
                 assertEquals(text, file.readText())
                 assertAppearance(chosen, decodeDesignAppearanceProfile(text))
                 assertEquals(portrait, decodePreviewProfileLayouts(text).portrait)
@@ -135,7 +135,7 @@ class ShippingProfileTest {
                 val saved = withContext(Dispatchers.Main) { session.state }
                 assertAppearance(chosen, saved.savedAppearance)
                 assertLayouts(saved)
-                assertEquals(30, reply.getJSONObject("state").getInt("protocol"))
+                assertEquals(31, reply.getJSONObject("state").getInt("protocol"))
                 assertAppearance(chosen, decodeDesignAppearance(reply.getJSONObject("state").getJSONObject("savedAppearance")))
                 val loaded = reload(file)
                 val restored = withContext(Dispatchers.Main) { loaded.state }
@@ -200,7 +200,7 @@ class ShippingProfileTest {
             assertLayouts(restored, legacyPortrait, legacyLandscape)
             assertEquals(legacy, file.readText())
             val migrated = loaded.command(save(restored)).getString("profile")
-            assertEquals(23, JSONObject(migrated).getInt("version"))
+            assertEquals(24, JSONObject(migrated).getInt("version"))
             assertAppearance(historical, decodeDesignAppearanceProfile(migrated))
             assertEquals(legacyPortrait, decodePreviewProfileLayouts(migrated).portrait)
             assertEquals(legacyLandscape, decodeLandscapeLayout(migrated))
@@ -276,13 +276,13 @@ class ShippingProfileTest {
     }
     @Test fun legacyNineteenKeepsAppearanceAndSeedsCurrentLauncherWithoutRewriting() {
         val previous = JSONObject(fixture(appearance())).withoutThinkingWingspan().put("version", 19).apply {
-            remove("launcher"); remove("connectionStyle")
+            remove("launcher"); remove("connectionStyle"); remove("notificationStyle")
         }.toString()
         assertAppearance(appearance().copy(launcher = "current", connectionStyle = "relay"), decodeDesignAppearanceProfile(previous))
         val restored = PersonaPreviewState().withAppearance(appearance()).json().withoutThinkingWingspan().put("protocol", 22).apply {
-            remove("launcher"); remove("connectionStyle")
-            getJSONObject("savedAppearance").apply { remove("launcher"); remove("connectionStyle") }
-            getJSONObject("defaultAppearance").apply { remove("launcher"); remove("connectionStyle") }
+            remove("launcher"); remove("connectionStyle"); remove("notificationStyle")
+            getJSONObject("savedAppearance").apply { remove("launcher"); remove("connectionStyle"); remove("notificationStyle") }
+            getJSONObject("defaultAppearance").apply { remove("launcher"); remove("connectionStyle"); remove("notificationStyle") }
         }
         val migrated = restorePersonaPreview(restored, portrait.placement)
         assertEquals("current", migrated.launcher)

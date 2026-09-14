@@ -33,6 +33,14 @@ coordination with cellular/other calling apps is a separate future decision.
 Custom view buttons do not publish the standard action metadata used by companion
 notification surfaces. Android controls outer-frame and lock-screen presentation.
 
+## Studio comparison
+
+The original Android CallStyle is retained as a saved Studio choice alongside the
+custom renderer. An explicit synthetic notification rehearsal uses the selected
+shared renderer with private, incarnation-fenced controls and no service or media.
+Only explicit design promotion changes the production renderer; existing profiles
+and production continue to select custom. Studio preview visibility is transient.
+
 ## Evidence
 
 - [Android call notification guidance](https://developer.android.com/develop/ui/views/notifications/call-style)
