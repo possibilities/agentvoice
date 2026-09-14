@@ -244,7 +244,8 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
         adm?.setMicrophoneMute(!micOpen)
         adm?.setSpeakerMute(!speakerOpen)
         peers.values.forEach { peer ->
-            peer.track?.setEnabled(micOpen && active == peer.id)
+            // This WebRTC fork stops ADM recording on track mute; Java ADM zeros muted input.
+            peer.track?.setEnabled(!closed && active == peer.id)
             peer.remote?.setEnabled(speakerOpen && active == peer.id)
             peer.remote?.setVolume(if (speakerOpen && active == peer.id) 1.0 else 0.0)
         }

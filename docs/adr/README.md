@@ -108,3 +108,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0065: Explicit server lifecycle controls in the native menu](0065-native-menu-server-lifecycle.md)
 
 - [0066: Restore bounded same-thread voice context](0066-same-thread-voice-continuity.md)
+
+- [0067: Trial continuous muted Android input](0067-android-muted-input-continuity-trial.md) — proposed trial; live acceptance pending.
