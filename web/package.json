@@ -13,7 +13,7 @@
     "test": "npm run test:api && npm run test:browser"
   },
   "dependencies": {
-    "@agentchats/transcript": "file:vendor/agentchats-transcript-0.3.9.tgz",
+    "@agentchats/transcript": "file:vendor/agentchats-transcript-0.3.10.tgz",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "mdast-util-from-markdown": "2.0.3",

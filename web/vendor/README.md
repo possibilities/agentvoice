@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.9
+# @agentchats/transcript 0.3.10
 
-Packed from AgentChats candidate `e57ab1f`, based on
+Packed from AgentChats candidate `57e02f5`, based on
 [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
@@ -41,7 +41,10 @@ Consumer fixes and shared features landed upstream:
 - `e57ab1f`: first upward wheel, touch, or keyboard intent releases follow immediately;
   appended and streaming text preserve the reading anchor even near the bottom.
 
-Archive SHA-256: `0a004ef29d14593aba2cd7c78efba2635885e08b0ed4ccc793ea7622e840d394`.
+- `57e02f5`: optional runtime reachability gives the fixed three-pixel composer
+  divider bright ready, dim unavailable, and animated working states with accessible text.
+
+Archive SHA-256: `4a8dd66663494b24e2748bc44d6deff79fd6e851963e2b183f958af1434e245a`.
 
 Reproduce from that clean agentchats revision:
 

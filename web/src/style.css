@@ -69,7 +69,7 @@ body,
   background: #0b100f;
 }
 .agent-dock .agentchats-transcript.transcript-composer {
-  --transcript-composer-divider: #27312f;
+  --transcript-composer-divider: #454545;
   --transcript-composer-progress: #c5e791;
   background: transparent;
 }

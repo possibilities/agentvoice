@@ -345,6 +345,7 @@ const AgentInput = memo(function AgentInput({
         observedSubmissionIds={observedSubmissionIds}
         alwaysShowSend
         optimisticSubmit
+        reachable={!disabled}
         active={controls.active}
         pending={controls.pending}
         stopping={controls.stopping}

@@ -172,7 +172,7 @@ for (const width of [1440, 600]) {
     expect(workingBox.x).toBe(dockBox.x);
     expect(workingBox.width).toBe(dockBox.width);
     expect(Math.abs(workingBox.y - dockBox.y)).toBeLessThanOrEqual(1);
-    expect(workingBox.height).toBe(2);
+    expect(workingBox.height).toBe(3);
     expect(await working.evaluate((el) => getComputedStyle(el, "::after").animationName)).toBe(
       "none",
     );

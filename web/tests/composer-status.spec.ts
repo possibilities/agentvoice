@@ -1,0 +1,75 @@
+import { expect, test } from "@playwright/test";
+import type { LiveView } from "../src/types.ts";
+
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`composer divider communicates runtime state without moving the dock (${reducedMotion})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion });
+    const view: LiveView = {
+      id: "divider-fixture",
+      persistenceScope: "divider-workspace-thread",
+      phase: "live",
+      agent: [
+        { id: "a", role: "assistant", status: "complete", content: "A retained conversation." },
+      ],
+      voice: [],
+      agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+    };
+    await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+    await page.goto("/");
+    const input = page.getByRole("textbox", { name: "Message Agent" });
+    const send = page.getByRole("button", { name: "Send", exact: true });
+    const line = page.locator(".transcript-composer__activity-line");
+    await input.fill("Retain this draft through every connection state");
+    const metrics = () =>
+      line.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        const segment = getComputedStyle(el, "::after");
+        return {
+          top: rect.top,
+          height: rect.height,
+          color: style.backgroundColor,
+          animation: segment.animationName,
+          opacity: segment.opacity,
+        };
+      });
+    await expect(send).toBeEnabled();
+    const idle = await metrics();
+    expect(idle.height).toBeGreaterThanOrEqual(3);
+    expect(idle.animation).toBe("none");
+    const dock = await page.locator(".agent-dock").boundingBox();
+    view.agentControls!.active = true;
+    await expect(line).toHaveAttribute("data-active", "true");
+    const working = await metrics();
+    expect(working.top).toBe(idle.top);
+    expect(working.height).toBe(idle.height);
+    expect(working.opacity).toBe("1");
+    expect(working.animation === "none").toBe(reducedMotion === "reduce");
+    await expect(send).toBeEnabled();
+    await page.screenshot({ path: `test-results/divider-working-${reducedMotion}.png` });
+
+    // Retained activity can be stale: unavailable wins over a last-known active turn.
+    view.phase = "unavailable";
+    view.agentControls!.available = false;
+    await expect(send).toBeDisabled();
+    await expect.poll(async () => (await metrics()).animation).toBe("none");
+    const unavailable = await metrics();
+    expect(unavailable.color).not.toBe(idle.color);
+    expect(unavailable.top).toBe(idle.top);
+    expect(unavailable.height).toBe(idle.height);
+    await expect(input).toBeEditable();
+    await page.screenshot({ path: `test-results/divider-unavailable-${reducedMotion}.png` });
+
+    view.phase = "detached";
+    view.agentControls!.available = true;
+    view.agentControls!.active = false;
+    await expect(send).toBeEnabled();
+    await expect.poll(async () => (await metrics()).color).toBe(idle.color);
+    expect((await metrics()).animation).toBe("none");
+    await expect(input).toHaveValue("Retain this draft through every connection state");
+    expect(await page.locator(".agent-dock").boundingBox()).toEqual(dock);
+    await page.screenshot({ path: `test-results/divider-detached-${reducedMotion}.png` });
+  });
+}

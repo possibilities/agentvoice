@@ -165,8 +165,11 @@ separated by full-width dividers. Both scrollbars end at those dividers, and the
 viewports stay aligned as drafts or queues grow. There is no overlay clearance.
 Headers use the transcript’s mono typography and shared reading alignment.
 The composer uses the dock canvas directly, with focus on its top divider instead
-of a nested input frame. Actions retain a 44px touch row; passive Working sits
-in the existing top gutter so turn state changes do not move either divider. Multiline drafts and queue content can
+of a nested input frame. Its thick line is bright when the native runtime is
+verified reachable, dim grey when unavailable, and animated only while reachable
+and working. Voice-client detachment alone keeps the bright state. Reduced motion
+uses a still working indicator; all states occupy the same geometry. Actions retain
+a 44px touch row. Multiline drafts and queue content can
 expand both docks together; long drafts scroll within the capped text field.
 
 ## Agent input
