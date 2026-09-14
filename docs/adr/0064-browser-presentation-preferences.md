@@ -3,8 +3,9 @@
 Accepted 2026-09-14 at the operator's request.
 
 The transcript reader offers Agent, Voice, and Both views; Both remains the
-initial default. A fixed toolbar makes the choice available during loading and
-reconnect. Concealed panes remain mounted, inert and measured, preserving their
+initial default. A responsive app header makes the choice available during loading
+and reconnect, alongside branding, the current-view label and reserved status text.
+It replaces duplicate pane headings; pane regions retain accessible names. Concealed panes remain mounted, inert and measured, preserving their
 composer, disclosure and follow state while current history continues updating.
 
 The selected view is a browser presentation preference, not workspace-session

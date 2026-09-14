@@ -113,14 +113,14 @@ times describe transcript receipt; they do not prove when speech was heard.
 
 The Agent lane uses event protocol 2: subscribe first, validate `state.get`, then
 read `conversation.live.get` and page `conversation.items.list` newest first.
-First open shows one centered loading notice. Both panes remain hidden until the
+First open shows one loading notice in the app header. Both panes remain hidden until the
 initial Agent history pass and the Voice file present at attachment are loaded,
 then appear together at the latest messages. Missing/unavailable Voice history
 uses its visible notice instead of holding the view indefinitely.
 Native history loads continuously in the background, one bounded request at a time, merged by turn
 and item ID. Pages accumulate privately until the pass finishes or reaches the
 viewer limit, then publish together. The API continues to collect live items while
-the centered loading state holds the initial view. Both lanes open at the end
+the header loading state holds the initial view. Both lanes open at the end
 without animated scrolling. Initial Agent loading has a five-second budget: a
 slow or failed pass publishes the available batch once and reveals the view with
 a notice. Retries run in the background after a delay, never reopening the centered
@@ -251,7 +251,15 @@ under `web/test-results/`. No test uses credentials, microphones or model turns.
 
 The Agent / Voice / Both switch selects the visible panes; Both is the default.
 Hidden panes remain mounted and keep their draft, disclosures and reading state
-while new history arrives. The toolbar retains a fixed height across modes.
+while new history arrives. One responsive app header contains AgentVoice branding,
+the current view label, connection status and the square segmented selector. Pane
+names remain accessible without duplicate sticky headings. Status has a reserved
+line, so connection changes do not move the transcript. Both bottom docks share
+a three-pixel divider and matching geometry.
+
+Text and native controls use the same monospace stack, including portal dialogs.
+Voice details open in a square-cornered dialog with an inset inspection control;
+the dialog title supplies its accessible name without a redundant visible hint.
 
 Selection is written immediately to browser-local storage, independently of the
 call/workspace. A Funk kiosk uses its existing stable instance identity, so the

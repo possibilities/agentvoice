@@ -85,11 +85,11 @@ test("full-width dock dividers end both scroll areas and stay aligned as the com
     return Math.abs(range.getBoundingClientRect().left - textLeft);
   });
   expect(insetAlignment).toBeLessThan(1);
-  await expect(agent.getByRole("heading", { name: "Agent", exact: true })).toHaveCSS(
+  await expect(page.getByRole("heading", { name: "AgentVoice", exact: true })).toHaveCSS(
     "font-size",
     "18px",
   );
-  await expect(agent.getByRole("heading", { name: "Agent", exact: true })).toHaveCSS(
+  await expect(page.getByRole("heading", { name: "AgentVoice", exact: true })).toHaveCSS(
     "font-family",
     /Geist Mono/,
   );

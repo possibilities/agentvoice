@@ -180,12 +180,28 @@ export function App() {
   return (
     <DocumentViewerProvider load={loadDocument} resetKey={view.id}>
       <main aria-label="AgentVoice live transcripts" className="live-view">
-        <div className="presentation-bar">
-          {!preferenceSaved ? (
-            <span className="preference-notice" role="status">
-              View saved for this visit only.
-            </span>
-          ) : null}
+        <header className="app-header">
+          <div className="app-heading">
+            <div className="app-identity">
+              <h1 className="app-brand">AgentVoice</h1>
+              <span className="app-view-label">
+                {panePreference === "agent"
+                  ? "Agent chat"
+                  : panePreference === "voice"
+                    ? "Voice chat"
+                    : "Agent + Voice chat"}
+              </span>
+            </div>
+            <p className="app-status" role="status">
+              {!preferenceSaved
+                ? "View saved for this visit only."
+                : showStatus
+                  ? holding && hasSession
+                    ? "Loading conversation…"
+                    : copy[view.phase]
+                  : ""}
+            </p>
+          </div>
           <fieldset className="pane-switch" aria-label="Transcript view">
             {(["agent", "voice", "both"] as const).map((mode) => (
               <button
@@ -199,12 +215,7 @@ export function App() {
               </button>
             ))}
           </fieldset>
-        </div>
-        {showStatus ? (
-          <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
-            {holding && hasSession ? "Loading conversation…" : copy[view.phase]}
-          </p>
-        ) : null}
+        </header>
         <div className="dual-pane" data-panes={panePreference} hidden={!!holding}>
           {(["agent", "voice"] as const).map((lane) => (
             <section
@@ -214,9 +225,8 @@ export function App() {
               data-concealed={(panePreference !== "both" && panePreference !== lane) || undefined}
               inert={panePreference !== "both" && panePreference !== lane}
               aria-hidden={(panePreference !== "both" && panePreference !== lane) || undefined}
-              aria-labelledby={`${lane}-heading`}
+              aria-label={lane === "voice" ? "Voice" : "Agent"}
             >
-              <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
               <TranscriptLane
                 lane={lane}
                 viewId={transcriptView.id}

@@ -99,7 +99,7 @@ test("windowed subagent groups keep every lifecycle body reachable after polling
   await expect(followup).toBeInViewport();
 });
 
-test("one centered loading state reveals both histories at the end and preserves later Voice scrolling", async ({
+test("one header loading state reveals both histories at the end and preserves later Voice scrolling", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -129,8 +129,9 @@ test("one centered loading state reveals both histories at the end and preserves
   await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toHaveCount(0);
   const status = await page.getByRole("status").boundingBox();
-  expect(Math.abs(status!.x + status!.width / 2 - 720)).toBeLessThan(1);
-  expect(Math.abs(status!.y + status!.height / 2 - 500)).toBeLessThan(1);
+  const header = await page.locator(".app-header").boundingBox();
+  expect(status!.x).toBeGreaterThanOrEqual(header!.x);
+  expect(status!.y + status!.height).toBeLessThanOrEqual(header!.y + header!.height);
   view = {
     ...view,
     agentHistoryLoading: false,
@@ -146,7 +147,7 @@ test("one centered loading state reveals both histories at the end and preserves
   view.voiceHistoryLoading = false;
   const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
   const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
-  await expect(page.locator(".view-status")).toHaveCount(0);
+  await expect(page.locator(".app-status")).toHaveText("");
   await expect(agent.getByText("Live Agent while history loads")).toBeInViewport();
   for (const lane of [voice, agent])
     await expect
@@ -217,8 +218,8 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   await expect(voice.locator(".message-author").last()).toHaveText("Agent");
   await expect(agent.locator("time")).toHaveCount(0);
   const lanes = page.locator(".lane");
-  await expect(lanes.nth(0).getByRole("heading", { level: 1 })).toHaveText("Agent");
-  await expect(lanes.nth(1).getByRole("heading", { level: 1 })).toHaveText("Voice");
+  await expect(lanes.nth(0)).toHaveAccessibleName("Agent");
+  await expect(lanes.nth(1)).toHaveAccessibleName("Voice");
   const left = await lanes.nth(0).boundingBox();
   const right = await lanes.nth(1).boundingBox();
   expect(left!.y).toBe(right!.y);

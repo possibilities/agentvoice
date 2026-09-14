@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.10
+# @agentchats/transcript 0.3.11
 
-Packed from AgentChats candidate `57e02f5`, based on
+Packed from AgentChats candidate `aca2534`, based on
 [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
@@ -44,7 +44,12 @@ Consumer fixes and shared features landed upstream:
 - `57e02f5`: optional runtime reachability gives the fixed three-pixel composer
   divider bright ready, dim unavailable, and animated working states with accessible text.
 
-Archive SHA-256: `4a8dd66663494b24e2748bc44d6deff79fd6e851963e2b183f958af1434e245a`.
+- `d137d5b`: square voice details, inset inspection trigger, and consistent
+  monospace native controls without a redundant visible dialog hint.
+- `aca2534`: ordinary painting and measurement for grouped activity children;
+  removes nested content-visibility placeholders inside windowed outer rows.
+
+Archive SHA-256: `00e9c2d8277d0764e08216f6753960fb053357c123e12dae8cf6e207781b5dc4`.
 
 Reproduce from that clean agentchats revision:
 
