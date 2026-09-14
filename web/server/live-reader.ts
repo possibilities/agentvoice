@@ -30,6 +30,7 @@ import { savedRecordings } from "../../src/recording/store.ts";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, AgentControls } from "./agent-controls.ts";
 import { sendAgentOperation } from "./agent-sender.ts";
+import type { DocumentViewContext } from "./document-reader.ts";
 import { type AgentItem, agentMessage, itemKey, VoiceMessages } from "./messages.ts";
 
 const liveSchema = liveSnapshotSchema.extend({ instanceId: z.string(), generation: z.number() });
@@ -183,6 +184,22 @@ export class LiveReader {
       throw new Error("The call changed. Nothing was sent.");
     await this.controls.command(command);
     this.readAt = 0;
+  }
+
+  /** A document grant can only be derived from the currently verified transcript incarnation. */
+  async documentContext(): Promise<DocumentViewContext | undefined> {
+    const view = await this.read();
+    const identity = this.identity;
+    const viewId = this.viewId;
+    if (!identity || !viewId || view.id !== viewId || !this.current(identity)) return;
+    return {
+      viewId,
+      workspace: identity.workspace,
+      assistantMarkdown: view.agent
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content),
+      current: () => this.identity === identity && this.viewId === viewId && this.current(identity),
+    };
   }
 
   read(): Promise<LiveView> {

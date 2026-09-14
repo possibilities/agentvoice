@@ -2,16 +2,32 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, agentCommandSchema } from "./agent-controls.ts";
 import { AgentSendError } from "./agent-sender.ts";
+import {
+  DocumentAccessError,
+  type DocumentReader,
+  type DocumentRequest,
+  documentRequestSchema,
+} from "./document-reader.ts";
 import { isLocalRequest } from "./local-origin.ts";
+
+function documentError(response: ServerResponse, status: number, error: string) {
+  response.setHeader("Cache-Control", "no-store");
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response
+    .writeHead(status, { "Content-Type": "application/json; charset=utf-8" })
+    .end(JSON.stringify({ error }));
+}
 
 export function liveApi(
   reader: { read(): Promise<LiveView>; agentCommand?(command: AgentCommand): Promise<void> },
   env = process.env,
   nonce?: string,
+  documents?: Pick<DocumentReader, "load">,
 ) {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
-      response.writeHead(403).end("Forbidden");
+      if (request.url === "/api/document") documentError(response, 403, "Forbidden.");
+      else response.writeHead(403).end("Forbidden");
       return;
     }
     response.setHeader("Cache-Control", "no-store");
@@ -26,6 +42,62 @@ export function liveApi(
     );
     if (!request.url?.startsWith("/api/")) {
       next();
+      return;
+    }
+    if (request.url === "/api/document") {
+      if (request.method !== "POST") {
+        response.setHeader("Allow", "POST");
+        documentError(response, 405, "Method not allowed.");
+        return;
+      }
+      if (
+        !request.headers.origin ||
+        !/^application\/json(?:;|$)/i.test(request.headers["content-type"] ?? "")
+      ) {
+        documentError(response, 403, "Forbidden.");
+        return;
+      }
+      if (!documents) {
+        documentError(response, 503, "Document viewer is unavailable.");
+        return;
+      }
+      void (async () => {
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        for await (const chunk of request) {
+          bytes += chunk.length;
+          if (bytes > 16 * 1024) {
+            documentError(response, 413, "Document request is too large.");
+            return;
+          }
+          chunks.push(Buffer.from(chunk));
+        }
+        let input: DocumentRequest;
+        try {
+          input = documentRequestSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          documentError(response, 400, "Invalid document request.");
+          return;
+        }
+        try {
+          const document = await documents.load(input);
+          if (!response.destroyed)
+            response
+              .writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+              .end(JSON.stringify(document));
+        } catch (error) {
+          if (!response.destroyed)
+            documentError(
+              response,
+              error instanceof DocumentAccessError ? error.status : 500,
+              error instanceof DocumentAccessError
+                ? error.message
+                : "Document could not be opened.",
+            );
+        }
+      })().catch(() => {
+        if (!response.destroyed) documentError(response, 400, "Invalid document request.");
+      });
       return;
     }
     if (request.url === "/api/agent") {

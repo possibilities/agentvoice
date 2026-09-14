@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { stateDirectory } from "../src/paths.ts";
 import { liveApi } from "./server/api.ts";
+import { DocumentReader } from "./server/document-reader.ts";
 import { LiveReader } from "./server/live-reader.ts";
 
 const nonce = randomBytes(18).toString("base64");
@@ -13,12 +14,12 @@ function localApi(): Plugin {
     name: "agentvoice-live-api",
     configureServer(server) {
       const reader = new LiveReader(stateDirectory(process.env, homedir()));
-      server.middlewares.use(liveApi(reader, process.env, nonce));
+      server.middlewares.use(liveApi(reader, process.env, nonce, new DocumentReader(reader)));
       server.httpServer?.once("close", () => reader.close());
     },
     configurePreviewServer(server) {
       const reader = new LiveReader(stateDirectory(process.env, homedir()));
-      server.middlewares.use(liveApi(reader));
+      server.middlewares.use(liveApi(reader, process.env, undefined, new DocumentReader(reader)));
       server.httpServer.once("close", () => reader.close());
     },
   };
