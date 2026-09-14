@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -12,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { VoiceState } from "../src/console/state.ts";
+import { controlStatusSchema } from "../src/control/contract.ts";
 import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
 import { readSessionMarker, saveSessionMarker } from "../src/core/session-marker.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
@@ -65,7 +67,11 @@ describe("persistent controller and disposable runtime", () => {
   test("real worker retains native work across detached startup and fresh media reattachments", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "av-detached-worker-")));
     const configPath = join(root, "server.json");
-    writeFileSync(configPath, "{}");
+    const role = join(root, "role");
+    mkdirSync(role);
+    const rolePrompt = join(role, "VOICE_ORCHESTRATOR_APPEND_SYSTEM_PROMPT.md");
+    writeFileSync(rolePrompt, "original private role prompt");
+    writeFileSync(configPath, JSON.stringify({ role }));
     const children: RuntimeProcess[] = [];
     const media: ServerMediaMessage[] = [];
     const controller = new RuntimeController({
@@ -104,6 +110,16 @@ describe("persistent controller and disposable runtime", () => {
       await until(() => children[0]?.nativePid !== undefined);
       const retained = controller.status();
       const workerPid = retained.runtime.pid!;
+      const loadedRole = retained.directoryRole!.loaded;
+      expect(retained.directoryRole).toMatchObject({
+        source: { kind: "directory", path: role },
+        stale: false,
+      });
+      expect(retained.role).toBeUndefined();
+      controlStatusSchema.parse(retained);
+      expect(JSON.stringify(retained.directoryRole)).not.toContain("original private role prompt");
+      writeFileSync(rolePrompt, "changed private role prompt");
+      expect(controller.status().directoryRole).toMatchObject({ loaded: loadedRole, stale: true });
       const nativePid = children[0]!.nativePid!;
       expect(retained).toMatchObject({
         instanceId: "detached-integration",
@@ -181,11 +197,45 @@ describe("persistent controller and disposable runtime", () => {
       expect(audit().filter((call) => call.method === "thread/realtime/start")).toHaveLength(2);
       expect(controller.status().runtime.pid).toBe(workerPid);
       expect(children[0]!.nativePid).toBe(nativePid);
+      expect(controller.status().directoryRole).toMatchObject({ loaded: loadedRole, stale: true });
+
+      const mutation = {
+        operationId: "role-redial",
+        expectedInstanceId: retained.instanceId,
+        expectedGeneration: retained.generation,
+      };
+      await controller.redial(mutation);
+      await until(() => media.filter((message) => message.type === "prepare").length === 3);
+      const third = media.filter((message) => message.type === "prepare")[2]!;
+      controller.clientMedia({ type: "offer", sessionId: third.sessionId, sdp: "offer-three" });
+      await until(() =>
+        media.some((message) => message.type === "answer" && message.sessionId === third.sessionId),
+      );
+      controller.clientMedia({ type: "connected", sessionId: third.sessionId });
+      await until(() => controller.status().currentOperation?.phase === "ready");
+      expect(controller.status().directoryRole).toMatchObject({ loaded: loadedRole, stale: true });
+      expect(controller.status().runtime.pid).toBe(workerPid);
 
       await controller.setFrontendAttached(false);
       await until(
         () => audit().filter((call) => call.method === "thread/realtime/stop").length === 2,
       );
+      const desired = controller.status().directoryRole!.desired!;
+      await controller.restart({ ...mutation, operationId: "role-restart", scope: "runtime" });
+      await until(() => controller.status().currentOperation?.phase === "ready");
+      const replaced = controller.status();
+      expect(replaced.runtime.pid).not.toBe(workerPid);
+      expect(replaced.directoryRole).toMatchObject({
+        loaded: { generation: 2, digests: desired.digests },
+        stale: false,
+      });
+      expect(replaced.directoryRole!.loaded.digests).not.toEqual(loadedRole.digests);
+      const starts = audit().filter(
+        (call) => call.method === "thread/start" || call.method === "thread/resume",
+      );
+      expect(
+        starts.map((call) => (call.params as Record<string, unknown>)["developerInstructions"]),
+      ).toEqual(["original private role prompt", "changed private role prompt"]);
     } finally {
       await controller.shutdown();
       rmSync(root, { recursive: true, force: true });

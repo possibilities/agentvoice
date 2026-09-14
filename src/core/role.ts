@@ -103,7 +103,10 @@ async function directoryExists(path: string): Promise<boolean> {
 }
 
 /** Loads the non-prompt assets; a missing role directory fails before native startup. */
-export async function readRoleAssets(dir: string): Promise<RoleAssets> {
+export async function readRoleAssets(
+  dir: string,
+  onRead?: (path: string, bytes: Uint8Array) => void,
+): Promise<RoleAssets> {
   if (!isAbsolute(dir)) throw new ConfigError(`role directory must be absolute: ${dir}`);
   if (!(await directoryExists(dir)))
     throw new ConfigError(
@@ -111,14 +114,16 @@ export async function readRoleAssets(dir: string): Promise<RoleAssets> {
     );
   const assets: RoleAssets = { dir };
   const mcpPath = join(dir, ROLE_MCP_FILE);
-  let mcpText: string | undefined;
+  let mcpBytes: Buffer | undefined;
   try {
-    mcpText = await readFile(mcpPath, "utf8");
+    mcpBytes = await readFile(mcpPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       throw new ConfigError(`${ROLE_MCP_FILE}: cannot read ${mcpPath}: ${String(error)}`);
   }
-  if (mcpText !== undefined) {
+  if (mcpBytes !== undefined) {
+    onRead?.(mcpPath, mcpBytes);
+    const mcpText = mcpBytes.toString("utf8");
     let document: unknown;
     try {
       document = JSON.parse(mcpText);

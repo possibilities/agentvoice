@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { handoffPromptSchema } from "../core/handoff.ts";
+import { directoryRoleStatusSchema } from "../core/role-content.ts";
 import {
   randomVoiceSelectionSchema,
   voiceCatalogReceiptSchema,
@@ -101,6 +102,7 @@ export const controlOperationSchema = z
 
 export const controlStatusSchema = z
   .object({
+    directoryRole: directoryRoleStatusSchema.optional(),
     protocolVersion: z.literal(CONTROL_PROTOCOL_VERSION),
     instanceId: z.string().min(1),
     // The controller binds before the candidate runtime has discovered the

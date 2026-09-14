@@ -2,6 +2,7 @@
 
 import type { VoiceState } from "../console/state.ts";
 import type { ControlMcpRegistration } from "../core/control-mcp.ts";
+import type { DirectoryRoleInfo } from "../core/role-content.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import type { ParsedArgs, ServerOptions } from "../main.ts";
 import type { RoleRef } from "../roles/store.ts";
@@ -14,6 +15,7 @@ export interface LaunchProvenance {
   launchCwd: string;
 }
 export interface CandidateInfo {
+  directoryRole?: DirectoryRoleInfo;
   role?: RoleRef;
   voice?: string | null;
   workspace: string;

@@ -31,6 +31,11 @@ import {
   handoffResultSchema,
   handoffUnknown,
 } from "../core/handoff.ts";
+import {
+  type DirectoryRoleInfo,
+  directoryRoleInfoSchema,
+  directoryRoleStatus,
+} from "../core/role-content.ts";
 import { clearSessionMarker, readSessionMarker } from "../core/session-marker.ts";
 import { lockThread } from "../core/thread-lock.ts";
 import { compatibleVoiceCatalog } from "../core/voice-catalog.ts";
@@ -118,6 +123,7 @@ export class RuntimeController implements ControlBackend {
   private threadId = "";
   private buildId: string | undefined;
   private loadedRole: RoleRef | undefined;
+  private loadedDirectoryRole: { info: DirectoryRoleInfo; generation: number } | undefined;
   private voiceRevision = 1;
   private loadedVoice: string | null = null;
   private voiceOutcomeUnknown = false;
@@ -170,6 +176,14 @@ export class RuntimeController implements ControlBackend {
     }
     return {
       ...(role ? { role } : {}),
+      ...(this.loadedDirectoryRole
+        ? {
+            directoryRole: directoryRoleStatus(
+              this.loadedDirectoryRole.info,
+              this.loadedDirectoryRole.generation,
+            ),
+          }
+        : {}),
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: this.options.instanceId,
       workspace: this.workspace,
@@ -431,6 +445,9 @@ export class RuntimeController implements ControlBackend {
       if (this.workspace && info.workspace !== this.workspace)
         throw new Error("Candidate changed pinned workspace");
       if (info.role) roleRefSchema.parse(info.role);
+      if (info.directoryRole) directoryRoleInfoSchema.parse(info.directoryRole);
+      if (info.role && info.directoryRole)
+        throw new Error("Candidate reported conflicting role sources");
       if (this.loadedRole && info.role?.id !== this.loadedRole.id)
         throw new Error("Candidate changed the bound workspace role");
       this.workspace = info.workspace;
@@ -496,6 +513,9 @@ export class RuntimeController implements ControlBackend {
         throw new Error(this.voice.notice ?? "Runtime failed during activation");
       this.phase = "ready";
       this.loadedRole = info.role;
+      this.loadedDirectoryRole = info.directoryRole
+        ? { info: structuredClone(info.directoryRole), generation: this.generation }
+        : undefined;
       this.voiceRevision = info.role?.revision ?? 1;
       this.loadedVoice = info.voice ?? null;
       this.voiceOutcomeUnknown = false;

@@ -87,6 +87,7 @@ test("real worker IPC applies the saved voice to its existing native child and c
     await controller.start();
     const before = controller.status();
     expect(before.runtime.phase).toBe("ready");
+    expect(before.directoryRole).toBeUndefined();
     await controller.voiceSet({
       operationId: "real-change",
       expectedInstanceId: "real-worker",

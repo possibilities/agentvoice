@@ -98,6 +98,7 @@ test("ejection captures complete role contents; later calls and preflights ignor
     const parsed = parseArgs(["--workspace", f.workspace, "--config", configPath]);
     const config = await loadLaunchConfig(parsed);
     const snapshot = await prepareRuntime(config);
+    expect(snapshot.directoryRole).toBeUndefined();
     try {
       expect(snapshot.prompts.voicePrompt).toBe("");
       expect(snapshot.prompts.orchestratorDeveloperInstructions).toBe("hello\n雪\n");
@@ -116,6 +117,7 @@ test("ejection captures complete role contents; later calls and preflights ignor
       expect(next.voice.name).toBe("maple");
       expect(next.roleDatabase!.snapshot.ref.revision).toBe(2);
       const nextSnapshot = await prepareRuntime(next);
+      expect(nextSnapshot.directoryRole).toBeUndefined();
       expect(next.configDir).not.toBe(config.configDir);
       nextSnapshot.dispose?.();
     } finally {

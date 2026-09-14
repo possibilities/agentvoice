@@ -112,3 +112,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0067: Trial continuous muted Android input](0067-android-muted-input-continuity-trial.md) — accepted after the human-run muted worker-completion trial.
 
 - [0068: Export durable native parentage from persisted history](0068-durable-native-parentage-export.md) — accepted; version 2 native metadata keeps ancestry separate from semantic Work and exact receiving turns.
+
+- [0069: Observe directory role content by runtime generation](0069-directory-role-content-status.md) — accepted; additive content status preserves directory skill and database revision semantics.

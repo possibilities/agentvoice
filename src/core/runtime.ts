@@ -53,6 +53,7 @@ import {
   threadParams,
 } from "./params.ts";
 import { type RoleAssets, readRoleAssets } from "./role.ts";
+import { type DirectoryRoleInfo, RoleContentCapture } from "./role-content.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { readSessionMarker, saveSessionMarker } from "./session-marker.ts";
@@ -123,6 +124,7 @@ export interface RuntimeOptions {
 }
 
 export interface RuntimeSnapshot {
+  directoryRole?: DirectoryRoleInfo;
   dispose?: () => void;
   prompts: Prompts;
   foundPrompts: string[];
@@ -141,8 +143,21 @@ export async function prepareRuntime(
     if (!statSync(workspace).isDirectory() || realpathSync(workspace) !== workspace)
       throw new Error("Workspace must be an existing canonical absolute directory");
     const warnings: string[] = [];
-    const loaded = await readPrompts(config, (message) => warnings.push(message));
-    const role = config.role === undefined ? null : await readRoleAssets(config.role);
+    const capture =
+      !config.roleDatabase && config.role ? new RoleContentCapture(config.role) : undefined;
+    const loaded = await readPrompts(config, (message) => warnings.push(message), capture?.file);
+    const role =
+      config.role === undefined ? null : await readRoleAssets(config.role, capture?.file);
+    try {
+      capture?.skills();
+    } catch {
+      throw new Error(
+        "Directory role content observation failed: unavailable source or observation limits",
+      );
+    }
+    const directoryRole = capture
+      ? { path: capture.directory, digests: capture.finish() }
+      : undefined;
     if (role) warnings.push(`role: ${role.dir}`);
     realtimeParams(config, loaded.prompts, "", "", "");
     warnings.push(...passthroughWarnings(config, loaded.prompts));
@@ -165,7 +180,14 @@ export async function prepareRuntime(
     }
     // Validate startup -c invariants before replacing a live generation.
     appServerArgv(config.codex, config.codexConfig);
-    return { prompts: loaded.prompts, foundPrompts: loaded.paths, role, warnings, dispose };
+    return {
+      prompts: loaded.prompts,
+      foundPrompts: loaded.paths,
+      role,
+      warnings,
+      dispose,
+      directoryRole,
+    };
   } catch (error) {
     dispose?.();
     throw error;

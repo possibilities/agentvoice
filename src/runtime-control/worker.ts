@@ -160,6 +160,7 @@ export function runRuntimeWorker(
       pid: process.pid,
       buildId: after,
       role: config.roleDatabase?.snapshot.ref,
+      directoryRole: snapshot.directoryRole,
       voice: config.voice.name ?? null,
     };
   }

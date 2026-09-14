@@ -164,10 +164,32 @@ runtime incarnation from bouncing a replacement runtime.
   threadId: string;  // empty while initial candidate startup has not identified it
   generation: number;
   runtime: { pid?: number; buildId?: string; phase: string; voicePhase?: string };
+  directoryRole?: {
+    source: { kind: "directory"; path: string };
+    loaded: { generation: number; digests: RoleContent };
+    desired?: { digests: RoleContent };
+    stale: boolean | null;
+    error?: "Directory role content is unavailable or exceeds observation limits";
+  };
   currentOperation?: ControlOperation;
   recentOperations: ControlOperation[];
 }
 ```
+
+`RoleContent` has `format: "agentvoice-role-content-v1"` and four lowercase
+SHA-256 strings: `content`, `prompts`, `mcp`, and `skills`. `directoryRole` is an
+additive protocol-7 field for directory-backed roles only. Loaded identifies the
+last successfully activated runtime's preflight inputs; desired rereads current
+bytes at that source path on each status request. `stale: null` plus the fixed
+error means desired could not be observed, not that the role is current. No
+prompt/MCP contents, commands, arguments, environment values or filesystem error
+details appear in this field. DB-backed `role` revision fields remain unchanged.
+
+Redial/reattachment never replace the loaded observation. Successful runtime
+replacement does. Live native skill reads may observe directory edits after
+preflight, so this is not proof of continuous native consumption. Traversal is
+bounded and non-atomic; it does not validate desired configuration or discover
+changed role selectors. See [the exact framing and limits](adr/0069-directory-role-content-status.md).
 
 `ControlOperation` contains immutable request identity and lifecycle state:
 

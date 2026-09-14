@@ -1,3 +1,4 @@
+import type { DirectoryRoleStatus } from "../core/role-content.ts";
 import type { VoiceInspection } from "../core/voice-inspection.ts";
 import type { MailboxCaller, MailboxOpenParams, MailboxOpenResult } from "../mailbox/contract.ts";
 import type { RoleRef, VoiceEdit } from "../roles/store.ts";
@@ -72,6 +73,7 @@ export type ControlOperation = {
 };
 
 export type ControlStatus = {
+  directoryRole?: DirectoryRoleStatus;
   role?: {
     loaded: RoleRef;
     desired?: RoleRef;

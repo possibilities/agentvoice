@@ -221,14 +221,21 @@ async function present(path: string): Promise<boolean> {
  * A name that exists must load: a broken link, directory or unreadable file
  * fails before Codex starts rather than silently sending nothing.
  */
-async function readPromptFile(path: string, filename: string): Promise<string | undefined> {
+async function readPromptFile(
+  path: string,
+  filename: string,
+  onRead?: (path: string, bytes: Uint8Array) => void,
+): Promise<string | undefined> {
   if (!(await present(path))) return undefined;
+  let bytes: Buffer;
   try {
     if (!(await stat(path)).isFile()) throw new Error("expected a regular file");
-    return await readFile(path, "utf8");
+    bytes = await readFile(path);
   } catch (error) {
     throw new ConfigError(`${filename}: cannot read ${path}: ${String(error)}`);
   }
+  onRead?.(path, bytes);
+  return bytes.toString("utf8");
 }
 
 /**
@@ -239,13 +246,14 @@ async function readPromptFile(path: string, filename: string): Promise<string | 
 async function readPromptDirectory(
   dir: string,
   general: boolean,
+  onRead?: (path: string, bytes: Uint8Array) => void,
 ): Promise<LoadedPrompts & { seen: string[] }> {
   const prompts: Prompts = {};
   const source: Partial<Record<PromptName, string>> = {};
   const seen: string[] = [];
   if (general) {
     for (const [name, filename] of Object.entries(ROLE_PROMPT_FILES) as [PromptName, string][]) {
-      const text = await readPromptFile(join(dir, filename), filename);
+      const text = await readPromptFile(join(dir, filename), filename, onRead);
       if (text === undefined) continue;
       prompts[name] = text;
       source[name] = filename;
@@ -253,7 +261,7 @@ async function readPromptDirectory(
     }
   }
   for (const [name, filename] of Object.entries(PROMPT_FILES) as [PromptName, string][]) {
-    const text = await readPromptFile(join(dir, filename), filename);
+    const text = await readPromptFile(join(dir, filename), filename, onRead);
     if (text === undefined) continue;
     // The voice-specific variant stands in for the general file of the same kind.
     prompts[name] = text;
@@ -289,10 +297,12 @@ async function readPromptDirectory(
 export async function readPrompts(
   config: Pick<ServerConfig, "configDir" | "codexConfig" | "role">,
   warn: (message: string) => void = () => {},
+  onRead?: (path: string, bytes: Uint8Array) => void,
 ): Promise<LoadedPrompts> {
   const loaded = await readPromptDirectory(
     config.role ?? config.configDir,
     config.role !== undefined,
+    onRead,
   );
   if (config.role !== undefined && config.role !== config.configDir) {
     for (const filename of Object.values(PROMPT_FILES)) {

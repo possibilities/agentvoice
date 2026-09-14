@@ -116,6 +116,10 @@ owns the current source map and recording/attachment implementation guidance.
   VOICE_ORCHESTRATOR pair stands in for the same kind. Role skills go to the owned
   child via skills/extraRoots/set after initialize (process-local, verified on stock
   0.153.4); role MCP servers ride per-thread config. Never write under CODEX_HOME.
+- src/core/role-content.ts: bounded directory-role preflight content observations and
+  read-only source digests for control status. Prompt/MCP readers supply their exact
+  loaded buffers; skills retain their existing live native root. DB snapshots never
+  use directory-content status. See [ADR 0069](adr/0069-directory-role-content-status.md).
 - src/core/codex-config.ts: ordered native startup overrides; validate only argv
   shape and product-invariant choices, never rewrite the forwarded strings.
 - src/core/params.ts: pure config/prompts → native thread and realtime requests.
