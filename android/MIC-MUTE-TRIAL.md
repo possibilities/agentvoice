@@ -1,8 +1,10 @@
-# Microphone continuity candidate
+# Microphone continuity acceptance and test procedure
 
-This test changes one Android media predicate: the active local audio track stays enabled while microphone mute supplies zero samples through the Java audio device module. Inactive peers and closed sessions remain disabled. Speaker controls are unchanged. Local microphone capture can remain active while muted, including Android's microphone indicator.
+The accepted change updates one Android media predicate: the active local audio track stays enabled while microphone mute supplies zero samples through the Java audio device module. Inactive peers and closed sessions remain disabled. Speaker controls are unchanged. Local microphone capture can remain active while muted, including Android's microphone indicator.
 
-The cached dependency is proven to stop recording on track mute. Whether that behavior caused the reported delayed voice answers remains a hypothesis until this trial. This is a prepared candidate, not production acceptance.
+Accepted September 14, 2026: candidate `fcaf35e` was installed on the Galaxy S22. The human muted the microphone while a read-only worker ran, watched it finish at 21:05:02Z, and heard the root deliver the four-project result while still muted. The operator reported “that seemed to work well” and authorized landing and closure.
+
+The cached dependency is proven to stop recording on track mute. The successful trial establishes the requested observable behavior; it does not prove the private remote scheduler's mechanism. The procedure below is retained for regression checks and recovery. The additional controls were not all claimed as executed.
 
 ## Human-run test
 
@@ -39,4 +41,4 @@ A separately labelled baseline APK, built from the same pre-candidate revision, 
 
 The investigation's exact cached-library disassembly proves the recording-stop branch and Android StopOnMute default. The separate exact-dependency PCM fixture and its report travel with the trial artifacts. Read its stated instrumentation and limitations before interpreting it as live-device coverage.
 
-Still required for full media acceptance: actual installed binary identity, muted PCM at the encoding boundary, RTP/codec behavior (including DTX), and active/pending peer renewal with the real shared ADM. Do not claim a two-minute wait alone verifies renewal. If the candidate fails despite verified input continuity, inspect the installed Codex desktop bundle's audio/realtime behavior next; do not change its scheduling modes as part of this trial.
+Additional media coverage not established by this trial: actual installed binary identity, muted PCM at the encoding boundary, RTP/codec behavior (including DTX), and active/pending peer renewal with the real shared ADM. Do not claim a two-minute wait alone verifies renewal. If the candidate fails despite verified input continuity, inspect the installed Codex desktop bundle's audio/realtime behavior next; do not change its scheduling modes as part of this trial.
