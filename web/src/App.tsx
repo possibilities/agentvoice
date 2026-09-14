@@ -4,6 +4,7 @@ import {
   TranscriptComposer,
 } from "@agentchats/transcript/react";
 import {
+  type MouseEvent,
   memo,
   useCallback,
   useDeferredValue,
@@ -33,6 +34,14 @@ const copy = {
   unavailable: "AgentVoice is unavailable. Reconnecting…",
   live: "",
 };
+
+const interactiveComposerTarget =
+  'a[href], button, input, textarea, select, option, label, summary, [contenteditable="true"], [role="button"], [role="checkbox"], [role="combobox"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="radio"], [role="slider"], [role="spinbutton"], [role="switch"], [role="tab"], [role="textbox"], [tabindex]:not([tabindex="-1"])';
+
+function focusComposerFromDock(event: MouseEvent<HTMLDivElement>) {
+  if (!(event.target instanceof Element) || event.target.closest(interactiveComposerTarget)) return;
+  event.currentTarget.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+}
 
 export function App() {
   const persistenceInstanceId = kioskPersistenceInstanceId();
@@ -238,6 +247,7 @@ export function App() {
               <div
                 ref={lane === "agent" ? agentDock : undefined}
                 className={lane === "agent" ? "agent-dock" : "voice-dock"}
+                onClick={lane === "agent" ? focusComposerFromDock : undefined}
                 style={lane === "voice" ? { height: dockHeight } : undefined}
                 aria-hidden={lane === "voice" ? true : undefined}
                 hidden={lane === "voice" && (panePreference !== "both" || dockHeight === 0)}

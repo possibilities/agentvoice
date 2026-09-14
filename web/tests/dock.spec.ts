@@ -1,6 +1,43 @@
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
+test("blank Agent dock clicks focus the composer without intercepting its controls", async ({
+  page,
+}) => {
+  const view: LiveView = {
+    phase: "live",
+    persistenceScope: "dock-focus-workspace-thread",
+    id: "dock-focus",
+    voice: [],
+    agent: [],
+    agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+  };
+  const requests: Record<string, unknown>[] = [];
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.route("**/api/agent", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/");
+
+  const agent = page.getByRole("region", { name: "Agent", exact: true });
+  const dock = agent.locator(".agent-dock");
+  const input = agent.getByRole("textbox", { name: "Message Agent" });
+  await page.getByRole("heading", { name: "AgentVoice" }).focus();
+  await dock.click({ position: { x: 6, y: 6 } });
+  await expect(input).toBeFocused();
+
+  const mode = agent.getByRole("button", { name: "Follow-up behavior" });
+  await mode.click();
+  await expect(page.getByRole("menuitemradio", { name: "Steer current turn" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await input.fill("Send from the dock");
+  await agent.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]?.action).toBe("send");
+});
+
 test("full-width dock dividers end both scroll areas and stay aligned as the composer grows", async ({
   page,
 }) => {
