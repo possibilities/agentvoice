@@ -576,7 +576,11 @@ working draft. There is no automatic release-time refresh. See the
 
 The selected i cons microphone/speaker were purchased individually with verified
 attribution waivers. This license holder's local build opts in through
-`agentvoice.paidNounIcons=856601,974802` in gitignored `android/local.properties`.
+`agentvoice.paidNounIcons=856601,974802` in private Gradle user properties
+(`~/.gradle/gradle.properties`) so fresh worktrees preserve the assertion.
+Gitignored `android/local.properties` remains a checkout-specific override;
+an empty value there explicitly retains attribution. Do not commit the assertion
+to project Gradle properties. Builds without an applicable opt-in remain public.
 Public builds retain accessible attribution; the opt-in removes only the selected
 paid pair's Credits action for the license holder and does not add icon UI or
 license downstream forks. Public CC BY sources/notices and Studio's all-library

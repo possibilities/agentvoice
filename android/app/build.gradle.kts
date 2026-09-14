@@ -10,7 +10,11 @@ plugins {
 val localIconLicenses = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
 }
-val paidNounIcons = localIconLicenses.getProperty("agentvoice.paidNounIcons") == "856601,974802"
+// A private Gradle user property survives fresh worktrees. A checkout-local
+// assertion (including an empty value) still takes precedence.
+val paidNounIconIds = localIconLicenses.getProperty("agentvoice.paidNounIcons")
+    ?: providers.gradleProperty("agentvoice.paidNounIcons").orNull
+val paidNounIcons = paidNounIconIds == "856601,974802"
 
 val verifyShippingDesign by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir.parentFile)

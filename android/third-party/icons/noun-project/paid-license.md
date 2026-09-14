@@ -21,9 +21,18 @@ License references:
 ## Building a licensed distribution
 
 Public builds keep accessible attribution by default. The verified license holder
-may set `agentvoice.paidNounIcons=856601,974802` in the gitignored
-`android/local.properties`; Gradle generates `BuildConfig.PAID_NOUN_ICONS` for
-that local build. This removes the selected i cons pair's app Credits action.
+may set `agentvoice.paidNounIcons=856601,974802` in their private Gradle user
+properties (`~/.gradle/gradle.properties`, or the selected `GRADLE_USER_HOME`).
+This explicit distributor setting survives fresh worktrees without copying a
+private checkout file. Gradle generates `BuildConfig.PAID_NOUN_ICONS` for that
+local build. This removes the selected i cons pair's app Credits action.
 It does not remove the public sources, packaged CC BY notices, or Studio's
 all-library credits. The flag is a distributor assertion, not a license grant.
 Do not copy another distributor's opt-in into a fork without an applicable license.
+
+The existing gitignored `android/local.properties` setting takes precedence,
+including an empty value to retain attribution in that checkout. Without a local
+setting, standard Gradle `-Pagentvoice.paidNounIcons=` can disable the user opt-in
+for a public build. Absent or mismatched IDs retain attribution. Never commit a
+purchaser opt-in to the project's `gradle.properties`, and do not infer it from
+the purchase note or copy invoices into the build tree.
