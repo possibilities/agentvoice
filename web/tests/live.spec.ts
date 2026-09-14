@@ -1,4 +1,5 @@
 import type { TranscriptMessage } from "@agentchats/transcript";
+import { mapCodexSubagentActivity } from "@agentchats/transcript/codex";
 import { expect, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
@@ -7,6 +8,96 @@ const message = (
   content: string,
   role: TranscriptMessage["role"] = "assistant",
 ): TranscriptMessage => ({ id, role, content, status: "complete" });
+
+const subagentMessage = (id: string, kind: string, agentPath: string): TranscriptMessage => {
+  const mapped = mapCodexSubagentActivity({
+    id,
+    kind,
+    agentThreadId: `thread-${id}`,
+    agentPath,
+  })!;
+  return {
+    id,
+    role: "tool",
+    content: mapped.content,
+    status: "complete",
+    toolActivity: mapped.activity,
+  };
+};
+
+test("windowed subagent groups keep every lifecycle body reachable after polling", async ({
+  page,
+}) => {
+  const singleton = subagentMessage(
+    "interaction",
+    "interacted",
+    "/root/android_disconnected_layout",
+  );
+  const separator = message("separator", "The child work is continuing.");
+  const started = subagentMessage("spawn", "started", "/root/layout_worker");
+  const completed = subagentMessage("completion", "completed", "/root/layout_worker");
+  let view: LiveView = {
+    phase: "live",
+    id: "subagent-details",
+    persistenceScope: "subagent-details-thread",
+    voice: [],
+    agent: [singleton, separator, started, completed],
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
+
+  const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
+  const singletonTrigger = agent.locator(".tool-disclosure__trigger", {
+    hasText: "/root/android_disconnected_layout",
+  });
+  await singletonTrigger.click();
+  await expect(agent.getByLabel("Agent thread", { exact: true })).toHaveText("thread-interaction");
+
+  const group = agent.locator(".activity-group__trigger");
+  await expect(group).toContainText("2 subagent activities");
+  await group.click();
+  await expect(group).toHaveAttribute("aria-expanded", "true");
+  const children = agent.locator(".activity-group__items .tool-disclosure");
+  await expect(children).toHaveCount(2);
+
+  for (const [index, action] of ["Started", "Completed"].entries()) {
+    const trigger = children.nth(index).locator(".tool-disclosure__trigger");
+    await trigger.scrollIntoViewIfNeeded();
+    await expect(trigger).toBeInViewport();
+    if (index === 0) await trigger.click();
+    else {
+      await trigger.focus();
+      await trigger.press("Enter");
+    }
+    const body = children.nth(index).getByLabel("Activity", { exact: true });
+    await body.scrollIntoViewIfNeeded();
+    await expect(body).toHaveText(action);
+    await expect(body).toBeInViewport();
+  }
+
+  view = {
+    ...view,
+    agent: [
+      { ...singleton },
+      separator,
+      { ...started },
+      { ...completed },
+      subagentMessage("followup", "interacted", "/root/reviewer"),
+    ],
+  };
+  await expect(children).toHaveCount(3);
+  await expect(group).toHaveAttribute("aria-expanded", "true");
+  for (const action of ["Started", "Completed"])
+    await expect(agent.locator(".tool-disclosure__trigger", { hasText: action })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  const followup = agent.locator(".tool-disclosure__trigger", {
+    hasText: "/root/reviewer",
+  });
+  await followup.scrollIntoViewIfNeeded();
+  await expect(followup).toBeInViewport();
+});
 
 test("one centered loading state reveals both histories at the end and preserves later Voice scrolling", async ({
   page,

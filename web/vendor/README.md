@@ -1,6 +1,7 @@
-# @agentchats/transcript 0.3.6
+# @agentchats/transcript 0.3.7
 
-Packed from [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
+Packed from AgentChats candidate `7135145`, based on
+[agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
 
@@ -31,7 +32,10 @@ Consumer fixes and shared features landed upstream:
   entry journal preserve drafts through actual WKWebView process termination.
   Generic browser tabs remain independently scoped; no recovery resends input.
 
-Archive SHA-256: `ea065eb6cc59fc5701e7740b509015aa4ca15040276ffaf697e652d9a57bd4d5`.
+- `7135145`: readable Codex subagent lifecycle rows preserve distinct activity
+  identities and expose the agent path, action, thread, and event ID.
+
+Archive SHA-256: `6b4c81cf38b18781a5a48de1472c45f13c58d85f3c2f25ad24dd500101c8d94c`.
 
 Reproduce from that clean agentchats revision:
 

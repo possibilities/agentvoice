@@ -67,3 +67,34 @@ test("MCP text envelopes show decoded command text and keep metadata and structu
   expect(sections).toContainEqual({ label: "Structured result", content: '{\n  "ok": true\n}' });
   expect(sections.at(-1)?.content).toBe(JSON.stringify(item, null, 2));
 });
+
+test("subagent lifecycle rows show the affected path and action without changing the native item", () => {
+  const item = {
+    type: "subAgentActivity" as const,
+    id: "call_GR4cGfSXKZr1ubNdikZLQ9uM",
+    kind: "interacted" as const,
+    agentThreadId: "01a0a060-8b15-7211-b62c-26e9bc56d447",
+    agentPath: "/root/android_disconnected_layout",
+  };
+  const before = JSON.stringify(item);
+  const message = agentMessage({ turnId: "turn", item })!;
+  expect(message).toMatchObject({
+    id: '["turn","call_GR4cGfSXKZr1ubNdikZLQ9uM"]',
+    role: "tool",
+    content: "Interacted /root/android_disconnected_layout",
+    toolActivity: {
+      name: "Subagent",
+      detail: "/root/android_disconnected_layout",
+      meta: "Interacted",
+      state: "complete",
+    },
+  });
+  expect(message.toolActivity?.sections).toEqual([
+    { label: "Activity", content: "Interacted" },
+    { label: "Agent path", content: "/root/android_disconnected_layout" },
+    { label: "Agent thread", content: "01a0a060-8b15-7211-b62c-26e9bc56d447" },
+    { label: "Activity ID", content: "call_GR4cGfSXKZr1ubNdikZLQ9uM" },
+    { label: "Original record", content: JSON.stringify(item, null, 2) },
+  ]);
+  expect(JSON.stringify(item)).toBe(before);
+});

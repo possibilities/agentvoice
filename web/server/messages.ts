@@ -1,5 +1,8 @@
 import type { TranscriptMessage } from "@agentchats/transcript";
-import { parseCodexMessagePresentation } from "@agentchats/transcript/codex";
+import {
+  mapCodexSubagentActivity,
+  parseCodexMessagePresentation,
+} from "@agentchats/transcript/codex";
 import type { z } from "zod";
 import type { conversationItemSchema } from "../../src/events/conversation.ts";
 import { recordedVoiceFrame } from "../../src/recording/writer.ts";
@@ -81,6 +84,12 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
       ...toolOutputSections(item.type === "mcpToolCall" ? item.result : item.contentItems),
       { label: "Original record", content: JSON.stringify(item, null, 2) },
     ];
+  } else if (item.type === "subAgentActivity") {
+    const mapped = mapCodexSubagentActivity(item);
+    if (mapped) {
+      message.content = mapped.content;
+      message.toolActivity = { ...mapped.activity, state };
+    }
   }
   return message;
 }
