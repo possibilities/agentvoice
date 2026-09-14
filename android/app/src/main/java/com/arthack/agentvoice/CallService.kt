@@ -6,13 +6,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Person
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Binder
 import android.os.Build
@@ -131,25 +129,8 @@ internal class CallService : Service() {
         }
         val hangUp = servicePendingIntent(ACTION_HANG_UP, session, 1)
         val mic = servicePendingIntent(ACTION_TOGGLE_MIC, session, 2)
-        val person = Person.Builder()
-            .setName(state.identity)
-            .setIcon(Icon.createWithResource(this, R.mipmap.ic_agentvoice))
-            .setImportant(true)
-            .build()
-        val notification = baseNotification(state.identity, session)
-            .setCategory(Notification.CATEGORY_CALL)
-            .setContentText(state.phase)
-            .setWhen(notificationWhenMillis(System.currentTimeMillis(), SystemClock.elapsedRealtime(),
-                state.startedAtElapsedRealtime))
-            .setShowWhen(true)
-            .setUsesChronometer(true)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(Notification.Action.Builder(
-                Icon.createWithResource(this, R.drawable.ic_notification_agentvoice), state.micAction, mic).build())
-            .setStyle(Notification.CallStyle.forOngoingCall(person, hangUp))
-            .build()
+        val notification = buildCallNotification(this, baseNotification(state.identity, session),
+            state, hangUp, mic)
         enterForeground(notification)
     }
 

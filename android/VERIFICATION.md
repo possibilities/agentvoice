@@ -1,6 +1,6 @@
 # Android development build verification
 
-Latest work: **Allow Android screen capture — September 13, 2026** (receipt at the end).
+Latest work: **Custom call notification contrast — September 14, 2026** (receipt at the end).
 The user-locked S22 profile is now complete version 20 and supplies generated
 production defaults. Studio protocol 23 persists all visual choices and retains
 its full editing range. See [Status polish](#status-polish) for the current
@@ -2689,3 +2689,42 @@ and the secure-window bit set. The phone disconnected before ADB accepted the
 in-place install. Build/source verification is complete; updated-device capture
 verification remains pending reconnection. No app data, pairing, Studio state,
 desktop call or server was changed by that unaccepted installation attempt.
+# 2026-09-14: Custom call notification contrast
+
+The operator handed over the plugged-in Samsung Galaxy S22 (Android 16/API 36,
+One UI 8) for implementation and delivery. Replaced the observed white-on-white
+CallStyle Unmute action with custom expanded controls; see
+[ADR 0061](../docs/adr/0061-custom-android-call-notification.md).
+
+- Production and Studio builds, 185 Studio unit tests, production lint (zero
+  errors), shipping APK/content audit and separate design-app audit passed.
+- Root checks passed: 713 tests, TypeScript typecheck and Biome lint.
+- `CallNotificationTest` passed on the physical phone against the final Studio
+  APK. It inflates both light/dark RemoteViews with Mute and Unmute labels,
+  checks button contrast at least 7:1 and 48 dp targets, verifies compact
+  visibility, and delivers both distinct PendingIntents to a synthetic receiver.
+  It opens no microphone/network and does not launch or edit a Studio scene.
+  The integrated Persona viewport test also passed with the notification shade closed.
+- The installed production client reconnected with existing saved access.
+  Actual notification Mute/Unmute toggled the corresponding HUMAN gate; Hang Up
+  removed the notification and foreground state. Returning through the notification
+  reused the active call. Backgrounding and a short screen-off interval retained
+  the foreground microphone service. Android reported requested/actual
+  `MODE_IN_COMMUNICATION` and `USAGE_VOICE_COMMUNICATION` audio focus.
+- Final compact and expanded views were inspected on the phone. Both final
+  light/dark expanded views show readable controls:
+  [dark](design/call-notification-dark.png), [light](design/call-notification-light.png).
+  Crops exclude unrelated notifications. The compact view includes the app name;
+  the expanded system header retains the name and elapsed time. The final refinement
+  removes the inset content panel and uses platform notification text appearances
+  directly on the system surface.
+- Installed production APK SHA-256 matched the audited artifact:
+  `05368dc00fd023fc7f69bdff24107c5359f6bd2cd20fbb96d55f9865d26336f7`.
+  Both installs used `-r`; Studio binding, working draft and explicit saved
+  profile SHA-256 values remained byte-identical. Night mode was restored to
+  its original enabled setting; font scale remained 1.0. Both audio gates were
+  restored muted, with a connected call and expanded notification for inspection.
+
+This verifies the contrast fix and existing lifecycle/audio-mode retention on
+this phone. It does not establish Telecom integration, companion-device controls,
+other OEM rendering, long Doze survival, or a new end-to-end spoken-audio result.

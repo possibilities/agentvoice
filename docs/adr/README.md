@@ -74,6 +74,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0057: Responsive web transcripts with correlated submissions](0057-responsive-web-transcripts.md) | Accepted | Windowed rendering, stable disclosures and exact native identity reconcile immediate local submissions. |
 | [0058: Durable web composer drafts and reader recovery](0058-durable-web-composer-and-reader-recovery.md) | Accepted | Same-call history survives recoverable reader failures; browser entry recovery is separate from native delivery. |
 | [0059: Clarify mailbox and conversation-hold guidance](0059-clarify-mailbox-and-conversation-hold-guidance.md) | Accepted | Wording follows retained workspace-session ownership; no runtime hold mechanism. |
+| [0061: Own Android call notification control contrast](0061-custom-android-call-notification.md) | Accepted | Custom expanded controls replace CallStyle; microphone service and communication audio ownership remain unchanged. |
 
 | [0060: Web session and browser-process continuity](0060-web-session-and-browser-process-continuity.md) | Accepted | Separate frontend connectivity, browser-instance recovery and served-code activation from retained session ownership. |
 

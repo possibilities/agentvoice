@@ -145,8 +145,10 @@ Start talking / Stop talking actions with the same gates.
 Screenshots, screen recording and display mirroring are allowed throughout the
 app. The screen stays awake during a call. System bars can be revealed by swiping.
 Back, backgrounding and lock release held PTT but preserve the call in a private
-microphone foreground service. An ongoing native notification has Hang up and
-microphone Mute/Unmute actions. Returning to the app reuses that call. Explicit
+microphone foreground service. An ongoing notification has custom expanded Hang Up
+and microphone Mute/Unmute controls with app-owned contrast. It replaces CallStyle
+presentation without changing communication audio mode or foreground microphone
+ownership; Telecom integration remains separate. Returning to the app reuses that call. Explicit
 Disconnect, transport loss, failed heartbeat, audio focus loss or removal of the
 selected audio device tears down locally. Activity recreation rebinds to the same
 owner without redialing; orientation changes release any owned hold. Portrait and landscape use their

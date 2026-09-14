@@ -44,11 +44,23 @@ keeps normal screen-off heartbeats running, including when channels are muted;
 it does not override deep Doze or manufacturer battery restrictions. Studio
 removes this permission as well as the service.
 
-The ongoing native call notification offers microphone Mute/Unmute and Hang up.
+The ongoing notification uses custom expanded controls for microphone Mute/Unmute
+and Hang Up inside Android's standard notification frame. Each button owns its
+background and text colors to avoid Samsung CallStyle's white-on-white action.
+Collapsed and heads-up views show the connection phase; expand for controls.
 Actions refer to the exact call incarnation, so an old action cannot affect a
 successor. Microphone state follows the existing server acknowledgement protocol.
 Audio-meter updates do not rebuild the notification. Tapping it returns to the
 existing call and cannot start a new one from a stale notification.
+
+This is the microphone service's foreground notification, not a second notification
+or a hidden CallStyle notification. It is updated and removed by the same call
+lifecycle. Communication audio mode, audio focus, routing and foreground microphone
+capture are independent of its visual style and remain unchanged. The app does not
+register calls with Telecom. Unlike CallStyle, this notification does not claim
+special call ranking or non-dismissible treatment; swiping it away is not Hang Up.
+Custom controls are PendingIntent-backed views, not standard notification action
+metadata for companion devices. See [ADR 0061](adr/0061-custom-android-call-notification.md).
 
 Notification permission is requested once on Android 13 and newer. Denial does
 not silently retry the permission prompt or prevent an otherwise permitted call;
