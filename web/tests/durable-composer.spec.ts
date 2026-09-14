@@ -17,7 +17,7 @@ const initial = (): LiveView => ({
   agentControls: { available: true, active: false, stopping: false, pending: false, queue: [] },
 });
 
-test("reconnecting retains readable history and editable drafts; reload and reader replacement recover the same scope", async ({
+test("detached and unavailable sessions retain history and editable drafts until reattachment", async ({
   page,
 }) => {
   const view = initial();
@@ -25,20 +25,33 @@ test("reconnecting retains readable history and editable drafts; reload and read
   await page.goto("/");
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await input.fill("Unsent draft before reconnect");
-  view.phase = "connecting";
+  view.id = "detached-action-incarnation";
+  view.phase = "detached";
   view.agentControls!.available = false;
-  await expect(page.getByText("Connecting to AgentVoice…", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Voice client detached. Agent history remains available.", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Existing history remains readable.", { exact: true })).toBeVisible();
   await expect(input).toBeEnabled();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
-  await input.fill("Typed while reconnecting 日本語");
+  await input.fill("Typed while detached 日本語");
+  view.agent.push({
+    id: "detached-native-work",
+    role: "assistant",
+    content: "Native work continued while voice was detached.",
+    status: "complete",
+  });
+  await expect(page.getByText("Native work continued while voice was detached.")).toBeVisible();
+  view.phase = "unavailable";
+  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toBeVisible();
+  await expect(input).toHaveValue("Typed while detached 日本語");
   await page.reload();
-  await expect(input).toHaveValue("Typed while reconnecting 日本語");
-  view.id = "new-reader-same-thread";
+  await expect(input).toHaveValue("Typed while detached 日本語");
+  view.id = "reattached-action-incarnation";
   view.phase = "live";
   view.agentControls!.available = true;
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
-  await expect(input).toHaveValue("Typed while reconnecting 日本語");
+  await expect(input).toHaveValue("Typed while detached 日本語");
 });
 
 test("drafts are isolated by verified workspace/thread and retained when returning", async ({

@@ -19,7 +19,7 @@ export type AgentControlsView = {
 };
 
 export type LiveView = {
-  phase: "offline" | "waiting" | "connecting" | "live" | "unavailable";
+  phase: "offline" | "empty" | "detached" | "connecting" | "live" | "unavailable";
   id: string;
   /** Opaque workspace/thread scope for browser-local composer recovery. */
   persistenceScope?: string;

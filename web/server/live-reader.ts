@@ -126,7 +126,6 @@ type Identity = {
   threadId: string;
   instanceId: string;
   generation: number;
-  clientId: string;
   controlProtocolVersion: ReadableControlProtocol;
 };
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
@@ -140,6 +139,7 @@ export class LiveReader {
   private historyClient?: ControlSocket;
   private historyConnectPending?: Promise<ControlSocket>;
   private identity?: Identity;
+  private attachedClientId?: string;
   private viewId = "";
   private tail?: VoiceRecordingTail;
   private voice = new VoiceMessages();
@@ -198,7 +198,7 @@ export class LiveReader {
     if (Date.now() - this.readAt < 250) return Promise.resolve(this.cached);
     this.pending = this.update()
       .then((view) => {
-        if (view.phase === "live" || view.phase === "waiting") {
+        if (view.phase === "live" || view.phase === "detached" || view.phase === "empty") {
           this.retryAt = 0;
           this.retryDelay = 250;
         }
@@ -206,7 +206,11 @@ export class LiveReader {
       })
       .catch((error) => {
         this.diagnose(this.stage, error);
-        if (this.replacementFailure(error)) this.resetCall();
+        if (
+          this.replacementFailure(error) ||
+          (this.identity && this.observedReplacement(this.identity))
+        )
+          this.resetCall();
         else this.disconnectLive();
         this.scheduleRetry();
         return this.retained("unavailable", "Agent transcript unavailable. Reconnecting…");
@@ -249,6 +253,7 @@ export class LiveReader {
   private resetCall() {
     this.disconnectLive();
     this.identity = undefined;
+    this.attachedClientId = undefined;
     this.viewId = "";
     this.tail?.close();
     this.tail = undefined;
@@ -273,8 +278,7 @@ export class LiveReader {
     return (
       !this.closed &&
       this.identity === identity &&
-      state?.availability === "connected" &&
-      state.clientId === identity.clientId &&
+      !!state &&
       state.workspace === identity.workspace &&
       state.threadId === identity.threadId &&
       (state.generation === undefined || state.generation === identity.generation)
@@ -284,12 +288,21 @@ export class LiveReader {
   private observedReplacement(identity: Identity) {
     const state = this.observer?.latest();
     if (!state) return false;
-    if (state.availability === "idle") return true;
+    if (!state.workspace || !state.threadId) return state.availability === "idle";
     return (
-      (state.clientId !== null && state.clientId !== identity.clientId) ||
-      (state.workspace !== null && state.workspace !== identity.workspace) ||
-      (state.threadId !== null && state.threadId !== identity.threadId) ||
+      state.workspace !== identity.workspace ||
+      state.threadId !== identity.threadId ||
       (state.generation !== undefined && state.generation !== identity.generation)
+    );
+  }
+
+  private attached(identity: Identity) {
+    const state = this.observer?.latest();
+    return (
+      this.current(identity) &&
+      state?.availability === "connected" &&
+      !!this.attachedClientId &&
+      state.clientId === this.attachedClientId
     );
   }
 
@@ -297,8 +310,41 @@ export class LiveReader {
     return (
       this.eventClient !== undefined &&
       this.verifiedClient === this.eventClient &&
+      this.attached(identity) &&
       this.current(identity)
     );
+  }
+
+  private syncAttachment(identity: Identity, clientId?: string) {
+    if (!this.viewId) {
+      this.viewId = randomUUID();
+      this.attachedClientId = clientId;
+    } else if (this.attachedClientId !== clientId) {
+      this.controls.disconnect();
+      this.attachedClientId = clientId;
+      this.viewId = randomUUID();
+    }
+    if (clientId) this.controls.bind({ ...identity, viewId: this.viewId });
+  }
+
+  private sessionPhase(identity: Identity): LiveView["phase"] {
+    const state = this.observer?.latest();
+    if (!state || !this.current(identity) || state.availability === "unavailable")
+      return "unavailable";
+    return this.attached(identity) ? "live" : "detached";
+  }
+
+  private interruptedRead(identity: Identity, client: ControlSocket): LiveView | undefined {
+    if (this.eventClient === client && this.observer) return;
+    if (this.observedReplacement(identity)) {
+      this.diagnose(
+        "observer.identity",
+        new SocketFailure("Call identity changed", "stale_generation"),
+      );
+      this.resetCall();
+      return empty("connecting");
+    }
+    return this.retained("unavailable", "Agent transcript disconnected. Reconnecting…");
   }
 
   private retained(phase: LiveView["phase"], notice?: string): LiveView {
@@ -388,18 +434,13 @@ export class LiveReader {
     return (
       left.workspace === right.workspace &&
       left.threadId === right.threadId &&
-      left.clientId === right.clientId &&
       left.instanceId === right.instanceId &&
       left.generation === right.generation &&
       left.controlProtocolVersion === right.controlProtocolVersion
     );
   }
 
-  private async discoverIdentity(
-    workspace: string,
-    threadId: string,
-    clientId: string,
-  ): Promise<Identity> {
+  private async discoverIdentity(workspace: string, threadId: string): Promise<Identity> {
     this.stage = "controller.discover";
     const selected = await discoverControllerStatus(this.stateDir, workspace, threadId).catch(
       (error: unknown) => {
@@ -428,7 +469,6 @@ export class LiveReader {
     return {
       workspace,
       threadId,
-      clientId,
       instanceId: selected.status.instanceId,
       generation: selected.status.generation,
       controlProtocolVersion,
@@ -445,7 +485,12 @@ export class LiveReader {
     );
     if (!this.current(identity)) {
       client.close();
-      throw new SocketFailure("Call changed while reconnecting", "stale_generation");
+      throw new SocketFailure(
+        this.observedReplacement(identity)
+          ? "Call changed while reconnecting"
+          : "Observer unavailable while reconnecting",
+        this.observedReplacement(identity) ? "stale_generation" : "unavailable",
+      );
     }
     this.eventClient = client;
     void client.done.then(() => {
@@ -483,12 +528,9 @@ export class LiveReader {
     ) {
       const turn = conversationTurnSchema.safeParse(data?.["turn"]);
       if (turn.success && typeof data?.["sequence"] === "number") {
-        this.controls.observe(turn.data, true, data["sequence"]);
+        this.controls.observe(turn.data, this.attached(identity), data["sequence"]);
         // Queued input belongs to the host and still runs when the page stops polling.
-        if (
-          frame["event"] === "conversation.turn.completed" &&
-          this.verifiedClient === this.eventClient
-        )
+        if (frame["event"] === "conversation.turn.completed" && this.actionable(identity))
           void this.controls.drain();
       }
     }
@@ -541,22 +583,23 @@ export class LiveReader {
       }
     }
     const state = this.observer.latest();
-    if (
-      state.availability !== "connected" ||
-      !state.clientId ||
-      !state.workspace ||
-      !state.threadId
-    ) {
-      if (state.availability === "unavailable") {
-        this.disconnectLive();
-        return this.retained("unavailable", "AgentVoice server is unavailable. Reconnecting…");
-      }
-      if (state.availability === "closing" && this.identity) {
-        this.disconnectLive();
-        return this.retained("connecting", "AgentVoice connection is closing…");
+    if (!state.workspace || !state.threadId) {
+      if (this.identity && state.availability !== "idle") {
+        this.syncAttachment(
+          this.identity,
+          state.availability === "connected" ? (state.clientId ?? undefined) : undefined,
+        );
+        return this.retained(
+          state.availability === "unavailable" ? "unavailable" : "connecting",
+          state.availability === "unavailable"
+            ? "AgentVoice server is unavailable. Reconnecting…"
+            : "AgentVoice session identity is changing…",
+        );
       }
       this.resetCall();
-      return empty(state.busy ? "connecting" : "waiting");
+      return empty(
+        state.availability === "unavailable" ? "unavailable" : state.busy ? "connecting" : "empty",
+      );
     }
     if (this.identity && !this.current(this.identity)) {
       this.diagnose(
@@ -566,11 +609,7 @@ export class LiveReader {
       this.resetCall();
     }
     if (!this.eventClient) {
-      const discovered = await this.discoverIdentity(
-        state.workspace,
-        state.threadId,
-        state.clientId,
-      );
+      const discovered = await this.discoverIdentity(state.workspace, state.threadId);
       if (this.closed) return empty("offline");
       if (this.identity && !this.sameIdentity(this.identity, discovered)) {
         this.diagnose(
@@ -580,17 +619,33 @@ export class LiveReader {
         this.resetCall();
       }
       const identity = this.identity ?? discovered;
-      if (!this.identity) {
-        this.identity = identity;
-        this.viewId = randomUUID();
-      }
-      this.controls.bind({ ...identity, viewId: this.viewId });
+      if (!this.identity) this.identity = identity;
+      this.syncAttachment(
+        identity,
+        state.availability === "connected" ? (state.clientId ?? undefined) : undefined,
+      );
       await this.connectEvents(identity);
-    }
+    } else
+      this.syncAttachment(
+        this.identity!,
+        state.availability === "connected" ? (state.clientId ?? undefined) : undefined,
+      );
     const identity = this.identity!;
     const client = this.eventClient!;
     this.stage = "events.snapshot";
     const before = eventSnapshotSchema.parse(await client.request("state.get", {}));
+    const interruptedSnapshot = this.interruptedRead(identity, client);
+    if (interruptedSnapshot) return interruptedSnapshot;
+    if (!this.current(identity)) {
+      if (!this.observedReplacement(identity))
+        return this.retained("unavailable", "AgentVoice observer disconnected. Reconnecting…");
+      this.diagnose(
+        "observer.identity",
+        new SocketFailure("Call identity changed", "stale_generation"),
+      );
+      this.resetCall();
+      return empty("connecting");
+    }
     if (
       before.instanceId !== identity.instanceId ||
       before.generation !== identity.generation ||
@@ -608,7 +663,9 @@ export class LiveReader {
     const root = before.threads.find((thread) => thread.id === identity.threadId);
     this.controls.observe(
       root?.turn ?? undefined,
-      root?.status === "idle" || (root?.status === "active" && root.turn?.status === "inProgress"),
+      this.attached(identity) &&
+        (root?.status === "idle" ||
+          (root?.status === "active" && root.turn?.status === "inProgress")),
       before.sequence,
     );
     const params = {
@@ -620,6 +677,18 @@ export class LiveReader {
     this.loadHistoryPage(identity, params);
     this.stage = "conversation.live";
     const live = liveSchema.parse(await client.request("conversation.live.get", params));
+    const interruptedLive = this.interruptedRead(identity, client);
+    if (interruptedLive) return interruptedLive;
+    if (!this.current(identity)) {
+      if (!this.observedReplacement(identity))
+        return this.retained("unavailable", "AgentVoice observer disconnected. Reconnecting…");
+      this.diagnose(
+        "observer.identity",
+        new SocketFailure("Call identity changed", "stale_generation"),
+      );
+      this.resetCall();
+      return empty("connecting");
+    }
     if (
       live.instanceId !== identity.instanceId ||
       live.generation !== identity.generation ||
@@ -645,14 +714,16 @@ export class LiveReader {
           }),
         );
         if (
-          turns.instanceId === identity.instanceId &&
-          turns.generation === identity.generation &&
-          turns.threadId === identity.threadId &&
-          turns.rootThreadId === identity.threadId &&
-          this.current(identity)
-        ) {
-          this.controls.observe(turns.data[0], true, live.throughSequence);
-        } else throw new SocketFailure("Turn read identity changed", "stale_generation");
+          turns.instanceId !== identity.instanceId ||
+          turns.generation !== identity.generation ||
+          turns.threadId !== identity.threadId ||
+          turns.rootThreadId !== identity.threadId
+        )
+          throw new SocketFailure("Turn read identity changed", "stale_generation");
+        if (this.current(identity))
+          this.controls.observe(turns.data[0], this.attached(identity), live.throughSequence);
+        else if (this.observedReplacement(identity))
+          throw new SocketFailure("Turn read identity changed", "stale_generation");
       } catch (error) {
         this.diagnose("conversation.turns", error);
         if (this.replacementFailure(error)) throw error;
@@ -687,13 +758,17 @@ export class LiveReader {
       this.tail?.close();
       this.tail = undefined;
     }
+    const interruptedFinal = this.interruptedRead(identity, client);
+    if (interruptedFinal) return interruptedFinal;
     if (!this.current(identity)) {
+      if (!this.observedReplacement(identity))
+        return this.retained("unavailable", "AgentVoice observer disconnected. Reconnecting…");
       this.resetCall();
       return empty("connecting");
     }
-    void this.controls.drain();
+    if (this.actionable(identity)) void this.controls.drain();
     return {
-      phase: "live",
+      phase: this.sessionPhase(identity),
       id: this.viewId,
       persistenceScope: persistenceScope(identity.workspace, identity.threadId),
       voice: this.voice.messages(),

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { kioskPersistenceInstanceId } from "./kiosk-context.ts";
 import {
   type OptimisticSubmission,
   observed,
@@ -20,13 +21,15 @@ import type { AgentControlsView, LiveView } from "./types.ts";
 
 const copy = {
   offline: "No agent voice server to connect to.",
-  waiting: "Waiting for a call.",
+  empty: "AgentVoice is ready. Start a client to begin a workspace session.",
+  detached: "Voice client detached. Agent history remains available.",
   connecting: "Connecting to AgentVoice…",
   unavailable: "AgentVoice is unavailable. Reconnecting…",
   live: "",
 };
 
 export function App() {
+  const persistenceInstanceId = kioskPersistenceInstanceId();
   const agentDock = useRef<HTMLDivElement>(null);
   const [dockHeight, setDockHeight] = useState(0);
   useLayoutEffect(() => {
@@ -113,9 +116,10 @@ export function App() {
     };
   }, [readRevision]);
 
+  const hasSession = !!view.persistenceScope && !!view.agentControls;
   const holding =
-    (view.phase === "live" && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
-    (view.phase !== "live" && view.agent.length === 0 && view.voice.length === 0);
+    (hasSession && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
+    (!hasSession && view.agent.length === 0 && view.voice.length === 0);
   const showStatus = holding || view.phase !== "live";
   // Initial reveal and incarnation replacement stay atomic; only subsequent
   // history updates may lag behind the immediately available input controls.
@@ -163,9 +167,7 @@ export function App() {
     <main aria-label="AgentVoice live transcripts" className="live-view">
       {showStatus ? (
         <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
-          {holding && (view.phase === "live" || view.phase === "connecting")
-            ? "Loading conversation…"
-            : copy[view.phase]}
+          {holding && hasSession ? "Loading conversation…" : copy[view.phase]}
         </p>
       ) : null}
       <div className="dual-pane" hidden={!!holding}>
@@ -191,6 +193,7 @@ export function App() {
                 <AgentInput
                   viewId={view.id}
                   persistenceScope={view.persistenceScope}
+                  persistenceInstanceId={persistenceInstanceId}
                   observedSubmissionIds={observedSubmissionIds}
                   controls={displayedControls}
                   disabled={view.phase !== "live" || !displayedControls.available}
@@ -241,9 +244,9 @@ const TranscriptLane = memo(function TranscriptLane({
         ) : null
       }
       empty={
-        phase === "live" && !notice ? (
+        phase !== "offline" && phase !== "empty" && !notice ? (
           <p className="transcript-notice">
-            {lane === "voice" ? "Waiting for speech." : "Waiting for agent messages."}
+            {lane === "voice" ? "No recorded speech." : "No agent messages yet."}
           </p>
         ) : null
       }
@@ -254,6 +257,7 @@ const TranscriptLane = memo(function TranscriptLane({
 const AgentInput = memo(function AgentInput({
   viewId,
   persistenceScope,
+  persistenceInstanceId,
   observedSubmissionIds,
   controls,
   disabled,
@@ -264,6 +268,7 @@ const AgentInput = memo(function AgentInput({
 }: {
   viewId: string;
   persistenceScope?: string;
+  persistenceInstanceId?: string;
   observedSubmissionIds: string[];
   controls: AgentControlsView;
   disabled: boolean;
@@ -326,6 +331,7 @@ const AgentInput = memo(function AgentInput({
       <TranscriptComposer
         transcriptId={viewId}
         persistenceScope={persistenceScope}
+        persistenceInstanceId={persistenceInstanceId}
         observedSubmissionIds={observedSubmissionIds}
         alwaysShowSend
         optimisticSubmit

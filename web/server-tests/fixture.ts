@@ -16,7 +16,7 @@ import { LifecycleFeed } from "../../src/events/feed.ts";
 import { EventSocketServer, eventSocketPath } from "../../src/events/socket.ts";
 import { connectFrontend } from "../../src/frontend/client.ts";
 import { frontendSocketPath } from "../../src/frontend/protocol.ts";
-import { VoiceServer } from "../../src/frontend/server.ts";
+import { type Call, VoiceServer } from "../../src/frontend/server.ts";
 import { recordingDirectory } from "../../src/recording/store.ts";
 import type { AgentItem } from "../server/messages.ts";
 
@@ -34,6 +34,8 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
   let history: AgentItem[] = [];
   let delayHistory: Promise<void> | undefined;
   let delayLive: Promise<void> | undefined;
+  let failDetach = false;
+  let liveCall: Call | undefined;
   const forbidden = async (): Promise<never> => {
     throw new Error("Mutation forbidden");
   };
@@ -96,28 +98,35 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
     });
   let events: EventSocketServer | undefined = createEvents();
   await events.start();
-  const server = new VoiceServer(frontendSocketPath(stateDir), async (notify) => {
-    starts++;
-    changed = notify;
-    return {
-      identity: () => ({ workspace: root, threadId, generation }),
-      state: () => ({
-        available: true,
-        codingActivity: "unknown",
-        phase: "live",
-        mic: { muted: true, effectiveMuted: true },
-        speaker: { muted: true, effectiveMuted: true },
-      }),
-      start: async () => {},
-      setFrontendAttached: async () => {},
-      command: (command) => {
-        if (command.action !== "release") throw new Error("No pointer input");
-      },
-      close: async () => {
-        closes++;
-      },
-    };
-  });
+  const server = new VoiceServer(
+    frontendSocketPath(stateDir),
+    async (notify) => {
+      starts++;
+      changed = notify;
+      liveCall = {
+        identity: () => ({ workspace: root, threadId, generation }),
+        state: () => ({
+          available: true,
+          codingActivity: "unknown",
+          phase: "live",
+          mic: { muted: true, effectiveMuted: true },
+          speaker: { muted: true, effectiveMuted: true },
+        }),
+        start: async () => {},
+        setFrontendAttached: async (attached) => {
+          if (!attached && failDetach) throw new Error("Synthetic detach failure");
+        },
+        command: (command) => {
+          if (command.action !== "release") throw new Error("No pointer input");
+        },
+        close: async () => {
+          closes++;
+        },
+      };
+      return liveCall;
+    },
+    () => {},
+  );
   await server.start();
   const runtime = () =>
     feed.runtime(generation, { phase: "ready", workspace: root, mainThreadId: threadId });
@@ -151,6 +160,13 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
     delayLive: (delay?: Promise<void>) => {
       delayLive = delay;
     },
+    failNextDetach: () => {
+      failDetach = true;
+    },
+    hideCallIdentity: () => {
+      if (liveCall) liveCall.identity = undefined;
+      changed();
+    },
     stopEvents: () => {
       events?.close();
       events = undefined;
@@ -172,6 +188,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
       await owner?.close();
       owner = undefined;
     },
+    stopFrontend: () => server.close(),
     replace: (nextThread = threadId) => {
       generation++;
       threadId = nextThread;

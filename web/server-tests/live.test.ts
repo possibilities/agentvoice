@@ -17,6 +17,11 @@ async function until(reader: LiveReader, check: (view: LiveView) => boolean, tim
   expect(check(view)).toBe(true);
   return view;
 }
+async function untilTrue(check: () => boolean, timeout = 2000) {
+  const deadline = Date.now() + timeout;
+  while (!check() && Date.now() < deadline) await Bun.sleep(10);
+  expect(check()).toBe(true);
+}
 const user = (id: string, text: string) => ({
   turnId: "turn",
   item: { type: "userMessage" as const, id, content: [{ type: "text" as const, text }] },
@@ -228,11 +233,11 @@ test("a viewer-bounded history pass publishes once without requesting the remain
   }
 }, 15_000);
 
-test("running server discovery, native history + live drafts, call replacement, and observer-only teardown", async () => {
+test("server and workspace-session lifecycle matrix preserves only authoritative retained state", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
   try {
-    expect((await reader.read()).phase).toBe("waiting");
+    expect((await reader.read()).phase).toBe("empty");
     expect(h.counts()).toEqual({ starts: 0, closes: 0 });
     h.history([user("a", "First"), user("b", "Second"), user("c", "Third")]);
     await h.start();
@@ -297,10 +302,49 @@ test("running server discovery, native history + live drafts, call replacement, 
     expect(view.id).not.toBe(oldId);
     expect(view.persistenceScope).not.toBe(oldScope);
     expect(view.voice).toEqual([]);
+    const attachedId = view.id;
+    const successorScope = view.persistenceScope;
     await h.hangup();
-    await until(reader, (value) => value.phase === "waiting" && value.agent.length === 0);
+    view = await until(reader, (value) => value.phase === "detached");
+    expect(view.id).not.toBe(attachedId);
+    expect(view.persistenceScope).toBe(successorScope);
+    expect(view.agent.map((message) => message.content)).toEqual(["New generation"]);
+    expect(view.agentControls?.available).toBe(false);
+    await expect(
+      reader.agentCommand({
+        action: "send",
+        viewId: view.id,
+        requestId: randomUUID(),
+        text: "Do not submit while detached",
+      }),
+    ).rejects.toThrow("call changed");
+    h.feed.conversation({
+      event: "conversation.item.started",
+      revision: 3,
+      data: {
+        threadId: "successor",
+        turnId: "detached-turn",
+        item: { type: "agentMessage", id: "detached-work", text: "Native work continued" },
+      },
+    });
+    view = await until(reader, (value) =>
+      value.agent.some((message) => message.content === "Native work continued"),
+    );
+    const detachedId = view.id;
     await h.start();
-    await until(reader, (value) => value.phase === "live");
+    view = await until(reader, (value) => value.phase === "live");
+    expect(view.id).not.toBe(detachedId);
+    expect(view.persistenceScope).toBe(successorScope);
+    expect(view.agent.some((message) => message.content === "Native work continued")).toBe(true);
+    const reattachedId = view.id;
+    h.failNextDetach();
+    h.hideCallIdentity();
+    await h.hangup();
+    view = await until(reader, (value) => value.phase === "unavailable");
+    expect(view.id).not.toBe(reattachedId);
+    expect(view.persistenceScope).toBe(successorScope);
+    expect(view.agent.some((message) => message.content === "Native work continued")).toBe(true);
+    expect(view.agentControls?.available).toBe(false);
     reader.close();
     expect(h.counts()).toEqual({ starts: 1, closes: 0 });
     expect(new Set(h.methods)).toEqual(
@@ -341,6 +385,7 @@ test("late native history cannot populate a successor and a missing server recon
 test("event transport reconnect preserves one verified view while fencing actions", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
   try {
     h.history([user("kept", "Verified cached history")]);
     await h.start();
@@ -351,8 +396,18 @@ test("event transport reconnect preserves one verified view while fencing action
     const { id, persistenceScope } = live;
     expect(persistenceScope).toMatch(/^[a-f0-9]{64}$/);
 
+    const liveReads = h.methods.filter((method) => method === "conversation.live.get").length;
+    h.delayLive(delayed.promise);
+    await Bun.sleep(260);
+    const pending = reader.read();
+    await untilTrue(
+      () => h.methods.filter((method) => method === "conversation.live.get").length > liveReads,
+    );
     h.stopEvents();
-    const unavailable = await until(reader, (view) => view.phase === "unavailable");
+    h.delayLive();
+    delayed.resolve();
+    const unavailable = await pending;
+    expect(unavailable.phase).toBe("unavailable");
     expect(unavailable.id).toBe(id);
     expect(unavailable.persistenceScope).toBe(persistenceScope);
     expect(unavailable.agent.map((message) => message.content)).toEqual([
@@ -387,6 +442,78 @@ test("event transport reconnect preserves one verified view while fencing action
     ])
       expect(diagnostics).not.toContain(secret);
   } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+});
+
+test("observer closure during an in-flight read retains the verified session", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.history([user("kept", "Verified through observer closure")]);
+    await h.start();
+    const initial = await until(
+      reader,
+      (view) => view.agent[0]?.content === "Verified through observer closure",
+    );
+    const liveReads = h.methods.filter((method) => method === "conversation.live.get").length;
+    h.delayLive(delayed.promise);
+    await Bun.sleep(260);
+    const pending = reader.read();
+    await untilTrue(
+      () => h.methods.filter((method) => method === "conversation.live.get").length > liveReads,
+    );
+    await h.stopFrontend();
+    h.delayLive();
+    delayed.resolve();
+    const unavailable = await pending;
+    expect(["offline", "unavailable"]).toContain(unavailable.phase);
+    expect(unavailable.id).toBe(initial.id);
+    expect(unavailable.persistenceScope).toBe(initial.persistenceScope);
+    expect(unavailable.agent.map((message) => message.content)).toEqual([
+      "Verified through observer closure",
+    ]);
+    expect(unavailable.agentControls?.available).toBe(false);
+  } finally {
+    delayed.resolve();
+    reader.close();
+    await h.close();
+  }
+});
+
+test("a confirmed replacement wins over an event closure during an in-flight read", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const delayed = Promise.withResolvers<void>();
+  try {
+    h.history([user("old", "Predecessor must not leak")]);
+    await h.start();
+    const initial = await until(
+      reader,
+      (view) => view.agent[0]?.content === "Predecessor must not leak",
+    );
+    const liveReads = h.methods.filter((method) => method === "conversation.live.get").length;
+    h.delayLive(delayed.promise);
+    await Bun.sleep(260);
+    const pending = reader.read();
+    await untilTrue(
+      () => h.methods.filter((method) => method === "conversation.live.get").length > liveReads,
+    );
+    h.replace("successor");
+    // Let the observer accept the replacement before the independent event transport closes.
+    await Bun.sleep(20);
+    h.stopEvents();
+    h.delayLive();
+    delayed.resolve();
+    const fenced = await pending;
+    expect(fenced.id).not.toBe(initial.id);
+    expect(JSON.stringify(fenced)).not.toContain("Predecessor must not leak");
+    expect(fenced.agentControls?.available ?? false).toBe(false);
+  } finally {
+    delayed.resolve();
     reader.close();
     await h.close();
   }

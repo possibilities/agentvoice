@@ -4,6 +4,7 @@ import type { LiveView } from "../src/types.ts";
 const initial = (): LiveView => ({
   id: "3235a2e5-f720-418b-bfaa-00856260ae91",
   phase: "live",
+  persistenceScope: "optimistic.spec.ts-workspace-thread",
   voice: [],
   agent: [],
   agentControls: { available: true, active: false, stopping: false, pending: false, queue: [] },
@@ -151,6 +152,7 @@ test("queue is immediate, authoritative edits win, and a call replacement fences
   await expect(queue).not.toContainText("Queued immediately");
   await input.fill("Next call draft");
   view.id = "32ac32a9-5cf9-41fa-bd77-59ae4ac5a08b";
+  view.persistenceScope = "replacement-workspace-thread";
   view.agentControls!.queue = [];
   await expect(input).toHaveValue("");
   await expect(queue).toHaveCount(0);

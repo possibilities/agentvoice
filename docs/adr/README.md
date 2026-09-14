@@ -75,6 +75,8 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0058: Durable web composer drafts and reader recovery](0058-durable-web-composer-and-reader-recovery.md) | Accepted | Same-call history survives recoverable reader failures; browser entry recovery is separate from native delivery. |
 | [0059: Clarify mailbox and conversation-hold guidance](0059-clarify-mailbox-and-conversation-hold-guidance.md) | Accepted | Wording follows retained workspace-session ownership; no runtime hold mechanism. |
 
+| [0060: Web session and browser-process continuity](0060-web-session-and-browser-process-continuity.md) | Accepted | Separate frontend connectivity, browser-instance recovery and served-code activation from retained session ownership. |
+
 ## Identifier history
 
 Corrected 2026-09-08. Each old filename below identifies one specific record;

@@ -15,6 +15,7 @@ test("one centered loading state reveals both histories at the end and preserves
   let view: LiveView = {
     phase: "live",
     id: "loading-call",
+    persistenceScope: "loading-workspace-thread",
     agentHistoryLoading: true,
     voiceHistoryLoading: true,
     agentNotice: "Loading earlier messages…",
@@ -22,6 +23,13 @@ test("one centered loading state reveals both histories at the end and preserves
     voice: Array.from({ length: 25 }, (_, i) =>
       message(`voice-${i}`, `Speech ${i}. ${"Words. ".repeat(80)}`),
     ),
+    agentControls: {
+      available: true,
+      active: false,
+      stopping: false,
+      pending: false,
+      queue: [],
+    },
   };
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
@@ -47,7 +55,7 @@ test("one centered loading state reveals both histories at the end and preserves
   view.voiceHistoryLoading = false;
   const voice = page.getByRole("region", { name: "Voice transcript", exact: true });
   const agent = page.getByRole("region", { name: "Agent transcript", exact: true });
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator(".view-status")).toHaveCount(0);
   await expect(agent.getByText("Live Agent while history loads")).toBeInViewport();
   for (const lane of [voice, agent])
     await expect
@@ -77,8 +85,11 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   await page.goto("/");
   await expect(page.getByText("No agent voice server to connect to.")).toHaveCount(1);
   await expect(page.getByRole("button")).toHaveCount(0);
-  view = { ...view, phase: "waiting", id: "waiting" };
-  await expect(page.getByText("Waiting for a call.")).toHaveCount(1);
+  view = { ...view, phase: "empty", id: "empty" };
+  await expect(
+    page.getByText("AgentVoice is ready. Start a client to begin a workspace session."),
+  ).toHaveCount(1);
+  await expect(page.getByRole("textbox", { name: "Message Agent" })).toHaveCount(0);
   view = {
     phase: "live",
     id: "call-one",
@@ -143,7 +154,7 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   };
   await expect(agent.getByText("A new call is connected.")).toBeVisible();
   await expect(agent.getByText("The canonical completion.")).toHaveCount(0);
-  await expect(voice.getByText("Waiting for speech.")).toBeVisible();
+  await expect(voice.getByText("No recorded speech.")).toBeVisible();
   await page.setViewportSize({ width: 600, height: 600 });
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -152,6 +163,45 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   const narrowRight = await lanes.nth(1).boundingBox();
   expect(narrowLeft!.y).toBe(narrowRight!.y);
   expect(errors).toEqual([]);
+});
+
+test("an empty retained session keeps both lanes and an editable disabled composer", async ({
+  page,
+}) => {
+  let posts = 0;
+  const view: LiveView = {
+    phase: "detached",
+    id: "detached-incarnation",
+    persistenceScope: "retained-workspace-thread",
+    voice: [],
+    agent: [],
+    agentControls: {
+      available: false,
+      active: false,
+      stopping: false,
+      pending: false,
+      queue: [],
+    },
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.route("**/api/agent", (route) => {
+    posts++;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/");
+
+  await expect(
+    page.getByText("Voice client detached. Agent history remains available.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toBeVisible();
+  await expect(page.getByText("No agent messages yet.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No recorded speech.", { exact: true })).toBeVisible();
+  const input = page.getByRole("textbox", { name: "Message Agent" });
+  await expect(input).toBeEnabled();
+  await input.fill("Editable while voice is detached");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  expect(posts).toBe(0);
 });
 
 test("HTTP failures show reconnect state, retain last text, and recover automatically", async ({

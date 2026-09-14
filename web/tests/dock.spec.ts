@@ -6,6 +6,7 @@ test("full-width dock dividers end both scroll areas and stay aligned as the com
 }) => {
   const view: LiveView = {
     phase: "live",
+    persistenceScope: "dock.spec.ts-workspace-thread",
     id: "docked-call",
     voice: [
       ...Array.from({ length: 20 }, (_, i) => ({
@@ -131,6 +132,7 @@ for (const width of [1440, 600]) {
     await page.setViewportSize({ width, height: 900 });
     const view: LiveView = {
       phase: "live",
+      persistenceScope: "dock.spec.ts-workspace-thread",
       id: "stable-composer",
       voice: [],
       agent: [],

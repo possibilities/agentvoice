@@ -8,6 +8,7 @@ test("typing, selection and composition survive streaming history and control up
   let revision = 0;
   const view: LiveView = {
     phase: "live",
+    persistenceScope: "composer-stream.spec.ts-workspace-thread",
     id: "streaming-input",
     voice: [],
     agent: [],

@@ -10,8 +10,14 @@ its action is unavailable. The divider above the composer shows work without
 changing padding or layout; reduced motion keeps it still. The Voice lane has no
 composer. Browser-local entry recovery preserves drafts, failed submissions and
 queued edits across reloads for the verified workspace/thread. Storage is best
-effort in the same browser profile and origin; it cannot survive unavailable or
-cleared storage. Recovered input is never automatically resent.
+effort in the same browser profile and origin; unavailable, evicted or cleared
+storage can prevent recovery. Recovered input is never automatically resent. The Funk kiosk
+supplies a stable single-window persistence identity so reopening it restores the
+main draft; ordinary browser tabs retain independent draft slots. A compact
+synchronous entry journal protects committed text before the full record is
+batched. A newly installed native bridge requires a later kiosk relaunch; old
+unidentified browser slots remain explicitly recoverable rather than being
+silently adopted from another active context.
 A quiet lined dock below Voice tracks the Agent composer's height, keeping the
 two transcript viewports aligned as drafts and queued messages expand.
 Both lanes window measured message blocks, open at the latest message and follow
@@ -23,8 +29,13 @@ of new messages. Using the chip or scrolling back to the bottom resumes followin
 
 The view observes the existing **default local AgentVoice server**, independent of
 the launch directory. A missing server shows “No agent voice server to connect to.”
-An idle server shows “Waiting for a call.” It reconnects automatically, including
-after call end, a new call, runtime replacement or an explicit new session.
+A server with no workspace session yet shows a normal ready/empty state. Once a
+session exists, detaching its voice client keeps authoritative Agent/Voice history
+available and continuing to update; sending is disabled while the composer stays
+editable. Transport unavailability is shown separately, with last verified text
+retained until it can be reverified. Actual session replacement clears old session
+presentation and action authority. The reader never creates a session or attaches
+media. It reconnects its observation automatically.
 Closing the page or `serve` leaves the call running.
 
 ## Prepare and run
@@ -42,6 +53,14 @@ From an uninstalled checkout, use `bun run src/main.ts serve`. The normal deskto
 installer still owns the CLI, menu app and voice-server service; web dependencies
 are prepared separately in this first slice. `serve` never installs dependencies,
 builds assets, starts a voice server or starts a call.
+
+A running development reader retains its optimized dependency graph. Installing a
+new transcript archive with `npm ci` and building successfully does not prove that
+the named origin serves the new composer. After a dependency upgrade, coordinate
+a refresh of the **web reader** and verify the imported browser module and an
+isolated persistence fixture. Restarting the kiosk alone cannot replace stale
+JavaScript served by Vite. Keep this separate from the default AgentVoice server,
+native call, Codex process and kiosk; those are not restarted by web delivery.
 
 The shared proxy must already be running on loopback port 443. Its one-time
 interactive setup is `portless service install` (or `portless proxy start`), with

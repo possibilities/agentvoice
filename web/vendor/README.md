@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.5
+# @agentchats/transcript 0.3.6
 
-Packed from [agentchats b0b827e](https://github.com/possibilities/agentchats/commit/b0b827ed0f1d86f9d53a375142d4f8e152024d26),
+Packed from [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
 
@@ -27,7 +27,11 @@ Consumer fixes and shared features landed upstream:
   full-width loading divider with reduced-motion support, and faithful empty
   prose-fence rendering. Native text shortcut defaults remain unhandled.
 
-Archive SHA-256: `2294b673eddb6949f5995b1741ec6b6051cb9e33bcfd3a2ff83943840620cb6d`.
+- `f756d03`: opt-in stable native browser-instance identity and a compact immediate
+  entry journal preserve drafts through actual WKWebView process termination.
+  Generic browser tabs remain independently scoped; no recovery resends input.
+
+Archive SHA-256: `ea065eb6cc59fc5701e7740b509015aa4ca15040276ffaf697e652d9a57bd4d5`.
 
 Reproduce from that clean agentchats revision:
 

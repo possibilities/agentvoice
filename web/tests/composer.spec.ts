@@ -6,6 +6,7 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
 }) => {
   const view: LiveView = {
     phase: "live",
+    persistenceScope: "composer.spec.ts-workspace-thread",
     id: "89e68874-f742-45c9-bd32-98123e74b164",
     voice: [],
     agent: [],
@@ -88,6 +89,7 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
   expect(view.agent).toEqual([]);
   await input.fill("Draft for old call");
   view.id = "a4ce8004-c370-42a5-a833-b7ce64cece66";
+  view.persistenceScope = "replacement-composer-workspace-thread";
   await expect(input).toHaveValue("");
   await page.setViewportSize({ width: 600, height: 600 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
