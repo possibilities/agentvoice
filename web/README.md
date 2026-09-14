@@ -246,3 +246,21 @@ HMR, exact origins, duplicate binding and shutdown. Browser tests import the pac
 components with synthetic transcripts, checking both lanes, scroll following,
 disclosures, reconnects and narrow windows. They write ignored screenshots/traces
 under `web/test-results/`. No test uses credentials, microphones or model turns.
+
+## Presentation preference
+
+The Agent / Voice / Both switch selects the visible panes; Both is the default.
+Hidden panes remain mounted and keep their draft, disclosures and reading state
+while new history arrives. The toolbar retains a fixed height across modes.
+
+Selection is written immediately to browser-local storage, independently of the
+call/workspace. A Funk kiosk uses its existing stable instance identity, so the
+same kiosk profile/origin restores its choice after exit/reopen. Ordinary browser
+tabs share the saved default without forcing another active tab to switch. Invalid
+values or blocked reads default to Both; failed writes leave the switch usable
+and show “View saved for this visit only.” Cleared, evicted or unavailable storage
+cannot guarantee restoration. No native action or voice attachment is triggered.
+
+Steer/Queue already persists with the composer. Runtime status and transient
+scroll/follow/disclosure state are not stored as presentation defaults. See
+[ADR 0064](../docs/adr/0064-browser-presentation-preferences.md).

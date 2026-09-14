@@ -19,12 +19,16 @@ body,
 .dual-pane {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 .dual-pane[hidden] {
   display: none;
 }
 .live-view {
+  display: flex;
+  flex-direction: column;
   position: relative;
   height: 100dvh;
 }
@@ -41,7 +45,7 @@ body,
   pointer-events: none;
 }
 .view-status--notice {
-  inset: 12px auto auto 50%;
+  inset: 64px auto auto 50%;
   transform: translateX(-50%);
   padding: 8px 16px;
   z-index: 1;
@@ -137,5 +141,74 @@ body,
 @container lane (max-width: 400px) {
   .lane > h1 {
     padding: 18px 32px 8px;
+  }
+}
+
+.presentation-bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 48px;
+  padding: 2px 12px;
+  border-bottom: 1px solid #27312f;
+}
+.pane-switch {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+}
+.pane-switch-button {
+  min-width: 64px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #969d91;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pane-switch-button[aria-pressed="true"] {
+  background: #1e281b;
+  color: #c5e791;
+}
+.pane-switch-button:hover {
+  color: #e5e7df;
+}
+.pane-switch-button:focus-visible {
+  outline: 2px solid #c5e791;
+  outline-offset: -3px;
+}
+.preference-notice {
+  margin-right: auto;
+  color: #969d91;
+  font-size: 12px;
+}
+.dual-pane:not([data-panes="both"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dual-pane:not([data-panes="both"]) > .lane {
+  border-left: 0;
+}
+/* Retain mounted transcript/composer state and nonzero measurement while concealed. */
+.lane[data-concealed="true"] {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  visibility: hidden;
+  pointer-events: none;
+}
+@media (max-width: 520px) {
+  .preference-notice {
+    position: absolute;
+    top: 52px;
+    left: 12px;
+    background: #090b0a;
   }
 }

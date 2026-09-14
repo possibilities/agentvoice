@@ -175,7 +175,10 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   });
   await page.goto("/");
   await expect(page.getByText("No agent voice server to connect to.")).toHaveCount(1);
-  await expect(page.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("button")).toHaveCount(3);
+  await expect(
+    page.getByRole("group", { name: "Transcript view" }).getByRole("button"),
+  ).toHaveCount(3);
   view = { ...view, phase: "empty", id: "empty" };
   await expect(
     page.getByText("AgentVoice is ready. Start a client to begin a workspace session."),

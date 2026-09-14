@@ -102,3 +102,5 @@ New records take an unused identifier above the highest current number. Check
 the landing branch before assigning it and coordinate shared ADR edits. Cite
 complete relative file links; a title change must not redirect a citation to a
 different decision. Keep this navigation index and the record's status together.
+
+- [0064: Browser presentation preferences](0064-browser-presentation-preferences.md)

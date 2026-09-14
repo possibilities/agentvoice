@@ -21,6 +21,7 @@ import {
   optimisticMessages,
   optimisticQueue,
 } from "./optimistic.ts";
+import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
 import { reconcileView } from "./reconcile-view.ts";
 import type { AgentControlsView, LiveView } from "./types.ts";
 
@@ -35,6 +36,14 @@ const copy = {
 
 export function App() {
   const persistenceInstanceId = kioskPersistenceInstanceId();
+  const [panePreference, setPanePreference] = useState(() =>
+    readPanePreference(persistenceInstanceId),
+  );
+  const [preferenceSaved, setPreferenceSaved] = useState(true);
+  const choosePane = (next: PanePreference) => {
+    setPreferenceSaved(savePanePreference(next, persistenceInstanceId));
+    setPanePreference(next);
+  };
   const agentDock = useRef<HTMLDivElement>(null);
   const [dockHeight, setDockHeight] = useState(0);
   useLayoutEffect(() => {
@@ -171,14 +180,42 @@ export function App() {
   return (
     <DocumentViewerProvider load={loadDocument} resetKey={view.id}>
       <main aria-label="AgentVoice live transcripts" className="live-view">
+        <div className="presentation-bar">
+          {!preferenceSaved ? (
+            <span className="preference-notice" role="status">
+              View saved for this visit only.
+            </span>
+          ) : null}
+          <fieldset className="pane-switch" aria-label="Transcript view">
+            {(["agent", "voice", "both"] as const).map((mode) => (
+              <button
+                className="pane-switch-button"
+                key={mode}
+                type="button"
+                aria-pressed={panePreference === mode}
+                onClick={() => choosePane(mode)}
+              >
+                {mode === "agent" ? "Agent" : mode === "voice" ? "Voice" : "Both"}
+              </button>
+            ))}
+          </fieldset>
+        </div>
         {showStatus ? (
           <p className={`view-status${holding ? "" : " view-status--notice"}`} role="status">
             {holding && hasSession ? "Loading conversation…" : copy[view.phase]}
           </p>
         ) : null}
-        <div className="dual-pane" hidden={!!holding}>
+        <div className="dual-pane" data-panes={panePreference} hidden={!!holding}>
           {(["agent", "voice"] as const).map((lane) => (
-            <section className="lane" key={lane} aria-labelledby={`${lane}-heading`}>
+            <section
+              className="lane"
+              key={lane}
+              data-lane={lane}
+              data-concealed={(panePreference !== "both" && panePreference !== lane) || undefined}
+              inert={panePreference !== "both" && panePreference !== lane}
+              aria-hidden={(panePreference !== "both" && panePreference !== lane) || undefined}
+              aria-labelledby={`${lane}-heading`}
+            >
               <h1 id={`${lane}-heading`}>{lane === "voice" ? "Voice" : "Agent"}</h1>
               <TranscriptLane
                 lane={lane}
