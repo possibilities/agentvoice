@@ -36,6 +36,7 @@ test("mode keeps mounted drafts and reading state through hidden updates, reconn
   await modes.getByRole("button", { name: "Voice", exact: true }).click();
   await expect(page.getByRole("region", { name: "Agent", exact: true })).toHaveCount(0);
   await expect(page.locator('[data-lane="agent"] textarea')).toHaveCount(1);
+  await expect(page.locator('[data-lane="agent"]')).toHaveCSS("opacity", "0");
   await expect(page.locator(".voice-dock")).toBeHidden();
   const voiceBottom = () =>
     page
