@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { acquireAttachment } from "../../src/attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../../src/attachment/gateway.ts";
+import type { ReadableControlProtocol } from "../../src/control/discovery.ts";
 
 export type AgentTarget = {
   instanceId: string;
   generation: number;
   workspace: string;
   threadId: string;
-  controlProtocolVersion: 5 | 6;
+  controlProtocolVersion: ReadableControlProtocol;
 };
 export type AgentOperation =
   | { action: "send"; text: string }

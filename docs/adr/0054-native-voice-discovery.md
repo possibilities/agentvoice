@@ -43,6 +43,8 @@ Randomness is an operation, not a role setting rerun at startup.
 Control protocol 7 carries the schema extension. Loaded controllers retain their
 old code/catalog until an explicitly authorized server restart; command publication,
 voice redial and replacement of the disposable runtime do not reload the controller.
+The web reader and exact-thread attachment retain explicit compatibility with loaded
+protocol-5/6 controllers; ordinary CLI discovery still requires the current protocol.
 This change does not restart a call, adopt prompt settings, or add voice-history replay.
 
 Verification uses native-catalog fixtures, fake media and owned fake Codex processes:

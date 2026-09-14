@@ -55,6 +55,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
       newSession: forbidden,
       mailboxOpen: forbidden,
       voiceSet: forbidden,
+      voiceGet: forbidden,
     },
   });
   const events = new EventSocketServer(

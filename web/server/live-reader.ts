@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { observeAttachmentServer, VoiceRecordingTail } from "../../src/attachment/session.ts";
 import { discoverControllerStatus } from "../../src/control/discovery.ts";
+import { CONTROL_PROTOCOL_VERSION } from "../../src/control/types.ts";
 import { EVENT_PROTOCOL_VERSION } from "../../src/events/contract.ts";
 import { conversationTurnSchema, readResultSchema } from "../../src/events/conversation.ts";
 import { liveSnapshotSchema } from "../../src/events/conversation-projection.ts";
@@ -185,10 +186,19 @@ export class LiveReader {
         state.workspace,
         state.threadId,
       ).catch((error: unknown) => {
-        // Protocol 6 added mutations; the read-only status/event contracts of 5 remain usable.
+        // Older loaded controllers retain compatible status/event/attachment contracts.
         if (!(error instanceof Error) || !error.message.startsWith("no live AgentVoice controller"))
           throw error;
-        return discoverControllerStatus(this.stateDir, state.workspace!, state.threadId!, 5);
+        return discoverControllerStatus(this.stateDir, state.workspace!, state.threadId!, 6).catch(
+          (legacyError: unknown) => {
+            if (
+              !(legacyError instanceof Error) ||
+              !legacyError.message.startsWith("no live AgentVoice controller")
+            )
+              throw legacyError;
+            return discoverControllerStatus(this.stateDir, state.workspace!, state.threadId!, 5);
+          },
+        );
       });
       if (this.closed) return empty("offline");
       const identity: Identity = {
@@ -200,10 +210,17 @@ export class LiveReader {
       };
       this.identity = identity;
       this.viewId = randomUUID();
+      const controlProtocolVersion = selected.status.protocolVersion;
+      if (
+        controlProtocolVersion !== 5 &&
+        controlProtocolVersion !== 6 &&
+        controlProtocolVersion !== CONTROL_PROTOCOL_VERSION
+      )
+        throw new Error("Unsupported controller protocol");
       this.controls.bind({
         ...identity,
         viewId: this.viewId,
-        controlProtocolVersion: selected.status.protocolVersion === 5 ? 5 : 6,
+        controlProtocolVersion,
       });
       const client = await ControlSocket.connect(
         eventSocketPath(this.stateDir, identity.instanceId),

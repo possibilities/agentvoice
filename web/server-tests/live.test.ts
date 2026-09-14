@@ -362,59 +362,60 @@ test("voice gaps and reused IDs stay fenced; unavailable native content remains 
   ).toBe("error");
 });
 
-test("read-only web discovery can observe a version-5 controller without changing CLI defaults", async () => {
-  const { discoverControllerStatus, publishControlDescriptor } = await import(
-    "../../src/control/discovery.ts"
-  );
-  const { JsonSocketServer } = await import("../../src/ipc/json-socket.ts");
-  const h = await fixture();
-  const reader = new LiveReader(h.stateDir);
-  await h.control.close();
-  const instanceId = h.feed.snapshot().instanceId;
-  const legacy = new JsonSocketServer(h.control.socketPath, {
-    version: 5,
-    handle(request, peer) {
-      expect(request.method).toBe("agentvoice.status");
-      peer.send({
-        v: 5,
-        type: "response",
-        id: request.id,
-        ok: true,
-        result: {
-          protocolVersion: 5,
-          instanceId,
-          generation: 1,
-          workspace: h.root,
-          threadId: "main",
-          runtime: { phase: "ready" },
-          recentOperations: [],
-        },
-      });
-    },
-  });
-  await legacy.start();
-  const remove = publishControlDescriptor(h.stateDir, {
-    version: 1,
-    instanceId,
-    controllerPid: process.pid,
-    socketPath: legacy.path,
-    url: h.control.httpUrl,
-    token: h.control.bearerToken,
-  });
-  try {
-    await expect(discoverControllerStatus(h.stateDir, h.root, "main")).rejects.toThrow("no live");
-    await h.start();
-    h.history([user("legacy", "Existing call")]);
-    await until(
-      reader,
-      (view) => view.phase === "live" && view.agent[0]?.content === "Existing call",
+for (const version of [5, 6] as const)
+  test(`read-only web discovery can observe a version-${version} controller without changing CLI defaults`, async () => {
+    const { discoverControllerStatus, publishControlDescriptor } = await import(
+      "../../src/control/discovery.ts"
     );
-    reader.close();
-    expect(h.counts()).toEqual({ starts: 1, closes: 0 });
-  } finally {
-    reader.close();
-    remove();
-    legacy.close();
-    await h.close();
-  }
-});
+    const { JsonSocketServer } = await import("../../src/ipc/json-socket.ts");
+    const h = await fixture();
+    const reader = new LiveReader(h.stateDir);
+    await h.control.close();
+    const instanceId = h.feed.snapshot().instanceId;
+    const legacy = new JsonSocketServer(h.control.socketPath, {
+      version,
+      handle(request, peer) {
+        expect(request.method).toBe("agentvoice.status");
+        peer.send({
+          v: version,
+          type: "response",
+          id: request.id,
+          ok: true,
+          result: {
+            protocolVersion: version,
+            instanceId,
+            generation: 1,
+            workspace: h.root,
+            threadId: "main",
+            runtime: { phase: "ready" },
+            recentOperations: [],
+          },
+        });
+      },
+    });
+    await legacy.start();
+    const remove = publishControlDescriptor(h.stateDir, {
+      version: 1,
+      instanceId,
+      controllerPid: process.pid,
+      socketPath: legacy.path,
+      url: h.control.httpUrl,
+      token: h.control.bearerToken,
+    });
+    try {
+      await expect(discoverControllerStatus(h.stateDir, h.root, "main")).rejects.toThrow("no live");
+      await h.start();
+      h.history([user("legacy", "Existing call")]);
+      await until(
+        reader,
+        (view) => view.phase === "live" && view.agent[0]?.content === "Existing call",
+      );
+      reader.close();
+      expect(h.counts()).toEqual({ starts: 1, closes: 0 });
+    } finally {
+      reader.close();
+      remove();
+      legacy.close();
+      await h.close();
+    }
+  });

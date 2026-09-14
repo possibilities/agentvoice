@@ -1,7 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { discoverControllerStatus } from "../control/discovery.ts";
-import type { CONTROL_PROTOCOL_VERSION } from "../control/types.ts";
+import { discoverControllerStatus, type ReadableControlProtocol } from "../control/discovery.ts";
 
 export const attachmentTargetSchema = z
   .object({
@@ -26,7 +25,7 @@ export async function acquireAttachment(
   workspace: string,
   threadId?: string,
   expected?: z.infer<typeof attachmentTargetSchema>,
-  controlProtocolVersion?: 5 | typeof CONTROL_PROTOCOL_VERSION,
+  controlProtocolVersion?: ReadableControlProtocol,
 ) {
   const { descriptor, status } = await discoverControllerStatus(
     stateDir,

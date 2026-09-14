@@ -363,11 +363,13 @@ function statusFromSocket(
   });
 }
 
+export type ReadableControlProtocol = typeof CONTROL_PROTOCOL_VERSION | 6 | 5;
+
 export async function discoverControllerStatus(
   stateDir: string,
   workspace: string,
   threadId?: string,
-  protocolVersion: typeof CONTROL_PROTOCOL_VERSION | 5 = CONTROL_PROTOCOL_VERSION,
+  protocolVersion: ReadableControlProtocol = CONTROL_PROTOCOL_VERSION,
 ): Promise<{ descriptor: ControlDiscoveryDescriptor; status: ControlStatus }> {
   const descriptors = readDescriptors(stateDir);
   const statuses = await Promise.all(
