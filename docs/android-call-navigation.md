@@ -25,6 +25,12 @@ The Persona has no permanent navigation button. The first three call visits show
 area replays the hint. Its region follows orientation and handedness and excludes
 the control deck. An accessibility long-click action exposes the same hint.
 
+The Persona keeps the same immersive viewport while connecting, connected, or
+disconnected. Transport failure must not reveal system bars and squeeze the
+trace corridor between the Persona and controls. Back restores system bars on
+the connection screen; a swipe can still reveal transient bars. Keeping the
+screen awake remains limited to a running call on the Persona screen.
+
 ## Ownership
 
 `CallService` is private and bound locally by `MainActivity`. It owns `CallOwner`

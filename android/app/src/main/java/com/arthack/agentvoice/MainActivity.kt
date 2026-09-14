@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
-import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -20,9 +19,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -99,16 +95,7 @@ class MainActivity : ComponentActivity() {
                 var credits by remember { mutableStateOf(false) }
                 val ui = controller?.ui ?: CallUi()
                 val inPersona = navigation.route == CallRoute.Persona
-                DisposableEffect(ui.running, inPersona) {
-                    if (ui.running && inPersona) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    WindowCompat.getInsetsController(window, window.decorView).apply {
-                        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                        if (ui.running && inPersona) hide(WindowInsetsCompat.Type.systemBars())
-                        else show(WindowInsetsCompat.Type.systemBars())
-                    }
-                    onDispose { }
-                }
+                CallWindowPresentation(window, inPersona, ui.running)
                 BackHandler(navigation.route != CallRoute.Connection || microphoneNeeded || showPendingPairing) { navigateBack() }
                 LaunchedEffect(ui.running, ui.message) {
                     if (!ui.running && ui.message == "Call ended.") navigation = navigation.disconnected()
