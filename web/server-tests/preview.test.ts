@@ -103,6 +103,21 @@ test.each([
       const options = { headers, tls: { rejectUnauthorized: false } };
       const base = `https://127.0.0.1:${proxyPort}`;
       const html = await fetch(base, options);
+      const assertCsp = (response: Response) => {
+        const policy = response.headers.get("Content-Security-Policy");
+        expect(policy).not.toBeNull();
+        const connect = policy
+          ?.split(";")
+          .map((directive) => directive.trim())
+          .find((directive) => directive.startsWith("connect-src "));
+        expect(connect).toBeDefined();
+        const sources = connect!.split(/\s+/).slice(1);
+        expect(sources.filter((source) => source.startsWith("wss:"))).toEqual([
+          `wss://${name}.localhost`,
+        ]);
+        expect(sources).not.toContain("*");
+      };
+      assertCsp(html);
       const document = await html.text();
       expect(document).toContain("<title>AgentVoice</title>");
       if (mode === "dev") {
@@ -145,6 +160,7 @@ test.each([
       expect(foreignHost.status).toBe(403);
       const result = await fetch(`${base}/api/live`, options);
       expect(result.status).toBe(200);
+      assertCsp(result);
       expect(result.headers.get("x-portless")).toBe("1");
       expect(await result.json()).toEqual({
         phase: "offline",

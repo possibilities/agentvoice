@@ -197,7 +197,11 @@ The underlying interrupt API and queued-work pause semantics remain supported.
 Resume explicitly releases paused rows.
 
 The host saves at most 20 queued messages (64 KiB each) in private mode-0600
-`web/queued-messages.json` under AgentVoice state. Restart or call replacement
+`web/queued-messages.json` under AgentVoice state for the default endpoint.
+Explicit workspace readers instead use
+`web/queues/<canonical-workspace-sha256>/queued-messages.json`; the reader's origin
+name does not select queue identity. They never read or overwrite the default
+queue or another workspace's queue. Restart or call replacement
 restores them paused for review. Failed dispatch stays paused; unknown acceptance
 never retries automatically. Check native history before editing/removing a row
 whose delivery is unknown. Submitted text appears immediately with a pending status, reconciled by the
