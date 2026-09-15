@@ -17,4 +17,5 @@
 <key>AgentVoiceInstaller</key><string>agentvoice/scripts/install.sh</string>
 <key>AgentVoiceSourceRevision</key><string>SOURCE_REVISION</string>
 <key>AgentVoiceStateDirectory</key><string>STATE_DIRECTORY</string>
+<key>AgentVoiceMenuControlProtocol</key><integer>1</integer>
 </dict></plist>

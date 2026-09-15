@@ -5,8 +5,12 @@ import { dirname, join } from "node:path";
 export const MACOS_APP_IDENTIFIER = "io.arthack.agentvoice.menu";
 export const MACOS_APP_INSTALLER = "agentvoice/scripts/install.sh";
 export const MACOS_APP_NAME = "AgentVoice.app";
+export const MACOS_APP_CONTROL_PROTOCOL = 1;
+const MACOS_APP_CONTROL_TIMEOUT_MS = 7_000;
+const MACOS_APP_LAUNCH_TIMEOUT_MS = 5_000;
 
 export interface MacAppInspection {
+  controlProtocol?: number;
   executable: string;
   revision: string;
 }
@@ -15,6 +19,22 @@ export interface MacAppChecks {
   plistValue(app: string, key: string): string;
   verifySignature(app: string): void;
   running(executable: string): boolean;
+}
+
+export interface MacAppLifecycle {
+  requestQuit(executable: string, revision: string): Promise<void>;
+  launch(app: string): Promise<void>;
+  wait?(milliseconds: number): Promise<void>;
+}
+
+export class MacAppQuitFailure extends Error {
+  constructor(
+    message: string,
+    readonly appStopped: boolean,
+    cause?: unknown,
+  ) {
+    super(message, { cause });
+  }
 }
 
 const defaultChecks: MacAppChecks = {
@@ -54,6 +74,42 @@ const defaultChecks: MacAppChecks = {
       cause: result.error,
     });
   },
+};
+
+const defaultLifecycle: MacAppLifecycle = {
+  async requestQuit(executable, revision) {
+    const result = spawnSync(
+      executable,
+      ["--menu-control", "quit-for-update", "--expected-revision", revision, "--json"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: MACOS_APP_CONTROL_TIMEOUT_MS,
+      },
+    );
+    if (result.error) {
+      if ((result.error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
+        throw new Error("AgentVoice menu did not quit before the update timeout");
+      }
+      throw new Error(`Could not ask the AgentVoice menu to quit: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      const detail = (result.stderr || result.stdout || "menu control request failed").trim();
+      throw new Error(`AgentVoice menu refused to quit for update: ${detail}`);
+    }
+  },
+  async launch(app) {
+    const result = spawnSync("/usr/bin/open", ["-g", app], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.error || result.status !== 0) {
+      const detail =
+        result.error?.message ?? (result.stderr || result.stdout || "open failed").trim();
+      throw new Error(`Could not reopen the AgentVoice menu: ${detail}`);
+    }
+  },
+  wait: Bun.sleep,
 };
 
 function ownedDirectory(path: string): void {
@@ -99,8 +155,15 @@ export function inspectMacApp(
       throw new Error("missing installer marker");
     const revision = checks.plistValue(app, "AgentVoiceSourceRevision");
     if (!/^[0-9a-f]{40}$/.test(revision)) throw new Error("invalid source revision");
+    let controlProtocol: number | undefined;
+    try {
+      const raw = checks.plistValue(app, "AgentVoiceMenuControlProtocol");
+      if (/^[1-9][0-9]*$/.test(raw)) controlProtocol = Number(raw);
+    } catch {
+      // Existing AgentVoice releases predate installer-controlled menu lifecycle.
+    }
     checks.verifySignature(app);
-    return { executable, revision };
+    return { controlProtocol, executable, revision };
   } catch (error) {
     throw new Error(`Refusing unrelated or modified AgentVoice application: ${app}`, {
       cause: error,
@@ -112,13 +175,67 @@ export function preflightMacApp(
   app: string,
   revision: string,
   checks: MacAppChecks = defaultChecks,
+  quitMenu = false,
 ): "missing" | "current" | "replace" {
   const existing = inspectMacApp(app, checks);
   if (!existing) return "missing";
   if (existing.revision === revision) return "current";
-  if (checks.running(existing.executable))
-    throw new Error("AgentVoice menu app is running; quit its menu before installation");
+  if (checks.running(existing.executable)) {
+    if (!quitMenu)
+      throw new Error(
+        "AgentVoice menu app is running; choose Quit AgentVoice menu or rerun with --quit-menu",
+      );
+    if (existing.controlProtocol !== MACOS_APP_CONTROL_PROTOCOL) {
+      throw new Error(
+        "This AgentVoice menu version cannot quit itself for an update. Choose Quit AgentVoice menu, then run the installer again",
+      );
+    }
+  }
   return "replace";
+}
+
+export async function quitMacAppForUpdate(
+  app: string,
+  revision: string,
+  quitMenu: boolean,
+  checks: MacAppChecks = defaultChecks,
+  lifecycle: MacAppLifecycle = defaultLifecycle,
+): Promise<boolean> {
+  const disposition = preflightMacApp(app, revision, checks, quitMenu);
+  if (disposition !== "replace") return false;
+  const existing = inspectMacApp(app, checks)!;
+  if (!checks.running(existing.executable)) return false;
+  try {
+    await lifecycle.requestQuit(existing.executable, existing.revision);
+  } catch (error) {
+    throw new MacAppQuitFailure(
+      error instanceof Error ? error.message : String(error),
+      !checks.running(existing.executable),
+      error,
+    );
+  }
+  if (checks.running(existing.executable)) {
+    throw new Error("AgentVoice menu control returned before the running app quit");
+  }
+  return true;
+}
+
+export async function relaunchMacApp(
+  app: string,
+  checks: MacAppChecks = defaultChecks,
+  lifecycle: MacAppLifecycle = defaultLifecycle,
+): Promise<void> {
+  const installed = inspectMacApp(app, checks);
+  if (!installed) throw new Error("Cannot reopen a missing AgentVoice menu app");
+  await lifecycle.launch(app);
+  const interval = 100;
+  for (let elapsed = 0; elapsed <= MACOS_APP_LAUNCH_TIMEOUT_MS; elapsed += interval) {
+    if (checks.running(installed.executable)) return;
+    if (elapsed < MACOS_APP_LAUNCH_TIMEOUT_MS) {
+      await (lifecycle.wait?.(interval) ?? Bun.sleep(interval));
+    }
+  }
+  throw new Error("AgentVoice menu did not reopen before the launch timeout");
 }
 
 export function installMacApp(

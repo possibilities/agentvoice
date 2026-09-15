@@ -448,6 +448,27 @@ restarts the server job and does end any active call. The job runs while logged
 in; sleep suspends it. A manual default server must be stopped before installing,
 since it owns the same socket.
 
+Menu updates have a separate non-server scope:
+
+```sh
+scripts/install.sh --install --menu-only --quit-menu
+```
+
+`--menu-only` builds and installs only the native menu app. It does not rebuild
+native audio, change the editable command or deployed receipt, or operate the
+LaunchAgent, so the server and any call continue unchanged. `--quit-menu` is the
+explicit permission to ask an outdated running owned menu app to quit through
+its private control socket, wait boundedly, and reopen the new app only if the
+old one was running. Without that flag, a changed running app is refused. The
+flag adds no server action when used with a full install; full installation still
+has its separately documented server restart.
+
+The first upgrade from a menu version that predates this control socket needs one
+last manual step: choose **Quit AgentVoice menu**, rerun the menu-only installer,
+then open `~/Applications/AgentVoice.app`. The installer never falls back to a
+signal, AppleScript, or a forced quit. A refused, busy, mismatched, or timed-out
+request leaves the installed app untouched.
+
 The plist pins absolute Bun and source entrypoint paths, uses the user's home
 as launch cwd, and captures PATH plus configured XDG, CODEX_HOME, CODEX_PATH and
 AGENTROLES_HOME environment entries. Unset CODEX_HOME stays unset. It copies no

@@ -20,17 +20,21 @@ owns the current source map and recording/attachment implementation guidance.
 - scripts/install.ts: clean checkout, frozen dependencies, staged native build,
   ownership-safe editable command publication and deployed-sha receipt, followed by
   the native menu app and default LaunchAgent installation on macOS. --command-only
-  skips both app and service management.
+  skips both app and service management; --menu-only builds and publishes only the
+  app, with explicit --quit-menu presence preservation through its private control
+  endpoint and no LaunchAgent action.
   No configuration, prompt/skill setup or legacy command cleanup.
 - macos/ + scripts/build-macos-app.sh: AppKit status item, native main-app login
   registration, versioned service-state observation and explicit load/unload/restart
   through the existing ownership-checked service command, reusable SwiftUI pairing window,
-  private render-gated pairing-socket client and signed application packaging.
+  private render-gated pairing-socket client, private same-user menu lifecycle control,
+  and signed application packaging.
   The menu is not a frontend or server supervisor; quitting
   it must not end a call. Follow AgentNotify for native panels, windows and shared
   SwiftUI content.
-- src/macos-app.ts: ownership, signing, source-revision and running-process checks
-  for atomic menu app installation. Keep its bundle identity distinct from the
+- src/macos-app.ts: ownership, signing, source-revision and running-process checks,
+  opt-in graceful quit orchestration, conditional exact-path relaunch, and atomic
+  menu app installation. Keep its bundle identity distinct from the
   private microphone-entitled Bun runtime below AgentVoice state.
 - scripts/install-android*: clean-checkout ARM64 standalone build plus an explicit
   SSH deployment to prepared Termux. Keep the target and receipt ownership-correlated,

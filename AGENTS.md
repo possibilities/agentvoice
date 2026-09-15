@@ -143,7 +143,10 @@ when the phone is available again. Report any restoration problem immediately.
   never use the live destination to test. Installer tests use disposable checkouts,
   local-only dependencies, a fake compiler, a fake launchctl runner and a Codex invocation sentinel.
   Use --command-only for command publication fixtures; it skips both the app and
-  LaunchAgent. Never run live launchctl in tests.
+  LaunchAgent. Use --menu-only --quit-menu for an explicit owned-menu update that
+  preserves its prior running presence without operating the LaunchAgent. The
+  private menu quit request shares the app's busy gate and never stops the server
+  or a call. Never run live launchctl in tests.
 
 A build or worktree commit is not delivery. After a verified desktop behavior
 change is committed, integrate it into the clean canonical local `main`, run the

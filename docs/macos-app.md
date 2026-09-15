@@ -59,8 +59,25 @@ media. The first menu-app launch registers it to run at login once; a later user
 opt-out is preserved. The full editable installer adds the signed bundle to
 `~/Applications`; use
 `AGENTVOICE_INSTALL_APP_DIR` for a disposable absolute destination. A changed
-running app must be quit before replacement. An already-current running app is
+running app is replaced only with the explicit `--quit-menu` opt-in. The
+installer asks that exact owned app to quit through its private versioned control
+socket, waits boundedly, publishes the update, and reopens it only when it was
+running before the update. A refusal, timeout, or identity mismatch stops before
+replacement; there is no forced-quit fallback. An already-current running app is
 left untouched.
+
+Use `scripts/install.sh --install --menu-only --quit-menu` to update and preserve
+the menu app without reinstalling or restarting the waiting-server LaunchAgent.
+This scope does not build native audio, publish the command, change the deployed
+receipt, or interrupt a call. The ordinary full installer still updates all three
+components and restarts the server as before; `--quit-menu` changes only how it
+handles an outdated running menu app.
+
+AgentVoice menu versions installed before the private control protocol cannot
+quit themselves for an update. The first upgrade from one of those versions
+clearly refuses: choose **Quit AgentVoice menu**, rerun the menu-only installer,
+then open the newly installed app once. After that one-time bootstrap, future
+menu updates can preserve running presence with `--quit-menu`.
 
 `scripts/install.sh --install --command-only` continues to publish only the CLI
 and its receipt. It neither builds nor installs the menu app and does not manage

@@ -5,10 +5,15 @@ import { join } from "node:path";
 import {
   inspectMacApp,
   installMacApp,
+  MACOS_APP_CONTROL_PROTOCOL,
   MACOS_APP_IDENTIFIER,
   MACOS_APP_INSTALLER,
   type MacAppChecks,
+  type MacAppLifecycle,
+  MacAppQuitFailure,
   preflightMacApp,
+  quitMacAppForUpdate,
+  relaunchMacApp,
 } from "../src/macos-app.ts";
 
 const roots: string[] = [];
@@ -22,6 +27,8 @@ function fixture() {
   const applications = join(root, "Applications");
   mkdirSync(applications);
   const running = new Set<string>();
+  const quitRequests: Array<{ executable: string; revision: string }> = [];
+  const launches: string[] = [];
   const checks: MacAppChecks = {
     plistValue(app, key) {
       return JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))[key];
@@ -34,7 +41,17 @@ function fixture() {
       return running.has(executable);
     },
   };
-  function app(name: string, revision: string, values: Record<string, string> = {}) {
+  const lifecycle: MacAppLifecycle = {
+    async requestQuit(executable, revision) {
+      quitRequests.push({ executable, revision });
+      running.delete(executable);
+    },
+    async launch(app) {
+      launches.push(app);
+      running.add(join(app, "Contents", "MacOS", "AgentVoice"));
+    },
+  };
+  function app(name: string, revision: string, values: Record<string, string | undefined> = {}) {
     const path = join(root, name);
     mkdirSync(join(path, "Contents", "MacOS"), { recursive: true });
     writeFileSync(
@@ -43,13 +60,14 @@ function fixture() {
         CFBundleIdentifier: MACOS_APP_IDENTIFIER,
         AgentVoiceInstaller: MACOS_APP_INSTALLER,
         AgentVoiceSourceRevision: revision,
+        AgentVoiceMenuControlProtocol: String(MACOS_APP_CONTROL_PROTOCOL),
         ...values,
       }),
     );
     writeFileSync(join(path, "Contents", "MacOS", "AgentVoice"), "signed", { mode: 0o755 });
     return path;
   }
-  return { root, applications, checks, running, app };
+  return { root, applications, checks, lifecycle, running, quitRequests, launches, app };
 }
 
 const oldRevision = "1".repeat(40);
@@ -84,9 +102,128 @@ test("current menu app stays untouched while an obsolete running app is refused"
       CFBundleIdentifier: MACOS_APP_IDENTIFIER,
       AgentVoiceInstaller: MACOS_APP_INSTALLER,
       AgentVoiceSourceRevision: oldRevision,
+      AgentVoiceMenuControlProtocol: String(MACOS_APP_CONTROL_PROTOCOL),
     }),
   );
-  expect(() => preflightMacApp(installed, newRevision, f.checks)).toThrow("quit its menu");
+  expect(() => preflightMacApp(installed, newRevision, f.checks)).toThrow("rerun with --quit-menu");
+});
+
+test("explicit opt-in asks the exact supported running app to quit", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", oldRevision);
+  const executable = join(installed, "Contents", "MacOS", "AgentVoice");
+  f.running.add(executable);
+
+  expect(await quitMacAppForUpdate(installed, newRevision, true, f.checks, f.lifecycle)).toBe(true);
+  expect(f.quitRequests).toEqual([{ executable, revision: oldRevision }]);
+  expect(f.running.has(executable)).toBe(false);
+});
+
+test("legacy running app needs one manual bootstrap quit", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", oldRevision, {
+    AgentVoiceMenuControlProtocol: undefined,
+  });
+  f.running.add(join(installed, "Contents", "MacOS", "AgentVoice"));
+
+  await expect(
+    quitMacAppForUpdate(installed, newRevision, true, f.checks, f.lifecycle),
+  ).rejects.toThrow("cannot quit itself for an update");
+  expect(f.quitRequests).toEqual([]);
+});
+
+test("quit refusal and a premature success both preserve the running app", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", oldRevision);
+  const executable = join(installed, "Contents", "MacOS", "AgentVoice");
+  f.running.add(executable);
+  const refusal: MacAppLifecycle = {
+    ...f.lifecycle,
+    async requestQuit() {
+      throw new Error("menu is busy");
+    },
+  };
+  await expect(
+    quitMacAppForUpdate(installed, newRevision, true, f.checks, refusal),
+  ).rejects.toThrow("menu is busy");
+  expect(f.running.has(executable)).toBe(true);
+
+  const premature: MacAppLifecycle = {
+    ...f.lifecycle,
+    async requestQuit() {},
+  };
+  await expect(
+    quitMacAppForUpdate(installed, newRevision, true, f.checks, premature),
+  ).rejects.toThrow("returned before the running app quit");
+  expect(f.running.has(executable)).toBe(true);
+});
+
+test("a lost quit reply refuses even when the exact old executable exited", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", oldRevision);
+  const executable = join(installed, "Contents", "MacOS", "AgentVoice");
+  f.running.add(executable);
+  const lostReply: MacAppLifecycle = {
+    ...f.lifecycle,
+    async requestQuit(path, revision) {
+      f.quitRequests.push({ executable: path, revision });
+      f.running.delete(path);
+      throw new Error("connection closed before acknowledgement");
+    },
+  };
+
+  try {
+    await quitMacAppForUpdate(installed, newRevision, true, f.checks, lostReply);
+    throw new Error("lost quit reply was accepted");
+  } catch (error) {
+    expect(error).toBeInstanceOf(MacAppQuitFailure);
+    expect((error as MacAppQuitFailure).appStopped).toBe(true);
+  }
+  expect(f.quitRequests).toEqual([{ executable, revision: oldRevision }]);
+});
+
+test("absent and stopped apps need no quit, and relaunch uses the exact bundle path", async () => {
+  const f = fixture();
+  const installed = join(f.applications, "AgentVoice.app");
+  expect(await quitMacAppForUpdate(installed, newRevision, true, f.checks, f.lifecycle)).toBe(
+    false,
+  );
+  f.app("Applications/AgentVoice.app", oldRevision);
+  expect(await quitMacAppForUpdate(installed, newRevision, true, f.checks, f.lifecycle)).toBe(
+    false,
+  );
+  expect(f.quitRequests).toEqual([]);
+
+  await relaunchMacApp(installed, f.checks, f.lifecycle);
+  expect(f.launches).toEqual([installed]);
+});
+
+test("relaunch requires the exact installed executable to become observable", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", newRevision);
+  const missingLaunch: MacAppLifecycle = {
+    async requestQuit() {},
+    async launch(app) {
+      f.launches.push(app);
+    },
+    async wait() {},
+  };
+  await expect(relaunchMacApp(installed, f.checks, missingLaunch)).rejects.toThrow(
+    "did not reopen before the launch timeout",
+  );
+  expect(f.launches).toEqual([installed]);
+});
+
+test("ownership refusal happens before any quit request", async () => {
+  const f = fixture();
+  const installed = f.app("Applications/AgentVoice.app", oldRevision, {
+    CFBundleIdentifier: "example.foreign",
+  });
+  f.running.add(join(installed, "Contents", "MacOS", "AgentVoice"));
+  await expect(
+    quitMacAppForUpdate(installed, newRevision, true, f.checks, f.lifecycle),
+  ).rejects.toThrow("unrelated or modified");
+  expect(f.quitRequests).toEqual([]);
 });
 
 test("menu app publication replaces only an owned stopped bundle", () => {
@@ -111,7 +248,9 @@ test("menu app publication rechecks a stopped bundle after staging", () => {
       return runningChecks > 1;
     },
   };
-  expect(() => installMacApp(candidate, installed, newRevision, checks)).toThrow("quit its menu");
+  expect(() => installMacApp(candidate, installed, newRevision, checks)).toThrow(
+    "rerun with --quit-menu",
+  );
   expect(inspectMacApp(installed, f.checks)?.revision).toBe(oldRevision);
   expect(existsSync(candidate)).toBe(true);
 });

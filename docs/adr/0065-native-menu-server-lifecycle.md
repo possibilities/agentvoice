@@ -5,6 +5,8 @@ menubar load, unload, and reload controls and normalize its messages. Extends
 [0044](0044-native-macos-menu-app.md); its independent menu login item,
 server supervision, and distinct signing identities remain. Extends
 [0025](0025-launchagent-default-workspaces.md) with non-deleting load and unload.
+The installer-controlled menu presence lifecycle is added separately by
+[0070](0070-installer-owned-menu-presence.md).
 
 ## Decision
 

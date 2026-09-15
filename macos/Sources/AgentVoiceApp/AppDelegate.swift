@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pairPhoneWindow: PairPhoneWindowController?
     private var probeRevision = 0
     private var checkingStatus = false
+    private var quitPrepared = false
+    private var menuControl: MenuControlServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -113,8 +115,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         // The attached menu owns native tracking and selected highlighting.
         statusItem.menu = menu
+        do {
+            menuControl = try MenuControlServer(
+                prepareQuit: { [weak self] in self?.prepareQuit() ?? false },
+                cancelQuit: { [weak self] in self?.cancelPreparedQuit() },
+                completeQuit: { [weak self] in self?.completePreparedQuit() }
+            )
+        } catch {
+            NSLog("AgentVoice menu update control is unavailable: %@", error.localizedDescription)
+        }
         login.applyDefaultIfNeeded()
         refresh()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        menuControl?.close()
+        menuControl = nil
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -157,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateServerMenu() {
-        let busy = operation != nil || confirming
+        let busy = operation != nil || confirming || quitPrepared
         serverItem.title = operation?.progress ?? serverState.menuTitle
         serverItem.toolTip = serverState.accessibilitySummary
         let summary = operation?.progress ?? serverState.accessibilitySummary
@@ -256,7 +272,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func quitMenu() {
-        guard operation == nil, !confirming else { return }
+        guard prepareQuit() else { return }
+        completePreparedQuit()
+    }
+
+    private func prepareQuit() -> Bool {
+        guard operation == nil, !confirming, !quitPrepared else { return false }
+        quitPrepared = true
+        updateServerMenu()
+        return true
+    }
+
+    private func completePreparedQuit() {
+        guard quitPrepared else { return }
         NSApplication.shared.terminate(nil)
+    }
+
+    private func cancelPreparedQuit() {
+        guard quitPrepared else { return }
+        quitPrepared = false
+        updateServerMenu()
     }
 }

@@ -7,6 +7,8 @@ microphone identity retained by [0027](0027-service-microphone-identity.md) and
 
 Extended by [0065](0065-native-menu-server-lifecycle.md), which adds explicit
 load/unload/restart controls while retaining the independence described here.
+Extended again by [0070](0070-installer-owned-menu-presence.md), which adds
+installer-owned graceful menu updates without changing the server lifecycle.
 
 ## Decision
 

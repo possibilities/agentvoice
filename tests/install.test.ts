@@ -22,6 +22,7 @@ import { dirname, join } from "node:path";
 
 const repository = dirname(import.meta.dir);
 const temporary: string[] = [];
+const oldRevision = "1".repeat(40);
 afterEach(() => {
   for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
 });
@@ -33,11 +34,13 @@ function fixture() {
   const bin = join(base, "bin");
   const state = join(base, "state");
   const commands = join(base, "commands");
+  const applications = join(base, "Applications");
   for (const dir of [
     root,
     bin,
     state,
     commands,
+    applications,
     join(root, "scripts"),
     join(root, "src"),
     join(root, "fixture-dep"),
@@ -65,10 +68,14 @@ function fixture() {
   for (const name of ["bun", "git", "dirname", "bash"]) {
     symlinkSync(name === "bun" ? process.execPath : Bun.which(name)!, join(commands, name));
   }
+  for (const name of ["swift", "iconutil", "codesign"]) {
+    symlinkSync("/usr/bin/true", join(commands, name));
+  }
   const env: Record<string, string> = {
     PATH: commands,
     AGENTVOICE_INSTALL_BIN_DIR: bin,
     AGENTVOICE_INSTALL_STATE_DIR: state,
+    AGENTVOICE_INSTALL_APP_DIR: applications,
     XDG_STATE_HOME: join(base, "xdg-state"),
     XDG_CACHE_HOME: join(base, "cache"),
     BUN_INSTALL_CACHE_DIR: join(base, "bun-cache"),
@@ -81,7 +88,20 @@ function fixture() {
   };
   const source = join(root, "src/main.ts");
   writeFileSync(source, "#!/usr/bin/env bun\nconsole.log(process.cwd());\n", { mode: 0o755 });
-  writeFileSync(join(root, ".gitignore"), "node_modules/\nbuild/\n");
+  writeFileSync(join(root, ".gitignore"), "node_modules/\nbuild/\ndist/\n");
+  writeFileSync(
+    join(root, "scripts/build-macos-app.sh"),
+    `#!/bin/bash
+set -euo pipefail
+candidate="$FIXTURE_ROOT/dist/AgentVoice.app"
+/bin/mkdir -p "$candidate/Contents/MacOS"
+sha=$(git -C "$FIXTURE_ROOT" rev-parse HEAD)
+/usr/bin/printf '{"CFBundleIdentifier":"io.arthack.agentvoice.menu","AgentVoiceInstaller":"agentvoice/scripts/install.sh","AgentVoiceSourceRevision":"%s","AgentVoiceMenuControlProtocol":"1"}' "$sha" > "$candidate/Contents/Info.plist"
+/usr/bin/printf signed > "$candidate/Contents/MacOS/AgentVoice"
+/bin/chmod 755 "$candidate/Contents/MacOS/AgentVoice"
+`,
+    { mode: 0o755 },
+  );
   writeFileSync(
     join(root, "package.json"),
     JSON.stringify({
@@ -190,17 +210,104 @@ exit "$FIXTURE_COMPILER_EXIT"
     expect(existsSync(join(base, "codex-called"))).toBe(false);
     return { code, out, err };
   }
+  function writeMenuApp(revision: string, controlProtocol = "1") {
+    const app = join(applications, "AgentVoice.app");
+    mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
+    writeFileSync(
+      join(app, "Contents", "Info.plist"),
+      JSON.stringify({
+        CFBundleIdentifier: "io.arthack.agentvoice.menu",
+        AgentVoiceInstaller: "agentvoice/scripts/install.sh",
+        AgentVoiceSourceRevision: revision,
+        ...(controlProtocol ? { AgentVoiceMenuControlProtocol: controlProtocol } : {}),
+      }),
+    );
+    writeFileSync(join(app, "Contents", "MacOS", "AgentVoice"), "signed", { mode: 0o755 });
+    return app;
+  }
+  async function runMenu(
+    options: {
+      quitMenu?: boolean;
+      quitResult?: "success" | "refuse" | "timeout" | "premature" | "lost";
+      launchResult?: "success" | "fail";
+      installResult?: "success" | "fail";
+    } = {},
+  ) {
+    const script = `
+      const { install } = await import(process.env["FIXTURE_ROOT"] + "/scripts/install.ts");
+      const { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+      const base = process.env["FIXTURE_BASE"];
+      const checks = {
+        plistValue(app, key) { return JSON.parse(readFileSync(app + "/Contents/Info.plist", "utf8"))[key]; },
+        verifySignature(app) {
+          if (readFileSync(app + "/Contents/MacOS/AgentVoice", "utf8") !== "signed") throw new Error("invalid signature");
+          const revision = JSON.parse(readFileSync(app + "/Contents/Info.plist", "utf8")).AgentVoiceSourceRevision;
+          if (process.env["FIXTURE_INSTALL_RESULT"] === "fail" && app === base + "/Applications/AgentVoice.app" && revision !== "${oldRevision}") {
+            throw new Error("fixture final app verification failure");
+          }
+        },
+        running(executable) {
+          return existsSync(base + "/menu-running") && readFileSync(base + "/menu-running", "utf8") === executable;
+        },
+      };
+      const lifecycle = {
+        async requestQuit(executable, revision) {
+          appendFileSync(base + "/menu-calls", "quit " + executable + " " + revision + "\\n");
+          if (process.env["FIXTURE_QUIT_RESULT"] === "refuse") throw new Error("fixture busy refusal");
+          if (process.env["FIXTURE_QUIT_RESULT"] === "timeout") throw new Error("AgentVoice menu did not quit before the update timeout");
+          if (process.env["FIXTURE_QUIT_RESULT"] === "lost") {
+            rmSync(base + "/menu-running", { force: true });
+            throw new Error("connection closed before acknowledgement");
+          }
+          if (process.env["FIXTURE_QUIT_RESULT"] !== "premature") rmSync(base + "/menu-running", { force: true });
+        },
+        async launch(app) {
+          appendFileSync(base + "/menu-calls", "launch " + app + "\\n");
+          if (process.env["FIXTURE_LAUNCH_RESULT"] === "fail") throw new Error("fixture launch failure");
+          writeFileSync(base + "/menu-running", app + "/Contents/MacOS/AgentVoice");
+        },
+      };
+      await install(false, true, {
+        menuOnly: true,
+        quitMenu: process.env["FIXTURE_QUIT_MENU"] === "1",
+        appChecks: checks,
+        appLifecycle: lifecycle,
+      });
+    `;
+    const child = Bun.spawn([process.execPath, "-e", script], {
+      cwd: base,
+      env: {
+        ...env,
+        FIXTURE_QUIT_MENU: options.quitMenu ? "1" : "0",
+        FIXTURE_QUIT_RESULT: options.quitResult ?? "success",
+        FIXTURE_LAUNCH_RESULT: options.launchResult ?? "success",
+        FIXTURE_INSTALL_RESULT: options.installResult ?? "success",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { code, out, err };
+  }
   return {
     base,
     runService,
     root,
     bin,
     state,
+    applications,
     source,
     commands,
     env,
     sha,
     run,
+    runMenu,
+    writeMenuApp,
     command,
     commit,
     target: join(bin, "agentvoice"),
@@ -262,6 +369,9 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
       [["--help"], 0],
       [["--uninstall"], 2],
       [["--install", "--help"], 2],
+      [["--install", "--command-only", "--quit-menu"], 2],
+      [["--install", "--command-only", "--menu-only"], 2],
+      [["--install", "--quit-menu", "--quit-menu"], 2],
     ] as const) {
       expect((await f.run([...args])).code).toBe(code);
     }
@@ -416,6 +526,152 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(readFileSync(f.receipt, "utf8")).toBe(`${sha}\n`);
     expect(result.err).toContain("PATH does not select this command");
     expect(readFileSync(join(f.commands, "agentvoice"), "utf8")).toContain("exit 99");
+  });
+});
+
+describe("menu-only installer lifecycle (disposable app, no server or call)", () => {
+  test("installs an absent app without quitting, launching, or touching the command and server", async () => {
+    const f = fixture();
+    const result = await f.runMenu({ quitMenu: true });
+    expect(result.code, result.err).toBe(0);
+    expect(existsSync(join(f.applications, "AgentVoice.app"))).toBe(true);
+    expect(existsSync(join(f.base, "menu-calls"))).toBe(false);
+    expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
+    expect(existsSync(join(f.base, "compiler-called"))).toBe(false);
+    expect(existsSync(f.target)).toBe(false);
+    expect(existsSync(f.receipt)).toBe(false);
+    expect(result.out).toContain("server and any call were left unchanged");
+  });
+
+  test("opt-in quits and reopens only the exact previously running menu app", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(oldRevision);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMenu({ quitMenu: true });
+    expect(result.code, result.err).toBe(0);
+    expect(readFileSync(join(f.base, "menu-calls"), "utf8")).toBe(
+      `quit ${executable} ${oldRevision}\nlaunch ${app}\n`,
+    );
+    expect(readFileSync(join(f.base, "menu-running"), "utf8")).toBe(executable);
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+        .AgentVoiceSourceRevision,
+    ).toBe(f.sha);
+    expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
+    expect(existsSync(f.target)).toBe(false);
+  });
+
+  test("running updates remain opt-in and legacy apps require one manual quit", async () => {
+    for (const [quitMenu, protocol, expected] of [
+      [false, "1", "rerun with --quit-menu"],
+      [true, "", "cannot quit itself for an update"],
+    ] as const) {
+      const f = fixture();
+      const app = f.writeMenuApp(oldRevision, protocol);
+      writeFileSync(join(f.base, "menu-running"), join(app, "Contents", "MacOS", "AgentVoice"));
+      const result = await f.runMenu({ quitMenu });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(expected);
+      expect(
+        JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+          .AgentVoiceSourceRevision,
+      ).toBe(oldRevision);
+      expect(existsSync(join(f.base, "menu-calls"))).toBe(false);
+      expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
+    }
+  });
+
+  test("quit refusal, timeout, or premature completion preserves the old app and never relaunches", async () => {
+    for (const quitResult of ["refuse", "timeout", "premature"] as const) {
+      const f = fixture();
+      const app = f.writeMenuApp(oldRevision);
+      const executable = join(app, "Contents", "MacOS", "AgentVoice");
+      writeFileSync(join(f.base, "menu-running"), executable);
+      const result = await f.runMenu({ quitMenu: true, quitResult });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(
+        quitResult === "refuse"
+          ? "fixture busy refusal"
+          : quitResult === "timeout"
+            ? "did not quit before the update timeout"
+            : "returned before the running app quit",
+      );
+      expect(readFileSync(join(f.base, "menu-calls"), "utf8")).toBe(
+        `quit ${executable} ${oldRevision}\n`,
+      );
+      expect(
+        JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+          .AgentVoiceSourceRevision,
+      ).toBe(oldRevision);
+      expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
+    }
+  });
+
+  test("a stopped app stays stopped, while relaunch failure reports the installed update", async () => {
+    const stopped = fixture();
+    const stoppedApp = stopped.writeMenuApp(oldRevision);
+    const stoppedResult = await stopped.runMenu({ quitMenu: true });
+    expect(stoppedResult.code, stoppedResult.err).toBe(0);
+    expect(existsSync(join(stopped.base, "menu-calls"))).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(stoppedApp, "Contents", "Info.plist"), "utf8"))
+        .AgentVoiceSourceRevision,
+    ).toBe(stopped.sha);
+
+    const failing = fixture();
+    const app = failing.writeMenuApp(oldRevision);
+    writeFileSync(join(failing.base, "menu-running"), join(app, "Contents", "MacOS", "AgentVoice"));
+    const failedResult = await failing.runMenu({ quitMenu: true, launchResult: "fail" });
+    expect(failedResult.code).toBe(1);
+    expect(failedResult.err).toContain("but could not reopen it");
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+        .AgentVoiceSourceRevision,
+    ).toBe(failing.sha);
+    expect(existsSync(join(failing.base, "launchctl-calls"))).toBe(false);
+  });
+
+  test("publication failure restores and reopens the previously running old app", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(oldRevision);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMenu({ quitMenu: true, installResult: "fail" });
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("reopened the preserved AgentVoice menu app");
+    expect(readFileSync(join(f.base, "menu-calls"), "utf8")).toBe(
+      `quit ${executable} ${oldRevision}\nlaunch ${app}\n`,
+    );
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+        .AgentVoiceSourceRevision,
+    ).toBe(oldRevision);
+    expect(readFileSync(join(f.base, "menu-running"), "utf8")).toBe(executable);
+    expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
+  });
+
+  test("a lost quit acknowledgement refuses the update and reopens the preserved old app", async () => {
+    const f = fixture();
+    const app = f.writeMenuApp(oldRevision);
+    const executable = join(app, "Contents", "MacOS", "AgentVoice");
+    writeFileSync(join(f.base, "menu-running"), executable);
+
+    const result = await f.runMenu({ quitMenu: true, quitResult: "lost" });
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("connection closed before acknowledgement");
+    expect(result.err).toContain("reopened the preserved AgentVoice menu app");
+    expect(readFileSync(join(f.base, "menu-calls"), "utf8")).toBe(
+      `quit ${executable} ${oldRevision}\nlaunch ${app}\n`,
+    );
+    expect(
+      JSON.parse(readFileSync(join(app, "Contents", "Info.plist"), "utf8"))
+        .AgentVoiceSourceRevision,
+    ).toBe(oldRevision);
+    expect(readFileSync(join(f.base, "menu-running"), "utf8")).toBe(executable);
+    expect(existsSync(join(f.base, "launchctl-calls"))).toBe(false);
   });
 });
 

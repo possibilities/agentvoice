@@ -114,3 +114,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0068: Export durable native parentage from persisted history](0068-durable-native-parentage-export.md) — accepted; version 2 native metadata keeps ancestry separate from semantic Work and exact receiving turns.
 
 - [0069: Observe directory role content by runtime generation](0069-directory-role-content-status.md) — accepted; additive content status preserves directory skill and database revision semantics.
+
+- [0070: Preserve menu presence during app-only updates](0070-installer-owned-menu-presence.md) — accepted; explicit private graceful quit and conditional relaunch keep menu updates independent from server restart.
