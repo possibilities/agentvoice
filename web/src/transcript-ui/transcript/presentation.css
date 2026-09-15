@@ -542,6 +542,11 @@
   color: var(--muted);
   text-align: left;
 }
+/* Sticky offsets use the untransformed position of virtual rows and can
+   place this opaque header over the last activity at the live edge. */
+[data-windowed-row-key] .activity-group__trigger {
+  position: static;
+}
 .activity-group__count {
   flex: none;
   color: var(--text);
