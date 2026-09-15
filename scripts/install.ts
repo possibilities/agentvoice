@@ -341,7 +341,7 @@ export async function install(
     console.log(
       menuOnly
         ? "Updated the AgentVoice menu. The server and any call were left unchanged."
-        : "No prompts, credentials or Codex settings changed. Connect with agentvoice.",
+        : "No prompts, credentials or Codex settings changed. Open https://agentvoice.localhost or run agentvoice client.",
     );
   } catch (error) {
     if (installApp && menuWasRunning && !menuRestoreAttempted) {
