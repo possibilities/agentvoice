@@ -21,6 +21,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const input = page.getByRole("textbox", { name: "Message Agent" });
     const send = page.getByRole("button", { name: "Send", exact: true });
     const line = page.locator(".transcript-composer__activity-line");
+    const inputGroup = page.locator('[data-slot="input-group"]');
+    await expect(send).toBeDisabled();
+    await expect.poll(() => inputGroup.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
     await input.fill("Retain this draft through every connection state");
     const metrics = () =>
       line.evaluate((el) => {
@@ -50,10 +53,27 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(send).toBeEnabled();
     await page.screenshot({ path: `test-results/divider-working-${reducedMotion}.png` });
 
+    view.agentControls!.active = false;
+    view.agentNotice = "Agent transcript is catching up. Input remains available.";
+    await expect(page.getByText(view.agentNotice, { exact: true })).toBeVisible();
+    await expect(send).toBeEnabled();
+    await expect(line).toHaveAttribute("data-reachable", "true");
+    await expect.poll(async () => (await metrics()).color).toBe(idle.color);
+    await expect(input).toHaveValue("Retain this draft through every connection state");
+    await page.screenshot({ path: `test-results/divider-catching-up-${reducedMotion}.png` });
+
     // Retained activity can be stale: unavailable wins over a last-known active turn.
     view.phase = "unavailable";
+    view.agentNotice = "Agent transcript disconnected. Reconnecting…";
     view.agentControls!.available = false;
+    view.agentControls!.inputUnavailableReason =
+      "Agent input is unavailable while the transcript reader reconnects. Your draft is still editable.";
     await expect(send).toBeDisabled();
+    await expect(
+      page.getByText(view.agentControls!.inputUnavailableReason, { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(view.agentNotice, { exact: true })).toBeVisible();
+    await expect.poll(() => inputGroup.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
     await expect.poll(async () => (await metrics()).animation).toBe("none");
     const unavailable = await metrics();
     expect(unavailable.color).not.toBe(idle.color);
@@ -64,6 +84,8 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 
     view.phase = "detached";
     view.agentControls!.available = true;
+    view.agentControls!.inputUnavailableReason = undefined;
+    view.agentNotice = undefined;
     view.agentControls!.active = false;
     await expect(send).toBeEnabled();
     await expect.poll(async () => (await metrics()).color).toBe(idle.color);

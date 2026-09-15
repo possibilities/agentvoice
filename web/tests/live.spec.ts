@@ -311,6 +311,7 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
               persistenceScope: "http-failure-workspace-thread",
               voice: [message("v", "Voice remains readable.")],
               agent: [],
+              agentNotice: "Agent transcript is catching up. Input remains available.",
               agentControls: {
                 available: true,
                 active: false,
@@ -324,17 +325,39 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
   );
   await page.goto("/");
   await expect(page.getByText("Voice remains readable.")).toBeVisible();
+  await expect(
+    page.getByText("Agent transcript is catching up. Input remains available.", { exact: true }),
+  ).toBeVisible();
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await input.fill("Retained through browser failure");
   const send = page.getByRole("button", { name: "Send", exact: true });
   await expect(send).toBeEnabled();
   fail = true;
-  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(1);
+  await expect(page.getByText("Agent transcript is reconnecting…")).toHaveCount(1);
+  await expect(
+    page.getByText(
+      "Agent input is unavailable because the web reader disconnected. Your draft is still editable.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Agent transcript is catching up. Input remains available.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Agent transcript disconnected. Reconnecting…", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Voice remains readable.")).toBeVisible();
   await expect(input).toHaveValue("Retained through browser failure");
   await expect(send).toBeDisabled();
   fail = false;
-  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toHaveCount(0);
+  await expect(page.getByText("Agent transcript is reconnecting…")).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Agent input is unavailable because the web reader disconnected. Your draft is still editable.",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Agent transcript is catching up. Input remains available.", { exact: true }),
+  ).toBeVisible();
   await expect(send).toBeEnabled();
 });
 

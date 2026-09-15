@@ -11,6 +11,8 @@ export type AgentQueuedMessage = {
 
 export type AgentControlsView = {
   available: boolean;
+  /** Plain-language reason actions are unavailable while the draft remains editable. */
+  inputUnavailableReason?: string;
   active: boolean;
   stopping: boolean;
   pending: boolean;

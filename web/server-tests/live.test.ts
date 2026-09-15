@@ -606,6 +606,76 @@ test("a timed-out live read retains verified rows and reconnects the same incarn
   }
 }, 10_000);
 
+test("capacity pressure before the first verified live read keeps input fenced", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.failLive("busy");
+    await h.start();
+    const unavailable = await reader.read();
+    expect(unavailable.phase).toBe("unavailable");
+    expect(unavailable.agentControls?.available).toBe(false);
+    expect(unavailable.agentControls?.inputUnavailableReason).toContain(
+      "transcript reader reconnects",
+    );
+    expect(unavailable.agentNotice).not.toBe(
+      "Agent transcript is catching up. Input remains available.",
+    );
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("native observation capacity pressure keeps verified input available while catching up", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    h.history([user("verified", "Visible through capacity pressure")]);
+    h.feed.update({
+      complete: true,
+      threads: [
+        {
+          id: "main",
+          parentThreadId: null,
+          name: null,
+          status: "idle",
+          activeFlags: [],
+          turn: null,
+        },
+      ],
+    });
+    await h.start();
+    const initial = await until(
+      reader,
+      (view) =>
+        view.agent[0]?.content === "Visible through capacity pressure" &&
+        view.agentControls?.available === true,
+    );
+
+    h.failLive("busy");
+    await Bun.sleep(260);
+    const busy = await reader.read();
+    expect(busy.phase).toBe("live");
+    expect(busy.id).toBe(initial.id);
+    expect(busy.agentControls?.available).toBe(true);
+    expect(busy.agentControls?.inputUnavailableReason).toBeUndefined();
+    expect(busy.agentNotice).toBe("Agent transcript is catching up. Input remains available.");
+
+    h.failLive("unavailable");
+    await Bun.sleep(260);
+    const unavailable = await reader.read();
+    expect(unavailable.phase).toBe("unavailable");
+    expect(unavailable.agentControls?.available).toBe(false);
+    expect(unavailable.agentControls?.inputUnavailableReason).toContain(
+      "transcript reader reconnects",
+    );
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("replacement during reader recovery cannot inherit cache, actions, or incarnation", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);

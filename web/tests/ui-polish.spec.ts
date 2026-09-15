@@ -46,7 +46,7 @@ for (const width of [1440, 390]) {
     await expect(status).toHaveText("");
     await expect(status).not.toHaveAttribute("data-visible");
     view.phase = "unavailable";
-    await expect(status).toContainText("AgentVoice is unavailable. Reconnecting…");
+    await expect(status).toContainText("Agent transcript is reconnecting…");
     await expect(status).toHaveAttribute("data-visible", "true");
     await expect(status).toHaveCSS("text-align", "center");
     await expect(status).toHaveCSS("border-radius", "0px");

@@ -125,3 +125,68 @@ test("history responses cannot cross runtime replacement and old content cannot 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("root live projection does not consume disposable worker observation capacity", async () => {
+  const root = mkdtempSync("/tmp/av-live-projection-");
+  const requests: string[] = [];
+  const ready: VoiceState = {
+    available: true,
+    phase: "live",
+    mic: { muted: false, effectiveMuted: false },
+    speaker: { muted: false, effectiveMuted: false },
+    conversation: {
+      workspace: root,
+      threadId: "main",
+      model: null,
+      effort: null,
+      conversationMode: "continued",
+      voiceVersion: null,
+      prompts: [],
+    },
+  };
+  const controller = new RuntimeController({
+    instanceId: "instance",
+    stateDir: root,
+    version: "test",
+    provenance: {
+      parsed: parseArgs([]),
+      options: { debug: false },
+      launchCwd: root,
+    },
+    control: { name: "agentvoice_control", server: {}, tools: [], env: {} },
+    lease: () => () => {},
+    spawn: (_generation, event, lease) => ({
+      pid: 101,
+      nativePid: undefined,
+      exited: Promise.resolve(),
+      notify() {},
+      stop: async () => false,
+      request: async <T>(method: string): Promise<T> => {
+        requests.push(method);
+        if (method === "preflight") return { workspace: root, pid: 101, buildId: "fixture" } as T;
+        if (method === "activate") {
+          await lease("main");
+          event("state", ready);
+        }
+        return null as T;
+      },
+    }),
+  });
+  try {
+    await controller.start();
+    const before = requests.length;
+    expect(
+      await controller.readConversation("conversation.live.get", {
+        expectedInstanceId: "instance",
+        expectedGeneration: 1,
+        rootThreadId: "main",
+        threadId: "main",
+      }),
+    ).toMatchObject({ generation: 1, threadId: "main", items: [] });
+    expect(requests).toHaveLength(before);
+    expect(requests).not.toContain("conversation.live.get");
+  } finally {
+    await controller.shutdown();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

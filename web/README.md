@@ -175,6 +175,13 @@ and working. Voice-client detachment alone keeps the bright state. Reduced motio
 uses a still working indicator; all states occupy the same geometry. Actions retain
 a 44px touch row. Multiline drafts and queue content can
 expand both docks together; long drafts scroll within the capped text field.
+Transient native observation capacity pressure keeps the last verified event
+transport and composer authority, labels the transcript as catching up, and retries
+without dimming the divider. Actual reader, observer, controller, or browser
+transport loss fences actions and names the reason beside the still-editable draft.
+An empty draft disables Send without fading the input group, and reconnect fencing
+dims only the unavailable actions so editable text does not visually claim to be
+disabled.
 
 ## Agent input
 

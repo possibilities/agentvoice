@@ -37,6 +37,7 @@ export async function fixture(
   let history: AgentItem[] = [];
   let delayHistory: Promise<void> | undefined;
   let delayLive: Promise<void> | undefined;
+  let liveFailure: ObservationError | undefined;
   let failDetach = false;
   let liveCall: Call | undefined;
   const forbidden = async (): Promise<never> => {
@@ -77,6 +78,7 @@ export async function fixture(
         throw new ObservationError("stale_generation");
       if (method === "conversation.live.get") {
         await delayLive;
+        if (liveFailure) throw liveFailure;
         return feed.live(threadId);
       }
       if (method !== "conversation.items.list") throw new Error(`Unexpected method ${method}`);
@@ -162,6 +164,9 @@ export async function fixture(
     },
     delayLive: (delay?: Promise<void>) => {
       delayLive = delay;
+    },
+    failLive: (code?: ConstructorParameters<typeof ObservationError>[0]) => {
+      liveFailure = code ? new ObservationError(code) : undefined;
     },
     failNextDetach: () => {
       failDetach = true;

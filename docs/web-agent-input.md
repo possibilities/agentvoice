@@ -111,6 +111,23 @@ scope. Background history failures do not close the live-read socket. Bounded
 diagnostics retain future failure reasons without conversation bodies or secrets.
 See [ADR 0058](adr/0058-durable-web-composer-and-reader-recovery.md).
 
+The controller serves the root live view from its own generation-scoped projection
+after checking instance, generation, lease, and root identity. It does not consume
+a disposable-worker history slot for a result it would discard. Native observation
+capacity pressure (`busy`) from an older controller after a verified live read is
+a catch-up state, not a transport failure. The reader retains its verified event
+socket and input authority, retries the snapshot with backoff, and keeps the
+composer available while identifying the transcript as catching up. Socket loss,
+controller/session mismatch, an unavailable observer, and browser-to-reader loss
+still disable actions. Those states keep the draft editable and show the reason
+beside the composer; a dim divider therefore means input is actually fenced, not
+merely that one observation request was deferred.
+
+Disabled action buttons do not fade the editable field. In particular, an empty
+healthy draft disables Send without making the whole composer look unavailable;
+reconnect states keep full-contrast editable text while the fenced actions and
+plain-language reason carry their own state.
+
 Voice frontend attachment is independent of text interaction. Send, Steer and
 Queue remain available against a reachable, verified retained native session after
 media disconnect; media changes alone do not replace the view or pause its queue.

@@ -30,8 +30,11 @@ const copy = {
   offline: "No agent voice server to connect to.",
   empty: "AgentVoice is ready. Start a client to begin a workspace session.",
   connecting: "Connecting to AgentVoice…",
-  unavailable: "AgentVoice is unavailable. Reconnecting…",
+  unavailable: "Agent transcript is reconnecting…",
 };
+
+const webReaderUnavailable =
+  "Agent input is unavailable because the web reader disconnected. Your draft is still editable.";
 
 const interactiveComposerTarget =
   'a[href], button, input, textarea, select, option, label, summary, [contenteditable="true"], [role="button"], [role="checkbox"], [role="combobox"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="radio"], [role="slider"], [role="spinbutton"], [role="switch"], [role="tab"], [role="textbox"], [tabindex]:not([tabindex="-1"])';
@@ -124,7 +127,18 @@ export function App() {
       } catch {
         if (!controller.signal.aborted) {
           previous = "";
-          setView((current) => ({ ...current, phase: "unavailable" }));
+          setView((current) => ({
+            ...current,
+            phase: "unavailable",
+            agentNotice: "Agent transcript disconnected. Reconnecting…",
+            agentControls: current.agentControls
+              ? {
+                  ...current.agentControls,
+                  available: false,
+                  inputUnavailableReason: webReaderUnavailable,
+                }
+              : undefined,
+          }));
         }
       } finally {
         if (!controller.signal.aborted) timer = setTimeout(read, 1000);
@@ -380,6 +394,11 @@ const AgentInput = memo(function AgentInput({
       {controls.notice ? (
         <p className="transcript-notice" role="status">
           {controls.notice}
+        </p>
+      ) : null}
+      {controls.inputUnavailableReason ? (
+        <p className="transcript-notice transcript-input-notice" role="status">
+          {controls.inputUnavailableReason}
         </p>
       ) : null}
       <TranscriptComposer

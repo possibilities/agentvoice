@@ -1085,6 +1085,17 @@ export class RuntimeController implements ControlBackend {
       throw new ObservationError("unavailable");
     if (params.rootThreadId !== this.threadId || !this.leases.has(params.rootThreadId))
       throw new ObservationError("forbidden_thread");
+    // The root live view is already a controller-owned, generation-scoped projection.
+    // Its identity and lease were verified above, so asking the disposable worker to
+    // authorize the same read only consumes scarce observation capacity and the
+    // worker result is discarded below. Descendant views still go through native
+    // ancestry authorization before the projection is returned.
+    if (
+      method === "conversation.live.get" &&
+      "threadId" in params &&
+      params.threadId === this.threadId
+    )
+      return this.lifecycle.live(params.threadId);
     if (this.observationPending >= 4) throw new ObservationError("busy");
     const active = this.active;
     const incarnation = this.activeIncarnation;

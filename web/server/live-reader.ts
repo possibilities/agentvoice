@@ -226,6 +226,10 @@ export class LiveReader {
       })
       .catch((error) => {
         this.diagnose(this.stage, error);
+        if (this.recoverableCapacityPressure(error)) {
+          this.scheduleRetry();
+          return this.catchingUp();
+        }
         if (
           this.replacementFailure(error) ||
           (this.identity && this.observedReplacement(this.identity))
@@ -330,6 +334,42 @@ export class LiveReader {
     );
   }
 
+  private recoverableCapacityPressure(error: unknown) {
+    return (
+      this.stage === "conversation.live" &&
+      error instanceof SocketFailure &&
+      error.code === "busy" &&
+      !!this.identity &&
+      this.actionable(this.identity)
+    );
+  }
+
+  private catchingUp(): LiveView {
+    const identity = this.identity!;
+    const agentControls = this.controlsView();
+    return {
+      ...this.cached,
+      phase: this.sessionPhase(identity),
+      id: this.viewId,
+      persistenceScope: persistenceScope(identity.workspace, identity.threadId),
+      agentControls,
+      agentNotice: agentControls.available
+        ? "Agent transcript is catching up. Input remains available."
+        : "Agent transcript and turn state are catching up.",
+    };
+  }
+
+  private controlsView(): NonNullable<LiveView["agentControls"]> {
+    const controls = this.controls.view();
+    return controls.available
+      ? controls
+      : {
+          ...controls,
+          inputUnavailableReason:
+            "Agent input is paused while the current turn state catches up. Your draft is still editable.",
+        };
+  }
+
   private bindControls(identity: Identity) {
     if (!this.viewId) this.viewId = randomUUID();
     this.controls.bind({ ...identity, viewId: this.viewId });
@@ -363,7 +403,16 @@ export class LiveReader {
       phase,
       id: this.viewId,
       persistenceScope: persistenceScope(this.identity.workspace, this.identity.threadId),
-      agentControls: { ...controls, available: false },
+      agentControls: {
+        ...controls,
+        available: false,
+        inputUnavailableReason:
+          phase === "offline"
+            ? "Agent input is unavailable because the AgentVoice server is offline. Your draft is still editable."
+            : phase === "connecting"
+              ? "Agent input is unavailable while the AgentVoice session changes. Your draft is still editable."
+              : "Agent input is unavailable while the transcript reader reconnects. Your draft is still editable.",
+      },
       ...(notice ? { agentNotice: notice } : {}),
     };
   }
@@ -774,7 +823,7 @@ export class LiveReader {
       agent: [...messages.values()].filter((message) => message !== undefined),
       agentHistoryLoading: !this.initialHistorySettled,
       voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,
-      agentControls: this.controls.view(),
+      agentControls: this.controlsView(),
       voiceNotice: voiceNotice ?? this.voice.notice,
       agentNotice:
         this.historyNotice ??

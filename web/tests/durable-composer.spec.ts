@@ -42,13 +42,19 @@ test("detached sessions retain interactive drafts while unavailable sessions dis
   await expect(page.getByText("Native work continued while voice was detached.")).toBeVisible();
   view.phase = "unavailable";
   view.agentControls!.available = false;
-  await expect(page.getByText("AgentVoice is unavailable. Reconnecting…")).toBeVisible();
+  view.agentControls!.inputUnavailableReason =
+    "Agent input is unavailable while the transcript reader reconnects. Your draft is still editable.";
+  await expect(page.getByText("Agent transcript is reconnecting…")).toBeVisible();
+  await expect(
+    page.getByText(view.agentControls!.inputUnavailableReason, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await expect(input).toHaveValue("Typed while detached 日本語");
   await page.reload();
   await expect(input).toHaveValue("Typed while detached 日本語");
   view.phase = "live";
   view.agentControls!.available = true;
+  view.agentControls!.inputUnavailableReason = undefined;
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await expect(input).toHaveValue("Typed while detached 日本語");
 });
