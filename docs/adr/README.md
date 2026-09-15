@@ -126,3 +126,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0074: Keep historical speech outside realtime input](0074-fail-closed-voice-history.md)
 
 - [0075: Own the web transcript UI in AgentVoice](0075-own-web-transcript-ui.md) — accepted; source, dependencies, scoped styles, and regressions live inside AgentVoice without an AgentChats package or archive.
+
+- [0076: Replace media clients through server-owned admission](0076-media-client-takeover.md) — accepted; terminal takeover is automatic, Android requires a fenced confirmation, and native work remains in the same retained session.

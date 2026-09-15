@@ -69,14 +69,30 @@ notification Hang up end it. See [call navigation](android-call-navigation.md).
 | --- | --- | --- |
 | `discover` | none | Read-only media-owner plus retained workspace/thread discovery |
 | `observe` | none | Read-only lifecycle snapshot and subsequent observations; cannot become owner |
-| `call` | optional `{clientId: UUID}` | Reuse a restored workspace session or create an unmarked lazy one, then reserve its one media attachment until this connection closes |
+| `call` | `{clientId: UUID, takeover?: "auto" | "confirm" | {token: string}}` | Reuse a restored workspace session or create an unmarked lazy one, then reserve its one media attachment until this connection closes |
 | `input` | `{action:"mute",target:"mic"|"speaker",muted:boolean}` or `{action:"hold"|"release"}` | Owner only; update server-authoritative mute gates |
 | `client-media` | Media message below | Owner only; session-correlated signaling to active runtime |
 
-Call acceptance means media reservation, not a new backend session or live audio.
+A successful `call` result of `null` means media reservation, not a new backend
+session or live audio. `takeover: "auto"` replaces an existing media owner after
+its acknowledged detach; the terminal client selects this policy automatically.
+`takeover: "confirm"` admits an idle client or returns
+`{takeoverRequired:true,token}` while leaving the incumbent untouched. The native
+Android client shows confirmation before submitting `takeover: {token}` on the
+same connection. Cancel closes only the candidate connection. A challenge result
+is not call acceptance and must not start media.
+
+Tokens bind the requesting connection/client ID and exact incumbent attachment.
+A stale or expired confirmation cannot evict a newer owner; when occupied, the
+server issues another challenge requiring a new human decision. Simultaneous
+replacement attempts are serialized by server admission, and disconnecting a
+waiting candidate fences its pending request. Omitting `takeover` preserves
+legacy busy rejection. A failed or unknown detach refuses the successor while
+retaining native work. See [the takeover decision](adr/0076-media-client-takeover.md).
+
 Server startup restores a valid marked workspace session without a frontend; when
 no marker exists, the first accepted frontend lazily starts the session. Later
-frontends attach to either retained session. `clientId` is optional correlation
+frontends attach to either retained session. `clientId` is required correlation
 and a fresh value is allowed; it is not continuation identity. `state.phase` progresses
 through `waiting-ready`, `negotiating`, `live`, `failed`, `stopped`.
 `state.available` indicates call availability; each channel has persistent

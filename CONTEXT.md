@@ -42,7 +42,9 @@ server configuration or thread leases. Both clients use frontend API v3 ([ADR 00
 workspace session. Disconnect releases its hold and closes realtime voice and
 client devices, without stopping the native runtime or work. A later attachment
 may use a fresh clientId and negotiates fresh media on the retained root;
-there is no saved-speech input replay or automatic reconnect. _Avoid_: controller lifetime, native session.
+there is no saved-speech input replay or automatic reconnect. Terminal connections
+automatically replace an existing media owner; native Android requires confirmation
+bound to the current attachment. Replacement preserves the workspace session. _Avoid_: controller lifetime, native session.
 
 **Phone frontend** — `agentvoice phone` plus its one-owner browser page on the
 same Android/Termux device. The command serves a capability-bearing loopback URL;

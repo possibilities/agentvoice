@@ -241,6 +241,10 @@ leases remain. After detach fencing, one later frontend with any fresh clientId
 may attach new media to that same session; no input, controls, SDP or audio are
 replayed. Saved speech remains read-only observation and never initializes successor
 voice input ([ADR 0074](docs/adr/0074-fail-closed-voice-history.md)).
+Terminal connections automatically replace the current media owner; native Android
+requires an explicit server-fenced confirmation. Cancel leaves the existing owner
+untouched. Replacement retains the same workspace session and native work; see
+[ADR 0076](docs/adr/0076-media-client-takeover.md).
 Successful detach requires acknowledged native voice stop;
 refusal or timeout reports an unknown stop outcome and blocks later media owners
 until server restart while retaining native work. Persistent mute assignments

@@ -25,6 +25,8 @@ macOS service installation, private-network pairing, and Android development.
 - Each workspace resumes one exact Codex thread. Closing the active frontend stops
   realtime speech and client media, while the server retains native work and its
   endpoints. A later sole frontend attaches fresh media to the same session.
+  A terminal connection automatically replaces the current media client; Android
+  asks for confirmation before replacing it. Cancel leaves that client connected.
 
 The server never owns production audio. Network access is opt-in, authenticated,
 and limited to the client API; native Codex, attachment, MCP, and event sockets

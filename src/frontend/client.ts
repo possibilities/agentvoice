@@ -28,6 +28,7 @@ export async function connectFrontend(
     signal?: AbortSignal;
     timeoutMs?: number;
     waiting?: () => void;
+    takeover?: "auto";
     onMedia?: (message: ServerMediaMessage) => void;
   } = {},
 ) {
@@ -49,11 +50,13 @@ export async function connectFrontend(
       (info.mode & 0o077) !== 0
     )
       throw new Error("Unsafe AgentVoice server socket");
-    const observation = await observeFrontend(path, () => {});
-    try {
-      await observation.waitUntilAvailable(options);
-    } finally {
-      observation.socket.close();
+    if (options.takeover !== "auto") {
+      const observation = await observeFrontend(path, () => {});
+      try {
+        await observation.waitUntilAvailable(options);
+      } finally {
+        observation.socket.close();
+      }
     }
   }
   options.signal?.throwIfAborted();
@@ -91,11 +94,11 @@ export async function connectFrontend(
   if (options.signal?.aborted) cancel();
   const timer = setTimeout(
     () => fail(new Error("AgentVoice server did not accept the call")),
-    5000,
+    options.timeoutMs ?? (options.takeover === "auto" ? 30_000 : 5000),
   );
   function send(
     method: string,
-    params?: FrontendCommand | ClientMediaMessage | { clientId: string },
+    params?: FrontendCommand | ClientMediaMessage | { clientId: string; takeover?: "auto" },
   ) {
     if (closed || socket.destroyed) return;
     if (pendingResponses.size >= 128) {
@@ -109,14 +112,24 @@ export async function connectFrontend(
     const id = String(++next);
     pendingResponses.set(
       id,
-      setTimeout(() => fail(new Error("AgentVoice server did not acknowledge client input")), 5000),
+      setTimeout(
+        () => fail(new Error("AgentVoice server did not acknowledge client input")),
+        method === "call"
+          ? (options.timeoutMs ?? (options.takeover === "auto" ? 30_000 : 5000))
+          : 5000,
+      ),
     );
     socket.write(
       `${JSON.stringify({ v: FRONTEND_VERSION, type: "request", id, method, ...(params ? { params } : {}) })}\n`,
     );
   }
   socket.setEncoding("utf8");
-  socket.on("connect", () => send("call", { clientId: clientId ?? randomUUID() }));
+  socket.on("connect", () =>
+    send("call", {
+      clientId: clientId ?? randomUUID(),
+      ...(options.takeover ? { takeover: options.takeover } : {}),
+    }),
+  );
   socket.on("data", (chunk) => {
     partial += chunk;
     if (Buffer.byteLength(partial) > 1024 * 1024) {
@@ -142,6 +155,8 @@ export async function connectFrontend(
           pendingResponses.delete(frame.id);
           if (!frame.ok) throw new Error(frame.error.message);
           if (frame.id === "1") {
+            if (frame.result !== null)
+              throw new Error("AgentVoice server did not grant media ownership");
             accepted = true;
             clearTimeout(timer);
             ready.resolve();
@@ -212,6 +227,7 @@ export async function runFrontend(
       process.env["AGENTVOICE_CLIENT_ID"],
       {
         signal: abort.signal,
+        takeover: "auto",
         waiting: () => console.error("Closing previous call…"),
         onMedia: (message) => {
           void media.receive(message);
