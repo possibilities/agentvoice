@@ -168,6 +168,21 @@ The desktop AgentVoice web UI presents the server's Voice and Agent transcripts
 and typed Agent input without taking phone media ownership. Native approvals stay
 pending because AgentVoice does not answer them.
 
+## Moving voice between clients
+
+If another client owns voice, Android asks **Move voice to this phone?** before
+replacing it. **Connect here** disconnects that client's audio and attaches this
+phone to the same conversation and agent work. **Cancel**, Back, or dismissing
+the dialog closes only the waiting phone connection. No audio device or WebRTC
+engine is created while confirmation is pending. Microphone permission and the
+foreground service are prepared as usual before connecting.
+
+The service retains the prompt across Activity recreation. Confirmation uses a
+single transport-bound challenge; old dialog callbacks cannot confirm or cancel
+a newer attempt. A changed or expired challenge can require a fresh confirmation.
+Transport loss discards it without replay. Servers predating takeover continue
+to reject a busy connection without disconnecting its owner.
+
 ## Implementation boundaries
 
 - `Protocol.kt`: strict owner-frame decoder, endpoint validation, heartbeat,

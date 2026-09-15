@@ -19,6 +19,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -124,6 +127,25 @@ class MainActivity : ComponentActivity() {
                     onCredits = if (requiresShippingIconCredit(ShippingDesign.icons.channels, BuildConfig.PAID_NOUN_ICONS))
                         ({ credits = true }) else null)
                 if (credits) ShippingCredits { credits = false }
+                ui.takeover?.let { challenge ->
+                    val cancel = {
+                        if (controller?.cancelTakeover(challenge) == true) {
+                            navigation = navigation.disconnected()
+                            hintShownThisVisit = false
+                        }
+                    }
+                    AlertDialog(
+                        onDismissRequest = cancel,
+                        title = { Text("Move voice to this phone?") },
+                        text = { Text("Another client is using voice. Connecting here will disconnect its audio. Your conversation and agent work will continue.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (resumed) controller?.confirmTakeover(challenge)
+                            }) { Text("Connect here") }
+                        },
+                        dismissButton = { TextButton(onClick = cancel) { Text("Cancel") } },
+                    )
+                }
                 val close = { navigateBack() }
                 when {
                     ownerFailed -> ConnectionOverlay(ConnectionScene.Failed, close, action = ::bindCallOwner,

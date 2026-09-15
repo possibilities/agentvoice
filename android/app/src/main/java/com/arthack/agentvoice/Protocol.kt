@@ -88,7 +88,7 @@ private fun channel(objectValue: JsonObject): ChannelState {
 internal sealed interface ServerFrame {
     data class Ping(val nonce: String) : ServerFrame
     data class State(val value: VoiceState) : ServerFrame
-    data class Response(val id: String, val ok: Boolean) : ServerFrame
+    data class Response(val id: String, val ok: Boolean, val takeoverToken: String? = null, val errorCode: String? = null) : ServerFrame
     data class Media(val type: String, val sessionId: String, val sdp: String? = null,
         val mic: ChannelState? = null, val speaker: ChannelState? = null) : ServerFrame
 }
@@ -118,10 +118,23 @@ internal fun parseFrame(text: String): ServerFrame {
             frame.fields("v", "type", "id", "ok", if (ok) "result" else "error")
             val id = frame.string("id")
             requireWire(id.length in 1..128)
-            // This owner sends call/input/client-media only; their result is null.
-            if (ok) requireWire(frame["result"] == JsonNull)
-            else { frame.obj("error").fields("message"); frame.obj("error").string("message") }
-            ServerFrame.Response(id, ok)
+            var takeoverToken: String? = null
+            var errorCode: String? = null
+            if (ok && frame["result"] != JsonNull) {
+                val result = frame.obj("result")
+                result.fields("takeoverRequired", "token")
+                requireWire(result.bool("takeoverRequired"))
+                takeoverToken = result.string("token")
+                requireWire(Regex("^[A-Za-z0-9_-]{32,256}$").matches(takeoverToken))
+            } else if (!ok) {
+                val error = frame.obj("error")
+                if ("code" in error) {
+                    error.fields("message", "code")
+                    errorCode = error.string("code")
+                } else error.fields("message")
+                error.string("message")
+            }
+            ServerFrame.Response(id, ok, takeoverToken, errorCode)
         }
         "client-media" -> {
             frame.fields("v", "type", "message")

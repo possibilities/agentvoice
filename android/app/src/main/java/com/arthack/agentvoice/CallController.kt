@@ -11,12 +11,12 @@ import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import java.util.UUID
 import kotlinx.serialization.json.*
 
 internal data class CallUi(
     val running: Boolean = false,
     val connected: Boolean = false,
+    val takeover: TakeoverChallenge? = null,
     val phase: String = "Ready",
     val message: String? = null,
     val micMuted: Boolean = true,
@@ -34,6 +34,8 @@ internal data class CallUi(
 internal interface OwnedCallController {
     val ui: CallUi
     fun start(credential: CallCredential)
+    fun confirmTakeover(challenge: TakeoverChallenge) {}
+    fun cancelTakeover(challenge: TakeoverChallenge): Boolean = false
     fun toggleMute(target: String)
     fun hold()
     fun release()
@@ -65,6 +67,8 @@ internal class CallController(
     private var generation = 0L
     private var transport: CallTransport? = null
     private var media: MediaEngine? = null
+    private var peerEvents: PeerEvents? = null
+    private var admission = CallAdmission()
     private var ledger: WireLedger? = null
     private var gate = AudioGate()
     private var opened = false
@@ -85,10 +89,11 @@ internal class CallController(
         opened = false
         admitted = false
         hasState = false
+        admission = CallAdmission()
         ledger = WireLedger(SystemClock::elapsedRealtime)
         ui = CallUi(running = true, phase = "Connecting")
         fun dispatch(block: () -> Unit) { main.post { if (generation == epoch && ui.running) guarded(block) } }
-        media = mediaFactory(object : PeerEvents {
+        peerEvents = object : PeerEvents {
             override fun offer(id: String, sdp: String) = guarded {
                 if (generation == epoch) send("client-media", buildJsonObject {
                     put("type", "offer"); put("sessionId", id); put("sdp", sdp)
@@ -116,7 +121,7 @@ internal class CallController(
                 refresh()
             }
             override fun fatal(message: String) { if (generation == epoch) stop(message) }
-        })
+        }
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) = dispatch {
                 stop("Network changed. Check Tailscale, then start again.")
@@ -129,7 +134,7 @@ internal class CallController(
         val transportEvents = object : TransportEvents {
             override fun opened() = dispatch {
                 opened = true
-                send("call", buildJsonObject { put("clientId", UUID.randomUUID().toString()) })
+                send("call", admission.initialRequest())
             }
             override fun text(value: String, consumed: () -> Unit) {
                 main.post {
@@ -160,11 +165,16 @@ internal class CallController(
                 val method = ledger!!.response(frame.id)
                 val ack = acknowledgements.remove(frame.id)
                 if (!frame.ok) {
-                    stop(if (method == "call") "Call unavailable. The server may be busy or closing a call."
+                    stop(if (method == "call") callAdmissionFailure(frame.errorCode)
                         else "Server refused a control. Start again when it is ready.")
                     return
                 }
-                if (method == "call") admitted = true
+                if (method == "call") {
+                    val challenge = admission.response(frame.takeoverToken)
+                    requireWire(challenge == null || media == null)
+                    admitted = challenge == null
+                    ui = ui.copy(takeover = challenge)
+                } else requireWire(frame.takeoverToken == null)
                 if (ack?.action == "mute") gate.acknowledgeMute(ack.target!!)
                 if (ack?.action == "hold" && ack.revision == holdRevision) gate.acknowledgeHold()
                 refresh()
@@ -180,6 +190,10 @@ internal class CallController(
                 "prepare" -> {
                     requireWire(prepared.add(frame.sessionId))
                     if (prepared.size > 256) prepared.remove(prepared.first())
+                    requireWire(ui.takeover == null)
+                    // A successful server admission may emit prepare before its call reply.
+                    // Challenges emit no media; keep audio focus/routing closed until prepare.
+                    if (media == null) media = mediaFactory(peerEvents ?: throw ProtocolFailure())
                     media!!.prepare(frame.sessionId)
                 }
                 "answer" -> media!!.answer(frame.sessionId, frame.sdp!!)
@@ -211,6 +225,17 @@ internal class CallController(
             outputLevel = if (gate.speakerOpen) peer?.outputLevel ?: 0f else 0f)
         main.postDelayed({ tick(epoch) }, 50)
     }
+    override fun cancelTakeover(challenge: TakeoverChallenge): Boolean {
+        if (!ui.running || ui.takeover !== challenge) return false
+        stop()
+        return true
+    }
+    override fun confirmTakeover(challenge: TakeoverChallenge) = guarded {
+        if (!ui.running) return@guarded
+        val params = admission.confirm(challenge) ?: return@guarded
+        ui = ui.copy(takeover = null, phase = "Connecting")
+        send("call", params)
+    }
     override fun toggleMute(target: String) = guarded {
         if (!ui.connected || gate.controlsPending) return@guarded
         release()
@@ -239,6 +264,7 @@ internal class CallController(
         media?.gates(admitted && gate.micOpen, admitted && gate.speakerOpen)
         ui = ui.copy(connected = live,
             phase = when {
+                ui.takeover != null -> "Confirmation needed"
                 live -> "Connected"
                 gate.state.phase == "failed" -> "Voice unavailable"
                 gate.state.phase == "stopped" && hasState -> "Voice stopped"
@@ -263,6 +289,8 @@ internal class CallController(
         transport?.cancel(); transport = null
         runCatching { media?.stop() }.onFailure { cleanupFailed = true }; media = null
         networkCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }; networkCallback = null
+        peerEvents = null
+        admission = CallAdmission()
         ledger = null
         acknowledgements.clear()
         prepared.clear()

@@ -12,6 +12,7 @@ class CallControllerTest {
     private lateinit var controller: CallController
     private lateinit var transport: FakeTransport
     private lateinit var media: FakeMedia
+    private var mediaCreations = 0
     private val session = "11111111-1111-4111-8111-111111111111"
     private val successor = "22222222-2222-4222-8222-222222222222"
     private val grant = DeviceGrant.parse("""{"version":1,"endpoint":"wss://example.test/v2/client","token":"${"a".repeat(32)}.${"b".repeat(64)}"}""")
@@ -39,15 +40,18 @@ class CallControllerTest {
         override fun stop() { stopped = true; mic = false; speaker = false; live = null; prepared.clear() }
         fun connect(id: String) { live = id; events.connected(id) }
     }
-    private fun start() {
+    private fun beginAdmission() {
         main {
             controller = CallController(instrumentation.targetContext,
-                mediaFactory = { events -> FakeMedia(events).also { media = it } },
+                mediaFactory = { events -> mediaCreations++; FakeMedia(events).also { media = it } },
                 transportFactory = { _, events -> FakeTransport(events).also { transport = it } },
                 permissionGranted = { true }, observeNetwork = false)
             controller.start(grant)
             transport.events.opened()
         }
+    }
+    private fun start() {
+        beginAdmission()
         reply(transport.requests.first().string("id"))
         receive("""{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"$session"}}""")
         main { media.connect(session) }
@@ -58,6 +62,64 @@ class CallControllerTest {
     private fun state(muted: Boolean, effective: Boolean, phase: String = "live", activity: String = "unknown") = receive("""{"v":3,"type":"state","state":{"codingActivity":"$activity","available":true,"phase":"$phase","mic":{"muted":$muted,"effectiveMuted":$effective},"speaker":{"muted":false,"effectiveMuted":false}}}""")
 
     @After fun cleanup() { if (::controller.isInitialized) main { controller.dispose() } }
+
+    private fun challenge(token: String = "a".repeat(43)) {
+        val id = transport.requests.last().string("id")
+        receive("""{"v":3,"type":"response","id":"$id","ok":true,"result":{"takeoverRequired":true,"token":"$token"}}""")
+    }
+
+    @Test fun challengeCancelCreatesNoMediaAndOldTransportCannotResume() {
+        beginAdmission()
+        challenge()
+        val oldTransport = transport
+        main {
+            assertEquals(0, mediaCreations)
+            assertFalse(controller.ui.connected)
+            assertEquals("Confirmation needed", controller.ui.phase)
+            val prompt = controller.ui.takeover!!
+            assertTrue(controller.cancelTakeover(prompt))
+            assertTrue(oldTransport.cancelled)
+            controller.confirmTakeover(prompt)
+            assertFalse(controller.ui.running)
+            assertEquals(1, oldTransport.requests.size)
+            oldTransport.events.opened()
+        }
+        main { assertEquals(0, mediaCreations); assertFalse(controller.ui.running) }
+    }
+
+    @Test fun successfulAdmissionCanPrepareBeforeTheCallResponse() {
+        beginAdmission()
+        val callId = transport.requests.first().string("id")
+        receive("""{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"$session"}}""")
+        main { media.connect(session) }
+        state(false, false)
+        main { assertFalse(controller.ui.connected); assertFalse(media.mic) }
+        reply(callId)
+        main { assertTrue(controller.ui.connected); assertTrue(media.mic) }
+    }
+
+    @Test fun freshChallengeRejectsOldConfirmAndCancelCallbacks() {
+        beginAdmission()
+        challenge()
+        val first = controller.ui.takeover!!
+        val originalClient = transport.requests.first().obj("params").string("clientId")
+        main { controller.confirmTakeover(first); controller.confirmTakeover(first) }
+        assertEquals(2, transport.requests.size)
+        assertEquals(originalClient, transport.requests.last().obj("params").string("clientId"))
+        challenge("b".repeat(43))
+        val current = controller.ui.takeover!!
+        main {
+            assertFalse(controller.cancelTakeover(first))
+            controller.confirmTakeover(first)
+            assertSame(current, controller.ui.takeover)
+            assertEquals(2, transport.requests.size)
+            assertEquals(0, mediaCreations)
+            controller.confirmTakeover(current)
+        }
+        reply(transport.requests.last().string("id"))
+        receive("""{"v":3,"type":"client-media","message":{"type":"prepare","sessionId":"$session"}}""")
+        main { assertEquals(1, mediaCreations); assertFalse(controller.cancelTakeover(current)) }
+    }
 
     @Test fun codingActivityUsesAuthoritativeStateAndClearsWithTheCall() {
         start()
