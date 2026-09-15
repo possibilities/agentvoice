@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync,
   lstatSync,
@@ -82,8 +82,19 @@ export class AgentControls {
   private readonly requests = new Map<string, { body: string; result: Promise<void> }>();
   private readonly send: Send;
 
-  constructor(stateDir: string, send?: Send) {
-    this.path = join(stateDir, "web", "queued-messages.json");
+  constructor(stateDir: string, send?: Send, workspace?: string) {
+    // Reader selection is host-owned. Keep the existing default endpoint's recovery
+    // file, but never expose it to an explicitly selected workspace server.
+    this.path =
+      workspace === undefined
+        ? join(stateDir, "web", "queued-messages.json")
+        : join(
+            stateDir,
+            "web",
+            "queues",
+            createHash("sha256").update(workspace).digest("hex"),
+            "queued-messages.json",
+          );
     this.send =
       send ??
       ((target, operation, current) => sendAgentOperation(stateDir, target, operation, current));

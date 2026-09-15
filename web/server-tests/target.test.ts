@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { webOrigin } from "../../src/web-target.ts";
+import { AgentControls } from "../server/agent-controls.ts";
 import { LiveReader } from "../server/live-reader.ts";
 import { isLocalRequest } from "../server/local-origin.ts";
 import { fixture } from "./fixture.ts";
@@ -29,6 +31,22 @@ test("parallel readers select independent workspace sessions and never fall back
   const state = mkdtempSync(join(tmpdir(), "av-parallel-"));
   const production = await fixture(undefined, { stateDir: state });
   const testing = await fixture(undefined, { stateDir: state, named: true });
+  const seedQueue = async (workspace: string, selected: boolean, text: string) => {
+    const controls = new AgentControls(state, undefined, selected ? workspace : undefined);
+    const viewId = randomUUID();
+    controls.bind({
+      workspace,
+      viewId,
+      threadId: "main",
+      instanceId: randomUUID(),
+      generation: 1,
+      controlProtocolVersion: 6,
+    });
+    controls.observe({ id: "busy", status: "inProgress" }, true, 1);
+    await controls.command({ action: "queue", viewId, requestId: randomUUID(), text });
+  };
+  await seedQueue(production.root, false, "Production queue");
+  await seedQueue(testing.root, true, "Test queue");
   const defaultReader = new LiveReader(state);
   const testReader = new LiveReader(state, undefined, undefined, testing.root);
   const missingReader = new LiveReader(state, undefined, undefined, join(state, "missing"));
@@ -56,6 +74,8 @@ test("parallel readers select independent workspace sessions and never fall back
     expect(p.agent.map((m) => m.content)).toEqual(["Production"]);
     expect(t.agent.map((m) => m.content)).toEqual(["Testing"]);
     expect(p.persistenceScope).not.toBe(t.persistenceScope);
+    expect(p.agentControls?.queue.map((row) => row.text)).toEqual(["Production queue"]);
+    expect(t.agentControls?.queue.map((row) => row.text)).toEqual(["Test queue"]);
     expect(missing.phase).toBe("offline");
     expect(missing.agent).toEqual([]);
     await testing.stopFrontend();

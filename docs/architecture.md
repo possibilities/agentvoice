@@ -50,12 +50,13 @@ owns the current source map and recording/attachment implementation guidance.
   frontend creates the lazy workspace session. Keep it pinned until server
   shutdown. No reset/deletion or context-policy changes.
 - web/: Agent | Voice browser composition using the packed `@agentchats/transcript`
-  API. `server/live-reader.ts` observes the default frontend, verifies the live
+  API. `server/live-reader.ts` observes the default or explicitly selected workspace
+  frontend without fallback, verifies the live
   controller and fences native history/live snapshots and saved voice tails.
   `server/agent-controls.ts` owns explicit Agent composer input and the private paused-on-restart
   queue; `server/agent-sender.ts` uses the existing exact-thread attachment gateway.
   No browser-selected endpoints, native RPC forwarding or call ownership.
-  `src/web-serve.ts` owns the fixed portless URL and foreground process; Vite
+  `src/web-serve.ts` owns the exact configured portless origin and foreground process; Vite
   dev is editable by default. See [the web contract](../web/README.md).
 - src/threads/: one-shot read-only native-thread table for `agentvoice threads` and
   `watch`. Reuse frontend/controller discovery and the event socket; at most four
@@ -297,3 +298,10 @@ shape and final WebRTC protocol mapping. Runtime tracks the matching started req
 the media host qualifies it with live media. Control exposes dedicated `voice_get` and
 validates `voice_set` before saving. SQLite receipts retain resolved random choices,
 while the controller journal separately owns saved/application outcomes (ADR 0054).
+
+The host transcript reader selects the default frontend endpoint unless launched
+with an explicit canonical workspace. Named readers never fall back to the default
+endpoint. Their host-owned pending-input queues live in workspace-hashed
+`web/queues/` directories; the default endpoint retains `web/queued-messages.json`
+for backward-compatible recovery. Reader origin names are deployment labels, not
+queue or native session identity. See [ADR 0073](adr/0073-parallel-workspace-web-readers.md).

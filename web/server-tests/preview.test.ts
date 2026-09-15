@@ -13,9 +13,14 @@ async function freePort() {
   return address.port;
 }
 
-test.each(["dev", "preview"] as const)(
-  "%s serves the API through portless HTTPS, rejects duplicate binds, and closes on TERM",
-  async (mode) => {
+test.each([
+  ["dev", "agentvoice"],
+  ["preview", "agentvoice"],
+  ["dev", "agentvoice-test"],
+  ["preview", "agentvoice-test"],
+] as const)(
+  "%s %s serves the API through portless HTTPS, rejects duplicate binds, and closes on TERM",
+  async (mode, name) => {
     const web = resolve(import.meta.dirname, "..");
     // The check workflow builds before testing. Exercise those actual assets.
     if (mode === "preview" && !existsSync(join(web, "dist/index.html")))
@@ -26,8 +31,8 @@ test.each(["dev", "preview"] as const)(
       ...process.env,
       __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: ".localhost",
       PORT: String(port),
-      PORTLESS_URL: "https://agentvoice-test.localhost",
-      AGENTVOICE_WEB_NAME: "agentvoice-test",
+      PORTLESS_URL: `https://${name}.localhost`,
+      AGENTVOICE_WEB_NAME: name,
       XDG_STATE_HOME: directory,
     };
     const backend = Bun.spawn([process.execPath, join(web, `server/${mode}.ts`)], {
@@ -62,7 +67,7 @@ test.each(["dev", "preview"] as const)(
           "-days",
           "1",
           "-subj",
-          "/CN=agentvoice-test.localhost",
+          `/CN=${name}.localhost`,
           "-keyout",
           key,
           "-out",
@@ -79,7 +84,7 @@ test.each(["dev", "preview"] as const)(
       import { createProxyServer } from ${JSON.stringify(new URL("../node_modules/portless/dist/index.js", import.meta.url).href)};
       import { readFileSync, writeFileSync } from "node:fs";
       const server = createProxyServer({
-        getRoutes: () => [{ hostname: "agentvoice-test.localhost", port: ${port} }], proxyPort: 443,
+        getRoutes: () => [{ hostname: "${name}.localhost", port: ${port} }], proxyPort: 443,
         tls: { cert: readFileSync(${JSON.stringify(certificate)}), key: readFileSync(${JSON.stringify(key)}) }
       });
       server.listen(0, "127.0.0.1", () => writeFileSync(${JSON.stringify(proxyPortFile)}, String(server.address().port)));
@@ -91,8 +96,8 @@ test.each(["dev", "preview"] as const)(
       expect(existsSync(proxyPortFile)).toBe(true);
       const proxyPort = Number(readFileSync(proxyPortFile, "utf8"));
       const headers = {
-        Host: "agentvoice-test.localhost",
-        Origin: "https://agentvoice-test.localhost",
+        Host: `${name}.localhost`,
+        Origin: `https://${name}.localhost`,
       };
       // The certificate is synthetic, generated only inside this test directory.
       const options = { headers, tls: { rejectUnauthorized: false } };
@@ -104,7 +109,7 @@ test.each(["dev", "preview"] as const)(
         expect(document).toContain("/@vite/client");
         const client = await (await fetch(`${base}/@vite/client`, options)).text();
         expect(client.includes('const socketProtocol = "wss"')).toBe(true);
-        expect(client.includes('"agentvoice-test.localhost"')).toBe(true);
+        expect(client.includes(JSON.stringify(`${name}.localhost`))).toBe(true);
         expect(client.includes("const hmrPort = 443")).toBe(true);
         const token = client.match(/const wsToken = "([^"\n]+)"/u)?.[1];
         expect(token).toBeDefined();

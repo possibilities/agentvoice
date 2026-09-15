@@ -76,7 +76,10 @@ frontend sockets, unique controller/event endpoints, workspace/thread leases,
 workspace-scoped roles and transcripts separate session state. An explicit
 workspace server never loads the default network gateway, so it neither binds the
 Android endpoint nor changes its grants. The web reader fails offline if its
-selected socket disappears; it never falls back to the default server.
+selected socket disappears; it never falls back to the default server. Pending
+Agent input is saved in a workspace-hashed host queue; it cannot be displayed,
+resumed or overwritten by the other endpoint. The default queue retains its
+existing recovery file.
 
 On macOS the source client re-executes through the already installed signed Bun
 runtime for microphone permission identity, passing this checkout's `src/main.ts`

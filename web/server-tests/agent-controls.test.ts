@@ -271,3 +271,53 @@ test("editing an unknown queue delivery creates a new native identity without mo
     h.close();
   }
 });
+
+test("parallel endpoint queues cannot read, retarget or overwrite each other's saved input", async () => {
+  const h = setup();
+  const testWorkspace = join(h.directory, "test-workspace");
+  const testTarget = { ...h.target, workspace: testWorkspace, viewId: randomUUID() };
+  const testControls = new AgentControls(h.directory, async () => "test-turn", testWorkspace);
+  testControls.bind(testTarget);
+  testControls.observe({ id: "busy-test", status: "inProgress" }, true, 1);
+  const command = (value: object) =>
+    agentCommandSchema.parse({ viewId: testTarget.viewId, requestId: randomUUID(), ...value });
+  try {
+    h.controls.observe({ id: "busy-prod", status: "inProgress" }, true, 2);
+    const production = h.command({ action: "queue", text: "Production only" });
+    await h.controls.command(production);
+    const productionPath = join(h.directory, "web/queued-messages.json");
+    const productionBytes = readFileSync(productionPath, "utf8");
+    expect(testControls.view().queue).toEqual([]);
+    const testing = command({ action: "queue", text: "Test only" });
+    await testControls.command(testing);
+    for (const action of ["resume", "remove", "edit"] as const) {
+      await expect(
+        testControls.command(
+          command({
+            action,
+            id: production.requestId,
+            ...(action === "edit" ? { text: "Hijacked" } : {}),
+          }),
+        ),
+      ).rejects.toThrow("no longer available");
+    }
+    await testControls.command(
+      command({ action: "edit", id: testing.requestId, text: "Edited test" }),
+    );
+    expect(readFileSync(productionPath, "utf8")).toBe(productionBytes);
+    const resumedProduction = new AgentControls(h.directory);
+    const resumedTest = new AgentControls(h.directory, undefined, testWorkspace);
+    expect(resumedProduction.view().queue.map((row) => row.text)).toEqual(["Production only"]);
+    expect(resumedTest.view().queue.map((row) => row.text)).toEqual(["Edited test"]);
+    expect(resumedTest.view().queue[0]?.pausedReason).toContain("Restored");
+    expect(
+      new AgentControls(h.directory, undefined, join(h.directory, "another-workspace")).view()
+        .queue,
+    ).toEqual([]);
+    await testControls.command(command({ action: "remove", id: testing.requestId }));
+    expect(new AgentControls(h.directory, undefined, testWorkspace).view().queue).toEqual([]);
+    expect(readFileSync(productionPath, "utf8")).toBe(productionBytes);
+  } finally {
+    h.close();
+  }
+});

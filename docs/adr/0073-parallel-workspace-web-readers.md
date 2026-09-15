@@ -17,7 +17,10 @@ A reader name is a validated single DNS label for the existing loopback portless
 proxy. An explicit workspace requires a non-default name so the ordinary test
 invocation cannot take the production route. The configured exact origin controls
 Host/Origin admission, Vite allowed hosts, HMR and CSP. Wildcard local origins,
-browser-selected workspaces and native credentials in browser code remain forbidden.
+browser-selected workspaces and native credentials in browser code remain forbidden. Host pending-input queues
+for explicit readers use canonical-workspace-hashed storage; the default endpoint
+retains its legacy queue file for recovery. Origin renaming does not change queue
+identity, and no explicit reader reads or rewrites the default queue.
 
 Separate server processes are the current session container. Existing workspace,
 controller and thread identities remain authoritative; reader deployment names

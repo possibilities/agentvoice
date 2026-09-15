@@ -169,13 +169,16 @@ export class LiveReader {
     private readonly historyRetryMs = 5_000,
     private readonly workspace?: string,
   ) {
-    this.controls = new AgentControls(stateDir, (target, operation, current) =>
-      sendAgentOperation(
-        stateDir,
-        target,
-        operation,
-        () => current() && !!this.identity && this.actionable(this.identity),
-      ),
+    this.controls = new AgentControls(
+      stateDir,
+      (target, operation, current) =>
+        sendAgentOperation(
+          stateDir,
+          target,
+          operation,
+          () => current() && !!this.identity && this.actionable(this.identity),
+        ),
+      workspace,
     );
   }
 
