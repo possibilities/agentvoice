@@ -36,9 +36,9 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
     private val main = Handler(Looper.getMainLooper())
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private var oldMode = AudioManager.MODE_NORMAL
-    private var oldRoute: AudioDeviceInfo? = null
-    private var selectedRoute: Int? = null
     private var focused = false
+    private var deviceCallbackRegistered = false
+    private var routeCallbackRegistered = false
     private var closed = false
     private var factory: PeerConnectionFactory? = null
     private var adm: JavaAudioDeviceModule? = null
@@ -48,6 +48,7 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
     private var pending: String? = null
     private var micOpen = false
     private var speakerOpen = false
+    private var routeReady = false
     @Volatile override var inputLevel = 0f; private set
     @Volatile override var outputLevel = 0f; private set
 
@@ -72,11 +73,61 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
             }
         }, main).build()
     private val devices = object : AudioDeviceCallback() {
-        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
-            if (!closed && removedDevices.any { it.id == selectedRoute }) {
-                mute(); events.fatal("Audio device disconnected. Check your output, then start again.")
-            }
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            devicesChanged()
         }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            devicesChanged()
+        }
+    }
+    private val routeChanged = AudioManager.OnCommunicationDeviceChangedListener { device ->
+        if (!closed) router.communicationDeviceChanged(device?.let { CommunicationRoute(it.id, it.type) })
+    }
+    private val routeAccess = object : CommunicationRouteAccess {
+        override fun available(): List<CommunicationRoute> = audioManager.availableCommunicationDevices.map {
+            CommunicationRoute(it.id, it.type)
+        }
+
+        override fun selected(): CommunicationRoute? = audioManager.communicationDevice?.let {
+            CommunicationRoute(it.id, it.type)
+        }
+
+        override fun select(route: CommunicationRoute): Boolean {
+            val device = audioManager.availableCommunicationDevices.firstOrNull {
+                it.id == route.id && it.type == route.type
+            } ?: return false
+            return audioManager.setCommunicationDevice(device)
+        }
+
+        override fun clear() = audioManager.clearCommunicationDevice()
+    }
+    private val router = CommunicationDeviceRouter(
+        access = routeAccess,
+        bluetoothAllowed = {
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        },
+        schedule = { delay, action ->
+            main.postDelayed({
+                if (!closed) runCatching(action).onFailure { routingFailed() }
+            }, delay)
+        },
+        routingFailed = ::routingFailed,
+        routeReady = {
+            routeReady = true
+            applyGates()
+        },
+    )
+
+    private fun devicesChanged() {
+        if (!closed) runCatching { router.devicesChanged() }
+            .onFailure { routingFailed() }
+    }
+
+    private fun routingFailed() {
+        if (closed) return
+        runCatching { mute() }
+        events.fatal("Audio routing failed. Check your audio device, then start again.")
     }
 
     private fun initialize() {
@@ -85,21 +136,12 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
             throw IllegalStateException("Audio focus unavailable")
         focused = true
         oldMode = audioManager.mode
-        oldRoute = audioManager.communicationDevice
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        val priorities = listOf(AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
-        val bluetooth = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        val available = audioManager.availableCommunicationDevices.filter {
-            bluetooth || it.type !in setOf(AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
-        }
-        val route = priorities.firstNotNullOfOrNull { type -> available.firstOrNull { it.type == type } }
-        if (route != null) {
-            check(audioManager.setCommunicationDevice(route))
-            selectedRoute = route.id
-        }
         audioManager.registerAudioDeviceCallback(devices, main)
+        deviceCallbackRegistered = true
+        audioManager.addOnCommunicationDeviceChangedListener(context.mainExecutor, routeChanged)
+        routeCallbackRegistered = true
+        check(router.start()) { "Communication audio route unavailable" }
         synchronized(VoicePeer::class.java) {
             if (!initialized) {
                 PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context)
@@ -241,16 +283,21 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
     override fun gates(mic: Boolean, speaker: Boolean) {
         micOpen = mic && !closed
         speakerOpen = speaker && !closed
-        adm?.setMicrophoneMute(!micOpen)
-        adm?.setSpeakerMute(!speakerOpen)
+        applyGates()
+    }
+    private fun applyGates() {
+        val capture = micOpen && routeReady && !closed
+        val playback = speakerOpen && routeReady && !closed
+        adm?.setMicrophoneMute(!capture)
+        adm?.setSpeakerMute(!playback)
         peers.values.forEach { peer ->
             // This WebRTC fork stops ADM recording on track mute; Java ADM zeros muted input.
             peer.track?.setEnabled(!closed && active == peer.id)
-            peer.remote?.setEnabled(speakerOpen && active == peer.id)
-            peer.remote?.setVolume(if (speakerOpen && active == peer.id) 1.0 else 0.0)
+            peer.remote?.setEnabled(playback && active == peer.id)
+            peer.remote?.setVolume(if (playback && active == peer.id) 1.0 else 0.0)
         }
-        if (!micOpen) inputLevel = 0f
-        if (!speakerOpen) outputLevel = 0f
+        if (!capture) inputLevel = 0f
+        if (!playback) outputLevel = 0f
     }
     private fun mute() = gates(false, false)
     override fun close(id: String) {
@@ -272,13 +319,17 @@ internal class VoicePeer(private val context: Context, private val events: PeerE
         cleanup({ mute() }, *closingPeers.map { id -> { close(id) } }.toTypedArray(),
             { source?.dispose(); source = null }, { factory?.dispose(); factory = null },
             { adm?.release(); adm = null },
-            { if (focused) audioManager.unregisterAudioDeviceCallback(devices) },
+            { router.stop() },
             {
-                if (focused) {
-                    val previous = oldRoute
-                    if (previous != null && audioManager.availableCommunicationDevices.any { it.id == previous.id })
-                        audioManager.setCommunicationDevice(previous)
-                    else audioManager.clearCommunicationDevice()
+                if (routeCallbackRegistered) {
+                    audioManager.removeOnCommunicationDeviceChangedListener(routeChanged)
+                    routeCallbackRegistered = false
+                }
+            },
+            {
+                if (deviceCallbackRegistered) {
+                    audioManager.unregisterAudioDeviceCallback(devices)
+                    deviceCallbackRegistered = false
                 }
             },
             { if (focused) audioManager.mode = oldMode },

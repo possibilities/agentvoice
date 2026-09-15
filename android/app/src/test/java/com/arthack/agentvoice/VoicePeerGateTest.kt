@@ -32,6 +32,7 @@ class VoicePeerGateTest {
             field(module, "audioOutput", output)
             field(engine, "adm", module)
             field(engine, "peers", peers)
+            field(engine, "routeReady", true)
         }
         fun peer(id: String, local: Track = Track(), remote: Track = Track()): Pair<Track, Track> {
             val type = Class.forName("com.arthack.agentvoice.VoicePeer\$Peer")
@@ -70,6 +71,25 @@ class VoicePeerGateTest {
         f.engine.gates(false, true)
         assertTrue(f.micMuted)
         assertFalse(f.speakerMuted)
+    }
+
+    @Test fun acceptedButUnconfirmedStartupRouteKeepsBothAudioGatesClosed() {
+        val f = Fixture()
+        val (local, remote) = f.peer("active")
+        f.active("active")
+        field(f.engine, "routeReady", false)
+
+        f.engine.gates(true, true)
+
+        assertTrue(f.micMuted)
+        assertTrue(f.speakerMuted)
+        assertTrue(local.open) // The continuous-input track carries Java ADM's zero PCM.
+        assertFalse(remote.open)
+        field(f.engine, "routeReady", true)
+        f.engine.gates(true, true)
+        assertFalse(f.micMuted)
+        assertFalse(f.speakerMuted)
+        assertTrue(remote.open)
     }
 
     @Test fun bothUserGatesMutedKeepOnlyActiveInputClockOpen() {

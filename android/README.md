@@ -149,8 +149,10 @@ microphone foreground service. An ongoing notification has custom expanded Hang 
 and microphone Mute/Unmute controls with app-owned contrast. It replaces CallStyle
 presentation without changing communication audio mode or foreground microphone
 ownership; Telecom integration remains separate. Returning to the app reuses that call. Explicit
-Disconnect, transport loss, failed heartbeat, audio focus loss or removal of the
-selected audio device tears down locally. Activity recreation rebinds to the same
+Disconnect, transport loss, failed heartbeat, audio focus loss or an unrecoverable
+communication-routing error tears down locally. Connecting a Bluetooth headset
+during a call moves both playback and the matching microphone to it; disconnecting
+that headset selects the best remaining route without redialing. Activity recreation rebinds to the same
 owner without redialing; orientation changes release any owned hold. Portrait and landscape use their
 adopted visible-viewport layouts without page scrolling. A quiet sliding notice
 appears inside Persona while connecting or disconnected; connected presentation
@@ -188,6 +190,10 @@ pending because AgentVoice does not answer them.
 - `VoicePeer.kt`: one call-owned audio device/factory, at most a live and pending
   peer, one gathered offer per session, exact answer matching, bounded negotiation,
   and stale-callback fences. The direct WebRTC path never sends audio over WSS.
+- `CommunicationDeviceRouter.kt`: self-managed communication-device priority,
+  hot-add/removal reconciliation, exact effective-route confirmation, one bounded
+  retry and fallback. Initial capture/playback gates remain closed until the route
+  is effective; later route changes keep the existing peer and call incarnation.
 - `VoiceScreen.kt` / `PersonaHalo.kt`: the original bundled Persona Halo asset
   runs through native Rive, with no WebView or remote content. Violet speaking
   follows enabled playback RMS, with a short release hold between syllables;
@@ -480,6 +486,11 @@ the transmitted voice track and requests no additional focus. Production enters 
 mode and selects an available headset microphone/output (LE audio when exposed,
 otherwise classic Bluetooth SCO). On the tested S22/headset, Android moves the
 media stream from A2DP to SCO too, then restores A2DP when the call ends. The call
+router applies the same priority when a headset becomes available after startup.
+Android selects the matching input for the requested communication output; a
+disconnect falls back through wired devices, speaker and earpiece while the same
+WebRTC peer remains active. Accepted route requests are confirmed asynchronously
+and retried once after 30 seconds before using a lower-priority route. The call
 path changes playback bandwidth/processing; its mixer sample rate does not prove
 the Bluetooth codec bandwidth. A route change alone does not establish that all
 perceived degradation is unavoidable: media and communication streams can have

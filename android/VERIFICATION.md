@@ -2780,3 +2780,38 @@ were restored byte-for-byte; notification permission/flags, dark mode, font1.0
 and rotation settings were restored. No Studio rehearsal service remained, the
 owned ADB forward was removed, and the phone was returned to Production with both
 gates muted before releasing the lease.
+
+## Hot Bluetooth communication routing — September 15, 2026
+
+The production call now observes communication-device additions and removals for
+its full lifetime. A newly available BLE, classic Bluetooth or hearing-aid route
+supersedes speaker/wired output without replacing the WebRTC peer. Removing it
+requests the best remaining communication device. Selection acceptance stays
+pending until Android reports the exact device ID and type; a generation-fenced
+30-second timeout clears and retries once, then tries lower-priority routes without
+cycling. Startup WebRTC negotiation may proceed, but Java capture and remote
+playback gates remain closed until the requested communication route is effective.
+Call teardown clears this app's selection rather than restoring a captured route.
+
+- 204 Studio JVM tests passed. The 13 router tests cover hot add/removal, priority,
+  permission filtering, asynchronous exact confirmation, callback deduplication,
+  one retry, bounded fallback/failure, platform-default empty inventory, timeout
+  fences and stop cleanup. The six `VoicePeerGateTest` cases include the initial
+  route-ready privacy gate and continuous muted-input behavior.
+- Production, Studio, unsigned Release and Studio instrumentation APKs assembled.
+  Production and Studio lint passed with zero errors.
+- Both APK audits passed. Production contains the expected real call service,
+  WebRTC JNI classes, selected assets/notices and no Studio entrypoints or profile.
+  Studio remains capability-isolated.
+- The 688 root tests passed after resolving dependencies from the canonical local
+  install; the first dependency-free attempt was invalid because the isolated
+  worktree had no `node_modules`.
+
+Production candidate:
+`app/build/outputs/apk/production/app-production.apk`, SHA-256
+`995f7bff4f7349d838c736e01e59658afdccdb3b889c2b493d80a4d72492e05b`.
+
+No phone, emulator, desktop UI or running service was used. JVM tests cannot prove
+Samsung callback timing, SCO/BLE activation, physical microphone selection or live
+WebRTC continuity through a route switch. The exact human/device procedure is
+[Bluetooth hot-routing acceptance](BLUETOOTH-ROUTING-TRIAL.md).
