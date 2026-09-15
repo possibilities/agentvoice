@@ -46,6 +46,24 @@
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "takeover": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["auto", "confirm"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "$ref": "#/$defs/__schema3"
+                        }
+                      },
+                      "required": ["token"],
+                      "additionalProperties": false
+                    }
+                  ]
                 }
               },
               "required": ["clientId"],
@@ -134,7 +152,7 @@
                       "const": "offer"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "sdp": {
                       "type": "string",
@@ -153,7 +171,7 @@
                       "const": "connected"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     }
                   },
                   "required": ["type", "sessionId"],
@@ -167,7 +185,7 @@
                       "const": "failed"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "detail": {
                       "type": "string",
@@ -186,7 +204,7 @@
                       "const": "mute"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "target": {
                       "type": "string",
@@ -207,7 +225,7 @@
                       "enum": ["hold", "release"]
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     }
                   },
                   "required": ["type", "sessionId"],
@@ -235,7 +253,7 @@
               "const": "state"
             },
             "state": {
-              "$ref": "#/$defs/__schema4"
+              "$ref": "#/$defs/__schema5"
             }
           },
           "required": ["v", "type", "state"],
@@ -253,7 +271,7 @@
               "const": "observation"
             },
             "observation": {
-              "$ref": "#/$defs/__schema6"
+              "$ref": "#/$defs/__schema7"
             }
           },
           "required": ["v", "type", "observation"],
@@ -280,7 +298,7 @@
                       "const": "prepare"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     }
                   },
                   "required": ["type", "sessionId"],
@@ -294,7 +312,7 @@
                       "const": "answer"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "sdp": {
                       "type": "string",
@@ -313,7 +331,7 @@
                       "const": "close"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "reason": {
                       "type": "string",
@@ -332,13 +350,13 @@
                       "const": "state"
                     },
                     "sessionId": {
-                      "$ref": "#/$defs/__schema3"
+                      "$ref": "#/$defs/__schema4"
                     },
                     "mic": {
-                      "$ref": "#/$defs/__schema7"
+                      "$ref": "#/$defs/__schema8"
                     },
                     "speaker": {
-                      "$ref": "#/$defs/__schema7"
+                      "$ref": "#/$defs/__schema8"
                     }
                   },
                   "required": ["type", "sessionId", "mic", "speaker"],
@@ -376,7 +394,21 @@
                   "type": "null"
                 },
                 {
-                  "$ref": "#/$defs/__schema6"
+                  "type": "object",
+                  "properties": {
+                    "takeoverRequired": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "token": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "required": ["takeoverRequired", "token"],
+                  "additionalProperties": false
+                },
+                {
+                  "$ref": "#/$defs/__schema7"
                 },
                 {
                   "type": "object",
@@ -439,6 +471,9 @@
               "properties": {
                 "message": {
                   "type": "string"
+                },
+                "code": {
+                  "type": "string"
                 }
               },
               "required": ["message"],
@@ -486,10 +521,16 @@
     },
     "__schema3": {
       "type": "string",
+      "minLength": 32,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "__schema4": {
+      "type": "string",
       "format": "uuid",
       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
     },
-    "__schema4": {
+    "__schema5": {
       "type": "object",
       "properties": {
         "available": {
@@ -504,16 +545,16 @@
           "enum": ["waiting-ready", "negotiating", "live", "failed", "stopped"]
         },
         "mic": {
-          "$ref": "#/$defs/__schema5"
+          "$ref": "#/$defs/__schema6"
         },
         "speaker": {
-          "$ref": "#/$defs/__schema5"
+          "$ref": "#/$defs/__schema6"
         }
       },
       "required": ["available", "codingActivity", "phase", "mic", "speaker"],
       "additionalProperties": false
     },
-    "__schema5": {
+    "__schema6": {
       "type": "object",
       "properties": {
         "muted": {
@@ -526,7 +567,7 @@
       "required": ["muted", "effectiveMuted"],
       "additionalProperties": false
     },
-    "__schema6": {
+    "__schema7": {
       "type": "object",
       "properties": {
         "busy": {
@@ -576,7 +617,7 @@
         "state": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema4"
+              "$ref": "#/$defs/__schema5"
             },
             {
               "type": "null"
@@ -587,7 +628,7 @@
       "required": ["busy", "availability", "clientId", "workspace", "threadId", "state"],
       "additionalProperties": false
     },
-    "__schema7": {
+    "__schema8": {
       "type": "object",
       "properties": {
         "muted": {

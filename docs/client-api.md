@@ -12,7 +12,7 @@ regenerate with `bun scripts/generate-client-schema.ts`. A drift test pins it.
 Local transport: UTF-8 newline-delimited JSON on an owned mode-0600 Unix socket
 under the private AgentVoice state directory. Each request has
 `{v:3,type:"request",id,method,params?}`. Responses correlate `id` and return
-`{v:3,type:"response",id,ok:true,result}` or `ok:false,error:{message}`.
+`{v:3,type:"response",id,ok:true,result}` or `ok:false,error:{message,code?}`.
 State updates are `{v:3,type:"state",state}`; media events are
 `{v:3,type:"client-media",message}`. The control-plane socket framing cap is
 1 MiB; SDP strings are capped at 192 KiB, peer IDs are UUIDs, failure details
@@ -82,12 +82,13 @@ Android client shows confirmation before submitting `takeover: {token}` on the
 same connection. Cancel closes only the candidate connection. A challenge result
 is not call acceptance and must not start media.
 
-Tokens bind the requesting connection/client ID and exact incumbent attachment.
-A stale or expired confirmation cannot evict a newer owner; when occupied, the
-server issues another challenge requiring a new human decision. Simultaneous
-replacement attempts are serialized by server admission, and disconnecting a
-waiting candidate fences its pending request. Omitting `takeover` preserves
-legacy busy rejection. A failed or unknown detach refuses the successor while
+Tokens bind the requesting connection/client ID and exact incumbent attachment
+and expire after 30 seconds. A stale or expired confirmation cannot evict a newer
+owner; an available challenge record returns a fresh challenge when occupied,
+requiring a new human decision. Missing or invalid records fail without replacement.
+Simultaneous replacement attempts are serialized by server admission, and an
+observed transport close fences a waiting candidate’s pending request. Omitting
+`takeover` preserves legacy busy rejection. A failed or unknown detach refuses the successor while
 retaining native work. See [the takeover decision](adr/0076-media-client-takeover.md).
 
 Server startup restores a valid marked workspace session without a frontend; when

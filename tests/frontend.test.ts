@@ -21,6 +21,7 @@ import {
   frontendStateSchema,
 } from "../src/frontend/protocol.ts";
 import { type Call, VoiceServer } from "../src/frontend/server.ts";
+import { ControlSocket, SocketFailure } from "../src/ipc/control-client.ts";
 import { currentWorkspace } from "../src/workspace.ts";
 
 async function until(predicate: () => boolean, timeoutMs = 3000) {
@@ -812,6 +813,267 @@ test("media detach failure makes waiting clients fail without replacing retained
     expect(calls).toBe(1);
   } finally {
     cleanup.resolve();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("auto takeover fences the old owner, serializes contenders, and preserves retained work", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-auto-takeover-"));
+  const cleanupStarted = Promise.withResolvers<void>();
+  const cleanup = Promise.withResolvers<void>();
+  const retained = fakeCall(() => {});
+  let creates = 0;
+  const server = new VoiceServer(frontendSocketPath(root), async () => {
+    creates++;
+    return {
+      ...retained.call,
+      identity: () => ({ workspace: root, threadId: "retained-thread", generation: 7 }),
+      setFrontendAttached: async (attached) => {
+        retained.attachments.push(attached);
+        if (!attached) {
+          cleanupStarted.resolve();
+          await cleanup.promise;
+        }
+      },
+    };
+  });
+  let owner: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let automatic: ControlSocket | undefined;
+  let competingAutomatic: ControlSocket | undefined;
+  let confirmer: ControlSocket | undefined;
+  let observer: Awaited<ReturnType<typeof observeFrontend>> | undefined;
+  const availability: string[] = [];
+  try {
+    await server.start();
+    observer = await observeFrontend(server.path, (state) => availability.push(state.availability));
+    owner = await connectFrontend(server.path);
+    await until(() => owner!.state().phase === "live");
+    owner.command({ action: "mute", target: "mic", muted: true });
+    await until(() => retained.mic.muted);
+    owner.command({ action: "hold" });
+    await until(() => !retained.mic.effectiveMuted);
+
+    automatic = await ControlSocket.connect(server.path, 3);
+    const takeover = automatic.request(
+      "call",
+      { clientId: crypto.randomUUID(), takeover: "auto" },
+      30_000,
+    );
+    await cleanupStarted.promise;
+    await owner.done;
+    expect(retained.mic.effectiveMuted).toBe(true);
+
+    await expect(automatic.request("observe")).rejects.toThrow(
+      "Call owners cannot become observers",
+    );
+    confirmer = await ControlSocket.connect(server.path, 3);
+    await expect(
+      confirmer.request("call", { clientId: crypto.randomUUID(), takeover: "confirm" }),
+    ).rejects.toMatchObject({ code: "takeover_in_progress" });
+    competingAutomatic = await ControlSocket.connect(server.path, 3);
+    await expect(
+      competingAutomatic.request("call", {
+        clientId: crypto.randomUUID(),
+        takeover: "auto",
+      }),
+    ).rejects.toMatchObject({ code: "takeover_in_progress" });
+
+    cleanup.resolve();
+    expect(await takeover).toBeNull();
+    await until(() => retained.attachments.at(-1) === true);
+    expect(retained.attachments).toEqual([true, false, true]);
+    expect(creates).toBe(1);
+    expect(retained.starts()).toBe(1);
+    expect(retained.closes()).toBe(0);
+    expect(availability).toContain("closing");
+    expect(availability).not.toContain("idle");
+    expect(await automatic.request("discover")).toEqual({
+      busy: true,
+      workspace: root,
+      threadId: "retained-thread",
+    });
+    await expect(
+      automatic.request("call", { clientId: crypto.randomUUID(), takeover: "auto" }),
+    ).rejects.toMatchObject({ code: "already_owner" });
+  } finally {
+    cleanup.resolve();
+    owner && (await owner.close());
+    automatic?.close();
+    competingAutomatic?.close();
+    confirmer?.close();
+    observer?.socket.close();
+    await server.close();
+    expect(retained.closes()).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a disconnected takeover requester cannot remain the media owner", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-cancelled-takeover-"));
+  const cleanupStarted = Promise.withResolvers<void>();
+  const cleanup = Promise.withResolvers<void>();
+  const retained = fakeCall(() => {});
+  retained.call.setFrontendAttached = async (attached) => {
+    retained.attachments.push(attached);
+    if (!attached) {
+      cleanupStarted.resolve();
+      await cleanup.promise;
+    }
+  };
+  const server = new VoiceServer(frontendSocketPath(root), async () => retained.call);
+  let owner: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let cancelled: ControlSocket | undefined;
+  let probe: ControlSocket | undefined;
+  let successor: ControlSocket | undefined;
+  try {
+    await server.start();
+    owner = await connectFrontend(server.path);
+    await until(() => retained.attachments.at(-1) === true);
+    cancelled = await ControlSocket.connect(server.path, 3);
+    const request = cancelled.request(
+      "call",
+      { clientId: crypto.randomUUID(), takeover: "auto" },
+      30_000,
+    );
+    const rejected = request.catch((error: Error) => error);
+    await cleanupStarted.promise;
+    cancelled.close();
+    cleanup.resolve();
+    expect(await rejected).toBeInstanceOf(Error);
+    probe = await ControlSocket.connect(server.path, 3);
+    let discovery: { busy: boolean } = { busy: true };
+    const deadline = Date.now() + 3_000;
+    while (discovery.busy && Date.now() < deadline) {
+      discovery = (await probe.request("discover")) as { busy: boolean };
+      if (discovery.busy) await Bun.sleep(5);
+    }
+    expect(discovery.busy).toBe(false);
+    expect(retained.attachments.slice(0, 2)).toEqual([true, false]);
+    expect(retained.attachments.at(-1)).toBe(false);
+    probe.close();
+    probe = undefined;
+
+    successor = await ControlSocket.connect(server.path, 3);
+    expect(
+      await successor.request("call", { clientId: crypto.randomUUID(), takeover: "confirm" }),
+    ).toBeNull();
+    await until(() => retained.attachments.at(-1) === true);
+    expect(retained.attachments.at(-1)).toBe(true);
+  } finally {
+    cleanup.resolve();
+    await owner?.close();
+    cancelled?.close();
+    probe?.close();
+    successor?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("confirmation tokens are peer-bound and stale incumbent tokens require a fresh confirmation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-confirm-takeover-"));
+  const retained = fakeCall(() => {});
+  let now = 1_000;
+  const server = new VoiceServer(
+    frontendSocketPath(root),
+    async () => retained.call,
+    console.error,
+    undefined,
+    () => now,
+  );
+  let owner: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let candidate: ControlSocket | undefined;
+  let replacement: ControlSocket | undefined;
+  let stranger: ControlSocket | undefined;
+  try {
+    await server.start();
+    owner = await connectFrontend(server.path);
+    candidate = await ControlSocket.connect(server.path, 3);
+    const clientId = crypto.randomUUID();
+    const first = (await candidate.request("call", {
+      clientId,
+      takeover: "confirm",
+    })) as { takeoverRequired: true; token: string };
+    expect(first.takeoverRequired).toBe(true);
+    expect(first.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    stranger = await ControlSocket.connect(server.path, 3);
+    await expect(
+      stranger.request("call", { clientId, takeover: { token: first.token } }),
+    ).rejects.toMatchObject({ code: "invalid_takeover_token" });
+
+    now += 30_001;
+    const renewedAfterExpiry = (await candidate.request("call", {
+      clientId,
+      takeover: { token: first.token },
+    })) as { takeoverRequired: true; token: string };
+    expect(renewedAfterExpiry.takeoverRequired).toBe(true);
+    expect(renewedAfterExpiry.token).not.toBe(first.token);
+
+    replacement = await ControlSocket.connect(server.path, 3);
+    expect(
+      await replacement.request(
+        "call",
+        { clientId: crypto.randomUUID(), takeover: "auto" },
+        30_000,
+      ),
+    ).toBeNull();
+    await owner.done;
+    const refreshed = (await candidate.request("call", {
+      clientId,
+      takeover: { token: renewedAfterExpiry.token },
+    })) as { takeoverRequired: true; token: string };
+    expect(refreshed.takeoverRequired).toBe(true);
+    expect(refreshed.token).not.toBe(first.token);
+    expect(await replacement.request("input", { action: "release" })).toBeNull();
+  } finally {
+    await owner?.close();
+    candidate?.close();
+    replacement?.close();
+    stranger?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("takeover reports media detach poison and never acknowledges a successor", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-takeover-detach-failure-"));
+  const retained = fakeCall(() => {});
+  retained.call.setFrontendAttached = async (attached) => {
+    retained.attachments.push(attached);
+    if (!attached) throw new Error("native stop outcome unknown");
+  };
+  const server = new VoiceServer(
+    frontendSocketPath(root),
+    async () => retained.call,
+    () => {},
+  );
+  let owner: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let candidate: ControlSocket | undefined;
+  try {
+    await server.start();
+    owner = await connectFrontend(server.path);
+    candidate = await ControlSocket.connect(server.path, 3);
+    let failure: unknown;
+    try {
+      await candidate.request("call", { clientId: crypto.randomUUID(), takeover: "auto" }, 30_000);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(SocketFailure);
+    expect(failure).toMatchObject({
+      code: "media_detach_failed",
+      message:
+        "Previous media cleanup failed. Conversation and agent work are retained; restart the server before connecting again.",
+    });
+    expect(retained.attachments).toEqual([true, false]);
+    await expect(
+      candidate.request("call", { clientId: crypto.randomUUID(), takeover: "confirm" }),
+    ).rejects.toMatchObject({ code: "media_detach_failed" });
+  } finally {
+    await owner?.close();
+    candidate?.close();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }

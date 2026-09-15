@@ -16,7 +16,22 @@ export const frontendStateSchema = z
   })
   .strict();
 export type FrontendState = z.infer<typeof frontendStateSchema>;
-export const callParamsSchema = z.object({ clientId: z.string().uuid() }).strict();
+export const takeoverTokenSchema = z
+  .string()
+  .min(32)
+  .max(256)
+  .regex(/^[A-Za-z0-9_-]+$/);
+export const takeoverSchema = z.union([
+  z.enum(["auto", "confirm"]),
+  z.object({ token: takeoverTokenSchema }).strict(),
+]);
+export const callParamsSchema = z
+  .object({ clientId: z.string().uuid(), takeover: takeoverSchema.optional() })
+  .strict();
+export type CallParams = z.infer<typeof callParamsSchema>;
+export const takeoverRequiredSchema = z
+  .object({ takeoverRequired: z.literal(true), token: takeoverTokenSchema })
+  .strict();
 export const observationSchema = z
   .object({
     busy: z.boolean(),
@@ -82,6 +97,7 @@ export const frontendServerFrameSchema = z.union([
       ok: z.literal(true),
       result: z.union([
         z.null(),
+        takeoverRequiredSchema,
         observationSchema,
         z
           .object({
@@ -99,7 +115,7 @@ export const frontendServerFrameSchema = z.union([
       type: z.literal("response"),
       id: z.string().min(1).max(128),
       ok: z.literal(false),
-      error: z.object({ message: z.string() }).strict(),
+      error: z.object({ message: z.string(), code: z.string().optional() }).strict(),
     })
     .strict(),
 ]);

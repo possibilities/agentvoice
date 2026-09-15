@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { readSessionMarker } from "../core/session-marker.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
@@ -7,6 +8,7 @@ import { createCall } from "../runtime-control/controller.ts";
 import type { LaunchProvenance } from "../runtime-control/protocol.ts";
 import { currentWorkspace, NoDefaultWorkspaceError } from "../workspace.ts";
 import {
+  type CallParams,
   callParamsSchema,
   FRONTEND_VERSION,
   type FrontendCommand,
@@ -30,10 +32,27 @@ export interface Call {
 type Session = {
   peer: JsonPeer;
   clientId?: string;
+  incarnation: number;
   call?: Call;
   closed: boolean;
   done: Promise<void>;
   end(): void;
+};
+
+class FrontendFailure extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+type TakeoverChallenge = {
+  peer: JsonPeer;
+  clientId: string;
+  incumbent: number;
+  expiresAt: number;
 };
 
 /** One retained workspace session; a single frontend owns its disposable media attachment. */
@@ -46,6 +65,10 @@ export class VoiceServer {
   private closing?: Promise<void>;
   private closed = false;
   private poisoned = false;
+  private nextIncarnation = 0;
+  private admission?: { peer: JsonPeer; clientId: string };
+  private readonly closedPeers = new WeakSet<JsonPeer>();
+  private readonly takeoverChallenges = new Map<string, TakeoverChallenge>();
   private readonly observers = new Set<JsonPeer>();
   constructor(
     readonly path: string,
@@ -56,23 +79,26 @@ export class VoiceServer {
     ) => Promise<Call>,
     private readonly report: (message: string) => void = console.error,
     private readonly workspace?: () => string,
+    private readonly now: () => number = () => Date.now(),
   ) {
     this.socket = new JsonSocketServer(path, {
       version: FRONTEND_VERSION,
-      handle: (request, peer) => {
-        const reply = (ok: boolean, result: unknown) =>
+      handle: async (request, peer) => {
+        const reply = (ok: boolean, result: unknown, code?: string) =>
           peer.send({
             v: FRONTEND_VERSION,
             type: "response",
             id: request.id,
             ok,
-            ...(ok ? { result } : { error: { message: result } }),
+            ...(ok
+              ? { result }
+              : { error: { message: result, ...(code === undefined ? {} : { code }) } }),
           });
         if (request.method === "discover" && request.params === undefined) {
           try {
             const identity = this.call?.identity?.();
             reply(true, {
-              busy: !!this.session,
+              busy: !!this.session || !!this.admission,
               workspace: identity?.workspace || this.workspace?.() || null,
               threadId: identity?.threadId || null,
             });
@@ -82,7 +108,7 @@ export class VoiceServer {
           return;
         }
         if (request.method === "observe" && request.params === undefined) {
-          if (this.session?.peer === peer) {
+          if (this.session?.peer === peer || this.admission?.peer === peer) {
             reply(false, "Call owners cannot become observers");
             return;
           }
@@ -90,30 +116,21 @@ export class VoiceServer {
           reply(true, this.observation());
           return;
         }
-        if (request.method === "call" && callParamsSchema.safeParse(request.params).success) {
+        const callParams = callParamsSchema.safeParse(request.params);
+        if (request.method === "call" && callParams.success) {
           if (this.observers.has(peer)) {
             reply(false, "Observers cannot own calls");
             return;
           }
-          if (this.closed || this.poisoned || this.session) {
-            reply(false, "Server is busy or unavailable");
-            return;
+          try {
+            reply(true, await this.requestCall(peer, callParams.data));
+          } catch (error) {
+            const failure =
+              error instanceof FrontendFailure
+                ? error
+                : new FrontendFailure("Server is unavailable", "server_unavailable");
+            reply(false, failure.message, failure.code);
           }
-          const ended = Promise.withResolvers<void>();
-          const session: Session = {
-            peer,
-            clientId:
-              request.params === undefined
-                ? undefined
-                : callParamsSchema.parse(request.params).clientId,
-            closed: false,
-            done: Promise.resolve(),
-            end: ended.resolve,
-          };
-          this.session = session;
-          this.publish();
-          session.done = this.run(session, ended.promise);
-          reply(true, null);
           return;
         }
         if (request.method === "input" && this.session?.peer === peer && !this.session.closed) {
@@ -143,15 +160,142 @@ export class VoiceServer {
         reply(false, "Unknown method or frontend does not own this call");
       },
       closed: (peer) => {
+        this.closedPeers.add(peer);
         this.observers.delete(peer);
+        for (const [token, challenge] of this.takeoverChallenges)
+          if (challenge.peer === peer) this.takeoverChallenges.delete(token);
         if (this.session?.peer !== peer) return;
-        this.session.closed = true;
-        this.publish();
-        this.session.end();
-        // End a hold immediately, before asynchronous media detachment.
-        this.session.call?.command({ action: "release" });
+        this.endSession(this.session, false);
       },
     });
+  }
+  private unavailable(): void {
+    if (this.poisoned)
+      throw new FrontendFailure(
+        "Previous media cleanup failed. Conversation and agent work are retained; restart the server before connecting again.",
+        "media_detach_failed",
+      );
+    if (this.closed) throw new FrontendFailure("Server is unavailable", "server_unavailable");
+  }
+  private createChallenge(peer: JsonPeer, clientId: string, incumbent: Session) {
+    const now = this.now();
+    while (this.takeoverChallenges.size >= 256)
+      this.takeoverChallenges.delete(this.takeoverChallenges.keys().next().value!);
+    const token = randomBytes(32).toString("base64url");
+    this.takeoverChallenges.set(token, {
+      peer,
+      clientId,
+      incumbent: incumbent.incarnation,
+      expiresAt: now + 30_000,
+    });
+    return { takeoverRequired: true as const, token };
+  }
+  private admit(peer: JsonPeer, clientId: string): null {
+    this.unavailable();
+    if (this.closedPeers.has(peer))
+      throw new FrontendFailure("Requesting frontend disconnected", "requester_closed");
+    if (this.observers.has(peer))
+      throw new FrontendFailure("Observers cannot own calls", "observer_cannot_call");
+    if (this.session) throw new FrontendFailure("Server media is already owned", "server_busy");
+    const ended = Promise.withResolvers<void>();
+    const session: Session = {
+      peer,
+      clientId,
+      incarnation: ++this.nextIncarnation,
+      closed: false,
+      done: Promise.resolve(),
+      end: ended.resolve,
+    };
+    this.session = session;
+    this.publish();
+    session.done = this.run(session, ended.promise);
+    return null;
+  }
+  private endSession(session: Session, closePeer: boolean): void {
+    if (!session.closed) {
+      session.closed = true;
+      this.publish();
+      session.end();
+      // End a hold immediately, before asynchronous media detachment.
+      try {
+        session.call?.command({ action: "release" });
+      } catch (error) {
+        this.report(`Frontend hold release failed: ${String(error)}`);
+      }
+    }
+    if (closePeer) session.peer.close();
+  }
+  private async replace(peer: JsonPeer, clientId: string, incumbent: Session): Promise<null> {
+    if (this.admission)
+      throw new FrontendFailure(
+        "Another media takeover is already in progress",
+        "takeover_in_progress",
+      );
+    this.admission = { peer, clientId };
+    try {
+      this.endSession(incumbent, true);
+      await incumbent.done;
+      this.unavailable();
+      if (this.closedPeers.has(peer))
+        throw new FrontendFailure("Requesting frontend disconnected", "requester_closed");
+      if (this.session)
+        throw new FrontendFailure("Media ownership changed during takeover", "takeover_stale");
+      return this.admit(peer, clientId);
+    } finally {
+      if (this.admission?.peer === peer && this.admission.clientId === clientId) {
+        this.admission = undefined;
+        this.publish();
+      }
+    }
+  }
+  private async requestCall(peer: JsonPeer, params: CallParams) {
+    const mode = params.takeover;
+    // Preserve the exact v3 failure shape and message for clients that do not opt into takeover.
+    if (mode === undefined) {
+      if (this.closed || this.poisoned || this.session || this.admission)
+        throw new FrontendFailure("Server is busy or unavailable");
+      return this.admit(peer, params.clientId);
+    }
+    this.unavailable();
+    if (this.closedPeers.has(peer))
+      throw new FrontendFailure("Requesting frontend disconnected", "requester_closed");
+    const incumbent = this.session;
+    if (incumbent?.peer === peer)
+      throw new FrontendFailure("Frontend already owns this call", "already_owner");
+    if (mode === "confirm") {
+      if (this.admission)
+        throw new FrontendFailure(
+          "Another media takeover is already in progress",
+          "takeover_in_progress",
+        );
+      return incumbent
+        ? this.createChallenge(peer, params.clientId, incumbent)
+        : this.admit(peer, params.clientId);
+    }
+    if (mode === "auto") {
+      if (this.admission)
+        throw new FrontendFailure(
+          "Another media takeover is already in progress",
+          "takeover_in_progress",
+        );
+      return incumbent
+        ? this.replace(peer, params.clientId, incumbent)
+        : this.admit(peer, params.clientId);
+    }
+
+    const challenge = this.takeoverChallenges.get(mode.token);
+    if (!challenge || challenge.peer !== peer || challenge.clientId !== params.clientId)
+      throw new FrontendFailure("Takeover confirmation is invalid", "invalid_takeover_token");
+    this.takeoverChallenges.delete(mode.token);
+    if (this.admission)
+      throw new FrontendFailure(
+        "Another media takeover is already in progress",
+        "takeover_in_progress",
+      );
+    if (!incumbent) return this.admit(peer, params.clientId);
+    if (challenge.expiresAt <= this.now() || incumbent.incarnation !== challenge.incumbent)
+      return this.createChallenge(peer, params.clientId, incumbent);
+    return this.replace(peer, params.clientId, incumbent);
   }
   start() {
     return this.socket.start();
@@ -167,7 +311,7 @@ export class VoiceServer {
     const session = this.session;
     const identity = this.call?.identity?.();
     return {
-      busy: !!session,
+      busy: !!session || !!this.admission,
       availability:
         this.closed || this.poisoned
           ? "unavailable"
@@ -175,7 +319,9 @@ export class VoiceServer {
             ? session.closed
               ? "closing"
               : "connected"
-            : "idle",
+            : this.admission
+              ? "closing"
+              : "idle",
       clientId: session?.clientId ?? null,
       workspace: identity?.workspace || null,
       threadId: identity?.threadId || null,
@@ -260,9 +406,7 @@ export class VoiceServer {
       const session = this.session;
       try {
         if (session) {
-          session.closed = true;
-          session.peer.close();
-          session.end();
+          this.endSession(session, true);
           await session.done;
         }
         const call = await this.creating?.catch(() => undefined);

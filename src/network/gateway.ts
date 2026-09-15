@@ -5,7 +5,7 @@ import {
   frontendRequestSchema,
   frontendServerFrameSchema,
 } from "../frontend/protocol.ts";
-import { ControlSocket } from "../ipc/control-client.ts";
+import { ControlSocket, SocketFailure } from "../ipc/control-client.ts";
 import { DeviceCredentials, type NetworkSettings } from "./credentials.ts";
 import {
   CHALLENGE_PATH,
@@ -333,6 +333,7 @@ export class NetworkGateway {
       const result = await ws.data.control.request(
         request.method,
         "params" in request ? request.params : undefined,
+        request.method === "call" ? 30_000 : undefined,
       );
       const frame = frontendServerFrameSchema.parse({
         v: FRONTEND_VERSION,
@@ -342,15 +343,19 @@ export class NetworkGateway {
         result,
       });
       this.send(ws, frame);
-    } catch {
+    } catch (error) {
+      const failure =
+        error instanceof SocketFailure
+          ? error
+          : new SocketFailure("Local server unavailable", "server_unavailable");
       this.send(ws, {
         v: FRONTEND_VERSION,
         type: "response",
         id: request.id,
         ok: false,
         error: {
-          message:
-            "Request refused: server busy, unavailable, or connection does not own this call",
+          message: failure.message,
+          ...(failure.code === undefined ? {} : { code: failure.code }),
         },
       });
     } finally {

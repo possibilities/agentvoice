@@ -107,7 +107,7 @@ export class ControlSocket {
       throw error;
     }
   }
-  request(method: string, params?: unknown): Promise<unknown> {
+  request(method: string, params?: unknown, timeoutMs = 5000): Promise<unknown> {
     if (this.socket.destroyed)
       return Promise.reject(this.failure ?? new Error("Control socket closed"));
     if (this.pending.size >= 32 || this.socket.writableLength > 64 * 1024) {
@@ -118,7 +118,7 @@ export class ControlSocket {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => this.close(new Error(`Socket request timed out: ${method}`)),
-        5000,
+        timeoutMs,
       );
       this.pending.set(id, { resolve, reject, timer });
       this.socket.write(

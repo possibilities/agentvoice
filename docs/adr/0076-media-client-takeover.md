@@ -28,7 +28,8 @@ Replacement reserves one admission before asynchronous work, fences the old
 attachment against input and signaling, releases its transient hold, closes its
 transport and awaits acknowledged media detach. Only then may the waiting client
 own a fresh attachment. Concurrent candidates cannot share admission. A candidate
-that disconnects while waiting cannot later become owner. Unknown native stop
+whose disconnect the server observes while waiting cannot later become owner;
+a later transport loss immediately detaches any admitted media. Unknown native stop
 outcomes retain native work and poison subsequent media admission, with a truthful
 failure returned to the requester.
 

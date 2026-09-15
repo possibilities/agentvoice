@@ -333,6 +333,65 @@ test("network disconnect detaches frontend media while retaining the backend for
   }
 });
 
+test("gateway preserves safe server takeover results and structured refusal details", async () => {
+  const f = await fixture();
+  try {
+    const owner = await f.open();
+    expect((await owner.request("call", { clientId: crypto.randomUUID() })).ok).toBe(true);
+    const candidate = await f.open();
+    const busy = await candidate.request("call", { clientId: crypto.randomUUID() });
+    expect(busy).toMatchObject({
+      ok: false,
+      error: { message: "Server is busy or unavailable" },
+    });
+    expect(busy.error).toEqual({ message: "Server is busy or unavailable" });
+
+    const invalid = await candidate.request("call", {
+      clientId: crypto.randomUUID(),
+      takeover: { token: "x".repeat(43) },
+    });
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: { code: "invalid_takeover_token", message: "Takeover confirmation is invalid" },
+    });
+
+    const cancelledClientId = crypto.randomUUID();
+    const challenged = await candidate.request("call", {
+      clientId: cancelledClientId,
+      takeover: "confirm",
+    });
+    expect(challenged).toMatchObject({
+      ok: true,
+      result: { takeoverRequired: true },
+    });
+    expect((challenged.result as { token: string }).token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    candidate.ws.close();
+    await candidate.ended;
+    expect(await owner.request("input", { action: "release" })).toMatchObject({ ok: true });
+
+    const confirmed = await f.open();
+    const confirmedClientId = crypto.randomUUID();
+    const confirmation = await confirmed.request("call", {
+      clientId: confirmedClientId,
+      takeover: "confirm",
+    });
+    const token = (confirmation.result as { token: string }).token;
+    expect(
+      await confirmed.request("call", {
+        clientId: confirmedClientId,
+        takeover: { token },
+      }),
+    ).toMatchObject({ ok: true, result: null });
+    await owner.ended;
+    expect(await confirmed.request("input", { action: "release" })).toMatchObject({ ok: true });
+    expect(f.creates()).toBe(1);
+    expect(f.starts()).toBe(1);
+    expect(f.closes()).toBe(0);
+  } finally {
+    await f.close();
+  }
+});
+
 test("revocation and heartbeat loss tear down active calls, requiring explicit new admission", async () => {
   for (const mode of ["revoke", "heartbeat"] as const) {
     const f = await fixture({ interval: 10, timeout: 80 });
