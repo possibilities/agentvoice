@@ -244,10 +244,6 @@ export function App() {
                 notice={transcriptView[`${lane}Notice`]}
                 messages={lane === "agent" ? displayedAgent : transcriptView.voice}
                 holding={!!holding}
-                canCompose={
-                  !!displayedControls?.available &&
-                  (view.phase === "live" || view.phase === "detached")
-                }
               />
               <div
                 ref={lane === "agent" ? agentDock : undefined}
@@ -290,7 +286,6 @@ const TranscriptLane = memo(function TranscriptLane({
   notice,
   messages,
   holding,
-  canCompose,
 }: {
   lane: "agent" | "voice";
   viewId: string;
@@ -298,7 +293,6 @@ const TranscriptLane = memo(function TranscriptLane({
   notice?: string;
   messages: LiveView["agent"];
   holding: boolean;
-  canCompose: boolean;
 }) {
   const empty = messages.length === 0 && !holding && phase !== "offline" && phase !== "empty";
   return (
@@ -323,23 +317,7 @@ const TranscriptLane = memo(function TranscriptLane({
       {empty ? (
         <div className="transcript-empty">
           <div className="transcript-empty__copy">
-            <h2>
-              {notice
-                ? lane === "voice"
-                  ? "Voice transcript"
-                  : "Agent conversation"
-                : lane === "voice"
-                  ? "No voice text yet"
-                  : "No agent messages yet"}
-            </h2>
-            <p role={notice ? "status" : undefined}>
-              {notice ??
-                (lane === "voice"
-                  ? "Spoken conversation will appear here."
-                  : canCompose
-                    ? "Start with a message below."
-                    : "Your conversation will appear here.")}
-            </p>
+            <h2>{lane === "voice" ? "No voice text yet" : "No agent messages yet"}</h2>
           </div>
         </div>
       ) : null}

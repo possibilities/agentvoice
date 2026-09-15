@@ -53,6 +53,7 @@ for (const viewport of [
         expect(metrics.fontSize).toBeGreaterThanOrEqual(16);
         expect(metrics.center).toBeLessThan(2);
       }
+      await expect(page.locator(".transcript-empty p")).toHaveCount(0);
       await expect(page.getByText(/incomplete/)).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       if (mode !== "Voice") {
@@ -64,10 +65,8 @@ for (const viewport of [
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(lane!.x + lane!.width);
         await input.focus();
         await expect(input).toBeFocused();
-        await expect(page.getByText("Start with a message below.")).toBeVisible();
       } else {
         await expect(input).toHaveCount(0);
-        await expect(page.getByText("Spoken conversation will appear here.")).toBeVisible();
       }
       await page.screenshot({
         path: `test-results/empty-${viewport.width}-${mode.toLowerCase()}.png`,
@@ -85,16 +84,19 @@ for (const viewport of [
   });
 }
 
-test("empty notices remain truthful through interruption, streaming and recovery", async ({
+test("empty lanes omit secondary notices while populated transcripts retain them", async ({
   page,
 }) => {
   const view = emptyView();
   await page.route("**/api/live", (route) => route.fulfill({ json: view }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "No voice text yet" })).toBeVisible();
+  view.voiceNotice = "Voice transcript was interrupted.";
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "No voice text yet" })).toBeVisible();
+  await expect(page.getByText(view.voiceNotice, { exact: true })).toHaveCount(0);
+  await expect(page.locator(".transcript-empty p")).toHaveCount(0);
   view.voiceNotice = "Some voice text is incomplete.";
-  await expect(page.getByRole("status").filter({ hasText: view.voiceNotice })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No voice text yet" })).toHaveCount(0);
   view.voice = [{ id: "speech", role: "user", status: "streaming", content: "Speech arriving" }];
   await expect(page.getByText("Speech arriving")).toBeVisible();
   await expect(page.locator('[data-lane="voice"] .transcript-empty')).toHaveCount(0);
@@ -106,7 +108,8 @@ test("empty notices remain truthful through interruption, streaming and recovery
   view.phase = "unavailable";
   view.agentNotice = "Agent transcript disconnected. Reconnecting…";
   await expect(page.getByText("Start with a message below.")).toHaveCount(0);
-  await expect(page.getByRole("status").filter({ hasText: view.agentNotice })).toBeVisible();
+  await expect(page.getByText(view.agentNotice, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "No agent messages yet" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Agent" })).toBeEditable();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
 });

@@ -238,19 +238,12 @@ body,
   margin-block: auto;
 }
 .transcript-empty h2 {
-  margin: 0 0 8px;
+  margin: 0;
   color: #c7cbc2;
   font-size: 16px;
   font-weight: 500;
   line-height: 1.5;
   text-wrap: balance;
-}
-.transcript-empty p {
-  margin: 0;
-  color: #969d91;
-  font-size: 14px;
-  line-height: 1.65;
-  overflow-wrap: break-word;
 }
 @container lane (max-width: 280px) {
   .agent-dock,
