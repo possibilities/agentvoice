@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 for (const count of [2, 3, 5])
   test(`${count} expanded activities remain fully painted and do not overlap next message`, async ({
     page,

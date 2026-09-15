@@ -203,8 +203,8 @@ quiet-resume instruction that briefly addressed it; [ADR 0011](adr/0011-spoken-h
 restoration. [ADR 0012](adr/0012-vanilla-voice-reconnects.md) then retired the
 instruction. [ADR 0017](adr/0017-remove-spoken-history-replay.md) subsequently
 removed automatic saved-speech replay entirely at that time.
-[ADR 0066](adr/0066-same-thread-voice-continuity.md) now restores bounded same-root speech
-context with an explicit historical/wait boundary at the operator’s request. [ADR 0020](adr/0020-native-launch-defaults.md) separately restores native
+[ADR 0066](adr/0066-same-thread-voice-continuity.md) briefly restored bounded speech;
+[ADR 0074](adr/0074-fail-closed-voice-history.md) removed it after duplicate-work incidents. [ADR 0020](adr/0020-native-launch-defaults.md) separately restores native
 startup-context resolution; [ADR 0029](adr/0029-desktop-startup-context.md) later selects the desktop false default. Neither restores AgentVoice replay.
 
 ## Native voice context levers retained
@@ -222,11 +222,9 @@ request or skip it; raw null restores native server resolution.
 Native tail flush and startup-text overrides stay unset by default.
 Global/workspace instructions still apply.
 
-AgentVoice restores bounded completed speech from its exact workspace/root private
-voice transcript as initial items on v3 starts. Explicit raw `voice.extra.initialItems`
-(including `[]`/`null`) remains authoritative; other protocols skip restoration.
-No audio/input resubmission or working-agent turn is generated. Native thread resume
-and explicit prompt/config customization are unchanged (ADR 0066).
+AgentVoice supplies no automatic saved-speech initial items. Native thread resume,
+private read-only transcripts and explicit prompt/config customization remain
+unchanged ([ADR 0074](adr/0074-fail-closed-voice-history.md)).
 
 The former `voice.replay-spoken-history` key is retired ([ADR 0017](adr/0017-remove-spoken-history-replay.md)), alongside
 `voice.quiet-resume` ([ADR 0012](adr/0012-vanilla-voice-reconnects.md)). Remove either key even when set to false; launch

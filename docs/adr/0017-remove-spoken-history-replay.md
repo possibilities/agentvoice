@@ -1,5 +1,7 @@
 # Remove automatic spoken-history replay
 
+**Current policy:** [ADR 0074](0074-fail-closed-voice-history.md) removes ADR 0066 automatic history injection after duplicate-work incidents.
+
 **Continuity update:** [ADR 0066](0066-same-thread-voice-continuity.md) restores bounded same-root speech context with historical framing at the operator’s request.
 
 **Partial policy update:** [ADR 0020](0020-native-launch-defaults.md) replaces the retained startup-context false default with native resolution and makes ordinary launch fresh. The replay removal remains current.

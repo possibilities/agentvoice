@@ -22,7 +22,6 @@ import {
 } from "../mailbox/contract.ts";
 import { SubagentObserver } from "../mailbox/observer.ts";
 import { stateDirectory } from "../paths.ts";
-import { type CompletedSpeech, voiceContinuity } from "../recording/continuity.ts";
 import { projectRole } from "../roles/runtime.ts";
 import {
   AppServerConnection,
@@ -220,7 +219,6 @@ export class VoiceRuntime {
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
   private readonly voiceCatalog: NativeVoiceCatalog;
-  private readonly recentSpeech: CompletedSpeech[] = [];
   private voiceRequest: { id: string; voice: string | null; confirmed: boolean } | undefined;
 
   constructor(
@@ -255,30 +253,8 @@ export class VoiceRuntime {
         if (!connection || !threadId || this.shuttingDown)
           throw new AppServerError("Codex is not ready");
         const params = realtimeParams(this.config, this.prompts, threadId, sessionId, sdp);
-        if (
-          params["version"] === "v3" &&
-          (params["transport"] as { type?: string } | null)?.type !== "existingCall" &&
-          !Object.hasOwn(params, "initialItems")
-        ) {
-          try {
-            const context = voiceContinuity(
-              this.options.nativeStateDir ?? stateDirectory(process.env, homedir()),
-              this.config.orchestrator.workspace,
-              threadId,
-              this.recentSpeech,
-            );
-            if (context.items.length) params["initialItems"] = context.items;
-            if (context.truncated)
-              this.events.onWarning?.(
-                "Voice continuity includes only the recent completed transcript",
-              );
-          } catch {
-            // A damaged/missing observation must not discard the working session or prevent a call.
-            this.events.onWarning?.(
-              "Voice continuity is unavailable; working-thread history is retained",
-            );
-          }
-        }
+        // Saved speech is observation, never successor-session input. Stock native
+        // delegation has no source-item admission gate; a prompt warning cannot fence it.
         this.voiceRequest = {
           id: sessionId,
           voice: typeof params["voice"] === "string" ? params["voice"] : null,
@@ -714,19 +690,7 @@ export class VoiceRuntime {
     }
     this.threadObserver?.notification(method, params);
     const voice = nativeVoiceNotification(method, params);
-    if (voice) {
-      if (
-        voice.data.threadId === this.threadId &&
-        voice.event === "voice.item.completed" &&
-        "item" in voice.data &&
-        voice.data.item.type === "transcriptSegment"
-      ) {
-        this.recentSpeech.push(voice.data.item);
-        if (this.recentSpeech.length > 128) this.recentSpeech.shift();
-      }
-      // Capture before sending to the controller; its disk writer is across IPC.
-      this.options.onVoice?.(voice);
-    }
+    if (voice) this.options.onVoice?.(voice);
     const id = params["threadId"];
     const turn = (params["turn"] ?? {}) as Record<string, unknown>;
     if (typeof id === "string") {

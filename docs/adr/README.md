@@ -28,7 +28,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0014: Roles are directories delivered to the owned child](0014-roles.md) | Partially superseded | [0042](0042-workspace-role-databases.md) captures explicitly ejected workspace roles in SQLite; unbound roles retain directory behavior. |
 | [0015: Retain the foreground controller, replace the voice runtime](0015-retain-controller-replace-runtime.md) | Partially superseded | [0024](0024-server-and-pointer-frontend.md) moves the retained controller/runtime under the waiting server; [0033](0033-client-owned-native-media.md) moves native media to clients. Runtime replacement, owned Codex cleanup and journaled operations remain. |
 | [0016: Submit an optional handoff after runtime restart](0016-restart-handoff.md) | Accepted | — |
-| [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Partially superseded | [0066](0066-same-thread-voice-continuity.md) restores bounded same-root context; retired keys remain retired. |
+| [0017: Remove automatic spoken-history replay](0017-remove-spoken-history-replay.md) | Partially superseded | [0074](0074-fail-closed-voice-history.md) removes unsafe automatic context again; retired keys remain retired. |
 | [0018: Observe lifecycle state through a separate Unix socket](0018-read-only-lifecycle-event-socket.md) | Partially superseded | [0026](0026-persistent-voice-transcripts.md) adds a separate persistent voice-transcript writer. The live event feed remains transient, lifecycle snapshots remain content-free, and their watermarks do not promise transcript replay. |
 | [0019: Compare defaults against the Codex client and server together](0019-client-server-default-baseline.md) | Recorded | — |
 | [0020: Native permissions and context, fresh ordinary launches](0020-native-launch-defaults.md) | Partially superseded | [0029](0029-desktop-startup-context.md) replaces the startup-context default; [0052](0052-workspace-session-marker.md) replaces fresh launches and selection flags. |
@@ -122,3 +122,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0072: Retire terminal composition and attachment commands](0072-retire-terminal-composition-and-attachments.md) — accepted; bare invocation shows help, the web UI owns transcripts and typed input, and the host gateway is narrowed to exact-root input and explicit speech.
 
 - [0073: Parallel workspace web readers](0073-parallel-workspace-web-readers.md) — accepted; explicit host-side workspace and local origin selection keep test sessions independent from the default server.
+
+- [0074: Keep historical speech outside realtime input](0074-fail-closed-voice-history.md)

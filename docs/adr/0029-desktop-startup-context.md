@@ -1,5 +1,7 @@
 # Desktop startup-context default
 
+**Current policy:** [ADR 0074](0074-fail-closed-voice-history.md) removes ADR 0066 automatic history injection after duplicate-work incidents.
+
 **Continuity update:** [ADR 0066](0066-same-thread-voice-continuity.md) restores bounded same-root speech context with historical framing at the operator’s request.
 
 2026-09-08. Supersedes [ADR 0020](0020-native-launch-defaults.md) only for the generic voice startup-context

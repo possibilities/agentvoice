@@ -1,5 +1,7 @@
 # 0066: Restore bounded same-thread voice context
 
+**Superseded by [ADR 0074](0074-fail-closed-voice-history.md):** role-bearing history caused duplicate work; automatic restoration is removed. The following records the former decision.
+
 Accepted 2026-09-14 at the operator's request after a client network change
 retained the working agent but lost the speech front's conversational agreement.
 Supersedes [0017](0017-remove-spoken-history-replay.md)'s ban on automatic voice

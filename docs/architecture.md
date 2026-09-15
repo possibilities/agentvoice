@@ -184,8 +184,8 @@ owns the current source map and recording/attachment implementation guidance.
   and typed conversation observation. Conversation content has bounded in-memory
   replay and live-item snapshots; native history pages come from the owned child.
   The controller automatically saves private workspace/thread-namespaced voice JSONL
-  from workspace-session startup. `src/recording/continuity.ts` reads bounded recent
-  completed speech from that exact root for v3 initial context (ADR0066).
+  from workspace-session startup. Saved speech remains read-only observation; it is never converted into
+  automatic realtime initial items (ADR 0074).
   The explicit scripts/voice-record.ts observer may additionally export received voice events to
   private per-conversation JSONL for external viewing; never feed recordings back
   into native history or automatic replay; exported observer files are not a
