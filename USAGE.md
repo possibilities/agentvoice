@@ -1,11 +1,12 @@
 # Using AgentVoice from an orchestrator
 
 Run `agentvoice server` in the workspace and `agentvoice` in another terminal.
-The first frontend lazily starts the server's retained workspace session. Its
-controller keeps exact identity, leases, API/MCP endpoints, native work and the
-operation journal across runtime replacements and frontend detach. Closing the
-frontend stops realtime voice and client media; a later frontend attaches fresh
-media to the same backend.
+A valid workspace marker restores the server's retained workspace session at
+launch without media; otherwise the first frontend starts it lazily. Its controller
+keeps exact identity, leases, API/MCP endpoints, native work and the operation
+journal across runtime replacements and frontend detach. Closing the frontend
+stops realtime voice and client media; a later frontend attaches fresh media to
+the same backend.
 
 Your orchestration thread receives a built-in `agentvoice_control` MCP entry on
 start and resume. It is required, but connection/catalog readiness is

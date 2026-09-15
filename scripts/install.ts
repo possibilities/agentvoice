@@ -38,8 +38,9 @@ const usage = `Usage: scripts/install.sh --install [--quit-menu] [--menu-only | 
 Install frozen dependencies, build native audio, and atomically link the editable
 agentvoice command to this checkout. On macOS also install AgentVoice.app and start
 the default waiting-server LaunchAgent (replacing this installer's existing job).
-No audio or Codex child opens until a frontend calls. --command-only skips the app
-and service. --menu-only updates only the menu app and never restarts the server.
+No server-owned audio opens; the service restores a valid marked Codex session or
+waits unmarked for a frontend. --command-only skips the app and service. --menu-only
+updates only the menu app and never restarts the server.
 For an outdated running menu, --quit-menu asks the owned app to quit gracefully and
 reopens it after publication. Requires a clean Git checkout, Bun 1.3+, stock Codex
 and a C11 compiler for a full or command-only install.
