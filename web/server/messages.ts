@@ -116,17 +116,6 @@ export class VoiceMessages {
       }
       if (hasIncompleteVoiceText || (hasVoiceText && record.type === "recording.gap"))
         this.notice = "Some voice text is incomplete.";
-      else if (
-        !hasVoiceText &&
-        ((record.type === "recording.gap" &&
-          ![
-            "previous_recording_interrupted",
-            "runtime_replaced",
-            "runtime_replacement_interrupted",
-          ].includes(record.reason)) ||
-          (record.type === "recording.ended" && record.reason === "error"))
-      )
-        this.notice = "Voice transcript was interrupted.";
       this.active.clear();
       return;
     }

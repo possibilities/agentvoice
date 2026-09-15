@@ -22,7 +22,8 @@ A quiet lined dock below Voice tracks the Agent composer's height, keeping the
 two transcript viewports aligned as drafts and queued messages expand.
 Empty lanes use one readable heading at the center of the transcript area,
 without secondary guidance or notices. Populated transcripts retain their status
-notices. The mounted transcript and composer stay stable when the first message
+notices tied to observed text. Recording boundaries before any speech do not
+create a notice that can outlive the empty state. The mounted transcript and composer stay stable when the first message
 arrives or a lane is concealed, preserving drafts, focus and reading state.
 
 Both lanes window measured message blocks, open at the latest message and follow

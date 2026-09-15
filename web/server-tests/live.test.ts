@@ -810,7 +810,7 @@ test("empty pending voice stays hidden until transcript text arrives", () => {
   expect(messages.messages()).toMatchObject([{ content: "Now audible", status: "streaming" }]);
 });
 
-test("genuine or unknown recording loss stays visible without surviving text", () => {
+test("recording gaps before speech do not leave a stale notice on later complete speech", () => {
   for (const boundary of [
     { type: "recording.gap", reason: "unfinished_record_recovered" },
     { type: "recording.gap", reason: "recording_failed" },
@@ -820,7 +820,37 @@ test("genuine or unknown recording loss stays visible without surviving text", (
     const messages = new VoiceMessages();
     messages.accept(JSON.stringify(boundary), "thread");
     expect(messages.messages()).toEqual([]);
-    expect(messages.notice).toBe("Voice transcript was interrupted.");
+    expect(messages.notice).toBeUndefined();
+    messages.accept(
+      JSON.stringify({
+        v: 2,
+        type: "event",
+        event: "voice.item.completed",
+        data: {
+          threadId: "thread",
+          instanceId: "controller",
+          generation: 1,
+          sequence: 1,
+          item: {
+            type: "transcriptSegment",
+            id: "later",
+            realtimeSessionId: "rt",
+            role: "user",
+            text: "Complete speech after the empty gap",
+          },
+        },
+      }),
+      "thread",
+    );
+    expect(messages.messages()).toMatchObject([
+      { content: "Complete speech after the empty gap", status: "complete" },
+    ]);
+    expect(messages.notice).toBeUndefined();
+    messages.accept(
+      JSON.stringify({ type: "recording.gap", reason: "recording_failed" }),
+      "thread",
+    );
+    expect(messages.notice).toBe("Some voice text is incomplete.");
   }
 });
 
