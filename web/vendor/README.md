@@ -1,6 +1,6 @@
-# @agentchats/transcript 0.3.11
+# @agentchats/transcript 0.3.12
 
-Packed from AgentChats candidate `aca2534`, based on
+Packed from AgentChats candidate `8bf887a`, based on
 [agentchats f756d03](https://github.com/possibilities/agentchats/commit/f756d03a2a4fa026c1e2948a16af0cd5149a9665),
 based on the requested `e973c55` foundation. MIT license is inside the archive.
 Consumer fixes and shared features landed upstream:
@@ -48,8 +48,10 @@ Consumer fixes and shared features landed upstream:
   monospace native controls without a redundant visible dialog hint.
 - `aca2534`: ordinary painting and measurement for grouped activity children;
   removes nested content-visibility placeholders inside windowed outer rows.
+- `f428d02`: remeasures windowed rows after disclosure transitions settle so a
+  following absolute row cannot cover the final activity in WKWebView.
 
-Archive SHA-256: `00e9c2d8277d0764e08216f6753960fb053357c123e12dae8cf6e207781b5dc4`.
+Archive SHA-256: `d95ce6361ccba057e2b71f67ca840b8b21406e99775fbd64bf51daf5c67d55e7`.
 
 Reproduce from that clean agentchats revision:
 
