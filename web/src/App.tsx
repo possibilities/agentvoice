@@ -29,10 +29,8 @@ import type { AgentControlsView, LiveView } from "./types.ts";
 const copy = {
   offline: "No agent voice server to connect to.",
   empty: "AgentVoice is ready. Start a client to begin a workspace session.",
-  detached: "Voice client detached. Agent remains available.",
   connecting: "Connecting to AgentVoice…",
   unavailable: "AgentVoice is unavailable. Reconnecting…",
-  live: "",
 };
 
 const interactiveComposerTarget =
@@ -143,14 +141,13 @@ export function App() {
   const holding =
     (hasSession && (view.agentHistoryLoading || view.voiceHistoryLoading)) ||
     (!hasSession && view.agent.length === 0 && view.voice.length === 0);
-  const showStatus = holding || view.phase !== "live";
   const statusText = !preferenceSaved
     ? "View saved for this visit only."
-    : showStatus
-      ? holding && hasSession
-        ? "Loading conversation…"
-        : copy[view.phase]
-      : "";
+    : holding && hasSession
+      ? "Loading conversation…"
+      : view.phase === "live" || view.phase === "detached"
+        ? ""
+        : copy[view.phase];
   // Initial reveal and incarnation replacement stay atomic; only subsequent
   // history updates may lag behind the immediately available input controls.
   const transcriptView =

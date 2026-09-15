@@ -27,9 +27,8 @@ test("detached sessions retain interactive drafts while unavailable sessions dis
   await input.fill("Unsent draft before reconnect");
   view.phase = "detached";
   view.agentControls!.available = true;
-  await expect(
-    page.getByText("Voice client detached. Agent remains available.", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".app-status")).toHaveText("");
+  await expect(page.locator(".app-status")).not.toHaveAttribute("data-visible");
   await expect(page.getByText("Existing history remains readable.", { exact: true })).toBeVisible();
   await expect(input).toBeEnabled();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();

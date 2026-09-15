@@ -283,9 +283,8 @@ test("an empty retained session keeps both lanes and an interactive composer", a
   });
   await page.goto("/");
 
-  await expect(
-    page.getByText("Voice client detached. Agent remains available.", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".app-status")).toHaveText("");
+  await expect(page.locator(".app-status")).not.toHaveAttribute("data-visible");
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toBeVisible();
   await expect(page.getByText("No agent messages yet.", { exact: true })).toBeVisible();
