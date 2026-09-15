@@ -1,0 +1,40 @@
+@import "tailwindcss" source(none);
+@import "theme.css";
+@import "presentation.css";
+@source "./transcript.tsx";
+@source "./windowed-transcript.tsx";
+@source "./composer.tsx";
+@source "./document-viewer.tsx";
+@source "../components/chat";
+@source "../components/ui/button.tsx";
+@source "../components/ui/bubble.tsx";
+@source "../components/ui/collapsible.tsx";
+@source "../components/ui/message.tsx";
+@source "../components/ui/message-scroller.tsx";
+@source "../components/ui/marker.tsx";
+@source "../components/ui/tooltip.tsx";
+@source "../components/ui/dropdown-menu.tsx";
+@source "../components/ui/input-group.tsx";
+@source "../components/ui/input.tsx";
+@source "../components/ui/textarea.tsx";
+@custom-variant dark (&:is(.dark *));
+
+.agentchats-transcript,
+:scope.agentchats-transcript {
+  box-sizing: border-box;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: var(--font-mono);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+button:not(:disabled) { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

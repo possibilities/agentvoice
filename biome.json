@@ -9,7 +9,7 @@
       "!android/configurator/profiles",
       "*.json",
       "web/**",
-      "!web/vendor",
+      "!web/src/transcript-ui/styles.css",
       "!web/dist",
       "!web/node_modules",
       "!web/test-results",
@@ -20,6 +20,38 @@
     "indentStyle": "space",
     "lineWidth": 100
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["web/src/transcript-ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noNoninteractiveTabindex": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["web/src/transcript-ui/transcript/*.css"],
+      "formatter": {
+        "enabled": false
+      }
+    }
+  ],
   "linter": {
     "rules": {
       "preset": "recommended",

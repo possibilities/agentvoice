@@ -1,6 +1,6 @@
 # Web Agent input semantics
 
-The Agent composer is shared with agentchats. AgentVoice owns its transport and
+The Agent composer is owned with the transcript UI inside AgentVoice. AgentVoice owns its transport and
 queue, submitting explicit human text through the existing attachment bootstrap
 and gateway. Reading transcripts never submits work. Voice has no composer.
 

@@ -76,7 +76,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0059: Clarify mailbox and conversation-hold guidance](0059-clarify-mailbox-and-conversation-hold-guidance.md) | Accepted | Wording follows retained workspace-session ownership; no runtime hold mechanism. |
 | [0061: Own Android call notification control contrast](0061-custom-android-call-notification.md) | Accepted | Custom expanded controls replace CallStyle; microphone service and communication audio ownership remain unchanged. |
 | [0062: Web text interaction without voice attachment](0062-web-text-interaction-without-voice-attachment.md) | Accepted | Verified retained native session reachability grants text authority independently of media attachment. |
-| [0063: Linked Markdown document viewer](0063-linked-markdown-document-viewer.md) | Accepted | Shared in-app reading surface with host-authorized linked Markdown access and contained relative navigation. |
+| [0063: Linked Markdown document viewer](0063-linked-markdown-document-viewer.md) | Partially superseded | [0075](0075-own-web-transcript-ui.md) transfers source ownership to AgentVoice; host-authorized linked Markdown access and contained relative navigation remain. |
 
 | [0060: Web session and browser-process continuity](0060-web-session-and-browser-process-continuity.md) | Partially superseded | [0071](0071-restore-marked-session-on-server-start.md) limits its empty-server state to unmarked workspaces; browser recovery and served-code activation remain. |
 
@@ -124,3 +124,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0073: Parallel workspace web readers](0073-parallel-workspace-web-readers.md) — accepted; explicit host-side workspace and local origin selection keep test sessions independent from the default server.
 
 - [0074: Keep historical speech outside realtime input](0074-fail-closed-voice-history.md)
+
+- [0075: Own the web transcript UI in AgentVoice](0075-own-web-transcript-ui.md) — accepted; source, dependencies, scoped styles, and regressions live inside AgentVoice without an AgentChats package or archive.

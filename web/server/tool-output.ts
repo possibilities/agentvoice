@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "@agentchats/transcript";
+import type { TranscriptMessage } from "../src/transcript-ui/transcript/index.ts";
 
 type Section = NonNullable<NonNullable<TranscriptMessage["toolActivity"]>["sections"]>[number];
 const object = (value: unknown): value is Record<string, unknown> =>

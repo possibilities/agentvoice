@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
+import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { stateDirectory } from "../src/paths.ts";
@@ -37,6 +38,7 @@ function localApi(): Plugin {
 
 export default defineConfig({
   html: { cspNonce: nonce },
+  resolve: { alias: { "@": fileURLToPath(new URL("./src/transcript-ui", import.meta.url)) } },
   server: { host: "127.0.0.1", strictPort: true, cors: false },
   preview: { host: "127.0.0.1", strictPort: true, cors: false },
   optimizeDeps: { include: ["@pierre/diffs", "@pierre/diffs/react"] },

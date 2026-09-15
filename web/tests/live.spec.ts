@@ -1,6 +1,6 @@
-import type { TranscriptMessage } from "@agentchats/transcript";
-import { mapCodexSubagentActivity } from "@agentchats/transcript/codex";
 import { expect, test } from "@playwright/test";
+import { mapCodexSubagentActivity } from "../src/transcript-ui/transcript/codex.ts";
+import type { TranscriptMessage } from "../src/transcript-ui/transcript/index.ts";
 import type { LiveView } from "../src/types.ts";
 
 const message = (

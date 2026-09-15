@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "@agentchats/transcript";
+import type { TranscriptMessage } from "./transcript-ui/transcript/index.ts";
 
 export type AgentQueuedMessage = {
   id: string;

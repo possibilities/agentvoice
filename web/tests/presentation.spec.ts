@@ -1,5 +1,5 @@
-import { parseCodexMessagePresentation } from "@agentchats/transcript/codex";
 import { expect, test } from "@playwright/test";
+import { parseCodexMessagePresentation } from "../src/transcript-ui/transcript/codex.ts";
 import type { LiveView } from "../src/types.ts";
 
 test("voice delegation is readable, preserves original details and uses shared lane density", async ({

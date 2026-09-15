@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "@agentchats/transcript";
+import type { TranscriptMessage } from "./transcript-ui/transcript/index.ts";
 import type { LiveView } from "./types.ts";
 
 // Snapshots contain JSON values. Compare every field so future presentation

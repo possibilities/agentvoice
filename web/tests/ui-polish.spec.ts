@@ -1,5 +1,5 @@
-import { parseCodexMessagePresentation } from "@agentchats/transcript/codex";
 import { expect, test } from "@playwright/test";
+import { parseCodexMessagePresentation } from "../src/transcript-ui/transcript/codex.ts";
 import type { LiveView } from "../src/types.ts";
 
 for (const width of [1440, 390]) {

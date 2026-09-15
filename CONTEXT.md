@@ -281,6 +281,12 @@ replay, live snapshots, and explicitly requested native history pages. It never
 starts or resumes work and never feeds content into a voice call.
 _Avoid_: speech replay, control attachment, transcript database.
 
+**Transcript UI** — The AgentVoice-owned provider-neutral message model, Codex
+presentation adapters, React transcript/composer/document components, and scoped
+styles under `web/src/transcript-ui/`. It renders Agent and Voice observations and
+accepts host-authorized Agent input without owning native history, transport, or
+work execution. _Avoid_: shared AgentChats package, vendor archive, cross-checkout UI import.
+
 **Live conversation snapshot** — A bounded projection of conversation items and
 updates actually received by the controller, with an exact publication-sequence
 cut. Its coverage is always partial; it is independent of native persisted history.

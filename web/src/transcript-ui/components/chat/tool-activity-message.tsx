@@ -1,0 +1,59 @@
+import { ChevronRightIcon, CircleAlertIcon, TerminalSquareIcon } from "lucide-react";
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { useDisclosureState } from "@/transcript/disclosure-state";
+import type { Message } from "@/types/message";
+
+export function ToolActivityMessage({ message }: { message: Message }) {
+  const [open, setOpen] = useDisclosureState(`tool:${message.id}`);
+  const activity = message.toolActivity;
+  const isError = message.status === "error";
+  const summary = activity?.detail || message.content;
+  const sections = activity?.sections?.filter((section) => section.content.trim()) ?? [];
+  const hasPayload = sections.length > 0;
+  // A host may supply only a full summary (or summary + output, as agentvoice
+  // does for commands). CSS ellipsis must never be its only reading surface.
+  if (summary.trim() && !sections.some((section) => section.content.includes(summary))) {
+    sections.unshift({ label: activity?.name ?? "Details", content: summary });
+  }
+  if (!hasPayload && message.content.trim() && message.content !== summary) {
+    sections.push({ label: "Content", content: message.content });
+  }
+  const hasDetails = sections.length > 0;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Marker variant="border" className="tool-disclosure" data-error={isError || undefined}>
+        <MarkerIcon>{isError ? <CircleAlertIcon /> : <TerminalSquareIcon />}</MarkerIcon>
+        <MarkerContent>
+          <CollapsibleTrigger
+            className="tool-disclosure__trigger"
+            disabled={!hasDetails}
+            data-open={open || undefined}
+          >
+            <span className="tool-disclosure__name">
+              {isError ? "Failed · " : ""}
+              {activity?.name ?? "Tool"}
+            </span>
+            <span className="tool-disclosure__summary">{summary}</span>
+            {activity?.meta ? <span className="tool-disclosure__meta">{activity.meta}</span> : null}
+            {hasDetails ? <ChevronRightIcon className="tool-disclosure__chevron" /> : null}
+          </CollapsibleTrigger>
+          {hasDetails ? (
+            <CollapsibleContent className="tool-disclosure__content">
+              {sections.map((section, index) => (
+                <section key={`${section.label}:${index}`} className="tool-detail">
+                  <h4>{section.label}</h4>
+                  <pre tabIndex={0} aria-label={section.label}>
+                    {section.content}
+                  </pre>
+                </section>
+              ))}
+            </CollapsibleContent>
+          ) : null}
+        </MarkerContent>
+      </Marker>
+    </Collapsible>
+  );
+}

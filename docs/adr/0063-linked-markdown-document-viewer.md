@@ -3,6 +3,10 @@
 Accepted 2026-09-14 at the operator's request. Extends the shared transcript
 presentation boundary without changing native session or action authority.
 
+Source ownership is partially superseded by
+[0075](0075-own-web-transcript-ui.md): AgentVoice now owns these components and
+styles internally. The behavior and activation boundaries below remain unchanged.
+
 ## Context
 
 Assistant replies contain ordinary external URLs alongside Markdown paths in the

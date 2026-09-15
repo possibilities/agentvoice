@@ -1,4 +1,4 @@
-import type { DocumentLoader } from "@agentchats/transcript/react";
+import type { DocumentLoader } from "./transcript-ui/transcript/react.ts";
 
 /** The host authorizes linked Markdown; the browser never chooses a filesystem root. */
 export const loadDocument: DocumentLoader = async ({ href, base, signal }) => {

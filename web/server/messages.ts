@@ -1,11 +1,11 @@
-import type { TranscriptMessage } from "@agentchats/transcript";
-import {
-  mapCodexSubagentActivity,
-  parseCodexMessagePresentation,
-} from "@agentchats/transcript/codex";
 import type { z } from "zod";
 import type { conversationItemSchema } from "../../src/events/conversation.ts";
 import { recordedVoiceFrame } from "../../src/recording/writer.ts";
+import {
+  mapCodexSubagentActivity,
+  parseCodexMessagePresentation,
+} from "../src/transcript-ui/transcript/codex.ts";
+import type { TranscriptMessage } from "../src/transcript-ui/transcript/index.ts";
 
 import { toolOutputSections } from "./tool-output.ts";
 

@@ -1,9 +1,4 @@
 import {
-  DocumentViewerProvider,
-  Transcript,
-  TranscriptComposer,
-} from "@agentchats/transcript/react";
-import {
   type MouseEvent,
   memo,
   useCallback,
@@ -24,6 +19,11 @@ import {
 } from "./optimistic.ts";
 import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
 import { reconcileView } from "./reconcile-view.ts";
+import {
+  DocumentViewerProvider,
+  Transcript,
+  TranscriptComposer,
+} from "./transcript-ui/transcript/react.ts";
 import type { AgentControlsView, LiveView } from "./types.ts";
 
 const copy = {

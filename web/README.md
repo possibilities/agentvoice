@@ -2,7 +2,7 @@
 
 `agentvoice serve` opens a live web view at **https://agentvoice.localhost**.
 Two equal, full-height lanes put Agent on the left and Voice on the right. They use
-`@agentchats/transcript` with Human / Agent labels, Markdown and inline tool/diff
+the AgentVoice-owned transcript UI with Human / Agent labels, Markdown and inline tool/diff
 disclosures. There is no toolbar or call control.
 The Agent lane includes the shared text composer with an always-visible Send
 button and Steer / Queue choices while Agent is working. Send is disabled when
@@ -212,13 +212,18 @@ in-process window; they are not a durable native exactly-once guarantee.
 See [Agent input semantics](../docs/web-agent-input.md) for source evidence and
 turn/queue boundaries.
 
-## Shared package
+## Owned transcript UI
 
-The packed MIT package in `vendor/` comes from agentchats main, based on `e973c55`
-plus the first-consumer fixes recorded in [vendor/README.md](vendor/README.md).
-`package-lock.json` verifies its integrity. No adjacent checkout is needed to
-install, build or run. UI imports use only the package's public data, React and
-scoped stylesheet exports, with no aliases into agentchats internals.
+`src/transcript-ui/` owns the provider-neutral data helpers, Codex presentation
+adapters, React components, types, utilities and styles used by this app. It was
+transferred from the MIT-licensed AgentChats transcript package at `4778b88`
+(0.3.13); its license and provenance stay beside the source. There is no archive,
+package dependency, adjacent checkout import or runtime dependency on AgentChats.
+
+Readable Tailwind/theme/presentation sources compile into the checked-in scoped
+stylesheet with `npm run transcript:styles`. The normal build runs
+`transcript:styles:check`, so generated CSS cannot drift from its AgentVoice-owned
+sources. The scoped output keeps host styles outside transcript roots unchanged.
 
 The host supplies complete snapshots to `Transcript`: older native history can
 arrive before existing messages, and reverts can remove messages. Those changes
@@ -250,8 +255,8 @@ The API tests create disposable private frontend/control/event sockets with fake
 calls and saved voice records. They cover ordering, canonical replacement, late
 responses, call ownership and teardown. Dev and preview tests use the real portless
 HTTPS proxy library with a temporary certificate on unprivileged ports, including
-HMR, exact origins, duplicate binding and shutdown. Browser tests import the packed
-components with synthetic transcripts, checking both lanes, scroll following,
+HMR, exact origins, duplicate binding and shutdown. Browser tests exercise the owned
+components directly and through the app with synthetic transcripts, checking both lanes, scroll following,
 disclosures, reconnects and narrow windows. They write ignored screenshots/traces
 under `web/test-results/`. No test uses credentials, microphones or model turns.
 

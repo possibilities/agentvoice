@@ -11,6 +11,10 @@ The valid empty state below is limited by
 [0071](0071-restore-marked-session-on-server-start.md) to an unmarked workspace;
 a valid saved marker now restores before any voice frontend attaches.
 
+Source ownership is partially superseded by
+[0075](0075-own-web-transcript-ui.md): AgentVoice now owns these components and
+styles internally. The behavior and activation boundaries below remain unchanged.
+
 ## Evidence
 
 The running web reader served an old optimized transcript package after the new

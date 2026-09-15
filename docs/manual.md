@@ -254,13 +254,13 @@ agentvoice serve               # https://agentvoice.localhost, editable Vite dev
 agentvoice serve --production  # optional, after bun run web:build
 ```
 
-Two live transcripts sit side by side, labelled Voice and Agent, using shared
-`@agentchats/transcript` blocks with Human / Agent labels. The view watches the
+Two live transcripts sit side by side, labelled Voice and Agent, using the
+AgentVoice-owned transcript components with Human / Agent labels. The view watches the
 running default local server, follows the latest text, and reconnects through
 call changes. An absent server and an idle server have clear empty states.
 There are no surrounding controls, and closing the page leaves the call running.
 The shared portless HTTPS proxy must already be running. See the [web guide](../web/README.md)
-for setup, local-only observation, package provenance, verification and future
+for setup, local-only observation, source provenance, verification and future
 launchd ownership.
 
 ### Permissions

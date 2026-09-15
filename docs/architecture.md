@@ -49,8 +49,10 @@ owns the current source map and recording/attachment implementation guidance.
   server launch when it has a valid marker; otherwise resolve it when the first
   frontend creates the lazy workspace session. Keep it pinned until server
   shutdown. No reset/deletion or context-policy changes.
-- web/: Agent | Voice browser composition using the packed `@agentchats/transcript`
-  API. `server/live-reader.ts` observes the default or explicitly selected workspace
+- web/: Agent | Voice browser composition using the AgentVoice-owned transcript
+  source in `web/src/transcript-ui/`. Its provider-neutral data helpers, Codex adapters,
+  React components, readable style sources and deterministic scoped stylesheet build
+  are one internal boundary. `server/live-reader.ts` observes the default or explicitly selected workspace
   frontend without fallback, verifies the live
   controller and fences native history/live snapshots and saved voice tails.
   `server/agent-controls.ts` owns explicit Agent composer input and the private paused-on-restart
