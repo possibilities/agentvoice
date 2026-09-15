@@ -12,6 +12,11 @@ corresponding disconnect language in [0034](0034-authenticated-client-network.md
 security, media ownership, continuation, attachment, mailbox, and replacement
 decisions remain.
 
+The first-frontend lazy-start rule and its default-workspace selection timing are
+superseded for valid marked workspaces by
+[0071](0071-restore-marked-session-on-server-start.md). Markerless workspaces and
+all detach/retention boundaries below remain active.
+
 ## Decision
 
 One `agentvoice server` process owns at most one workspace session. It creates

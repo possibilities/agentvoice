@@ -66,10 +66,10 @@ From a prepared checkout (Bun dependencies and native audio already built), run
 these in separate terminals:
 
 ```sh
-# Terminal 1: waits without opening audio or starting Codex
+# Terminal 1: restores marked native work, or waits unmarked; opens no audio
 bun run /path/to/agentvoice/src/main.ts server
 
-# Terminal 2: connects and starts a call
+# Terminal 2: attaches media, creating an unmarked session if needed
 bun run /path/to/agentvoice/src/main.ts
 ```
 
@@ -164,8 +164,9 @@ previous frontend has disconnected but media is still detaching, displaying
 does not reserve media, reconnect a disconnected client, or retry a refused request.
 Network clients request admission once; busy/closing refusals require an explicit retry.
 This requires a server running the same frontend observation contract; update
-and restart an older server explicitly before using the updated client. The first
-accepted frontend lazily creates and pins the server's workspace session. Closing
+and restart an older server explicitly before using the updated client. A valid
+marker restores and pins the server's workspace session at startup; without one,
+the first accepted frontend creates it lazily. Closing
 the terminal frontend, closing or navigating away from the phone page, or
 terminating its owning process releases holds and closes client media. After the
 native realtime stop is acknowledged, the server retains the controller, runtime,
@@ -188,7 +189,8 @@ agentvoice service remove
 ```
 
 Restart ends any frontend media and the retained workspace session, then starts
-a new waiting server. Removal unloads
+a new waiting server that immediately restores a valid saved marker without
+media. Removal unloads
 only the owned LaunchAgent and removes its plist; workspace directories, logs,
 configuration, command installation and native history remain. The TUI does not
 automatically reconnect after server loss.
@@ -548,10 +550,10 @@ The initial empty generation is created atomically using the base's creation tim
 and a zero UUID, so concurrent initializers agree. Other namespaces are reserved
 for future named voice agents; there is no named-agent selector yet.
 
-The default server selects the current generation once when its first frontend
-creates the lazy workspace session and pins it through detach and runtime restarts.
-A later generation takes effect after server shutdown, when the next server
-lifetime receives its first frontend; old directories and native history remain. There is no reset, deletion or transcript
+The default server selects and pins the current generation at launch when it has
+a valid marker. Without a marker it selects once when its first frontend creates
+the lazy workspace session. A later generation takes effect only at the next
+applicable server/session boundary; old directories and native history remain. There is no reset, deletion or transcript
 cleanup operation. Native context policy is unchanged.
 
 An explicit CLI workspace selects a separate workspace socket; pass the same
@@ -567,9 +569,10 @@ session resumes that exact thread with `thread/read` and `thread/resume`, includ
 server restarts. There is no latest-history lookup. Native identity must still
 match this canonical workspace and an AgentVoice main thread.
 
-If the marker is absent, the next server workspace session creates a new thread
-and saves its ID before readiness. Delete the marker while the server has no
-workspace session to select a new thread for its next lazy start. Deleting it
+If the marker is absent, the next frontend-created workspace session creates a new
+thread and saves its ID before readiness. Delete the marker only while the server
+is stopped or otherwise has no workspace session to select a new thread at the
+next server or frontend start. Deleting it
 during a retained session does not interrupt that session, and frontend reattachment
 does not reread it; ordinary runtime restart still retains its active thread. An invalid or unresumable marker reports an
 error and stays intact. Native history, transcripts and workspace files remain
@@ -603,9 +606,10 @@ It errors at load with removal guidance, as does the older `voice.quiet-resume`
 key. AgentVoice does not migrate or delete your configuration or saved history.
 See [ADR 0017](adr/0017-remove-spoken-history-replay.md) for the decision.
 
-The first frontend connection begins the server's workspace session using the
-selected workspace and marker. Workspace and thread kernel locks remain held
-until server shutdown. Later frontend attachments use that retained identity.
+A valid marker begins the server's workspace session at launch; without one, the
+first frontend connection begins it and creates the marker. Workspace and thread
+kernel locks remain held until server shutdown. Later frontend attachments use
+that retained identity.
 
 Closing a frontend stops client media and, after acknowledged native stop,
 realtime voice. Native work continues in the retained Codex child. Explicit

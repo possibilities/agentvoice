@@ -35,8 +35,8 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0021: Attach a stock TUI through a guarded local gateway](0021-guarded-tui-attachment.md) | Partially superseded | [0022](0022-websocket-native-tui.md) replaces opt-in transport and admission gates; the owned local attachment boundary remains. |
 | [0022: WebSocket-only RPC and native TUI interaction](0022-websocket-native-tui.md) | Accepted | — |
 | [0023: Conversation observation for independent UIs](0023-conversation-observation.md) | Recorded | — |
-| [0024: Waiting local server and pointer-only frontend](0024-server-and-pointer-frontend.md) | Partially superseded | [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle, [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients, and [0053](0053-retain-workspace-session-across-frontend-detach.md) retains the workspace session across frontend detach. The waiting server and pointer frontend remain. |
-| [0025: LaunchAgent and default workspace generations](0025-launchagent-default-workspaces.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) pins the selected default generation for the server lifetime after the first frontend. |
+| [0024: Waiting local server and pointer-only frontend](0024-server-and-pointer-frontend.md) | Partially superseded | [0025](0025-launchagent-default-workspaces.md) supplies the default service/workspace lifecycle, [0033](0033-client-owned-native-media.md) moves audio/WebRTC to clients, [0053](0053-retain-workspace-session-across-frontend-detach.md) retains the workspace session across frontend detach, and [0071](0071-restore-marked-session-on-server-start.md) restores marked sessions before a frontend. The waiting server and pointer frontend remain. |
+| [0025: LaunchAgent and default workspace generations](0025-launchagent-default-workspaces.md) | Partially superseded | [0053](0053-retain-workspace-session-across-frontend-detach.md) pins the selected default generation for the server lifetime; [0071](0071-restore-marked-session-on-server-start.md) selects a marked generation at server launch. |
 | [0026: Persistent workspace voice transcripts](0026-persistent-voice-transcripts.md) | Recorded | — |
 | [0027: A microphone identity for the LaunchAgent](0027-service-microphone-identity.md) | Partially superseded | [0033](0033-client-owned-native-media.md) moves microphone use to the client. The installer-owned signed runtime, stable permission identity and operator-owned consent remain.
 | [0028: Bare command composes local terminal apps](0028-foreground-composition.md) | Partially superseded | [0052](0052-workspace-session-marker.md) replaces attachment-exit shutdown during runtime replacement with exact-thread pane reopening. |
@@ -65,7 +65,7 @@ no status claim beyond the record; it does not certify every detail as current.
 
 | [0051: AgentStart owns manager and worker roles](0051-agentstart-owns-working-roles.md) | Accepted | Supersedes 0049's source ownership and default name. |
 | [0052: Persist one current session in each workspace](0052-workspace-session-marker.md) | Partially superseded | Exact marker-based resume, explicit API/MCP new session, and terminal panes following runtime replacement remain. [0053](0053-retain-workspace-session-across-frontend-detach.md) replaces frontend-scoped call lifetime and lease release. |
-| [0053: Retain one workspace session across frontend detach](0053-retain-workspace-session-across-frontend-detach.md) | Accepted | One server-lifetime controller/runtime and pinned workspace; disposable one-owner media attachments; explicit replacement and shutdown boundaries. |
+| [0053: Retain one workspace session across frontend detach](0053-retain-workspace-session-across-frontend-detach.md) | Partially superseded | [0071](0071-restore-marked-session-on-server-start.md) replaces first-frontend lazy start for marked workspaces; one server-lifetime controller/runtime, disposable media attachments, and explicit replacement/shutdown boundaries remain. |
 
 | [0054: Discover native voices and persist one random choice](0054-native-voice-discovery.md) | Accepted | Dedicated native-backed voice inspection, pre-save compatibility validation, and durable random selection; refines [0042](0042-workspace-role-databases.md). |
 | [0055: One durable Work owner with an independent HUD](0055-durable-work-hud.md) | Partially superseded | [0056](0056-independent-agenthud.md) transfers source and delivery to independent AgentHUD; native execution remains native. |
@@ -78,7 +78,7 @@ no status claim beyond the record; it does not certify every detail as current.
 | [0062: Web text interaction without voice attachment](0062-web-text-interaction-without-voice-attachment.md) | Accepted | Verified retained native session reachability grants text authority independently of media attachment. |
 | [0063: Linked Markdown document viewer](0063-linked-markdown-document-viewer.md) | Accepted | Shared in-app reading surface with host-authorized linked Markdown access and contained relative navigation. |
 
-| [0060: Web session and browser-process continuity](0060-web-session-and-browser-process-continuity.md) | Accepted | Separate frontend connectivity, browser-instance recovery and served-code activation from retained session ownership. |
+| [0060: Web session and browser-process continuity](0060-web-session-and-browser-process-continuity.md) | Partially superseded | [0071](0071-restore-marked-session-on-server-start.md) limits its empty-server state to unmarked workspaces; browser recovery and served-code activation remain. |
 
 ## Identifier history
 
@@ -116,3 +116,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0069: Observe directory role content by runtime generation](0069-directory-role-content-status.md) — accepted; additive content status preserves directory skill and database revision semantics.
 
 - [0070: Preserve menu presence during app-only updates](0070-installer-owned-menu-presence.md) — accepted; explicit private graceful quit and conditional relaunch keep menu updates independent from server restart.
+
+- [0071: Restore a marked workspace session at server start](0071-restore-marked-session-on-server-start.md) — accepted; saved native work and web history return without reserving media or waiting for a client.

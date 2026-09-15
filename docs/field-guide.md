@@ -14,8 +14,9 @@ agentvoice frontend → private workspace socket → agentvoice server
       stock Codex TUI → guarded gateway → private native WebSocket
 ```
 
-The server waits without starting a runtime or opening audio until its first
-frontend connects. That frontend lazily creates and pins one workspace session.
+The server never opens audio. If the selected workspace has a valid marker, server
+startup immediately restores and pins its native runtime without a media owner.
+Otherwise the first frontend lazily creates and pins one workspace session.
 The frontend has static monochrome mute/PTT buttons and connection phase only.
 Closing it releases holds and stops client media and realtime voice after an
 acknowledged native stop; the controller, Codex child and native work remain.
@@ -26,9 +27,9 @@ remain, including optional restart handoffs. Restart reloads the runtime under
 the connected frontend and resumes the same thread. Guarded stock TUI input and
 explicit handoffs use native turns.
 
-Server launch flags select a canonical workspace and conversation policy. The
-lazy workspace session resumes the exact `.agentvoice-session` thread or creates
-one when absent. The retired `--continue` and `--resume` flags no longer select
+Server launch flags select a canonical workspace and conversation policy. A valid
+`.agentvoice-session` thread resumes at server startup; an absent marker leaves
+thread creation to the first frontend. The retired `--continue` and `--resume` flags no longer select
 history. Automatic WebRTC renewal keeps an attached frontend connected. Workspace
 is a selection boundary, not a sandbox.
 

@@ -182,8 +182,9 @@ Client disconnect immediately closes local media and the server's realtime voice
 the server-owned Codex child and native work survive in the pinned workspace
 session. Detach must complete before another media owner is admitted. Reconnect
 means a fresh media attachment, possibly with a fresh clientId, to the same
-controller/workspace/thread. Server restart creates a new workspace session;
-runtime restart/redial retains the owner connection and changes
+controller/workspace/thread. Server restart creates a new controller lifetime and
+immediately restores a valid saved workspace session without media; runtime
+restart/redial retains the owner connection and changes
 media sessions; close only peers named by stale/close events, not their successors.
 
 ## Handoff acceptance

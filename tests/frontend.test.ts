@@ -1,9 +1,19 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MuteGate } from "../src/console/audio-control.ts";
+import { saveSessionMarker } from "../src/core/session-marker.ts";
 import { connectFrontend } from "../src/frontend/client.ts";
+import { observeFrontend } from "../src/frontend/observer.ts";
 import {
   type FrontendState,
   frontendSocketPath,
@@ -11,9 +21,10 @@ import {
   frontendStateSchema,
 } from "../src/frontend/protocol.ts";
 import { type Call, VoiceServer } from "../src/frontend/server.ts";
+import { currentWorkspace } from "../src/workspace.ts";
 
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 3000;
+async function until(predicate: () => boolean, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate() && Date.now() < deadline) await Bun.sleep(5);
   expect(predicate()).toBe(true);
 }
@@ -100,6 +111,42 @@ test("server retains one call across frontend reconnects, releases PTT, and clos
   } finally {
     await client?.close();
     await second?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("server restores native work before a frontend and later attaches media to the same call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-frontend-restore-"));
+  const path = frontendSocketPath(root, root);
+  const calls: ReturnType<typeof fakeCall>[] = [];
+  const server = new VoiceServer(path, async (changed) => {
+    const fake = fakeCall(changed);
+    calls.push(fake);
+    return {
+      ...fake.call,
+      identity: () => ({ workspace: root, threadId: "saved-thread" }),
+    };
+  });
+  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  try {
+    await server.start();
+    await server.restoreWorkspaceSession();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.starts()).toBe(1);
+    expect(calls[0]!.attachments).toEqual([]);
+    expect(calls[0]!.closes()).toBe(0);
+
+    client = await connectFrontend(path);
+    await until(() => client!.state().phase === "live");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.starts()).toBe(1);
+    expect(calls[0]!.attachments).toEqual([true]);
+    await client.close();
+    await until(() => calls[0]!.attachments.at(-1) === false);
+    expect(calls[0]!.closes()).toBe(0);
+  } finally {
+    await client?.close();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -335,6 +382,82 @@ test("real server CLI waits without Codex or audio and removes its socket on ter
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("real default server restores a marked conversation before any media client connects", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-server-restore-")));
+  const stateDir = join(root, "state", "agentvoice");
+  const workspace = currentWorkspace(stateDir);
+  const threadId = "saved-conversation";
+  const configPath = join(root, "server.json");
+  const auditPath = join(workspace, "native-audit.jsonl");
+  writeFileSync(configPath, "{}");
+  writeFileSync(
+    join(workspace, "native-threads.json"),
+    JSON.stringify([
+      {
+        id: threadId,
+        cwd: workspace,
+        threadSource: "agentvoice-orchestrator",
+        parentThreadId: null,
+        status: { type: "idle" },
+      },
+    ]),
+  );
+  saveSessionMarker(workspace, threadId);
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      new URL("../src/main.ts", import.meta.url).pathname,
+      "server",
+      "--config",
+      configPath,
+      "--codex",
+      join(import.meta.dir, "fixtures/controller-codex.ts"),
+    ],
+    {
+      cwd: root,
+      env: { ...process.env, XDG_STATE_HOME: join(root, "state") },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const path = frontendSocketPath(stateDir);
+  let observer: Awaited<ReturnType<typeof observeFrontend>> | undefined;
+  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
+  let latest: Parameters<Parameters<typeof observeFrontend>[1]>[0] | undefined;
+  try {
+    await until(() => existsSync(path), 10_000);
+    observer = await observeFrontend(path, (state) => {
+      latest = state;
+    });
+    latest = observer.initial;
+    await until(() => latest?.threadId === threadId && latest.generation === 1, 15_000);
+    expect(latest).toMatchObject({
+      availability: "idle",
+      busy: false,
+      workspace,
+      threadId,
+      generation: 1,
+      state: null,
+    });
+    const beforeAttachment = readFileSync(auditPath, "utf8");
+    expect(beforeAttachment).toContain('"method":"thread/read"');
+    expect(beforeAttachment).toContain('"method":"thread/resume"');
+    expect(beforeAttachment).not.toContain('"method":"thread/start"');
+    expect(beforeAttachment).not.toContain('"method":"thread/realtime/start"');
+
+    client = await connectFrontend(path);
+    await until(() => latest?.availability === "connected");
+    expect(latest).toMatchObject({ workspace, threadId, generation: 1 });
+    expect(readFileSync(auditPath, "utf8")).not.toContain('"method":"thread/start"');
+  } finally {
+    await client?.close();
+    observer?.socket.close();
+    child.kill("SIGTERM");
+    await child.exited;
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 25_000);
 
 test("server recovers a private stale socket left by an exited owner", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-stale-"));

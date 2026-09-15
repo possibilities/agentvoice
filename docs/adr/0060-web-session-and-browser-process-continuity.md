@@ -7,6 +7,9 @@ workspace-session ownership established in
 
 The voice-attachment requirement for composer actions below is superseded by
 [0062](0062-web-text-interaction-without-voice-attachment.md). Other decisions remain active.
+The valid empty state below is limited by
+[0071](0071-restore-marked-session-on-server-start.md) to an unmarked workspace;
+a valid saved marker now restores before any voice frontend attaches.
 
 ## Evidence
 

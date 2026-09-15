@@ -45,9 +45,10 @@ owns the current source map and recording/attachment implementation guidance.
   Never adopt an unrelated loaded job or edited/unsafe plist, or open audio as a check.
 - src/workspace.ts: default/workspaces generations under XDG state; newest sortable
   timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
-  reject unsafe selected directories. Resolve the current generation once when
-  the first frontend creates a server's lazy workspace session, then pin it until
-  server shutdown. No reset/deletion or context-policy changes.
+  reject unsafe selected directories. Resolve and pin the current generation at
+  server launch when it has a valid marker; otherwise resolve it when the first
+  frontend creates the lazy workspace session. Keep it pinned until server
+  shutdown. No reset/deletion or context-policy changes.
 - web/: Agent | Voice browser composition using the packed `@agentchats/transcript`
   API. `server/live-reader.ts` observes the default frontend, verifies the live
   controller and fences native history/live snapshots and saved voice tails.
@@ -66,7 +67,8 @@ owns the current source map and recording/attachment implementation guidance.
 - src/frontend/: strict private workspace socket, one retained workspace session,
   exclusive disposable media ownership and minimal state/input protocol. It also
   carries validated browser SDP/control messages for every attachment over frontend
-  version 3, never RTP/Opus/PCM. The first owner lazily starts and pins the backend.
+  version 3, never RTP/Opus/PCM. Server startup restores and pins a valid marked
+  backend without media; the first owner lazily starts an unmarked backend.
   Disconnect releases PTT, forces effective mute and stops realtime media while
   preserving the controller, runtime, native work and endpoints. Never accept a
   successor until detach completes or automatically reconnect/replay. A successor

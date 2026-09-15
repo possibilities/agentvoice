@@ -30,13 +30,14 @@ of new messages. Using the chip or scrolling back to the bottom resumes followin
 
 The view observes the existing **default local AgentVoice server**, independent of
 the launch directory. A missing server shows “No agent voice server to connect to.”
-A server with no workspace session yet shows a normal ready/empty state. Once a
-session exists, detaching its voice client keeps authoritative Agent/Voice history
-available and continuing to update; sending is disabled while the composer stays
-editable. Transport unavailability is shown separately, with last verified text
-retained until it can be reverified. Actual session replacement clears old session
-presentation and action authority. The reader never creates a session or attaches
-media. It reconnects its observation automatically.
+A server whose selected workspace has no marker or session yet shows a normal
+ready/empty state. A valid marker is restored at server startup, so authoritative
+Agent/Voice history is available before any voice client attaches. Detaching that
+client keeps the history available and continuing to update; sending is disabled
+while the composer stays editable. Transport unavailability is shown separately,
+with last verified text retained until it can be reverified. Actual session
+replacement clears old session presentation and action authority. The reader
+never creates a session or attaches media. It reconnects its observation automatically.
 Closing the page or `serve` leaves the call running.
 
 ## Prepare and run

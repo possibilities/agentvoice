@@ -16,7 +16,7 @@ const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
   agentvoice serve [--production]   Live Voice | Agent web transcripts at https://agentvoice.localhost
-  agentvoice server [options]       Wait for a frontend to start a call
+  agentvoice server [options]       Restore saved work or wait for a frontend
   agentvoice service status|load|unload|restart|remove [--json]
                                    Manage the default macOS LaunchAgent
   agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
@@ -63,13 +63,15 @@ Client options (agentvoice or agentvoice client):
   --output-device <index>  This client's speaker device
 
 The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
-For manual use, run agentvoice server. It opens no audio or Codex child while waiting.
+For manual use, run agentvoice server. It opens no audio; a valid saved marker restores
+its Codex child immediately, while an unmarked workspace waits for a frontend.
 Closing the frontend stops media; the server retains native work for the next client.
 The client has pointer controls only: microphone, speaker and hold-to-talk.
 Terminate its process or close its terminal to detach media. There are no app keybindings.
 Server settings and prompt files load for each runtime. Permissions follow native
 configuration unless explicitly overridden; native managed requirements still apply.
-The first frontend resumes the workspace .agentvoice-session thread; reconnects retain it.
+Server startup resumes a valid workspace .agentvoice-session thread without media;
+the first frontend creates an unmarked session, and reconnects retain either one.
 Use the agentvoice_new_session MCP/control operation for an explicit new session.
 Stopping the server ends native work; runtime restart also replaces the native child.
 Use agentvoice attach agent to answer native approvals and tool questions.

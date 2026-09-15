@@ -373,11 +373,13 @@ ignore optional result fields they do not understand.
 `frontend/` directory, selected by a hash of the canonical workspace. Its version
 is 3. `agentvoice` sends a strict `call` request with an optional UUID `clientId`
 for correlation and owns the media attachment. A new attachment may use a fresh
-UUID; it is not backend continuation identity. The first accepted owner lazily creates the server's
-workspace session; a later owner attaches to the retained controller and may use
-a different clientId. The server rejects additional callers while an attachment
-starts, runs or detaches. Before the first attachment it opens no runtime, native
-child or audio. After detach it retains the runtime and native child but no media.
+UUID; it is not backend continuation identity. Server startup restores a valid
+marked workspace session without an owner; if there is no marker, the first
+accepted owner lazily creates it. A later owner attaches to the retained controller
+and may use a different clientId. The server rejects additional callers while an
+attachment starts, runs or detaches. Before the first attachment a restored
+session may own a runtime and native child, but it opens no audio, WebRTC or native
+realtime session. After detach it retains the runtime and native child but no media.
 
 Only the owning connection can send `input` with one of:
 

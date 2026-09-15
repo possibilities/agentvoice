@@ -69,14 +69,15 @@ notification Hang up end it. See [call navigation](android-call-navigation.md).
 | --- | --- | --- |
 | `discover` | none | Read-only media-owner plus retained workspace/thread discovery |
 | `observe` | none | Read-only lifecycle snapshot and subsequent observations; cannot become owner |
-| `call` | optional `{clientId: UUID}` | Create the lazy workspace session if needed, then reserve its one media attachment until this connection closes |
+| `call` | optional `{clientId: UUID}` | Reuse a restored workspace session or create an unmarked lazy one, then reserve its one media attachment until this connection closes |
 | `input` | `{action:"mute",target:"mic"|"speaker",muted:boolean}` or `{action:"hold"|"release"}` | Owner only; update server-authoritative mute gates |
 | `client-media` | Media message below | Owner only; session-correlated signaling to active runtime |
 
 Call acceptance means media reservation, not a new backend session or live audio.
-The first accepted frontend lazily starts the server's workspace session; later
-frontends attach to that retained session. `clientId` is optional correlation and
-a fresh value is allowed; it is not continuation identity. `state.phase` progresses
+Server startup restores a valid marked workspace session without a frontend; when
+no marker exists, the first accepted frontend lazily starts the session. Later
+frontends attach to either retained session. `clientId` is optional correlation
+and a fresh value is allowed; it is not continuation identity. `state.phase` progresses
 through `waiting-ready`, `negotiating`, `live`, `failed`, `stopped`.
 `state.available` indicates call availability; each channel has persistent
 `muted` and computed `effectiveMuted`. Only `effectiveMuted` drives devices.

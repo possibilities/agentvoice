@@ -1,10 +1,11 @@
 import { homedir } from "node:os";
+import { readSessionMarker } from "../core/session-marker.ts";
 import type { ClientMediaMessage, ServerMediaMessage } from "../frontend/media-protocol.ts";
 import { type JsonPeer, JsonSocketServer } from "../ipc/json-socket.ts";
 import { stateDirectory } from "../paths.ts";
 import { createCall } from "../runtime-control/controller.ts";
 import type { LaunchProvenance } from "../runtime-control/protocol.ts";
-import { currentWorkspace } from "../workspace.ts";
+import { currentWorkspace, NoDefaultWorkspaceError } from "../workspace.ts";
 import {
   callParamsSchema,
   FRONTEND_VERSION,
@@ -155,6 +156,13 @@ export class VoiceServer {
   start() {
     return this.socket.start();
   }
+  /** Restore native work without reserving media; a later frontend attaches to this call. */
+  async restoreWorkspaceSession(): Promise<void> {
+    if (this.closed || this.poisoned) throw new Error("Server is unavailable");
+    await this.retain(undefined);
+    await this.boot;
+    this.changed();
+  }
   private observation() {
     const session = this.session;
     const identity = this.call?.identity?.();
@@ -285,11 +293,24 @@ export async function runServer(
   endpointWorkspace?: string,
 ) {
   const stateDir = stateDirectory(process.env, homedir());
+  let pinnedWorkspace = workspace;
+  let restoreWorkspace: string | undefined;
+  try {
+    const selected = pinnedWorkspace ?? currentWorkspace(stateDir, false);
+    if (readSessionMarker(selected)) {
+      pinnedWorkspace = selected;
+      restoreWorkspace = selected;
+    }
+  } catch (error) {
+    if (!(error instanceof NoDefaultWorkspaceError))
+      console.error(`Existing workspace session was not restored: ${String(error)}`);
+  }
+  const selectedWorkspace = () => (pinnedWorkspace ??= currentWorkspace(stateDir));
   const server = new VoiceServer(
     frontendSocketPath(stateDir, endpointWorkspace),
     async (changed, _params, sendMedia) => {
       let notice: string | undefined;
-      const pinned = pinCallWorkspace(provenance, workspace ?? currentWorkspace(stateDir));
+      const pinned = pinCallWorkspace(provenance, selectedWorkspace());
       const call = await createCall(
         pinned,
         version,
@@ -331,7 +352,7 @@ export async function runServer(
       };
     },
     console.error,
-    () => workspace ?? currentWorkspace(stateDir, false),
+    () => pinnedWorkspace ?? currentWorkspace(stateDir, false),
   );
   const stopped = Promise.withResolvers<void>();
   let network: import("../network/gateway.ts").NetworkGateway | undefined;
@@ -341,6 +362,10 @@ export async function runServer(
   process.once("SIGHUP", stop);
   try {
     await server.start();
+    if (restoreWorkspace)
+      void server
+        .restoreWorkspaceSession()
+        .catch((error) => console.error(`Workspace session restore failed: ${String(error)}`));
     if (endpointWorkspace === undefined) {
       const { loadNetworkSettings } = await import("../network/credentials.ts");
       const settings = loadNetworkSettings(stateDir);

@@ -19,12 +19,14 @@ selection, app-server omission fallback and deliberate AgentVoice policy; omissi
 alone does not establish parity. See `docs/adr/0019-client-server-default-baseline.md`.
 
 **Server** — The `agentvoice server` process, supervised by a macOS user LaunchAgent
-or run manually, waiting on a private local socket. Its first frontend lazily
-creates one retained workspace session. Frontend detach ends realtime media,
-while server shutdown ends the workspace session and native work.
+or run manually, waiting on a private local socket. It immediately restores a
+valid marked workspace session without media; an unmarked workspace stays lazy
+until its first frontend. Frontend detach ends realtime media, while server
+shutdown ends the workspace session and native work.
 
 **Workspace session** — The server-lifetime controller, runtime and exact native
-conversation created lazily by the first frontend. It pins one canonical workspace
+conversation restored from a valid marker at server startup, or created lazily by
+the first frontend when no marker exists. It pins one canonical workspace
 and retains the Codex child, verified native work, leases, gateway, mailbox,
 operation journal, transcripts and control/event endpoints across frontend detach.
 Only explicit runtime replacement, `new_session`, or server shutdown changes the
@@ -105,7 +107,8 @@ bound to the root while the TUI navigates subagents. See ADRs [0022](docs/adr/00
 
 **Workspace** — The canonical existing root pinned for one server workspace session. Explicit
 --workspace wins over configuration; otherwise the default server selects its
-current workspace directory when the first frontend starts the lazy session. Used for native conversation lookup
+current workspace directory at launch when it restores a marked session, or when
+the first frontend starts an unmarked lazy session. Used for native conversation lookup
 and all AgentVoice-created threads. Not a sandbox or necessarily a Git worktree.
 
 **Workspace base** — `$XDG_STATE_HOME/agentvoice/default/workspaces/` (falling back
@@ -114,15 +117,17 @@ workspace generations. The `default` namespace reserves room for named voice age
 
 **Current workspace directory** — The generation with the newest sortable UTC
 timestamp-and-UUID directory name inside the workspace base. Created initially
-when absent, then selected afresh for each default server lifetime when its first
-frontend creates the workspace session; file edits do not change selection and
-the retained session keeps its selected directory.
+when absent, then selected afresh at each applicable server/session boundary: at
+server launch for a marked session, or at first frontend attachment for an
+unmarked session. File edits do not change selection and the retained session
+keeps its selected directory.
 
 **LaunchAgent** — The user-owned `io.arthack.agentvoice.server` launchd job that
 starts the waiting default server at login and restarts it on exit. Its private,
 installer-owned runtime bundle supplies the native client's stable macOS microphone
 identity; it is distinct from the visible menu app. The server opens no audio or
-Codex child until a frontend calls.
+realtime session. It starts a Codex child at launch only to restore a valid marked
+conversation; an unmarked workspace still waits for a frontend.
 
 **Menu app** — The installed native macOS `AgentVoice.app`: a menu-bar status
 surface and independently registered main-app login item. It observes the default
@@ -176,7 +181,7 @@ require effective v3.
 containing the exact native main-thread ID as plain text. New server workspace sessions resume it;
 absence creates and saves a thread. Invalid or unavailable saved history is an
 error. Deleting the marker while no server session owns the workspace selects a
-new session on the next lazy server start.
+new session at the next server start or first frontend attachment.
 
 **New session** — An explicit MCP/API operation that preflights replacement, stops
 the old runtime, clears the workspace marker and mailbox, creates and saves a

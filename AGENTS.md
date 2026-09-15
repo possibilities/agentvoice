@@ -2,8 +2,10 @@
 
 A local Codex voice server with a pointer-only TUI and same-device phone browser.
 `agentvoice server`
-waits on a private workspace socket without opening audio or Codex; `agentvoice client`
-connects and starts a call. Bare `agentvoice` composes that client, voice transcript,
+waits on a private workspace socket without opening audio. When the selected workspace
+already has a session marker it immediately restores that native conversation while
+detached; otherwise `agentvoice client` connects and starts the new workspace session.
+Bare `agentvoice` composes that client, voice transcript,
 and stock agent attachment in one foreground smolmux process with local PTYs only.
 `agentvoice phone` serves one capability-bearing loopback page; its browser owns
 audio and WebRTC while Termux retains the controller and Codex child.
@@ -11,10 +13,12 @@ The server-owned workspace-session controller retains exact thread
 identity, leases, operation journal and control/event transports; its disposable runtime
 owns config/prompt/role loading and an owned stock Codex app-server. All clients
 own audio and WebRTC; no production server path loads native media ([ADR 0033](docs/adr/0033-client-owned-native-media.md)).
-The first frontend lazily creates the workspace session; disconnect disposes only
-that frontend's media while the controller, runtime, native work and endpoints
-remain until server shutdown. A later sole frontend attaches fresh media to the
-same pinned workspace and thread ([ADR 0053](docs/adr/0053-retain-workspace-session-across-frontend-detach.md)). The macOS installer
+A valid existing marker restores the workspace session at server startup without
+reserving media. A markerless workspace stays lazy until its first frontend.
+Disconnect disposes only that frontend's media while the controller, runtime,
+native work and endpoints remain until server shutdown. A later sole frontend
+attaches fresh media to the same pinned workspace and thread
+([ADR 0071](docs/adr/0071-restore-marked-session-on-server-start.md)). The macOS installer
 supervises the waiting default server as a user LaunchAgent and installs a separate
 native menu app ([ADR 0044](docs/adr/0044-native-macos-menu-app.md)). The menu app's
 login item controls only its own menu-bar presence; quitting or disabling it must
@@ -223,11 +227,13 @@ Workspace and thread leases serialize creation and replacement. Explicit MCP/API
 new_session preflights, drains the old runtime, clears the marker and mailbox,
 then creates and saves a thread and reconnects voice. Old history remains.
 
-The first frontend connection lazily starts the server's one workspace session
-using the workspace session marker. Explicit workspaces are pinned at server
-launch; otherwise the default server resolves the current generation once, at
-that first attachment. The selected canonical workspace remains pinned until
-server shutdown, including through detach and runtime replacement. The default
+A valid existing workspace marker starts the server's one workspace session at
+server launch with no frontend or media owner. A markerless workspace remains lazy
+until the first frontend connection. Explicit workspaces are pinned at server
+launch; otherwise the default server resolves and pins the current generation at
+launch when it has a marker, or at the first attachment when it does not. The
+selected canonical workspace remains pinned until server shutdown, including
+through detach and runtime replacement. The default
 frontend socket stays stable across generations; explicit CLI workspaces use their
 own hashed sockets. Closing a frontend releases holds, closes its audio/WebRTC,
 and stops realtime speech only. The controller, runtime, owned Codex child, native

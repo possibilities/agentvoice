@@ -3,10 +3,10 @@
 # AgentVoice
 
 AgentVoice is an experimental local voice frontend for Codex. A waiting server
-creates one retained workspace session when its first frontend connects, owning
-the exact workspace, conversation, and stock `codex app-server` child; the
-connected terminal, phone browser, or native Android client owns audio and
-WebRTC.
+immediately restores a selected workspace's saved session when one exists, or
+creates one when the first frontend connects. It owns the exact workspace,
+conversation, and stock `codex app-server` child; the connected terminal, phone
+browser, or native Android client owns audio and WebRTC.
 
 It is not a turnkey product yet. A usable installation currently requires a
 prepared checkout, stock Codex authentication, platform dependencies, and
@@ -30,21 +30,22 @@ The server never owns production audio. Network access is opt-in, authenticated,
 and limited to the client API; native Codex, attachment, MCP, and event sockets
 remain local.
 
-The first frontend pins the server's workspace until server shutdown. For the
-managed default this means a newer workspace generation is selected on the next
-server lifetime, not between frontend attachments. Redial is voice-only and
-requires an attached frontend; explicit runtime restart and new session remain
-the intentional native replacement operations.
+A saved marker pins the server's workspace at startup; a markerless workspace is
+pinned when its first frontend connects. For the managed default this means a
+newer workspace generation is selected only at an applicable server/session
+boundary, never between frontend attachments. Redial is voice-only and requires
+an attached frontend; explicit runtime restart and new session remain the
+intentional native replacement operations.
 
 ## Try it from a prepared checkout
 
 Run the server and client in separate terminals:
 
 ```sh
-# Waits without opening audio or starting Codex
+# Restores saved native work if marked; always waits without opening audio
 bun run src/main.ts server
 
-# Connects and starts the call
+# Attaches media, creating a new session only when the workspace was unmarked
 bun run src/main.ts
 ```
 
