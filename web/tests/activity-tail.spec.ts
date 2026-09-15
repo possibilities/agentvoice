@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 for (const count of [2, 5])
   test(`tail ${count} expands and grows without clipping`, async ({ page }, info) => {
     const errors: string[] = [];

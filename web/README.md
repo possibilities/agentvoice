@@ -20,6 +20,13 @@ unidentified browser slots remain explicitly recoverable rather than being
 silently adopted from another active context.
 A quiet lined dock below Voice tracks the Agent composer's height, keeping the
 two transcript viewports aligned as drafts and queued messages expand.
+Empty lanes use a compact heading and readable guidance at the center of the
+transcript area. Agent points to the composer only when input is available;
+Voice distinguishes no observed speech from incomplete or interrupted text.
+Notices replace empty guidance and retain their status semantics. The mounted
+transcript and composer stay stable when the first message arrives or a lane is
+concealed, preserving drafts, focus and reading state.
+
 Both lanes window measured message blocks, open at the latest message and follow
 new text. Stable row identities retain tool expansion across polls, appends and
 group changes. Browser find sees mounted history; the API retains the complete

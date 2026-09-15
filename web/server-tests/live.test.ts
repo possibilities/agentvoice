@@ -736,6 +736,123 @@ test("voice gaps and reused IDs stay fenced; unavailable native content remains 
   ).toBe("error");
 });
 
+test("empty voice starts remain empty across recording boundaries", () => {
+  const frame = (event: string) =>
+    JSON.stringify({
+      v: 2,
+      type: "event",
+      event,
+      data: {
+        threadId: "thread",
+        instanceId: "controller",
+        generation: 1,
+        sequence: 1,
+        item: {
+          type: "transcriptSegment",
+          id: "empty",
+          realtimeSessionId: "rt",
+          role: "user",
+          text: "",
+        },
+      },
+    });
+
+  for (const boundary of [
+    { type: "recording.gap", reason: "previous_recording_interrupted" },
+    { type: "recording.gap", reason: "runtime_replaced" },
+    { type: "recording.gap", reason: "runtime_replacement_interrupted" },
+    { type: "recording.ended", reason: "stopped" },
+  ]) {
+    const messages = new VoiceMessages();
+    messages.accept(frame("voice.item.started"), "thread");
+    messages.accept(JSON.stringify(boundary), "thread");
+    expect(messages.messages()).toEqual([]);
+    expect(messages.notice).toBeUndefined();
+  }
+});
+
+test("empty pending voice stays hidden until transcript text arrives", () => {
+  const messages = new VoiceMessages();
+  const data = {
+    threadId: "thread",
+    instanceId: "controller",
+    generation: 1,
+    sequence: 1,
+  };
+  messages.accept(
+    JSON.stringify({
+      v: 2,
+      type: "event",
+      event: "voice.item.started",
+      data: {
+        ...data,
+        item: {
+          type: "transcriptSegment",
+          id: "pending",
+          realtimeSessionId: "rt",
+          role: "user",
+          text: "",
+        },
+      },
+    }),
+    "thread",
+  );
+  expect(messages.messages()).toEqual([]);
+  messages.accept(
+    JSON.stringify({
+      v: 2,
+      type: "event",
+      event: "voice.item.transcript.delta",
+      data: { ...data, sequence: 2, itemId: "pending", delta: "Now audible" },
+    }),
+    "thread",
+  );
+  expect(messages.messages()).toMatchObject([{ content: "Now audible", status: "streaming" }]);
+});
+
+test("genuine or unknown recording loss stays visible without surviving text", () => {
+  for (const boundary of [
+    { type: "recording.gap", reason: "unfinished_record_recovered" },
+    { type: "recording.gap", reason: "recording_failed" },
+    { type: "recording.gap", reason: "unrecognized_future_reason" },
+    { type: "recording.ended", reason: "error" },
+  ]) {
+    const messages = new VoiceMessages();
+    messages.accept(JSON.stringify(boundary), "thread");
+    expect(messages.messages()).toEqual([]);
+    expect(messages.notice).toBe("Voice transcript was interrupted.");
+  }
+});
+
+test("recording boundaries preserve non-empty unfinished speech as incomplete", () => {
+  const frame = JSON.stringify({
+    v: 2,
+    type: "event",
+    event: "voice.item.started",
+    data: {
+      threadId: "thread",
+      instanceId: "controller",
+      generation: 1,
+      sequence: 1,
+      item: {
+        type: "transcriptSegment",
+        id: "draft",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: "Partially heard",
+      },
+    },
+  });
+
+  for (const boundary of ["recording.gap", "recording.ended"]) {
+    const messages = new VoiceMessages();
+    messages.accept(frame, "thread");
+    messages.accept(JSON.stringify({ type: boundary }), "thread");
+    expect(messages.messages()).toMatchObject([{ content: "Partially heard", status: "error" }]);
+    expect(messages.notice).toBe("Some voice text is incomplete.");
+  }
+});
+
 for (const version of [5, 6] as const)
   test(`read-only web discovery can observe a version-${version} controller without changing CLI defaults`, async () => {
     const { discoverControllerStatus, publishControlDescriptor } = await import(

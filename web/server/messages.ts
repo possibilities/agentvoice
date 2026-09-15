@@ -102,12 +102,31 @@ export class VoiceMessages {
   accept(line: string, threadId: string) {
     const { observedAt, ...record } = JSON.parse(line);
     if (record.type === "recording.gap" || record.type === "recording.ended") {
-      for (const [key, message] of this.rows)
+      let hasVoiceText = false;
+      let hasIncompleteVoiceText = false;
+      for (const [key, message] of this.rows) {
+        if (message.content.length > 0) hasVoiceText = true;
         if (message.status === "streaming") {
-          this.rows.set(key, { ...message, status: "error" });
-          this.notice = "Some voice text is incomplete.";
+          if (message.content.length === 0) this.rows.delete(key);
+          else {
+            this.rows.set(key, { ...message, status: "error" });
+            hasIncompleteVoiceText = true;
+          }
         }
-      if (record.type === "recording.gap") this.notice = "Some voice text is incomplete.";
+      }
+      if (hasIncompleteVoiceText || (hasVoiceText && record.type === "recording.gap"))
+        this.notice = "Some voice text is incomplete.";
+      else if (
+        !hasVoiceText &&
+        ((record.type === "recording.gap" &&
+          ![
+            "previous_recording_interrupted",
+            "runtime_replaced",
+            "runtime_replacement_interrupted",
+          ].includes(record.reason)) ||
+          (record.type === "recording.ended" && record.reason === "error"))
+      )
+        this.notice = "Voice transcript was interrupted.";
       this.active.clear();
       return;
     }
@@ -145,6 +164,6 @@ export class VoiceMessages {
     });
   }
   messages() {
-    return [...this.rows.values()];
+    return [...this.rows.values()].filter((message) => message.content.length > 0);
   }
 }

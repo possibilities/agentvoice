@@ -249,7 +249,7 @@ test("two independent transcripts follow live updates, retain disclosures, and r
   };
   await expect(agent.getByText("A new call is connected.")).toBeVisible();
   await expect(agent.getByText("The canonical completion.")).toHaveCount(0);
-  await expect(voice.getByText("No recorded speech.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No voice text yet" })).toBeVisible();
   await page.setViewportSize({ width: 600, height: 600 });
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -287,8 +287,10 @@ test("an empty retained session keeps both lanes and an interactive composer", a
   await expect(page.locator(".app-status")).not.toHaveAttribute("data-visible");
   await expect(page.getByRole("region", { name: "Agent transcript", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Voice transcript", exact: true })).toBeVisible();
-  await expect(page.getByText("No agent messages yet.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No recorded speech.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No agent messages yet", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No voice text yet", exact: true })).toBeVisible();
   const input = page.getByRole("textbox", { name: "Message Agent" });
   await expect(input).toBeEnabled();
   await input.fill("Editable while voice is detached");

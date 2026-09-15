@@ -244,6 +244,10 @@ export function App() {
                 notice={transcriptView[`${lane}Notice`]}
                 messages={lane === "agent" ? displayedAgent : transcriptView.voice}
                 holding={!!holding}
+                canCompose={
+                  !!displayedControls?.available &&
+                  (view.phase === "live" || view.phase === "detached")
+                }
               />
               <div
                 ref={lane === "agent" ? agentDock : undefined}
@@ -286,6 +290,7 @@ const TranscriptLane = memo(function TranscriptLane({
   notice,
   messages,
   holding,
+  canCompose,
 }: {
   lane: "agent" | "voice";
   viewId: string;
@@ -293,32 +298,52 @@ const TranscriptLane = memo(function TranscriptLane({
   notice?: string;
   messages: LiveView["agent"];
   holding: boolean;
+  canCompose: boolean;
 }) {
+  const empty = messages.length === 0 && !holding && phase !== "offline" && phase !== "empty";
   return (
-    <Transcript
-      transcriptId={`${viewId}:${lane}`}
-      messages={messages}
-      // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
-      loading={!!holding}
-      detail="full"
-      windowed
-      showJumpToLatest
-      aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
-      header={
-        notice ? (
-          <p className="transcript-notice" role="status">
-            {notice}
-          </p>
-        ) : null
-      }
-      empty={
-        phase !== "offline" && phase !== "empty" && !notice ? (
-          <p className="transcript-notice">
-            {lane === "voice" ? "No recorded speech." : "No agent messages yet."}
-          </p>
-        ) : null
-      }
-    />
+    <div className="transcript-lane">
+      <Transcript
+        transcriptId={`${viewId}:${lane}`}
+        messages={messages}
+        // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
+        loading={!!holding}
+        detail="full"
+        windowed
+        showJumpToLatest
+        aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}
+        header={
+          notice && !empty ? (
+            <p className="transcript-notice" role="status">
+              {notice}
+            </p>
+          ) : null
+        }
+      />
+      {empty ? (
+        <div className="transcript-empty">
+          <div className="transcript-empty__copy">
+            <h2>
+              {notice
+                ? lane === "voice"
+                  ? "Voice transcript"
+                  : "Agent conversation"
+                : lane === "voice"
+                  ? "No voice text yet"
+                  : "No agent messages yet"}
+            </h2>
+            <p role={notice ? "status" : undefined}>
+              {notice ??
+                (lane === "voice"
+                  ? "Spoken conversation will appear here."
+                  : canCompose
+                    ? "Start with a message below."
+                    : "Your conversation will appear here.")}
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 });
 

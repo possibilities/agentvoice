@@ -215,3 +215,55 @@ body,
   visibility: hidden;
   pointer-events: none;
 }
+
+.transcript-lane {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.transcript-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 32px 26px;
+}
+.transcript-empty__copy {
+  width: 100%;
+  max-width: 34ch;
+  margin-block: auto;
+}
+.transcript-empty h2 {
+  margin: 0 0 8px;
+  color: #c7cbc2;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.transcript-empty p {
+  margin: 0;
+  color: #969d91;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+@container lane (max-width: 280px) {
+  .agent-dock,
+  .voice-dock {
+    --dock-inset-inline: 16px;
+  }
+  .agent-dock .transcript-composer__mode {
+    max-width: 100%;
+    white-space: normal;
+    height: auto;
+    text-align: left;
+  }
+  .transcript-empty {
+    padding: 24px 16px;
+  }
+}
