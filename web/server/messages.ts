@@ -11,6 +11,51 @@ import { toolOutputSections } from "./tool-output.ts";
 
 export type AgentItem = { turnId: string; item: z.infer<typeof conversationItemSchema> };
 export const itemKey = ({ turnId, item }: AgentItem) => JSON.stringify([turnId, item.id]);
+const bytes = new Intl.NumberFormat("en-US");
+
+function unavailableActivity(item: Extract<AgentItem["item"], { type: "unavailable" }>) {
+  const omission = item.omission;
+  if (!omission) {
+    return {
+      name: item.nativeType,
+      detail: `Content unavailable (${item.reason})`,
+      state: "complete" as const,
+      sections: [{ label: "Details", content: JSON.stringify(item, null, 2) }],
+    };
+  }
+  const sections: { label: string; content: string }[] = [];
+  if (omission.failure) {
+    sections.push({ label: "Error type", content: omission.failure.type });
+    sections.push({ label: "Error", content: omission.failure.message });
+    if (omission.failure.details)
+      sections.push({ label: "Error details", content: omission.failure.details });
+  }
+  if (omission.excerpt) sections.push(omission.excerpt);
+  const omissionReason =
+    item.reason === "oversized"
+      ? omission.originalBytes > omission.limitBytes
+        ? `exceeded the ${bytes.format(omission.limitBytes)}-byte transcript limit`
+        : "exceeded transcript traversal or representation limits"
+      : item.reason === "media"
+        ? "contained media excluded from transcripts"
+        : "could not be represented safely by the transcript contract";
+  sections.push({
+    label: "Omitted content",
+    content: `The ${item.nativeType} item was ${bytes.format(omission.originalBytes)} bytes. AgentVoice retained this bounded summary because the item ${omissionReason}.`,
+  });
+  const status = omission.status ?? "content omitted";
+  return {
+    name: omission.name ?? item.nativeType,
+    detail: omission.detail ?? item.nativeType,
+    meta: `${status} · ${bytes.format(omission.originalBytes)} bytes`,
+    state: (["failed", "declined", "interrupted", "errored"].includes(status)
+      ? "error"
+      : status === "inProgress"
+        ? "running"
+        : "complete") as "error" | "running" | "complete",
+    sections,
+  };
+}
 
 export function agentMessage(entry: AgentItem, completed = true): TranscriptMessage | undefined {
   const { item } = entry;
@@ -35,9 +80,9 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
   if (item.type === "reasoning") return;
   if (item.type === "plan") return { ...base, role: "assistant", content: item.text };
   const row = item as Record<string, unknown>;
-  const failed =
-    ["failed", "declined", "interrupted"].includes(String(row["status"])) ||
-    item.type === "unavailable";
+  const failed = ["failed", "declined", "interrupted", "errored"].includes(
+    String(item.type === "unavailable" ? item.omission?.status : row["status"]),
+  );
   const running = row["status"] === "inProgress" || !completed;
   const state = failed ? "error" : running ? "running" : "complete";
   const message: TranscriptMessage = {
@@ -52,7 +97,10 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
       sections: [{ label: "Details", content: JSON.stringify(item, null, 2) }],
     },
   };
-  if (item.type === "commandExecution") {
+  if (item.type === "unavailable") {
+    message.toolActivity = unavailableActivity(item);
+    message.status = message.toolActivity.state === "error" ? "error" : "complete";
+  } else if (item.type === "commandExecution") {
     message.toolActivity = {
       name: "Command",
       detail: item.command,

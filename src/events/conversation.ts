@@ -3,6 +3,9 @@ import { nativeConversationSchemas, ThreadItemSchema, TurnSchema } from "./conve
 
 export const MAX_CONVERSATION_BYTES = 64 * 1024;
 export const MAX_HISTORY_BYTES = 512 * 1024;
+// Leave room for the event envelope while retaining a useful bounded item summary.
+export const MAX_PROJECTED_ITEM_BYTES = 48 * 1024;
+const MAX_PROJECTED_EXCERPT_BYTES = 24 * 1024;
 export const conversationId = z
   .string()
   .min(1)
@@ -10,12 +13,35 @@ export const conversationId = z
   .regex(/^[A-Za-z0-9._:-]+$/u);
 export const eventName = (method: string) =>
   `conversation.${method.replaceAll("/", ".").replace(/[A-Z]/gu, (letter) => `_${letter.toLowerCase()}`)}`;
+const projectedFailureSchema = z
+  .object({
+    type: z.string().max(128),
+    message: z.string().max(8192),
+    details: z.string().max(8192).optional(),
+  })
+  .strict();
+const contentOmissionSchema = z
+  .object({
+    originalBytes: z.number().int().min(0).safe(),
+    limitBytes: z.number().int().positive().safe(),
+    name: z.string().max(256).optional(),
+    detail: z.string().max(2048).optional(),
+    status: z.string().max(64).optional(),
+    exitCode: z.number().int().safe().nullable().optional(),
+    failure: projectedFailureSchema.optional(),
+    excerpt: z
+      .object({ label: z.string().max(64), content: z.string().max(MAX_PROJECTED_EXCERPT_BYTES) })
+      .strict()
+      .optional(),
+  })
+  .strict();
 export const unsupportedItemSchema = z
   .object({
     type: z.literal("unavailable"),
     id: conversationId,
     nativeType: z.string().max(256),
     reason: z.enum(["unsupported", "oversized", "media"]),
+    omission: contentOmissionSchema.optional(),
   })
   .strict();
 export const conversationItemSchema = z.union([ThreadItemSchema, unsupportedItemSchema]);
@@ -77,19 +103,224 @@ export function safeContent(value: unknown, secrets: readonly string[] = []): un
   return visit(value, 0);
 }
 
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+function truncateUtf8(value: string, maximum: number): string {
+  const bytes = Buffer.from(value);
+  if (bytes.length <= maximum) return value;
+  const marker = Buffer.from("\n… excerpt truncated …\n");
+  const available = Math.max(0, maximum - marker.length);
+  const decode = (slice: Uint8Array, fromStart: boolean) => {
+    for (let trim = 0; trim < 4 && trim <= slice.length; trim++) {
+      const candidate = fromStart ? slice.subarray(0, slice.length - trim) : slice.subarray(trim);
+      try {
+        return new TextDecoder("utf-8", { fatal: true }).decode(candidate);
+      } catch {
+        /* A UTF-8 code point spans the byte boundary; remove at most three bytes. */
+      }
+    }
+    return "";
+  };
+  const headBytes = Math.floor(available / 2);
+  const tailBytes = available - headBytes;
+  return `${decode(bytes.subarray(0, headBytes), true)}${marker.toString()}${decode(
+    bytes.subarray(bytes.length - tailBytes),
+    false,
+  )}`;
+}
+
+function safeText(value: unknown, maximum: number, secrets: readonly string[]) {
+  if (typeof value !== "string") return;
+  try {
+    const safe = safeContent(value, secrets);
+    if (typeof safe === "string") return truncateUtf8(safe, maximum);
+  } catch {
+    return;
+  }
+}
+
+function safeExcerpt(value: unknown, secrets: readonly string[]) {
+  if (value == null) return;
+  try {
+    const safe = safeContent(value, secrets);
+    const text = typeof safe === "string" ? safe : JSON.stringify(safe, null, 2);
+    if (text) return truncateUtf8(text, MAX_PROJECTED_EXCERPT_BYTES);
+  } catch {
+    return;
+  }
+}
+
+function projectedFailure(
+  row: Record<string, unknown>,
+  nativeType: string,
+  secrets: readonly string[],
+) {
+  const status = typeof row["status"] === "string" ? row["status"] : undefined;
+  const failed = ["failed", "declined", "interrupted", "errored"].includes(status ?? "");
+  const error = record(row["error"]);
+  const agentFailures =
+    nativeType === "collabAgentToolCall"
+      ? Object.entries(record(row["agentsStates"]))
+          .map(([agentId, value]): Record<string, unknown> & { agentId: string } => ({
+            agentId,
+            ...record(value),
+          }))
+          .filter((agent) =>
+            ["errored", "interrupted", "notFound"].includes(String(agent["status"])),
+          )
+      : [];
+  const agentMessage = agentFailures
+    .map((agent) => safeText(agent["message"], 8192, secrets))
+    .find((message): message is string => Boolean(message));
+  const type =
+    safeText(error["type"] ?? error["name"] ?? error["code"], 128, secrets) ??
+    (failed
+      ? nativeType === "mcpToolCall"
+        ? "MCP tool failure"
+        : nativeType === "commandExecution"
+          ? "Command failure"
+          : nativeType === "collabAgentToolCall"
+            ? "Agent collaboration failure"
+            : "Tool failure"
+      : undefined);
+  const exitCode = typeof row["exitCode"] === "number" ? row["exitCode"] : undefined;
+  const message =
+    safeText(error["message"], 8192, secrets) ??
+    agentMessage ??
+    (failed && exitCode != null
+      ? `Command exited with code ${exitCode}.`
+      : failed
+        ? "The tool reported a failed status."
+        : undefined);
+  if (!type || !message) return;
+  const details = safeExcerpt(
+    error["details"] ??
+      error["data"] ??
+      error["cause"] ??
+      (agentFailures.length > 0
+        ? agentFailures.map(({ agentId, status, message }) => ({ agentId, status, message }))
+        : undefined),
+    secrets,
+  );
+  return { type, message, ...(details ? { details: truncateUtf8(details, 8192) } : {}) };
+}
+
+function projectUnavailableItem(
+  row: Record<string, unknown>,
+  reason: "unsupported" | "oversized" | "media",
+  originalBytes: number,
+  secrets: readonly string[],
+): z.infer<typeof unsupportedItemSchema> {
+  const nativeType = typeof row["type"] === "string" ? row["type"].slice(0, 256) : "unknown";
+  const summarizedTypes = new Set([
+    "commandExecution",
+    "mcpToolCall",
+    "dynamicToolCall",
+    "functionCallOutput",
+    "collabAgentToolCall",
+    "userMessage",
+    "agentMessage",
+    "plan",
+    "fileChange",
+    "webSearch",
+  ]);
+  if (reason === "unsupported" && !summarizedTypes.has(nativeType))
+    return { type: "unavailable", id: conversationId.parse(row["id"]), nativeType, reason };
+  const status = safeText(row["status"], 64, secrets);
+  let name: string | undefined;
+  let detail: string | undefined;
+  let excerpt: { label: string; content: string } | undefined;
+  if (nativeType === "commandExecution") {
+    name = "Command";
+    detail = safeText(row["command"], 2048, secrets);
+    const content = reason === "media" ? undefined : safeExcerpt(row["aggregatedOutput"], secrets);
+    if (content) excerpt = { label: "Output excerpt", content };
+  } else if (nativeType === "mcpToolCall") {
+    name = safeText(row["tool"], 256, secrets) ?? "MCP tool";
+    const server = safeText(row["server"], 256, secrets);
+    detail = server ? `${server}.${name}` : name;
+    const content = reason === "media" ? undefined : safeExcerpt(row["result"], secrets);
+    if (content) excerpt = { label: "Result excerpt", content };
+  } else if (nativeType === "dynamicToolCall") {
+    name = safeText(row["tool"], 256, secrets) ?? "Dynamic tool";
+    const namespace = safeText(row["namespace"], 256, secrets);
+    detail = namespace ? `${namespace}.${name}` : name;
+    const content = reason === "media" ? undefined : safeExcerpt(row["contentItems"], secrets);
+    if (content) excerpt = { label: "Result excerpt", content };
+  } else if (nativeType === "functionCallOutput") {
+    name = safeText(row["name"], 256, secrets) ?? "Tool result";
+    const namespace = safeText(row["namespace"], 256, secrets);
+    detail = namespace ? `${namespace}.${name}` : name;
+    const content = reason === "media" ? undefined : safeExcerpt(row["output"], secrets);
+    if (content) excerpt = { label: "Output excerpt", content };
+  } else if (nativeType === "collabAgentToolCall") {
+    name = safeText(row["tool"], 256, secrets) ?? "Agent collaboration";
+    detail = name;
+    const content = reason === "media" ? undefined : safeExcerpt(row["agentsStates"], secrets);
+    if (content) excerpt = { label: "Agent state excerpt", content };
+  } else {
+    name = nativeType;
+    const source =
+      row["text"] ?? row["query"] ?? row["results"] ?? row["changes"] ?? row["content"];
+    const content = reason === "media" ? undefined : safeExcerpt(source, secrets);
+    if (content) excerpt = { label: "Content excerpt", content };
+  }
+  const failure = projectedFailure(row, nativeType, secrets);
+  const exitCode =
+    typeof row["exitCode"] === "number" && Number.isSafeInteger(row["exitCode"])
+      ? row["exitCode"]
+      : row["exitCode"] === null
+        ? null
+        : undefined;
+  const projected: Record<string, unknown> = {
+    type: "unavailable",
+    id: conversationId.parse(row["id"]),
+    nativeType,
+    reason,
+    omission: {
+      originalBytes,
+      limitBytes: MAX_PROJECTED_ITEM_BYTES,
+      ...(name ? { name } : {}),
+      ...(detail ? { detail } : {}),
+      ...(status ? { status } : {}),
+      ...(exitCode !== undefined ? { exitCode } : {}),
+      ...(failure ? { failure } : {}),
+      ...(excerpt ? { excerpt } : {}),
+    },
+  };
+  const omission = projected["omission"] as Record<string, unknown>;
+  if (Buffer.byteLength(JSON.stringify(projected)) > MAX_PROJECTED_ITEM_BYTES)
+    delete omission["excerpt"];
+  if (Buffer.byteLength(JSON.stringify(projected)) > MAX_PROJECTED_ITEM_BYTES) {
+    const projectedFailure = record(omission["failure"]);
+    delete projectedFailure["details"];
+    if (typeof projectedFailure["message"] === "string")
+      projectedFailure["message"] = truncateUtf8(projectedFailure["message"], 1024);
+  }
+  if (Buffer.byteLength(JSON.stringify(projected)) > MAX_PROJECTED_ITEM_BYTES)
+    delete omission["detail"];
+  return unsupportedItemSchema.parse(projected);
+}
+
 export function projectItem(
   value: unknown,
   secrets: readonly string[] = [],
 ): z.infer<typeof conversationItemSchema> {
   const row = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  const id = conversationId.parse(row["id"]);
+  conversationId.parse(row["id"]);
   let reason: "unsupported" | "oversized" | "media" = "unsupported";
+  let originalBytes = 0;
   try {
-    if (Buffer.byteLength(JSON.stringify(value)) > MAX_CONVERSATION_BYTES) reason = "oversized";
+    originalBytes = Buffer.byteLength(JSON.stringify(value));
+    const safe = safeContent(value, secrets);
+    if (originalBytes > MAX_PROJECTED_ITEM_BYTES) reason = "oversized";
     else {
-      const parsed = ThreadItemSchema.safeParse(safeContent(value, secrets));
+      const parsed = ThreadItemSchema.safeParse(safe);
       if (parsed.success) {
-        if (Buffer.byteLength(JSON.stringify(parsed.data)) <= MAX_CONVERSATION_BYTES)
+        if (Buffer.byteLength(JSON.stringify(parsed.data)) <= MAX_PROJECTED_ITEM_BYTES)
           return parsed.data;
         reason = "oversized";
       }
@@ -98,12 +329,7 @@ export function projectItem(
     if (error instanceof Error && (error.message === "media" || error.message === "oversized"))
       reason = error.message;
   }
-  return {
-    type: "unavailable",
-    id,
-    nativeType: typeof row["type"] === "string" ? row["type"].slice(0, 256) : "unknown",
-    reason,
-  };
+  return projectUnavailableItem(row, reason, originalBytes, secrets);
 }
 
 export function projectNotification(

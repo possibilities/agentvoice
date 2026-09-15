@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { conversationId, ObservationError, projectItem } from "../events/conversation.ts";
+import {
+  conversationId,
+  MAX_HISTORY_BYTES,
+  ObservationError,
+  projectItem,
+} from "../events/conversation.ts";
 
 type Request = (method: string, params: unknown) => Promise<unknown>;
 const record = (value: unknown): Record<string, unknown> =>
@@ -55,10 +60,21 @@ export async function readConversationItems(
     .digest("hex");
   if (anchor.digest && anchor.digest !== digest) throw new ObservationError("cursor_expired");
   const items = params.sortDirection === "desc" ? [...rawItems].reverse() : rawItems;
-  const selected = items.slice(anchor.offset, anchor.offset + params.limit);
-  const offset = anchor.offset + selected.length;
+  const selected: { turnId: string; item: ReturnType<typeof projectItem> }[] = [];
+  let offset = anchor.offset;
+  let bytes = 0;
+  while (offset < items.length && selected.length < params.limit) {
+    const entry = { turnId, item: projectItem(items[offset], secrets) };
+    const entryBytes = Buffer.byteLength(JSON.stringify(entry));
+    // Preserve a real cursor instead of failing the whole history page when several
+    // individually bounded items would inflate the result envelope past its limit.
+    if (selected.length > 0 && bytes + entryBytes > MAX_HISTORY_BYTES - 16 * 1024) break;
+    selected.push(entry);
+    bytes += entryBytes;
+    offset++;
+  }
   return {
-    data: selected.map((item) => ({ turnId, item: projectItem(item, secrets) })),
+    data: selected,
     nextCursor:
       offset < items.length
         ? JSON.stringify({ cursor: anchor.cursor, offset, digest })

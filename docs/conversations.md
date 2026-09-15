@@ -118,9 +118,15 @@ commands, file changes, MCP/dynamic tools, collaboration calls and subagent
 activity, searches, image references, sleep, hook prompts, review markers and
 compaction. Preserve assistant phase, citations, tool arguments/results, command
 status/exit/output, collaboration sender/receivers and native model/role fields.
-Only known schema fields are projected. Unknown/malformed or oversized items use
-`{type:"unavailable", id, nativeType, reason}`. No ID is invented; an invalid
-identity produces an event gap or read failure instead.
+Only known schema fields are projected. Unknown or malformed items use
+`{type:"unavailable", id, nativeType, reason}`. An oversized or media-bearing
+item uses the same explicit unavailable type with bounded `omission` metadata:
+original/limit bytes, preserved tool name/detail/status/exit code, concise failure
+type/message/details, and a safe text excerpt when the content can be traversed.
+The omission is the content state, not a failed tool status. A completed tool with
+omitted bulk output stays completed; a real failed tool keeps its failure status
+and actionable error fields. No ID is invented; an invalid identity produces an
+event gap or read failure instead.
 
 Audio and inline binary media are omitted, encrypted payloads are not exposed,
 and generated images expose metadata/saved paths rather than base64 results.
@@ -172,8 +178,9 @@ history. The API does not promise a lossless audit trail.
 
 ## Limits and failure behavior
 
-Conversation events are at most 64 KiB of projected data, with small framing
-overhead. Replay retains at most 512 events / 8 MiB per controller's current runtime
+Conversation events are at most 64 KiB of projected data. Individual items reserve
+framing room by projecting to at most 48 KiB, including at most a 24 KiB excerpt.
+Replay retains at most 512 events / 8 MiB per controller's current runtime
 generation; replay pages contain at most 100 events and fit below 512 KiB. The
 live projection retains at most 64 threads / 8 MiB, with 128 items, 128 turns and
 384 KiB per thread. Eviction is normal; coverage stays partial. Both caches clear
@@ -183,8 +190,9 @@ no on-disk AgentVoice conversation store and no voice-event replay.
 There are four concurrent reads, a six-second native read budget, and bounded
 metadata traversal. Public history replies are at most 512 KiB. A native full
 turn is limited locally to 4,096 items / 16 MiB after receipt; the native transport
-has its own frame bound. Reduce `limit` on an oversized public page. An oversized
-native turn cannot be made smaller by a public page limit and remains unavailable.
+has its own frame bound. History item pages stop before their byte budget and return
+a continuation cursor even when the requested item count would overfill the reply.
+An oversized native turn cannot be made smaller by a public page limit and remains unavailable.
 Content traversal is capped at 8,192 nodes and depth 32. Reads are demand-driven.
 
 At 16 pending runtime IPC writes, conversation events drop without consuming the

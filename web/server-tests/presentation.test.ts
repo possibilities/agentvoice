@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { projectItem } from "../../src/events/conversation.ts";
 import { agentMessage } from "../server/messages.ts";
 
 test("native voice delegation gets readable shared presentation without changing saved content", () => {
@@ -66,6 +67,119 @@ test("MCP text envelopes show decoded command text and keep metadata and structu
   expect(sections).toContainEqual({ label: "Result metadata", content: '{\n  "exit_code": 0\n}' });
   expect(sections).toContainEqual({ label: "Structured result", content: '{\n  "ok": true\n}' });
   expect(sections.at(-1)?.content).toBe(JSON.stringify(item, null, 2));
+});
+
+test("oversized tool summaries preserve real completion and failure state", () => {
+  const raw = (status: "completed" | "failed") => ({
+    type: "mcpToolCall",
+    id: `oversized-${status}`,
+    server: "inventory",
+    tool: "refresh",
+    status,
+    arguments: { query: "x".repeat(70_000) },
+    result: { content: [{ type: "text", text: "large result ".repeat(10_000) }] },
+    ...(status === "failed"
+      ? {
+          error: {
+            type: "rate_limit",
+            message: "The inventory API refused the refresh.",
+            details: "Retry after the service window.",
+          },
+        }
+      : {}),
+  });
+  const completed = agentMessage({ turnId: "turn", item: projectItem(raw("completed")) })!;
+  expect(completed).toMatchObject({
+    status: "complete",
+    toolActivity: {
+      name: "refresh",
+      detail: "inventory.refresh",
+      state: "complete",
+    },
+  });
+  expect(completed.toolActivity?.meta).toContain("completed");
+  expect(completed.toolActivity?.sections?.at(-1)).toMatchObject({
+    label: "Omitted content",
+  });
+
+  const failed = agentMessage({ turnId: "turn", item: projectItem(raw("failed")) })!;
+  expect(failed).toMatchObject({
+    status: "error",
+    toolActivity: {
+      name: "refresh",
+      detail: "inventory.refresh",
+      state: "error",
+    },
+  });
+  expect(failed.toolActivity?.meta).toContain("failed");
+  expect(failed.toolActivity?.sections).toEqual(
+    expect.arrayContaining([
+      { label: "Error type", content: "rate_limit" },
+      { label: "Error", content: "The inventory API refused the refresh." },
+      { label: "Error details", content: "Retry after the service window." },
+      expect.objectContaining({ label: "Result excerpt" }),
+      expect.objectContaining({ label: "Omitted content" }),
+    ]),
+  );
+  expect(JSON.stringify(failed)).not.toContain("Content unavailable (oversized)");
+});
+
+test("media and unsupported summaries explain the actual omission reason", () => {
+  const media = agentMessage({
+    turnId: "turn",
+    item: projectItem({
+      type: "mcpToolCall",
+      id: "media",
+      server: "vision",
+      tool: "inspect",
+      status: "completed",
+      arguments: {},
+      result: { content: [{ type: "image", data: "data:image/png;base64,aGVsbG8=" }] },
+    }),
+  })!;
+  const mediaOmission = media.toolActivity?.sections?.find(
+    (section) => section.label === "Omitted content",
+  );
+  expect(mediaOmission?.content).toContain("contained media excluded from transcripts");
+  expect(mediaOmission?.content).not.toContain("exceeded the");
+
+  const unsupported = agentMessage({
+    turnId: "turn",
+    item: projectItem({
+      type: "mcpToolCall",
+      id: "malformed",
+      server: "inventory",
+      tool: "refresh",
+      arguments: {},
+    }),
+  })!;
+  const unsupportedOmission = unsupported.toolActivity?.sections?.find(
+    (section) => section.label === "Omitted content",
+  );
+  expect(unsupportedOmission?.content).toContain(
+    "could not be represented safely by the transcript contract",
+  );
+  expect(unsupportedOmission?.content).not.toContain("exceeded the");
+
+  const traversalLimited = agentMessage({
+    turnId: "turn",
+    item: projectItem({
+      type: "mcpToolCall",
+      id: "many-nodes",
+      server: "inventory",
+      tool: "refresh",
+      status: "completed",
+      arguments: { nodes: Array.from({ length: 8_200 }, () => []) },
+      result: null,
+    }),
+  })!;
+  const traversalOmission = traversalLimited.toolActivity?.sections?.find(
+    (section) => section.label === "Omitted content",
+  );
+  expect(traversalOmission?.content).toContain(
+    "exceeded transcript traversal or representation limits",
+  );
+  expect(traversalOmission?.content).not.toContain("exceeded the 49,152-byte transcript limit");
 });
 
 test("subagent lifecycle rows show the affected path and action without changing the native item", () => {

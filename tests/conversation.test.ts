@@ -6,6 +6,8 @@ import {
   type ConversationNotification,
   conversationRequestSchemas,
   MAX_CONVERSATION_BYTES,
+  MAX_HISTORY_BYTES,
+  MAX_PROJECTED_ITEM_BYTES,
   projectItem,
   projectNotification,
   readResultSchema,
@@ -100,6 +102,103 @@ describe("conversation content contract", () => {
     expect(
       projectItem({ type: "agentMessage", id: "huge", text: "雪".repeat(MAX_CONVERSATION_BYTES) }),
     ).toMatchObject({ type: "unavailable", reason: "oversized" });
+    const failedRaw = {
+      type: "mcpToolCall",
+      id: "failed-tool",
+      server: "inventory",
+      tool: "refresh",
+      status: "failed",
+      arguments: { query: "x".repeat(MAX_CONVERSATION_BYTES) },
+      result: { content: [{ type: "text", text: "result ".repeat(20_000) }] },
+      error: {
+        type: "rate_limit",
+        message: "The inventory API refused the refresh.",
+        details: "Retry after the service window.",
+      },
+    };
+    const failed = projectItem(failedRaw);
+    expect(failed).toMatchObject({
+      type: "unavailable",
+      nativeType: "mcpToolCall",
+      reason: "oversized",
+      omission: {
+        name: "refresh",
+        detail: "inventory.refresh",
+        status: "failed",
+        failure: {
+          type: "rate_limit",
+          message: "The inventory API refused the refresh.",
+          details: "Retry after the service window.",
+        },
+        excerpt: { label: "Result excerpt" },
+      },
+    });
+    expect(Buffer.byteLength(JSON.stringify(failed))).toBeLessThanOrEqual(MAX_PROJECTED_ITEM_BYTES);
+    const completedEvent = projectNotification(
+      "item/completed",
+      { threadId: "child", turnId: "turn", item: failedRaw, completedAtMs: 20 },
+      2,
+    );
+    expect(completedEvent?.event).not.toBe("conversation.gap");
+    expect(Buffer.byteLength(JSON.stringify(completedEvent))).toBeLessThanOrEqual(
+      MAX_CONVERSATION_BYTES,
+    );
+    const mediaFailure = projectItem({
+      type: "mcpToolCall",
+      id: "failed-media",
+      server: "vision",
+      tool: "inspect",
+      status: "failed",
+      arguments: {},
+      result: {
+        content: [{ type: "image", data: `data:image/png;base64,${"a".repeat(80_000)}` }],
+      },
+      error: { message: "The image could not be decoded." },
+    });
+    expect(mediaFailure).toMatchObject({
+      reason: "media",
+      omission: {
+        name: "inspect",
+        status: "failed",
+        failure: { type: "MCP tool failure", message: "The image could not be decoded." },
+      },
+    });
+    expect(
+      mediaFailure.type === "unavailable" ? mediaFailure.omission?.excerpt : undefined,
+    ).toBeUndefined();
+    const collaborationFailure = projectItem({
+      type: "collabAgentToolCall",
+      id: "failed-agent",
+      tool: "spawnAgent",
+      status: "failed",
+      senderThreadId: "root",
+      receiverThreadIds: ["child"],
+      agentsStates: {
+        child: {
+          status: "errored",
+          message: `Worker could not read the repository. ${"diagnostic ".repeat(8_000)}`,
+        },
+      },
+    });
+    expect(collaborationFailure).toMatchObject({
+      type: "unavailable",
+      nativeType: "collabAgentToolCall",
+      reason: "oversized",
+      omission: {
+        name: "spawnAgent",
+        detail: "spawnAgent",
+        status: "failed",
+        failure: {
+          type: "Agent collaboration failure",
+          message: expect.stringContaining("Worker could not read the repository."),
+          details: expect.stringContaining('"status": "errored"'),
+        },
+        excerpt: { label: "Agent state excerpt" },
+      },
+    });
+    expect(Buffer.byteLength(JSON.stringify(collaborationFailure))).toBeLessThanOrEqual(
+      MAX_PROJECTED_ITEM_BYTES,
+    );
     expect(
       projectNotification("item/agentMessage/delta", { delta: "missing identity" }, 1),
     ).toMatchObject({ event: "conversation.gap", data: { reason: "unsupported", threadId: null } });
@@ -252,6 +351,48 @@ describe("scoped native conversation reads", () => {
     await expect(
       readConversationItems(call, { ...params, cursor: first.nextCursor! }, []),
     ).rejects.toThrow("cursor_expired");
+  });
+  test("history pages stop at the public byte budget while preserving oversized tool summaries", async () => {
+    const items = Array.from({ length: 30 }, (_, index) => ({
+      id: `large-${index}`,
+      type: "commandExecution",
+      command: `run ${index}`,
+      commandActions: [],
+      cwd: "/work",
+      status: index === 0 ? "failed" : "completed",
+      exitCode: index === 0 ? 23 : 0,
+      aggregatedOutput: `${index}: ${"output ".repeat(20_000)}`,
+    }));
+    const call = async () => ({
+      data: [{ id: "turn", itemsView: "full", items }],
+      nextCursor: null,
+    });
+    const params = { threadId: "child", limit: 50, sortDirection: "asc" as const };
+    const first = await readConversationItems(call, params, []);
+    expect(first.data.length).toBeGreaterThan(0);
+    expect(first.data.length).toBeLessThan(items.length);
+    expect(Buffer.byteLength(JSON.stringify(first.data))).toBeLessThan(MAX_HISTORY_BYTES);
+    expect(first.data[0]).toMatchObject({
+      item: {
+        type: "unavailable",
+        nativeType: "commandExecution",
+        omission: {
+          name: "Command",
+          status: "failed",
+          exitCode: 23,
+          failure: { type: "Command failure", message: "Command exited with code 23." },
+        },
+      },
+    });
+    const all = [...first.data];
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await readConversationItems(call, { ...params, cursor }, []);
+      expect(Buffer.byteLength(JSON.stringify(page.data))).toBeLessThan(MAX_HISTORY_BYTES);
+      all.push(...page.data);
+      cursor = page.nextCursor;
+    }
+    expect(all.map((entry) => entry.item.id)).toEqual(items.map((item) => item.id));
   });
   test("walks ancestry, forwards bounded native pagination, binds cursors, and reports concurrent changes without pretending atomicity", async () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];

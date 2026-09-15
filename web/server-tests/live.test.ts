@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { projectItem } from "../../src/events/conversation.ts";
 import { LiveReader } from "../server/live-reader.ts";
 import { agentMessage, VoiceMessages } from "../server/messages.ts";
 import type { LiveView } from "../src/types.ts";
@@ -375,6 +376,48 @@ test("late native history cannot populate a successor and a missing server recon
   }
 });
 
+test("history reader keeps oversized tool identity and true failure state", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  try {
+    const tool = (id: string, status: "completed" | "failed") => ({
+      turnId: "turn",
+      item: projectItem({
+        type: "mcpToolCall",
+        id,
+        server: "inventory",
+        tool: "refresh",
+        status,
+        arguments: {},
+        result: { content: [{ type: "text", text: "result ".repeat(20_000) }] },
+        ...(status === "failed"
+          ? { error: { type: "service_error", message: "Inventory is temporarily offline." } }
+          : {}),
+      }),
+    });
+    h.history([tool("completed", "completed"), tool("failed", "failed")]);
+    await h.start();
+    const view = await until(reader, (candidate) => !candidate.agentHistoryLoading);
+    expect(view.agent).toHaveLength(2);
+    expect(view.agent[0]).toMatchObject({
+      status: "complete",
+      toolActivity: { name: "refresh", state: "complete" },
+    });
+    expect(view.agent[1]).toMatchObject({
+      status: "error",
+      toolActivity: { name: "refresh", state: "error" },
+    });
+    expect(view.agent[1]?.toolActivity?.sections).toContainEqual({
+      label: "Error",
+      content: "Inventory is temporarily offline.",
+    });
+    expect(JSON.stringify(view)).not.toContain("Content unavailable (oversized)");
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("event transport reconnect preserves one verified view while fencing actions", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
@@ -733,7 +776,7 @@ test("voice gaps and reused IDs stay fenced; unavailable native content remains 
       turnId: "t",
       item: { type: "unavailable", id: "u", nativeType: "unknown", reason: "unsupported" },
     })?.status,
-  ).toBe("error");
+  ).toBe("complete");
 });
 
 test("empty voice starts remain empty across recording boundaries", () => {
