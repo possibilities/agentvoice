@@ -162,12 +162,9 @@ Expired or revoked grants stay stored and are never auto-replaced. An unreadable
 stored grant is also retained. The app has no refresh-secret, server
 configuration, account, approval or transcript interface, and currently has no
 delete or replacement UI; manual app-data repair is the recovery scope.
-The desktop's `agentvoice --attach` opens voice and orchestrator panes for the
-phone's call; `agentvoice --attach --host smolbird` uses verified SSH when the
-backend runs on that phone. The new CLI version must be installed on both ends
-for remote viewing. This view owns no audio and closing it leaves the phone's
-call running. Stock Codex TUI handles native approvals. See
-[desktop attachment](../docs/composition.md).
+The desktop AgentVoice web UI presents the server's Voice and Agent transcripts
+and typed Agent input without taking phone media ownership. Native approvals stay
+pending because AgentVoice does not answer them.
 
 ## Implementation boundaries
 

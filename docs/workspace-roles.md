@@ -174,9 +174,8 @@ keys fail; open native config/extra objects conservatively require runtime resta
 Named realtime settings have voice impact, but only voice name currently has a
 narrow application implementation. Other changes and prompt/skill/MCP asset edits
 require full runtime restart. Workspace changes require a new call/server
-selection. The planner explains supported actions, including closing/reopening
-an attached composition when needed. Platform-specific full restarters are future
-work.
+selection. The planner explains supported actions, including web revalidation after
+runtime replacement. Platform-specific full restarters are future work.
 
 The database captures authored contents, not a whole machine. External programs,
 absolute paths embedded in scripts/prompts, environment dependencies and inline

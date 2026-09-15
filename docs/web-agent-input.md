@@ -30,7 +30,8 @@ The browser posts a strict named command with the current view incarnation and a
 fresh request UUID. The host binds instance, generation, canonical workspace and
 thread before obtaining a short-lived attachment ticket. Immediately before the
 one native mutation it checks call and turn identity again. It never sends model,
-permissions, cwd or other launch overrides. Native approvals remain stock TUI-owned.
+permissions, cwd or other launch overrides, reads, descendant navigation, or
+answers to native prompts. AgentVoice reports native approvals but does not answer them.
 
 The browser always shows Send, disabled when input is empty or submission is
 unavailable. The follow-up selector chooses Steer or Queue while Agent works.

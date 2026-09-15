@@ -15,8 +15,8 @@ macOS service installation, private-network pairing, and Android development.
 
 ## What it provides
 
-- Bare `agentvoice` opens a foreground terminal composition with voice controls,
-  a persistent voice transcript, and an attached stock Codex TUI.
+- Bare `agentvoice` prints command help. The AgentVoice web UI presents the
+  persistent Agent and Voice transcripts with typed Agent input.
 - `agentvoice client` opens only the pointer voice frontend.
 - `agentvoice phone` serves a capability-bearing loopback page whose browser owns
   microphone capture, playback, and WebRTC.
@@ -39,14 +39,15 @@ intentional native replacement operations.
 
 ## Try it from a prepared checkout
 
-Run the server and client in separate terminals:
+Run the server and explicit voice client in separate terminals, and open the web UI
+at `https://agentvoice.localhost` for transcripts and typed Agent input:
 
 ```sh
 # Restores saved native work if marked; always waits without opening audio
 bun run src/main.ts server
 
 # Attaches media, creating a new session only when the workspace was unmarked
-bun run src/main.ts
+bun run src/main.ts client
 ```
 
 Use the same absolute workspace for both processes when you do not want the
@@ -54,14 +55,14 @@ managed default:
 
 ```sh
 bun run src/main.ts server --workspace /absolute/project
-bun run src/main.ts --workspace /absolute/project
+bun run src/main.ts client --workspace /absolute/project
 ```
 
 The terminal client needs Bun 1.3+, an authenticated stock Codex, built native
-audio, microphone permission, smolmux 0.9.2+, and `codex-viewer`. The phone path
+audio, and microphone permission. The phone path
 uses browser audio and does not require the native audio build. See the
 [complete manual](docs/manual.md) for setup, installation, clients,
-configuration, permissions, attachment, and troubleshooting.
+configuration, permissions, web interaction, and troubleshooting.
 
 ## Documentation
 

@@ -216,6 +216,5 @@ even for the same user or workspace.
 
 The complete method, result, error, transport, and compatibility reference is
 in [`docs/api.md`](docs/api.md). Agentmux is the relevant precedent for shared
-Zod validation/dispatch across Unix socket and MCP; smolmux is the precedent
-for a private, bounded singleton socket. AgentVoice retains a foreground
-controller rather than adopting either project's daemon topology.
+Zod validation/dispatch across Unix socket and MCP. AgentVoice retains its own
+workspace-session controller rather than adopting agentmux's daemon topology.

@@ -5,8 +5,8 @@ A local Codex voice server with a pointer-only TUI and same-device phone browser
 waits on a private workspace socket without opening audio. When the selected workspace
 already has a session marker it immediately restores that native conversation while
 detached; otherwise `agentvoice client` connects and starts the new workspace session.
-Bare `agentvoice` composes that client, voice transcript,
-and stock agent attachment in one foreground smolmux process with local PTYs only.
+Bare `agentvoice` prints command help. The AgentVoice web UI presents Agent and Voice
+transcripts and sends typed Agent input through the guarded local gateway.
 `agentvoice phone` serves one capability-bearing loopback page; its browser owns
 audio and WebRTC while Termux retains the controller and Codex child.
 The server-owned workspace-session controller retains exact thread
@@ -26,7 +26,7 @@ not stop the server or a call.
 Authenticated WSS transport v2 (frontend API v3) is opt-in behind a dedicated tailnet-only TLS
 proxy ([ADR 0034](docs/adr/0034-authenticated-client-network.md)). `client` and `phone --connect` load a private device grant;
 browser content stays loopback-only and never receives that grant. Never expose
-native Codex, MCP, attachment or event sockets through this gateway. Read [README.md](README.md), [CONTEXT.md](CONTEXT.md), the [decision index](docs/adr/README.md) and ADRs [0033](docs/adr/0033-client-owned-native-media.md)/[0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0024](docs/adr/0024-server-and-pointer-frontend.md)/[0022](docs/adr/0022-websocket-native-tui.md) for the active topologies; ADRs [0015](docs/adr/0015-retain-controller-replace-runtime.md)/[0016](docs/adr/0016-restart-handoff.md) describe retained MCP/API
+native Codex, MCP, attachment or event sockets through this gateway. Read [README.md](README.md), [CONTEXT.md](CONTEXT.md), the [decision index](docs/adr/README.md) and ADRs [0072](docs/adr/0072-retire-terminal-composition-and-attachments.md)/[0062](docs/adr/0062-web-text-interaction-without-voice-attachment.md)/[0033](docs/adr/0033-client-owned-native-media.md)/[0032](docs/adr/0032-loopback-browser-media-frontend.md)/[0024](docs/adr/0024-server-and-pointer-frontend.md) for the active topologies; ADRs [0015](docs/adr/0015-retain-controller-replace-runtime.md)/[0016](docs/adr/0016-restart-handoff.md) describe retained MCP/API
 runtime replacement and restart handoff semantics.
 
 For the native Android client, configure the private Tailscale WSS endpoint and
@@ -206,10 +206,9 @@ and CLI opt-ins win over false in the file. Resolve once per runtime generation.
 conflicting permission selectors, not unrelated settings. Do not reject launch,
 resume or settings reports solely because permissions are restricted or
 unreported. Preserve native managed requirements. Command/file/permission approvals,
-tool questions and MCP elicitations flow through an attached stock TUI. The server
-terminal shows an interaction notice; without a TUI, native Codex retains the request and
-replays it on attachment. Never add automatic consent, refusals that race the TUI,
-invented answers or an AgentVoice approval queue. Unsupported client tools/auth/
+tool questions and MCP elicitations remain owned by native Codex. The server
+terminal shows an interaction notice; AgentVoice does not answer or forward answers.
+Never add automatic consent, invented answers or an AgentVoice approval queue. Unsupported client tools/auth/
 legacy/unknown requests are still refused visibly. See ADRs [0020](docs/adr/0020-native-launch-defaults.md)/[0022](docs/adr/0022-websocket-native-tui.md).
 
 Resolve one existing absolute real workspace before spawning the child:
@@ -335,7 +334,7 @@ AgentStart's guidance and rendering checks. These include `APPEND_SYSTEM_PROMPT.
 Do not edit deployed role copies or recreate these prompt files in AgentVoice.
 
 
-## Voice recording and attachment
+## Voice recording and host gateway
 
-Read the [recording and attachment contract](docs/architecture.md#voice-recording-and-attachment)
-before changing writers, discovery, attachment or the signed media runtime.
+Read the [recording and web-reading contract](docs/architecture.md#voice-recording-and-web-reading)
+before changing writers, discovery, the host gateway or the signed media runtime.

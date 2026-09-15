@@ -8,7 +8,7 @@
   },
   "private": true,
   "type": "module",
-  "description": "Local Codex voice server and pointer TUI with managed default workspaces.",
+  "description": "Local Codex voice server with a web UI and optional pointer client.",
   "bin": {
     "agentvoice": "./src/main.ts"
   },

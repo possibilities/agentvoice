@@ -205,7 +205,7 @@ export class VoiceRuntime {
   private effort: string | null = null;
   private conversationMode: "started" | "continued" = "started";
   private shuttingDown = false;
-  private tuiGateway: AttachmentGateway | undefined;
+  private agentGateway: AttachmentGateway | undefined;
   private shutdownPromise: Promise<void> | null = null;
   private workspaceLease: (() => void) | undefined;
   private readonly abort = new AbortController();
@@ -547,7 +547,7 @@ export class VoiceRuntime {
 
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
-    this.tuiGateway?.close();
+    this.agentGateway?.close();
     this.shuttingDown = true;
     this.threadObserver?.stop();
     this.mailboxObserver?.stop();
@@ -798,22 +798,17 @@ export class VoiceRuntime {
     }
     this.attachment = connection;
     if (connection.nativeEndpoint) {
-      this.tuiGateway = new AttachmentGateway(
-        connection.nativeEndpoint,
-        resolveNativeExecutable(codex, this.config.orchestrator.workspace),
-        (threadId, timeoutMs) =>
-          connection.request("thread/read", { threadId, includeTurns: false }, timeoutMs),
-      );
+      this.agentGateway = new AttachmentGateway(connection.nativeEndpoint);
       this.options.onAttachmentReady?.(
         () => {
           if (!this.threadReady || this.shuttingDown || !this.threadId)
             throw new Error("Voice thread is not ready for attachment");
-          return this.tuiGateway!.issue({
+          return this.agentGateway!.issue({
             threadId: this.threadId,
             workspace: this.config.orchestrator.workspace,
           });
         },
-        () => this.tuiGateway?.revoke(),
+        () => this.agentGateway?.revoke(),
       );
     }
     this.tierSelection = new ServiceTierSelection(

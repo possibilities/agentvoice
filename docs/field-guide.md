@@ -1,6 +1,7 @@
 # Current AgentVoice field guide
 
-Updated for the waiting local server and pointer frontend (ADRs [0024](adr/0024-server-and-pointer-frontend.md)/[0022](adr/0022-websocket-native-tui.md)).
+Updated for the waiting local server, explicit pointer frontend and web transcript
+UI (ADRs [0024](adr/0024-server-and-pointer-frontend.md)/[0062](adr/0062-web-text-interaction-without-voice-attachment.md)/[0072](adr/0072-retire-terminal-composition-and-attachments.md)).
 Historical upstream probes below retain their inspected versions and evidence.
 References to in-call Fresh describe a retired UI control; restart remains in MCP/API.
 
@@ -11,7 +12,7 @@ agentvoice frontend → private workspace socket → agentvoice server
   → retained workspace-session controller (leases, lifecycle control, read-only events)
     → disposable runtime → private native WebSocket → owned stock Codex child
       microphone/speaker ↔ miniaudio + Opus ↔ WebRTC ↔ voice service
-      stock Codex TUI → guarded gateway → private native WebSocket
+      web Agent input / explicit speech → guarded gateway → private native WebSocket
 ```
 
 The server never opens audio. If the selected workspace has a valid marker, server
@@ -24,8 +25,8 @@ A later sole frontend negotiates fresh media to the same session. A stop failure
 has an unknown outcome and blocks media admission until server restart.
 There are no keybindings or in-call Fresh. MCP/API redial and runtime restart
 remain, including optional restart handoffs. Restart reloads the runtime under
-the connected frontend and resumes the same thread. Guarded stock TUI input and
-explicit handoffs use native turns.
+the connected frontend and resumes the same thread. Guarded web input and explicit
+handoffs use native turns.
 
 Server launch flags select a canonical workspace and conversation policy. A valid
 `.agentvoice-session` thread resumes at server startup; an absent marker leaves
@@ -33,114 +34,23 @@ thread creation to the first frontend. The retired `--continue` and `--resume` f
 history. Automatic WebRTC renewal keeps an attached frontend connected. Workspace
 is a selection boundary, not a sandbox.
 
-## Stock TUI attachment boundary probe
+## Native gateway boundary probe
 
-Attachment is always available through a guarded gateway ([ADR 0022](adr/0022-websocket-native-tui.md)). A direct
-authenticated connection to the owned Codex app-server is not scoped to the
-selected thread. The original boundary probe also established why native startup
-permission defaults cannot enforce a full-access-only attachment policy, which
-has since been removed.
-
-Verified against stock Codex 0.153.4 on September 5 and 6, 2026:
+The host-side web composer and explicit speech helper use a guarded gateway
+instead of receiving the owned Codex app-server credential. The retained security
+probe demonstrates why a direct native credential is too broad:
 
 ```sh
 CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-boundary-probe.ts
 ```
 
 The opt-in macOS probe uses disposable HOME/CODEX_HOME/workspace directories,
-an authenticated loopback listener, an environment without inherited provider
-keys, and sandbox-exec denying external network access. It starts two protocol
-clients and ephemeral threads, but no turns, inference, realtime sessions or
-audio. It verifies these boundaries and cleans up its child and temporary state:
-
-- The owner starts a thread with confirmed `dangerFullAccess` / `never`.
-- The second client successfully changes that thread's approval policy to
-  `on-request` through `thread/settings/update`. The owner receives the applied
-  settings afterward, too late to prevent the mutation. Startup
-  `-c approval_policy=never` is not a lock.
-- The second client can create another thread. The bearer capability authorizes
-  the app-server, not one thread or one runtime-generation attachment.
-
-Source review of upstream commit
-`008bbd5884122dc95aaece19ecfe0fc6a59dcf36` also found that
-`app-server/src/outgoing_message.rs` broadcasts a server request to subscribed
-clients and consumes one shared callback on the first answer. Letting the stock
-TUI answer while AgentVoice refuses is therefore a race. Native TUI shutdown
-normally unsubscribes, but its running-task Exit action can explicitly interrupt
-work (`tui/src/app/event_dispatch.rs`). This protocol probe does not establish
-live audio behavior.
-
-The gateway checks target identity and permitted operations before forwarding,
-forwards native human questions and TUI answers, and revokes before call teardown. Native credentials remain private. Every launch uses native
-WebSocket RPC. Voice and TUI attachment accept native/configured permissions;
-joining preserves live thread settings. Explicit settings changes remain native.
-AgentVoice leaves supported human requests pending, so it cannot race the TUI
-with a refusal. Native `replay_requests_to_connection_for_thread` retains and
-replays unanswered questions on resume; AgentVoice stores no second queue.
-
-A second opt-in macOS fixture tests the stock TUI with a localhost fake Responses
-API and disposable native history; its native child cannot contact the external
-network and it opens no media:
-
-```sh
-CODEX_PATH=/absolute/path/to/stock/codex bun run scripts/attachment-tui-probe.ts
-```
-
-Set `AGENTVOICE_TUI_PROBE_COMPOSITION=1` to run the real three-pane smolmux
-composition with no-media fake pointer and voice panes around the stock TUI.
-
-Its READY line gives the isolated HOME/CODEX_HOME/workspace/state for a separate
-terminal running this checkout's `attach` command. Set HOME, CODEX_HOME and
-XDG_STATE_HOME to those fixture paths. Stdin commands `hold`, `stream`, `owner`, `release`,
-`approval`, `revoke`, and `quit` control only this fixture. `hold` delays the next fake model
-response; `owner` starts a native owner turn so typing in the TUI exercises steer.
-`stream` sends text deltas for the next response and holds completion until
-`release`. Complete lines must appear before release, including on successive
-owner turns. Stock TUI rendering is newline-gated: an unfinished line can remain
-invisible until completion, even when the delta has arrived. `approval` makes the
-next fake response request a harmless command with native escalation. The thread
-uses workspace-write/on-request: issue `approval` then `owner` before attaching
-to test native replay, or while attached to test live delivery.
-The fixture has a ten-minute deadline and removes its child and temporary state.
-
-Stock 0.153.4 PTY checks, repeated on 2026-09-06, established: exact warm resume and history display;
-successive owner-originated input and streaming replies appearing in the TUI
-before completion, while the owner opts out of text deltas; idle typed `turn/start`; active
-`turn/steer` reaching the fake provider after the held response completed; and
-launcher termination on revocation. Stock `/quit` acknowledges unsubscribe but
-can close TCP without a normal WebSocket close handshake, so the gateway tracks
-the latest successful unsubscribe for normal detach (verified launcher exit 0;
-revocation exits 1). Unknown `plugin/list` and
-`thread/name/set` calls are refused; core conversation interaction still works.
-Fake-media controller tests cover bootstrap, call ownership, configuration reload
-on a later call, stale response rejection and shutdown. The new permission checks
-established native approval replay before first attachment, acceptance and tool
-output, and pending-request survival across TUI loss and reattachment. These
-isolated checks establish neither audible response delivery nor simultaneous
-live voice behavior. The TUI intentionally
-shows native orchestrator messages, not a voice transcript.
-
-Stock 0.154.0 added a startup hook-review screen. A disposable PTY check on
-2026-09-12 established that review and continue-without-trusting reach the exact
-resumed thread, while trust-all sends `config/batchWrite` for `hooks.state` before
-resume. The gateway now records only untrusted or modified key/hash pairs from
-that attachment peer's workspace-bound `hooks/list` result and accepts only the
-matching native upsert. Arbitrary config edits, alternate files, unknown keys and
-different hashes remain rejected. The check trusted a harmless `/usr/bin/true`
-fixture hook, resumed the local fake-model thread, and then reattached without a
-second review prompt. It used disposable state, external network denial, no audio
-and no hosted inference. The no-media three-pane composition remained open after
-Escape dismissed the review and after trust-all completed.
-
-Upstream `core/src/session/turn.rs::realtime_text_for_event` excludes user messages;
-`core/src/session/mod.rs::maybe_mirror_event_text_to_realtime` relays assistant
-output, and `core/src/realtime_conversation.rs` sends a standalone context update
-even without an active handoff. The stock backend prompt explicitly accounts for
-typed backend input and spoken summaries of visible output. This establishes the
-intended typed-input route. A separate live trial on 2026-09-06 confirmed continued
-orchestrator updates, typed steering and an audible response with the official
-0.153.4 TUI; the operator confirmed the spoken result. That live trial used the
-earlier full-access attachment path, not the new restricted-permission flow.
+denies external network access, and starts no turns, inference, realtime sessions
+or audio. Two protocol clients establish that the native bearer token itself can
+change settings and create threads. Production therefore issues a short-lived
+exact-controller/root ticket and permits only web Send/Steer/Interrupt plus the
+explicit root speech operation. It rejects reads, settings, descendant navigation,
+native questions and arbitrary method selection before native dispatch.
 
 ## Complete configurable surface
 
@@ -228,10 +138,11 @@ Permissions defer to native/configured behavior when --allow-full-access is
 absent. The flag explicitly selects danger-full-access/never and wins over
 conflicting permission controls, including raw selectors. Native managed
 requirements still apply. Restricted or missing permission reports do not stop
-the child or prevent attachment. Full access does not grant connector consent or
-answer tool questions. Native approvals, tool questions and MCP elicitations stay
-pending until an attached stock TUI answers. Unsupported client requests still
-receive native denials or protocol errors with a persistent TUI explanation.
+the child or prevent voice and web observation. Full access does not grant connector
+consent or answer tool questions. Native approvals, tool questions and MCP
+elicitations stay pending; AgentVoice reports but does not answer them. Unsupported
+client requests still receive native denials or protocol errors with a visible
+explanation.
 
 Still application-owned: visible refusal handling, WebRTC/audio transport,
 explicit continuation's workspace filters and renewal policy. These are not a

@@ -92,11 +92,10 @@ async function agentFixture() {
       },
     },
   });
-  gateway = new AttachmentGateway(
-    { url: `ws://127.0.0.1:${native.port}`, token: "fake-native-token" },
-    process.execPath,
-    async () => ({ id: "main", cwd: h.root, parentThreadId: null }),
-  );
+  gateway = new AttachmentGateway({
+    url: `ws://127.0.0.1:${native.port}`,
+    token: "fake-native-token",
+  });
   update();
   await h.start();
   const reader = new LiveReader(h.stateDir);

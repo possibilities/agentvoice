@@ -24,7 +24,7 @@ export class AgentSendError extends Error {
   }
 }
 
-/** Credentials and native RPC stay on the host, behind the stock TUI's exact-thread gateway. */
+/** Credentials and native RPC stay on the host behind an exact-root gateway. */
 export async function sendAgentOperation(
   stateDir: string,
   target: AgentTarget,
@@ -102,7 +102,7 @@ export async function dispatchAgentOperation(
                 if (typeof data !== "string" || Buffer.byteLength(data) > 4 * 1024 * 1024)
                   throw new Error();
                 const frame = JSON.parse(data);
-                // Native questions remain pending for the stock TUI; this client never answers them.
+                // Native questions remain pending; this client never answers them.
                 if (frame.method || (frame.id !== "initialize" && frame.id !== "operation")) return;
                 if (frame.error) {
                   reject(

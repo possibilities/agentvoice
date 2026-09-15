@@ -27,4 +27,6 @@ reconnect or input replay. Voice redial remains within the same attachment.
 This keeps native approvals and typed steering in the established stock gateway
 and keeps phone audio ownership independent of desktop observation. The cost is
 an updated CLI on each host and working SSH access for a phone-hosted backend.
-See [composition](../composition.md) for limits and verification.
+The former composition contract was removed by
+[ADR 0072](0072-retire-terminal-composition-and-attachments.md); this record
+retains the historical limits and rationale.

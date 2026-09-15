@@ -66,7 +66,7 @@ The directory is mode 0700 and the socket 0600. Both endpoints belong to the sam
 foreground controller and close when it quits. Read-only is the API's contract,
 not isolation from other processes running as the same Unix user.
 
-## Record and view voice conversations
+## Record voice conversations
 
 Run the observer explicitly in a separate terminal while AgentVoice is running:
 
@@ -77,18 +77,10 @@ bun run voice:record --workspace ~/code/myapp --thread <main-thread-id> --out-di
 ```
 
 The recorder prints each absolute JSONL path to stdout as it opens it, including
-an initial file before any speech. Notices go to stderr. In another terminal:
-
-```sh
-~/code/codex-viewer/bin/codex-viewer --voice-jsonl ~/voice-recordings/myapp/<thread-id>.jsonl --follow
-# Later, view the saved recording without following:
-~/code/codex-viewer/bin/codex-viewer --voice-jsonl ~/voice-recordings/myapp/<thread-id>.jsonl
-```
-
-Use the updated codex-viewer build that supports `--voice-jsonl`. This path renders
-native Codex user/assistant cells without starting app-server or reading Codex
-threads. Scroll upward to pause tail-following; End returns to the latest text.
-Ctrl+C exits either observer without affecting AgentVoice.
+an initial file before any speech. Notices go to stderr. The AgentVoice web UI
+reads the server-managed recording for the active workspace and thread; exported
+observer files remain available to outside JSONL tooling. Ctrl+C exits the observer
+without affecting AgentVoice.
 
 One file belongs to one canonical workspace and native main-thread identity.
 A call using a new conversation opens a different file; calls resuming the same
@@ -143,9 +135,6 @@ Resumes append, runtime replacements retain the writer, and shutdown allows fina
 voice notifications from the current runtime before closing it. A new conversation
 or workspace has a separate recording. No viewer is required to record.
 
-`agentvoice attach voice` resolves active/default workspace and opens codex-viewer;
-`--list`, `--thread` and `--workspace` select saved history after calls end. Without
-an active call the newest modified recording in that workspace is selected.
 The writer checks private ancestors/files, uses per-thread locks, fsyncs completions
 and boundaries, and fsyncs the containing directory when opening a file. Reopening
 an unclean run marks `previous_recording_interrupted`, including newline-complete
@@ -173,7 +162,7 @@ limits, and live-only delivery remain the behavioral contract below.
 ## Wire contract
 
 One UTF-8 JSON object per line, over a long-lived duplex connection. Envelopes
-follow agentmux and smolmux: `v`, `type`, request/response `id`, and event
+follow the fleet convention: `v`, `type`, request/response `id`, and event
 `event`/`data`. Request IDs are nonempty strings up to 128 characters. Requests
 and params reject unknown fields. Protocol versions are endpoint-local.
 

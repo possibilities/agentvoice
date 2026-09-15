@@ -336,11 +336,11 @@ export class AppServerConnection {
     }
 
     if (id !== undefined && typeof method === "string") {
-      // Native owns pending human requests and replays them when a TUI resumes.
+      // Native owns pending human requests. AgentVoice reports them but never answers.
       if (nativeHumanRequest(method)) {
         try {
           this.options.onInteraction?.(
-            "Codex requested your input. Run agentvoice attach agent in this workspace to respond.",
+            "Codex requested your input. The request remains pending; AgentVoice does not answer native prompts.",
           );
         } catch {
           this.options.debug?.("interaction notice callback failed");

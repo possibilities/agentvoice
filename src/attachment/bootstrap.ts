@@ -14,7 +14,6 @@ export const attachmentTicketSchema = z
   .object({
     threadId: z.string().min(1),
     workspace: z.string().refine(isAbsolute),
-    codex: z.string().refine(isAbsolute),
     token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
     url: z.string().regex(/^ws:\/\/127\.0\.0\.1:\d+$/),
   })
@@ -46,7 +45,7 @@ export async function acquireAttachment(
       target.workspace !== expected.workspace ||
       target.threadId !== expected.threadId)
   )
-    throw new Error("Backend changed. Run agentvoice --attach again.");
+    throw new Error("Backend changed. Refresh the current AgentVoice view.");
   const response = await fetch(new URL("/tui/attach", descriptor.url), {
     method: "POST",
     headers: { Authorization: `Bearer ${descriptor.token}`, "Content-Type": "application/json" },

@@ -105,8 +105,8 @@ links keep browser navigation. Unsupported, unavailable or disallowed documents
 show an error; there is no arbitrary file browser or remote-page proxy. See
 [ADR 0063](../docs/adr/0063-linked-markdown-document-viewer.md) for the access boundary.
 
-The Voice lane incrementally tails the same private, identity-checked JSONL used
-by `attach voice`, including saved speech from previous calls on this exact thread.
+The Voice lane incrementally tails the private, identity-checked server recording,
+including saved speech from previous calls on this exact thread.
 Draft deltas update stable item IDs; canonical completions replace them. Runtime
 and realtime-session IDs fence reused item IDs. Recording gaps remain visible.
 Recording reads retain the existing 64 MiB file / 1 MiB record limits. Observed
@@ -176,11 +176,11 @@ expand both docks together; long drafts scroll within the capped text field.
 ## Agent input
 
 `POST /api/agent` accepts only named composer actions, a current view ID and a
-unique request ID. The host discovers the exact live controller and acquires the
-same identity-fenced attachment gateway used by `attach agent`. It sends native
+unique request ID. The host discovers the exact live controller and acquires an
+identity-fenced host gateway ticket. It sends native
 `turn/start`, `turn/steer` with `expectedTurnId`, or `turn/interrupt` with the active
-turn ID. It does not override native settings or answer approval requests; attach
-the stock TUI for approvals. Mutation bodies require same-origin JSON and bounded
+turn ID. It does not override native settings, read native history through this
+gateway, navigate descendants, or answer approval requests. Mutation bodies require same-origin JSON and bounded
 text. No native endpoint, token, method selector or thread selector reaches the browser.
 
 Idle input sends immediately. While Agent works, the shared desktop-style mode

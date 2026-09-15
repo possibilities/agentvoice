@@ -178,7 +178,7 @@ describe("owned native WebSocket", () => {
       expect(notices).toContainEqual(["test/initialized", {}]);
       expect(notices.some(([method]) => method === "test/response")).toBe(false);
       expect(interactions).toHaveLength(5);
-      expect(interactions[0]).toContain("Run agentvoice attach agent");
+      expect(interactions[0]).toContain("request remains pending");
       for (const entry of native) expect(notices).toContainEqual(entry);
     } finally {
       await c.close();

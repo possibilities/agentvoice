@@ -33,22 +33,6 @@ Only explicit runtime replacement, `new_session`, or server shutdown changes the
 parts named by those operations. _Avoid_: workspace session marker (the marker is
 only the persisted root-thread pointer).
 
-**Composition** — Bare `agentvoice`: one foreground smolmux process presenting the
-pointer frontend, voice transcript and stock agent attachment side by side. All
-three Apps use local PTYs and end with the smolmux process; there are no
-Companion-held Sessions. Ordinary App exit/failure ends the Composition and its
-media attachment; native work remains in the server's workspace session. Runtime
-replacement reopens exact-thread attachments after live media;
-input is never replayed. Attachments initially start only after this launch's call is live.
-
-**Attachment view** — `agentvoice --attach`, run on desktop: two local PTYs for
-voice transcript and stock agent, observing another frontend's call. It starts
-no call/audio and closing it never stops that frontend. `--host <ssh-host>` keeps
-smolmux and codex-viewer on desktop while SSH carries bounded transcript frames
-and the backend's stock attachment TUI. Pin call, workspace, thread, controller
-and generation; disconnect/replacement ends the view without replay. Native
-attachment readiness is independent of media readiness. See ADR 0036.
-
 **Frontend / Console** — The separate `agentvoice client` terminal process. Connecting
 attaches media to the retained workspace session; its only controls are microphone mute, speaker mute and pointer
 push-to-talk. It owns native audio, Opus and WebRTC, but no Codex process,
@@ -84,26 +68,12 @@ owned child/process group.
 
 **Connection** — The runtime-private native WebSocket RPC channel to that child.
 
-**TUI attachment** — A stock Codex TUI subscribing to the current live
-orchestrator thread and its verified native descendants through a guarded local
-gateway. It follows native work and
-submits typed input without owning voice or the child. Always available through
-`agentvoice attach agent`; no launch opt-in or full-access requirement. Runtime restart, server shutdown and native loss revoke it; frontend detach, redial and automatic
-renewal preserve it. Joining preserves the live
-thread's settings; explicit native setting changes and human answers flow through.
-
 **Attachment gateway** — Runtime-owned authenticated loopback WebSocket proxy.
-It validates the root or native descendant ancestry in the exact workspace before
-dispatch, filters unrelated/realtime
-notifications, and forwards native human questions and correlated TUI answers.
-Hook trust is the only persistent native-config write: the gateway accepts only
-an untrusted or modified key/hash pair returned by that attachment's current
-`hooks/list` result for the selected workspace, and consumes that inventory on
-one trust attempt.
-Native Codex owns pending requests and replay; AgentVoice never races the TUI
-with a refusal. A private controller bootstrap issues a short-lived admission
-ticket; its native listener credential is never given to the TUI. The grant stays
-bound to the root while the TUI navigates subagents. See ADRs [0022](docs/adr/0022-websocket-native-tui.md)/[0037](docs/adr/0037-descendant-tui-attachment.md).
+It issues short-lived, exact-controller/thread tickets to host-side AgentVoice
+consumers such as the web composer and explicit speech helper. Native credentials,
+sockets and request selection never reach browser code. Runtime restart, server
+shutdown and native loss revoke tickets; frontend detach does not. See
+[ADR 0062](docs/adr/0062-web-text-interaction-without-voice-attachment.md).
 
 **Workspace** — The canonical existing root pinned for one server workspace session. Explicit
 --workspace wins over configuration; otherwise the default server selects its
@@ -139,8 +109,8 @@ _Avoid_: Server (the LaunchAgent owns that lifecycle), client (it owns no call/m
 allow-full-access:true explicitly selects
 native danger-full-access / never. Without the flag, unset permission fields defer
 to Codex; configured modes/profiles are accepted. Managed requirements still apply.
-Native human interaction uses the attached stock TUI; unsupported client requests
-are refused visibly.
+AgentVoice reports native human requests but does not answer them; unsupported
+client requests are refused visibly.
 
 **Conversation / main thread** — A native Codex thread tagged
 agentvoice-orchestrator. Its saved history can continue across app launches.
@@ -277,7 +247,7 @@ native Codex/controller credential and must not be persisted, shared or widened
 into remote access.
 
 **Redial** — An MCP/API operation that replaces the voice connection while
-keeping the runtime, loaded settings, native thread and stock TUI attachment.
+keeping the runtime, loaded settings, native thread and web gateway.
 
 **Runtime restart** — An MCP/API operation that preflights a replacement, stops
 the old runtime and resumes its exact leased thread with reloaded code/settings.
@@ -331,7 +301,8 @@ _Avoid_: worker registry, transcript store.
 **Voice transcript** — Automatic private JSONL observation of a workspace session's native voice
 items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.
 Resumed conversations append to the same file; recordings survive server shutdown.
-`agentvoice attach voice` opens them with codex-viewer, independently of recording.
+The web Voice lane reads them through the same bounded identity checks, independently
+of recording.
 This is observed text, not proof of what was heard. Its bounded recent completed
 speech supplies same-root voice context under ADR 0066, independently of the viewer.
 

@@ -177,7 +177,7 @@ async function runProbe(root: string, codex: string): Promise<void> {
     const url = await bounded(listening.promise);
     const owner = await Client.connect(url, token, "agentvoice_probe");
     clients.push(owner);
-    const attached = await Client.connect(url, token, "codex_tui_probe");
+    const attached = await Client.connect(url, token, "untrusted_peer_probe");
     clients.push(attached);
     const started = await owner.request("thread/start", {
       cwd: workspace,

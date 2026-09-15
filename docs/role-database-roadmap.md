@@ -72,9 +72,9 @@ fallback, compare desired versus per-component loaded content and explain exact 
 actions. Preflight and pin a revision before teardown; preserve exact workspace/thread
 leases and prevent later edits leaking into activation. Support save now/apply later,
 honest saved/applied/failed/unknown outcomes, recovery without automatic mutation retries
-and no repeated restart for a no-op. Keep working agent/attachment on voice-only changes.
-Broader runtime changes currently revoke the attachment and close a composition; expose
-this honestly until lifecycle work lands. Fake tests cover concurrency, preflight
+and no repeated restart for a no-op. Keep the working agent and media attachment on
+voice-only changes. Broader runtime changes currently replace the native child and
+revoke host gateway tickets; the web UI revalidates the successor. Fake tests cover concurrency, preflight
 rejection, lost replies and partial apply.
 
 ### 3. Reuse AgentVoice roles as named templates and defaults
@@ -114,10 +114,9 @@ AgentBoard: `it-86b5c7c8`.
 Implement platform-aware actions produced by the apply planner for runtime, server, client
 and any whole-UI setting. For each supported platform, either perform an authorized
 orderly restart/re-attachment or explain exactly what the user must close/reopen; no
-invented universal restarter or automatic new call. Address the current
-full-runtime-restart -> attachment revoked -> composition ends call behavior. Preserve
+invented universal restarter or automatic new call. Preserve web revalidation,
 mute/hold-release, exact thread authority, lifecycle fences, pending approval behavior and
-safe failure/rollback reporting. Never make observer attachment a call owner or expose
+safe failure/rollback reporting. Never make observation a call owner or expose
 native capabilities through network transport. Device/live checks happen only with current
 authorization; IRL validation can accompany normal use.
 

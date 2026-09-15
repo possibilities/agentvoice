@@ -80,7 +80,7 @@ export function roleImpact(before: RoleBundle, after: RoleBundle) {
       boundary === "server"
         ? "Restart the server and reconnect the frontend"
         : boundary === "runtime"
-          ? "Restart the runtime; attached compositions must be closed and reopened"
+          ? "Restart the runtime; the web UI follows after revalidation"
           : boundary === "voice"
             ? "Reconnect the voice session"
             : "No restart required",

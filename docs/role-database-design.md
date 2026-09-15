@@ -277,10 +277,9 @@ other CLI's directory format.
 
 ## Decisions still open
 
-- Adopt the narrow voice-session application boundary, or use full runtime
-  restart for the first feature? Recommend the narrow boundary. Today restart
-  revokes the TUI, and the bare-command composition ends its call when that pane
-  exits; a full restart is therefore not a smooth voice-setting control.
+- The narrow voice-session application boundary remains preferable because full
+  runtime restart interrupts active native work. The former combined terminal
+  panes were later retired by ADR 0072.
 - Choose cutover scope after this architecture discussion: explicit import into
   a complete database-backed role first, or a coordinated replacement of all
   current role/config entry points. Do not silently migrate global configuration.

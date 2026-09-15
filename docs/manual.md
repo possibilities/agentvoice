@@ -3,53 +3,20 @@
 This is the detailed operating and reference guide. For the short project
 overview and current readiness caveat, see the [README](../README.md).
 
-A local Codex voice server with terminal and same-device browser frontends. `agentvoice server`
-waits for a call; bare `agentvoice` opens a foreground smolmux instance containing
-`agentvoice client`, `agentvoice attach voice`, and `agentvoice attach agent`
-side by side. The terminal client owns native audio and WebRTC,
-and displays connection status and monochrome YOU/AGENT
+A local Codex voice server with terminal and same-device browser frontends.
+`agentvoice server` restores saved work or waits for a first frontend. Bare
+`agentvoice` prints command help. `agentvoice client` is the explicit pointer voice
+frontend. The AgentVoice web UI at `https://agentvoice.localhost` presents the
+persistent Agent and Voice transcripts and accepts typed Agent input. The terminal
+client owns native audio and WebRTC, and displays connection status and monochrome YOU/AGENT
 buttons, plus PUSH TO TALK when the microphone is muted. `agentvoice phone`
 instead opens a capability-bearing loopback page whose browser owns audio and
 WebRTC. In both topologies the server owns exact conversation identity, thread
 leases and its unmodified `codex app-server` child.
 
-The two attachment panes show “Waiting for voice connection” until this launch's
-call reaches `live`, then attach to its exact workspace and thread. All three
-apps run in local PTYs owned by the foreground smolmux process. Closing that
-process or exiting any pane app ends all panes and the call; nothing persists
-in smolmux's Companion. App failures also end the composition.
-Press Ctrl+C twice within three seconds to exit the entire composition. The
-first press shows a centered one-row overlay without resizing panes. Ctrl+C
-is reserved for this exit action and never reaches the individual apps.
-Divider drags survive placeholder replacement. Keyboard focus moves to the
-working agent when it opens. Runtime replacement reopens both attachments on
-the current exact thread after voice reconnects. Ordinary pane exits still end
-the composition; typed input is never replayed.
-
-Bare `agentvoice` requires smolmux 0.9.2 or newer with its local PTY helper,
-and `codex-viewer`, on PATH. Their existing installers own those dependencies;
-AgentVoice does not install them. Use `agentvoice client` for the pointer frontend
-alone. Scripts that previously used bare `agentvoice` for that frontend must now
-use `agentvoice client`.
-
-For a call owned by the Android app or phone browser, open the **desktop** view:
-
-```sh
-agentvoice --attach                 # Backend on this desktop
-agentvoice --attach --host smolbird  # Backend in Android/Termux, over SSH
-```
-
-This opens just the voice transcript and stock Codex panes. It waits for a call
-without starting one, and the agent pane becomes available as soon as the native
-backend is ready, even while voice media is negotiating. Closing either pane ends
-the view and leaves the mobile call running. Call end, backend replacement or
-connection loss ends the view; rerun explicitly to attach again.
-
-`--host` uses an existing SSH host configuration, verified host key and key-based
-authentication. Both machines need this AgentVoice CLI version; only the desktop
-needs smolmux and codex-viewer. Optional `--workspace` selects an absolute path on
-the backend host. No attachment or Codex socket is exposed through the voice WSS
-gateway. See [desktop attachment](composition.md#desktop-attachment-view).
+Persistent voice records are read by the web Voice lane with exact workspace and
+thread identity checks. The web Agent composer uses the guarded host-side gateway;
+native sockets and credentials never enter browser code.
 
 The direction is vanilla Codex with configurable prompts and settings: the
 client-and-server experience, including voice, is the baseline. Because AgentVoice
@@ -70,21 +37,21 @@ these in separate terminals:
 bun run /path/to/agentvoice/src/main.ts server
 
 # Terminal 2: attaches media, creating an unmarked session if needed
-bun run /path/to/agentvoice/src/main.ts
+bun run /path/to/agentvoice/src/main.ts client
 ```
 
 On macOS, installation adds a native AgentVoice menu app and starts the default
 server as a separate user LaunchAgent. The menu can show at login and reports the
 LaunchAgent's job state without starting a call or probing Codex, authentication,
 or audio. Quitting the menu leaves the server and any Android or terminal call
-running. Run `agentvoice` whenever you want a call. For manual use, run
+running. Run `agentvoice client` whenever you want terminal voice controls. For manual use, run
 `agentvoice server`. See [macOS menu app](macos-app.md) for its build,
 installation, and future native-UI boundary.
 To choose an explicit workspace,
 pass `--workspace /absolute/project` to both commands. Configuration, model,
 voice, permission and role flags belong to
 `agentvoice server`, for example `agentvoice server --fast`.
-The composition and `client` also accept `--device` and `--output-device` for
+The `client` command also accepts `--device` and `--output-device` for
 client-local audio. `client` and `phone` also accept `--connect <private-profile.json>`
 instead of `--workspace` for authenticated WSS access to the desktop server.
 Both clients use [client API v3](client-api.md); the server never opens audio.
@@ -107,8 +74,8 @@ microphone permission only after **Start voice** is tapped, then owns microphone
 capture, response playback, codecs and the WebRTC peer. It provides microphone
 and speaker mute plus hold-to-talk while persistently muted. The Termux process
 continues to own the call controller, configuration, exact thread, transcripts,
-attachments and stock Codex child; use separate `attach agent` or `attach voice`
-commands when those views are wanted.
+gateway and stock Codex child. Use the desktop AgentVoice web UI for Agent and
+Voice transcripts and typed Agent input.
 
 The printed URL contains a per-process bearer capability. Do not share or
 bookmark it. The listener accepts only exact-origin loopback requests and one
@@ -174,7 +141,6 @@ Codex child, native work, gateway, mailbox and endpoints without realtime speech
 A stop refusal or timeout reports an unknown outcome and blocks another frontend
 until server restart while retaining native work. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.
-The attached stock Codex TUI retains its own keyboard controls.
 The default endpoint is independent of the current workspace generation. Without
 `--workspace`, both commands use that endpoint from any launch directory.
 Warnings and detailed failure reasons go to private service logs, or the terminal
@@ -247,10 +213,10 @@ read `state.get` for the current inventory and a sequence watermark. The endpoin
 reports native thread state and runtime availability during a call, including
 native subagents. The same endpoint also carries typed
 `voice.*` items and transcript deltas as a live-only socket stream, without history
-backfill. The controller automatically saves private workspace/thread JSONL; use
-`agentvoice attach voice` to view it live or after a call ends. An explicit `bun run voice:record
---workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for live
-and saved `codex-viewer --voice-jsonl <file> [--follow]` viewing. `state.get` remains lifecycle-only. See the
+backfill. The controller automatically saves private workspace/thread JSONL; the
+web Voice lane reads it live or after a call ends. An explicit `bun run voice:record
+--workspace <dir> --out-dir <dir>` observer saves per-conversation JSONL for outside
+tools. `state.get` remains lifecycle-only. See the
 [event protocol](events.md) for prefix matching, snapshots, and limits, and
 [events.schema.json](../events.schema.json) for the machine-readable event types.
 
@@ -297,72 +263,6 @@ The shared portless HTTPS proxy must already be running. See the [web guide](../
 for setup, local-only observation, package provenance, verification and future
 launchd ownership.
 
-### Attach a stock Codex TUI
-
-Every active workspace session supports stock Codex attachment from an additional terminal,
-including while its frontend media is detached:
-
-```sh
-# Server terminal, from this prepared checkout:
-bun run src/main.ts server --workspace ~/code/myapp
-
-# Frontend terminal:
-bun run src/main.ts --workspace ~/code/myapp
-
-# Third terminal, for typed Codex interaction:
-bun run src/main.ts attach agent --workspace ~/code/myapp
-```
-
-Installed commands use the same flags with `agentvoice`. Attachment selects a
-live controller by canonical workspace; add `--thread <exact-id>` if more than
-one matches. It launches the same stock Codex executable as the voice runtime
-and resumes its exact live orchestrator thread. Type to start work or steer an
-active turn, and follow native messages and tool activity. Steering follows
-Codex's normal delivery timing; it may queue until a model/tool boundary.
-
-This is the native orchestrator conversation, including raw voice handoff messages
-such as `<realtime_delegation>`. Speech that stays within the voice agent produces
-no new orchestrator turn. Typed input goes to the orchestrator; native Codex relays
-its assistant output to an active voice session for a spoken response. The text
-itself is not inserted into the voice transcript. A live trial confirmed typed
-steering, continued orchestrator updates and an audible response on stock 0.153.4.
-
-This experimental path was checked with stock Codex **0.153.4**. The runtime
-always uses an authenticated private loopback WebSocket for native RPC. There
-is no stdio transport or attachment enable/disable flag. Relaunch AgentVoice
-after upgrading an older controller to use this behavior. Attaching preserves
-the live thread's settings, including restricted permissions; the TUI's local
-startup defaults do not replace them.
-
-The attachment gateway permits reads, typed turns, interruption, and native
-session settings for the selected orchestrator and its verified native descendants
-in the same workspace. `/subagents` can discover and view those agents, including
-completed agents with native history; Codex controls whether they accept direct input.
-New/forked threads, history mutations,
-persistent configuration/account changes, plugin controls and realtime control
-are unsupported. The TUI does not show a live voice transcript or carry audio.
-It shows native command/file/permission approvals, tool questions and MCP
-elicitations for those threads, and forwards your answers to Codex.
-AgentVoice leaves those questions pending in native Codex when no TUI is
-attached; attaching later replays them. The gateway checks requests before
-forwarding them. Navigation never changes the attachment's root grant, and unrelated
-threads remain inaccessible. Explicit speech submission remains root-only.
-
-Ordinary `/quit` detaches the TUI and leaves voice running. Codex's explicit
-interrupt or running-task Exit action can interrupt native work. Redial preserves
-attachment; call teardown or native failure disconnects
-it. Run `attach` again for the current thread after a disconnect. No automatic
-reconnect or input replay occurs. Use `agentvoice attach agent` instead of the stock
-TUI's printed reconnect command, whose one-use ticket has ended.
-Native and gateway credentials remain private;
-there is no arbitrary endpoint flag or cross-machine mode.
-
-Isolated stock TUI tests establish later owner turns, streaming replies, typed
-steering and native approval round trips using local fake model responses.
-Controller lifecycle tests use fake media. The earlier live trial established
-simultaneous voice and TUI operation; it did not exercise every permission mode.
-See [ADR 0022](adr/0022-websocket-native-tui.md).
-
 ### Permissions
 
 `--allow-full-access` is optional. Without it, AgentVoice leaves unset permission
@@ -375,14 +275,14 @@ policy `never`, overriding conflicting launch/request permission settings.
 Unrelated raw native settings retain their normal precedence. The flag does not
 bypass managed Codex requirements or grant connector consent.
 
-Use `agentvoice attach agent` for native approvals, tool questions and MCP elicitations.
-The voice console shows an interaction notice; Codex retains the pending request
-until an attached TUI answers or native work is cancelled. AgentVoice neither
+The voice console shows an interaction notice for native approvals, tool questions
+and MCP elicitations. Codex retains the pending request until native work is
+cancelled or another supported Codex client answers it. AgentVoice neither
 auto-approves nor auto-refuses these requests and maintains no approval queue.
 Unsupported client-defined tools, auth callbacks, legacy requests and unknown
 methods still receive a visible refusal or protocol error. Retired worker tools
 remain retired. Restricted or missing permission reports do not stop voice or
-prevent attachment.
+prevent voice or web transcript observation.
 
 Native protocol reference: [Codex approvals and connector interaction](https://learn.chatgpt.com/docs/app-server#approvals).
 
@@ -560,8 +460,8 @@ An explicit CLI workspace selects a separate workspace socket; pass the same
 `--workspace` to its server and frontend. A file-configured workspace pins the
 default server's calls while retaining the default endpoint. Workspace settings
 are selected at server startup; restart the service to change that selection.
-Read-only discovery commands and `attach` still accept `--workspace <directory>`;
-their omitted workspace remains the invoking directory.
+Read-only discovery commands accept `--workspace <directory>`; their omitted
+workspace remains the invoking directory.
 
 Each workspace keeps its current Codex thread ID in `.agentvoice-session`, a
 private plain-text file containing the ID and a newline. Every server workspace
@@ -640,7 +540,7 @@ Warnings appear in the server terminal. With `--debug`, private per-workspace-se
 also capture protocol/media details. Native item deltas remain available through
 the read-only event socket; the frontend does not display them.
 
-Workspace-session startup validates prompts and protocol before opening media. A terminal attachment
+Workspace-session startup validates prompts and protocol before opening media. A terminal client
 also validates native device readiness before its WebRTC offer; a phone call asks
 the browser to prepare its peer and never loads the native duplex library. Media
 failure closes client media; native conversation creation or resume may already
@@ -653,7 +553,7 @@ Workspace-owned SQLite roles are available through explicit
 prompts, MCP definitions and skill assets. Bound workspaces load database
 revisions instead of the source files below. `role export` / `import` create
 independent copies; `role voice` saves a voice, and MCP/API `agentvoice_voice_set`
-can save and reconnect voice while preserving the working agent and attachment.
+can save and reconnect voice while preserving the working agent and media attachment.
 Unbound workspaces retain the file behavior below.
 
 Keep `~/.config/agentvoice/server.json` (or
@@ -1243,24 +1143,7 @@ The native probe starts its own stock child, initializes, lists workspace
 history, and closes—no turns or audio. `audio:probe` uses hardware and requires
 an explicit live check.
 
-`CODEX_PATH=/absolute/path/to/codex bun scripts/attachment-tui-probe.ts` starts an
-opt-in macOS fixture with disposable state, a localhost fake Responses API,
-external network denied for the native child, and no audio. Its `subagent` then
-`owner` commands create a native subagent using a scripted tool call; the fixture
-explicitly enables multi-agent v2. Use the printed workspace, `nativeHome` and
-state directory to attach an isolated stock TUI. In the September 6, 2026 check
-with Codex 0.153.4, `/subagents` listed a completed child, opened its saved reply,
-retained native direct-input restrictions, and returned to Main. The TUI was also
-restricted to loopback/Unix sockets. “No sub-agents running” remains normal once
-all children have completed.
-
-The navigation request audit used upstream tag `rust-v0.153.4`
-(`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`), specifically
-`codex-rs/tui/src/app/agent_picker.rs`, `app/session_lifecycle.rs`,
-`app/loaded_threads.rs` and `app_server_session.rs`. The gateway admits the
-picker's ancestry-filtered list fields and verifies each result independently;
-see [ADR 0037](adr/0037-descendant-tui-attachment.md).
-
+See [AGENTS.md](../AGENTS.md) for the source map and [ADR 0009](adr/0009-one-foreground-workspace.md)
 See [AGENTS.md](../AGENTS.md) for the source map and [ADR 0009](adr/0009-one-foreground-workspace.md)
 for historical ownership decisions. [ADR 0024](adr/0024-server-and-pointer-frontend.md)
 records the original terminal topology; [ADR 0032](adr/0032-loopback-browser-media-frontend.md)
@@ -1278,18 +1161,18 @@ bun run voice:speak --workspace ~/code/myapp "Hello, bananafish."
 ```
 
 The script discovers the live controller by exact canonical workspace, like
-`voice:messages` and `agentvoice attach agent`. Add `--thread <main-thread-id>` if
+`voice:messages` and the web composer. Add `--thread <main-thread-id>` if
 several controllers share that workspace. Use `--` before text beginning with
 a dash. Empty text and text over 64 KiB are rejected.
 
 It sends one native `thread/realtime/appendSpeech` request through the guarded
-attachment connection, without starting a working-agent turn or resuming a
+host connection, without starting a working-agent turn or resuming a
 thread. Acceptance does not confirm audible playback or verbatim delivery.
 There are no automatic retries. An ambiguous disconnect may occur after the
 request was delivered; rerunning can repeat speech.
 
 Use MCP/API runtime restart or start a new call to load changed runtime code. The script does not restart the app or voice
-session. Other realtime mutations remain unavailable through attachment.
+session. Other realtime mutations remain unavailable through the gateway.
 
 ### Persistent launch switches
 
@@ -1303,30 +1186,14 @@ reload these settings; frontend reattachment and redial keep the current runtime
 settings. Model, effort and role retain their existing config keys.
 
 
-### Attach to the working agent or voice transcript
-
-```sh
-agentvoice attach agent
-agentvoice attach voice
-agentvoice attach voice --list
-agentvoice attach voice --thread <thread-id>
-# Either target accepts an explicit workspace:
-agentvoice attach voice --workspace ~/code/myapp
-```
-
-Both commands use the default server's active workspace, even if a newer default
-workspace directory has been created. When idle they use its selected workspace;
-without a server they use the configured workspace or current default generation.
-Bare `agentvoice attach` now requires `agent` or `voice`.
+### Persistent voice transcripts
 
 Every call automatically records native voice items from startup to private JSONL
 under `$XDG_STATE_HOME/agentvoice/voice/<workspace-hash>/<thread-id>.jsonl`
 (default `~/.local/state`). The header retains the canonical workspace and thread.
 Calls resuming a thread append; other threads and workspaces remain separate.
-Recordings persist after calls end. `attach voice` opens the active transcript,
-or the latest saved recording when no call is active, with `codex-viewer --follow`.
-Closing the viewer has no effect on recording or the call. Install `codex-viewer`
-on PATH to view them; `--list` requires no interactive terminal.
+Recordings persist after calls end. The AgentVoice web UI reads the active thread's
+recording while presenting the matching Agent history.
 
 Completed items and recording boundaries are fsynced. Runtime interruptions,
 unfinalized files and recovered partial writes are marked; disk failures appear

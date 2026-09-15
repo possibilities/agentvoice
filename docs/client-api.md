@@ -87,8 +87,8 @@ retained workspace/thread identity while no media owner is attached. A closing
 attachment must finish realtime teardown before a successor is admitted; a detach
 failure poisons admission until server shutdown.
 Local call observations also include optional `generation`, incremented before
-runtime replacement so the terminal composition can recover its attachment panes.
-This field does not change the media state or the Android call protocol.
+runtime replacement so host readers can revalidate the current identity. This
+field does not change the media state or the Android call protocol.
 
 `state.codingActivity` is `working`, `blocked`, `idle` or `unknown`. It describes
 observed native work on the root and verified direct coding-agent children,

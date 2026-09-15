@@ -719,39 +719,6 @@ test("default server CLI creates its generation and waits on the stable endpoint
   }
 });
 
-test("attachment discovery retains detached call identity while default selection advances", async () => {
-  const { attachmentSelection } = await import("../src/attachment/command.ts");
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-pinned-")));
-  let newest = root;
-  const server = new VoiceServer(
-    frontendSocketPath(root),
-    async (changed) => ({
-      ...fakeCall(changed).call,
-      identity: () => ({ workspace: root, threadId: "pinned-thread" }),
-    }),
-    () => {},
-    () => newest,
-  );
-  let client: Awaited<ReturnType<typeof connectFrontend>> | undefined;
-  try {
-    await server.start();
-    client = await connectFrontend(frontendSocketPath(root));
-    newest = "/a/newer/workspace";
-    await client.close();
-    const selected = await attachmentSelection(root);
-    expect(selected).toMatchObject({
-      workspace: root,
-      threadId: "pinned-thread",
-      active: true,
-      busy: false,
-    });
-  } finally {
-    await client?.close();
-    await server.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("clients wait for media detach, compete for one attachment, and never replace retained work", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-cleanup-"));
   const stopping = Promise.withResolvers<void>();

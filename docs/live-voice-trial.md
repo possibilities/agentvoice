@@ -70,14 +70,14 @@ agent through a failed request: choosing how to do it is part of the test.
 
 > Tell me another short joke.
 
-Listen for the changes. The working-agent pane should stay connected, and the
+Listen for the changes. The web Agent lane should stay connected, and the
 conversation should continue normally. A spoken claim that the voice changed
 is not enough; note what you actually heard. This setup starts with Cove, so
 switching to Maple first makes the later Cove request a real change.
 
 ## 3. Check that it remembers the choice
 
-Close terminal 2's client/composition, leaving terminal 1's server running.
+Close terminal 2's client, leaving terminal 1's server running.
 Run the same client command again to open a new call in the same workspace.
 
 > What voice are you using? Tell me a short joke.

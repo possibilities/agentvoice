@@ -282,23 +282,6 @@ byte-identical with SHA-256 recorded in [its provenance file](third-party/person
 All captures were limited to the synthetic preview after verifying its focused
 activity. These checks opened no voice call, microphone, playback or inference.
 
-## Desktop backend viewer
-
-`agentvoice --attach` now composes just the voice transcript and stock Codex TUI,
-without a voice owner or media. `--host smolbird` observes a Termux backend through
-verified SSH, never through the voice WSS gateway. Exact call, workspace, thread
-and runtime identity are pinned; backend loss or replacement ends the view.
-
-A real desktop PTY fixture verified both panes, typed steering, and that closing
-the view leaves the fake phone owner connected. Fake protocol tests cover native
-attachment readiness before media, generation revocation, bounded transcript
-framing and private temporary copies. The cross-compiled Android helper was
-temporarily staged and produced valid read-only waiting frames over the existing
-strict SSH connection; the staging directory was then removed. A stock TUI
-attached to a real active phone-hosted call remains unverified. The new CLI is
-available in this checkout; global desktop/Termux CLI installation is not part
-of this APK verification.
-
 ## Physical phone checks
 
 | Check | Observed result |

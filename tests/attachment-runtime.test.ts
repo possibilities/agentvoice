@@ -15,7 +15,7 @@ async function until(predicate: () => boolean) {
   for (let i = 0; i < 500 && !predicate(); i++) await Bun.sleep(10);
   expect(predicate()).toBe(true);
 }
-test("native permission changes preserve TUI admission and voice", async () => {
+test("native permission changes preserve guarded gateway admission and voice", async () => {
   let issue: (() => AttachmentTicket) | undefined;
   const h = runtimeHarness(
     { codex: process.execPath },
@@ -180,7 +180,7 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
       }),
     ).rejects.toThrow();
     const final = await watch(resumed.url, resumed.token);
-    // Restricted and unreported permissions also support attachment across runtime replacement.
+    // Restricted and unreported permissions also support the gateway across runtime replacement.
     for (const [index, permissions] of [
       { approvalPolicy: "on-request", sandbox: { type: "readOnly" } },
       {},

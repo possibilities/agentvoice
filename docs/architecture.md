@@ -62,8 +62,9 @@ owns the current source map and recording/attachment implementation guidance.
   metadata reads in flight. Read only bounded metadata pages from native persisted
   history; never start a call, resume a thread, read item bodies, or guess Work,
   model or effort. Keep idle threads and unresolved parent evidence visible.
-- src/main.ts: server/frontend CLI and workspace canonicalization; former
-  accounts/resident/remote/console verbs error.
+- src/main.ts: server/frontend CLI and workspace canonicalization. Bare invocation
+  prints help; `client` remains the explicit pointer frontend. Former
+  accounts/resident/remote/console verbs and terminal attachment forms error.
 - src/frontend/: strict private workspace socket, one retained workspace session,
   exclusive disposable media ownership and minimal state/input protocol. It also
   carries validated browser SDP/control messages for every attachment over frontend
@@ -75,25 +76,7 @@ owns the current source map and recording/attachment implementation guidance.
   may use a fresh clientId and negotiates fresh media against the same backend.
   Fresh clients observe explicit closing state and wait at most 30 seconds before
   requesting ownership; observation never reserves admission. Connected and
-  unavailable states fail immediately. The composition shares this readiness handling.
-- src/composition/: bare-command foreground smolmux launcher and three-pane layout.
-  All apps use local PTYs, never Companion ownership; shutdown reaps the exact
-  foreground child. Read-only frontend observation gates attachments on this
-  client's correlation ID, live media and exact workspace/thread. Correlation is
-  not authorization. Observer disconnect cannot close a call or send input.
-  Preserve divider revisions. Any pane app exiting or failing ends the entire
-  composition and its media attachment, except attachment revocation during runtime replacement.
-  Generation observation gates exact-thread pane restarts after live media;
-  refresh observation when attachment exit races a generation publication.
-  Never replay typed input or open audio/inference in composition tests.
-  `--attach` is the desktop-only two-pane variant for another client's call;
-  it starts no client/audio and closing its apps never stops that call.
-  `--host` uses verified SSH for bounded transcript observation and the backend's
-  existing stock TUI. Keep smolmux/codex-viewer on desktop. Pin client, workspace,
-  thread, controller instance and generation; loss or replacement ends the view.
-  Never expose these transports through the voice WSS gateway. Temporary desktop
-  transcript copies are private, bounded and removed after pane cleanup
-  ([ADR 0036](adr/0036-desktop-mobile-attachment.md)).
+  unavailable states fail immediately.
 - src/browser/: same-device phone page, loopback HTTP/WebSocket gateway and
   bounded browser-media protocol. Bind only `127.0.0.1`; retain the random token
   path, exact Host/Origin checks, one-owner reservation, browser security headers,
@@ -162,29 +145,16 @@ owns the current source map and recording/attachment implementation guidance.
   auto-answer or retain a second approval queue. Unsupported client requests
   receive native denial payloads or JSON-RPC errors; retired tools stay retired.
 - src/core/native-listener.ts + src/attachment/: always-on private authenticated
-  native loopback listener, root-and-verified-descendant policy gateway, controller bootstrap and
-  stock TUI launcher. No stdio RPC or attachment enable/disable flags. Never expose
-  the native credential or allow unrelated-thread/config/account mutations. Verify native
-  parentThreadId ancestry and exact workspace before descendant dispatch; never infer
-  authorization from a tool message, forkedFromId or a client-supplied parent. Forward
-  root/descendant native human requests and their correlated answers. Native owns
-  first-answer resolution and pending-request replay on resume. Joining strips
-  local TUI resume overrides to preserve live settings; subsequent native settings
-  changes, including permissions, are allowed. Native hook trust is the sole
-  persistent config write: allow only untrusted or modified key/hash pairs from
-  that peer's latest workspace-bound hooks inventory. Reject arbitrary config
-  edits, alternate config paths and hashes that were not just listed. A new list
-  attempt invalidates the prior inventory and one trust attempt consumes it. Do
-  not gate attachment on full access.
-  scripts/voice-speak.ts uses the same gateway with exact-root admission for explicit
-  root-only thread/realtime/appendSpeech (nonempty text, 64 KiB maximum); other realtime
-  mutations remain denied. Never retry speech automatically or report acceptance
-  as playback confirmation.
-  Validate before native dispatch; unknown null placeholders are stripped.
-  Watcher revocation terminates the TUI before automatic reconnect can replay input.
-  Runtime restart and server shutdown revoke before teardown; frontend detach,
-  redial and automatic renewal preserve attachment. Ordinary
-  acknowledged unsubscribe permits clean stock TUI exit without a WS close handshake.
+  native loopback listener, exact-root policy gateway and controller bootstrap for
+  host-owned web Agent input and explicit speech. Never expose the native credential,
+  executable path or request selection to browser code. Permit only initialize,
+  turn start/steer/interrupt and root-only thread/realtime/appendSpeech; reject
+  reads, settings, descendants, native-question answers and arbitrary methods before
+  native dispatch. Tickets require a watcher, expire unused after 30 seconds and
+  are fenced to controller generation, workspace and root thread. Runtime restart
+  and server shutdown revoke before teardown; frontend detach, redial and automatic
+  renewal preserve the gateway. Never retry input or speech automatically or report
+  acceptance as completion/playback.
 - src/core/session-marker.ts: private workspace `.agentvoice-session` marker,
   bounded safe reads, exclusive atomic publication and fsynced deletion. Runtime
   validates exact native main-thread ownership; no latest-history lookup or fallback.
@@ -296,23 +266,16 @@ profile. Gradle checks drift. Reusable renderers live in main and consume real
 remain debug/host only. Save includes every visual choice, while runtime rehearsal
 state stays outside profiles. See the Android README for promotion and APK audits.
 
-## Voice recording and attachment
+## Voice recording and web reading
 
-`agentvoice attach agent` joins native Codex; `agentvoice attach voice` launches
-`codex-viewer --voice-jsonl <saved-file> --follow`. `--list` lists workspace
-recordings and `--thread` selects one. Bare attach is an actionable error.
-`agentvoice --attach [--host <ssh-host>]` opens the desktop two-pane view.
-Attachment admission follows verified native thread/control readiness, independent
-of media readiness; runtime replacement still revokes the previous generation.
-Implicit selection probes the default frontend endpoint read-only, preserving an
-active call's pinned workspace; idle/offline selection uses the configured/current
-workspace without creating a generation. Explicit workspace always wins.
 `src/recording/` owns private per-thread writers and bounded header/tail discovery.
 Recording starts at verified native identity before voice events, survives runtime
 replacement, and closes after runtime teardown. Preserve canonical completions
 through IPC soft pressure and reject foreign/stale runtime events before storage.
 Disk errors must be visible without stopping healthy media; never report missing
 or interrupted speech as complete, replay it, or write it to native history.
+The web Voice lane opens one verified recording inode, enforces workspace/thread
+headers and bounded records, and never follows file replacement or truncation.
 The LaunchAgent label is `io.arthack.agentvoice.server`; explicit installation
 retires only the ownership-verified former `dev.agentvoice.default` job.
 

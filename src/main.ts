@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 /** Local voice server and independent pointer frontend. */
 import packageJson from "../package.json";
 import { discoverController, discoverMcpConnection } from "./control/discovery.ts";
@@ -15,13 +15,11 @@ export const VERSION: string = packageJson.version;
 const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
+  agentvoice                         Show this help
   agentvoice serve [--production]   Live Voice | Agent web transcripts at https://agentvoice.localhost
   agentvoice server [options]       Restore saved work or wait for a frontend
   agentvoice service status|load|unload|restart|remove [--json]
                                    Manage the default macOS LaunchAgent
-  agentvoice [--workspace <dir>]    Open voice controls, transcript and agent panes
-  agentvoice --attach [--host <ssh-host>] [--workspace <dir>]
-                                   Desktop transcript and agent panes for another client's call
   agentvoice client [--workspace <dir>]
                                    Connect with the pointer frontend alone
   agentvoice phone [--workspace <dir>]
@@ -30,10 +28,6 @@ Usage:
                                    Connect to an authenticated WSS server
   agentvoice network --help        Configure network access and device grants
   agentvoice role --help           Eject, copy and edit workspace SQLite roles
-  agentvoice attach agent [--workspace <dir>] [--thread <id>]
-                                   Attach stock Codex to an active call
-  agentvoice attach voice [--workspace <dir>] [--thread <id>] [--list]
-                                   View or list persistent voice transcripts
   agentvoice mcp-config [--workspace <dir>] [--thread <id>]
                                    Print live read-only MCP configuration
   agentvoice event-socket [--workspace <dir>] [--thread <id>]
@@ -58,11 +52,13 @@ Server options:
   --debug                 Private runtime protocol/media log
   --help                  Show help
 
-Client options (agentvoice or agentvoice client):
+Client options (agentvoice client):
   --device <index>         This client's microphone device
   --output-device <index>  This client's speaker device
 
-The macOS installer starts the default server as a LaunchAgent. Connect with agentvoice.
+The macOS installer starts the default server as a LaunchAgent. Open
+https://agentvoice.localhost for transcripts and typed Agent input, or connect voice
+controls with agentvoice client.
 For manual use, run agentvoice server. It opens no audio; a valid saved marker restores
 its Codex child immediately, while an unmarked workspace waits for a frontend.
 Closing the frontend stops media; the server retains native work for the next client.
@@ -74,7 +70,6 @@ Server startup resumes a valid workspace .agentvoice-session thread without medi
 the first frontend creates an unmarked session, and reconnects retain either one.
 Use the agentvoice_new_session MCP/control operation for an explicit new session.
 Stopping the server ends native work; runtime restart also replaces the native child.
-Use agentvoice attach agent to answer native approvals and tool questions.
 `;
 
 export interface FlagSpec {
@@ -328,16 +323,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runRuntimeWorker();
       await new Promise<void>(() => {});
     }
-    if (command === "__attach-bridge" || command === "__attach-agent") {
-      const { runAttachmentBridge, runPinnedAttachment } = await import(
-        "./attachment/bridge-command.ts"
-      );
-      return await (command === "__attach-bridge" ? runAttachmentBridge : runPinnedAttachment)(
-        argv.slice(1),
-        stateDirectory(process.env, homedir()),
-      );
-    }
-    if (command === "help") {
+    if (command === undefined || command === "help" || command === "--help") {
       console.log(USAGE);
       return 0;
     }
@@ -363,10 +349,6 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return await runThreadsCommand(argv.slice(1), stateDirectory(process.env, homedir()));
     }
 
-    if (command === "attach") {
-      const { runAttachCommand } = await import("./attachment/command.ts");
-      return await runAttachCommand(argv.slice(1), stateDirectory(process.env, homedir()));
-    }
     if (command === "mcp-config") return await runMcpConfigCommand(argv.slice(1));
     if (command === "accounts")
       throw new UsageError(
@@ -397,7 +379,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (command === "resident" || command === "remote" || command === "console") {
       throw new UsageError(
-        `${command} has been retired. Run agentvoice server, then agentvoice in another terminal. Existing installed services are not changed automatically.`,
+        `${command} has been retired. Run agentvoice server, then agentvoice client or open https://agentvoice.localhost. Existing installed services are not changed automatically.`,
       );
     }
     if (command === "phone") {
@@ -426,48 +408,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       });
       return 0;
     }
-    const clientArgs = command === "client" ? argv.slice(1) : argv;
+    if (command !== "client") throw new UsageError(`unknown command "${command}"`);
+    const clientArgs = argv.slice(1);
     const frontendFlags = parseArgs(clientArgs, {
-      value: new Set(["--workspace", "--device", "--output-device", "--connect", "--host"]),
-      bool: new Set(command === "client" ? ["--help"] : ["--help", "--attach"]),
+      value: new Set(["--workspace", "--device", "--output-device", "--connect"]),
+      bool: new Set(["--help"]),
     });
     if (frontendFlags.help) {
       console.log(USAGE);
-      return 0;
-    }
-    const attach = clientArgs.includes("--attach");
-    const host = frontendFlags.values["host"];
-    if (host !== undefined && !attach) throw new UsageError("--host requires agentvoice --attach");
-    if (attach) {
-      for (const flag of ["device", "output-device", "connect"]) {
-        if (frontendFlags.values[flag] !== undefined)
-          throw new UsageError(
-            `--${flag} cannot be combined with --attach; this view owns no audio`,
-          );
-      }
-      const { validateSshHost } = await import("./attachment/ssh.ts");
-      if (host !== undefined) {
-        try {
-          validateSshHost(host);
-        } catch (error) {
-          throw new UsageError((error as Error).message);
-        }
-      }
-      let workspace = frontendFlags.values["workspace"];
-      if (workspace !== undefined) {
-        if (host) {
-          if (!isAbsolute(workspace) || /[\0\r\n]/.test(workspace))
-            throw new UsageError(
-              "Remote --workspace requires an absolute path on the backend host",
-            );
-        } else {
-          const selected = parseMcpConfigCommand(["--workspace", workspace]);
-          if (selected.help) return 0;
-          workspace = selected.workspace;
-        }
-      }
-      const { runComposition } = await import("./composition/launch.ts");
-      await runComposition(workspace, undefined, [], { attach: true, host });
       return 0;
     }
     const selected =
@@ -475,44 +423,29 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         ? undefined
         : parseMcpConfigCommand(["--workspace", frontendFlags.values["workspace"]]);
     if (selected?.help) return 0;
-    if (frontendFlags.values["connect"] && (selected || command !== "client"))
-      throw new UsageError(
-        "--connect requires agentvoice client and cannot select a local workspace",
-      );
-    if (command === "client") {
-      const { launchClientRuntime } = await import("./frontend/client-runtime.ts");
-      const exitCode = await launchClientRuntime(clientArgs, import.meta.path);
-      if (exitCode !== undefined) return exitCode;
-      const { runFrontend } = await import("./frontend/client.ts");
-      const { loadConnectionProfile } = await import("./network/credentials.ts");
-      await runFrontend(
-        selected?.workspace,
-        {
-          deviceIndex:
-            frontendFlags.values["device"] === undefined
-              ? undefined
-              : parseDeviceIndex("--device", frontendFlags.values["device"]),
-          outputDeviceIndex:
-            frontendFlags.values["output-device"] === undefined
-              ? undefined
-              : parseDeviceIndex("--output-device", frontendFlags.values["output-device"]),
-        },
-        frontendFlags.values["connect"]
-          ? loadConnectionProfile(resolve(frontendFlags.values["connect"]))
-          : undefined,
-      );
-    } else {
-      const { runComposition } = await import("./composition/launch.ts");
-      const deviceArgs: string[] = [];
-      for (const flag of ["device", "output-device"]) {
-        const value = frontendFlags.values[flag];
-        if (value !== undefined) {
-          parseDeviceIndex(`--${flag}`, value);
-          deviceArgs.push(`--${flag}`, value);
-        }
-      }
-      await runComposition(selected?.workspace, undefined, deviceArgs);
-    }
+    if (frontendFlags.values["connect"] && selected)
+      throw new UsageError("--connect cannot select a local workspace");
+    const { launchClientRuntime } = await import("./frontend/client-runtime.ts");
+    const exitCode = await launchClientRuntime(clientArgs, import.meta.path);
+    if (exitCode !== undefined) return exitCode;
+    const { runFrontend } = await import("./frontend/client.ts");
+    const { loadConnectionProfile } = await import("./network/credentials.ts");
+    await runFrontend(
+      selected?.workspace,
+      {
+        deviceIndex:
+          frontendFlags.values["device"] === undefined
+            ? undefined
+            : parseDeviceIndex("--device", frontendFlags.values["device"]),
+        outputDeviceIndex:
+          frontendFlags.values["output-device"] === undefined
+            ? undefined
+            : parseDeviceIndex("--output-device", frontendFlags.values["output-device"]),
+      },
+      frontendFlags.values["connect"]
+        ? loadConnectionProfile(resolve(frontendFlags.values["connect"]))
+        : undefined,
+    );
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

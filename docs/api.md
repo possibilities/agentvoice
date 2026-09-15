@@ -58,41 +58,27 @@ AgentVoice registers this MCP server for each orchestration thread as
 also checks the native MCP catalog for a connected server and the exact tool
 set before it reports the bridge ready.
 
-## Private TUI launcher bootstrap
+## Private host gateway bootstrap
 
-`agentvoice attach agent [--workspace <dir>] [--thread <id>]`
-reuses live Unix status discovery. It then sends an authenticated `POST /tui/attach`
-to the controller's loopback HTTP host with `{instanceId, generation, threadId,
-workspace}`. This is a launcher-only endpoint, not an MCP tool or Unix
-operation. It accepts no Origin and requires the same exact Host and bearer.
+The web Agent composer and explicit speech helper reuse live Unix status discovery,
+then send an authenticated `POST /tui/attach` to the controller's loopback HTTP
+host with `{instanceId, generation, threadId, workspace}`. The historical path is
+a private host-side bootstrap endpoint, not an MCP tool, Unix operation or browser
+API. It accepts no Origin and requires the exact Host and controller bearer.
 
-The controller must be ready and idle
-with respect to lifecycle operations, and still match the target before and after
-its private runtime request. The result contains the selected thread/workspace,
-absolute Codex executable, gateway URL and an ephemeral bearer ticket. It is
-returned with `Cache-Control: no-store`, never in status, diagnostics or tool
-results. Every controller supports attachment; there is no opt-in or permission
-gate. The native app-server token never leaves the runtime. The runtime uses
-WebSocket for all native RPC, with no stdio transport branch.
+The controller must still match the exact target before and after its private
+runtime request. The result contains only the selected thread/workspace, gateway
+URL and a 30-second bearer ticket, with `Cache-Control: no-store`. The owned native
+app-server token and executable path never leave the runtime.
 
-The launcher must open its watcher before the TUI connects. Tickets admit one
-watcher/TUI pair within 30 seconds, with at most eight grants per runtime. The
-watcher controls launcher lifetime; native protocol initialization and correlation
-remain per-client. Frames are capped at 4 MiB, pending requests at 64, and request
-timeouts at 30 seconds. Requests outside the selected-thread allowlist are
-rejected before native dispatch. Native command/file/permission approvals, tool
-questions and MCP elicitations for the selected thread are forwarded to the TUI;
-only answers matching a forwarded request ID pass back to native. Pending human
-request IDs are bounded at 64 per connection, without a response deadline.
-Native Codex owns pending requests, first-answer resolution and replay on resume.
-AgentVoice neither auto-refuses them nor stores another approval queue. TUI resume
-overrides are stripped to preserve the live settings; explicit settings updates
-can change native permissions.
-
-Runtime restart and server shutdown revoke all grants before teardown. Frontend
-detach and redial keep them. Lost attachment connections require explicit reattachment and do
-not replay input. See [ADR 0022](adr/0022-websocket-native-tui.md) for scope and
-[manual](manual.md#attach-a-stock-codex-tui) for launch instructions.
+Each ticket admits one watcher/client pair, with at most eight grants per runtime.
+Frames are capped at 4 MiB, pending requests at 64, and request timeouts at 30
+seconds. After initialization, the allowlist contains only exact-root `turn/start`,
+`turn/steer`, `turn/interrupt`, and `thread/realtime/appendSpeech`. Reads, settings,
+descendant navigation, client answers to native questions and arbitrary methods are
+rejected before native dispatch. Runtime restart and server shutdown revoke grants;
+frontend detach and redial preserve the gateway. See
+[web Agent input](web-agent-input.md) and [ADR 0072](adr/0072-retire-terminal-composition-and-attachments.md).
 
 ## Unix socket transport
 
@@ -259,9 +245,9 @@ a frontend is attached. `ready` confirms the new thread and runtime readiness;
 it confirms media readiness only when attached. Preflight/cleanup failure
 preserves the marker; failure after removal leaves either no marker or the
 newly saved thread, which a later runtime retry uses. Old history and transcripts
-remain, and mute preferences are preserved. The terminal composition reopens
-its two attachment panes at the new exact identity; independent attachment views
-still require a rerun. This operation accepts no `scope` or `handoffPrompt` input.
+remain, and mute preferences are preserved. The web reader follows the new exact
+identity after revalidation. This operation
+accepts no `scope` or `handoffPrompt` input.
 Repeated operation IDs return their recorded outcome without another reset.
 
 New session does not submit a working-agent turn or replay prior speech. It
@@ -460,7 +446,7 @@ or no alternative fails before save. A repeated operation ID returns the origina
 choice; recovery after a journal-write failure also reuses the saved choice.
 Save commits before asynchronous application.
 `voice` requires an attached frontend and reconnects only the voice session; the
-working child and TUI remain. `next-session` applies on the next explicit runtime
+working child remains. `next-session` applies on the next explicit runtime
 replacement, `new_session`, or server lifetime, not on ordinary frontend reattachment.
 See [workspace roles](workspace-roles.md#voice-editing) for examples and retry,
 saved-versus-applied, failure and status contracts. The operation adds kind
