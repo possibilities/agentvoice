@@ -132,7 +132,7 @@ type Identity = {
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
 type HistoryAttempt = { client?: ControlSocket; closed?: boolean };
 
-/** Shared default-call adapter. The browser can neither choose sockets nor submit RPC methods. */
+/** Host-selected workspace adapter. The browser can neither choose sockets nor submit RPC methods. */
 export class LiveReader {
   private observer?: Observer;
   private eventClient?: ControlSocket;
@@ -167,6 +167,7 @@ export class LiveReader {
     private readonly stateDir: string,
     private readonly initialHistoryBudgetMs = 5_000,
     private readonly historyRetryMs = 5_000,
+    private readonly workspace?: string,
   ) {
     this.controls = new AgentControls(stateDir, (target, operation, current) =>
       sendAgentOperation(
@@ -558,7 +559,7 @@ export class LiveReader {
     if (!this.observer) {
       try {
         this.stage = "observer.connect";
-        const observer = await observeAttachmentServer(this.stateDir);
+        const observer = await observeAttachmentServer(this.stateDir, this.workspace, false);
         if (this.closed) {
           observer.socket.close();
           return empty("offline");
@@ -587,6 +588,8 @@ export class LiveReader {
       }
     }
     const state = this.observer.latest();
+    if (this.workspace && state.workspace && state.workspace !== this.workspace)
+      throw new Error("Selected server reported a different workspace");
     if (!state.workspace || !state.threadId) {
       if (this.identity && state.availability !== "idle") {
         return this.retained(

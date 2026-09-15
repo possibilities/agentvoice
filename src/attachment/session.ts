@@ -88,9 +88,14 @@ export class VoiceRecordingTail {
   }
 }
 
-export async function observeAttachmentServer(stateDir: string, workspace?: string) {
+export async function observeAttachmentServer(
+  stateDir: string,
+  workspace?: string,
+  fallbackToDefault = true,
+) {
   let path = frontendSocketPath(stateDir, workspace);
-  if (workspace && !lstatSync(path, { throwIfNoEntry: false })) path = frontendSocketPath(stateDir);
+  if (fallbackToDefault && workspace && !lstatSync(path, { throwIfNoEntry: false }))
+    path = frontendSocketPath(stateDir);
   let latest: FrontendObservation | undefined;
   const observation = await observeFrontend(path, (value) => {
     latest = value;

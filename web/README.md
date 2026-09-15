@@ -28,8 +28,11 @@ up releases follow on the first deliberate upward wheel, touch, or keyboard inpu
 even within a pixel of the bottom. It lets you read earlier text and shows the shared jump-to-latest chip with a count
 of new messages. Using the chip or scrolling back to the bottom resumes following.
 
-The view observes the existing **default local AgentVoice server**, independent of
-the launch directory. A missing server shows “No agent voice server to connect to.”
+By default the view observes the existing **default local AgentVoice server**, independent of
+the launch directory. `serve --workspace <dir> --name agentvoice-test` instead pins
+the reader to that explicit server at `https://agentvoice-test.localhost`; a missing
+selected socket never falls back to the default server. See the
+[parallel production/test workflow](../docs/parallel-test-environment.md). A missing server shows “No agent voice server to connect to.”
 A server whose selected workspace has no marker or session yet shows a normal
 ready/empty state. A valid marker is restored at server startup, so authoritative
 Agent/Voice history is available before any voice client attaches. Detaching that

@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { request } from "node:https";
 import { resolve } from "node:path";
 
+import { webOrigin } from "./web-target.ts";
+
 type Environ = Record<string, string | undefined>;
 
 /** Portless identifies its loopback proxy even on the no-route HEAD response.
@@ -76,7 +78,13 @@ export function runForeground(
   });
 }
 
-export async function serveWeb(env: Environ, production = false): Promise<number> {
+export async function serveWeb(
+  env: Environ,
+  production = false,
+  target: { name?: string; workspace?: string } = {},
+): Promise<number> {
+  const name = target.name ?? "agentvoice";
+  webOrigin(name);
   const web = resolve(import.meta.dir, "../web");
   const portless = resolve(web, "node_modules/.bin/portless");
   const node = Bun.which("node", { PATH: env["PATH"] ?? "" });
@@ -100,7 +108,7 @@ export async function serveWeb(env: Environ, production = false): Promise<number
     [
       portless,
       "--name",
-      "agentvoice",
+      name,
       "--",
       process.execPath,
       resolve(web, production ? "server/preview.ts" : "server/dev.ts"),
@@ -108,6 +116,8 @@ export async function serveWeb(env: Environ, production = false): Promise<number
     web,
     {
       ...env,
+      AGENTVOICE_WEB_NAME: name,
+      AGENTVOICE_WEB_WORKSPACE: target.workspace,
       PORTLESS: "1",
       PORTLESS_PORT: "443",
       PORTLESS_HTTPS: "1",

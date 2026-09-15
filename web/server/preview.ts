@@ -1,21 +1,19 @@
 import { resolve } from "node:path";
 import { preview } from "vite";
+import { configuredWebOrigin } from "../../src/web-target.ts";
 
+const origin = configuredWebOrigin(process.env);
+const hostname = new URL(origin).hostname;
 const port = Number(process.env.PORT);
-if (
-  !Number.isInteger(port) ||
-  port < 1 ||
-  port > 65535 ||
-  process.env.PORTLESS_URL !== "https://agentvoice.localhost"
-) {
+if (!Number.isInteger(port) || port < 1 || port > 65535 || process.env.PORTLESS_URL !== origin) {
   throw new Error(
-    "Start the production reader with agentvoice serve --production; portless must assign PORT and https://agentvoice.localhost.",
+    "Start the production reader with agentvoice serve --production; portless must assign PORT and the configured AgentVoice origin.",
   );
 }
 
 // Portless normally adds a wildcard .localhost allowance. This reader serves
 // private history and has exactly one named origin, including for static assets.
-process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = "agentvoice.localhost";
+process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = hostname;
 const root = resolve(import.meta.dirname, "..");
 const server = await preview({
   root,
@@ -24,11 +22,11 @@ const server = await preview({
     host: "127.0.0.1",
     port,
     strictPort: true,
-    allowedHosts: ["agentvoice.localhost"],
+    allowedHosts: [hostname],
     cors: false,
   },
 });
-console.log("AgentVoice live transcripts: https://agentvoice.localhost");
+console.log(`AgentVoice live transcripts: ${origin}`);
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => server.httpServer.close(() => process.exit(0)));
 }

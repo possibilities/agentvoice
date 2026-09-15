@@ -39,3 +39,15 @@ test("retired terminal composition and attachment forms are rejected", async () 
     expect(result.stderr).toContain("agentvoice client [--workspace <dir>]");
   }
 });
+
+test("web target flags validate before starting a reader or touching routes", async () => {
+  const help = await run(["serve", "--help"]);
+  expect(help.exit).toBe(0);
+  expect(help.stdout).toContain("--workspace <dir> --name <label>");
+  const reserved = await run(["serve", "--workspace", process.cwd()]);
+  expect(reserved.exit).toBe(2);
+  expect(reserved.stderr).toContain("preserve the default route");
+  const invalid = await run(["serve", "--name", "a.b"]);
+  expect(invalid.exit).not.toBe(0);
+  expect(invalid.stderr).toContain("lowercase DNS label");
+});

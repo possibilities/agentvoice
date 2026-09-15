@@ -16,7 +16,8 @@ const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
   agentvoice                         Show this help
-  agentvoice serve [--production]   Live Voice | Agent web transcripts at https://agentvoice.localhost
+  agentvoice serve [--production] [--workspace <dir> --name <label>]
+                                    Live Voice | Agent web transcripts at https://agentvoice.localhost
   agentvoice server [options]       Restore saved work or wait for a frontend
   agentvoice service status|load|unload|restart|remove [--json]
                                    Manage the default macOS LaunchAgent
@@ -328,16 +329,30 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (command === "serve") {
-      if (argv.length === 2 && argv[1] === "--help") {
+      const parsed = parseArgs(argv.slice(1), {
+        bool: new Set(["--help", "--production"]),
+        value: new Set(["--workspace", "--name"]),
+      });
+      if (parsed.help) {
         console.log(
-          "Usage: agentvoice serve [--production]\nLive transcripts at https://agentvoice.localhost; Vite dev by default.",
+          "Usage: agentvoice serve [--production] [--workspace <dir> --name <label>]\nLive transcripts at https://<name>.localhost (default: agentvoice); Vite dev by default.",
         );
         return 0;
       }
-      if (argv.length > 2 || (argv[1] !== undefined && argv[1] !== "--production"))
-        throw new UsageError("Usage: agentvoice serve [--production]");
+      const workspace =
+        parsed.values["workspace"] === undefined
+          ? undefined
+          : parseMcpConfigCommand(["--workspace", parsed.values["workspace"]]);
+      const name = parsed.values["name"] ?? "agentvoice";
+      if (workspace && name === "agentvoice")
+        throw new UsageError(
+          "An explicit web workspace requires --name other than agentvoice to preserve the default route",
+        );
       const { serveWeb } = await import("./web-serve.ts");
-      return await serveWeb(process.env, argv[1] === "--production");
+      return await serveWeb(process.env, argv.includes("--production"), {
+        name,
+        workspace: workspace && !workspace.help ? workspace.workspace : undefined,
+      });
     }
     if (command === "role") {
       const { runRoleCommand } = await import("./roles/cli.ts");

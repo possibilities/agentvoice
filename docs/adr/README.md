@@ -120,3 +120,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0071: Restore a marked workspace session at server start](0071-restore-marked-session-on-server-start.md) — accepted; saved native work and web history return without reserving media or waiting for a client.
 
 - [0072: Retire terminal composition and attachment commands](0072-retire-terminal-composition-and-attachments.md) — accepted; bare invocation shows help, the web UI owns transcripts and typed input, and the host gateway is narrowed to exact-root input and explicit speech.
+
+- [0073: Parallel workspace web readers](0073-parallel-workspace-web-readers.md) — accepted; explicit host-side workspace and local origin selection keep test sessions independent from the default server.

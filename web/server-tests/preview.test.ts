@@ -26,7 +26,8 @@ test.each(["dev", "preview"] as const)(
       ...process.env,
       __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: ".localhost",
       PORT: String(port),
-      PORTLESS_URL: "https://agentvoice.localhost",
+      PORTLESS_URL: "https://agentvoice-test.localhost",
+      AGENTVOICE_WEB_NAME: "agentvoice-test",
       XDG_STATE_HOME: directory,
     };
     const backend = Bun.spawn([process.execPath, join(web, `server/${mode}.ts`)], {
@@ -61,7 +62,7 @@ test.each(["dev", "preview"] as const)(
           "-days",
           "1",
           "-subj",
-          "/CN=agentvoice.localhost",
+          "/CN=agentvoice-test.localhost",
           "-keyout",
           key,
           "-out",
@@ -78,7 +79,7 @@ test.each(["dev", "preview"] as const)(
       import { createProxyServer } from ${JSON.stringify(new URL("../node_modules/portless/dist/index.js", import.meta.url).href)};
       import { readFileSync, writeFileSync } from "node:fs";
       const server = createProxyServer({
-        getRoutes: () => [{ hostname: "agentvoice.localhost", port: ${port} }], proxyPort: 443,
+        getRoutes: () => [{ hostname: "agentvoice-test.localhost", port: ${port} }], proxyPort: 443,
         tls: { cert: readFileSync(${JSON.stringify(certificate)}), key: readFileSync(${JSON.stringify(key)}) }
       });
       server.listen(0, "127.0.0.1", () => writeFileSync(${JSON.stringify(proxyPortFile)}, String(server.address().port)));
@@ -89,7 +90,10 @@ test.each(["dev", "preview"] as const)(
       while (!existsSync(proxyPortFile) && Date.now() < proxyDeadline) await Bun.sleep(20);
       expect(existsSync(proxyPortFile)).toBe(true);
       const proxyPort = Number(readFileSync(proxyPortFile, "utf8"));
-      const headers = { Host: "agentvoice.localhost", Origin: "https://agentvoice.localhost" };
+      const headers = {
+        Host: "agentvoice-test.localhost",
+        Origin: "https://agentvoice-test.localhost",
+      };
       // The certificate is synthetic, generated only inside this test directory.
       const options = { headers, tls: { rejectUnauthorized: false } };
       const base = `https://127.0.0.1:${proxyPort}`;
@@ -100,7 +104,7 @@ test.each(["dev", "preview"] as const)(
         expect(document).toContain("/@vite/client");
         const client = await (await fetch(`${base}/@vite/client`, options)).text();
         expect(client.includes('const socketProtocol = "wss"')).toBe(true);
-        expect(client.includes('"agentvoice.localhost"')).toBe(true);
+        expect(client.includes('"agentvoice-test.localhost"')).toBe(true);
         expect(client.includes("const hmrPort = 443")).toBe(true);
         const token = client.match(/const wsToken = "([^"\n]+)"/u)?.[1];
         expect(token).toBeDefined();

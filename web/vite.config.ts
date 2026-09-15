@@ -13,12 +13,22 @@ function localApi(): Plugin {
   return {
     name: "agentvoice-live-api",
     configureServer(server) {
-      const reader = new LiveReader(stateDirectory(process.env, homedir()));
+      const reader = new LiveReader(
+        stateDirectory(process.env, homedir()),
+        undefined,
+        undefined,
+        process.env.AGENTVOICE_WEB_WORKSPACE || undefined,
+      );
       server.middlewares.use(liveApi(reader, process.env, nonce, new DocumentReader(reader)));
       server.httpServer?.once("close", () => reader.close());
     },
     configurePreviewServer(server) {
-      const reader = new LiveReader(stateDirectory(process.env, homedir()));
+      const reader = new LiveReader(
+        stateDirectory(process.env, homedir()),
+        undefined,
+        undefined,
+        process.env.AGENTVOICE_WEB_WORKSPACE || undefined,
+      );
       server.middlewares.use(liveApi(reader, process.env, undefined, new DocumentReader(reader)));
       server.httpServer.once("close", () => reader.close());
     },

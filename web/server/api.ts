@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { configuredWebOrigin } from "../../src/web-target.ts";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, agentCommandSchema } from "./agent-controls.ts";
 import { AgentSendError } from "./agent-sender.ts";
@@ -38,7 +39,7 @@ export function liveApi(
     // Remote Markdown media and embeds must not leak private conversation content or local paths.
     response.setHeader(
       "Content-Security-Policy",
-      `default-src 'self'; script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://127.0.0.1:* ws://localhost:* wss://agentvoice.localhost; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'`,
+      `default-src 'self'; script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ${configuredWebOrigin(env).replace("https:", "wss:")}; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'`,
     );
     if (!request.url?.startsWith("/api/")) {
       next();

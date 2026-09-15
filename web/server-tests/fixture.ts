@@ -20,9 +20,12 @@ import { type Call, VoiceServer } from "../../src/frontend/server.ts";
 import { recordingDirectory } from "../../src/recording/store.ts";
 import type { AgentItem } from "../server/messages.ts";
 
-export async function fixture(attachment?: (value: unknown) => Promise<unknown>) {
+export async function fixture(
+  attachment?: (value: unknown) => Promise<unknown>,
+  options: { stateDir?: string; named?: boolean } = {},
+) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "av-web-")));
-  const stateDir = join(root, "agentvoice");
+  const stateDir = options.stateDir ?? join(root, "agentvoice");
   const instanceId = randomUUID();
   const feed = new LifecycleFeed(instanceId);
   let generation = 1;
@@ -99,7 +102,7 @@ export async function fixture(attachment?: (value: unknown) => Promise<unknown>)
   let events: EventSocketServer | undefined = createEvents();
   await events.start();
   const server = new VoiceServer(
-    frontendSocketPath(stateDir),
+    frontendSocketPath(stateDir, options.named ? root : undefined),
     async (notify) => {
       starts++;
       changed = notify;

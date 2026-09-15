@@ -88,3 +88,6 @@ bun run lint
 Tests use fake protocol and media boundaries and do not open a microphone or
 start inference. Hardware probes, installation, service restarts, Android device
 work, and live calls are separate explicit operations.
+
+For an independently restartable test server, targeted pointer client and two
+simultaneous web origins, see [parallel production/test sessions](docs/parallel-test-environment.md).
