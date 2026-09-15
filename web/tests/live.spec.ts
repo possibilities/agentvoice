@@ -312,7 +312,7 @@ test("HTTP failures show reconnect state, retain last text, and recover automati
               id: "call",
               persistenceScope: "http-failure-workspace-thread",
               voice: [message("v", "Voice remains readable.")],
-              agent: [],
+              agent: [message("a", "Agent remains readable.")],
               agentNotice: "Agent transcript is catching up. Input remains available.",
               agentControls: {
                 available: true,

@@ -78,3 +78,117 @@ test("both lanes release follow on the first small upward wheel and retain readi
   }
   await expect(input).toHaveValue("Draft stays while reading either lane");
 });
+
+for (const width of [1440, 390]) {
+  test(`sparse transcripts keep top spacing and ignore follow-release gestures without overflow at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const view: LiveView = {
+      id: "sparse-view",
+      persistenceScope: "sparse-scope",
+      phase: "live",
+      agent: [{ id: "a", role: "assistant", status: "complete", content: "A short answer." }],
+      voice: [{ id: "v", role: "user", status: "complete", content: "A short question." }],
+      agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+    };
+    await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+    await page.goto("/");
+    for (const lane of ["agent", "voice"] as const) {
+      const name = lane === "agent" ? "Agent" : "Voice";
+      const section = page.getByRole("region", { name, exact: true });
+      const viewport = page.getByRole("region", { name: `${name} transcript`, exact: true });
+      await expect(viewport).toBeVisible();
+      await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
+      await expect
+        .poll(() =>
+          viewport.evaluate((e) => {
+            const row = e.querySelector<HTMLElement>("[data-windowed-row-key]")!;
+            return row.getBoundingClientRect().top - e.getBoundingClientRect().top;
+          }),
+        )
+        .toBeGreaterThanOrEqual(16);
+      await viewport.hover();
+      await page.mouse.wheel(0, -50);
+      await viewport.focus();
+      for (const key of ["ArrowUp", "PageUp", "Home", "Shift+Space"])
+        await page.keyboard.press(key);
+      await viewport.evaluate((element) => {
+        for (const [type, clientY] of [
+          ["touchstart", 100],
+          ["touchmove", 160],
+          ["touchend", 0],
+        ] as const) {
+          element.dispatchEvent(
+            new TouchEvent(type, {
+              bubbles: true,
+              touches:
+                type === "touchend" ? [] : [new Touch({ identifier: 1, target: element, clientY })],
+            }),
+          );
+        }
+      });
+      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+      view[lane].push({
+        id: `${lane}-second`,
+        role: "assistant",
+        status: "complete",
+        content: "Still fits.",
+      });
+      await expect(section.getByText("Still fits.")).toBeVisible();
+      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+      // A prior ineffective gesture must not leave subsequent overflowing text unfollowed.
+      view[lane].push({
+        id: `${lane}-long`,
+        role: "assistant",
+        status: "complete",
+        content: "Growing conversation. ".repeat(300),
+      });
+      await expect
+        .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight))
+        .toBeGreaterThan(100);
+      await expect
+        .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight - e.scrollTop))
+        .toBeLessThan(2);
+      await viewport.hover();
+      await page.mouse.wheel(0, -1);
+      await expect(
+        section.getByRole("button", { name: "Jump to latest", exact: true }),
+      ).toBeVisible();
+      // Returning to a fitting transcript clears the now-meaningless jump state.
+      view[lane].pop();
+      await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
+      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+    }
+    await page.screenshot({ path: `test-results/sparse-${width}.png` });
+  });
+}
+
+test("enlarging the viewport clears a jump state once all messages fit", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 500 });
+  const messages: LiveView["voice"] = Array.from({ length: 8 }, (_, i) => ({
+    id: `resize-${i}`,
+    role: "user",
+    status: "complete",
+    content: `Message ${i}`,
+  }));
+  await page.route("**/api/live", (route) =>
+    route.fulfill({ json: { id: "resize", phase: "live", agent: [], voice: messages } }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("group", { name: "Transcript view" })
+    .getByRole("button", { name: "Voice", exact: true })
+    .click();
+  const viewport = page.getByRole("region", { name: "Voice transcript", exact: true });
+  await expect
+    .poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight))
+    .toBeGreaterThan(0);
+  await viewport.focus();
+  await page.keyboard.press("Home");
+  await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
+  await expect.poll(() => viewport.evaluate((e) => e.scrollTop)).toBe(0);
+  await page.setViewportSize({ width: 1000, height: 1600 });
+  await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
+  await expect(page.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+});

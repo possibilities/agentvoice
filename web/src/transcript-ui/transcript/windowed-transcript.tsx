@@ -120,6 +120,7 @@ export function WindowedTranscript<T extends { id: string }>({
   const [away, setAway] = useState(false);
   const [unread, setUnread] = useState(0);
   const [initializing, setInitializing] = useState(true);
+  const [startPadding, setStartPadding] = useState(24);
   const [endPadding, setEndPadding] = useState(48);
   const priorIdsRef = useRef(new Set(messageIds));
 
@@ -246,6 +247,7 @@ export function WindowedTranscript<T extends { id: string }>({
     getScrollElement: () => viewportRef.current,
     estimateSize: (index) => (rows[index]?.kind === "slot" ? 96 : 180),
     getItemKey,
+    paddingStart: startPadding,
     paddingEnd: endPadding,
     overscan: 6,
     useFlushSync: false,
@@ -288,6 +290,9 @@ export function WindowedTranscript<T extends { id: string }>({
   }, [releaseResizePin]);
 
   const disengageEndFollow = useCallback(() => {
+    const element = viewportRef.current;
+    // Gestures on a fully visible conversation cannot move the reading position.
+    if (!element || element.scrollHeight <= element.clientHeight) return;
     markReadingIntent();
     towardEndIntentUntilRef.current = 0;
     if (initializingRef.current) return;
@@ -303,11 +308,8 @@ export function WindowedTranscript<T extends { id: string }>({
     stickToEndRef.current = false;
     awayRef.current = true;
     setAway(true);
-    const element = viewportRef.current;
-    if (element) {
-      anchorRef.current = captureReadingAnchor(element);
-      queueAnchorCapture();
-    }
+    anchorRef.current = captureReadingAnchor(element);
+    queueAnchorCapture();
   }, [markReadingIntent, queueAnchorCapture]);
 
   const markTowardEndIntent = useCallback(() => {
@@ -348,9 +350,10 @@ export function WindowedTranscript<T extends { id: string }>({
     lastScrollOffsetRef.current = element.scrollTop;
     if (resizePinRef.current) return;
     const nextAway =
-      gap > END_THRESHOLD ||
-      movedUp ||
-      (awayRef.current && !stickToEndRef.current && !(movedTowardEnd && gap <= END_THRESHOLD));
+      element.scrollHeight > element.clientHeight &&
+      (gap > END_THRESHOLD ||
+        movedUp ||
+        (awayRef.current && !stickToEndRef.current && !(movedTowardEnd && gap <= END_THRESHOLD)));
     if (movedUp) stickToEndRef.current = false;
     if (nextAway && stickToEndRef.current && followRef.current && !readingIntent) {
       awayRef.current = false;
@@ -388,6 +391,10 @@ export function WindowedTranscript<T extends { id: string }>({
     const observer = new ResizeObserver(() => {
       const height = element.clientHeight;
       if (height === lastViewportHeightRef.current) return;
+      if (element.scrollHeight <= height) {
+        updateEdge();
+        return;
+      }
       const wasPinned =
         !awayRef.current &&
         lastEndGapRef.current <= END_THRESHOLD &&
@@ -407,16 +414,18 @@ export function WindowedTranscript<T extends { id: string }>({
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [queueScrollToEnd, virtualizer]);
+  }, [queueScrollToEnd, updateEdge, virtualizer]);
 
   useLayoutEffect(() => {
     const element = contentRef.current;
     if (!element) return;
     const updatePadding = () => {
-      const next = Number.parseFloat(getComputedStyle(element).paddingBottom);
-      if (Number.isFinite(next)) {
-        setEndPadding((current) => (current === next ? current : next));
-      }
+      const style = getComputedStyle(element);
+      const start = Number.parseFloat(style.paddingTop);
+      const end = Number.parseFloat(style.paddingBottom);
+      if (Number.isFinite(start))
+        setStartPadding((current) => (current === start ? current : start));
+      if (Number.isFinite(end)) setEndPadding((current) => (current === end ? current : end));
     };
     updatePadding();
     const observer = new ResizeObserver(updatePadding);
