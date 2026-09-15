@@ -31,6 +31,12 @@ trace corridor between the Persona and controls. Back restores system bars on
 the connection screen; a swipe can still reveal transient bars. Keeping the
 screen awake remains limited to a running call on the Persona screen.
 
+The immersive Persona scene reserves cutouts, waterfall edges, a desktop caption
+bar and the keyboard, but not status/navigation bars. When Android reveals those
+bars during the overview transition, they overlay the scene without changing
+Persona, the control deck or their trace corridor before the task snapshot.
+Studio and connections retain their normal safe-drawing insets.
+
 ## Ownership
 
 `CallService` is private and bound locally by `MainActivity`. It owns `CallOwner`

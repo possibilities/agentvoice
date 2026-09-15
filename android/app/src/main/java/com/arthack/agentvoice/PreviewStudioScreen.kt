@@ -57,10 +57,11 @@ internal fun PreviewStudioScreen(
     onConnect: (() -> Unit)? = null,
     onCancelConnection: (() -> Unit)? = null,
     onNavigationHint: (() -> Unit)? = null,
+    contentWindowInsets: WindowInsets = WindowInsets.safeDrawing,
 ) {
     CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
-            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection, onNavigationHint)
+            connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection, onNavigationHint, contentWindowInsets)
     }
 }
 
@@ -71,7 +72,7 @@ private fun PreviewStudioScene(
     connection: String, halo: PreviewHalo, spirit: PreviewSpirit, activity: String,
     personaSide: String, mutedPresence: String, mutedTuning: PreviewMutedTuning, presenceScope: String, horizontalOffsetDp: Int, onReleaseCompleted: () -> Unit, showPushToTalk: Boolean, handleBack: Boolean,
     connectionStyle: String, connectionDetail: String?, onConnect: (() -> Unit)?, onCancelConnection: (() -> Unit)?,
-    onNavigationHint: (() -> Unit)?,
+    onNavigationHint: (() -> Unit)?, contentWindowInsets: WindowInsets,
 ) {
     val theme = LocalPreviewTheme.current
     androidx.activity.compose.BackHandler(enabled = handleBack, onBack = onExit)
@@ -97,7 +98,7 @@ private fun PreviewStudioScene(
         PreviewAmbientGlow(scene.ambient, Modifier.matchParentSize())
         val density = LocalDensity.current
         val cutouts = WindowInsets.displayCutout
-        val safe = WindowInsets.safeDrawing
+        val safe = contentWindowInsets
         val cutoutPadding = with(density) {
             PreviewCutoutPadding(
                 minOf(cutouts.getLeft(this, androidx.compose.ui.unit.LayoutDirection.Ltr), safe.getLeft(this, androidx.compose.ui.unit.LayoutDirection.Ltr)).toDp().value,
@@ -106,7 +107,7 @@ private fun PreviewStudioScene(
                 minOf(cutouts.getBottom(this), safe.getBottom(this)).toDp().value,
             )
         }
-        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(contentWindowInsets)) {
             val viewportWidth = maxWidth.value
             val viewportHeight = maxHeight.value
             val target = previewOrientationGeometry(maxWidth.value, maxHeight.value, screenWidth.value,

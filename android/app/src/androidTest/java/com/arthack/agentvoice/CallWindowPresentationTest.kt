@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import org.junit.Assert.*
 import org.junit.Rule
@@ -16,6 +17,41 @@ import org.junit.Test
 
 class CallWindowPresentationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun revealedSystemBarsKeepTheImmersiveSceneGeometry() {
+        compose.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
+        compose.setContent {
+            CallWindowPresentation(compose.activity.window, inPersona = true, running = true)
+            VoiceTheme {
+                VoiceScreen(CallUi(running = true, connected = true), {}, {}, {}, {})
+            }
+        }
+        fun barsVisible(): Boolean {
+            val insets = ViewCompat.getRootWindowInsets(compose.activity.window.decorView) ?: return true
+            return insets.isVisible(WindowInsetsCompat.Type.statusBars()) ||
+                insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+        }
+        val tags = listOf("studio-persona-stage", "preview-controls", "mic-mute", "speaker-mute", "hold-to-talk")
+        fun bounds() = tags.map { compose.onNodeWithTag(it, useUnmergedTree = true).getUnclippedBoundsInRoot() }
+        compose.waitUntil(5_000) { !barsVisible() }
+        val before = bounds()
+        repeat(2) {
+            compose.runOnIdle {
+                WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
+            compose.waitUntil(5_000) { barsVisible() }
+            android.os.SystemClock.sleep(500)
+            assertEquals("System bars must not squeeze the trace corridor", before, bounds())
+            compose.runOnIdle {
+                WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView)
+                    .hide(WindowInsetsCompat.Type.systemBars())
+            }
+            compose.waitUntil(5_000) { !barsVisible() }
+            android.os.SystemClock.sleep(500)
+            assertEquals(before, bounds())
+        }
+    }
 
     @Test fun transportFailureKeepsTheViewportAndDeckWhileReleasingScreenAwake() {
         var running by mutableStateOf(true)

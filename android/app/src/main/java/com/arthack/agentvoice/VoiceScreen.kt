@@ -98,7 +98,11 @@ internal fun VoiceScreen(
             },
             onConnect = if (!ui.running) connect else null,
             onCancelConnection = if (ui.running && !ui.connected) stop else null,
-            onNavigationHint = onNavigationHint)
+            onNavigationHint = onNavigationHint,
+            // Overview can reveal status/navigation bars before taking the task snapshot.
+            // Keep the immersive scene's geometry stable while retaining physical/window obstructions.
+            contentWindowInsets = WindowInsets.displayCutout.union(WindowInsets.waterfall)
+                .union(WindowInsets.captionBar).union(WindowInsets.ime))
         if (ui.connected) ui.message?.let {
             Text(it, color = VoiceInk.text, fontFamily = VoiceInk.type, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().background(VoiceInk.surface)
