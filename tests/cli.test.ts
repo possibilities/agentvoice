@@ -44,6 +44,7 @@ test("web target flags validate before starting a reader or touching routes", as
   const help = await run(["serve", "--help"]);
   expect(help.exit).toBe(0);
   expect(help.stdout).toContain("--workspace <dir> --name <label>");
+  expect(help.stdout).toContain("--tailscale");
   const reserved = await run(["serve", "--workspace", process.cwd()]);
   expect(reserved.exit).toBe(2);
   expect(reserved.stderr).toContain("preserve the default route");

@@ -16,7 +16,7 @@ const USAGE = `agentvoice — a local Codex voice server and frontend
 
 Usage:
   agentvoice                         Show this help
-  agentvoice serve [--production] [--workspace <dir> --name <label>]
+  agentvoice serve [--production] [--tailscale] [--workspace <dir> --name <label>]
                                     Live Voice | Agent web transcripts at https://agentvoice.localhost
   agentvoice server [options]       Restore saved work or wait for a frontend
   agentvoice service status|load|unload|restart|remove [--json]
@@ -342,12 +342,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (command === "serve") {
       const parsed = parseArgs(argv.slice(1), {
-        bool: new Set(["--help", "--production"]),
+        bool: new Set(["--help", "--production", "--tailscale"]),
         value: new Set(["--workspace", "--name"]),
       });
       if (parsed.help) {
         console.log(
-          "Usage: agentvoice serve [--production] [--workspace <dir> --name <label>]\nLive transcripts at https://<name>.localhost (default: agentvoice); Vite dev by default.",
+          "Usage: agentvoice serve [--production] [--tailscale] [--workspace <dir> --name <label>]\nLive transcripts at https://<name>.localhost (default: agentvoice); --tailscale adds a tailnet-only URL; Vite dev by default.",
         );
         return 0;
       }
@@ -364,6 +364,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return await serveWeb(process.env, argv.includes("--production"), {
         name,
         workspace: workspace && !workspace.help ? workspace.workspace : undefined,
+        tailscale: argv.includes("--tailscale"),
       });
     }
     if (command === "role") {

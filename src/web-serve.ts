@@ -81,7 +81,7 @@ export function runForeground(
 export async function serveWeb(
   env: Environ,
   production = false,
-  target: { name?: string; workspace?: string } = {},
+  target: { name?: string; workspace?: string; tailscale?: boolean } = {},
 ): Promise<number> {
   const name = target.name ?? "agentvoice";
   webOrigin(name);
@@ -124,7 +124,7 @@ export async function serveWeb(
       PORTLESS_TLD: "localhost",
       PORTLESS_LAN: "0",
       PORTLESS_WILDCARD: "0",
-      PORTLESS_TAILSCALE: "0",
+      PORTLESS_TAILSCALE: target.tailscale ? "1" : "0",
       PORTLESS_FUNNEL: "0",
       PORTLESS_NGROK: "0",
       // A service cannot answer sudo prompts. DNS/CA setup belongs to the shared proxy.

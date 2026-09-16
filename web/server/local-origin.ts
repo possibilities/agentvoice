@@ -1,27 +1,37 @@
 import type { IncomingMessage } from "node:http";
-import { configuredWebOrigin } from "../../src/web-target.ts";
+import { configuredWebOrigins } from "../../src/web-target.ts";
 
-/** Forwarding headers authorize only the one fixed portless origin, never another local app. */
+/** Forwarding headers authorize only the exact Portless origins, never another local app. */
 export function isLocalRequest(request: IncomingMessage, env = process.env): boolean {
   const peer = request.socket.remoteAddress;
   if (peer !== "127.0.0.1" && peer !== "::1" && peer !== "::ffff:127.0.0.1") return false;
-  let configured: string;
+  let configured: string[];
   try {
-    configured = configuredWebOrigin(env);
+    configured = configuredWebOrigins(env);
   } catch {
     return false;
   }
-  const hostname = new URL(configured).hostname;
   const host = request.headers.host ?? "";
   let origin: string;
   if (/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host)) origin = `http://${host}`;
-  else if (
-    env["PORTLESS_URL"] === configured &&
-    (host === hostname || host === `${hostname}:443`) &&
-    request.headers["x-forwarded-proto"] === "https"
-  )
-    origin = configured;
-  else return false;
+  else {
+    if (request.headers["x-forwarded-proto"] !== "https") return false;
+    let requested: string;
+    try {
+      requested = new URL(`https://${host}`).origin;
+    } catch {
+      return false;
+    }
+    const match = configured.find((candidate) => candidate === requested);
+    if (!match) return false;
+    if (
+      match.endsWith(".localhost")
+        ? env["PORTLESS_URL"] !== match
+        : env["PORTLESS_TAILSCALE_URL"] !== match
+    )
+      return false;
+    origin = match;
+  }
   return (
     (!request.headers.origin || request.headers.origin === origin) &&
     request.headers["sec-fetch-site"] !== "cross-site"

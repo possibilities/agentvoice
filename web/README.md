@@ -67,6 +67,7 @@ From this checkout, prepare dependencies once (or after changing lockfiles):
 bun install --frozen-lockfile
 npm --prefix web ci
 agentvoice serve                 # editable Vite dev + HMR
+agentvoice serve --tailscale     # local URL plus a tailnet-only Portless URL
 ```
 
 From an uninstalled checkout, use `bun run src/main.ts serve`. The normal desktop
@@ -89,6 +90,12 @@ setup. The app uses its locked portless 0.15.6 dependency and never prompts for 
 or updates the hosts file. Safari may need an explicit `portless hosts sync` after
 route registration. Duplicate routes fail without taking over an existing view.
 
+`--tailscale` keeps the local URL and adds a root-mounted HTTPS URL on this
+machine's Tailscale DNS name. Use `portless list` to find the current app-to-port
+mapping; additional apps use ports such as 8443 and 8444. The browser device must
+be on the same tailnet. The reader accepts only Portless's exact injected origin,
+and Funnel, ngrok, LAN and wildcard routing remain disabled.
+
 ```sh
 bun run web:dev                  # direct loopback development
 bun run web:build
@@ -97,9 +104,10 @@ agentvoice serve --production    # Vite preview of prepared web/dist
 
 Production remains optional. Both Vite modes use the same API bridge. The named
 route is fixed across worktrees. Backend listeners bind strictly to `127.0.0.1`
-at portless's assigned `PORT`; HMR uses the same HTTPS origin. LAN, tunnels and
-wildcard routes are disabled. TERM, INT and HUP stop the foreground process tree
-and unregister its route. A static hosted build cannot connect to local sockets.
+at portless's assigned `PORT`; HMR follows either admitted HTTPS origin. LAN,
+public tunnels and wildcard routes are disabled. TERM, INT and HUP stop the
+foreground process tree and unregister its route. A static hosted build cannot
+connect to local sockets.
 
 ## Connection and transcript contract
 

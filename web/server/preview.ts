@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
 import { preview } from "vite";
-import { configuredWebOrigin } from "../../src/web-target.ts";
+import { configuredWebOrigin, configuredWebOrigins } from "../../src/web-target.ts";
 
 const origin = configuredWebOrigin(process.env);
-const hostname = new URL(origin).hostname;
+const allowedHosts = configuredWebOrigins(process.env).map((value) => new URL(value).hostname);
 const port = Number(process.env.PORT);
 if (!Number.isInteger(port) || port < 1 || port > 65535 || process.env.PORTLESS_URL !== origin) {
   throw new Error(
@@ -22,7 +22,7 @@ const server = await preview({
     host: "127.0.0.1",
     port,
     strictPort: true,
-    allowedHosts: [hostname],
+    allowedHosts,
     cors: false,
   },
 });
