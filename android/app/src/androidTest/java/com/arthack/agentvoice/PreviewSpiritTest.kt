@@ -73,7 +73,7 @@ class PreviewSpiritTest {
         compose.runOnIdle { assertFalse(ui.holding); assertFalse(ui.micOpen); assertEquals(1, stops) }
     }
 
-    @Test fun disabledMotionAndOffStopTheSharedClockAndLevelModulation() {
+    @Test fun reducedMotionStopsActivityButAmbientStillDoesNot() {
         compose.mainClock.autoAdvance = false
         var allowed by mutableStateOf(true)
         var spirit by mutableStateOf(PreviewSpirit("soft", 35, "follow"))
@@ -90,6 +90,11 @@ class PreviewSpiritTest {
         compose.runOnIdle { assertEquals(paused, scene.colors.value); assertEquals(PreviewButtonLight(), scene.light.value) }
         compose.runOnIdle { allowed = true; spirit = PreviewSpirit() }
         compose.mainClock.advanceTimeBy(1500)
-        compose.runOnIdle { assertEquals(halo.colors(), scene.colors.value); assertEquals(PreviewButtonLight(), scene.light.value) }
+        compose.runOnIdle {
+            assertEquals(halo.colors(), scene.colors.value)
+            assertEquals(0f, scene.light.value.amount)
+            assertTrue(scene.light.value.flowPhaseTurns > 0f)
+            assertTrue(scene.light.value.captureEnergy > 0f)
+        }
     }
 }

@@ -22,6 +22,7 @@ class PreviewLandscapeTraceGeometryTest {
                 assertEquals(expected.routes.size, actual.routes.size)
                 for ((original, turned) in expected.routes.zip(actual.routes)) {
                     fun point(p: PreviewTracePoint) = PreviewTracePoint(forward(p.y), layout.deckY * unit + p.x)
+                    assertEquals(original.channel, turned.channel)
                     assertEquals(original.points.map(::point), turned.points)
                     assertEquals(point(original.port), turned.port)
                     assertEquals(point(original.contactEnd), turned.contactEnd)
@@ -39,6 +40,8 @@ class PreviewLandscapeTraceGeometryTest {
             val right = previewLandscapeTraceGeometry(layout("right"), 780f, 1f, radius, settings)!!
             assertTrue(left.routes.isNotEmpty())
             for ((a, b) in left.routes.zip(right.routes)) {
+                assertEquals(a.channel, b.channel)
+                assertEquals(if (a.landing.y < 180f) PreviewTraceChannel.Capture else PreviewTraceChannel.Playback, a.channel)
                 assertEquals(a.landing.y, b.landing.y, .001f)
                 for ((p, q) in a.points.zip(b.points)) {
                     assertEquals(780f - p.x, q.x, .001f)

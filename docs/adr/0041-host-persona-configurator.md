@@ -149,7 +149,7 @@ Reset color behavior affects persona only. Base Halo colors, motion and geometry
 remain independent. Exact Save receipts include spirit. Transient
 `activity: steady|voice` selects the rehearsal envelope and never enters a profile.
 
-Soft light uses one lifecycle-aware 14-second scene clock, a draw-only face wash
+The original Soft light uses one lifecycle-aware 14-second scene clock, a draw-only face wash
 capped at 3.5% alpha, and slow attack/release on the existing level-envelope seam.
 Binary mute state, acknowledged capture, touch geometry and text remain immediate.
 Closed gates fence activity immediately. Reduced motion freezes both drift and
@@ -157,6 +157,8 @@ energy modulation; background/disconnect/Off stop frame work. Follow channels
 uses small per-family tonal changes and a 900 ms gate/palette blend; it neither
 changes Rive motion tuning nor repeatedly settles the native pose on recoloring.
 The preview remains synthetic and opens no microphone, playback or voice call.
+[0087](0087-gated-android-trace-energy.md) extends that same clock with directional
+trace energy and shared activity lighting independent of the optional Soft wash.
 
 `design.composition` also accepts Socket and Traces: stationary mechanical
 supports and paired PCB routes. A placement-derived clear aperture prevents

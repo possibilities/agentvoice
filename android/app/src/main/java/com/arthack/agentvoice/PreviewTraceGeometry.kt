@@ -4,11 +4,14 @@ import kotlin.math.sqrt
 
 internal data class PreviewTracePoint(val x: Float, val y: Float)
 
+internal enum class PreviewTraceChannel { Capture, Playback }
+
 internal data class PreviewTraceRoute(
     val port: PreviewTracePoint,
     val contactEnd: PreviewTracePoint,
     val landing: PreviewTracePoint,
     val points: List<PreviewTracePoint>,
+    val channel: PreviewTraceChannel,
 )
 
 internal data class PreviewTraceGeometry(
@@ -80,7 +83,8 @@ internal fun previewTraceGeometry(
                     .map { point(it.x, it.y) }
                     .withoutRepeatedPoints()
                 routes += PreviewTraceRoute(point(port.x, port.y), point(port.x, port.contactEndY),
-                    point(port.landing, end), points)
+                    point(port.landing, end), points,
+                    if (side == 0) PreviewTraceChannel.Capture else PreviewTraceChannel.Playback)
             }
         }
     }

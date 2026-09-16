@@ -2,6 +2,7 @@ package com.arthack.agentvoice
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -27,6 +28,9 @@ internal fun PreviewPersonaTraces(
     settings: PreviewTraces = PreviewTraces(),
     channelGapDp: Int = 10,
     displayedClearRadius: (() -> Dp)? = null,
+    light: State<PreviewButtonLight>? = null,
+    ui: CallUi = CallUi(),
+    energyEnabled: Boolean = false,
 ) {
     val theme = LocalPreviewTheme.current
     Canvas(modifier) {
@@ -39,10 +43,12 @@ internal fun PreviewPersonaTraces(
         val contact = previewTraceInk(theme.decoration(VoiceInk.muted.copy(alpha = .32f)), center, join)
         clipRect(bottom = geometry.endY) {
             for (trace in geometry.routes) {
-                drawPath(trace.points.tracePath(), route,
+                val path = trace.points.tracePath()
+                drawPath(path, route,
                     style = Stroke(geometry.strokeWidth, cap = StrokeCap.Butt, join = StrokeJoin.Bevel))
                 drawLine(contact, Offset(trace.landing.x, maxOf(trace.contactEnd.y, geometry.deckTop - 4.dp.toPx())),
                     trace.landing.offset(), geometry.contactWidth, StrokeCap.Butt)
+                drawPreviewTraceEnergy(path, trace.channel, geometry.strokeWidth, center, join, theme, light, ui, energyEnabled)
             }
         }
     }

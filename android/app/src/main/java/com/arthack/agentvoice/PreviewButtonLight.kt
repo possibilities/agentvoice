@@ -12,13 +12,14 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Shared scene time and already-smoothed energy; zero amount preserves the unlit face exactly. */
+/** Shared scene time and already-smoothed energy; ambient strength is separate from measured channel activity. */
 @Immutable
 internal data class PreviewButtonLight(
     val phaseTurns: Float = 0f,
     val amount: Float = 0f,
     val captureEnergy: Float = 0f,
     val playbackEnergy: Float = 0f,
+    val flowPhaseTurns: Float = 0f,
 )
 
 internal fun DrawScope.drawPreviewButtonLight(
@@ -33,9 +34,12 @@ internal fun DrawScope.drawPreviewButtonLight(
     if (!enabled || light == null) return
     val frame = light.value
     val amount = frame.amount.lightUnit() * strength.lightUnit()
-    if (amount == 0f) return
     val energy = (if (capture) frame.captureEnergy else frame.playbackEnergy).lightUnit()
-    val alpha = (amount * (.010f + .025f * energy)).coerceAtMost(.035f)
+    val channel = if (capture) PreviewTraceChannel.Capture else PreviewTraceChannel.Playback
+    // The same traveling band feeds its control endpoint; no second pulse or clock.
+    val contact = previewTraceFlowAt(1f, frame.flowPhaseTurns, channel)
+    val alpha = amount * .010f + energy * (.045f + .035f * contact) * strength.lightUnit()
+    if (alpha == 0f) return
     val angle = frame.phaseTurns.lightUnit().toDouble() * 2.0 * PI
     val center = Offset(
         size.width * (.5f + .18f * sin(angle).toFloat()),

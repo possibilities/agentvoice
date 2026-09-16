@@ -58,7 +58,8 @@ would use a still pose. This is indeterminate connection activity, never progres
 or a simulated remote acknowledgement. It needs a separate Studio audition and
 native renderer review; no new profile/protocol field is introduced here.
 
-Activity-carrying traces are also deferred. A later implementation must use real
+Activity-carrying traces were deferred here and are implemented by
+[0087](0087-gated-android-trace-energy.md). That implementation must use real
 gated input/output levels, keep route geometry fixed, clear energy immediately
 when a gate closes, and keep neutral connection light distinct from lime capture
 and violet playback. The existing trace geometry and light clock are unchanged.

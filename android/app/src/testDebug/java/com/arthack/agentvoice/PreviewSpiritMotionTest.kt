@@ -18,13 +18,15 @@ class PreviewSpiritMotionTest {
         val lit = step()
         assertTrue(lit.ambient.amount > .95f)
         assertTrue(lit.ambient.phaseTurns > 0f)
-        assertEquals(PreviewButtonLight(), lit.light)
+        assertEquals(0f, lit.light.amount)
+        assertTrue(lit.light.captureEnergy > .95f)
         assertEquals(base, lit.colors)
         val shared = motion.step(listening, spirit, base, false, "steady", .03f, true, 100)
         assertEquals(shared.light.phaseTurns, shared.ambient.phaseTurns)
         assertEquals(PreviewAmbientFrame(), step(foreground = false).ambient)
         val returned = step(dt = 0f)
-        assertEquals(PreviewButtonLight(), returned.light)
+        assertEquals(0f, returned.light.captureEnergy)
+        assertEquals(0f, returned.light.playbackEnergy)
         assertEquals(PreviewAmbientFrame(), returned.ambient)
         step()
         assertEquals(PreviewAmbientFrame(), step(percent = 0).ambient)
@@ -81,6 +83,34 @@ class PreviewSpiritMotionTest {
         val off = motion.step(listening, PreviewSpirit(), base, true, "voice", .03f, false)
         assertEquals(PreviewSpiritFrame(PreviewButtonLight(), base), off)
         repeat(60) { assertEquals(base, motion.step(listening, spirit, base, false, "voice", .03f, true).colors) }
+    }
+
+    @Test fun duplexLevelsAreIndependentAndFlowUsesTheExistingClock() {
+        val motion = PreviewSpiritMotion()
+        val duplex = listening.copy(speakerOpen = true, speakerMuted = false, outputLevel = .075f)
+        fun step(ui: CallUi = duplex, dt: Float = .1f, foreground: Boolean = true) =
+            motion.step(ui, PreviewSpirit(), base, false, "steady", dt, true, foreground = foreground)
+        repeat(30) { step() }
+        val active = step()
+        assertTrue(active.light.captureEnergy > .99f)
+        assertEquals(.5f, active.light.playbackEnergy, .001f)
+        assertEquals(0f, active.light.amount) // Activity works with optional ambient Spirit off.
+        val phase = active.light.flowPhaseTurns
+        val captureClosed = step(duplex.copy(micOpen = false), dt = 0f)
+        assertEquals(0f, captureClosed.light.captureEnergy)
+        assertEquals(.5f, captureClosed.light.playbackEnergy, .001f)
+        assertEquals(phase, captureClosed.light.flowPhaseTurns)
+        assertEquals(0f, step(duplex.copy(speakerOpen = false), dt = 0f).light.playbackEnergy)
+        assertEquals(PreviewButtonLight(), step(foreground = false).light)
+        val resumed = step(dt = 0f)
+        assertEquals(phase, resumed.light.flowPhaseTurns)
+        assertEquals(0f, resumed.light.captureEnergy)
+        assertEquals(0f, resumed.light.playbackEnergy)
+        repeat(100) {
+            val frame = step(duplex.copy(inputLevel = Float.NaN, outputLevel = Float.POSITIVE_INFINITY))
+            assertTrue(frame.light.flowPhaseTurns in 0f..1f)
+            assertTrue(frame.light.captureEnergy.isFinite())
+        }
     }
 
     @Test fun syntheticVoiceHasPausesAndOnlyDrivesTheSelectedOpenChannel() {

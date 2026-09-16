@@ -141,3 +141,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0084: Hand self-hosted installation to launchd](0084-launchd-owned-self-install-handoff.md) — accepted; an external launchd transaction owns crash-released installer/service locks and resumes reload after the managed server terminates its initiating turn.
 - [0085: Render observed system events as transcript cards](0085-system-event-transcript-cards.md) — accepted; a static renderer boundary keeps context compaction visible as a system note with shared lane rendering and existing row identity.
 - [0086: Illuminate Android connection preparation](0086-illuminated-android-connection-preparation.md) — accepted; Activity-owned preparation presentation keeps audio gates authoritative.
+
+- [0087: Carry gated Android audio energy along the traces](0087-gated-android-trace-energy.md) — accepted; shared clock, independent gated channels, unchanged routes and shipping provenance.

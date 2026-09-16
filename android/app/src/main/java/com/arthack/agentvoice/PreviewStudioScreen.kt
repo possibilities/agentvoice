@@ -169,9 +169,11 @@ private fun PreviewStudioScene(
                     if (portrait) {
                         PreviewPersonaTraces(geometry.deckY.dp, deck.extentHeightDp.dp, geometry.deckX.dp,
                             traceLayer, (geometry.stageY + geometry.diameter / 2f + geometry.offsetY).dp,
-                            clearRadius, design.traces, design.spacing.effectiveChannelGapDp, displayedClearRadius)
+                            clearRadius, design.traces, design.spacing.effectiveChannelGapDp, displayedClearRadius,
+                            scene.light, ui, foreground && motionAllowed)
                     } else {
-                        PreviewLandscapeTraces(geometry, clearRadius, design, traceLayer, displayedClearRadius)
+                        PreviewLandscapeTraces(geometry, clearRadius, design, traceLayer, displayedClearRadius,
+                            scene.light, ui, foreground && motionAllowed)
                     }
                     Box(Modifier.offset { IntOffset(geometry.stageX.dp.roundToPx(), geometry.stageY.dp.roundToPx()) }
                         .requiredSize(geometry.diameter.dp)) {

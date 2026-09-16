@@ -46,10 +46,11 @@ private data class SpiritColorCue(
     val pending: Boolean,
 )
 
-/** One slow scene clock, with gate changes kept separate from its trailing energy. */
+/** One scene clock, with gate changes kept separate from its trailing energy. */
 internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHaloColors()) {
     private var seconds = 0f
     private var mutedPhase = 0f
+    private var flowPhase = 0f
     private var capture = 0f
     private var playback = 0f
     private var amount = 0f
@@ -81,6 +82,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
         // Integrating speed preserves the displayed phase when the cycle slider changes.
         mutedPhase = (mutedPhase + dt / mutedCycleSeconds.coerceIn(6, 30)) % 1f
         val phase = (seconds / 14f) % 1f
+        flowPhase = (flowPhase + dt / 1.8f) % 1f
         val state = personaState(ui)
         fun normalized(level: Float) = if (level.isFinite()) sqrt((level / .3f).coerceIn(0f, 1f)) else 0f
         val demo = if (activity == "voice") syntheticSpiritEnergy(seconds) else 0f
@@ -106,7 +108,7 @@ internal class PreviewSpiritMotion(initialColors: CompactHaloColors = CompactHal
             colors = base
             colorCue = null
         }
-        return PreviewSpiritFrame(if (amount == 0f) PreviewButtonLight() else PreviewButtonLight(phase, amount, capture, playback), colors,
+        return PreviewSpiritFrame(PreviewButtonLight(phase, amount, capture, playback, flowPhase), colors,
             if (ambientAmount == 0f) PreviewAmbientFrame() else PreviewAmbientFrame(phase, ambientAmount), mutedPhase)
     }
 }
@@ -166,7 +168,7 @@ internal fun rememberPreviewSpirit(
     val latestActivity by rememberUpdatedState(activity)
     val latestAmbient by rememberUpdatedState(ambientPercent)
     val latestMutedCycle by rememberUpdatedState(mutedCycleSeconds)
-    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0 || mutedPresence
+    val enabled = (spirit.surface == "soft" && spirit.strengthPercent > 0) || (halo.variant == "contained" && spirit.persona == "follow") || ambientPercent > 0 || mutedPresence || ui.micOpen || ui.speakerOpen
     val moving = enabled && foreground && motionAllowed && ui.connected && !ui.controlsPending
     val latestMoving by rememberUpdatedState(moving)
     val latestForeground by rememberUpdatedState(foreground)
@@ -177,7 +179,8 @@ internal fun rememberPreviewSpirit(
         phase.floatValue = frame.phaseTurns
     }
     SideEffect {
-        if (!moving) publish(motion.step(ui, spirit, base, halo.variant == "contained", activity, 0f, false, ambientPercent, foreground))
+        // Publish gate changes in this composition, before the next animation tick.
+        publish(motion.step(ui, spirit, base, halo.variant == "contained", activity, 0f, moving, ambientPercent, foreground, mutedCycleSeconds))
     }
     LaunchedEffect(moving) {
         if (!moving) return@LaunchedEffect

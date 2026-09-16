@@ -2,6 +2,7 @@ package com.arthack.agentvoice
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -19,6 +20,9 @@ internal fun PreviewLandscapeTraces(
     design: PreviewDesign,
     modifier: Modifier = Modifier,
     displayedClearRadius: (() -> Dp)? = null,
+    light: State<PreviewButtonLight>? = null,
+    ui: CallUi = CallUi(),
+    energyEnabled: Boolean = false,
 ) {
     val theme = LocalPreviewTheme.current
     Canvas(modifier) {
@@ -42,6 +46,7 @@ internal fun PreviewLandscapeTraces(
             else maxOf(route.contactEnd.x, traces.deckEdgeX - 4f * unit)
             drawLine(contactInk, Offset(contactX, route.landing.y), Offset(route.landing.x, route.landing.y),
                 traces.contactWidth, StrokeCap.Butt)
+            drawPreviewTraceEnergy(path, route.channel, traces.strokeWidth, center, join, theme, light, ui, energyEnabled)
         }
     }
 }

@@ -32,5 +32,5 @@ internal fun previewLandscapeTraceGeometry(
         geometry.deckWidth * unit, 0f, forward(center.x), personaClearRadius, unit, settings, channelGapDp) ?: return null
     fun point(point: PreviewTracePoint) = PreviewTracePoint(forward(point.y), geometry.deckY * unit + point.x)
     return PreviewLandscapeTraceGeometry(center, deckEdge, portrait.strokeWidth, portrait.contactWidth,
-        portrait.routes.map { PreviewTraceRoute(point(it.port), point(it.contactEnd), point(it.landing), it.points.map(::point)) })
+        portrait.routes.map { PreviewTraceRoute(point(it.port), point(it.contactEnd), point(it.landing), it.points.map(::point), it.channel) })
 }

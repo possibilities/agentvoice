@@ -875,3 +875,15 @@ Hang Up and microphone Mute/Unmute remain primary; expanded content also offers 
 Mute/Unmute. These actions change only the synthetic notification rehearsal.
 Push-to-talk is omitted because notification clicks cannot reliably represent a
 press-and-hold gesture. Android still supplies the outer notification frame.
+
+
+### Audio activity on traces
+
+Existing **Preview activity → Synthetic voice** auditions a soft lime band toward
+Persona while Listening, or a violet band toward Agent controls while Speaking.
+Control faces share the same energy and flow phase. This remains synthetic and
+transient, excluded from Save and shipping provenance. Ambient Spirit **Still**
+turns off its slow wash while retaining the audio activity feedback; system reduced
+motion stops both flow and audio-driven face modulation. Real calls use independent
+gated input/output levels and can illuminate both directions together. See
+[ADR 0087](../../docs/adr/0087-gated-android-trace-energy.md) for physical checks.
