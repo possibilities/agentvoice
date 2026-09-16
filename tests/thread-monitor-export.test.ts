@@ -23,6 +23,7 @@ const monitor: ThreadMonitor = {
       activeFlags: [],
       turn: { id: "turn", status: "inProgress" },
       parentage: { state: "root", sources: ["live_inventory"] },
+      collaborationIdentity: { state: "root", sources: ["live_inventory"] },
     },
   ],
 };
@@ -43,7 +44,7 @@ test("JSON command exports versioned exact metadata and excludes incidental priv
     }),
   ).toBe(0);
   const exported = threadMonitorExportSchema.parse(JSON.parse(output));
-  expect(exported.schemaVersion).toBe(2);
+  expect(exported.schemaVersion).toBe(3);
   expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
   expect(output).not.toContain("secret");
   expect(output).not.toContain("socket");
@@ -123,7 +124,7 @@ test("ready inventory must include its parentless root; incomplete cuts can omit
     exportThreadMonitor({ ...monitor, inventory: "incomplete", threads: [] }).monitor.inventory,
   ).toBe("incomplete");
 });
-test("version two freezes native row ID/name/turn bounds independently of internal schemas", () => {
+test("version three freezes native row and collaboration identity bounds", () => {
   const root = monitor.threads[0]!;
   for (const patch of [
     { id: "bad/id" },
@@ -148,6 +149,29 @@ test("version two freezes native row ID/name/turn bounds independently of intern
     ],
   });
   expect(accepted.monitor.threads).toHaveLength(1);
+  expect(() =>
+    exportThreadMonitor({
+      ...monitor,
+      threads: [
+        {
+          ...root,
+          id: "worker",
+          parentThreadId: "root",
+          parentage: {
+            state: "verified",
+            parentThreadId: "root",
+            sources: ["native_history"],
+          },
+          collaborationIdentity: {
+            state: "verified",
+            path: "/root/Bad-Name",
+            sources: ["native_history"],
+          },
+        },
+      ],
+      inventory: "incomplete",
+    }),
+  ).toThrow();
 });
 test("oversized escaped JSON is rejected and command returns bounded unavailable instead of truncating", async () => {
   const escaped = String.fromCharCode(0).repeat(256);

@@ -476,6 +476,20 @@ export const capabilitiesSchema = z
     cursorTtlMs: z.number().int(),
   })
   .strict();
+export const canonicalAgentPathSchema = z
+  .string()
+  .min(7)
+  .max(4096)
+  .regex(/^\/root(?:\/[a-z0-9_]+)+$/u);
+export const collaborationIdentityEvidenceSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("verified"), path: canonicalAgentPathSchema }).strict(),
+  z
+    .object({
+      state: z.literal("missing"),
+      reason: z.enum(["not_reported", "malformed"]),
+    })
+    .strict(),
+]);
 export const threadDetailsSchema = z.object({
   id: conversationId,
   parentThreadId: conversationId.nullable().optional(),
@@ -494,6 +508,7 @@ export const threadDetailsSchema = z.object({
   reasoningEffort: z.string().max(256).nullable().optional(),
   ephemeral: z.boolean().optional(),
   canAcceptDirectInput: z.boolean().nullable().optional(),
+  collaborationIdentity: collaborationIdentityEvidenceSchema.optional(),
 });
 const readResultBase = {
   rootThreadId: conversationId,

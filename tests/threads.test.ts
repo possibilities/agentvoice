@@ -45,6 +45,13 @@ const metadata = (id: string) => ({
     status: { type: "idle" },
     model: "gpt-6-astra",
     reasoningEffort: "low",
+    collaborationIdentity:
+      id === "root"
+        ? { state: "missing" as const, reason: "not_reported" as const }
+        : {
+            state: "verified" as const,
+            path: `/root/${id.replaceAll("-", "_")}`,
+          },
   },
 });
 
@@ -119,11 +126,12 @@ describe("watchable thread inventory", () => {
 
   test("rehydrates persisted and archived descendants with exact parentage and preserves conflicts", async () => {
     const live = snapshot([thread("root"), thread("child"), thread("conflict", "root")]);
-    const detail = (id: string, parentThreadId: string) => ({
+    const detail = (id: string, parentThreadId: string, path: string) => ({
       id,
       parentThreadId,
       cwd: "/workspace",
       status: { type: "notLoaded" },
+      collaborationIdentity: { state: "verified" as const, path },
     });
     const result = await readThreadMonitor(
       {
@@ -135,10 +143,10 @@ describe("watchable thread inventory", () => {
           const archived = input["archived"] === true;
           const cursor = input["cursor"];
           const data = archived
-            ? [detail("archived", "child")]
+            ? [detail("archived", "child", "/root/child/archived")]
             : cursor
-              ? [detail("conflict", "other")]
-              : [detail("child", "root")];
+              ? [detail("conflict", "other", "/root/other_conflict")]
+              : [detail("child", "root", "/root/child")];
           return {
             instanceId: "call",
             generation: 1,
@@ -169,6 +177,11 @@ describe("watchable thread inventory", () => {
         parentThreadId: "child",
         sources: ["native_history"],
       },
+      collaborationIdentity: {
+        state: "verified",
+        path: "/root/child/archived",
+        sources: ["native_history"],
+      },
     });
     expect(result.threads.find((row) => row.id === "child")?.parentage).toEqual({
       state: "verified",
@@ -180,6 +193,11 @@ describe("watchable thread inventory", () => {
       parentage: {
         state: "conflict",
         parentThreadIds: ["other", "root"],
+        sources: ["live_inventory", "native_history"],
+      },
+      collaborationIdentity: {
+        state: "conflict",
+        paths: ["/root/conflict", "/root/other_conflict"],
         sources: ["live_inventory", "native_history"],
       },
     });

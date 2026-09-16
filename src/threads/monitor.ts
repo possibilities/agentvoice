@@ -17,11 +17,21 @@ export type NativeParentage =
   | { state: "verified"; parentThreadId: string; sources: ParentageSource[] }
   | { state: "missing"; reason: "not_reported"; sources: ParentageSource[] }
   | { state: "conflict"; parentThreadIds: string[]; sources: ParentageSource[] };
+export type CollaborationIdentity =
+  | { state: "root"; sources: ParentageSource[] }
+  | { state: "verified"; path: string; sources: ParentageSource[] }
+  | {
+      state: "missing";
+      reason: "not_reported" | "malformed";
+      sources: ParentageSource[];
+    }
+  | { state: "conflict"; paths: string[]; sources: ParentageSource[] };
 export type ThreadRow = ThreadView & {
   model?: string | null;
   effort?: string | null;
   nickname?: string | null;
   parentage?: NativeParentage;
+  collaborationIdentity?: CollaborationIdentity;
 };
 export type ThreadMonitor = {
   instanceId?: string;
@@ -39,7 +49,12 @@ export type ThreadMonitor = {
 };
 type Reader = Pick<ControlSocket, "request">;
 
-type ObservedRow = Omit<ThreadRow, "parentage"> & { source: ParentageSource };
+type ObservedRow = Omit<ThreadRow, "parentage" | "collaborationIdentity"> & {
+  source: ParentageSource;
+  collaborationIdentity?:
+    | { state: "verified"; path: string }
+    | { state: "missing"; reason: "not_reported" | "malformed" };
+};
 
 function rowFromHistory(value: unknown): ObservedRow {
   const row = threadDetailsSchema.parse(value);
@@ -53,6 +68,7 @@ function rowFromHistory(value: unknown): ObservedRow {
     model: row.model,
     effort: row.reasoningEffort,
     nickname: row.agentNickname,
+    collaborationIdentity: row.collaborationIdentity,
     source: "native_history",
   };
 }
@@ -164,6 +180,60 @@ function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
         parentThreadIds: parents,
         sources: [...new Set(parents.flatMap((parent) => sourcesFor(parent)))].sort(),
       };
+    const identityEvidence = observed.flatMap((row) =>
+      row.collaborationIdentity ? [{ ...row.collaborationIdentity, source: row.source }] : [],
+    );
+    const paths = [
+      ...new Set(
+        identityEvidence.flatMap((identity) =>
+          identity.state === "verified" ? [identity.path] : [],
+        ),
+      ),
+    ].sort();
+    const identitySources = (matching = identityEvidence) =>
+      [
+        ...new Set((matching.length ? matching : observed).map((row) => row.source)),
+      ].sort() as ParentageSource[];
+    let collaborationIdentity: CollaborationIdentity;
+    if (id === rootThreadId) collaborationIdentity = { state: "root", sources: identitySources() };
+    else if (paths.length > 1)
+      collaborationIdentity = {
+        state: "conflict",
+        paths,
+        sources: identitySources(
+          identityEvidence.filter((identity) => identity.state === "verified"),
+        ),
+      };
+    else if (
+      identityEvidence.some(
+        (identity) => identity.state === "missing" && identity.reason === "malformed",
+      )
+    )
+      collaborationIdentity = {
+        state: "missing",
+        reason: "malformed",
+        sources: identitySources(
+          identityEvidence.filter(
+            (identity) => identity.state === "missing" && identity.reason === "malformed",
+          ),
+        ),
+      };
+    else if (paths.length === 1)
+      collaborationIdentity = {
+        state: "verified",
+        path: paths[0]!,
+        sources: identitySources(
+          identityEvidence.filter(
+            (identity) => identity.state === "verified" && identity.path === paths[0],
+          ),
+        ),
+      };
+    else
+      collaborationIdentity = {
+        state: "missing",
+        reason: "not_reported",
+        sources: identitySources(),
+      };
     return {
       id,
       parentThreadId: parentage.state === "verified" ? parentage.parentThreadId : null,
@@ -175,6 +245,7 @@ function mergeRows(rootThreadId: string, rows: ObservedRow[]): ThreadRow[] {
       effort: live?.effort ?? base.effort,
       nickname: live?.nickname ?? base.nickname,
       parentage,
+      collaborationIdentity,
     };
   });
 }
@@ -192,7 +263,12 @@ export async function readThreadMonitor(
     before.runtime.mainThreadId !== expected.threadId
   )
     throw new Error("AgentVoice call changed during discovery; retry");
-  const settings = new Map<string, Pick<ThreadRow, "model" | "effort" | "nickname">>();
+  const settings = new Map<
+    string,
+    Pick<ThreadRow, "model" | "effort" | "nickname"> & {
+      collaborationIdentity?: ObservedRow["collaborationIdentity"];
+    }
+  >();
   let next = 0;
   const settingsBudget = Math.min(4_000, Math.max(0, Math.floor(budgetMs / 3)));
   const deadline = Date.now() + settingsBudget;
@@ -224,6 +300,7 @@ export async function readThreadMonitor(
             model: parsed.data.model,
             effort: parsed.data.reasoningEffort,
             nickname: parsed.data.agentNickname,
+            collaborationIdentity: parsed.data.collaborationIdentity,
           });
         } catch (error) {
           if (

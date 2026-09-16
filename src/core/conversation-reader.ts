@@ -3,6 +3,7 @@ import {
   type ConversationReadMethod,
   type ConversationReadParams,
   type ConversationReadResult,
+  canonicalAgentPathSchema,
   conversationId,
   conversationTurnSchema,
   MAX_HISTORY_BYTES,
@@ -20,6 +21,30 @@ const record = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 type Cursor = { native: string; scope: string; expires: number };
+
+function collaborationIdentity(raw: Record<string, unknown>) {
+  const source = record(raw["source"]);
+  const subAgent = record(source["subAgent"]);
+  const spawn = record(subAgent["thread_spawn"]);
+  if (!("thread_spawn" in subAgent))
+    return { state: "missing" as const, reason: "not_reported" as const };
+  const path = spawn["agent_path"];
+  const parsed = canonicalAgentPathSchema.safeParse(path);
+  return parsed.success
+    ? { state: "verified" as const, path: parsed.data }
+    : {
+        state: "missing" as const,
+        reason:
+          path === undefined || path === null ? ("not_reported" as const) : ("malformed" as const),
+      };
+}
+
+function publicThreadDetails(raw: Record<string, unknown>, secrets: readonly string[]) {
+  return threadDetailsSchema.parse({
+    ...record(safeContent(raw, secrets)),
+    collaborationIdentity: collaborationIdentity(raw),
+  });
+}
 
 /** Reads native persisted data without resuming, loading, or submitting work on a thread. */
 export class ConversationReader {
@@ -110,7 +135,7 @@ export class ConversationReader {
       let data: unknown;
       let next: unknown = null;
       if (method === "conversation.thread.get" || method === "conversation.live.get") {
-        data = threadDetailsSchema.parse(safeContent(await get(threadId!), this.secrets));
+        data = publicThreadDetails(await get(threadId!), this.secrets);
       } else {
         if (threadId && (await get(threadId))["ephemeral"] === true)
           throw new ObservationError("history_unavailable");
@@ -175,9 +200,7 @@ export class ConversationReader {
             const id = conversationId.parse(record(row)["id"]);
             if (id === params.rootThreadId) throw new ObservationError("forbidden_thread");
             await authorize(id);
-            (data as unknown[]).push(
-              threadDetailsSchema.parse(safeContent(await get(id), this.secrets)),
-            );
+            (data as unknown[]).push(publicThreadDetails(await get(id), this.secrets));
           }
         } else if (method === "conversation.turns.list") {
           data = rows.map((row) => safeContent(conversationTurnSchema.parse(row), this.secrets));

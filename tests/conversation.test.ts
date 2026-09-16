@@ -571,6 +571,7 @@ describe("scoped native conversation reads", () => {
 
   test("descendant list verifies rows, includes unloaded children, and rejects a server ignoring the ancestry filter", async () => {
     let foreign = false;
+    let malformed = false;
     const calls: string[] = [];
     const reader = new ConversationReader(
       async (method, input) => {
@@ -583,6 +584,20 @@ describe("scoped native conversation reads", () => {
         }
         const id = String(params["threadId"]);
         const row = metadata(id, id === "child" ? "main" : null);
+        if (id === "child")
+          Object.assign(row, {
+            source: {
+              subAgent: {
+                thread_spawn: {
+                  parent_thread_id: "main",
+                  depth: 1,
+                  agent_path: malformed
+                    ? "/root/Friendly Name"
+                    : "/root/agenthud_live_update_cleanup",
+                },
+              },
+            },
+          });
         row.status.type = "notLoaded";
         return { thread: row };
       },
@@ -601,6 +616,17 @@ describe("scoped native conversation reads", () => {
         parentThreadId: "main",
         agentNickname: "Scout",
         status: { type: "notLoaded" },
+        collaborationIdentity: {
+          state: "verified",
+          path: "/root/agenthud_live_update_cleanup",
+        },
+      },
+    ]);
+    malformed = true;
+    expect((await reader.read("conversation.threads.list", params)).data).toMatchObject([
+      {
+        id: "child",
+        collaborationIdentity: { state: "missing", reason: "malformed" },
       },
     ]);
     foreign = true;

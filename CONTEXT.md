@@ -319,6 +319,12 @@ of recording.
 This is observed text, not proof of what was heard. It is never automatically
 converted into voice input (ADR 0074).
 
+**Canonical collaboration task identity** — The persisted Codex agent path from
+`thread.source.subAgent.thread_spawn.agent_path`, correlated by exact native
+thread ID and exported as verified, missing, malformed or conflicting evidence.
+It remains distinct from friendly names, nicknames, roles, parentage and Work
+association. _Avoid_: worker display name, inferred task name, HUD identity row.
+
 **AgentHUD** — Independent durable Work, Assignment and Result owner in
 `~/code/agenthud`, observed through its own web UI. AgentVoice supplies only
 bounded versioned native metadata through `threads --json`. _Avoid_: runtime

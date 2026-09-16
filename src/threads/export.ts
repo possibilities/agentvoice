@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { canonicalAgentPathSchema } from "../events/conversation.ts";
 import type { ThreadMonitor } from "./monitor.ts";
 
 /** Public metadata contract for independent read-only clients; never a socket descriptor. */
-export const THREAD_MONITOR_EXPORT_VERSION = 2;
+export const THREAD_MONITOR_EXPORT_VERSION = 3;
 export const THREAD_MONITOR_EXPORT_MAX_BYTES = 1024 * 1024;
 const MAX_THREADS = 256;
 const identity = z
@@ -20,6 +21,24 @@ export const nativeParentageSchema = z.discriminatedUnion("state", [
     .object({
       state: z.literal("conflict"),
       parentThreadIds: z.array(identity).min(2).max(32),
+      sources,
+    })
+    .strict(),
+]);
+export const collaborationIdentitySchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("root"), sources }).strict(),
+  z.object({ state: z.literal("verified"), path: canonicalAgentPathSchema, sources }).strict(),
+  z
+    .object({
+      state: z.literal("missing"),
+      reason: z.enum(["not_reported", "malformed"]),
+      sources,
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal("conflict"),
+      paths: z.array(canonicalAgentPathSchema).min(2).max(32),
       sources,
     })
     .strict(),
@@ -42,6 +61,7 @@ const exportedThreadSchema = z
     effort: z.string().max(256).nullable().optional(),
     nickname: z.string().max(256).nullable().optional(),
     parentage: nativeParentageSchema,
+    collaborationIdentity: collaborationIdentitySchema,
   })
   .strict()
   .superRefine((thread, ctx) => {
@@ -55,6 +75,17 @@ const exportedThreadSchema = z
       new Set(thread.parentage.parentThreadIds).size !== thread.parentage.parentThreadIds.length
     )
       ctx.addIssue({ code: "custom", message: "Conflicting parents must be unique" });
+    if (
+      "sources" in thread.collaborationIdentity &&
+      new Set(thread.collaborationIdentity.sources).size !==
+        thread.collaborationIdentity.sources.length
+    )
+      ctx.addIssue({ code: "custom", message: "Collaboration identity sources must be unique" });
+    if (
+      thread.collaborationIdentity.state === "conflict" &&
+      new Set(thread.collaborationIdentity.paths).size !== thread.collaborationIdentity.paths.length
+    )
+      ctx.addIssue({ code: "custom", message: "Conflicting collaboration paths must be unique" });
   });
 const monitorSchema = z
   .object({
@@ -110,9 +141,15 @@ const monitorSchema = z
     const root = monitor.threads.find((thread) => thread.id === monitor.rootThreadId);
     if (
       monitor.inventory === "ready" &&
-      (!root || root.parentThreadId !== null || root.parentage.state !== "root")
+      (!root ||
+        root.parentThreadId !== null ||
+        root.parentage.state !== "root" ||
+        root.collaborationIdentity.state !== "root")
     )
-      ctx.addIssue({ code: "custom", message: "Ready inventory requires its parentless root row" });
+      ctx.addIssue({
+        code: "custom",
+        message: "Ready inventory requires its parentless root row and root collaboration identity",
+      });
     if (monitor.nativeSessionId !== undefined && monitor.nativeSessionId !== monitor.rootThreadId)
       ctx.addIssue({
         code: "custom",
@@ -161,6 +198,15 @@ export function exportThreadMonitor(
                     reason: "not_reported" as const,
                     sources: ["live_inventory" as const],
                   }),
+          collaborationIdentity:
+            thread.collaborationIdentity ??
+            (thread.id === monitor.rootThreadId
+              ? { state: "root" as const, sources: ["live_inventory" as const] }
+              : {
+                  state: "missing" as const,
+                  reason: "not_reported" as const,
+                  sources: ["live_inventory" as const],
+                }),
         }));
   const exported = threadMonitorExportSchema.parse({
     schemaVersion: THREAD_MONITOR_EXPORT_VERSION,

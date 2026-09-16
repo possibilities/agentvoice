@@ -4378,6 +4378,42 @@
               "type": "null"
             }
           ]
+        },
+        "collaborationIdentity": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "verified"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 7,
+                  "maxLength": 4096,
+                  "pattern": "^\\/root(?:\\/[a-z0-9_]+)+$"
+                }
+              },
+              "required": ["state", "path"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "const": "missing"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": ["not_reported", "malformed"]
+                }
+              },
+              "required": ["state", "reason"],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": ["id", "cwd", "status"]
