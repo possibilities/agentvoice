@@ -1,10 +1,11 @@
 import type { Message } from "../types/message";
+import { isSystemEventMessage } from "./system-events";
 
 export type TranscriptEntry =
   | { kind: "message"; id: string; message: Message }
   | { kind: "activity"; id: string; messages: readonly Message[] };
 
-// Never group across a user or assistant message. The first id stays
+// Never group across prose or an explicit system event. The first id stays
 // stable when live items append, preserving disclosure state during polling.
 export function groupTranscript(messages: readonly Message[]): TranscriptEntry[] {
   const entries: Array<
@@ -12,7 +13,7 @@ export function groupTranscript(messages: readonly Message[]): TranscriptEntry[]
     | { kind: "activity"; id: string; messages: Message[] }
   > = [];
   for (const message of messages) {
-    if (message.role === "user" || message.role === "assistant") {
+    if (message.role === "user" || message.role === "assistant" || isSystemEventMessage(message)) {
       entries.push({ kind: "message", id: message.id, message });
       continue;
     }

@@ -14,6 +14,7 @@ import {
   useMessageScrollerScrollable,
 } from "../components/ui/message-scroller";
 import { TooltipProvider } from "../components/ui/tooltip";
+import { isSystemEventMessage } from "../lib/system-events";
 import { groupTranscript, type TranscriptEntry } from "../lib/transcript";
 import type { Message } from "../types/message";
 import { DisclosureStateProvider } from "./disclosure-state";
@@ -110,7 +111,12 @@ function useVisibleMessages(messages: readonly Message[], detail: TranscriptDeta
     () =>
       detail === "full"
         ? messages
-        : messages.filter((message) => message.role === "user" || message.role === "assistant"),
+        : messages.filter(
+            (message) =>
+              message.role === "user" ||
+              message.role === "assistant" ||
+              isSystemEventMessage(message),
+          ),
     [messages, detail],
   );
   const [stored, setStored] = useState(() => ({ input: next, output: next }));

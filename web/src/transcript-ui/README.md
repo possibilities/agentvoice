@@ -22,6 +22,16 @@ browser-storage keys remain compatibility identifiers. Retaining them preserves 
 accepted scoped CSS byte output and existing recovered AgentVoice drafts; neither
 identifier loads or communicates with AgentChats.
 
+System event cards use the optional `Message.systemEvent` marker only on a
+`system` message. Native adapters own decoding and supply readable fallback
+content; the static registry in `components/chat/system-event-card.tsx` owns
+custom rendering. Add a renderer there when an observed event earns a custom
+card. Unknown card types retain the existing activity renderer. Explicit system
+events stay visible in both detail levels as independent measured rows, so they
+cannot disappear inside a tool group. Both Agent and Voice use this same boundary;
+it does not manufacture events for either source. See
+[ADR 0085](../../../docs/adr/0085-system-event-transcript-cards.md).
+
 The copied component boundary retains scoped lint exceptions for existing
 interaction roles, effect dependencies, and positional rendering keys; migration
 does not rewrite those accepted behaviors. Readable CSS preserves its source

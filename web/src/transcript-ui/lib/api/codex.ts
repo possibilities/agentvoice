@@ -11,6 +11,7 @@ import type {
 import type { FileChange, Message, ToolActivity, ToolDetailSection } from "@/types/message";
 import type { SessionStatus, SessionSummary } from "@/types/session-summary";
 import type { Thread } from "@/types/thread";
+import { contextCompactionMessage } from "../system-events.ts";
 import { transcriptTitle } from "../transcript-title.ts";
 import { parseCodexMessagePresentation } from "./codex-presentation.ts";
 import { mapCodexSubagentActivity } from "./codex-subagent-activity.ts";
@@ -206,6 +207,10 @@ export function mapCodexItem(record: CodexThreadItemRecord): Message | null {
   const createdAt = new Date(record.createdAtMs).toISOString();
   const id = `${record.turnId}:${record.itemId}`;
 
+  if (record.itemType === "contextCompaction") {
+    return { id, createdAt, ...contextCompactionMessage(true) };
+  }
+
   if (record.itemType === "userMessage") {
     const content = userText(record.item);
     return content
@@ -263,7 +268,8 @@ function mapItems(items: CodexThreadItemRecord[], detail: CodexTranscriptDetail)
     if (
       detail === "messages" &&
       item.itemType !== "userMessage" &&
-      item.itemType !== "agentMessage"
+      item.itemType !== "agentMessage" &&
+      item.itemType !== "contextCompaction"
     ) {
       return [];
     }

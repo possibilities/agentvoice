@@ -96,6 +96,24 @@
   color: var(--text);
   font-weight: 500;
 }
+.system-event-card {
+  margin-inline: 16px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-inline-start: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.system-event-card__title {
+  display: block;
+  color: var(--text);
+  font-weight: 500;
+}
+.system-event-card p {
+  margin: 4px 0 0;
+}
 .message-delivery-status {
   min-width: 0;
   overflow: hidden;

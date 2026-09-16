@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { FileChangeMessage } from "@/components/chat/file-change-message";
 import { MessageBody } from "@/components/chat/message-body";
+import { systemEventCard } from "@/components/chat/system-event-card";
 import { ToolActivityMessage } from "@/components/chat/tool-activity-message";
 import { VoiceMessageModal } from "@/components/chat/voice-message-modal";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -9,6 +10,8 @@ import { formatClockTime } from "@/lib/relative-time";
 import type { Message } from "@/types/message";
 
 export const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
+  const SystemEventCard = systemEventCard(message);
+  if (SystemEventCard) return <SystemEventCard message={message} />;
   if (message.role === "tool" || message.role === "system") {
     return message.fileChanges ? (
       <FileChangeMessage message={message} />

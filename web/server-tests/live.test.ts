@@ -28,6 +28,48 @@ const user = (id: string, text: string) => ({
   item: { type: "userMessage" as const, id, content: [{ type: "text" as const, text }] },
 });
 
+test("compaction live completion and saved history remain one system event after reconnect", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const item = { type: "contextCompaction" as const, id: "compact" };
+  try {
+    await h.start();
+    await until(reader, (view) => view.phase === "live" && !view.agentHistoryLoading);
+    h.feed.conversation({
+      event: "conversation.item.started",
+      revision: 1,
+      data: { threadId: "main", turnId: "turn", item },
+    });
+    const started = await until(reader, (view) => view.agent[0]?.status === "working");
+    expect(started.agent[0]?.role).toBe("system");
+    const id = started.agent[0]?.id;
+    h.history([{ turnId: "turn", item }]);
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 2,
+      data: { threadId: "main", turnId: "turn", item },
+    });
+    const completed = await until(reader, (view) => view.agent[0]?.status === "complete");
+    expect(completed.agent).toHaveLength(1);
+    expect(completed.agent[0]?.id).toBe(id);
+    reader.close();
+    const replay = new LiveReader(h.stateDir);
+    try {
+      const restored = await until(
+        replay,
+        (view) => view.agent.length === 1 && !view.agentHistoryLoading,
+      );
+      expect(restored.agent).toEqual(completed.agent);
+      expect(restored.voice).toEqual([]);
+    } finally {
+      replay.close();
+    }
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("initial history pages stay private while live Agent and Voice items keep updating", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
