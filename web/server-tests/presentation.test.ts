@@ -263,6 +263,120 @@ test("media and unsupported summaries explain the actual omission reason", () =>
   expect(traversalOmission?.content).not.toContain("exceeded the 49,152-byte transcript limit");
 });
 
+test("file operations preserve native order, kinds, status, correlation, and original detail", () => {
+  const item = {
+    type: "fileChange" as const,
+    id: "patch",
+    status: "inProgress" as const,
+    changes: [
+      {
+        path: "/work/src/new.ts",
+        kind: { type: "add" as const },
+        diff: "export const created = true;\n",
+      },
+      {
+        path: "/work/src/edit.ts",
+        kind: { type: "update" as const },
+        diff: "@@ -1 +1 @@\n-old\n+new\n",
+      },
+      {
+        path: "/work/src/old.ts",
+        kind: { type: "delete" as const },
+        diff: "obsolete\n",
+      },
+      {
+        path: "/work/src/before.ts",
+        kind: { type: "update" as const, move_path: "/work/src/after.ts" },
+        diff: "",
+      },
+    ],
+  };
+  const before = JSON.stringify(item);
+  const started = agentMessage({ turnId: "turn", item }, false)!;
+  const completed = agentMessage({ turnId: "turn", item: { ...item, status: "completed" } }, true)!;
+
+  expect(started).toMatchObject({
+    id: '["turn","patch"]',
+    role: "tool",
+    status: "working",
+    nativeItemType: "fileChange",
+    toolActivity: { name: "Files", detail: "4 files", meta: "inProgress", state: "running" },
+  });
+  expect(started.fileChanges).toEqual([
+    {
+      path: "/work/src/new.ts",
+      kind: "add",
+      diff: "export const created = true;\n",
+      diffTruncated: false,
+    },
+    {
+      path: "/work/src/edit.ts",
+      kind: "update",
+      diff: "@@ -1 +1 @@\n-old\n+new\n",
+      diffTruncated: false,
+    },
+    {
+      path: "/work/src/old.ts",
+      kind: "delete",
+      diff: "obsolete\n",
+      diffTruncated: false,
+    },
+    {
+      path: "/work/src/before.ts",
+      movePath: "/work/src/after.ts",
+      kind: "update",
+      diff: "",
+      diffTruncated: false,
+    },
+  ]);
+  expect(completed).toMatchObject({
+    id: started.id,
+    status: "complete",
+    nativeItemType: "fileChange",
+    toolActivity: { meta: "completed", state: "complete" },
+  });
+  expect(completed.toolActivity?.sections).toEqual([
+    {
+      label: "Original record",
+      content: JSON.stringify({ ...item, status: "completed" }, null, 2),
+    },
+  ]);
+  expect(JSON.stringify(item)).toBe(before);
+});
+
+test("oversized file operations stay top-level truthful fallbacks without partial diffs", () => {
+  const item = projectItem({
+    type: "fileChange",
+    id: "oversized-patch",
+    status: "completed",
+    changes: [
+      {
+        path: "/work/src/large.ts",
+        kind: { type: "update" },
+        diff: `@@ -1 +1 @@\n-${"old".repeat(30_000)}\n+${"new".repeat(30_000)}\n`,
+      },
+    ],
+  });
+  const message = agentMessage({ turnId: "turn", item })!;
+
+  expect(item).toMatchObject({
+    type: "unavailable",
+    nativeType: "fileChange",
+    reason: "oversized",
+  });
+  expect(message).toMatchObject({
+    nativeItemType: "fileChange",
+    status: "complete",
+    toolActivity: {
+      name: "Files",
+      detail: "File changes unavailable",
+      state: "complete",
+    },
+  });
+  expect(message.fileChanges).toBeUndefined();
+  expect(message.toolActivity?.sections?.at(-1)?.label).toBe("Omitted content");
+});
+
 test("subagent lifecycle rows show the affected path and action without changing the native item", () => {
   const item = {
     type: "subAgentActivity" as const,

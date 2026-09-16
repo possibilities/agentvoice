@@ -17,10 +17,11 @@ const bytes = new Intl.NumberFormat("en-US");
 
 function unavailableActivity(item: Extract<AgentItem["item"], { type: "unavailable" }>) {
   const omission = item.omission;
+  const fileChange = item.nativeType === "fileChange";
   if (!omission) {
     return {
-      name: item.nativeType,
-      detail: `Content unavailable (${item.reason})`,
+      name: fileChange ? "Files" : item.nativeType,
+      detail: fileChange ? "File changes unavailable" : `Content unavailable (${item.reason})`,
       state: "complete" as const,
       sections: [{ label: "Details", content: JSON.stringify(item, null, 2) }],
     };
@@ -47,8 +48,10 @@ function unavailableActivity(item: Extract<AgentItem["item"], { type: "unavailab
   });
   const status = omission.status ?? "content omitted";
   return {
-    name: omission.name ?? item.nativeType,
-    detail: omission.detail ?? item.nativeType,
+    name: fileChange ? "Files" : (omission.name ?? item.nativeType),
+    detail: fileChange
+      ? (omission.detail ?? "File changes unavailable")
+      : (omission.detail ?? item.nativeType),
     meta: `${status} · ${bytes.format(omission.originalBytes)} bytes`,
     state: (["failed", "declined", "interrupted", "errored"].includes(status)
       ? "error"
@@ -127,6 +130,15 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
         ? { movePath: change.kind.move_path }
         : {}),
     }));
+    const fileCount = message.fileChanges.length;
+    message.nativeItemType = "fileChange";
+    message.toolActivity = {
+      name: "Files",
+      detail: `${fileCount} ${fileCount === 1 ? "file" : "files"}`,
+      meta: item.status,
+      state,
+      sections: [{ label: "Original record", content: JSON.stringify(item, null, 2) }],
+    };
   } else if (item.type === "functionCallOutput") {
     message.toolActivity!.name = item.name;
     message.toolActivity!.detail = item.namespace ? `${item.namespace}.${item.name}` : item.name;
@@ -147,6 +159,9 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
       message.content = mapped.content;
       message.toolActivity = { ...mapped.activity, state };
     }
+  }
+  if (item.type === "unavailable" && item.nativeType === "fileChange") {
+    message.nativeItemType = "fileChange";
   }
   return message;
 }

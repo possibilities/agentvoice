@@ -174,6 +174,16 @@ through three levels, and keeps plain or malformed text intact. Nested arbitrary
 string properties are not rewritten. Oversized encoded strings and unsafe numeric
 values remain in their original representation.
 
+Native file-change items render as independent, correlated transcript cards
+between adjacent activity groups. Each card preserves the received multi-file
+order and streaming/final status, shows paths and add/remove counts immediately,
+and lazy-loads Pierre only for an opened file diff. Create, edit, delete and rename
+use the native change kind and optional destination path. Empty/path-only changes,
+source-truncated diffs, parse failures and oversized unavailable items remain
+explicit, with the exact projected record available behind Details. The renderer
+never reads or changes the workspace. See
+[ADR 0089](../docs/adr/0089-top-level-file-change-diffs.md).
+
 Live snapshots keep composer controls separate from transcript rendering. Unchanged
 controls retain their identity, so transcript-only polls do not rerender the input
 owner or replace its callbacks. Subsequent transcript rendering is deferred so

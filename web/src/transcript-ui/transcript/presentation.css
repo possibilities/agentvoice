@@ -719,13 +719,31 @@
   border-top: 1px solid var(--line);
 }
 .file-disclosure__trigger {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   padding: 6px 0;
 }
 .file-disclosure__path {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.file-disclosure__meta,
+.file-diff-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+.file-diff-counts [data-change="addition"] {
+  color: var(--accent);
+}
+.file-diff-counts [data-change="deletion"] {
+  color: var(--danger);
+}
+.tool-disclosure__meta .file-diff-counts + .telemetry-live {
+  margin-left: 8px;
 }
 .file-disclosure__content {
   min-width: 0;

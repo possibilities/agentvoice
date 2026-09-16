@@ -13,7 +13,13 @@ export function groupTranscript(messages: readonly Message[]): TranscriptEntry[]
     | { kind: "activity"; id: string; messages: Message[] }
   > = [];
   for (const message of messages) {
-    if (message.role === "user" || message.role === "assistant" || isSystemEventMessage(message)) {
+    if (
+      message.role === "user" ||
+      message.role === "assistant" ||
+      isSystemEventMessage(message) ||
+      message.fileChanges !== undefined ||
+      message.nativeItemType === "fileChange"
+    ) {
       entries.push({ kind: "message", id: message.id, message });
       continue;
     }

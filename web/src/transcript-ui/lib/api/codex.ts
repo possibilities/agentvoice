@@ -148,8 +148,9 @@ function fileActivity(item: JsonObject): {
     activity: {
       name: "Files",
       detail: shown ? `${shown}${remainder}` : detail,
-      meta: detail,
+      meta: stringValue(item.status) || detail,
       state: toolState(item),
+      sections: [{ label: "Original record", content: JSON.stringify(item, null, 2) }],
     },
     fileChanges,
   };
@@ -262,6 +263,7 @@ export function mapCodexItem(record: CodexThreadItemRecord): Message | null {
     status: mapped.activity.state === "error" ? "error" : "complete",
     toolActivity: mapped.activity,
     fileChanges: mapped.fileChanges,
+    ...(record.itemType === "fileChange" ? { nativeItemType: "fileChange" } : {}),
   };
 }
 

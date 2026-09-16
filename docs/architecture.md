@@ -57,6 +57,9 @@ owns the current source map and recording/attachment implementation guidance.
   is no messages-only detail mode in the renderer, source contract or fixtures.
   Registered system cards consume the exact native item type copied into the
   render message, while unknown items keep readable fallback activity.
+  Native file-change items remain independent measured rows rather than collapsed
+  activity children; one ordered multi-file item exposes lazy Pierre diffs and its
+  exact projected record without reading or changing workspace files.
   `server/live-reader.ts` observes the default or explicitly selected workspace
   frontend without fallback, verifies the live
   controller and fences native history/live snapshots and saved voice tails.

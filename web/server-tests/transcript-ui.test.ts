@@ -20,6 +20,67 @@ describe("owned transcript data surface", () => {
     expect(activity.messages.map((message) => message.id)).toEqual(["tool-1", "tool-2"]);
   });
 
+  test("keeps canonical and unavailable file operations as ordered top-level rows", () => {
+    const tool = (id: string) => ({
+      id,
+      role: "tool" as const,
+      content: id,
+      status: "complete" as const,
+      toolActivity: { name: "Command", detail: id, state: "complete" as const },
+    });
+    const file = {
+      id: "files",
+      role: "tool" as const,
+      content: "",
+      status: "complete" as const,
+      nativeItemType: "fileChange",
+      toolActivity: { name: "Files", detail: "1 file", state: "complete" as const },
+      fileChanges: [
+        {
+          path: "/work/src/app.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+          diffTruncated: false,
+        },
+      ],
+    };
+    const unavailable = {
+      id: "files-unavailable",
+      role: "tool" as const,
+      content: "",
+      status: "complete" as const,
+      nativeItemType: "fileChange",
+      toolActivity: {
+        name: "Files",
+        detail: "File changes unavailable",
+        state: "complete" as const,
+      },
+    };
+    const blocks = groupTranscript([
+      tool("command-1"),
+      tool("command-2"),
+      file,
+      tool("command-3"),
+      tool("command-4"),
+      unavailable,
+    ]);
+
+    expect(blocks.map((block) => [block.kind, block.id])).toEqual([
+      ["activity", "command-1"],
+      ["message", "files"],
+      ["activity", "command-3"],
+      ["message", "files-unavailable"],
+    ]);
+    expect(blocks[0]?.kind === "activity" ? blocks[0].messages.map(({ id }) => id) : []).toEqual([
+      "command-1",
+      "command-2",
+    ]);
+    expect(blocks[2]?.kind === "activity" ? blocks[2].messages.map(({ id }) => id) : []).toEqual([
+      "command-3",
+      "command-4",
+    ]);
+  });
+
   test("merges updates by stable identity and keeps the newest cursor", () => {
     const snapshot = {
       id: "thread",

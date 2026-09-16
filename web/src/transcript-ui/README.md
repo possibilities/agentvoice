@@ -38,6 +38,13 @@ activity retains its tool treatment. No model, effort, Work, or result is inferr
 from these identity-only observations. See
 [ADR 0088](../../../docs/adr/0088-subagent-lifecycle-transcript-cards.md).
 
+Native file-change items remain independent rows between adjacent activity
+groups. One card preserves the native operation's file order and status, shows
+paths and line counts immediately, and lazy-loads Pierre for each disclosed diff.
+Original projected detail and honest unavailable/truncated fallbacks remain
+reachable without reading workspace files. See
+[ADR 0089](../../../docs/adr/0089-top-level-file-change-diffs.md).
+
 The copied component boundary retains scoped lint exceptions for existing
 interaction roles, effect dependencies, and positional rendering keys; migration
 does not rewrite those accepted behaviors. Readable CSS preserves its source
