@@ -30,3 +30,9 @@ read native credentials, replace exhausted native runtimes, or modify Fx.
 
 Activation requires the existing controller/runtime restart contract. Source
 installation alone does not load this behavior into an already running call.
+
+A retained controller from before this change can activate the new runtime
+without a full server restart. The runtime reuses its existing authenticated
+`agentvoice_status` readiness response to recover the exact controller instance,
+generation, pinned root, runtime PID and build identity. Missing or mismatched
+identity fails closed; no history inventory or guessed process identity is used.

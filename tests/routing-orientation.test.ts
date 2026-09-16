@@ -3,6 +3,7 @@ import {
   ManagerRoutingOrientation,
   type RoutingCommand,
   type RoutingOrientationOptions,
+  routingIdentityFromStatus,
 } from "../src/core/routing-orientation.ts";
 
 const catalog = {
@@ -180,4 +181,21 @@ test("material refreshes coalesce and only the latest persisted revision is subm
   const publications = f.calls.filter((call) => call.args[1] === "apply");
   expect(publications).toHaveLength(2);
   expect(publications[1]?.input).toMatchObject({ context: { context_revision: 2 } });
+});
+
+test("retained controller compatibility uses authenticated exact runtime/root evidence", () => {
+  const status = {
+    instanceId: "controller",
+    generation: 2,
+    threadId: "root",
+    runtime: { pid: 123, buildId: "build" },
+  };
+  expect(routingIdentityFromStatus(status, "root")).toEqual({
+    controllerId: "controller",
+    generation: 2,
+    processInstanceId: "controller:2:123",
+    buildId: "build",
+  });
+  expect(routingIdentityFromStatus(status, "other-root")).toBeUndefined();
+  expect(routingIdentityFromStatus({ ...status, runtime: { pid: 123 } }, "root")).toBeUndefined();
 });

@@ -56,7 +56,11 @@ import {
 } from "./params.ts";
 import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { type DirectoryRoleInfo, RoleContentCapture } from "./role-content.ts";
-import { ManagerRoutingOrientation, type RoutingIdentity } from "./routing-orientation.ts";
+import {
+  ManagerRoutingOrientation,
+  type RoutingIdentity,
+  routingIdentityFromStatus,
+} from "./routing-orientation.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { readSessionMarker, saveSessionMarker } from "./session-marker.ts";
@@ -225,6 +229,7 @@ export class VoiceRuntime {
   >();
   private conversationRevision = 0;
   private readonly conversationReader: ConversationReader;
+  private authenticatedRoutingIdentity: RoutingIdentity | undefined;
   private routingOrientation: ManagerRoutingOrientation | undefined;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
@@ -473,9 +478,10 @@ export class VoiceRuntime {
       this.threadReady = true;
       void this.threadObserver?.start();
       this.emitReady();
-      if (this.options.routingIdentity && this.attachment) {
+      const routingIdentity = this.options.routingIdentity ?? this.authenticatedRoutingIdentity;
+      if (routingIdentity && this.attachment) {
         this.routingOrientation = new ManagerRoutingOrientation({
-          identity: this.options.routingIdentity,
+          identity: routingIdentity,
           clientVersion: this.version,
           workspace: this.config.orchestrator.workspace,
           threadId: this.threadId,
@@ -619,12 +625,13 @@ export class VoiceRuntime {
   private async confirmControlReady(): Promise<void> {
     if (this.options.controlMcp && this.threadId) {
       const connection = this.requireConnection();
-      await requireControlMcpReady(
+      const status = await requireControlMcpReady(
         connection.request.bind(connection),
         this.threadId,
         this.options.controlMcp,
         this.options.controlReadinessTimeoutMs,
       );
+      this.authenticatedRoutingIdentity = routingIdentityFromStatus(status, this.threadId);
       this.assertRunning();
     }
   }

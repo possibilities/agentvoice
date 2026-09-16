@@ -42,7 +42,7 @@ export async function requireControlMcpReady(
   threadId: string,
   registration: ControlMcpRegistration,
   timeoutMs = 10_000,
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   if (!registration.tools.includes(CONTROL_READINESS_TOOL))
     throw new Error("AgentVoice control MCP has no readiness tool");
 
@@ -74,4 +74,5 @@ export async function requireControlMcpReady(
     !Array.isArray(status["recentOperations"])
   )
     throw new Error("AgentVoice control MCP returned an invalid authenticated readiness result");
+  return status;
 }

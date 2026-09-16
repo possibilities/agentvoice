@@ -13,6 +13,32 @@ export interface RoutingIdentity {
   processInstanceId: string;
   buildId: string;
 }
+/** Compatible activation from a retained controller predating the identity field. */
+export function routingIdentityFromStatus(
+  value: unknown,
+  threadId: string,
+): RoutingIdentity | undefined {
+  const status = row(value),
+    runtime = row(status["runtime"]);
+  if (
+    typeof status["instanceId"] !== "string" ||
+    !status["instanceId"] ||
+    status["threadId"] !== threadId ||
+    !Number.isSafeInteger(status["generation"]) ||
+    Number(status["generation"]) < 1 ||
+    !Number.isSafeInteger(runtime["pid"]) ||
+    Number(runtime["pid"]) < 1 ||
+    typeof runtime["buildId"] !== "string" ||
+    !runtime["buildId"]
+  )
+    return undefined;
+  return {
+    controllerId: status["instanceId"],
+    generation: Number(status["generation"]),
+    processInstanceId: `${status["instanceId"]}:${status["generation"]}:${runtime["pid"]}`,
+    buildId: runtime["buildId"],
+  };
+}
 export type RoutingCommand = (command: string, args: string[], input?: unknown) => Promise<unknown>;
 
 /** Bounded subprocess seam. Provider private state and command stderr never enter context. */
