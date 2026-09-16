@@ -12,6 +12,16 @@ Retain the existing turn/item row key, shared lane renderer, measurement, and
 persisted disclosure ownership. Unknown or malformed events keep readable
 fallback activity; `interacted` retains the existing tool disclosure.
 
+Amended 2026-09-16: the web reader retains each exact lifecycle item it has
+observed for the current verified conversation incarnation. Native paginated
+history can omit these activity items, while the controller's live projection
+evicts old items after its bounded window advances. A history refresh or live
+snapshot replacement therefore merges retained lifecycle items back at their
+prior position relative to surviving transcript rows. An explicit thread revert
+or conversation-incarnation replacement clears them. Event metadata and the
+turn/item row key remain unchanged; this is reader memory, not a durable
+transcript or a reconstruction from prose.
+
 The labels are “Subagent started,” “Subagent turn completed,” and “Subagent
 interruption requested.” These are historical observations, not current running
 status. In particular, successful turn completion does not close a reusable
@@ -62,12 +72,13 @@ path, and quiet Details control follow the current Vercel guidance and wiki
 native fleet adaptation without introducing a second visual language. Native
 identity stays available without making every transcript row an ID ledger.
 There is no live announcement, replay animation, inferred navigation link,
-transport change, or additional transcript projection. Voice does not acquire
-Agent lifecycle events.
+transport change, or durable transcript store. Voice does not acquire Agent
+lifecycle events.
 
 Focused checks cover strict kind/identity mapping, all three lifecycle kinds,
 unchanged transport-envelope identity, saved-history/reconnect reconciliation,
-repeated child turns, tool-group separation, unknown/malformed fallbacks, both
-Codex adapters, and legacy collaboration payload preservation. Headless browser
-checks cover real lane rendering, keyboard disclosure, narrow long paths,
-retained DOM/disclosure state, existing compaction, and full-transcript behavior.
+bounded live-projection eviction, repeated child turns, tool-group separation,
+unknown/malformed fallbacks, both Codex adapters, and legacy collaboration
+payload preservation. Headless browser checks cover real lane rendering,
+keyboard disclosure, narrow long paths, unmount/remount disclosure state under
+virtualization, existing compaction, and full-transcript behavior.

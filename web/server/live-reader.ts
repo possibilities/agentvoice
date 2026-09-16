@@ -150,6 +150,8 @@ export class LiveReader {
   private tail?: VoiceRecordingTail;
   private voice = new VoiceMessages();
   private history: AgentItem[] = [];
+  private lifecycle = new Map<string, AgentItem>();
+  private agentOrder: string[] = [];
   private pass?: HistoryPass;
   private historyRevision = 0;
   private loadedRevision = -1;
@@ -320,6 +322,8 @@ export class LiveReader {
     this.tail = undefined;
     this.voice = new VoiceMessages();
     this.history = [];
+    this.lifecycle.clear();
+    this.agentOrder = [];
     this.historyRevision = 0;
     this.loadedRevision = -1;
     this.initialHistorySettled = false;
@@ -640,6 +644,8 @@ export class LiveReader {
       this.historyRevision++;
       if (frame["event"] === "conversation.thread.reverted") {
         this.history = [];
+        this.lifecycle.clear();
+        this.agentOrder = [];
         this.pass = undefined;
       }
     }
@@ -820,10 +826,36 @@ export class LiveReader {
     this.loadHistoryPage(identity, params);
     const messages = new Map(this.history.map((entry) => [itemKey(entry), agentMessage(entry)]));
     for (const entry of live.items) {
+      if (
+        entry.item.type === "subAgentActivity" &&
+        ["started", "completed", "interrupted"].includes(entry.item.kind)
+      )
+        this.lifecycle.set(itemKey(entry), entry);
       // Incomplete live text cannot replace canonical history or establish delta overlap.
       if (entry.complete || !messages.has(itemKey(entry)))
         messages.set(itemKey(entry), agentMessage(entry, entry.completed));
     }
+    const authoritativeOrder = [...messages.keys()];
+    for (const [key, entry] of this.lifecycle)
+      if (!messages.has(key)) messages.set(key, agentMessage(entry));
+    const order = [...authoritativeOrder];
+    const included = new Set(order);
+    for (let index = 0; index < this.agentOrder.length; index++) {
+      const key = this.agentOrder[index]!;
+      if (included.has(key) || !this.lifecycle.has(key)) continue;
+      const next = this.agentOrder.slice(index + 1).find((candidate) => included.has(candidate));
+      if (next) order.splice(order.indexOf(next), 0, key);
+      else {
+        const previous = this.agentOrder
+          .slice(0, index)
+          .reverse()
+          .find((candidate) => included.has(candidate));
+        if (previous) order.splice(order.indexOf(previous) + 1, 0, key);
+        else order.push(key);
+      }
+      included.add(key);
+    }
+    this.agentOrder = order;
     let voiceNotice = this.voice.notice;
     try {
       if (!this.tail) {
@@ -860,7 +892,10 @@ export class LiveReader {
       id: this.viewId,
       persistenceScope: persistenceScope(identity.workspace, identity.threadId),
       voice: this.voice.messages(),
-      agent: [...messages.values()].filter((message) => message !== undefined),
+      agent: order.flatMap((key) => {
+        const message = messages.get(key);
+        return message ? [message] : [];
+      }),
       agentHistoryLoading: !this.initialHistorySettled,
       voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,
       agentControls: this.controlsView(),

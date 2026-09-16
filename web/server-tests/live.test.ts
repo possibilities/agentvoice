@@ -129,6 +129,75 @@ test("subagent lifecycle envelopes and saved history reconcile without duplicati
   }
 });
 
+test("observed lifecycle cards survive later history replacement and live projection eviction", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const before = user("before-lifecycle", "Before lifecycle event");
+  const lifecycle = {
+    type: "subAgentActivity" as const,
+    id: "completion",
+    kind: "completed" as const,
+    agentPath: "/root/check",
+    agentThreadId: "child",
+  };
+  try {
+    h.history([before]);
+    await h.start();
+    await until(reader, (view) => view.agent.length === 1 && !view.agentHistoryLoading);
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 1,
+      data: { threadId: "main", turnId: "lifecycle-turn", item: lifecycle },
+    });
+    const observed = await until(
+      reader,
+      (view) => view.agent[1]?.nativeItemType === "subAgentActivity",
+    );
+    const lifecycleId = observed.agent[1]!.id;
+
+    const later = Array.from({ length: 130 }, (_, index) =>
+      user(`later-${index}`, `Later message ${index}`),
+    );
+    // Native paginated history may omit these ephemeral lifecycle observations.
+    h.history([before, ...later]);
+    for (const [index, entry] of later.entries())
+      h.feed.conversation({
+        event: "conversation.item.completed",
+        revision: index + 2,
+        data: { threadId: "main", ...entry },
+      });
+
+    const replaced = await until(
+      reader,
+      (view) => view.agent.length === later.length + 2 && !view.agentHistoryLoading,
+    );
+    expect(replaced.agent[0]?.content).toBe("Before lifecycle event");
+    expect(replaced.agent[1]?.id).toBe(lifecycleId);
+    expect(replaced.agent[1]?.presentation?.details).toContainEqual({
+      label: "Agent thread",
+      content: "child",
+    });
+    expect(replaced.agent[2]?.content).toBe("Later message 0");
+    expect(
+      replaced.agent.filter((message) => message.nativeItemType === "subAgentActivity"),
+    ).toHaveLength(1);
+
+    h.stopEvents();
+    await until(reader, (view) => view.phase === "unavailable");
+    await h.startEvents();
+    const reconnected = await until(
+      reader,
+      (view) => view.phase === "live" && view.agent.length === later.length + 2,
+    );
+    expect(reconnected.agent.map((message) => message.id)).toEqual(
+      replaced.agent.map((message) => message.id),
+    );
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("initial history pages stay private while live Agent and Voice items keep updating", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);

@@ -95,3 +95,75 @@ test("long agent paths wrap, disclosure survives polls, and compaction stays int
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   await page.screenshot({ path: "test-results/subagent-lifecycle-narrow.png", fullPage: true });
 });
+
+test("a lifecycle card keeps its row identity and disclosure state across virtualization", async ({
+  page,
+}) => {
+  await page.goto("/tests/transcript-ui.html");
+  const lifecycle = event("retained-completion", "completed", "/root/persistent_worker");
+  const messages = [
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `before-${index}`,
+      role: "assistant",
+      content: `Before ${index}. ${"Transcript text. ".repeat(8)}`,
+      status: "complete",
+    })),
+    lifecycle,
+    ...Array.from({ length: 300 }, (_, index) => ({
+      id: `after-${index}`,
+      role: "assistant",
+      content: `After ${index}. ${"Transcript text. ".repeat(8)}`,
+      status: "complete",
+    })),
+  ];
+  const setMessages = (value: unknown[]) =>
+    page.evaluate((next) => {
+      const fixture = (
+        window as unknown as {
+          transcriptFixture: {
+            setMessages(value: unknown[]): void;
+            setWindowed(value: boolean): void;
+          };
+        }
+      ).transcriptFixture;
+      fixture.setWindowed(true);
+      fixture.setMessages(next);
+    }, value);
+  await setMessages(messages);
+  const viewport = page.getByRole("region", { name: "Component transcript", exact: true });
+  const scrollToStart = async () => {
+    await viewport.hover();
+    await page.mouse.wheel(0, -10);
+    await viewport.evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event("scroll"));
+    });
+  };
+  await scrollToStart();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+  const card = page.getByRole("note", { name: "Subagent turn completed", exact: true });
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(card.getByText("child-thread", { exact: true })).toBeVisible();
+
+  await viewport.focus();
+  await viewport.press("End");
+  await expect(card).toHaveCount(0);
+  await setMessages([
+    ...messages.map((message) => ({ ...message })),
+    {
+      id: "latest",
+      role: "assistant",
+      content: "Latest transcript message",
+      status: "complete",
+    },
+  ]);
+  await scrollToStart();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(2);
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button", { name: "Hide details", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(card.getByText("child-thread", { exact: true })).toBeVisible();
+});
