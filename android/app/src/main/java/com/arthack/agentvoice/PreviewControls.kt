@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-/** Debug-only controls. All state and operations belong to the synthetic preview owner. */
+/** Shared controls. Presentation never grants availability; CallUi owns every gesture gate. */
 @Composable
 internal fun PreviewControls(
     ui: CallUi,
@@ -183,7 +183,12 @@ private fun PreviewMuteButton(
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
     val on = !muted || open
-    val color = if (enabled && on) ink else inks.muted
+    val presentation = LocalVoicePresentation.current
+    val color = when {
+        on && (enabled || presentation == VoicePresentation.Connected) -> ink
+        presentation.illuminated -> inks.text
+        else -> inks.muted
+    }
     val status = when { !enabled -> "wait"; muted && open -> "live"; muted -> "off"; else -> "on" }
     Box(modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled,
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
@@ -193,7 +198,8 @@ private fun PreviewMuteButton(
             toggleableState = if (muted) ToggleableState.Off else ToggleableState.On
             stateDescription = when {
                 muted && open -> "Talking; muted on release"
-                !enabled -> if (muted) "Muted; unavailable" else "On; unavailable"
+                !enabled -> (if (muted) "Muted; unavailable" else "On; unavailable") +
+                    if (presentation.illuminated) "; ${presentation.label}" else ""
                 muted -> "Muted"
                 else -> "On"
             }
@@ -216,6 +222,7 @@ internal fun RockerMuteFace(
 ) {
     val theme = LocalPreviewTheme.current
     val inks = theme.palette
+    val illuminated = LocalVoicePresentation.current.illuminated
     val sink = if (pressed) 2.dp else 0.dp
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
@@ -247,6 +254,7 @@ internal fun RockerMuteFace(
                 lineTo(edge, top + 4.dp.toPx()); close()
             }
             drawPath(upperFace, if (muted) inks.surface else color.copy(alpha = .12f))
+            drawPreviewPreparationLight(upperFace, illuminated, inks.text)
             drawPreviewButtonLight(upperFace, light, lightEnabled, capture = !speaker, ink = color, strength = theme.decorationStrength)
             drawPath(Path().apply {
                 moveTo(edge + 3.dp.toPx(), seam + 2.dp.toPx())
@@ -325,6 +333,7 @@ internal fun PreviewHoldControl(
     onReleaseCompleted: () -> Unit = onRelease,
 ) {
     val inks = LocalPreviewTheme.current.palette
+    val presentation = LocalVoicePresentation.current
     val latestUi by rememberUpdatedState(ui)
     val latestHold by rememberUpdatedState(onHold)
     val latestRelease by rememberUpdatedState(onRelease)
@@ -351,6 +360,7 @@ internal fun PreviewHoldControl(
     val ink = when {
         ui.canHold || ui.holding -> inks.you
         acknowledgedTouch -> androidx.compose.ui.graphics.lerp(inks.muted, inks.you, .18f)
+        presentation.illuminated -> inks.text
         else -> inks.muted
     }
     val surface = when {
@@ -402,6 +412,7 @@ internal fun PreviewHoldControl(
             ui.holding -> "Pressed"
             ui.canHold -> "Ready"
             ui.connected -> "Microphone muted"
+            presentation.illuminated -> "Unavailable. ${presentation.label}"
             else -> "Unavailable. ${holdDisconnectedReason()}"
         }
         if (!ui.canHold && !ui.holding) disabled()
@@ -435,6 +446,7 @@ internal fun RockerHoldFace(
 ) {
     val theme = LocalPreviewTheme.current
     val inks = theme.palette
+    val presentation = LocalVoicePresentation.current
     val largeType = LocalDensity.current.fontScale > 1.3f
     val live = ui.holding && ui.micOpen
     val microphoneLive = ui.connected && ui.micOpen
@@ -482,6 +494,7 @@ internal fun RockerHoldFace(
                 lineTo(lowerSide, bottom + bevel - corner); close()
             }, inks.line)
             drawPath(face, surface)
+            drawPreviewPreparationLight(face, presentation.illuminated, inks.text)
             drawPreviewButtonLight(face, light, ui.connected && !ui.controlsPending && live,
                 capture = true, ink = inks.you, strength = theme.decorationStrength)
             drawPath(face, inks.line, style = Stroke(1.dp.toPx()))
@@ -508,12 +521,14 @@ internal fun RockerHoldFace(
                 ControlText(when {
                     microphoneLive -> "Live\nnow"
                     ui.connected -> "Push"
+                    presentation.illuminated -> "Wait"
                     else -> "Off"
                 }, ink, mainSize, bold = true, maxLines = 2, align = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release\nto mute" else "mic open"
                     ui.connected -> "to talk"
+                    presentation.illuminated -> presentation.label
                     else -> holdDisconnectedReason(concise = true)
                 }, ink, detailSize, maxLines = 4, align = TextAlign.Center)
             }
@@ -525,6 +540,7 @@ internal fun RockerHoldFace(
                 ControlText(when {
                     microphoneLive -> "Live now"
                     ui.connected -> "Push"
+                    presentation.illuminated -> "Wait"
                     else -> if (concise) "Off" else "Unavailable"
                 }, ink, if (shortFace) shortTitle else when {
                     microphoneLive -> scaledType(24, heightScale, 19, liveTypeMaximum)
@@ -535,6 +551,7 @@ internal fun RockerHoldFace(
                 ControlText(when {
                     microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.connected -> "to talk"
+                    presentation.illuminated -> presentation.label
                     else -> holdDisconnectedReason(concise = concise)
                 }, ink, if (shortFace) shortDetail else scaledType(11, heightScale, 10, 14), maxLines = if (shortFace) 1 else 2)
             }

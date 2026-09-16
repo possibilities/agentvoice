@@ -58,8 +58,10 @@ internal fun PreviewStudioScreen(
     onCancelConnection: (() -> Unit)? = null,
     onNavigationHint: (() -> Unit)? = null,
     contentWindowInsets: WindowInsets = WindowInsets.safeDrawing,
+    presentation: VoicePresentation = previewVoicePresentation(connection),
 ) {
-    CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons) {
+    CompositionLocalProvider(LocalPreviewTheme provides PreviewTheme.resolve(theme), LocalPreviewIcons provides icons,
+        LocalVoicePresentation provides presentation) {
         PreviewStudioScene(ui, design, placement, onMute, onHold, onRelease, onExit,
             connection, halo, spirit, activity, personaSide, mutedPresence, mutedTuning, presenceScope, horizontalOffsetDp, onReleaseCompleted, showPushToTalk, handleBack, connectionStyle, connectionDetail, onConnect, onCancelConnection, onNavigationHint, contentWindowInsets)
     }
@@ -75,6 +77,7 @@ private fun PreviewStudioScene(
     onNavigationHint: (() -> Unit)?, contentWindowInsets: WindowInsets,
 ) {
     val theme = LocalPreviewTheme.current
+    val presentation = LocalVoicePresentation.current
     androidx.activity.compose.BackHandler(enabled = handleBack, onBack = onExit)
     val currentRelease by rememberUpdatedState(onRelease)
     DisposableEffect(Unit) { onDispose { currentRelease() } }
@@ -178,7 +181,9 @@ private fun PreviewStudioScene(
                             if (halo.variant == "contained") PreviewSpiritHalo(ui, stage, presentedPlacement, halo, scene.colors)
                             else PersonaHalo(ui, stage, presentedPlacement, PersonaColors(
                                 listening = theme.haloArgb(VoiceInk.you.toArgb()), speaking = theme.haloArgb(VoiceInk.agent.toArgb()),
-                                idle = theme.haloArgb(VoiceInk.text.toArgb()), asleep = theme.haloArgb(VoiceInk.muted.toArgb())), displayedPlacement)
+                                idle = theme.haloArgb(VoiceInk.text.toArgb()),
+                                asleep = theme.haloArgb((if (presentation.illuminated) VoiceInk.text else VoiceInk.muted).toArgb())),
+                                displayedPlacement, motionEnabled = !presentation.illuminated)
                         }
                         // Only disconnected/connecting Idle uses this aperture. Connected speech and
                         // listening remove the notice immediately, without a stale outgoing status.
@@ -187,7 +192,7 @@ private fun PreviewStudioScene(
                         PreviewConnectionNotice(connection,
                             Modifier.align(Alignment.Center).offset(y = geometry.offsetY.dp),
                             style = connectionStyle, innerRadius = (geometry.diameter * 1.9f * noticeScale * idleInset).dp,
-                            detail = connectionDetail, onConnect = onConnect, onCancel = onCancelConnection)
+                            detail = connectionDetail, onConnect = onConnect, onCancel = onCancelConnection, presentation = presentation)
                         val aperture = rememberMutedAperture(geometry.diameter, halo, placement, motionAllowed && foreground)
                         if (mutedPresence == "tide") {
                             PreviewMutedPresence(muted, motionAllowed, scene.phaseTurns, geometry.diameter.dp,
@@ -247,7 +252,9 @@ private fun PreviewSpiritHalo(ui: CallUi, modifier: Modifier, placement: Persona
     val themed = if (theme == PreviewTheme.Bright) base else CompactHaloColors(
         theme.haloArgb(base.speaking), theme.haloArgb(base.listening), theme.haloArgb(base.idle),
         theme.haloArgb(base.asleep))
-    CompactPersonaHalo(ui, modifier, halo.placement(placement), halo.tuning(), themed)
+    val illuminated = LocalVoicePresentation.current.illuminated
+    CompactPersonaHalo(ui, modifier, halo.placement(placement), halo.tuning(),
+        if (illuminated) themed.copy(asleep = themed.idle) else themed, motionEnabled = !illuminated)
 }
 
 internal fun previewMutedEligible(ui: CallUi, foreground: Boolean): Boolean =

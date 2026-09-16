@@ -44,6 +44,7 @@ internal fun CompactPersonaHalo(
     placement: PersonaPlacement,
     tuning: CompactHaloTuning,
     colors: CompactHaloColors = CompactHaloColors(),
+    motionEnabled: Boolean = true,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -81,7 +82,7 @@ internal fun CompactPersonaHalo(
         }
         return
     }
-    val animate = resumed && !reducedMotion
+    val animate = resumed && !reducedMotion && motionEnabled
     // One shared size; state changes are entirely inside the modified animation.
     val targetScale = 1.9f * placement.speakingScale
     val scale = remember { Animatable(targetScale) }

@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.PI
 import kotlin.math.cos
@@ -50,3 +51,10 @@ internal fun DrawScope.drawPreviewButtonLight(
 }
 
 private fun Float.lightUnit(): Float = if (isFinite()) coerceIn(0f, 1f) else 0f
+
+/** Stationary neutral preparation light is independent of enabled state and measured audio. */
+internal fun DrawScope.drawPreviewPreparationLight(face: Path, illuminated: Boolean, ink: Color) {
+    if (!illuminated) return
+    drawPath(face, ink.copy(alpha = .065f))
+    drawPath(face, ink.copy(alpha = .20f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+}

@@ -37,13 +37,7 @@ internal fun VoiceTheme(content: @Composable () -> Unit) {
 internal fun requiresShippingIconCredit(family: String, paidNounIcons: Boolean): Boolean =
     family == "noun-boatman" || (family == "noun-icons" && !paidNounIcons)
 
-internal fun voiceConnectionNoticeState(ui: CallUi): String = when {
-    ui.connected -> "connected"
-    ui.phase in setOf("Voice unavailable", "Voice stopped") -> "failed"
-    ui.running -> "connecting"
-    ui.message != null && !ui.message.startsWith("Call ended") -> "failed"
-    else -> "disconnected"
-}
+internal fun voiceConnectionNoticeState(ui: CallUi): String = voicePresentation(ui).connection
 
 /** The adopted scene consumes real controller state; only the debug studio synthesizes it. */
 @Composable
@@ -54,6 +48,7 @@ internal fun VoiceScreen(
     connect: (() -> Unit)? = null,
     onBack: () -> Unit = {},
     onNavigationHint: (() -> Unit)? = null,
+    presentation: VoicePresentation = voicePresentation(ui),
 ) {
     val layout = shippingLayoutForOrientation(currentPreviewOrientation())
     val latestUi by rememberUpdatedState(ui)
@@ -71,7 +66,7 @@ internal fun VoiceScreen(
     }
     var credits by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().semantics {
-        stateDescription = ui.phase
+        stateDescription = presentation.label
         customActions = if (ui.running) listOf(CustomAccessibilityAction("End call") { stop(); true }) else emptyList()
     }.testTag("voice-screen")) {
         PreviewStudioScreen(ui, layout.design, layout.placement,
@@ -84,19 +79,20 @@ internal fun VoiceScreen(
             }, onHold = { if (latestUi.canHold && !latestUi.holding) { hold(); feedback.down() } },
             onRelease = { feedback.cancel(); release() },
             onReleaseCompleted = { release(); feedback.release() }, onExit = { release(); onBack() },
-            connection = voiceConnectionNoticeState(ui),
+            connection = presentation.connection, presentation = presentation,
             halo = layout.halo, spirit = layout.spirit, activity = "steady", personaSide = layout.personaSide,
             theme = ShippingDesign.theme, mutedPresence = ShippingDesign.mutedPresence,
             mutedTuning = ShippingDesign.mutedTuning, presenceScope = ShippingDesign.presenceScope,
             horizontalOffsetDp = layout.horizontalOffsetDp, showPushToTalk = ShippingDesign.showPushToTalk,
             icons = ShippingDesign.icons, handleBack = true,
             connectionStyle = ShippingDesign.connectionStyle,
-            connectionDetail = ui.message ?: when (ui.phase) {
+            connectionDetail = if (presentation == VoicePresentation.Preparing || presentation == VoicePresentation.AwaitingAction) null
+                else ui.message ?: when (ui.phase) {
                 "Voice stopped" -> "Voice stopped. End this attempt before reconnecting."
                 "Voice unavailable" -> "Voice could not start. Check the server, then end this attempt and try again."
                 else -> null
             },
-            onConnect = if (!ui.running) connect else null,
+            onConnect = if (!ui.running && !presentation.illuminated) connect else null,
             onCancelConnection = if (ui.running && !ui.connected) stop else null,
             onNavigationHint = onNavigationHint,
             // Overview can reveal status/navigation bars before taking the task snapshot.

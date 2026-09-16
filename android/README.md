@@ -99,6 +99,17 @@ screen writes empty, single, multiple, current, error, switching and pending PNG
 to `app/build/reports/connection-renders/`. These are synthetic UI renders, not
 Keystore or real-call validation. Instrumentation retains those device boundaries.
 
+The illuminated connection preparation checks additionally write native Compose
+control/status PNGs to `app/build/reports/voice-preparation-renders/`. They verify
+disabled gestures and action availability without loading the native Rive asset.
+During a separately authorized phone handoff, verify a selected-server cold
+launch, a first explicit Connect, permission/takeover waits, failure and Retry,
+a later disconnect and Activity recreation. Compare Original and Contained in
+Studio Connecting/Disconnected, all four physical layouts, large text and disabled
+system animations. Capture the first native frame and confirm no grey flash,
+unchanged hit targets and immediate live-state handoff. Do not reset or save over
+the operator's Studio draft to conduct that check.
+
 Root `bun run test`, `bun run typecheck`, and `bun run lint` include the shared
 contract fixtures. Both Kotlin and the server Zod schemas validate
 `contract/server-frames.json`.

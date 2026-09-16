@@ -29,6 +29,8 @@ internal data class CallUi(
     val inputLevel: Float = 0f,
     val outputLevel: Float = 0f,
     val codingActivity: CodingActivity = CodingActivity.Unknown,
+    // Monotonic for this attempt, retained with the controller across Activity bindings.
+    val hasReachedLive: Boolean = false,
 )
 
 internal interface OwnedCallController {
@@ -262,7 +264,7 @@ internal class CallController(
         if (!ui.running) return
         val live = admitted && hasState && gate.state.available && gate.connected && gate.state.phase == "live"
         media?.gates(admitted && gate.micOpen, admitted && gate.speakerOpen)
-        ui = ui.copy(connected = live,
+        ui = ui.copy(connected = live, hasReachedLive = ui.hasReachedLive || live,
             phase = when {
                 ui.takeover != null -> "Confirmation needed"
                 live -> "Connected"

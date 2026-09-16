@@ -37,25 +37,25 @@ internal fun PreviewConnectionNotice(
     detail: String? = null,
     onConnect: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
+    presentation: VoicePresentation = previewVoicePresentation(connection),
 ) {
     require(connection in setOf("connected", "connecting", "disconnected", "failed"))
     require(style in setOf("relay", "beacon", "datum"))
     if (connection == "connected") return
     val inks = LocalPreviewTheme.current.palette
-    val label = when (connection) {
-        "connecting" -> "Connecting"
-        "failed" -> "Couldn’t connect"
-        else -> "Disconnected"
-    }
+    val label = presentation.label
     val action = onConnect ?: onCancel
     val actionLabel = when {
         onConnect != null -> if (connection == "failed") "Retry" else "Connect"
-        onCancel != null -> if (connection == "failed") "End attempt" else "Cancel"
+        onCancel != null -> if (connection in setOf("failed", "disconnected")) "End attempt" else "Cancel"
         else -> null
     }
-    val explanation = detail ?: when (connection) {
-        "failed" -> "Check the server and Tailscale connection, then try again."
-        "connecting" -> "Opening the voice connection."
+    val explanation = detail ?: when {
+        presentation == VoicePresentation.Preparing -> "Preparing this phone’s voice connection."
+        presentation == VoicePresentation.AwaitingAction -> "Complete the requested action to continue."
+        connection == "disconnected" && onCancel != null -> "Voice connection was lost. End this attempt before reconnecting."
+        connection == "failed" -> "Check the server and Tailscale connection, then try again."
+        connection == "connecting" -> "Opening the voice connection."
         else -> "Connect when you’re ready."
     }
     var details by remember(connection) { mutableStateOf(false) }

@@ -85,6 +85,26 @@ class ConnectionScreenRenderTest {
         capture("storage-error-active-call")
     }
 
+    @Test fun savedAccessRecoveryRemainsSeparateFromARetainedDisconnectedAttempt() {
+        val actions = mutableListOf<String>()
+        compose.setContent {
+            VoiceTheme {
+                ConnectionScreen(CallUi(running = true, hasReachedLive = true), false, {},
+                    { actions += "return" }, { actions += "disconnect" }, {},
+                    profiles = emptyList(), attemptedProfileId = "retained",
+                    accessMessage = "Saved servers couldn’t be opened. You can still end the current attempt.",
+                    onRetryAccess = { actions += "reload" })
+            }
+        }
+        compose.onNodeWithText("Voice disconnected").assertIsDisplayed()
+        compose.onNodeWithText("Connecting…").assertDoesNotExist()
+        compose.onNodeWithText("Try opening saved servers again").performClick()
+        compose.onNodeWithTag("connection-return").assertDoesNotExist()
+        compose.onNodeWithTag("connection-end-attempt").assertIsEnabled().performClick()
+        compose.runOnIdle { check(actions == listOf("reload", "disconnect")) }
+        capture("storage-error-retained-disconnected")
+    }
+
     @Test fun staleProfilesCannotBeUsedWhileAccessIsUnavailableButCurrentCallCan() {
         compose.setContent {
             VoiceTheme {

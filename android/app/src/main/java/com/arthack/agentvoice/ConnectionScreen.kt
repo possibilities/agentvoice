@@ -88,7 +88,7 @@ internal fun ConnectionScreen(
                         current && ui.connected -> "Call in progress"
                         current && ui.running -> when (ui.phase) {
                             "Voice unavailable", "Voice stopped" -> ui.phase
-                            else -> "Connecting…"
+                            else -> if (ui.hasReachedLive) "Voice disconnected" else "Connecting…"
                         }
                         current && ui.message != null && !ui.message.startsWith("Call ended") -> "Couldn’t connect"
                         else -> "Ready to connect"
@@ -138,7 +138,7 @@ internal fun ConnectionScreen(
                                 }
                             }
                             current && ui.running -> {
-                                val stopped = ui.phase in setOf("Voice unavailable", "Voice stopped")
+                                val stopped = ui.hasReachedLive || ui.phase in setOf("Voice unavailable", "Voice stopped")
                                 SecondaryConnectionButton(if (stopped) "End attempt" else "Cancel",
                                     if (stopped) "connection-end-attempt" else "connection-cancel", onDisconnect, enabled = !busy)
                             }

@@ -15,6 +15,14 @@ one automatic call attempt to that server. Saved but unselected profiles open
 Connections; migration preserves the old saved server as selected. Failure requires an explicit retry; returning to the foreground or
 recreating the Activity does not retry a failed attempt. A running call is reused.
 
+Preparation and the first connection attempt use an illuminated, stationary
+Persona and neutral lit controls. The controls remain unavailable until their
+real connection and acknowledgement gates permit interaction. Preparing saved
+access is distinct from an active connection attempt, and permission/takeover
+surfaces retain their actual actions. A failure or later loss of a previously
+live connection uses the grey disconnected treatment. Recreating the Activity
+does not turn that loss into a fresh initial attempt. See [ADR 0086](adr/0086-illuminated-android-connection-preparation.md).
+
 Android Back from the Persona releases any held push-to-talk gesture and returns
 to the connection screen. The call continues. Return to call opens the same
 Persona without reconnecting. Disconnect and the ongoing notification's Hang up

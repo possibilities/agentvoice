@@ -47,6 +47,8 @@ class MainActivity : ComponentActivity() {
     private var profileErrorId by mutableStateOf<String?>(null)
     private var forgetting by mutableStateOf<ServerProfile?>(null)
     private var selection: Job? = null
+    private val selectionOperation = ActivityOperation()
+    private val loadingOperation = ActivityOperation()
     private var pairingPending by mutableStateOf(false)
     private var showPendingPairing by mutableStateOf(false)
     private var loaded by mutableStateOf(false)
@@ -61,7 +63,7 @@ class MainActivity : ComponentActivity() {
     private var epoch = 0L
     private var enrollment: Job? = null
     private var loading: Job? = null
-    private var pendingPermission = false
+    private var pendingPermission by mutableStateOf(false)
     private var recoverPairingOnLoad = false
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
@@ -104,6 +106,11 @@ class MainActivity : ComponentActivity() {
                 var credits by remember { mutableStateOf(false) }
                 val ui = controller?.ui ?: CallUi()
                 val inPersona = navigation.route == CallRoute.Persona
+                val presentation = voicePresentation(ui, voicePreparation(
+                    loaded = loaded, ownerReady = owner != null, ownerFailed = ownerFailed,
+                    // Reloading profile metadata cannot redefine a retained call's transport state.
+                    loadFailed = loadFailed && !ui.running, autoConnectPending = navigation.autoConnectPending,
+                    selecting = busyProfileId != null, awaitingAction = microphoneNeeded || pendingPermission))
                 CallWindowPresentation(window, inPersona, ui.running)
                 BackHandler(navigation.route != CallRoute.Connection || microphoneNeeded || showPendingPairing) { navigateBack() }
                 LaunchedEffect(ui.running, ui.message) {
@@ -123,7 +130,7 @@ class MainActivity : ComponentActivity() {
                 if (inPersona) VoiceScreen(ui, stop = ::disconnect,
                     mute = { controller?.toggleMute(it) }, hold = { controller?.hold() }, release = { controller?.release() },
                     connect = if (loaded && hasGrant && !loadFailed && !microphoneNeeded) ::requestCall else null,
-                    onBack = ::navigateBack, onNavigationHint = ::showNavigationHint)
+                    onBack = ::navigateBack, onNavigationHint = ::showNavigationHint, presentation = presentation)
                 else ConnectionScreen(ui, hasGrant, ::requestCall,
                     onReturnToCall = { navigation = navigation.enterCall() }, onDisconnect = ::disconnect,
                     onScan = {
@@ -133,8 +140,10 @@ class MainActivity : ComponentActivity() {
                     profiles = profiles.profiles, selectedProfileId = profiles.selectedId,
                     attemptedProfileId = owner?.attemptedProfileId,
                     busyProfileId = busyProfileId, profileErrorId = profileErrorId,
-                    accessMessage = if (ui.running && loadFailed) "Saved servers couldn’t be opened. Your call is still active."
-                        else if (ui.running && !loaded) "Opening saved servers…" else null,
+                    accessMessage = if (ui.running && loadFailed) {
+                        if (ui.connected) "Saved servers couldn’t be opened. Your call is still active."
+                        else "Saved servers couldn’t be opened. You can still end the current attempt."
+                    } else if (ui.running && !loaded) "Opening saved servers…" else null,
                     onRetryAccess = if (loadFailed) ::loadGrant else null,
                     onConnectProfile = ::connectProfile, onForgetProfile = { id ->
                         forgetting = profiles.profiles.firstOrNull { it.id == id }
@@ -180,7 +189,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     ownerFailed -> ConnectionOverlay(ConnectionScene.Failed, close, action = ::bindCallOwner,
                         title = "Call service unavailable", detail = "Your pairing is kept. Reopen the call service to try again.")
-                    (!loaded || owner == null) && !ui.running -> ConnectionOverlay(ConnectionScene.Found, close,
+                    (!loaded || owner == null) && !ui.running && !inPersona -> ConnectionOverlay(ConnectionScene.Found, close,
                         title = "Opening device access…", detail = "Checking this phone’s saved connection.")
                     loadFailed && !ui.running -> ConnectionOverlay(ConnectionScene.Failed, close, action = ::loadGrant,
                         title = "Couldn’t open device access", detail = "Your saved access has been kept. Try again; if this continues, repair the app’s device access manually.")
@@ -233,6 +242,7 @@ class MainActivity : ComponentActivity() {
         microphoneNeeded = false
         showPendingPairing = false
         pendingPermission = false
+        selectionOperation.invalidate()
         selection?.cancel()
         busyProfileId = null
         if (enrollment?.isActive == true) {
@@ -243,6 +253,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun disconnect() {
+        selectionOperation.invalidate()
         selection?.cancel()
         busyProfileId = null
         pendingPermission = false
@@ -272,6 +283,8 @@ class MainActivity : ComponentActivity() {
 
     private fun loadGrantAfter(pendingWrite: Job?) {
         val visit = epoch
+        val token = loadingOperation.begin()
+        fun current() = visit == epoch && loadingOperation.owns(token)
         loading?.cancel()
         loaded = false
         loadFailed = false
@@ -279,7 +292,7 @@ class MainActivity : ComponentActivity() {
             try {
                 pendingWrite?.join()
                 val saved = withContext(Dispatchers.IO) { credentials.listProfiles() }
-                if (visit != epoch) return@launch
+                if (!current()) return@launch
                 applyProfiles(saved)
                 navigation = navigation.loaded(hasGrant, pairingPending, recoverPairingOnLoad, saved.profiles.isNotEmpty())
                 recoverPairingOnLoad = false
@@ -287,9 +300,9 @@ class MainActivity : ComponentActivity() {
                 setupTitle = null
                 setupDetail = null
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { if (visit == epoch) loadFailed = true }
+            catch (_: Exception) { if (current()) loadFailed = true }
             finally {
-                if (visit == epoch) { loaded = true; maybeConnect() }
+                if (current()) { loaded = true; maybeConnect() }
             }
         }
     }
@@ -416,6 +429,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         val visit = epoch
+        val token = selectionOperation.begin()
+        fun current() = visit == epoch && selectionOperation.owns(token)
         navigation = navigation.consumeAutoConnect()
         busyProfileId = id
         selection = lifecycleScope.launch {
@@ -423,7 +438,7 @@ class MainActivity : ComponentActivity() {
                 val (credential, saved) = withContext(Dispatchers.IO) {
                     credentials.credential(id) to credentials.select(id)
                 }
-                if (visit != epoch || !resumed) return@launch
+                if (!current() || !resumed) return@launch
                 applyProfiles(saved)
                 profileErrorId = null
                 // Disconnect is synchronous: the old transport and media close before permission/start.
@@ -431,12 +446,12 @@ class MainActivity : ComponentActivity() {
                 startPreparedCall(id, credential)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
-                if (visit == epoch) {
+                if (current()) {
                     profileErrorId = id
                     navigation = navigation.disconnected()
                 }
             } finally {
-                if (visit == epoch) busyProfileId = null
+                if (current()) busyProfileId = null
             }
         }
     }
@@ -445,20 +460,22 @@ class MainActivity : ComponentActivity() {
         if (!resumed || busyProfileId != null || enrollment?.isActive == true) return
         if (controller?.ui?.running == true && owner?.attemptedProfileId == id) disconnect()
         val visit = epoch
+        val token = selectionOperation.begin()
+        fun current() = visit == epoch && selectionOperation.owns(token)
         busyProfileId = id
         navigation = navigation.disconnected()
         pendingPermission = false
         selection = lifecycleScope.launch {
             try {
                 val saved = withContext(Dispatchers.IO) { credentials.forget(id) }
-                if (visit == epoch) {
+                if (current()) {
                     applyProfiles(saved)
                     profileErrorId = null
                     showPendingPairing = false
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { if (visit == epoch) loadFailed = true }
-            finally { if (visit == epoch) busyProfileId = null }
+            catch (_: Exception) { if (current()) loadFailed = true }
+            finally { if (current()) busyProfileId = null }
         }
     }
 
@@ -504,6 +521,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         resumed = false
         enrollment?.cancel()
+        selectionOperation.invalidate()
         selection?.cancel()
         busyProfileId = null
         controller?.release()
@@ -514,6 +532,7 @@ class MainActivity : ComponentActivity() {
         epoch++
         loading?.cancel()
         enrollment?.cancel()
+        selectionOperation.invalidate()
         selection?.cancel()
         busyProfileId = null
         if (binding) { unbindService(serviceConnection); binding = false }
