@@ -138,10 +138,59 @@ test("failed initial history releases readiness with a notice and no immediate r
     h.delayHistory(delayed.promise);
     await h.start();
     await reader.read();
+    await untilTrue(
+      () => h.methods.filter((method) => method === "conversation.items.list").length === 1,
+    );
     delayed.reject(new Error("History unavailable"));
     const ready = await until(reader, (view) => !view.agentHistoryLoading);
     expect(ready.agentNotice).toContain("unavailable");
     expect(h.methods.filter((method) => method === "conversation.items.list")).toHaveLength(1);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("a new reader retries earlier history during an active root turn without another browser poll", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir, 50, 50);
+  try {
+    h.history(Array.from({ length: 5 }, (_, index) => user(`active-${index}`, `Earlier ${index}`)));
+    h.feed.update({
+      complete: true,
+      threads: [
+        {
+          id: "main",
+          parentThreadId: null,
+          name: null,
+          status: "active",
+          activeFlags: [],
+          turn: { id: "working", status: "inProgress" },
+        },
+      ],
+    });
+    h.failHistory("busy");
+    await h.start();
+
+    const initial = await reader.read();
+    expect(initial.phase).toBe("live");
+    expect(initial.agentControls?.available).toBe(true);
+    expect(initial.agentHistoryLoading).toBe(true);
+
+    // The retry timer and page chain run independently of the HTTP polling loop.
+    await untilTrue(
+      () => h.methods.filter((method) => method === "conversation.items.list").length === 4,
+    );
+    const recovered = await reader.read();
+    expect(recovered.agent.map((message) => message.content)).toEqual([
+      "Earlier 0",
+      "Earlier 1",
+      "Earlier 2",
+      "Earlier 3",
+      "Earlier 4",
+    ]);
+    expect(recovered.agentHistoryLoading).toBe(false);
+    expect(recovered.agentNotice).toBeUndefined();
   } finally {
     reader.close();
     await h.close();

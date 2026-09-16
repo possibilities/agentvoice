@@ -36,6 +36,7 @@ export async function fixture(
   const methods: string[] = [];
   let history: AgentItem[] = [];
   let delayHistory: Promise<void> | undefined;
+  const historyFailures: ObservationError[] = [];
   let delayLive: Promise<void> | undefined;
   let liveFailure: ObservationError | undefined;
   let failDetach = false;
@@ -81,6 +82,8 @@ export async function fixture(
         return feed.live(threadId);
       }
       if (method !== "conversation.items.list") throw new Error(`Unexpected method ${method}`);
+      const failure = historyFailures.shift();
+      if (failure) throw failure;
       const selected = history;
       const selectedThread = threadId;
       const selectedGeneration = generation;
@@ -166,6 +169,9 @@ export async function fixture(
     },
     failLive: (code?: ConstructorParameters<typeof ObservationError>[0]) => {
       liveFailure = code ? new ObservationError(code) : undefined;
+    },
+    failHistory: (code: ConstructorParameters<typeof ObservationError>[0], count = 1) => {
+      for (let index = 0; index < count; index++) historyFailures.push(new ObservationError(code));
     },
     failNextDetach: () => {
       failDetach = true;

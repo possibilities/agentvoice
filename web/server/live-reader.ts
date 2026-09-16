@@ -155,7 +155,11 @@ export class LiveReader {
   private loadedRevision = -1;
   private initialHistorySettled = false;
   private historyTimer?: ReturnType<typeof setTimeout>;
+  private historyRetryTimer?: ReturnType<typeof setTimeout>;
   private historyRetryAt = 0;
+  // A failed or timed-out pass must remain eligible even if its snapshot is empty.
+  // Otherwise its revision looks loaded and a newly opened reader stays truncated forever.
+  private historyRefreshNeeded = false;
   private historyPending = false;
   private historyAttempt?: HistoryAttempt;
   private historyNotice?: string;
@@ -294,7 +298,10 @@ export class LiveReader {
     this.loadedRevision = -1;
     clearTimeout(this.historyTimer);
     this.historyTimer = undefined;
+    clearTimeout(this.historyRetryTimer);
+    this.historyRetryTimer = undefined;
     this.historyRetryAt = 0;
+    this.historyRefreshNeeded = false;
     this.historyPending = false;
     this.historyAttempt = undefined;
     this.readAt = 0;
@@ -746,7 +753,6 @@ export class LiveReader {
       rootThreadId: identity.threadId,
       threadId: identity.threadId,
     };
-    this.loadHistoryPage(identity, params);
     this.stage = "conversation.live";
     const live = liveSchema.parse(await client.request("conversation.live.get", params));
     const interruptedLive = this.interruptedRead(identity, client);
@@ -809,6 +815,9 @@ export class LiveReader {
         /* Transcript reads remain available while the active turn cannot be confirmed. */
       }
     }
+    // Establish the current live incarnation before consuming a background history slot.
+    // This keeps a newly opened reader useful while the root is actively working.
+    this.loadHistoryPage(identity, params);
     const messages = new Map(this.history.map((entry) => [itemKey(entry), agentMessage(entry)]));
     for (const entry of live.items) {
       // Incomplete live text cannot replace canonical history or establish delta overlap.
@@ -868,7 +877,9 @@ export class LiveReader {
     if (
       this.historyPending ||
       Date.now() < this.historyRetryAt ||
-      (this.loadedRevision === this.historyRevision && this.historyRetryAt === 0)
+      (!this.historyRefreshNeeded &&
+        this.loadedRevision === this.historyRevision &&
+        this.historyRetryAt === 0)
     )
       return;
     if (!this.pass) {
@@ -877,8 +888,13 @@ export class LiveReader {
         const initial = this.pass;
         this.historyTimer = setTimeout(() => {
           if (!this.current(identity) || this.pass !== initial) return;
-          this.publishHistory(initial, "Showing recent messages while earlier history loads.");
-          this.historyRetryAt = Date.now() + this.historyRetryMs;
+          // Keep the pass private but let the reader leave its initial loading state.
+          // The outstanding page or its retry still owns completion.
+          this.publishHistory(
+            initial,
+            "Showing recent messages while earlier history loads.",
+            false,
+          );
         }, this.initialHistoryBudgetMs);
       }
     }
@@ -932,13 +948,17 @@ export class LiveReader {
           this.retryAt = 0;
           return;
         }
-        const notice = "Earlier Agent history is unavailable. Retrying in the background.";
-        if (!this.initialHistorySettled) this.publishHistory(pass, notice);
+        this.historyRefreshNeeded = true;
+        const notice = this.historyCapacityPressure(error)
+          ? "Earlier Agent history is waiting for capacity while current Agent work runs."
+          : "Earlier Agent history is unavailable. Retrying in the background.";
+        if (!this.initialHistorySettled) this.publishHistory(pass, notice, false);
         else {
           this.pass = undefined;
           this.historyNotice = notice;
         }
         this.historyRetryAt = Date.now() + this.historyRetryMs;
+        this.scheduleHistoryRetry(identity, params);
       })
       .finally(() => {
         if (
@@ -1020,15 +1040,37 @@ export class LiveReader {
     return pending;
   }
 
-  private publishHistory(pass: HistoryPass, notice?: string) {
+  private publishHistory(pass: HistoryPass, notice?: string, complete = true) {
     this.history = [...pass.rows].reverse();
-    this.loadedRevision = pass.revision;
     this.initialHistorySettled = true;
     this.historyNotice = notice;
-    this.historyRetryAt = 0;
-    this.pass = undefined;
     clearTimeout(this.historyTimer);
     this.historyTimer = undefined;
+    if (!complete) {
+      this.readAt = 0;
+      return;
+    }
+    this.loadedRevision = pass.revision;
+    this.historyRefreshNeeded = false;
+    this.historyRetryAt = 0;
+    clearTimeout(this.historyRetryTimer);
+    this.historyRetryTimer = undefined;
+    this.pass = undefined;
     this.readAt = 0;
+  }
+
+  private historyCapacityPressure(error: unknown) {
+    return error instanceof SocketFailure && error.code === "busy";
+  }
+
+  private scheduleHistoryRetry(identity: Identity, params: Record<string, unknown>) {
+    clearTimeout(this.historyRetryTimer);
+    const delay = Math.max(0, this.historyRetryAt - Date.now());
+    this.historyRetryTimer = setTimeout(() => {
+      this.historyRetryTimer = undefined;
+      if (!this.current(identity)) return;
+      this.historyRetryAt = 0;
+      this.loadHistoryPage(identity, params);
+    }, delay);
   }
 }
