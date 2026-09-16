@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { gzipSync } from "node:zlib";
 import {
   CLIPBOARD_IMAGE_MIME_TYPES,
   MAX_CLIPBOARD_IMAGE_BYTES,
@@ -27,6 +29,26 @@ import {
 import { isLocalRequest } from "./local-origin.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const liveCompressionThreshold = 1024;
+
+function acceptsGzip(value: string | string[] | undefined) {
+  if (!value) return false;
+  return (Array.isArray(value) ? value.join(",") : value).split(",").some((entry) => {
+    const [name, ...parameters] = entry.trim().split(";");
+    if (name?.toLowerCase() !== "gzip") return false;
+    const quality = parameters
+      .map((parameter) => parameter.trim().match(/^q=(\d(?:\.\d+)?)$/i)?.[1])
+      .find((candidate) => candidate !== undefined);
+    return quality === undefined || Number(quality) > 0;
+  });
+}
+
+function matchesEtag(value: string | string[] | undefined, etag: string) {
+  if (!value) return false;
+  return (Array.isArray(value) ? value.join(",") : value)
+    .split(",")
+    .some((candidate) => candidate.trim() === "*" || candidate.trim() === etag);
+}
 
 function apiError(response: ServerResponse, status: number, error: string) {
   response.setHeader("Cache-Control", "no-store");
@@ -56,6 +78,7 @@ export function liveApi(
   files: Pick<FilePicker, "list"> = new FilePicker(),
   images: Pick<LocalImageStore, "save" | "discard"> = new LocalImageStore(),
 ) {
+  let liveSnapshot: { json: string; etag: string; gzip?: Buffer<ArrayBufferLike> } | undefined;
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
       if (
@@ -324,10 +347,29 @@ export function liveApi(
     void reader
       .read()
       .then((view) => {
-        if (!response.destroyed)
-          response
-            .writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
-            .end(JSON.stringify(view));
+        if (response.destroyed) return;
+        const json = JSON.stringify(view);
+        if (!liveSnapshot || liveSnapshot.json !== json) {
+          const digest = createHash("sha256").update(json).digest("base64url");
+          liveSnapshot = {
+            json,
+            etag: `W/"sha256-${digest}"`,
+            ...(Buffer.byteLength(json) >= liveCompressionThreshold
+              ? { gzip: gzipSync(json, { level: 1 }) }
+              : {}),
+          };
+        }
+        response.setHeader("ETag", liveSnapshot.etag);
+        response.setHeader("Vary", "Accept-Encoding");
+        if (matchesEtag(request.headers["if-none-match"], liveSnapshot.etag)) {
+          response.writeHead(304).end();
+          return;
+        }
+        const compressed = liveSnapshot.gzip && acceptsGzip(request.headers["accept-encoding"]);
+        const body = compressed ? liveSnapshot.gzip! : liveSnapshot.json;
+        if (compressed) response.setHeader("Content-Encoding", "gzip");
+        response.setHeader("Content-Length", Buffer.byteLength(body));
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }).end(body);
       })
       .catch(() => {
         if (!response.destroyed) response.writeHead(503).end("AgentVoice is unavailable");

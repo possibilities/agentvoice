@@ -19,7 +19,8 @@ import {
   optimisticQueue,
 } from "./optimistic.ts";
 import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
-import { reconcileView } from "./reconcile-view.ts";
+import { readLiveView } from "./read-live-view.ts";
+import { reconcileView, transcriptPresentationView } from "./reconcile-view.ts";
 import type { SaveClipboardImage } from "./transcript-ui/transcript/composer-images";
 import type { ListReferenceFiles } from "./transcript-ui/transcript/file-references";
 import {
@@ -125,23 +126,19 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    let previous = "";
+    let etag: string | undefined;
     const read = async () => {
       try {
-        const response = await fetch("/api/live", {
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error("Unavailable");
-        const text = await response.text();
-        if (!controller.signal.aborted && text !== previous) {
-          const next: LiveView = JSON.parse(text);
-          setView((current) => reconcileView(current, next));
-          previous = text;
+        const result = await readLiveView(controller.signal, etag);
+        etag = result.etag;
+        if (!controller.signal.aborted && !result.unchanged) {
+          setView((current) => reconcileView(current, result.view));
         }
       } catch {
         if (!controller.signal.aborted) {
-          previous = "";
+          // The unavailable projection is local. Force the authoritative body
+          // on recovery instead of accepting a 304 against hidden old state.
+          etag = undefined;
           setView((current) => ({
             ...current,
             phase: "unavailable",
@@ -179,12 +176,7 @@ export function App() {
         : copy[view.phase];
   // Initial reveal and incarnation replacement stay atomic; only subsequent
   // history updates may lag behind the immediately available input controls.
-  const transcriptView =
-    renderedView.id !== view.id ||
-    renderedView.agentHistoryLoading ||
-    renderedView.voiceHistoryLoading
-      ? view
-      : renderedView;
+  const transcriptView = transcriptPresentationView(view, renderedView);
   const localSubmissions = useMemo(
     () => submissions.filter((row) => row.viewId === view.id),
     [submissions, view.id],

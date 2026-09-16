@@ -40,3 +40,14 @@ export function reconcileView(previous: LiveView, next: LiveView): LiveView {
       : next.agentControls,
   };
 }
+
+/** Keep the first visible batch and incarnation replacement outside deferred rendering. */
+export function transcriptPresentationView(view: LiveView, renderedView: LiveView) {
+  return renderedView.id !== view.id ||
+    renderedView.agentHistoryLoading ||
+    renderedView.voiceHistoryLoading ||
+    (renderedView.agent.length === 0 && view.agent.length > 0) ||
+    (renderedView.voice.length === 0 && view.voice.length > 0)
+    ? view
+    : renderedView;
+}

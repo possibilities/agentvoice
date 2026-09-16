@@ -13,6 +13,18 @@ of mounting all history and measuring every child on each scroll. Tool disclosur
 state belongs to stable message identities above grouping and windowing, so
 streaming, prepends, and temporary unmounts retain the reader's choices.
 
+The host serves large live snapshots with gzip and an explicit ETag. The browser
+retains that validator and accepts `304 Not Modified`, avoiding retransmission of
+the same bounded history on every poll. Connection health remains time-bounded
+until response headers arrive. Once the local reader accepts a response, its body
+receives a separate generous deadline so a large history cannot be discarded
+repeatedly while the centered history-loading state hides both panes. The first
+nonempty lane also bypasses deferred presentation, preventing an empty same-call
+snapshot released by the server's initial history budget from starving the first
+complete batch.
+Any failed read clears the validator because the browser's unavailable state is a
+local projection that must be replaced by an authoritative response body.
+
 The composer always presents Send, disabled when its selected action is unavailable.
 Working occupies the upper-right composer gutter. Submitting clears only that
 submitted draft immediately and projects a local message or queue row while the

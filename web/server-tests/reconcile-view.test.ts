@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { reconcileView } from "../src/reconcile-view.ts";
+import { reconcileView, transcriptPresentationView } from "../src/reconcile-view.ts";
 import type { LiveView } from "../src/types.ts";
 
 test("a tail delta preserves unchanged messages, the other lane and controls", () => {
@@ -54,4 +54,30 @@ test("reorders, removals and nested authoritative corrections are retained", () 
   expect(merged.agent[0]).toBe(prior.agent[1]);
   expect(merged.agent[1]?.toolActivity?.sections?.[0]?.content).toBe("corrected");
   expect(reconcileView(prior, { ...next, agent: [] }).agent).toEqual([]);
+});
+
+test("the first nonempty same-incarnation batch bypasses deferred empty history", () => {
+  const empty: LiveView = {
+    id: "view",
+    phase: "detached",
+    agent: [],
+    voice: [],
+  };
+  const populated: LiveView = {
+    ...empty,
+    agent: [{ id: "history", role: "assistant", content: "Prior work", status: "complete" }],
+  };
+  expect(transcriptPresentationView(populated, empty)).toBe(populated);
+
+  const later: LiveView = {
+    ...populated,
+    agent: [
+      ...populated.agent,
+      { id: "live", role: "assistant", content: "Now", status: "complete" },
+    ],
+  };
+  expect(transcriptPresentationView(later, populated)).toBe(populated);
+  expect(transcriptPresentationView({ ...empty, id: "replacement" }, populated).id).toBe(
+    "replacement",
+  );
 });
