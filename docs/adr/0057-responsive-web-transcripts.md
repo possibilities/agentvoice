@@ -7,7 +7,8 @@ execution ownership remain with the existing attachment gateway.
 ## Decision
 
 The web host preserves unchanged message and lane identities across full JSON
-polls. The shared transcript renders a measured window of message blocks instead
+polls. The shared transcript always renders the full observed item surface and a
+measured window of message blocks instead
 of mounting all history and measuring every child on each scroll. Tool disclosure
 state belongs to stable message identities above grouping and windowing, so
 streaming, prepends, and temporary unmounts retain the reader's choices.

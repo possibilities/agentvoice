@@ -12,7 +12,6 @@ export type {
 export { mergeTranscript } from "./merge";
 export type {
   TranscriptCursor,
-  TranscriptDetail,
   TranscriptReadOptions,
   TranscriptSnapshot,
   TranscriptSource,

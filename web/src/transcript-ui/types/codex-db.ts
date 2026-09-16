@@ -1,7 +1,5 @@
 export type CodexTurnStatus = "inProgress" | "completed" | "failed" | "interrupted" | string;
 
-export type CodexTranscriptDetail = "messages" | "full";
-
 export interface CodexThreadRecord {
   id: string;
   title: string;
@@ -27,10 +25,6 @@ export interface CodexThreadItemRecord {
   createdAtMs: number;
   itemType: string;
   item: unknown;
-}
-
-export interface CodexThreadListResponse {
-  threads: CodexThreadRecord[];
 }
 
 export interface CodexThreadDetailResponse {

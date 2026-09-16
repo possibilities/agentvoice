@@ -38,8 +38,8 @@ export interface Message {
   fileChanges?: FileChange[];
   /** Optional user/assistant body interpretation; content remains the original record. */
   presentation?: MessagePresentation;
-  /** Explicit system event identity; unknown types keep the ordinary activity fallback. */
-  systemEvent?: { type: string };
+  /** Exact source item type when custom rendering depends on native item identity. */
+  nativeItemType?: string;
 }
 
 /** Provider-neutral, plain-text presentation of a structured message payload. */

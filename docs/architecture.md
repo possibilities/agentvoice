@@ -53,7 +53,11 @@ owns the current source map and recording/attachment implementation guidance.
 - web/: Agent | Voice browser composition using the AgentVoice-owned transcript
   source in `web/src/transcript-ui/`. Its provider-neutral data helpers, Codex adapters,
   React components, readable style sources and deterministic scoped stylesheet build
-  are one internal boundary. `server/live-reader.ts` observes the default or explicitly selected workspace
+  are one internal boundary. It always renders the full observed transcript; there
+  is no messages-only detail mode in the renderer, source contract or fixtures.
+  Registered system cards consume the exact native item type copied into the
+  render message, while unknown items keep readable fallback activity.
+  `server/live-reader.ts` observes the default or explicitly selected workspace
   frontend without fallback, verifies the live
   controller and fences native history/live snapshots and saved voice tails.
   `server/agent-controls.ts` owns explicit Agent composer input and the private paused-on-restart

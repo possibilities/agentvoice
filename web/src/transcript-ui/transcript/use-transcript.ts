@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { mergeTranscript } from "./merge";
-import type { TranscriptDetail, TranscriptSnapshot, TranscriptSource } from "./types";
+import type { TranscriptSnapshot, TranscriptSource } from "./types";
 
 export interface UseTranscriptOptions {
-  detail?: TranscriptDetail;
   /** Poll committed history even when the agent is idle. Defaults to true. */
   watch?: boolean;
   pollIntervalMs?: number;
@@ -19,7 +18,6 @@ export interface TranscriptState {
 interface ReadState {
   source: TranscriptSource;
   id: string;
-  detail: TranscriptDetail;
   revision: number;
   snapshot: TranscriptSnapshot | null;
   loading: boolean;
@@ -32,12 +30,12 @@ const asError = (error: unknown) => (error instanceof Error ? error : new Error(
 export function useTranscript(
   source: TranscriptSource,
   id: string | null,
-  { detail = "messages", watch = true, pollIntervalMs = 1000 }: UseTranscriptOptions = {},
+  { watch = true, pollIntervalMs = 1000 }: UseTranscriptOptions = {},
 ): TranscriptState {
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<ReadState | null>(null);
   const retry = useCallback(() => setRevision((value) => value + 1), []);
-  const matches = state?.source === source && state.id === id && state.detail === detail;
+  const matches = state?.source === source && state.id === id;
   const current = matches ? state : null;
   const ready = current?.revision === revision && !current.loading && Boolean(current.snapshot);
   const interval = Number.isFinite(pollIntervalMs) ? Math.max(100, pollIntervalMs) : 1000;
@@ -48,22 +46,17 @@ export function useTranscript(
     setState((previous) => ({
       source,
       id,
-      detail,
       revision,
       loading: true,
       error: null,
-      snapshot:
-        previous?.source === source && previous.id === id && previous.detail === detail
-          ? previous.snapshot
-          : null,
+      snapshot: previous?.source === source && previous.id === id ? previous.snapshot : null,
     }));
-    void source.load({ id, detail, signal: controller.signal }).then(
+    void source.load({ id, signal: controller.signal }).then(
       (snapshot) => {
         if (!controller.signal.aborted)
           setState({
             source,
             id,
-            detail,
             revision,
             snapshot,
             loading: false,
@@ -83,7 +76,7 @@ export function useTranscript(
       },
     );
     return () => controller.abort();
-  }, [source, id, detail, revision]);
+  }, [source, id, revision]);
 
   useEffect(() => {
     if (!id || !watch || !ready) return;
@@ -95,7 +88,6 @@ export function useTranscript(
       try {
         const update = await source.poll({
           id,
-          detail,
           cursor,
           signal: controller.signal,
         });
@@ -124,7 +116,7 @@ export function useTranscript(
     };
     // Snapshot changes must not restart polling. Each run owns its cursor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, id, detail, ready, watch, interval, revision]);
+  }, [source, id, ready, watch, interval, revision]);
 
   return {
     snapshot: current?.snapshot ?? null,

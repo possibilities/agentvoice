@@ -11,8 +11,8 @@ export {
 /** Map the existing reader HTTP API to portable transcript data. No database access. */
 export function createCodexTranscriptSource(options: CodexTransportOptions = {}): TranscriptSource {
   return {
-    async load({ id, detail, signal }) {
-      const view = await fetchThread(id, detail, signal, options);
+    async load({ id, signal }) {
+      const view = await fetchThread(id, signal, options);
       return {
         id: view.thread.id,
         title: view.thread.title,
@@ -21,12 +21,12 @@ export function createCodexTranscriptSource(options: CodexTransportOptions = {})
         status: view.status,
       };
     },
-    async poll({ id, detail, cursor, signal }) {
+    async poll({ id, cursor, signal }) {
       const ordinal = Number(cursor);
       if (!/^-?\d+$/.test(cursor) || !Number.isSafeInteger(ordinal) || ordinal < -1) {
         throw new Error("Invalid transcript cursor");
       }
-      const update = await fetchThreadItems(id, ordinal, detail, signal, options);
+      const update = await fetchThreadItems(id, ordinal, signal, options);
       return {
         messages: update.messages,
         cursor: String(update.latestOrdinal),

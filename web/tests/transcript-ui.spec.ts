@@ -41,13 +41,11 @@ test("settled activity events retain the measured row and following message", as
       window as unknown as Window & {
         transcriptFixture: {
           setWindowed(value: boolean): void;
-          setDetail(value: "full"): void;
           setMessages(messages: unknown[]): void;
         };
       }
     ).transcriptFixture;
     host.setWindowed(true);
-    host.setDetail("full");
     host.setMessages([
       { id: "before", role: "assistant", content: "Before activity", status: "complete" },
       ...Array.from({ length: 5 }, (_, index) => ({

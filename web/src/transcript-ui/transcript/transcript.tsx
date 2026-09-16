@@ -14,11 +14,9 @@ import {
   useMessageScrollerScrollable,
 } from "../components/ui/message-scroller";
 import { TooltipProvider } from "../components/ui/tooltip";
-import { isSystemEventMessage } from "../lib/system-events";
 import { groupTranscript, type TranscriptEntry } from "../lib/transcript";
 import type { Message } from "../types/message";
 import { DisclosureStateProvider } from "./disclosure-state";
-import type { TranscriptDetail } from "./types";
 import { WindowedTranscript } from "./windowed-transcript";
 
 /** Keep subscription updates out of the transcript's message rendering. */
@@ -106,32 +104,6 @@ function renderTranscriptBlock(block: TranscriptEntry) {
   return <BlockContent block={block} />;
 }
 
-function useVisibleMessages(messages: readonly Message[], detail: TranscriptDetail) {
-  const next = useMemo(
-    () =>
-      detail === "full"
-        ? messages
-        : messages.filter(
-            (message) =>
-              message.role === "user" ||
-              message.role === "assistant" ||
-              isSystemEventMessage(message),
-          ),
-    [messages, detail],
-  );
-  const [stored, setStored] = useState(() => ({ input: next, output: next }));
-  if (next === stored.input) return stored.output;
-  let output = next;
-  if (
-    next.length === stored.output.length &&
-    next.every((message, index) => message === stored.output[index])
-  ) {
-    output = stored.output;
-  }
-  setStored({ input: next, output });
-  return output;
-}
-
 function useTranscriptBlocks(messages: readonly Message[]) {
   const grouped = useMemo(() => groupTranscript(messages), [messages]);
   const [stored, setStored] = useState<{
@@ -180,7 +152,6 @@ export interface TranscriptProps {
   /** Changing this ID resets scroll and disclosure state. */
   transcriptId: string;
   messages: readonly Message[];
-  detail?: TranscriptDetail;
   loading?: boolean;
   /** Follow the bottom until the reader scrolls away; independent of agent status. */
   follow?: boolean;
@@ -200,7 +171,6 @@ export interface TranscriptProps {
 export function Transcript({
   transcriptId,
   messages,
-  detail = "messages",
   loading = false,
   follow = true,
   showJumpToLatest = true,
@@ -212,17 +182,16 @@ export function Transcript({
   viewportId,
   "aria-label": label = "Human / Agent transcript",
 }: TranscriptProps) {
-  const visibleMessages = useVisibleMessages(messages, detail);
-  const blocks = useTranscriptBlocks(visibleMessages);
-  const messageIds = useMemo(() => visibleMessages.map((message) => message.id), [visibleMessages]);
+  const blocks = useTranscriptBlocks(messages);
+  const messageIds = useMemo(() => messages.map((message) => message.id), [messages]);
   const countedMessageIds = useMemo(
     () =>
-      visibleMessages
+      messages
         .filter((message) => message.role === "user" || message.role === "assistant")
         .map((message) => message.id),
-    [visibleMessages],
+    [messages],
   );
-  const incarnationKey = `${transcriptId}:${detail}:${loading ? "loading" : "ready"}`;
+  const incarnationKey = `${transcriptId}:${loading ? "loading" : "ready"}`;
   return (
     <div className={cn("agentchats-transcript chat-pane", className)}>
       <DisclosureStateProvider key={transcriptId}>
@@ -261,7 +230,7 @@ export function Transcript({
                   </MessageScrollerContent>
                 </MessageScrollerViewport>
                 <TranscriptFollow
-                  messages={visibleMessages}
+                  messages={messages}
                   follow={follow}
                   showJumpToLatest={showJumpToLatest}
                 />

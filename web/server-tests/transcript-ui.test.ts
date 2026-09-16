@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseCodexMessagePresentation } from "../src/transcript-ui/transcript/codex.ts";
+import {
+  createCodexTranscriptSource,
+  parseCodexMessagePresentation,
+} from "../src/transcript-ui/transcript/codex.ts";
 import { groupTranscript, mergeTranscript } from "../src/transcript-ui/transcript/index.ts";
 
 describe("owned transcript data surface", () => {
@@ -47,5 +50,63 @@ describe("owned transcript data surface", () => {
     expect(presentation?.title).toBe("Via Voice");
     expect(presentation?.body).toBe("Review the result.");
     expect(presentation?.details?.[0]?.content).toContain("Review it");
+  });
+
+  test("pins the retained Codex source to full detail and keeps activity", async () => {
+    const urls: string[] = [];
+    const item = {
+      threadId: "thread",
+      turnId: "turn",
+      itemId: "command",
+      rolloutOrdinal: 1,
+      createdAtMs: 0,
+      itemType: "commandExecution",
+      item: { type: "commandExecution", command: "pwd", status: "completed", output: "/tmp" },
+    };
+    const transport = {
+      fetch: (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+        const url = String(input);
+        urls.push(url);
+        return Response.json(
+          url.includes("/items?")
+            ? { items: [item], latestOrdinal: 2, turnStatus: "completed" }
+            : {
+                thread: {
+                  id: "thread",
+                  title: "Transcript",
+                  cwd: "/tmp",
+                  rolloutPath: "",
+                  source: "",
+                  threadSource: null,
+                  model: null,
+                  gitBranch: null,
+                  preview: "",
+                  updatedAtMs: 0,
+                  recencyAtMs: 0,
+                  hasUserEvent: true,
+                  messageCount: 1,
+                  turnStatus: "completed",
+                },
+                items: [item],
+                latestOrdinal: 1,
+                turnStatus: "completed",
+              },
+        );
+      }) as typeof globalThis.fetch,
+    };
+    const source = createCodexTranscriptSource(transport);
+    const loaded = await source.load({ id: "thread", signal: new AbortController().signal });
+    const update = await source.poll({
+      id: "thread",
+      cursor: loaded.cursor,
+      signal: new AbortController().signal,
+    });
+
+    expect(urls).toEqual([
+      "/api/threads/thread?detail=full",
+      "/api/threads/thread/items?after_ordinal=1&detail=full",
+    ]);
+    expect(loaded.messages[0]?.toolActivity?.name).toBe("Command");
+    expect(update.messages[0]?.toolActivity?.name).toBe("Command");
   });
 });

@@ -290,7 +290,9 @@ _Avoid_: speech replay, control attachment, transcript database.
 presentation adapters, React transcript/composer/document components, and scoped
 styles under `web/src/transcript-ui/`. It renders Agent and Voice observations and
 accepts host-authorized Agent input without owning native history, transport, or
-work execution. _Avoid_: shared AgentChats package, vendor archive, cross-checkout UI import.
+work execution. It has one full-transcript surface; registered system cards may
+consume an exact native item type copied into the render message. _Avoid_:
+messages-only detail mode, shared AgentChats package, vendor archive, cross-checkout UI import.
 
 **Live conversation snapshot** — A bounded projection of conversation items and
 updates actually received by the controller, with an exact publication-sequence

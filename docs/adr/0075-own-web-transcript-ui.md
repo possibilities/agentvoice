@@ -27,6 +27,14 @@ scoped stylesheet. Normal web builds reject stylesheet drift. Property definitio
 and keyframes remain document-level; every selector rule remains inside the
 transcript scope, preserving host CSS isolation.
 
+Amended 2026-09-16: AgentVoice has one transcript detail surface. The renderer,
+live hook and retained Codex adapter always carry the full observed transcript;
+there is no messages-only filter, detail prop/type, detail-scoped cursor or row
+incarnation, caller-selectable HTTP detail query, or fixture control. The retained
+Codex source adapter pins `detail=full` because its source API defaults omission to
+messages-only. This matches the live app, which has never offered a detail selector
+and needs native activity for its disclosures and system cards.
+
 ## Consequences
 
 Transcript fixes, dependencies, tests and releases now move with AgentVoice. The

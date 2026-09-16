@@ -7,13 +7,16 @@ identities in [0057](0057-responsive-web-transcripts.md).
 ## Decision
 
 Native context compaction is a system event, not authored conversation or a tool
-call. The host maps its existing `contextCompaction` item to a `system` message
-with the optional provider-neutral `systemEvent.type: "context-compaction"`
-marker. A small static component registry selects the card; unknown types retain
-the ordinary activity fallback and its readable content. There is no dynamic
-plugin loader, new transport, or second transcript pipeline.
+call. Amended 2026-09-16: the host maps its existing `contextCompaction` item to a
+`system` message and copies the exact native spelling into
+`Message.nativeItemType`. A small static component registry selects the card from
+that source metadata; unknown types retain the ordinary activity fallback and
+their readable content. This copy into the render DTO is the only necessary
+projection because React does not receive the event socket's native item object.
+There is no second provider-neutral event vocabulary, dynamic plugin loader, new
+transport, or second transcript pipeline.
 
-Explicit system events form independent rows in both transcript detail levels.
+Explicit system events form independent rows in the single full transcript.
 They separate adjacent tool groups, retain the host's original message ID, and
 use existing measurement, reconciliation and scroll ownership. The first card
 says “Compacting context” while the item is incomplete and “Context compacted”
@@ -34,7 +37,8 @@ and `item/completed` notifications with `threadId`, `turnId`, and the respective
 `startedAtMs` or `completedAtMs`. The existing event adapter publishes
 `conversation.item.started` / `conversation.item.completed`; native history
 items use the same bounded projection. `web/server/messages.ts` uses the existing
-turn/item key and completion flag for both live and saved observations. No
+turn/item key, exact `item.type`, and completion flag for both live and saved
+observations. The retained Codex adapter uses its existing `itemType` field. No
 changes to event schemas or native history are necessary.
 
 Codex rollout JSONL has separate shapes: `type: "compacted"` is a history
@@ -70,7 +74,9 @@ as a compaction event. Native Codex rollout JSONL is not read by this web reader
 Mapping and reader fixtures cover start/completion identity, saved history,
 reconnection, separation from tools, unknown native items, and the retained Codex
 adapter. Headless browser checks cover both lane renderers, narrow wrapping,
-stable DOM identity, unknown card fallback, windowing and scroll behavior.
+stable DOM identity, unknown card fallback, windowing and scroll behavior. The
+transcript has no messages-only mode or detail selector; activity remains present
+for these checks and for the live app.
 The Voice card fixture is deliberately synthetic renderer coverage; it does not
 claim a native Voice compaction event exists. Live desktop and call verification
 are separate from source delivery and build preparation.

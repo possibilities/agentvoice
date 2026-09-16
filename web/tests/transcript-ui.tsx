@@ -10,15 +10,13 @@ const initial: TranscriptMessage[] = [
 
 function Fixture() {
   const [messages, setMessages] = useState(initial);
-  const [detail, setDetail] = useState<"messages" | "full">("messages");
   const [windowed, setWindowed] = useState(false);
-  Object.assign(window, { transcriptFixture: { setMessages, setDetail, setWindowed } });
+  Object.assign(window, { transcriptFixture: { setMessages, setWindowed } });
   return (
     <main style={{ height: 600, display: "flex", flexDirection: "column" }}>
       <Transcript
         transcriptId="component-fixture"
         messages={messages}
-        detail={detail}
         windowed={windowed}
         aria-label="Component transcript"
       />

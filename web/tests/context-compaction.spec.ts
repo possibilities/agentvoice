@@ -33,7 +33,7 @@ test("shared system card renders consistently in either pane and stays readable 
   await page.screenshot({ path: "test-results/context-compaction-narrow.png", fullPage: true });
 });
 
-test("card revisions retain row identity and unknown cards fall back in messages view", async ({
+test("card revisions retain row identity and unknown cards retain their fallback", async ({
   page,
 }) => {
   await page.goto("/tests/transcript-ui.html");
@@ -59,7 +59,7 @@ test("card revisions retain row identity and unknown cards fall back in messages
       role: "system",
       status: "complete",
       content: "Future system event",
-      systemEvent: { type: "future-event" },
+      nativeItemType: "futureNativeEvent",
     },
   ]);
   await expect(page.getByText("Future system event", { exact: true })).toBeVisible();

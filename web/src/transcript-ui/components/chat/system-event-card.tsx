@@ -19,13 +19,13 @@ function ContextCompactionCard({ message }: CardProps) {
   );
 }
 
-// Static, local registration keeps native decoding outside React and unknown events readable.
+// Static, local registration consumes the exact native item type; unknown events stay readable.
 const cards: ReadonlyMap<string, ComponentType<CardProps>> = new Map([
-  ["context-compaction", ContextCompactionCard],
+  ["contextCompaction", ContextCompactionCard],
 ]);
 
 export function systemEventCard(message: Message) {
-  return message.role === "system" && message.systemEvent
-    ? cards.get(message.systemEvent.type)
+  return message.role === "system" && message.nativeItemType
+    ? cards.get(message.nativeItemType)
     : undefined;
 }

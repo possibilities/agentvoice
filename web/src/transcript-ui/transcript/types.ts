@@ -1,9 +1,8 @@
 import type { Message } from "../types/message";
 
-export type TranscriptDetail = "messages" | "full";
 export type TranscriptStatus = "idle" | "working" | "attention" | "complete";
 
-/** A provider's opaque checkpoint, scoped to one transcript and detail level. */
+/** A provider's opaque checkpoint, scoped to one transcript. */
 export type TranscriptCursor = string;
 
 export interface TranscriptSnapshot {
@@ -23,7 +22,6 @@ export interface TranscriptUpdate {
 
 export interface TranscriptReadOptions {
   id: string;
-  detail: TranscriptDetail;
   signal: AbortSignal;
 }
 

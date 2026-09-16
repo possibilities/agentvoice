@@ -317,7 +317,6 @@ const TranscriptLane = memo(function TranscriptLane({
         messages={messages}
         // Reveal both initial batches at the end; later refreshes retain each lane's scroller.
         loading={!!holding}
-        detail="full"
         windowed
         showJumpToLatest
         aria-label={`${lane === "voice" ? "Voice" : "Agent"} transcript`}

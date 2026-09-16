@@ -13,7 +13,7 @@ test("native compaction starts and completes as one system card, including histo
     role: "system",
     status: "working",
     content: "Older conversation context is being summarized.",
-    systemEvent: { type: "context-compaction" },
+    nativeItemType: "contextCompaction",
   });
   expect(completed).toMatchObject({
     id: started.id,
@@ -49,7 +49,7 @@ test("the retained Codex adapter uses the same system presentation", () => {
     createdAtMs: 0,
     rolloutOrdinal: 1,
   });
-  expect(message).toMatchObject({ role: "system", systemEvent: { type: "context-compaction" } });
+  expect(message).toMatchObject({ role: "system", nativeItemType: "contextCompaction" });
 });
 
 test("cards separate adjacent tool groups and unknown native items retain their fallback", () => {
@@ -62,7 +62,7 @@ test("cards separate adjacent tool groups and unknown native items retain their 
     item: projectItem({ type: "futureNativeEvent", id: "unknown" }),
   })!;
   expect(unknown.role).toBe("tool");
-  expect(unknown.systemEvent).toBeUndefined();
+  expect(unknown.nativeItemType).toBeUndefined();
   expect(unknown.toolActivity?.name).toBe("futureNativeEvent");
   const blocks = groupTranscript([unknown, card, { ...unknown, id: "next" }]);
   expect(blocks.map((block) => block.kind)).toEqual(["activity", "message", "activity"]);

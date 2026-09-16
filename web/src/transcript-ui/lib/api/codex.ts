@@ -3,14 +3,11 @@ import type {
   CodexThreadDetailResponse,
   CodexThreadItemRecord,
   CodexThreadItemsResponse,
-  CodexThreadListResponse,
-  CodexThreadRecord,
-  CodexTranscriptDetail,
   CodexTurnStatus,
 } from "@/types/codex-db";
 import type { FileChange, Message, ToolActivity, ToolDetailSection } from "@/types/message";
-import type { SessionStatus, SessionSummary } from "@/types/session-summary";
 import type { Thread } from "@/types/thread";
+import type { TranscriptStatus } from "../../transcript/types.ts";
 import { contextCompactionMessage } from "../system-events.ts";
 import { transcriptTitle } from "../transcript-title.ts";
 import { parseCodexMessagePresentation } from "./codex-presentation.ts";
@@ -18,15 +15,14 @@ import { mapCodexSubagentActivity } from "./codex-subagent-activity.ts";
 
 export interface CodexThreadView {
   thread: Thread;
-  summary: SessionSummary;
   latestOrdinal: number;
-  status: SessionStatus;
+  status: TranscriptStatus;
 }
 
 export interface CodexThreadUpdate {
   messages: Message[];
   latestOrdinal: number;
-  status: SessionStatus;
+  status: TranscriptStatus;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -64,7 +60,7 @@ function detailSection(label: string, content: unknown): ToolDetailSection[] {
   return text.trim() ? [{ label, content: text }] : [];
 }
 
-function sessionStatus(status: CodexTurnStatus | null): SessionStatus {
+function sessionStatus(status: CodexTurnStatus | null): TranscriptStatus {
   if (status === "inProgress") return "working";
   if (status === "failed" || status === "interrupted") return "attention";
   if (status === "completed") return "complete";
@@ -263,32 +259,11 @@ export function mapCodexItem(record: CodexThreadItemRecord): Message | null {
   };
 }
 
-function mapItems(items: CodexThreadItemRecord[], detail: CodexTranscriptDetail) {
+function mapItems(items: CodexThreadItemRecord[]) {
   return items.flatMap((item) => {
-    if (
-      detail === "messages" &&
-      item.itemType !== "userMessage" &&
-      item.itemType !== "agentMessage" &&
-      item.itemType !== "contextCompaction"
-    ) {
-      return [];
-    }
     const message = mapCodexItem(item);
     return message ? [message] : [];
   });
-}
-
-function mapSession(thread: CodexThreadRecord): SessionSummary {
-  return {
-    id: thread.id,
-    title: transcriptTitle(thread.title),
-    updatedAt: new Date(thread.recencyAtMs || thread.updatedAtMs).toISOString(),
-    status: sessionStatus(thread.turnStatus),
-    messageCount: thread.messageCount,
-    workspace: basename(thread.cwd),
-    cwd: thread.cwd,
-    model: thread.model ?? undefined,
-  };
 }
 
 export interface CodexTransportOptions {
@@ -316,19 +291,13 @@ async function getJson<T>(
   return data as T;
 }
 
-export async function fetchSessions(signal?: AbortSignal) {
-  const response = await getJson<CodexThreadListResponse>("/threads?limit=50", signal);
-  return response.threads.map(mapSession);
-}
-
 export async function fetchThread(
   threadId: string,
-  detail: CodexTranscriptDetail,
   signal?: AbortSignal,
   transport?: CodexTransportOptions,
 ): Promise<CodexThreadView> {
   const response = await getJson<CodexThreadDetailResponse>(
-    `/threads/${encodeURIComponent(threadId)}?detail=${detail}`,
+    `/threads/${encodeURIComponent(threadId)}?detail=full`,
     signal,
     transport,
   );
@@ -337,9 +306,8 @@ export async function fetchThread(
       id: response.thread.id,
       sessionId: response.thread.id,
       title: transcriptTitle(response.thread.title),
-      messages: mapItems(response.items, detail),
+      messages: mapItems(response.items),
     },
-    summary: mapSession(response.thread),
     latestOrdinal: response.latestOrdinal,
     status: sessionStatus(response.turnStatus),
   };
@@ -348,17 +316,16 @@ export async function fetchThread(
 export async function fetchThreadItems(
   threadId: string,
   afterOrdinal: number,
-  detail: CodexTranscriptDetail,
   signal?: AbortSignal,
   transport?: CodexTransportOptions,
 ): Promise<CodexThreadUpdate> {
   const response = await getJson<CodexThreadItemsResponse>(
-    `/threads/${encodeURIComponent(threadId)}/items?after_ordinal=${afterOrdinal}&detail=${detail}`,
+    `/threads/${encodeURIComponent(threadId)}/items?after_ordinal=${afterOrdinal}&detail=full`,
     signal,
     transport,
   );
   return {
-    messages: mapItems(response.items, detail),
+    messages: mapItems(response.items),
     latestOrdinal: response.latestOrdinal,
     status: sessionStatus(response.turnStatus),
   };
