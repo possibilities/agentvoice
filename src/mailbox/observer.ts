@@ -36,6 +36,7 @@ type Tracked = {
 export class SubagentObserver {
   private readonly threads = new Map<string, Tracked>();
   private readonly reads = new Set<string>();
+  private readonly priorityReads = new Set<string>();
   private readonly calls = new Set<string>();
   private readonly callWaiters = new Set<() => void>();
   private stopped = false;
@@ -236,6 +237,7 @@ export class SubagentObserver {
   stop() {
     this.stopped = true;
     this.reads.clear();
+    this.priorityReads.clear();
     for (const wake of this.callWaiters) wake();
   }
   private text(value: unknown, limit: number): string | null {
@@ -288,6 +290,7 @@ export class SubagentObserver {
       tracked.child.waitingOn = this.flags(row(raw["status"])["activeFlags"]);
     }
     this.reads.delete(tracked.child.threadId);
+    this.priorityReads.delete(tracked.child.threadId);
     this.inventory();
     const pending = tracked.pending.splice(0);
     for (const event of pending) this.lifecycle(tracked, event);
@@ -296,6 +299,10 @@ export class SubagentObserver {
     if (tracked.verified === null) {
       if (tracked.pending.length < 256) tracked.pending.push(event);
       else this.gap("capacity");
+      // Terminal lifecycle delivery should wait only for this thread's ancestry
+      // verification, not the complete startup scan or unrelated metadata reads.
+      this.reads.add(tracked.child.threadId);
+      if (event.kind === "completed") this.priorityReads.add(tracked.child.threadId);
       return;
     }
     if (!tracked.verified) return;
@@ -315,10 +322,15 @@ export class SubagentObserver {
       });
   }
   private async readPending() {
-    if (this.reading || this.scanning || this.stopped) return;
+    if (this.reading || this.stopped || (this.scanning && this.priorityReads.size === 0)) return;
     this.reading = true;
     try {
-      for (const threadId of this.reads) {
+      while (!this.stopped) {
+        const threadId =
+          this.priorityReads.values().next().value ??
+          (!this.scanning ? this.reads.values().next().value : undefined);
+        if (!threadId) break;
+        this.priorityReads.delete(threadId);
         this.reads.delete(threadId);
         const tracked = this.threads.get(threadId)!;
         if (tracked.verified !== null) continue;
@@ -338,6 +350,8 @@ export class SubagentObserver {
     } finally {
       this.reading = false;
       this.inventory();
+      if (!this.stopped && (this.priorityReads.size > 0 || (!this.scanning && this.reads.size > 0)))
+        void this.readPending();
     }
   }
   private inventory() {

@@ -226,6 +226,39 @@ test("completion before metadata and a newer child turn preserve the correct com
   }
 });
 
+test("terminal turns prioritize ancestry verification during the startup inventory scan", async () => {
+  const scan = Promise.withResolvers<unknown>();
+  const calls: string[] = [];
+  let scanResolved = false;
+  const events: MailboxObservation[] = [];
+  const o = new SubagentObserver(
+    "root",
+    "/work",
+    async (method) => {
+      calls.push(method);
+      if (method === "thread/loaded/list") return scan.promise;
+      expect(scanResolved).toBe(false);
+      return { thread: metadata("child") };
+    },
+    (event) => events.push(event),
+  );
+  const startup = o.start();
+  try {
+    await Bun.sleep(0);
+    turn(o, "turn/completed", "child", "done", "completed");
+    await Bun.sleep(5);
+    expect(calls).toEqual(["thread/loaded/list", "thread/read"]);
+    expect(events.find((event) => event.kind === "completed")).toMatchObject({
+      completion: { threadId: "child", turnId: "done", status: "completed" },
+    });
+  } finally {
+    scanResolved = true;
+    scan.resolve({ data: [], nextCursor: null });
+    await startup;
+    o.stop();
+  }
+});
+
 test("mailbox caller validation waits for correlated native tool activity, refuses children, and stops on teardown", async () => {
   const { o, events } = await observer();
   const pending = o.authorize({ threadId: "root", callId: "native-call" });
