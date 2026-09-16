@@ -19,12 +19,25 @@ import {
 } from "./optimistic.ts";
 import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
 import { reconcileView } from "./reconcile-view.ts";
+import type { ListReferenceFiles } from "./transcript-ui/transcript/file-references";
 import {
   DocumentViewerProvider,
   Transcript,
   TranscriptComposer,
 } from "./transcript-ui/transcript/react.ts";
 import type { AgentControlsView, LiveView } from "./types.ts";
+
+const listReferenceFiles: ListReferenceFiles = async (request, signal) => {
+  const response = await fetch("/api/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error ?? "Files could not be listed.");
+  return result;
+};
 
 const copy = {
   offline: "No agent voice server to connect to.",
@@ -409,6 +422,7 @@ const AgentInput = memo(function AgentInput({
         persistenceScope={persistenceScope}
         persistenceInstanceId={persistenceInstanceId}
         observedSubmissionIds={observedSubmissionIds}
+        listReferenceFiles={listReferenceFiles}
         alwaysShowSend
         optimisticSubmit
         reachable={!disabled}

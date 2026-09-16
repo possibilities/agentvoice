@@ -133,3 +133,25 @@ Queue remain available against a reachable, verified retained native session aft
 media disconnect; media changes alone do not replace the view or pause its queue.
 A server with no session yet remains empty and cannot accept scoped input.
 See [ADR 0062](adr/0062-web-text-interaction-without-voice-attachment.md).
+
+## Local file references
+
+**Reference a file** opens a bounded picker for visible files in the AgentVoice
+reader host's home folder. Selecting a file inserts `@/absolute/path/to/file` into
+the draft at the selection. The reference stays fully editable, including its
+filename and spaces. Send, Steer, Queue and queued editing send that exact text
+through the unchanged native text input contract; choosing a file sends no turn.
+Cancel and picker errors leave the draft intact.
+
+Drop or paste absolute path text or local `file://` URIs into the composer for the
+same result. If a browser exposes only a filename, use the picker or copy the full
+path. Clipboard images without a stable local path cannot be referenced. Files
+are never read, uploaded, copied or saved by these controls. A phone browser's
+picker selects files on the Agent host, not files on the phone.
+
+The host endpoint `POST /api/files` returns directory metadata only. It requires
+the existing loopback peer and exact same-origin JSON guards, does not cache
+responses, excludes hidden entries, symlinks and special files, and bounds request,
+scan and result sizes. Paths outside the home tree can still be typed directly;
+file access remains subject to native Codex permissions. See
+[ADR 0078](adr/0078-composer-local-file-references.md).

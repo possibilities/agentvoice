@@ -130,3 +130,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0076: Replace media clients through server-owned admission](0076-media-client-takeover.md) — accepted; terminal takeover is automatic, Android requires a fenced confirmation, and native work remains in the same retained session.
 
 - [0077: Preserve bounded transcript content summaries](0077-bounded-transcript-content-summaries.md) — accepted; oversized tools keep identity, real status, actionable failures, size metadata, and a safe excerpt without raising transport bounds.
+
+- [0078: Composer local file references remain editable text](0078-composer-local-file-references.md) — accepted; bounded host metadata picker and path-aware drop/paste insert ordinary absolute `@path` text without upload transport.

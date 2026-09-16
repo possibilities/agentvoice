@@ -105,7 +105,9 @@ workspace/thread controller through its verified status. Read-only discovery als
 accepts control protocols 5 and 6 so an existing call need not restart to open this view;
 the thread monitor/HUD also accepts these read-only status versions, while
 mutation discovery keeps the current protocol requirement. For transcript and action
-requests, the browser cannot select a workspace, thread, path, endpoint or RPC method. Native sockets, descriptors,
+requests, the browser cannot select a workspace, thread, endpoint or RPC method.
+The separate read-only file picker can browse bounded visible directory metadata
+inside the host home folder and insert an absolute `@path` as ordinary composer text. Native sockets, descriptors,
 credentials and grants remain in the local process. Requests require a loopback
 peer and exact direct-loopback or named HTTPS origin; foreign hosts/origins are
 refused. Remote Markdown images and embeds are blocked.

@@ -57,7 +57,9 @@ owns the current source map and recording/attachment implementation guidance.
   controller and fences native history/live snapshots and saved voice tails.
   `server/agent-controls.ts` owns explicit Agent composer input and the private paused-on-restart
   queue; `server/agent-sender.ts` uses the existing exact-thread attachment gateway.
-  No browser-selected endpoints, native RPC forwarding or call ownership.
+  `server/file-picker.ts` supplies bounded read-only home-directory metadata; the
+  composer inserts selected or pasted absolute paths as ordinary `@path` text.
+  No file bytes, browser-selected endpoints, native RPC forwarding or call ownership.
   `src/web-serve.ts` owns the exact configured portless origin and foreground process; Vite
   dev is editable by default. See [the web contract](../web/README.md).
 - src/threads/: one-shot read-only native-thread table for `agentvoice threads` and

@@ -170,6 +170,43 @@ test("detached web Agent send and steer reach the retained exact native thread",
   }
 });
 
+test("absolute file references remain one exact native text part for send, steer and queued dispatch", async () => {
+  const h = await agentFixture();
+  try {
+    const view = await h.reader.read();
+    const text = "Inspect @/Users/operator/design reference.png\n@/Users/operator/notes.md";
+    const command = (action: string) =>
+      agentCommandSchema.parse({
+        viewId: view.id,
+        requestId: randomUUID(),
+        action,
+        text,
+      });
+    await h.reader.agentCommand(command("send"));
+    await h.reader.agentCommand(command("steer"));
+    await h.reader.agentCommand(command("queue"));
+    h.complete("completed");
+    for (
+      let n = 0;
+      n < 200 && h.calls.filter((call) => call.method === "turn/start").length < 2;
+      n++
+    )
+      await Bun.sleep(5);
+    const dispatched = h.calls.filter(
+      (call) => call.method === "turn/start" || call.method === "turn/steer",
+    );
+    expect(dispatched.map((call) => call.method)).toEqual([
+      "turn/start",
+      "turn/steer",
+      "turn/start",
+    ]);
+    for (const call of dispatched)
+      expect(call.params.input).toEqual([{ type: "text", text, text_elements: [] }]);
+  } finally {
+    await h.close();
+  }
+});
+
 test("detached queued input dispatches on native completion without browser polling", async () => {
   const h = await agentFixture();
   try {

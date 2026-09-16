@@ -9,9 +9,15 @@ import {
   type DocumentRequest,
   documentRequestSchema,
 } from "./document-reader.ts";
+import {
+  FilePicker,
+  FilePickerAccessError,
+  type FilePickerRequest,
+  filePickerRequestSchema,
+} from "./file-picker.ts";
 import { isLocalRequest } from "./local-origin.ts";
 
-function documentError(response: ServerResponse, status: number, error: string) {
+function apiError(response: ServerResponse, status: number, error: string) {
   response.setHeader("Cache-Control", "no-store");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response
@@ -24,10 +30,12 @@ export function liveApi(
   env = process.env,
   nonce?: string,
   documents?: Pick<DocumentReader, "load">,
+  files: Pick<FilePicker, "list"> = new FilePicker(),
 ) {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
-      if (request.url === "/api/document") documentError(response, 403, "Forbidden.");
+      if (request.url === "/api/document" || request.url === "/api/files")
+        apiError(response, 403, "Forbidden.");
       else response.writeHead(403).end("Forbidden");
       return;
     }
@@ -45,21 +53,17 @@ export function liveApi(
       next();
       return;
     }
-    if (request.url === "/api/document") {
+    if (request.url === "/api/files") {
       if (request.method !== "POST") {
         response.setHeader("Allow", "POST");
-        documentError(response, 405, "Method not allowed.");
+        apiError(response, 405, "Method not allowed.");
         return;
       }
       if (
         !request.headers.origin ||
         !/^application\/json(?:;|$)/i.test(request.headers["content-type"] ?? "")
       ) {
-        documentError(response, 403, "Forbidden.");
-        return;
-      }
-      if (!documents) {
-        documentError(response, 503, "Document viewer is unavailable.");
+        apiError(response, 403, "Forbidden.");
         return;
       }
       void (async () => {
@@ -68,7 +72,63 @@ export function liveApi(
         for await (const chunk of request) {
           bytes += chunk.length;
           if (bytes > 16 * 1024) {
-            documentError(response, 413, "Document request is too large.");
+            apiError(response, 413, "File request is too large.");
+            return;
+          }
+          chunks.push(Buffer.from(chunk));
+        }
+        let input: FilePickerRequest;
+        try {
+          input = filePickerRequestSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          apiError(response, 400, "Invalid file request.");
+          return;
+        }
+        try {
+          const listing = await files.list(input);
+          if (!response.destroyed)
+            response
+              .writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+              .end(JSON.stringify(listing));
+        } catch (error) {
+          if (!response.destroyed)
+            apiError(
+              response,
+              error instanceof FilePickerAccessError ? error.status : 500,
+              error instanceof FilePickerAccessError
+                ? error.message
+                : "Folder could not be listed.",
+            );
+        }
+      })().catch(() => {
+        if (!response.destroyed) apiError(response, 400, "Invalid file request.");
+      });
+      return;
+    }
+    if (request.url === "/api/document") {
+      if (request.method !== "POST") {
+        response.setHeader("Allow", "POST");
+        apiError(response, 405, "Method not allowed.");
+        return;
+      }
+      if (
+        !request.headers.origin ||
+        !/^application\/json(?:;|$)/i.test(request.headers["content-type"] ?? "")
+      ) {
+        apiError(response, 403, "Forbidden.");
+        return;
+      }
+      if (!documents) {
+        apiError(response, 503, "Document viewer is unavailable.");
+        return;
+      }
+      void (async () => {
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        for await (const chunk of request) {
+          bytes += chunk.length;
+          if (bytes > 16 * 1024) {
+            apiError(response, 413, "Document request is too large.");
             return;
           }
           chunks.push(Buffer.from(chunk));
@@ -77,7 +137,7 @@ export function liveApi(
         try {
           input = documentRequestSchema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         } catch {
-          documentError(response, 400, "Invalid document request.");
+          apiError(response, 400, "Invalid document request.");
           return;
         }
         try {
@@ -88,7 +148,7 @@ export function liveApi(
               .end(JSON.stringify(document));
         } catch (error) {
           if (!response.destroyed)
-            documentError(
+            apiError(
               response,
               error instanceof DocumentAccessError ? error.status : 500,
               error instanceof DocumentAccessError
@@ -97,7 +157,7 @@ export function liveApi(
             );
         }
       })().catch(() => {
-        if (!response.destroyed) documentError(response, 400, "Invalid document request.");
+        if (!response.destroyed) apiError(response, 400, "Invalid document request.");
       });
       return;
     }

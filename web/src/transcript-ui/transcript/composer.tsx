@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ArrowUpIcon, ChevronDownIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../components/ui/button";
 import {
@@ -27,6 +27,13 @@ import {
   writeComposerEntryJournal,
   writeComposerState,
 } from "./composer-persistence";
+
+import { FileReferencePicker } from "./file-reference-picker";
+import {
+  insertFileReferences,
+  type ListReferenceFiles,
+  transferredReferencePaths,
+} from "./file-references";
 
 export type TranscriptFollowUpMode = "steer" | "queue";
 type ActionResult = void | Promise<void>;
@@ -99,6 +106,8 @@ export interface TranscriptComposerProps {
   onRemoveQueued?: (id: string) => ActionResult;
   /** Pause/exclude this row from host dispatch while its text is in the composer. */
   onEditingQueuedChange?: (id: string | null) => ActionResult;
+  /** Read-only host file picker; selected paths remain ordinary message text. */
+  listReferenceFiles?: ListReferenceFiles;
   defaultValue?: string;
   placeholder?: string;
   className?: string;
@@ -137,6 +146,7 @@ function Composer({
   onEditQueued,
   onRemoveQueued,
   onEditingQueuedChange,
+  listReferenceFiles,
   defaultValue = "",
   placeholder = "Message Agent…",
   className,
@@ -148,6 +158,9 @@ function Composer({
   )[0];
   const inputId = useId();
   const input = useRef<HTMLTextAreaElement>(null);
+  const referenceSelection = useRef({ start: 0, end: 0 });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const locked = useRef(false);
   const persisted = useRef<PersistedComposerState>(loaded.state);
   const persistenceTimer = useRef<number | null>(null);
@@ -183,6 +196,35 @@ function Composer({
     !unavailable &&
     (editing ? Boolean(editedRow && !editedRow.disabled && onEditQueued) : Boolean(action));
   const showStop = !alwaysShowSend && !editing && active && draft.trim().length === 0;
+
+  function insertReferences(paths: readonly string[]) {
+    const selection = referenceSelection.current;
+    const next = insertFileReferences(draftRef.current, paths, selection.start, selection.end);
+    updateDraft(next.text, true);
+    setError(null);
+    setPickerOpen(false);
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(next.caret, next.caret);
+    });
+  }
+
+  function captureSelection() {
+    referenceSelection.current = {
+      start: input.current?.selectionStart ?? draftRef.current.length,
+      end: input.current?.selectionEnd ?? draftRef.current.length,
+    };
+  }
+
+  function acceptTransfer(transfer: DataTransfer) {
+    captureSelection();
+    const paths = transferredReferencePaths(transfer);
+    if (paths.length) insertReferences(paths);
+    else
+      setError(
+        "This browser did not provide a full local file path. Use Reference a file or paste an absolute path. Clipboard images without a path cannot be referenced.",
+      );
+  }
 
   function ownsPersistence() {
     if (!persistenceScope) return true;
@@ -575,6 +617,44 @@ function Composer({
         ) : null}
         <form
           aria-label={label}
+          data-file-drop={dragging || undefined}
+          onDragOver={(event) => {
+            if (!listReferenceFiles || disabled || (operation !== null && !submissionPending))
+              return;
+            if (
+              !event.dataTransfer.types.some((type) =>
+                ["Files", "text/uri-list", "text/plain"].includes(type),
+              )
+            )
+              return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            setDragging(true);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+              setDragging(false);
+          }}
+          onDrop={(event) => {
+            if (!listReferenceFiles) return;
+            setDragging(false);
+            if (
+              !event.dataTransfer.types.includes("Files") &&
+              !transferredReferencePaths(event.dataTransfer).length
+            )
+              return;
+            event.preventDefault();
+            if (!disabled && (operation === null || submissionPending))
+              acceptTransfer(event.dataTransfer);
+          }}
+          onPaste={(event) => {
+            if (!listReferenceFiles || disabled || (operation !== null && !submissionPending))
+              return;
+            const paths = transferredReferencePaths(event.clipboardData);
+            if (!paths.length && event.clipboardData.files.length === 0) return;
+            event.preventDefault();
+            acceptTransfer(event.clipboardData);
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             submit();
@@ -660,6 +740,20 @@ function Composer({
                     </DropdownMenuGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              ) : null}
+              {listReferenceFiles ? (
+                <InputGroupButton
+                  type="button"
+                  aria-label="Reference a file"
+                  title="Insert a local file path"
+                  disabled={disabled || (operation !== null && !submissionPending)}
+                  onClick={() => {
+                    captureSelection();
+                    setPickerOpen(true);
+                  }}
+                >
+                  <PaperclipIcon aria-hidden="true" />
+                </InputGroupButton>
               ) : null}
               <span className="transcript-composer__status" role="status">
                 {stopping && onInterrupt ? "Stopping…" : (operation ?? (pending ? "Sending…" : ""))}
@@ -759,6 +853,16 @@ function Composer({
           ) : null}
         </form>
       </div>
+      {pickerOpen && listReferenceFiles ? (
+        <FileReferencePicker
+          listFiles={listReferenceFiles}
+          onSelect={(path) => insertReferences([path])}
+          onClose={() => {
+            setPickerOpen(false);
+            requestAnimationFrame(() => input.current?.focus());
+          }}
+        />
+      ) : null}
     </div>
   );
 }

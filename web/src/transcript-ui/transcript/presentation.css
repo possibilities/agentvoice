@@ -1116,3 +1116,38 @@
 :scope.agentchats-transcript :is(button, input, select, textarea, optgroup) {
   font-family: var(--font-mono);
 }
+
+.transcript-composer form[data-file-drop] { outline: 2px dashed var(--foreground); outline-offset: 6px; }
+.transcript-file-picker {
+  position: fixed;
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  width: min(620px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: min(720px, calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+  margin: auto;
+  padding: 20px;
+  overflow: auto;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  font: inherit;
+}
+.transcript-file-picker::backdrop { background: #0008; }
+.transcript-file-picker header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.transcript-file-picker h2 { font-size: 16px; font-weight: 600; }
+.transcript-file-picker p { margin-block: 12px; font-size: 13px; }
+.transcript-file-picker button { min-width: 44px; min-height: 44px; padding: 8px; cursor: pointer; }
+.transcript-file-picker button:disabled { opacity: .4; cursor: default; }
+.transcript-file-picker button:hover:not(:disabled) { background: var(--accent-surface); }
+.transcript-file-picker button:focus-visible, .transcript-file-picker input:focus-visible { outline: 2px solid var(--foreground); outline-offset: -2px; }
+.transcript-file-picker svg { width: 18px; height: 18px; flex-shrink: 0; }
+.transcript-file-picker label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; }
+.transcript-file-picker input { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--border); font: inherit; font-size: 16px; }
+.transcript-file-picker__location { display: flex; align-items: end; gap: 8px; margin-top: 16px; }
+.transcript-file-picker__location label { flex: 1; }
+.transcript-file-picker__filter { margin-block: 12px; }
+.transcript-file-picker__entries { min-height: 120px; max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+.transcript-file-picker__entries ul { margin: 0; padding: 0; list-style: none; }
+.transcript-file-picker__entries li button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.transcript-file-picker__entries li button > span:first-of-type { min-width: 0; overflow-wrap: anywhere; flex: 1; }
+.transcript-file-picker__kind { font-size: 12px; white-space: nowrap; color: var(--muted-foreground); }
+.transcript-file-picker footer { display: flex; justify-content: end; margin-top: 12px; }
