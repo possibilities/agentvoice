@@ -22,7 +22,10 @@ const catalog = {
   ],
   nextCursor: null,
 };
-function fixture(overrides: Partial<RoutingOrientationOptions> = {}) {
+function fixture(
+  overrides: Partial<RoutingOrientationOptions> = {},
+  contextOverrides: Record<string, unknown> = {},
+) {
   const calls: { command: string; args: string[]; input?: unknown }[] = [];
   const native: { method: string; params: unknown }[] = [];
   const warnings: string[] = [];
@@ -43,7 +46,9 @@ function fixture(overrides: Partial<RoutingOrientationOptions> = {}) {
         context_revision: value["context_revision"],
         digest: "a".repeat(64),
         sources: { native_catalog_revision: 1, hud_host_revision: 1, hud_domain_revision: 1 },
+        guidance: { routing_policy: { enabled: true } },
         native_catalog: { drift: [] },
+        ...contextOverrides,
       };
     }
     if (args[1] === "apply") {
@@ -100,6 +105,10 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
       native: { session_id: "thread-1", process_instance_id: "runtime-1" },
     },
     evidence: { source_revision: "6405175911611332984741815" },
+    reviewed: {
+      revision: 2,
+      source_version: "agentvoice-role-catalog-and-economics-2026-09-16",
+    },
     native_catalog: { source: "codex_app_server_model_list" },
   });
   expect(f.calls.filter((call) => call.args[1] === "apply")).toHaveLength(1);
@@ -112,6 +121,14 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
   expect(JSON.parse(start.toolOutput.output).handling).toMatchObject({
     human_facing_response: "none",
     start_new_work: false,
+  });
+  expect(JSON.parse(start.toolOutput.output).routing_guidance).toEqual({
+    provider_preference:
+      "When fresh context lists an eligible Grok account and AgentFX advertises a compatible Grok target, prefer it for a well-specified assignment to preserve finite Codex main quota.",
+    codex_selection:
+      "For Codex work, choose the least expensive reviewed model adequate for the task; task fit and current native target support remain required.",
+    economics_boundary:
+      "Codex model prices are an official API text-token proxy within OpenAI only. They do not measure subscription quota or establish any numeric Codex-to-Grok comparison.",
   });
 });
 test("stopped producer fences a pending catalog capture from publication or native work", async () => {
@@ -143,6 +160,26 @@ test("malformed catalog fails closed with a deduplicated warning and no native t
   f.orientation.stop();
   expect(f.warnings).toHaveLength(1);
   expect(f.calls.some((call) => call.args[1] === "apply")).toBe(false);
+});
+
+test("catalog drift persists context without delivering routing recommendations", async () => {
+  const f = fixture(
+    {},
+    {
+      guidance: { routing_policy: { enabled: false } },
+      native_catalog: { drift: ["effort-mismatch:gpt-5.6-luna"] },
+    },
+  );
+  f.orientation.start();
+  await f.delivered;
+  f.orientation.stop();
+  const start = f.native.find((call) => call.method === "turn/start")!.params as {
+    toolOutput: { output: string };
+  };
+  expect(JSON.parse(start.toolOutput.output).routing_guidance).toBeUndefined();
+  expect(f.warnings).toEqual([
+    "Routing model catalog drift detected. Delegation recommendations are disabled until reviewed guidance is updated.",
+  ]);
 });
 
 test("material refreshes coalesce and only the latest persisted revision is submitted", async () => {

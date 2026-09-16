@@ -228,7 +228,10 @@ export class ManagerRoutingOrientation {
       context_revision: revision,
       trigger: revision === 1 ? (expected ? "producer_generation_change" : "initial") : "heartbeat",
       composed_at: now,
-      reviewed: { revision: 1, source_version: "agentvoice-role-catalog-2026-09-14" },
+      reviewed: {
+        revision: 2,
+        source_version: "agentvoice-role-catalog-and-economics-2026-09-16",
+      },
       native_catalog: {
         revision: Number(sources["native_catalog_revision"] ?? 0) + 1,
         source: "codex_app_server_model_list",
@@ -297,6 +300,18 @@ export class ManagerRoutingOrientation {
         identity.processInstanceId,
       ]),
     );
+    const routingPolicy = row(row(context["guidance"])["routing_policy"]);
+    const routingGuidance =
+      routingPolicy["enabled"] === true
+        ? {
+            provider_preference:
+              "When fresh context lists an eligible Grok account and AgentFX advertises a compatible Grok target, prefer it for a well-specified assignment to preserve finite Codex main quota.",
+            codex_selection:
+              "For Codex work, choose the least expensive reviewed model adequate for the task; task fit and current native target support remain required.",
+            economics_boundary:
+              "Codex model prices are an official API text-token proxy within OpenAI only. They do not measure subscription quota or establish any numeric Codex-to-Grok comparison.",
+          }
+        : undefined;
     const output = {
       schema_version: 1,
       type: "routing.context",
@@ -315,6 +330,7 @@ export class ManagerRoutingOrientation {
         operations: ["targets", "start", "observe", "steer", "cancel", "collect"],
         note: "MCP targets/start/observe/control or bounded run --config FILE --file REQUEST. Require fresh routing_source_revision, explicit target/effort, existing Work and routing-decision association; no uncontrolled fanout.",
       },
+      ...(routingGuidance ? { routing_guidance: routingGuidance } : {}),
       context: delivery["delivery"],
     };
     // At most one native submission per persisted revision; unknown outcomes are never retried.

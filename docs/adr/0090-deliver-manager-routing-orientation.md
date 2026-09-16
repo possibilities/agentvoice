@@ -9,8 +9,13 @@ AgentVoice obtains that owned Codex connection's paginated model/list catalog,
 current model/effort/tier, and read-only AgentUsage public routing evidence.
 AgentUsage composes reviewed qualitative model guidance and fresh account/reset
 facts. The current native manager account is explicitly uncorrelated; numeric
-cross-provider economics are unavailable. AgentHUD stores the full evidence and
-context with producer generation, context revision, digest and source CAS.
+cross-provider economics are unavailable. The reviewed context may include
+official Codex API text-token prices as a within-provider proxy and a separate
+preference for eligible included-allowance Grok targets that preserves finite
+Codex main quota. Exact AgentFX target support remains a dispatch-time gate; API
+prices do not establish subscription consumption or a Codex-to-Grok rate.
+AgentHUD stores the full evidence and context with producer generation, context
+revision, digest and source CAS.
 
 One coalescing producer refreshes at startup, native settings changes, and every
 five minutes. Each persisted revision receives at most one named native
