@@ -137,3 +137,4 @@ different decision. Keep this navigation index and the record's status together.
 - [0080: Deliver each direct-child completion immediately](0080-direct-child-completion-delivery.md) — accepted; one bounded native tool output replaces mailbox notices, openings, replay and persistence.
 - [0081: Saved Android server profiles](0081-saved-android-server-profiles.md) — accepted; encrypted migration, explicit switching and workspace-targeted terminal pairing retain independent server access.
 - [0082: Let the kernel release service-operation locks](0082-kernel-owned-service-operation-lock.md) — accepted; crash-released flock ownership prevents interrupted lifecycle commands from stranding menu and CLI actions.
+- [0083: Adopt directory role contents as a fenced workspace revision](0083-adopt-directory-role-revisions.md) — accepted; explicit validated capture preserves the workspace role identity and saved settings while advancing desired content without live activation.

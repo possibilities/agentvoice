@@ -224,7 +224,9 @@ identity, account, or workspace. _Avoid_: capability, overlay, profile.
 **Workspace role** — An explicitly ejected, independently owned SQLite snapshot
 of role settings and authored assets, bound to a canonical workspace. Source files
 cease to be runtime inputs. Export/import creates reusable independent copies;
-native authentication and history stay outside. See ADR 0042.
+explicit fenced adoption can capture a directory role into a new asset revision
+while preserving the binding identity and saved settings. Neither operation creates
+a live parent. Native authentication and history stay outside. See ADRs 0042/0083.
 
 **Worker role** — The shipped `roles/worker` directory, responsible for one
 assignment. Its owner/return recipient is the parent when delegated or the human

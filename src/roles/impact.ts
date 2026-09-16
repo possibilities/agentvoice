@@ -46,6 +46,19 @@ export const VOICE_IMPACTS = {
   extra: "runtime",
 } as const satisfies Record<keyof VoiceValues, SettingImpact>;
 
+function sameFiles(left: RoleBundle["files"], right: RoleBundle["files"]): boolean {
+  if (left.length !== right.length) return false;
+  const byPath = new Map(right.map((file) => [file.path, file]));
+  return left.every((file) => {
+    const other = byPath.get(file.path);
+    return (
+      other !== undefined &&
+      other.executable === file.executable &&
+      Buffer.from(other.bytes).equals(Buffer.from(file.bytes))
+    );
+  });
+}
+
 export function roleImpact(before: RoleBundle, after: RoleBundle) {
   const changes: Array<{ setting: string; impact: SettingImpact }> = [];
   function compare(a: object, b: object, map: Record<string, SettingImpact>, prefix = "") {
@@ -62,7 +75,7 @@ export function roleImpact(before: RoleBundle, after: RoleBundle) {
   compare(bt, at, SETTING_IMPACTS);
   compare(bo ?? {}, ao ?? {}, ORCHESTRATOR_IMPACTS, "orchestrator.");
   compare(bv ?? {}, av ?? {}, VOICE_IMPACTS, "voice.");
-  if (before.hasRole !== after.hasRole || !isDeepStrictEqual(before.files, after.files))
+  if (before.hasRole !== after.hasRole || !sameFiles(before.files, after.files))
     changes.push({ setting: "assets", impact: "runtime" });
   // Only voice.name has a narrow application implementation in this slice.
   const automatic = changes.every((change) => change.setting === "voice.name");

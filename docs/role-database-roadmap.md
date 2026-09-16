@@ -23,6 +23,9 @@ the remaining scope is delivered or explicitly changed by the operator.
   to advertise protocol 7. See [ADR 0054](adr/0054-native-voice-discovery.md).
 - Schema settings have a mechanical impact classification. Only the voice-name
   change currently has a narrow apply implementation.
+- Explicit `role adopt` captures a selected directory role into a fenced immutable
+  revision while preserving the binding ID and all saved settings. It is save-only
+  and does not create a live template relationship ([ADR 0083](adr/0083-adopt-directory-role-revisions.md)).
 - Adaptive read-only/thinking delegation, useful parallelism and clear handoff
   communication are recorded in [ADR 0043](adr/0043-adaptive-conversation-first-delegation.md).
   Default prompts and the trial's revision 4 carry that policy.
@@ -51,7 +54,8 @@ blocked on completing an everyday-use checklist.
 
 AgentBoard: `it-64f9bd7e`.
 
-Recommended next slice. Replace ad hoc SQL prompt updates with supported CLI and
+Recommended next slice. Directory adoption now merges captured paths into complete role asset bundles;
+replace remaining ad hoc SQL prompt/settings updates with supported CLI and
 equivalent controller-bound API/MCP read/edit operations for settings and named prompts,
 extending to skills/MCP/bundled assets through the same validated transaction boundary.
 Batch edits atomically with expected revision, preserve null/empty/absent values,

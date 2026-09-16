@@ -3,14 +3,18 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { resolveConfig } from "../core/config.ts";
 import { loadLaunchSource } from "../core/launch-config.ts";
+import { resolveRolePath } from "../core/role.ts";
 import { prepareRuntime } from "../core/runtime.ts";
 import { parseArgs, UsageError } from "../main.ts";
 import { dataDirectory, expandTilde } from "../paths.ts";
 import { roleImpact } from "./impact.ts";
 import {
+  adoptRoleFiles,
   canonicalWorkspace,
   captureFiles,
+  captureRolePrompts,
   createRole,
+  preflightRoleAdoption,
   type RoleBundle,
   readRole,
   rolePath,
@@ -23,6 +27,10 @@ const HELP = `agentvoice role — workspace-owned SQLite roles (no audio or infe
       Capture complete settings and role assets once; refuse an existing binding.
   import --workspace <dir> --from <export.sqlite>
       Bind an independent copy of an exported role; refuse an existing binding.
+  adopt --workspace <dir> --role <directory|name> --expected-revision <n> [--prompts-only] [--dry-run]
+      Update supplied role paths in a new revision; preserve other assets and settings.
+      --prompts-only keeps MCP, skills and every other non-prompt asset unchanged.
+      Save only: an explicit runtime restart or later server session activates it.
   export --workspace <dir> --output <new.sqlite>
       Export the current revision without workspace binding or operation receipts.
   status --workspace <dir>
@@ -56,7 +64,7 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
     console.log(HELP);
     return 0;
   }
-  if (!["eject", "import", "export", "status", "voice"].includes(command))
+  if (!["eject", "import", "adopt", "export", "status", "voice"].includes(command))
     throw new UsageError(HELP);
   const parsed =
     command === "eject"
@@ -66,13 +74,21 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
             "--workspace",
             ...(command === "import"
               ? ["--from"]
-              : command === "export"
-                ? ["--output"]
-                : command === "voice"
-                  ? ["--voice", "--revision"]
-                  : []),
+              : command === "adopt"
+                ? ["--role", "--expected-revision"]
+                : command === "export"
+                  ? ["--output"]
+                  : command === "voice"
+                    ? ["--voice", "--revision"]
+                    : []),
           ]),
-          bool: new Set(command === "voice" ? ["--clear-voice"] : []),
+          bool: new Set(
+            command === "voice"
+              ? ["--clear-voice"]
+              : command === "adopt"
+                ? ["--dry-run", "--prompts-only"]
+                : [],
+          ),
         });
   if (!parsed.values["workspace"])
     throw new UsageError("role commands require --workspace <existing directory>");
@@ -103,7 +119,51 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
     return 0;
   }
   const before = readRole(path);
-  if (command === "export") {
+  if (command === "adopt") {
+    const roleSpec = parsed.values["role"];
+    if (!roleSpec) throw new UsageError("adopt requires --role <directory|name>");
+    const expectedRevision = Number(parsed.values["expected-revision"]);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
+      throw new UsageError("adopt requires a positive --expected-revision <n>");
+    if (expectedRevision !== before.ref.revision)
+      throw new Error("Stale role revision; read status before adopting");
+    const source = resolveRolePath(roleSpec, process.env, homedir(), process.cwd());
+    const promptsOnly = argv.includes("--prompts-only");
+    const captured = promptsOnly ? captureRolePrompts(source) : captureFiles(source, true);
+    if (captured.length === 0)
+      throw new Error(
+        promptsOnly ? "Selected role contains no supported prompt files" : "Selected role is empty",
+      );
+    const sourcePaths = new Set(captured.map((file) => file.path));
+    const candidate: RoleBundle = {
+      settings: before.settings,
+      hasRole: true,
+      files: [...before.files.filter((file) => !sourcePaths.has(file.path)), ...captured],
+    };
+    await validateRoleBundle(candidate, workspace);
+    preflightRoleAdoption(path, before.ref.id, expectedRevision, candidate.files);
+    const plan = roleImpact(before, candidate);
+    const result = {
+      workspace,
+      role: source,
+      mode: promptsOnly ? "prompts" : "all",
+      id: before.ref.id,
+      previousRevision: before.ref.revision,
+      revision: before.ref.revision + 1,
+      assets: candidate.files.length,
+      sourceAssets: captured.length,
+      preservedAssets: before.files.filter((file) => !sourcePaths.has(file.path)).length,
+      settingsPreserved: true,
+      applied: false,
+      plan,
+    };
+    if (argv.includes("--dry-run")) {
+      console.log(JSON.stringify({ ...result, dryRun: true }));
+      return 0;
+    }
+    const ref = adoptRoleFiles(path, before.ref.id, expectedRevision, candidate.files);
+    console.log(JSON.stringify({ ...result, ...ref, dryRun: false }));
+  } else if (command === "export") {
     if (!parsed.values["output"]) throw new UsageError("export requires --output <new.sqlite>");
     const output = resolve(expandTilde(parsed.values["output"], homedir()));
     console.log(JSON.stringify({ output, ...createRole(output, before, true) }));
@@ -142,6 +202,7 @@ export async function runRoleCommand(argv: string[]): Promise<number> {
         ...before.ref,
         savedVoice: before.settings.voice?.name ?? null,
         assets: before.files.length,
+        hasRole: before.hasRole,
       }),
     );
   return 0;

@@ -51,6 +51,64 @@ without those flags. Different canonical workspaces, including Git worktrees,
 have separate bindings. Moving a workspace requires export before moving and
 import into the new canonical directory.
 
+## Adopt updated directory contents
+
+An already-bound workspace can explicitly capture a selected directory role into
+a new revision:
+
+```sh
+agentvoice role status --workspace /absolute/project
+agentvoice role adopt --workspace /absolute/project \
+  --role /path/to/role --expected-revision 2 --prompts-only --dry-run
+agentvoice role adopt --workspace /absolute/project \
+  --role /path/to/role --expected-revision 2 --prompts-only
+```
+
+`--role` also accepts a role name under `$AGENTROLES_HOME`. Adoption captures every
+file supplied by that directory. Each supplied path replaces the corresponding
+saved path, while existing asset paths absent from the source remain byte-for-byte
+intact. This preserves separately managed skills and other local additions. Asset
+deletion needs a future explicit editor/remove command; omission is never deletion.
+Adoption also preserves the workspace binding identity and the current saved
+settings document exactly. Voice, working model, permission
+selection, native startup overrides, debug choice, and every other database-owned
+setting therefore remain unchanged. A directory role does not own those settings.
+
+Use `--prompts-only` when the source directory owns guidance while another tool
+materializes its MCP or skill inventory. It updates only `SYSTEM_PROMPT.md`,
+`APPEND_SYSTEM_PROMPT.md`, and the seven `VOICE_*` prompt/mode controls found in
+the source. Every MCP, skill, metadata, and other asset stays unchanged. The
+source traversal does not visit those paths, so an unrelated broken or oversized
+subtree cannot block this mode. The output names the selected `mode` so a dry-run
+makes this boundary reviewable.
+
+The expected revision is required. If another edit wins first, the command fails
+with a stale-revision error and publishes nothing. `--dry-run` checks that same
+initial fence, captures and merges the source, validates the complete candidate,
+and reports the prospective revision, total/source/preserved asset counts, and
+impact plan without mutating the database. Invalid MCP JSON, prompt conflicts, unsafe or unsupported paths and file
+types, cycles, and bundle limit violations leave the prior revision current.
+
+Capture preserves file bytes and executable bits under the existing 4096-file,
+32-MiB, and depth bounds. Keep the source stable while the command runs because a
+directory traversal is not an atomic filesystem snapshot. Symlink targets are
+captured as content; later source changes are not followed. Existing absolute
+paths, external programs, environment references, and inline secrets retain their
+meaning and should be reviewed before adoption.
+
+A role database retains at most 4,097 immutable revisions and 256 MiB of
+deduplicated asset bytes. A save exceeding either bound fails without advancing
+the desired revision. Export/import the selected revision into another workspace
+to compact it into a fresh independent role; in-place compaction remains future
+work.
+
+Adoption is save-only and reports `applied: false`. It does not touch a running
+runtime, child, frontend, or voice session. An explicit runtime restart,
+`new_session`, or later server workspace session loads the new desired revision;
+frontend reattachment alone does not. Older revisions remain immutable, although
+general history, diff, and restore commands are not yet implemented. See
+[ADR 0083](adr/0083-adopt-directory-role-revisions.md).
+
 ## Voice editing
 
 ```sh
@@ -131,8 +189,9 @@ Controller/generation/revision checks prevent cross-call writes and lost edits.
 Save and application/journal updates are separate commits. A journal failure
 after save reports that application did not start. New calls load saved values
 without adopting old journals or replaying operations. Each controller accepts
-256 operations; each database currently retains 4096 voice-edit receipts, then
-refuses new edits. Export/import into a new workspace compacts to a fresh identity;
+256 operations; each database currently retains 4096 voice-edit receipts and at
+most 4097 total revisions, then refuses new edits. Export/import into a new
+workspace compacts to a fresh identity;
 in-place receipt/revision compaction is future work.
 
 ## Copy and reuse
@@ -151,8 +210,10 @@ copying an open database's main file. Exported files are ordinary portable files
 retain private mode `0600` when transferring them.
 
 Named defaults, automatic template selection, replacement/rebinding, and general
-settings/prompt editors are not implemented in this first slice. Exported files
-provide reusable templates. Other tools' directory role formats are unchanged.
+settings/prompt editors are not implemented in this first slice. Explicit
+directory adoption updates supplied paths but is not a general file-by-file editor,
+deletion surface, or live template link. Exported files provide reusable
+templates. Other tools' directory role formats are unchanged.
 
 ## Storage and application planning
 

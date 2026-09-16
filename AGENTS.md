@@ -186,7 +186,10 @@ subsystem. It includes the recording and attachment lifecycle.
 - `src/roles/`: explicit `role eject` captures complete settings/assets into a
   private workspace-bound SQLite database. Bound launches/restarts never reread
   source role/config files; reject masking role-setting launch flags. Unbound
-  workspaces retain directory behavior. No automatic global migration.
+  workspaces retain directory behavior. Explicit fenced `role adopt` captures a
+  directory role into a new asset revision while preserving the binding identity
+  and saved settings; it is save-only and never restores a live source link. No
+  automatic global migration.
 - Immutable revisions and CAS protect edits. `role export/import` creates a
   standalone independent copy, never a live database-file copy or shared parent.
   Native credentials/history and machine workspace bindings stay outside.

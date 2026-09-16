@@ -557,8 +557,10 @@ Workspace-owned SQLite roles are available through explicit
 [`agentvoice role eject`](workspace-roles.md). Ejection captures settings,
 prompts, MCP definitions and skill assets. Bound workspaces load database
 revisions instead of the source files below. `role export` / `import` create
-independent copies; `role voice` saves a voice, and MCP/API `agentvoice_voice_set`
-can save and reconnect voice while preserving the working agent and media attachment.
+independent copies; fenced `role adopt` captures an updated directory-role asset
+bundle while preserving saved settings; `role voice` saves a voice, and MCP/API
+`agentvoice_voice_set` can save and reconnect voice while preserving the working
+agent and media attachment.
 Unbound workspaces retain the file behavior below.
 
 Keep `~/.config/agentvoice/server.json` (or

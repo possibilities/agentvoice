@@ -22,10 +22,13 @@ import { dirname, join, posix } from "node:path";
 import { z } from "zod";
 import { PROMPT_FILES, parseJsonConfig } from "../core/config.ts";
 import type { ConfigValues, VoiceValues } from "../core/config-schema.ts";
+import { ROLE_PROMPT_FILES } from "../core/role.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "../private-files.ts";
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_FILES = 4096;
+const MAX_REVISIONS = 4097;
+const MAX_STORED_ASSET_BYTES = 256 * 1024 * 1024;
 const SCHEMA_VERSION = 1;
 const APPLICATION_ID = 0x4156524c;
 export const roleRefSchema = z
@@ -268,8 +271,7 @@ export function readRoleHead(path: string): {
   }
 }
 
-/** Snapshot symlink targets as bytes; never retain a live filesystem dependency. */
-export function captureFiles(directory: string, hasRole: boolean): RoleBundle["files"] {
+function capture(directory: string, names?: ReadonlyArray<string>): RoleBundle["files"] {
   const files: RoleBundle["files"] = [];
   let total = 0;
   function walk(source: string, path: string, ancestors: Set<string>): void {
@@ -288,14 +290,129 @@ export function captureFiles(directory: string, hasRole: boolean): RoleBundle["f
       files.push({ path, bytes: readFileSync(real), executable: (info.mode & 0o111) !== 0 });
     }
   }
-  if (hasRole) walk(directory, "", new Set());
-  else
-    for (const name of Object.values(PROMPT_FILES)) {
-      const source = join(directory, name);
+  if (names === undefined) walk(directory, "", new Set());
+  else {
+    const root = realpathSync(directory);
+    if (!statSync(root).isDirectory()) throw new Error("Role source must be a directory");
+    for (const name of names) {
+      const source = join(root, name);
       if (lstatSync(source, { throwIfNoEntry: false })) walk(source, name, new Set());
     }
-  manifest({ settings: {}, hasRole, files });
+  }
+  manifest({ settings: {}, hasRole: names === undefined, files });
   return files;
+}
+
+/** Snapshot symlink targets as bytes; never retain a live filesystem dependency. */
+export function captureFiles(directory: string, hasRole: boolean): RoleBundle["files"] {
+  return capture(directory, hasRole ? undefined : Object.values(PROMPT_FILES));
+}
+
+/** Prompt-only capture never traverses unrelated MCP, skills, metadata or assets. */
+export function captureRolePrompts(directory: string): RoleBundle["files"] {
+  return capture(directory, [...Object.values(ROLE_PROMPT_FILES), ...Object.values(PROMPT_FILES)]);
+}
+
+function checkAdoption(
+  db: Database,
+  roleId: string,
+  expectedRevision: number,
+  files: RoleBundle["files"],
+): {
+  ref: RoleRef;
+  settings: string;
+  missing: Array<{ hash: string; bytes: Uint8Array }>;
+} {
+  const ref = roleRefSchema.parse(db.query("SELECT id, revision FROM role").get());
+  if (ref.id !== roleId) throw new Error("Role identity changed");
+  if (ref.revision !== expectedRevision)
+    throw new Error("Stale role revision; read status before adopting");
+  const revisionCount = db
+    .query<{ count: number }, []>("SELECT count(*) AS count FROM revisions")
+    .get()!.count;
+  if (revisionCount >= MAX_REVISIONS)
+    throw new Error("Role revision limit reached; export/import into another workspace to compact");
+  const current = db
+    .query<{ settings: string }, [number]>("SELECT settings FROM revisions WHERE revision=?")
+    .get(ref.revision);
+  if (!current) throw new Error("Invalid role revision");
+  // Revalidate before preserving the serialized settings document byte-for-byte.
+  settings(JSON.parse(current.settings));
+  const readAsset = db.query<{ bytes: Uint8Array }, [string]>(
+    "SELECT bytes FROM assets WHERE hash=?",
+  );
+  let storedBytes = db
+    .query<{ bytes: number }, []>("SELECT coalesce(sum(length(bytes)), 0) AS bytes FROM assets")
+    .get()!.bytes;
+  const pending = new Map<string, Uint8Array>();
+  for (const file of files) {
+    const digest = hash(file.bytes);
+    const existing = readAsset.get(digest)?.bytes ?? pending.get(digest);
+    if (existing && !Buffer.from(existing).equals(Buffer.from(file.bytes)))
+      throw new Error("Existing role asset does not match its content hash");
+    if (!existing) {
+      storedBytes += file.bytes.byteLength;
+      if (storedBytes > MAX_STORED_ASSET_BYTES)
+        throw new Error(
+          "Role stored asset limit reached; export/import into another workspace to compact",
+        );
+      pending.set(digest, file.bytes);
+    }
+  }
+  return {
+    ref: { id: ref.id, revision: ref.revision + 1 },
+    settings: current.settings,
+    missing: [...pending].map(([digest, bytes]) => ({ hash: digest, bytes })),
+  };
+}
+
+/** Read-only dry-run check; the publishing transaction repeats every check authoritatively. */
+export function preflightRoleAdoption(
+  path: string,
+  roleId: string,
+  expectedRevision: number,
+  files: RoleBundle["files"],
+): RoleRef {
+  manifest({ settings: {}, hasRole: true, files });
+  const db = open(path);
+  try {
+    return db.transaction(() => checkAdoption(db, roleId, expectedRevision, files).ref)();
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Publish a complete candidate asset bundle without changing the workspace binding
+ * or any saved AgentVoice settings. The caller preflights the complete candidate;
+ * this transaction only publishes it if the observed head is still current.
+ */
+export function adoptRoleFiles(
+  path: string,
+  roleId: string,
+  expectedRevision: number,
+  files: RoleBundle["files"],
+): RoleRef {
+  const entries = manifest({ settings: {}, hasRole: true, files });
+  const db = open(path, false);
+  try {
+    return db
+      .transaction(() => {
+        const checked = checkAdoption(db, roleId, expectedRevision, files);
+        const insertAsset = db.query("INSERT INTO assets VALUES (?, ?)");
+        for (const asset of checked.missing) insertAsset.run(asset.hash, asset.bytes);
+        db.query("INSERT INTO revisions VALUES (?, ?, ?, 1)").run(
+          checked.ref.revision,
+          checked.settings,
+          JSON.stringify(entries),
+        );
+        db.query("UPDATE role SET revision=?").run(checked.ref.revision);
+        return checked.ref;
+      })
+      .immediate();
+  } finally {
+    db.close();
+  }
 }
 
 /** Per-load private projection: a live child never shares a mutable tree with its successor. */
@@ -406,6 +523,13 @@ export function writeVoice(path: string, roleId: string, request: VoiceEdit): Ro
         if (count >= 4096)
           throw new Error(
             "Role edit receipt limit reached; export/import into another workspace to compact",
+          );
+        const revisionCount = db
+          .query<{ count: number }, []>("SELECT count(*) AS count FROM revisions")
+          .get()!.count;
+        if (revisionCount >= MAX_REVISIONS)
+          throw new Error(
+            "Role revision limit reached; export/import into another workspace to compact",
           );
         const revision = meta.revision + 1;
         db.query("INSERT INTO revisions VALUES (?, ?, ?, ?)").run(
