@@ -1,6 +1,5 @@
 import type { DirectoryRoleStatus } from "../core/role-content.ts";
 import type { VoiceInspection } from "../core/voice-inspection.ts";
-import type { MailboxCaller, MailboxOpenParams, MailboxOpenResult } from "../mailbox/contract.ts";
 import type { RoleRef, VoiceEdit } from "../roles/store.ts";
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
@@ -15,7 +14,6 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_redial",
   "agentvoice_restart_runtime",
   "agentvoice_new_session",
-  "agentvoice_thread_mailbox_open",
   "agentvoice_voice_set",
   "agentvoice_voice_get",
 ] as const;
@@ -124,7 +122,6 @@ export interface ControlBackend {
   voiceGet(request: { refresh?: boolean }): Promise<VoiceGetResult>;
   voiceSet(request: VoiceSetRequest): Promise<ControlOperation>;
   status(): MaybePromise<ControlStatus>;
-  mailboxOpen(request: MailboxOpenParams, caller?: MailboxCaller): Promise<MailboxOpenResult>;
   redial(request: ControlMutationRequest): Promise<ControlOperation>;
   restart(request: ControlRestartRequest): Promise<ControlOperation>;
   newSession(request: ControlMutationRequest): Promise<ControlOperation>;

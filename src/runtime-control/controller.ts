@@ -4,6 +4,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { attachmentTargetSchema } from "../attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
+import {
+  type Completion,
+  completionObservationSchema,
+  type DeliveryOutcome,
+  deliveryOutcomeSchema,
+  MAX_COMPLETION_DELIVERIES,
+} from "../completions/contract.ts";
 import { MuteGate } from "../console/audio-control.ts";
 import type { VoiceState } from "../console/state.ts";
 import { voiceEditRecordSchema } from "../control/contract.ts";
@@ -63,17 +70,6 @@ import {
   type ServerMediaMessage,
   serverMediaMessageSchema,
 } from "../frontend/media-protocol.ts";
-import {
-  inFlightSchema,
-  type MailboxCaller,
-  type MailboxOpenParams,
-  type MailboxOpenResult,
-  mailboxObservationSchema,
-  mailboxOpenParams,
-  type WakeOutcome,
-  wakeOutcomeSchema,
-} from "../mailbox/contract.ts";
-import { ThreadMailbox } from "../mailbox/state.ts";
 import { dataDirectory, stateDirectory } from "../paths.ts";
 import { recordCall } from "../recording/call.ts";
 import {
@@ -110,7 +106,9 @@ export interface ControllerOptions {
 export class RuntimeController implements ControlBackend {
   readonly lifecycle: LifecycleFeed;
   private readonly journal: OperationJournal;
-  private readonly mailbox: ThreadMailbox;
+  // Keep identities, never consumable result content. Ambiguous submissions are not replayed.
+  private readonly completedTurns = new Set<string>();
+  private readonly pendingCompletions = new Set<string>();
   private readonly coding = new CodingActivityReducer();
   private readonly leases = new Map<string, () => void>();
   private workspaceLease: (() => void) | undefined;
@@ -149,10 +147,6 @@ export class RuntimeController implements ControlBackend {
   constructor(private readonly options: ControllerOptions) {
     this.frontendAttached = options.frontendAttached ?? true;
     this.lifecycle = options.lifecycle ?? new LifecycleFeed(options.instanceId);
-    this.mailbox = new ThreadMailbox(options.instanceId, (event, data) =>
-      this.lifecycle.mailbox(event, data),
-    );
-    this.lifecycle.mailbox("mailbox.changed", { state: this.mailbox.snapshot() });
     this.journal = new OperationJournal(
       join(options.stateDir, "operations", `${options.instanceId}.jsonl`),
     );
@@ -290,50 +284,29 @@ export class RuntimeController implements ControlBackend {
       if (parsed.success && this.frontendAttached) this.options.onMedia?.(parsed.data);
       return;
     }
-    if (method === "mailbox") {
-      const parsed = mailboxObservationSchema.safeParse(params);
+    if (method === "completion") {
+      const parsed = completionObservationSchema.safeParse(params);
       if (!parsed.success) {
-        this.mailbox.gap("inventory");
         this.coding.childrenGap();
-        this.changed();
+        this.notice("Direct-child observation was invalid; completion delivery may be incomplete");
         return;
       }
       if (!["starting", "ready"].includes(this.phase)) return;
       const observation = parsed.data;
       switch (observation.kind) {
         case "inventory":
-          this.mailbox.update(observation.inventory);
           this.coding.inFlight(observation.inventory);
           break;
         case "started":
-          this.lifecycle.mailbox("mailbox.child.started", {
-            child: observation.child,
-            observedAt: observation.observedAt,
-          });
           break;
-        case "completed": {
-          const eventId = this.mailbox.complete(observation.completion, this.generation);
-          if (eventId) void this.submitMailboxWake(eventId);
-          break;
-        }
-        case "submitting":
-          if (
-            observation.notice.instanceId === this.options.instanceId &&
-            observation.notice.rootThreadId === this.threadId
-          )
-            this.mailbox.submitting(observation.notice, this.generation);
-          break;
-        case "recorded":
-          this.mailbox.recorded(
-            observation.eventId,
-            this.generation,
-            observation.turnId,
-            observation.itemId,
-          );
+        case "completed":
+          this.deliverCompletion(observation.completion);
           break;
         case "gap":
-          this.mailbox.gap(observation.reason);
           this.coding.childrenGap();
+          this.notice(
+            `Direct-child observation gap (${observation.reason}); completion delivery may be incomplete`,
+          );
           break;
       }
       this.changed();
@@ -406,7 +379,7 @@ export class RuntimeController implements ControlBackend {
           ? (params as { message: string }).message
           : "Runtime exited; restart runtime to retry";
       this.cancelHolds();
-      this.mailbox.unavailableRuntime();
+      this.completionRuntimeUnavailable();
     }
     this.changed();
   }
@@ -463,7 +436,7 @@ export class RuntimeController implements ControlBackend {
       this.active?.notify("mute", { mic: true, speaker: true });
       this.activeIncarnation = 0;
       this.nativeThreadReady = false;
-      this.mailbox.unavailableRuntime();
+      this.completionRuntimeUnavailable();
       this.phase = "quiescing";
       this.voice = { ...this.voice, phase: "waiting-ready" };
       committed = true;
@@ -481,7 +454,8 @@ export class RuntimeController implements ControlBackend {
         this.threadId = "";
         this.voice.conversation = undefined;
         this.coding.reset();
-        this.mailbox.clear();
+        this.completedTurns.clear();
+        this.pendingCompletions.clear();
       }
       this.active = candidate.process;
       this.activeIncarnation = candidate.incarnation;
@@ -958,73 +932,58 @@ export class RuntimeController implements ControlBackend {
     }
     this.finishHandoff(operation, outcome);
   }
-  private async submitMailboxWake(eventId: string) {
+  private completionRuntimeUnavailable() {
+    this.coding.childrenGap();
+    if (this.pendingCompletions.size) {
+      this.pendingCompletions.clear();
+      const failure = this.phase === "failed" && this.voice.notice ? `${this.voice.notice}; ` : "";
+      this.notice(
+        `${failure}Direct-child completion delivery was interrupted; acceptance is unknown and will not be retried`,
+      );
+    }
+  }
+  private deliverCompletion(completion: Completion) {
+    const key = JSON.stringify([completion.threadId, completion.turnId]);
+    if (this.completedTurns.has(key)) return;
+    // Refuse new observations rather than evict identities and duplicate old submissions.
+    if (this.completedTurns.size >= MAX_COMPLETION_DELIVERIES) {
+      this.coding.childrenGap();
+      this.notice(
+        "Direct-child completion deduplication capacity reached; further delivery is unavailable",
+      );
+      return;
+    }
+    this.completedTurns.add(key);
+    const eventId = randomUUID();
+    this.pendingCompletions.add(eventId);
+    void this.submitCompletion(eventId, completion);
+  }
+  private async submitCompletion(eventId: string, completion: Completion) {
     const runtime = this.active;
-    const generation = this.generation;
     const incarnation = this.activeIncarnation;
     if (this.closed || !runtime || !this.threadId || !["ready", "starting"].includes(this.phase)) {
-      this.mailbox.outcome(eventId, generation, { status: "unavailable" });
+      this.pendingCompletions.delete(eventId);
+      this.notice("Direct-child completion delivery is unavailable; it will not be retried");
       return;
     }
     const request = {
       eventId,
       instanceId: this.options.instanceId,
       rootThreadId: this.threadId,
-      completed: this.mailbox.snapshot().completed,
+      completion,
     };
-    let outcome: WakeOutcome;
+    let outcome: DeliveryOutcome;
     try {
-      outcome = wakeOutcomeSchema.parse(await runtime.request("mailbox-wake", request, 12000));
+      outcome = deliveryOutcomeSchema.parse(
+        await runtime.request("completion-deliver", request, 12000),
+      );
     } catch {
-      outcome = { status: "unknown" as const };
+      outcome = { status: "unknown" };
     }
     if (this.closed || this.activeIncarnation !== incarnation || this.active !== runtime) return;
-    this.mailbox.outcome(eventId, generation, outcome);
-  }
-  async mailboxOpen(
-    request: MailboxOpenParams,
-    caller?: MailboxCaller,
-  ): Promise<MailboxOpenResult> {
-    const params = mailboxOpenParams.parse(request);
-    if (params.expectedInstanceId !== this.options.instanceId)
-      throw new ControlError("instance_mismatch", "Mailbox belongs to another call");
-    if (this.closed || !this.threadId)
-      throw new ControlError("unavailable", "Mailbox is unavailable");
-    const runtime = this.active,
-      incarnation = this.activeIncarnation;
-    if (caller) {
-      if (
-        caller.threadId !== this.threadId ||
-        !runtime ||
-        this.phase !== "ready" ||
-        !(await runtime.request<boolean>("mailbox-authorize", caller, 2000))
-      )
-        throw new ControlError(
-          "invalid_request",
-          "Only the orchestrator may open its mailbox through a native tool call",
-        );
-    }
-    const current = () =>
-      !this.closed && runtime === this.active && incarnation === this.activeIncarnation;
-    if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
-    const cached = this.mailbox.cached(params.operationId);
-    if (cached) return cached;
-    if (runtime && ["ready", "starting"].includes(this.phase)) {
-      try {
-        const inventory = inFlightSchema.parse(await runtime.request("mailbox-snapshot", {}, 2000));
-        if (!current()) throw new Error("changed");
-        this.mailbox.update(inventory);
-        this.coding.inFlight(inventory);
-        this.changed();
-      } catch {
-        if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
-        this.mailbox.gap("inventory");
-        this.coding.childrenGap();
-        this.changed();
-      }
-    }
-    if (!current()) throw new ControlError("unavailable", "Mailbox runtime changed");
-    return this.mailbox.open(params.operationId);
+    this.pendingCompletions.delete(eventId);
+    if (outcome.status !== "accepted")
+      this.notice(`Direct-child completion delivery ${outcome.status}; it will not be retried`);
   }
   private finishHandoff(operation: JournalOperation, outcome: HandoffResult) {
     operation.handoff = { clientUserMessageId: operation.handoff!.clientUserMessageId, ...outcome };
@@ -1151,7 +1110,8 @@ export class RuntimeController implements ControlBackend {
       this.leases.clear();
       this.workspaceLease?.();
       this.workspaceLease = undefined;
-      this.mailbox.clear();
+      this.completedTurns.clear();
+      this.pendingCompletions.clear();
       this.journal.close();
       const failed = stopped.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
@@ -1201,7 +1161,6 @@ export async function createCall(
     control = await startControlServer({
       backend: {
         status: () => current().status(),
-        mailboxOpen: (params, caller) => current().mailboxOpen(params, caller),
         redial: (request) => current().redial(request),
         restart: (request) => current().restart(request),
         newSession: (request) => current().newSession(request),

@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { InFlight } from "../src/completions/contract.ts";
 import type { ThreadView } from "../src/events/contract.ts";
 import { connectFrontend } from "../src/frontend/client.ts";
 import { frontendSocketPath } from "../src/frontend/protocol.ts";
 import { VoiceServer } from "../src/frontend/server.ts";
-import type { InFlight } from "../src/mailbox/contract.ts";
 import { parseArgs } from "../src/main.ts";
 import { CodingActivityReducer } from "../src/runtime-control/coding-activity.ts";
 import { RuntimeController } from "../src/runtime-control/controller.ts";
@@ -199,9 +199,9 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
     await until(() => controller.status().runtime.phase === "ready");
     const emit = callbacks[0]!;
     emit("threads", { complete: true, threads: [root()] });
-    emit("mailbox", { kind: "inventory", inventory: { ...children(), threads: [] } });
+    emit("completion", { kind: "inventory", inventory: { ...children(), threads: [] } });
     await until(() => client!.state().codingActivity === "idle");
-    emit("mailbox", { kind: "inventory", inventory: children(2) });
+    emit("completion", { kind: "inventory", inventory: children(2) });
     await until(() => client!.state().codingActivity === "working");
     const retained = controller;
     const retainedIdentity = {
@@ -221,13 +221,13 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
       threadId: controller.status().threadId,
     }).toEqual(retainedIdentity);
     expect(frontendAttachments).toEqual([true, false, true]);
-    emit("mailbox", { kind: "inventory", inventory: children(3, true) });
+    emit("completion", { kind: "inventory", inventory: children(3, true) });
     await until(() => client!.state().codingActivity === "blocked");
-    emit("mailbox", { kind: "gap", reason: "inventory" });
+    emit("completion", { kind: "gap", reason: "inventory" });
     await until(() => client!.state().codingActivity === "unknown");
-    emit("mailbox", { kind: "inventory", inventory: children(2) });
+    emit("completion", { kind: "inventory", inventory: children(2) });
     expect(controller.state().codingActivity).toBe("unknown");
-    emit("mailbox", { kind: "inventory", inventory: { ...children(4), threads: [] } });
+    emit("completion", { kind: "inventory", inventory: { ...children(4), threads: [] } });
     await until(() => client!.state().codingActivity === "idle");
     emit("threads", { complete: true, threads: [turn("read", "inProgress")] });
     await until(() => client!.state().codingActivity === "working");
@@ -248,7 +248,7 @@ test("coding activity survives frontend reconnect and voice-only changes, then r
     );
     await until(() => client!.state().codingActivity === "unknown");
     emit("threads", { complete: true, threads: [turn("stale", "inProgress")] });
-    emit("mailbox", { kind: "inventory", inventory: children(100) });
+    emit("completion", { kind: "inventory", inventory: children(100) });
     expect(controller.state().codingActivity).toBe("unknown");
     callbacks[1]!("threads", { complete: true, threads: [turn("fresh", "inProgress")] });
     await until(() => client!.state().codingActivity === "working");

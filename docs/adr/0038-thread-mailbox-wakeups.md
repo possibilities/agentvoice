@@ -1,5 +1,11 @@
 # 0038: Thread mailbox wake-ups
 
+Superseded 2026-09-15 by
+[0080](0080-direct-child-completion-delivery.md), which removes the mailbox,
+opening API, caches, replay and count-only notice in favor of one immediate bounded
+completion output per newly observed direct-child terminal turn. The text below is
+retained as historical rationale.
+
 Identifier corrected 2026-09-08: formerly `0026-thread-mailbox-wakeups.md`. The old number
 was shared by another decision; this record retains its original rationale.
 See the [identifier history](README.md#identifier-history).

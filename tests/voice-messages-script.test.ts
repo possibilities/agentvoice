@@ -39,9 +39,6 @@ for (const flags of [[], ["--stream"], ["--completed"]]) {
           voiceSet: async () => {
             throw new Error("not used");
           },
-          mailboxOpen: async () => {
-            throw new Error("not used");
-          },
           redial: async () => {
             throw new Error("unexpected mutation");
           },

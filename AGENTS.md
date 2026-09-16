@@ -223,7 +223,7 @@ agentvoice-orchestrator source, no parent and non-ephemeral history. Absence cre
 and atomically saves a thread before readiness; invalid/unresumable markers fail
 without fallback. --resume/--continue/--fresh/--no-continue are retired.
 Workspace and thread leases serialize creation and replacement. Explicit MCP/API
-new_session preflights, drains the old runtime, clears the marker and mailbox,
+new_session preflights, drains the old runtime, clears the marker and child-turn dedupe state,
 then creates and saves a thread and reconnects voice. Old history remains.
 
 A valid existing workspace marker starts the server's one workspace session at
@@ -236,7 +236,7 @@ through detach and runtime replacement. The default
 frontend socket stays stable across generations; explicit CLI workspaces use their
 own hashed sockets. Closing a frontend releases holds, closes its audio/WebRTC,
 and stops realtime speech only. The controller, runtime, owned Codex child, native
-work, attachment gateway, mailbox, operation journal, endpoints, and workspace/thread
+work, attachment gateway, direct-child completion observer, operation journal, endpoints, and workspace/thread
 leases remain. After detach fencing, one later frontend with any fresh clientId
 may attach new media to that same session; no input, controls, SDP or audio are
 replayed. Saved speech remains read-only observation and never initializes successor
@@ -250,7 +250,7 @@ refusal or timeout reports an unknown stop outcome and blocks later media owners
 until server restart while retaining native work. Persistent mute assignments
 remain and detached channels are effectively muted. Redial and immediate voice application require an attached
 frontend. MCP/API runtime restart and new_session deliberately replace the runtime;
-new_session also replaces the exact root and clears the old mailbox. Explicit
+new_session also replaces the exact root and clears direct-child observation state. Explicit
 server shutdown closes the retained session and releases all ownership. A detach
 failure prevents subsequent frontend attachments until server termination.
 Other workspace servers may run independently; other clients do not honor this guard.
@@ -300,8 +300,7 @@ the [field guide](docs/field-guide.md) retains the underlying audit evidence.
 - No AgentVoice runtime worker execution tools, registry, archival or result reports.
   The independent AgentHUD project stores declared assignments/results and projects
   native observations; see [ADR 0056](docs/adr/0056-independent-agenthud.md). It never executes agents.
-  Automated custom turn submission is limited to explicit MCP/API restart handoffs ([ADR 0016](docs/adr/0016-restart-handoff.md)) and immediate metadata-mailbox tally wake-ups ([ADR 0038](docs/adr/0038-thread-mailbox-wakeups.md)). Explicit human Agent composer input uses the exact-thread attachment gateway; see [web input](docs/web-agent-input.md). For handoffs, submit once
-  after exact identity and live media checks; never retry ambiguous acceptance,
+  Automated custom turn submission is limited to explicit MCP/API restart handoffs ([ADR 0016](docs/adr/0016-restart-handoff.md)) and one immediate direct-child completion output per newly observed terminal turn ([ADR 0080](docs/adr/0080-direct-child-completion-delivery.md)). Explicit human Agent composer input uses the exact-thread attachment gateway; see [web input](docs/web-agent-input.md). Submit completion outputs once after exact identity checks; restart handoffs additionally require live media. Never retry ambiguous acceptance,
   echo the private prompt in status/errors or change prompt defaults.
   Native Codex tools, subagents and voice handoffs stay native.
   Retired dispatch/dispatch-reports config keys error, including explicit false.

@@ -33,9 +33,6 @@ for (const shutdown of ["disconnect", "signal"] as const) {
         voiceSet: async () => {
           throw new Error("not used");
         },
-        mailboxOpen: async () => {
-          throw new Error("not used");
-        },
         redial: async () => {
           throw new Error("unexpected mutation");
         },

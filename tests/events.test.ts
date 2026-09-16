@@ -361,9 +361,6 @@ describe("lifecycle event socket", () => {
         voiceSet: async () => {
           throw new Error("not used");
         },
-        mailboxOpen: async () => {
-          throw new Error("not used");
-        },
         redial: async () => {
           throw new Error("must not mutate");
         },

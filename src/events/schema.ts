@@ -1,11 +1,5 @@
 import { z } from "zod";
 import {
-  mailboxEventSchemas,
-  mailboxGetParams,
-  mailboxReplayParams,
-  mailboxSnapshotSchema,
-} from "../mailbox/contract.ts";
-import {
   EVENT_PROTOCOL_VERSION,
   emptyEventParams,
   eventSubscriptionSchema,
@@ -61,13 +55,6 @@ export const conversationFrameSchemas = Object.entries(conversationEventSchemas)
       "Conversation: typed native content or explicit gap. Bounded controller replay; native history is a separate read, never an atomic event watermark.",
     ),
 );
-export const mailboxFrameSchemas = Object.entries(mailboxEventSchemas).map(([name, schema]) =>
-  event(
-    name,
-    schema.shape,
-    "Mailbox: controller-owned state and operations; bounded replay survives runtime replacement.",
-  ),
-);
 export const eventFrameSchema = z
   .union([
     event("threads.changed", { inventory, threads }, "Current state: replace thread inventory."),
@@ -89,7 +76,6 @@ export const eventFrameSchema = z
       ),
     ),
     ...conversationFrameSchemas,
-    ...mailboxFrameSchemas,
   ])
   .meta({ id: "events" });
 
@@ -100,12 +86,6 @@ const requestBase = {
 };
 const requests = z
   .union([
-    z
-      .object({ ...requestBase, method: z.literal("mailbox.get"), params: mailboxGetParams })
-      .strict(),
-    z
-      .object({ ...requestBase, method: z.literal("mailbox.replay"), params: mailboxReplayParams })
-      .strict(),
     z
       .object({
         ...requestBase,
@@ -146,28 +126,6 @@ const responseBase = {
 };
 const responses = z
   .union([
-    z
-      .object({
-        ...responseBase,
-        ok: z.literal(true),
-        result: z.object({ ...context, state: mailboxSnapshotSchema }).strict(),
-      })
-      .strict(),
-    z
-      .object({
-        ...responseBase,
-        ok: z.literal(true),
-        result: z
-          .object({
-            instanceId: context.instanceId,
-            generation: context.generation,
-            events: z.array(z.union(mailboxFrameSchemas)).max(100),
-            throughSequence: context.sequence,
-            hasMore: z.boolean(),
-          })
-          .strict(),
-      })
-      .strict(),
     z
       .object({
         ...responseBase,

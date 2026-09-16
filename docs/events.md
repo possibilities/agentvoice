@@ -1,8 +1,8 @@
 # AgentVoice event socket
 
 Each server-owned workspace-session controller exposes a **separate read-only Unix socket**
-for thread state, transient voice items, conversation observation and the thread mailbox. The event
-protocol remains 2; the separate control API uses protocol 7 for status, redial, restart and mailbox opening. A new
+for thread state, transient voice items and conversation observation. The event
+protocol remains 2; the separate control API uses protocol 7 for status, redial and restart. A new
 server workspace session creates a new controller and socket. Frontend detach
 preserves it; rediscover after server restart.
 Protocol-1 event clients must update.
@@ -10,9 +10,6 @@ Protocol-1 event clients must update.
 For typed orchestrator/subagent content, live snapshots, bounded conversation
 replay and native history reads, see [conversation observation](conversations.md).
 The lifecycle and voice semantics below remain distinct from that content API.
-
-For accumulated child completion metadata, wake-up outcomes and non-consuming
-mailbox snapshots/replay, see [thread mailbox](thread-mailbox.md).
 
 ## Discovery
 

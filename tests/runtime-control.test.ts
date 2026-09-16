@@ -142,13 +142,6 @@ describe("persistent controller and disposable runtime", () => {
         threadId: retained.threadId,
         workspace: root,
       });
-      expect(
-        await controller.mailboxOpen({
-          expectedInstanceId: retained.instanceId,
-          operationId: "detached-mailbox",
-        }),
-      ).toMatchObject({ instanceId: retained.instanceId, entries: [] });
-
       await controller.setFrontendAttached(true);
       await until(() => media.some((message) => message.type === "prepare"));
       const first = media.find((message) => message.type === "prepare")!;
@@ -399,7 +392,7 @@ describe("persistent controller and disposable runtime", () => {
       expect(readFileSync(join(root, "operations/integration.jsonl"), "utf8")).not.toContain(
         "native voice fixture",
       );
-      await until(() => controller.lifecycle.live(first.threadId).items.length === 1);
+      await until(() => controller.lifecycle.live(first.threadId).items[0]?.completed === true);
       const observation = {
         expectedInstanceId: "integration",
         expectedGeneration: 2,

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { IpcMessage } from "../src/runtime-control/protocol.ts";
 import { runtimeSender } from "../src/runtime-control/sender.ts";
 
-test("mailbox facts retain the reserved reliable lane while conversation observations are dropped", () => {
+test("completion facts retain the reserved reliable lane while conversation observations are dropped", () => {
   const writes: IpcMessage[] = [];
   const callbacks: Array<(error: Error | null) => void> = [];
   const sender = runtimeSender({
@@ -19,11 +19,11 @@ test("mailbox facts retain the reserved reliable lane while conversation observa
   for (let revision = 1; revision <= 20; revision++)
     sender.send({ method: "conversation", params: { revision } });
   sender.send({
-    method: "mailbox",
+    method: "completion",
     params: { kind: "completed", completion: { turnId: "child-turn" } },
   });
   expect(writes).toHaveLength(17);
-  expect(writes.at(-1)?.method).toBe("mailbox");
+  expect(writes.at(-1)?.method).toBe("completion");
   while (callbacks.length) callbacks.shift()!(null);
 });
 

@@ -60,7 +60,6 @@ export async function fixture(
       redial: forbidden,
       restart: forbidden,
       newSession: forbidden,
-      mailboxOpen: forbidden,
       voiceSet: forbidden,
       voiceGet: forbidden,
     },

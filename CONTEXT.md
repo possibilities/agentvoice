@@ -27,7 +27,7 @@ shutdown ends the workspace session and native work.
 **Workspace session** — The server-lifetime controller, runtime and exact native
 conversation restored from a valid marker at server startup, or created lazily by
 the first frontend when no marker exists. It pins one canonical workspace
-and retains the Codex child, verified native work, leases, gateway, mailbox,
+and retains the Codex child, verified native work, leases, gateway,
 operation journal, transcripts and control/event endpoints across frontend detach.
 Only explicit runtime replacement, `new_session`, or server shutdown changes the
 parts named by those operations. _Avoid_: workspace session marker (the marker is
@@ -139,8 +139,9 @@ replaces it while preserving the voice runtime, Codex child and workspace.
 loopback Streamable HTTP MCP projection owned by the controller. The injected
 MCP entry is `agentvoice_control`; its capability is passed to the owned Codex
 child only by environment variable. MCP and the control socket expose status, voice redial and full runtime restart
-with an optional handoff prompt, plus explicit new session, voice selection and
-thread-mailbox opening. UI removal does not retire API controls. See `docs/api.md`.
+with an optional handoff prompt, plus explicit new session and voice selection.
+Direct-child completion delivery is an internal native protocol, not a control or
+MCP operation. UI removal does not retire API controls. See `docs/api.md`.
 
 **Voice protocol** — AgentVoice defaults WebRTC requests to v3 for service
 compatibility; explicit voice.version or voice.extra.version overrides win.
@@ -156,7 +157,7 @@ error. Deleting the marker while no server session owns the workspace selects a
 new session at the next server start or first frontend attachment.
 
 **New session** — An explicit MCP/API operation that preflights replacement, stops
-the old runtime, clears the workspace marker and mailbox, creates and saves a
+the old runtime, clears the workspace marker and direct-child dedupe state, creates and saves a
 new main thread, and reconnects voice when attached within the same retained
 workspace session.
 Native history and old transcripts remain. _Avoid_: redial (voice only).
@@ -298,12 +299,12 @@ or items through the owned Codex child, scoped to an owned root and verified
 descendants. Native reads are not atomic cuts of the event stream; revision fences
 report observed overlap without inventing native snapshot guarantees.
 
-**Thread mailbox** — The workspace-session-controller-owned collection of pending completion
-metadata for the orchestrator's direct native children. Opening returns and
-clears a batch; each child terminal turn immediately sends a count-only wake-up
-with a current working-child tally. It is not native child-result delivery or a
-per-message read-receipt system.
-_Avoid_: worker registry, transcript store.
+**Direct-child completion delivery** — One standalone native tool output submitted
+through `turn/start` when AgentVoice first observes a terminal turn from a verified
+direct child of the root. The output carries that completion's bounded metadata and
+a current bounded in-flight snapshot; native Codex delivers the worker's full text
+separately. The controller retains only exact child/turn dedupe identities, not
+consumable entries or opening results. _Avoid_: mailbox, wake-up notice, result store.
 
 
 **Voice transcript** — Automatic private JSONL observation of a workspace session's native voice

@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { AttachmentTicket } from "../attachment/gateway.ts";
+import { type CompletionRuntime, completionRequestSchema } from "../completions/contract.ts";
 import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
@@ -16,11 +17,6 @@ import {
   ObservationError,
 } from "../events/conversation.ts";
 import { type ClientMediaMessage, clientMediaMessageSchema } from "../frontend/media-protocol.ts";
-import {
-  type MailboxRuntime,
-  mailboxCallerSchema,
-  wakeRequestSchema,
-} from "../mailbox/contract.ts";
 import { ipcMessage, type RuntimeActivation, type RuntimeLaunch } from "./protocol.ts";
 import { runtimeSender } from "./sender.ts";
 
@@ -40,7 +36,7 @@ export function runRuntimeWorker(
   let voiceSettings:
     | Parameters<NonNullable<ConsoleHostOptions["onVoiceSettingsReady"]>>[0]
     | undefined;
-  let mailboxRuntime: MailboxRuntime | undefined;
+  let completionRuntime: CompletionRuntime | undefined;
   let submitHandoff: ((request: HandoffRequest) => Promise<HandoffResult>) | undefined;
   let revokeAttachment: (() => void) | undefined;
   let issueAttachment: (() => AttachmentTicket) | undefined;
@@ -229,11 +225,11 @@ export function runRuntimeWorker(
           controlMcp: currentLaunch.control,
           acquireLease,
           onVerifiedThread: (identity) => event("identity", identity),
-          onMailboxReady: (runtime) => {
-            mailboxRuntime = runtime;
+          onCompletionReady: (runtime) => {
+            completionRuntime = runtime;
           },
-          onMailbox: (observation) => {
-            if (!stopping && !terminalFailure) event("mailbox", observation);
+          onCompletion: (observation) => {
+            if (!stopping && !terminalFailure) event("completion", observation);
           },
           onThreads: (inventory) => {
             threadInventory = inventory;
@@ -389,16 +385,9 @@ export function runRuntimeWorker(
         }
         return null;
       }
-      case "mailbox-wake":
-        if (terminalFailure || stopping || !mailboxRuntime) return { status: "unavailable" };
-        return mailboxRuntime.wake(wakeRequestSchema.parse(params));
-      case "mailbox-snapshot":
-        if (terminalFailure || stopping || !mailboxRuntime)
-          throw new Error("Mailbox observation unavailable");
-        return mailboxRuntime.snapshot();
-      case "mailbox-authorize":
-        if (terminalFailure || stopping || !mailboxRuntime) return false;
-        return mailboxRuntime.authorize(mailboxCallerSchema.parse(params));
+      case "completion-deliver":
+        if (terminalFailure || stopping || !completionRuntime) return { status: "unavailable" };
+        return completionRuntime.deliver(completionRequestSchema.parse(params));
       case "handoff":
         if (terminalFailure || stopping || !mediaEnabled || !submitHandoff)
           return handoffFailure("not_ready");

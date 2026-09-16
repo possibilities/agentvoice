@@ -43,9 +43,6 @@ function backend(current: () => ControlStatus): ControlBackend {
     voiceSet: async () => {
       throw new Error("not used");
     },
-    async mailboxOpen() {
-      throw new Error("not used");
-    },
     async redial() {
       throw new Error("not used");
     },

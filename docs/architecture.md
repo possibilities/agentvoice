@@ -167,7 +167,7 @@ owns the current source map and recording/attachment implementation guidance.
   validates exact native main-thread ownership; no latest-history lookup or fallback.
 - src/core/thread-lock.ts: per-thread flock; keep lock inodes, release via close.
 - src/runtime-control/controller.ts: one server-owned workspace session, exact thread leases,
-  workspace lease before startup, explicit new-session replacement and mailbox reset,
+  workspace lease before startup, explicit new-session replacement and child-turn dedupe reset,
   native identity, readiness, MCP/API redial and full runtime replacement. Preserve
   controller ownership across frontend detach; cancel pointer holds on detach and
   after successful replacement preflight. Redial and immediate voice application
@@ -197,8 +197,8 @@ owns the current source map and recording/attachment implementation guidance.
   into native history or automatic replay; exported observer files are not a
   continuity source. Never discard voice
   events using lifecycle snapshot watermarks or infer missing native identity.
-  No audio/bearer capabilities or mutation/MCP methods. The separate mailbox
-  snapshot/replay is controller-owned and survives runtime replacement. Replacement resets
+  No audio/bearer capabilities or mutation/MCP methods. Direct-child completion
+  delivery is not an event snapshot/replay or control API. Replacement resets
   native inventory; stale incarnations never publish into a successor or another server session. See docs/events.md.
 - src/core/thread-observer.ts: bounded owned-child loaded inventory and metadata reads,
   never history hydration, resume, or turns. Preserve newer notifications over late reads.
@@ -218,22 +218,22 @@ owns the current source map and recording/attachment implementation guidance.
   authenticated server and its statically registered enabled catalog. Never gate
   voice startup on `mcpServerStatus/list`: native Codex rebuilds the global MCP
   inventory for that request and waits for unrelated servers.
-- src/mailbox/: verified direct-child lifecycle observation, workspace-session-owned completion
-  metadata and count-only wake-ups. Each child terminal turn immediately submits
-  a named standalone tool output through native turn/start; multiple pending
-  notices are expected. The control/MCP mailbox opening atomically consumes only
-  returned entries, caches opening results by operation ID, and never creates
-  per-message receipts. Working counts are fresh native snapshots, not cleared
-  counters. Mailbox state/replay survives frontend detach and runtime replacement;
-  `new_session` and server shutdown clear it. Stale generations cannot publish or
-  consume. Native owns full child results. See [ADR 0038](adr/0038-thread-mailbox-wakeups.md) and
-  docs/thread-mailbox.md for capacity, ancestry, caller and retry boundaries.
+- src/completions/: the bounded completion-delivery contract and verified
+  direct-child lifecycle observer. Each newly observed terminal child turn submits
+  one standalone native tool output through `turn/start`, carrying that completion's
+  identity/status metadata and a fresh in-flight snapshot. The controller retains
+  only exact child/turn dedupe identities across frontend detach and runtime
+  replacement; `new_session` and server shutdown clear them. There is no completion
+  queue, opening API, cached opening, replay, or result store. Stale generations
+  cannot publish. Native owns full child results. See
+  [ADR 0080](adr/0080-direct-child-completion-delivery.md) and
+  [direct child completions](direct-child-completions.md).
 - src/core/runtime.ts: launch, exact restart resume, attach/detach of realtime voice,
   owned child lifecycle and runtime-cached settings. Frontend detach stops only
   realtime voice; native work and attachment gateway remain. No account selection/rotation, custom
   worker manager. Custom native turn submissions are limited to
-  explicit controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)) and immediate child
-  completion-tally wake-ups ([ADR 0038](adr/0038-thread-mailbox-wakeups.md)).
+  explicit controller-owned restart handoffs ([ADR 0016](adr/0016-restart-handoff.md)) and immediate direct-child
+  completion outputs ([ADR 0080](adr/0080-direct-child-completion-delivery.md)).
 - src/core/session.ts: counted native voice starts/stops and attribution.
   Stop timeouts do not prove non-delivery: retain each expected requested-close
   until notification or reset; a late refusal must remove only its own stop.

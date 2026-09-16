@@ -1,5 +1,10 @@
 # 0059: Describe mailbox lifetime separately from conversational hold
 
+Partially superseded 2026-09-15 by
+[0080](0080-direct-child-completion-delivery.md), which removes all mailbox
+lifetime, opening and guidance behavior described below. The separate conclusion
+that conversational hold is prompt policy rather than runtime state remains active.
+
 Accepted September 14, 2026. Clarifies the tool description against
 [0053](0053-retain-workspace-session-across-frontend-detach.md), without changing
 that decision's runtime ownership or the control protocol.

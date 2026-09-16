@@ -1,7 +1,7 @@
 # AgentVoice control API
 
 Control protocol **7** provides new session, status, voice redial and runtime restart with an
-optional handoff prompt, thread-mailbox opening, and persistent workspace voice selection. MCP and Unix control use the same schemas and dispatcher.
+optional handoff prompt, and persistent workspace voice selection. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
 and control/event endpoints across runtime replacements and frontend detach. A
 frontend owns only its media attachment; closing it stops realtime voice and
@@ -119,7 +119,6 @@ caller connection, event subscription, or pending request.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `agentvoice.status` | `{}` | `ControlStatus` |
-| `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` | Completion batch, remaining tally, in-flight snapshot |
 | `agentvoice.voice_get` | `{refresh?: boolean}` | `VoiceGetResult` |
 | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice` or `selection`, `apply` | saved/apply `ControlOperation` |
 | `agentvoice.redial` | `MutationRequest` | accepted/current `ControlOperation` |
@@ -240,7 +239,7 @@ arbitrary-thread restart scopes do not exist in version 6.
 `agentvoice.new_session` uses the same durable operation and instance/generation
 fences, with scope `runtime` in its result. After successful preflight and old
 runtime cleanup it removes the unchanged workspace `.agentvoice-session` marker,
-clears the old mailbox, creates and saves a new thread and reconnects voice when
+clears direct-child observation state, creates and saves a new thread and reconnects voice when
 a frontend is attached. `ready` confirms the new thread and runtime readiness;
 it confirms media readiness only when attached. Preflight/cleanup failure
 preserves the marker; failure after removal leaves either no marker or the
@@ -298,7 +297,7 @@ There is no automatic retry after uncertain acceptance, later readiness events,
 redials, or further restarts. A failed restart does not carry its prompt into an
 unrelated retry. Frontend detach and reattachment do not create a new journal or
 adopt work from another controller. This API does not
-provide a separate mailbox, queue, cancellation method, or persistent prompt edit.
+provide a worker-result queue, cancellation method, or persistent prompt edit.
 
 ## Streamable HTTP MCP projection
 
@@ -317,7 +316,6 @@ Zod validation and dispatch implementation:
 | MCP tool | Socket method | Input |
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
-| `agentvoice_thread_mailbox_open` | `agentvoice.thread_mailbox_open` | `{operationId, expectedInstanceId}` |
 | `agentvoice_voice_get` | `agentvoice.voice_get` | `{refresh?: boolean}` |
 | `agentvoice_voice_set` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice` or `selection`, `apply` |
 | `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
@@ -386,17 +384,6 @@ If the stop is refused or times out, its outcome is unknown and the server repor
 the failure and refuses new attachments until its process is restarted. The
 disconnected client still closes local devices. A later client explicitly negotiates fresh media; there is
 no reconnect or replay loop.
-
-## Thread mailbox opening
-
-See [thread mailbox](thread-mailbox.md) for the consuming operation and its
-read-only event API. Unlike runtime mutations, mailbox openings are scoped to
-the controller instance and survive runtime generation changes. Reusing an
-operation ID returns the same batch; use a new ID for a new opening. The native
-MCP caller is correlated to an orchestrator tool item before consumption.
-The bounded opening cache survives frontend detach and runtime restart. If it is
-exhausted, use explicit `new_session` to clear the mailbox or restart the server;
-never discard cached results automatically because callers rely on idempotent recovery.
 
 ## Workspace voice selection
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
+import type { InFlight } from "../completions/contract.ts";
 import type { ThreadInventory, ThreadView } from "../events/contract.ts";
-import type { InFlight } from "../mailbox/contract.ts";
 
 export const codingActivitySchema = z.enum(["working", "blocked", "idle", "unknown"]);
 export type CodingActivity = z.infer<typeof codingActivitySchema>;

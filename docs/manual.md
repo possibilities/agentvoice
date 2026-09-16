@@ -137,7 +137,7 @@ the first accepted frontend creates it lazily. Closing
 the terminal frontend, closing or navigating away from the phone page, or
 terminating its owning process releases holds and closes client media. After the
 native realtime stop is acknowledged, the server retains the controller, runtime,
-Codex child, native work, gateway, mailbox and endpoints without realtime speech.
+Codex child, native work, gateway, direct-child observer and endpoints without realtime speech.
 A stop refusal or timeout reports an unknown outcome and blocks another frontend
 until server restart while retaining native work. There are no
 pointer-frontend keybindings, including quit; process signals still perform cleanup.
@@ -231,20 +231,19 @@ Event clients must match the event protocol. A new server workspace session crea
 new event and control endpoints. Frontend detach preserves them; rediscover after
 server restart.
 
-### Child completion wake-ups
+### Direct child completions
 
-Each finished turn of an orchestrator-created native child immediately sends a
-count-only wake-up: accumulated completion notices and the current number of
-children still working. The `agentvoice_thread_mailbox_open` MCP tool returns
-and clears completion metadata; native Codex supplies the full results.
-Multiple pending notices and empty openings are expected. The mailbox survives
-runtime replacement and has no per-message read receipts. AgentStart's manager role and
-mailbox tool description explicitly explain fire-and-forget dispatch: stay
-available to the human and process automatic notices without waiting or polling
-for completion. The runtime adds no system prompt of its own.
-Read-only `mailbox.*` events and mailbox snapshots/replay expose the same state
-for external clients. See [thread mailbox](thread-mailbox.md) for scope,
-retry semantics and bounds.
+Each newly observed terminal turn from a verified direct native child immediately
+sends one standalone tool output to the root through `turn/start`. The payload
+contains that completion's bounded identity/status metadata and a fresh bounded
+snapshot of children still in flight; native Codex supplies the full worker text
+separately. A busy root turn is steered through the same native request.
+
+There is no mailbox to open, no completion queue or replay API, and no retained
+consumable entry. The controller remembers only exact child/turn identities so a
+completion already seen is not submitted again across frontend detach or runtime
+replacement. It does not retry refused, unavailable, or ambiguous submissions.
+See [direct child completions](direct-child-completions.md) for scope and bounds.
 
 ### Watch Voice and Agent in a browser
 
@@ -317,7 +316,7 @@ shows FAILED and the server prints the cause. Use MCP/API redial to reconnect
 voice, or runtime restart to reload code/configuration and resume the same thread.
 Restart supports an optional caller-provided handoff prompt. These controls have
 no TUI buttons or keybindings. Control protocol 7
-exposes status, redial, restart, new session, voice selection and thread-mailbox opening with matching MCP tools; see the
+exposes status, redial, restart, new session and voice selection with matching MCP tools; see the
 [control API](api.md) and [orchestrator guide](../USAGE.md).
 
 ### Installation
@@ -482,7 +481,7 @@ For an immediate new session in a retained workspace session, use the `agentvoic
 tool or `agentvoice.new_session` control API. It preflights a replacement, stops
 the old runtime and work, removes the marker, then creates and saves a new thread
 and reconnects voice when a frontend is attached. The workspace, controller and mute preferences remain;
-the old thread's mailbox clears and transcripts stay separate. See [control API](api.md).
+the old thread's direct-child observation state clears and transcripts stay separate. See [control API](api.md).
 
 `--resume`, `--continue`, `--fresh` and `--no-continue` are retired and report
 marker guidance. Existing launch scripts using those flags must remove them.
@@ -925,8 +924,8 @@ the named voice controls, and `orchestrator.extra.config` replaces
 ## Native work, no custom worker layer
 
 Codex owns the voice-to-working-agent handoff, tools, subagents and their native
-events. AgentVoice adds completion-tally wake-ups and a metadata-only thread
-mailbox; native Codex still starts the children and delivers their results.
+events. AgentVoice submits one bounded metadata output for each newly observed
+direct-child completion; native Codex still starts the children and delivers their full results.
 AgentVoice does not add worker execution tools or archive/delete completed work. An explicit MCP/API restart
 handoff is submitted once through native `turn/start` after exact resume and live media.
 It generates no worker-specific instructions; optional operator prompt overrides

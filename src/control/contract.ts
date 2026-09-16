@@ -7,12 +7,6 @@ import {
   voiceInspectionSchema,
   voiceNameSchema,
 } from "../core/voice-inspection.ts";
-import {
-  type MailboxCaller,
-  type MailboxOpenParams,
-  mailboxOpenParams,
-  mailboxOpenResultSchema,
-} from "../mailbox/contract.ts";
 import { roleRefSchema } from "../roles/store.ts";
 import {
   CONTROL_PROTOCOL_VERSION,
@@ -161,8 +155,7 @@ export type ControlMethod =
   | "agentvoice.status"
   | "agentvoice.redial"
   | "agentvoice.restart"
-  | "agentvoice.new_session"
-  | "agentvoice.thread_mailbox_open";
+  | "agentvoice.new_session";
 
 export type ControlMethodEntry = {
   tool: string;
@@ -170,7 +163,7 @@ export type ControlMethodEntry = {
   params: z.ZodType;
   result: z.ZodType;
   readOnly: boolean;
-  invoke(backend: ControlBackend, params: unknown, caller?: MailboxCaller): Promise<unknown>;
+  invoke(backend: ControlBackend, params: unknown): Promise<unknown>;
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
@@ -200,15 +193,6 @@ export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
     result: controlOperationSchema,
     readOnly: false,
     invoke: (backend, params) => backend.voiceSet(params as VoiceSetRequest),
-  },
-  "agentvoice.thread_mailbox_open": {
-    tool: "agentvoice_thread_mailbox_open",
-    description:
-      "Direct-child work in this AgentVoice call is fire-and-forget after successful dispatch: each observed terminal turn automatically queues completion metadata and submits a turn/start mailbox notice. Stay available to the human; do not block or poll just to detect completion. Open this orchestrator's thread mailbox on notice: return and clear completion metadata, with a fresh snapshot of children still working. Full child results arrive separately through native Codex, possibly after the notice. Use the notice's operationId and expectedInstanceId; reuse an operationId only to retry that same opening. If remainingCompleted is nonzero, open again with a new operationId. Old notices may yield an empty mailbox. Handle reported delivery gaps or failures. Mailbox entries and cached openings survive frontend detach and runtime replacement; explicit new_session or server shutdown clears them. Runtime replacement interrupts native work and rebuilds inventory; old wake-ups are not automatically resubmitted. No per-message read receipts.",
-    params: mailboxOpenParams,
-    result: mailboxOpenResultSchema,
-    readOnly: false,
-    invoke: (backend, params, caller) => backend.mailboxOpen(params as MailboxOpenParams, caller),
   },
   "agentvoice.status": {
     tool: "agentvoice_status",
@@ -242,7 +226,6 @@ export async function dispatchControl(
   backend: ControlBackend,
   method: string,
   params: unknown,
-  caller?: MailboxCaller,
 ): Promise<unknown> {
   const entry = CONTROL_METHODS[method as ControlMethod];
   if (!entry) throw new ControlError("unknown_method", `unknown method "${method}"`);
@@ -255,7 +238,7 @@ export async function dispatchControl(
       .join("; ");
     throw new ControlError("invalid_params", message);
   }
-  const result = await entry.invoke(backend, checked.data, caller);
+  const result = await entry.invoke(backend, checked.data);
   const output = entry.result.safeParse(result);
   if (!output.success)
     throw new ControlError("internal_error", "controller returned an invalid result");

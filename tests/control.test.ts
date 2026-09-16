@@ -128,9 +128,6 @@ function fakeBackend(
       };
       return result;
     },
-    mailboxOpen: async () => {
-      throw new Error("not used");
-    },
     redial: async (request) => accept("redial", "voice", request),
     restart: async (request) => accept("restart", "runtime", request),
   };
@@ -207,7 +204,6 @@ describe("controller control transports", () => {
           "agentvoice_redial",
           "agentvoice_restart_runtime",
           "agentvoice_new_session",
-          "agentvoice_thread_mailbox_open",
           "agentvoice_voice_set",
           "agentvoice_voice_get",
         ],
@@ -249,6 +245,16 @@ describe("controller control transports", () => {
       const toolText = await tools.text();
       expect(toolText).toContain("agentvoice_restart_runtime");
       expect(toolText).toContain("handoffPrompt");
+      expect(toolText).not.toContain("mailbox");
+      expect(
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "retired-mailbox",
+          method: "agentvoice.thread_mailbox_open",
+          params: {},
+        }),
+      ).toMatchObject({ ok: false, error: { code: "unknown_method" } });
 
       const call = await mcpRequest(
         server.httpUrl,

@@ -87,7 +87,6 @@ runRuntimeWorker({mediaFactory:{check(){},audio(){return {micMuted:true,speakerM
       voiceSet: async () => {
         throw new Error("not used");
       },
-      mailboxOpen: (params, caller) => controller.mailboxOpen(params, caller),
       redial: (r) => controller.redial(r),
       restart: (r) => controller.restart(r),
     },

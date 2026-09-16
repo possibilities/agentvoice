@@ -1,23 +1,17 @@
-import { CONTROL_MCP_SERVER_NAME } from "../control/types.ts";
 import {
   type Child,
   type Completion,
+  type CompletionObservation,
   childSchema,
+  completionId,
   type InFlight,
-  MAILBOX_NAMESPACE,
-  MAILBOX_OUTPUT,
-  MAILBOX_TOOL,
-  type MailboxCaller,
-  type MailboxObservation,
-  mailboxId,
-  wakeNoticeSchema,
 } from "./contract.ts";
 
 type Request = (method: string, params: unknown, timeout?: number) => Promise<unknown>;
 const row = (v: unknown): Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 const id = (v: unknown): string | null => {
-  const p = mailboxId.safeParse(v);
+  const p = completionId.safeParse(v);
   return p.success ? p.data : null;
 };
 type TurnEvent =
@@ -33,12 +27,10 @@ type Tracked = {
 };
 
 /** Native facts only: no thread resume, history hydration, or inference for observation. */
-export class SubagentObserver {
+export class CompletionObserver {
   private readonly threads = new Map<string, Tracked>();
   private readonly reads = new Set<string>();
   private readonly priorityReads = new Set<string>();
-  private readonly calls = new Set<string>();
-  private readonly callWaiters = new Set<() => void>();
   private stopped = false;
   private reading = false;
   private scanning = true;
@@ -49,7 +41,7 @@ export class SubagentObserver {
     private readonly root: string,
     private readonly workspace: string,
     private readonly request: Request,
-    private readonly publish: (event: MailboxObservation) => void,
+    private readonly publish: (event: CompletionObservation) => void,
     private readonly secrets: readonly string[] = [],
   ) {}
   async start() {
@@ -106,36 +98,6 @@ export class SubagentObserver {
     const threadId = id(params["threadId"]);
     const item = row(params["item"]);
     if (threadId === this.root) {
-      if (
-        method === "item/started" &&
-        item["type"] === "mcpToolCall" &&
-        item["server"] === CONTROL_MCP_SERVER_NAME &&
-        item["tool"] === MAILBOX_TOOL
-      ) {
-        const callId = id(item["id"]);
-        if (callId) {
-          this.calls.add(callId);
-          while (this.calls.size > 256) this.calls.delete(this.calls.values().next().value!);
-          for (const wake of this.callWaiters) wake();
-        }
-      }
-      if (
-        method === "item/completed" &&
-        item["type"] === "functionCallOutput" &&
-        item["name"] === MAILBOX_OUTPUT &&
-        item["namespace"] === MAILBOX_NAMESPACE &&
-        typeof item["output"] === "string"
-      ) {
-        try {
-          const notice = wakeNoticeSchema.parse(JSON.parse(item["output"]));
-          const turnId = id(params["turnId"]),
-            itemId = id(item["id"]);
-          if (notice.rootThreadId === this.root && turnId && itemId)
-            this.publish({ kind: "recorded", eventId: notice.eventId, turnId, itemId });
-        } catch {
-          /* Other native tool outputs do not identify our submissions. */
-        }
-      }
       if (
         (method === "item/started" || method === "item/completed") &&
         item["type"] === "subAgentActivity"
@@ -216,29 +178,10 @@ export class SubagentObserver {
     this.inventory();
     void this.readPending();
   }
-  async authorize(caller: MailboxCaller): Promise<boolean> {
-    if (caller.threadId !== this.root || this.stopped) return false;
-    if (!this.calls.has(caller.callId) && this.callWaiters.size >= 32) return false;
-    if (!this.calls.has(caller.callId))
-      await new Promise<void>((resolve) => {
-        const done = () => {
-          if (this.calls.has(caller.callId) || this.stopped) finish();
-        };
-        const finish = () => {
-          clearTimeout(timer);
-          this.callWaiters.delete(done);
-          resolve();
-        };
-        const timer = setTimeout(finish, 1000);
-        this.callWaiters.add(done);
-      });
-    return !this.stopped && this.calls.has(caller.callId);
-  }
   stop() {
     this.stopped = true;
     this.reads.clear();
     this.priorityReads.clear();
-    for (const wake of this.callWaiters) wake();
   }
   private text(value: unknown, limit: number): string | null {
     if (typeof value !== "string") return null;

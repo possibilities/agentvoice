@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { buildEventsSchema } from "../scripts/generate-events-schema.ts";
 import { conversationEventSchemas } from "../src/events/conversation.ts";
 import { eventSocketFrameSchema } from "../src/events/schema.ts";
-import { mailboxEventSchemas } from "../src/mailbox/contract.ts";
 
 test("events.schema.json matches its generator and exposes every named event type", async () => {
   const schema = await Bun.file(new URL("../events.schema.json", import.meta.url)).json();
@@ -16,7 +15,6 @@ test("events.schema.json matches its generator and exposes every named event typ
     "voice.item.transcript.delta",
     "voice.item.completed",
     ...Object.keys(conversationEventSchemas),
-    ...Object.keys(mailboxEventSchemas),
   ];
   expect(schema.$defs.events.anyOf.map((entry: { $ref: string }) => entry.$ref)).toEqual(
     names.map((name) => `#/$defs/${name}`),
@@ -27,13 +25,11 @@ test("events.schema.json matches its generator and exposes every named event typ
     expect(discriminator.const).toBe(name);
     expect(schema.$defs[name].required).toEqual(["v", "type", "event", "data"]);
     expect(schema.$defs[name].description).toContain(
-      name.startsWith("mailbox.")
-        ? "Mailbox:"
-        : name.startsWith("conversation.")
-          ? "Conversation:"
-          : name.startsWith("voice.")
-            ? "Transient:"
-            : "Current state:",
+      name.startsWith("conversation.")
+        ? "Conversation:"
+        : name.startsWith("voice.")
+          ? "Transient:"
+          : "Current state:",
     );
   }
 });
@@ -64,4 +60,18 @@ test("published contract rejects untyped content and unknown fields while permit
     }).success,
   ).toBe(false);
   expect(eventSocketFrameSchema.safeParse({ ...frame, event: "unknown" }).success).toBe(false);
+  expect(
+    eventSocketFrameSchema.safeParse({
+      ...request,
+      method: "mailbox.get",
+      params: { expectedInstanceId: "instance" },
+    }).success,
+  ).toBe(false);
+  expect(
+    eventSocketFrameSchema.safeParse({
+      ...frame,
+      event: "mailbox.changed",
+      data: { ...frame.data, state: {} },
+    }).success,
+  ).toBe(false);
 });
