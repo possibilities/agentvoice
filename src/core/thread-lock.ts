@@ -1,6 +1,6 @@
 import { dlopen, FFIType } from "bun:ffi";
 import { createHash } from "node:crypto";
-import { closeSync, constants, mkdirSync, openSync } from "node:fs";
+import { closeSync, constants, fstatSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 
 let library: ReturnType<typeof openLibrary> | undefined;
@@ -32,23 +32,24 @@ function openLibrary() {
   });
 }
 
-/** Kernel-owned locks release even after a crash. Never unlink a lock inode. */
-export function lockThread(directory: string, threadId: string): () => void {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const name = createHash("sha256").update(threadId).digest("hex");
-  const fd = openSync(
-    join(directory, `${name}.lock`),
-    constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW,
-    0o600,
-  );
+/** Kernel-owned exclusive lock. The inode is retained so process death releases ownership. */
+export function lockFile(path: string, unavailableMessage: string): () => void {
+  const fd = openSync(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   let locked = false;
   try {
+    const info = fstatSync(fd);
+    const uid = process.getuid?.();
+    if (
+      !info.isFile() ||
+      info.nlink !== 1 ||
+      (info.mode & 0o777) !== 0o600 ||
+      uid === undefined ||
+      info.uid !== uid
+    )
+      throw new Error(`Unsafe lock file: ${path}`);
     library ??= openLibrary();
     locked = library.symbols.flock(fd, 2 | 4) === 0; // LOCK_EX | LOCK_NB
-    if (!locked)
-      throw new Error(
-        `Conversation ${threadId} is already open in another AgentVoice process; stop that server before opening another workspace session`,
-      );
+    if (!locked) throw new Error(unavailableMessage);
   } finally {
     if (!locked) closeSync(fd);
   }
@@ -58,4 +59,14 @@ export function lockThread(directory: string, threadId: string): () => void {
     released = true;
     closeSync(fd);
   };
+}
+
+/** Kernel-owned locks release even after a crash. Never unlink a lock inode. */
+export function lockThread(directory: string, threadId: string): () => void {
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const name = createHash("sha256").update(threadId).digest("hex");
+  return lockFile(
+    join(directory, `${name}.lock`),
+    `Conversation ${threadId} is already open in another AgentVoice process; stop that server before opening another workspace session`,
+  );
 }

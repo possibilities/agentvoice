@@ -43,6 +43,7 @@ function fixture() {
     applications,
     join(root, "scripts"),
     join(root, "src"),
+    join(root, "src/core"),
     join(root, "fixture-dep"),
   ]) {
     mkdirSync(dir);
@@ -65,6 +66,7 @@ function fixture() {
   ]) {
     copyFileSync(join(repository, "src", name), join(root, "src", name));
   }
+  copyFileSync(join(repository, "src/core/thread-lock.ts"), join(root, "src/core/thread-lock.ts"));
   for (const name of ["bun", "git", "dirname", "bash"]) {
     symlinkSync(name === "bun" ? process.execPath : Bun.which(name)!, join(commands, name));
   }

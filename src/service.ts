@@ -1,15 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmdirSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
+import { lockFile } from "./core/thread-lock.ts";
 import { type Environ, stateDirectory } from "./paths.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "./private-files.ts";
 import {
@@ -276,12 +269,16 @@ export class VoiceService {
     safeAncestors(directory);
     mkdirSync(directory, { recursive: true, mode: 0o755 });
     const lock = join(directory, `.${this.label}.lock`);
+    const unavailable = `Another AgentVoice service operation is already in progress: ${lock}`;
+    let release: () => void;
     try {
-      mkdirSync(lock, { mode: 0o700 });
-    } catch {
-      throw new Error(
-        `Service operation lock exists: ${lock}; check for another operation before removing a stale lock`,
-      );
+      release = lockFile(lock, unavailable);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EISDIR")
+        throw new Error(
+          `Legacy service operation lock directory exists: ${lock}; check for another operation before removing it`,
+        );
+      throw error;
     }
     try {
       const previous = readManaged(plist, this.label);
@@ -373,7 +370,7 @@ export class VoiceService {
         await this.run(["bootstrap", `gui/${this.options.uid}`, plist]);
       }
     } finally {
-      rmdirSync(lock);
+      release();
     }
   }
 }

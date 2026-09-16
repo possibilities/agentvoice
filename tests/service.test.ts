@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -397,7 +399,7 @@ test("menu and CLI lifecycle changes share the installer lock", async () => {
   await entered.promise;
   try {
     await expect(new VoiceService(f.options).change("load")).rejects.toThrow(
-      "operation lock exists",
+      "service operation is already in progress",
     );
   } finally {
     release.resolve();
@@ -405,4 +407,22 @@ test("menu and CLI lifecycle changes share the installer lock", async () => {
   }
   await f.service.change("load");
   expect(f.loaded()).toBe(true);
+  const lock = join(f.paths.directory, `.${SERVICE_LABEL}.lock`);
+  expect(lstatSync(lock).isFile()).toBe(true);
+  await f.service.change("unload");
+  await f.service.change("load");
+  expect(lstatSync(lock).isFile()).toBe(true);
+});
+
+test("legacy lock directories are never removed without inspection", async () => {
+  const f = fixture();
+  await f.service.change("install");
+  const lock = join(f.paths.directory, `.${SERVICE_LABEL}.lock`);
+  rmSync(lock);
+  mkdirSync(lock, { mode: 0o700 });
+  await expect(f.service.change("load")).rejects.toThrow("Legacy service operation lock directory");
+  expect(lstatSync(lock).isDirectory()).toBe(true);
+  rmSync(lock, { recursive: true });
+  await f.service.change("load");
+  expect(lstatSync(lock).isFile()).toBe(true);
 });

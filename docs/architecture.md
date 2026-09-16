@@ -41,7 +41,8 @@ owns the current source map and recording/attachment implementation guidance.
   stage and verify before atomic publication, and never install phone packages,
   configuration, credentials or services or start a call during convergence.
 - src/service.ts: owned user LaunchAgent install/status/restart/remove, explicit argv
-  and selected environment, private logs, bounded launchctl and failed-install rollback.
+  and selected environment, private logs, bounded launchctl, kernel-released shared
+  operation locking and failed-install rollback.
   Never adopt an unrelated loaded job or edited/unsafe plist, or open audio as a check.
 - src/workspace.ts: default/workspaces generations under XDG state; newest sortable
   timestamp-and-UUID name wins, independent of mtimes. Initial creation is atomic;
