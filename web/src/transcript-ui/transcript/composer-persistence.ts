@@ -1,14 +1,18 @@
+import type { ComposerImage } from "./composer-images";
+import { parseComposerImages } from "./composer-images";
 export type PersistedFollowUpMode = "steer" | "queue";
 
 export interface PersistedComposerRecovery {
   clientId: string;
   text: string;
+  images?: ComposerImage[];
   error: string;
 }
 
 export interface PersistedComposerPending {
   clientId: string;
   text: string;
+  images?: ComposerImage[];
   mode: "send" | PersistedFollowUpMode;
   pageId: string;
 }
@@ -16,12 +20,15 @@ export interface PersistedComposerPending {
 export interface PersistedComposerEditing {
   id: string;
   text: string;
+  images?: ComposerImage[];
   savedDraft: string;
+  savedImages?: ComposerImage[];
   pageId: string;
 }
 
 export interface PersistedComposerState {
   draft: string;
+  images?: ComposerImage[];
   followUpMode: PersistedFollowUpMode;
   recoveries: PersistedComposerRecovery[];
   pending: PersistedComposerPending[];
@@ -33,6 +40,7 @@ interface PersistedComposerEntryJournal {
   tabId: string;
   updatedAt: number;
   draft: string;
+  images?: ComposerImage[];
   editing: PersistedComposerEditing | null;
 }
 
@@ -184,7 +192,9 @@ function parseRecovery(value: unknown): PersistedComposerRecovery | null {
   const clientId = stringValue(value.clientId);
   const text = stringValue(value.text);
   const error = stringValue(value.error);
-  return clientId && text !== null && error ? { clientId, text, error } : null;
+  return clientId && text !== null && error
+    ? { clientId, text, error, images: parseComposerImages(value.images) }
+    : null;
 }
 
 function parsePending(value: unknown): PersistedComposerPending | null {
@@ -197,7 +207,7 @@ function parsePending(value: unknown): PersistedComposerPending | null {
     text !== null &&
     pageId &&
     (mode === "send" || mode === "steer" || mode === "queue")
-    ? { clientId, text, pageId, mode }
+    ? { clientId, text, pageId, mode, images: parseComposerImages(value.images) }
     : null;
 }
 
@@ -208,7 +218,14 @@ function parseEditing(value: unknown): PersistedComposerEditing | null {
   const savedDraft = stringValue(value.savedDraft);
   const pageId = stringValue(value.pageId);
   return id && text !== null && savedDraft !== null && pageId
-    ? { id, text, savedDraft, pageId }
+    ? {
+        id,
+        text,
+        savedDraft,
+        pageId,
+        images: parseComposerImages(value.images),
+        savedImages: parseComposerImages(value.savedImages),
+      }
     : null;
 }
 
@@ -218,6 +235,7 @@ function parseState(value: unknown): PersistedComposerState | null {
   if (draft === null) return null;
   return {
     draft,
+    images: parseComposerImages(value.images),
     followUpMode: value.followUpMode === "queue" ? "queue" : "steer",
     recoveries: Array.isArray(value.recoveries)
       ? value.recoveries.flatMap((entry) => {
@@ -263,6 +281,7 @@ function parseJournal(value: unknown): PersistedComposerEntryJournal | null {
     tabId: value.tabId,
     updatedAt: value.updatedAt,
     draft: value.draft,
+    images: parseComposerImages(value.images),
     editing,
   };
 }
@@ -271,7 +290,9 @@ function applyJournal(
   state: PersistedComposerState,
   journal: PersistedComposerEntryJournal | null,
 ) {
-  return journal ? { ...state, draft: journal.draft, editing: journal.editing } : state;
+  return journal
+    ? { ...state, draft: journal.draft, images: journal.images, editing: journal.editing }
+    : state;
 }
 
 function uniqueByClientId<T extends { clientId: string }>(values: T[]) {
@@ -293,6 +314,7 @@ function recoverPending(state: PersistedComposerState, observed: ReadonlySet<str
       recoveries.push({
         clientId: entry.clientId,
         text: entry.text,
+        images: entry.images,
         error: UNKNOWN_DELIVERY,
       });
   }
@@ -320,18 +342,21 @@ function recoverOtherSlots(
         recoveries.push({
           clientId: pending.clientId,
           text: pending.text,
+          images: pending.images,
           error: UNKNOWN_DELIVERY,
         });
-    if (state.draft)
+    if (state.draft || state.images?.length)
       recoveries.push({
         clientId: `recovered-draft:${slotId}`,
         text: state.draft,
+        images: state.images,
         error: RECOVERED_DRAFT,
       });
-    if (state.editing?.text)
+    if (state.editing && (state.editing.text || state.editing.images?.length))
       recoveries.push({
         clientId: `recovered-edit:${slotId}:${state.editing.id}`,
         text: state.editing.text,
+        images: state.editing.images,
         error: RECOVERED_EDIT,
       });
   }
@@ -523,6 +548,7 @@ export function writeComposerEntryJournal(
         tabId,
         updatedAt: Date.now(),
         draft: state.draft,
+        images: state.images,
         editing: state.editing,
       } satisfies PersistedComposerEntryJournal),
     );

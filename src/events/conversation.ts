@@ -108,6 +108,28 @@ const record = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const OMITTED_IMAGE_REFERENCE = "[image omitted]";
+
+/** Native echoes may contain private local paths, remote URLs, or inline image bytes. */
+function omitUserMessageImageReferences(value: unknown): unknown {
+  const row = record(value);
+  if (row["type"] !== "userMessage" || !Array.isArray(row["content"])) return value;
+  let changed = false;
+  const content = row["content"].map((part) => {
+    const input = record(part);
+    if (input["type"] === "image" && typeof input["url"] === "string") {
+      changed = true;
+      return { ...input, url: OMITTED_IMAGE_REFERENCE };
+    }
+    if (input["type"] === "localImage" && typeof input["path"] === "string") {
+      changed = true;
+      return { ...input, path: OMITTED_IMAGE_REFERENCE };
+    }
+    return part;
+  });
+  return changed ? { ...row, content } : value;
+}
+
 function truncateUtf8(value: string, maximum: number): string {
   const bytes = Buffer.from(value);
   if (bytes.length <= maximum) return value;
@@ -309,13 +331,14 @@ export function projectItem(
   value: unknown,
   secrets: readonly string[] = [],
 ): z.infer<typeof conversationItemSchema> {
-  const row = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const projectedValue = omitUserMessageImageReferences(value);
+  const row = record(projectedValue);
   conversationId.parse(row["id"]);
   let reason: "unsupported" | "oversized" | "media" = "unsupported";
   let originalBytes = 0;
   try {
-    originalBytes = Buffer.byteLength(JSON.stringify(value));
-    const safe = safeContent(value, secrets);
+    originalBytes = Buffer.byteLength(JSON.stringify(projectedValue));
+    const safe = safeContent(projectedValue, secrets);
     if (originalBytes > MAX_PROJECTED_ITEM_BYTES) reason = "oversized";
     else {
       const parsed = ThreadItemSchema.safeParse(safe);

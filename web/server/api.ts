@@ -1,4 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import {
+  CLIPBOARD_IMAGE_MIME_TYPES,
+  MAX_CLIPBOARD_IMAGE_BYTES,
+} from "../../src/attachment/image-contract.ts";
+import {
+  type ClipboardImageMimeType,
+  LocalImageError,
+  LocalImageStore,
+} from "../../src/attachment/local-images.ts";
 import { configuredWebOrigin } from "../../src/web-target.ts";
 import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, agentCommandSchema } from "./agent-controls.ts";
@@ -17,6 +26,8 @@ import {
 } from "./file-picker.ts";
 import { isLocalRequest } from "./local-origin.ts";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 function apiError(response: ServerResponse, status: number, error: string) {
   response.setHeader("Cache-Control", "no-store");
   response.setHeader("X-Content-Type-Options", "nosniff");
@@ -26,15 +37,32 @@ function apiError(response: ServerResponse, status: number, error: string) {
 }
 
 export function liveApi(
-  reader: { read(): Promise<LiveView>; agentCommand?(command: AgentCommand): Promise<void> },
+  reader: {
+    read(): Promise<LiveView>;
+    agentCommand?(command: AgentCommand): Promise<void>;
+    localImageContext?(): Promise<
+      | {
+          viewId: string;
+          workspace: string;
+          threadId: string;
+          current(): boolean;
+        }
+      | undefined
+    >;
+  },
   env = process.env,
   nonce?: string,
   documents?: Pick<DocumentReader, "load">,
   files: Pick<FilePicker, "list"> = new FilePicker(),
+  images: Pick<LocalImageStore, "save" | "discard"> = new LocalImageStore(),
 ) {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (!isLocalRequest(request, env)) {
-      if (request.url === "/api/document" || request.url === "/api/files")
+      if (
+        request.url === "/api/document" ||
+        request.url === "/api/files" ||
+        request.url === "/api/clipboard-image"
+      )
         apiError(response, 403, "Forbidden.");
       else response.writeHead(403).end("Forbidden");
       return;
@@ -51,6 +79,76 @@ export function liveApi(
     );
     if (!request.url?.startsWith("/api/")) {
       next();
+      return;
+    }
+    if (request.url === "/api/clipboard-image") {
+      if (request.method !== "POST") {
+        response.setHeader("Allow", "POST");
+        apiError(response, 405, "Method not allowed.");
+        return;
+      }
+      const mimeType = request.headers["content-type"]?.toLowerCase();
+      const viewId = request.headers["x-agentvoice-view-id"];
+      const requestId = request.headers["x-agentvoice-image-id"];
+      if (
+        !request.headers.origin ||
+        typeof mimeType !== "string" ||
+        !CLIPBOARD_IMAGE_MIME_TYPES.includes(mimeType as ClipboardImageMimeType) ||
+        typeof viewId !== "string" ||
+        !UUID.test(viewId) ||
+        typeof requestId !== "string" ||
+        !UUID.test(requestId)
+      ) {
+        apiError(response, 403, "Forbidden.");
+        return;
+      }
+      const declaredBytes = Number(request.headers["content-length"]);
+      if (Number.isFinite(declaredBytes) && declaredBytes > MAX_CLIPBOARD_IMAGE_BYTES) {
+        apiError(response, 413, "Image is larger than 10 MiB.");
+        return;
+      }
+      if (!reader.localImageContext) {
+        apiError(response, 503, "Image input is unavailable.");
+        return;
+      }
+      void (async () => {
+        const context = await reader.localImageContext?.();
+        if (!context || context.viewId !== viewId || !context.current()) {
+          apiError(response, 409, "The Agent view changed before saving.");
+          return;
+        }
+        const chunks = (async function* () {
+          for await (const chunk of request) yield Buffer.from(chunk);
+        })();
+        try {
+          const saved = await images.save({
+            identity: { workspace: context.workspace, threadId: context.threadId },
+            requestId,
+            mimeType: mimeType as ClipboardImageMimeType,
+            chunks,
+            current: context.current,
+            cancelled: () => request.aborted,
+          });
+          if (!context.current()) {
+            images.discard(saved);
+            apiError(response, 409, "The Agent view changed while saving.");
+            return;
+          }
+          if (!response.destroyed)
+            response
+              .writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+              .end(JSON.stringify({ path: saved.path }));
+        } catch (error) {
+          if (!response.destroyed)
+            apiError(
+              response,
+              error instanceof LocalImageError ? error.status : 500,
+              error instanceof LocalImageError ? error.message : "Image could not be saved.",
+            );
+        }
+      })().catch(() => {
+        if (!response.destroyed) apiError(response, 400, "Invalid image request.");
+      });
       return;
     }
     if (request.url === "/api/files") {

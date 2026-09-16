@@ -1,6 +1,11 @@
 import { cn } from "cn";
-import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, PaperclipIcon, SquareIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  CLIPBOARD_IMAGE_MIME_TYPES,
+  MAX_CLIPBOARD_IMAGE_BYTES,
+  MAX_LOCAL_IMAGES,
+} from "../../../../src/attachment/image-contract";
 import { Button } from "../components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +22,7 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "../components/ui/input-group";
+import type { ComposerImage, SaveClipboardImage } from "./composer-images";
 import {
   cacheComposerState,
   composerPageId,
@@ -27,7 +33,6 @@ import {
   writeComposerEntryJournal,
   writeComposerState,
 } from "./composer-persistence";
-
 import { FileReferencePicker } from "./file-reference-picker";
 import {
   insertFileReferences,
@@ -42,6 +47,7 @@ export interface TranscriptSubmission {
   /** Host-visible identity for optimistic rendering and exact transport reconciliation. */
   clientId: string;
   mode: "send" | TranscriptFollowUpMode;
+  images?: ComposerImage[];
 }
 
 let submissionSequence = 0;
@@ -59,6 +65,7 @@ function createSubmissionClientId() {
 export interface TranscriptQueuedMessage {
   id: string;
   text: string;
+  images?: ComposerImage[];
   pausedReason?: string;
   disabled?: boolean;
   canSteer?: boolean;
@@ -102,12 +109,14 @@ export interface TranscriptComposerProps {
   onSteerQueued?: (id: string) => ActionResult;
   onResumeQueued?: (id: string) => ActionResult;
   /** Save edited text in the existing queue position; never submit a new turn. */
-  onEditQueued?: (id: string, text: string) => ActionResult;
+  onEditQueued?: (id: string, text: string, images?: ComposerImage[]) => ActionResult;
   onRemoveQueued?: (id: string) => ActionResult;
   /** Pause/exclude this row from host dispatch while its text is in the composer. */
   onEditingQueuedChange?: (id: string | null) => ActionResult;
   /** Read-only host file picker; selected paths remain ordinary message text. */
   listReferenceFiles?: ListReferenceFiles;
+  /** Materialize raw clipboard images locally before submitting native localImage paths. */
+  saveClipboardImage?: SaveClipboardImage;
   defaultValue?: string;
   placeholder?: string;
   className?: string;
@@ -147,6 +156,7 @@ function Composer({
   onRemoveQueued,
   onEditingQueuedChange,
   listReferenceFiles,
+  saveClipboardImage,
   defaultValue = "",
   placeholder = "Message Agent…",
   className,
@@ -158,6 +168,8 @@ function Composer({
   )[0];
   const inputId = useId();
   const input = useRef<HTMLTextAreaElement>(null);
+  const imageSave = useRef<AbortController | null>(null);
+  const [savingImages, setSavingImages] = useState(false);
   const referenceSelection = useRef({ start: 0, end: 0 });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -167,6 +179,8 @@ function Composer({
   const persistenceDirty = useRef(loaded.changed);
   const initialEditing = loaded.state.editing;
   const draftRef = useRef(initialEditing?.text ?? loaded.state.draft);
+  const imagesRef = useRef<ComposerImage[]>(initialEditing?.images ?? loaded.state.images ?? []);
+  const [images, setImages] = useState(imagesRef.current);
   const [draft, setDraft] = useState(initialEditing?.text ?? loaded.state.draft);
   const [localMode, setLocalMode] = useState<TranscriptFollowUpMode>(loaded.state.followUpMode);
   const [operation, setOperation] = useState<string | null>(null);
@@ -181,7 +195,8 @@ function Composer({
   const [editing, setEditing] = useState<PersistedComposerEditing | null>(initialEditing);
   const observedIdsRef = useRef(new Set(observedSubmissionIds));
   const mode = followUpMode ?? localMode;
-  const unavailable = disabled || actionsDisabled || pending || operation !== null || stopping;
+  const unavailable =
+    disabled || actionsDisabled || pending || operation !== null || stopping || savingImages;
   const editedRow = editing ? queue.find((row) => row.id === editing.id) : null;
   const action = !active ? onSend : mode === "steer" ? onSteer : onQueue;
   const actionLabel = editing
@@ -192,10 +207,105 @@ function Composer({
         ? "Steer"
         : "Queue";
   const canSubmit =
-    draft.trim().length > 0 &&
+    (draft.trim().length > 0 || images.length > 0) &&
     !unavailable &&
     (editing ? Boolean(editedRow && !editedRow.disabled && onEditQueued) : Boolean(action));
-  const showStop = !alwaysShowSend && !editing && active && draft.trim().length === 0;
+  const showStop =
+    !alwaysShowSend && !editing && active && draft.trim().length === 0 && images.length === 0;
+
+  useEffect(() => () => imageSave.current?.abort(), []);
+
+  function updateImages(next: ComposerImage[], immediate = true) {
+    imagesRef.current = next;
+    setImages(next);
+    if (editingRef.current) {
+      editingRef.current = { ...editingRef.current, text: draftRef.current, images: next };
+      setEditing(editingRef.current);
+    }
+    updatePersistence(
+      (current) =>
+        editingRef.current
+          ? { ...current, editing: { ...editingRef.current, text: draftRef.current, images: next } }
+          : { ...current, images: next },
+      immediate,
+    );
+  }
+
+  async function pasteImages(files: readonly File[]) {
+    if (
+      !saveClipboardImage ||
+      imageSave.current ||
+      disabled ||
+      (operation !== null && !submissionPending)
+    )
+      return;
+    if (actionsDisabled) {
+      setError("Reconnect to Agent before pasting an image. Your draft has been kept.");
+      return;
+    }
+    if (imagesRef.current.length + files.length > MAX_LOCAL_IMAGES) {
+      setError("Attach up to 4 clipboard images per message.");
+      return;
+    }
+    for (const file of files) {
+      if (!(CLIPBOARD_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+        setError("Paste a PNG, JPEG, WebP or GIF image. Use Reference a file for other files.");
+        return;
+      }
+      if (file.size === 0 || file.size > MAX_CLIPBOARD_IMAGE_BYTES) {
+        setError("Clipboard images must be nonempty and at most 10 MiB each.");
+        return;
+      }
+    }
+    const controller = new AbortController();
+    imageSave.current = controller;
+    setSavingImages(true);
+    setError(null);
+    try {
+      // Keep paste order, bound memory, and retain already completed files if a later save fails.
+      for (const file of files) {
+        const image = await saveClipboardImage(file, createSubmissionClientId(), controller.signal);
+        if (controller.signal.aborted || !ownsPersistence()) return;
+        updateImages([...imagesRef.current, image]);
+      }
+      input.current?.focus();
+    } catch (cause) {
+      if (!controller.signal.aborted && ownsPersistence()) setError(failureMessage(cause));
+    } finally {
+      if (imageSave.current === controller) {
+        imageSave.current = null;
+        setSavingImages(false);
+      }
+    }
+  }
+
+  function imageAttachments(items: readonly ComposerImage[], removable = false) {
+    return items.length ? (
+      <ul
+        className="transcript-composer__images"
+        aria-label={removable ? "Attached images" : "Message images"}
+      >
+        {items.map((image, index) => (
+          <li key={`${index}:${image.path}`} title={image.path}>
+            <span>[Image #{index + 1}]</span>
+            {removable ? (
+              <button
+                type="button"
+                aria-label={`Remove Image #${index + 1}`}
+                disabled={disabled || (operation !== null && !submissionPending)}
+                onClick={() => {
+                  updateImages(imagesRef.current.filter((_, position) => position !== index));
+                  input.current?.focus();
+                }}
+              >
+                <XIcon aria-hidden="true" />
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+  }
 
   function insertReferences(paths: readonly string[]) {
     const selection = referenceSelection.current;
@@ -222,7 +332,7 @@ function Composer({
     if (paths.length) insertReferences(paths);
     else
       setError(
-        "This browser did not provide a full local file path. Use Reference a file or paste an absolute path. Clipboard images without a path cannot be referenced.",
+        "This browser did not provide a full local file path. Use Reference a file or paste an absolute path. Paste a clipboard image to attach it instead.",
       );
   }
 
@@ -390,6 +500,7 @@ function Composer({
       (current) => ({
         ...current,
         draft: optimisticSubmit ? "" : current.draft,
+        images: optimisticSubmit ? [] : current.images,
         pending: [...current.pending, pendingSubmission],
       }),
       true,
@@ -404,12 +515,15 @@ function Composer({
     if (optimisticSubmit) {
       draftRef.current = "";
       setDraft("");
+      imagesRef.current = [];
+      setImages([]);
       input.current?.focus();
     }
     try {
       await callback();
       if (!optimisticSubmit && ownsPersistence()) {
         updateDraft("", true);
+        updateImages([]);
         input.current?.focus();
       }
     } catch (cause) {
@@ -425,12 +539,16 @@ function Composer({
       if (observed) return;
       const message = failureMessage(cause);
       if (optimisticSubmit) {
-        if (draftRef.current.length === 0) {
+        if (draftRef.current.length === 0 && imagesRef.current.length === 0 && !imageSave.current) {
           updateDraft(text, true);
+          updateImages(submission.images ?? []);
           setError(message);
         } else {
           updateRecoveries(
-            (current) => [...current, { clientId: submission.clientId, text, error: message }],
+            (current) => [
+              ...current,
+              { clientId: submission.clientId, text, images: submission.images, error: message },
+            ],
             true,
           );
         }
@@ -449,6 +567,7 @@ function Composer({
     if (!ownsPersistence()) return;
     updateEditing(null);
     updateDraft(current.savedDraft, true);
+    updateImages(current.savedImages ?? []);
     input.current?.focus();
   }
 
@@ -467,7 +586,7 @@ function Composer({
             if (!ownsPersistence()) return;
             updateEditing({ ...editState, pageId: composerPageId }, true);
           }
-          await onEditQueued(editState.id, text);
+          await onEditQueued(editState.id, text, imagesRef.current);
         },
         finishEditing,
       );
@@ -479,6 +598,7 @@ function Composer({
     const submission: TranscriptSubmission = {
       clientId: createSubmissionClientId(),
       mode: active ? submitMode : "send",
+      ...(images.length ? { images: [...images] } : {}),
     };
     void runSubmission(
       !active ? "Sending…" : submitMode === "steer" ? "Steering…" : "Queueing…",
@@ -497,11 +617,14 @@ function Composer({
         const next = {
           id: row.id,
           text: row.text,
+          images: row.images ?? [],
+          savedImages: editingRef.current?.savedImages ?? imagesRef.current,
           savedDraft: editingRef.current?.savedDraft ?? draftRef.current,
           pageId: composerPageId,
         };
         updateEditing(next);
         updateDraft(row.text, true);
+        updateImages(row.images ?? []);
         input.current?.focus();
       },
     );
@@ -540,6 +663,7 @@ function Composer({
               {queue.map((row) => (
                 <li key={row.id} aria-label={`Queued message: ${row.text}`}>
                   <p className="transcript-queue__text">{row.text}</p>
+                  {imageAttachments(row.images ?? [])}
                   {row.pausedReason ? (
                     <p className="transcript-queue__reason" role="status">
                       {row.pausedReason}
@@ -648,12 +772,22 @@ function Composer({
               acceptTransfer(event.dataTransfer);
           }}
           onPaste={(event) => {
-            if (!listReferenceFiles || disabled || (operation !== null && !submissionPending))
-              return;
+            if (disabled || (operation !== null && !submissionPending)) return;
             const paths = transferredReferencePaths(event.clipboardData);
-            if (!paths.length && event.clipboardData.files.length === 0) return;
-            event.preventDefault();
-            acceptTransfer(event.clipboardData);
+            if (paths.length && listReferenceFiles) {
+              event.preventDefault();
+              acceptTransfer(event.clipboardData);
+              return;
+            }
+            const files = Array.from(event.clipboardData.files);
+            if (!files.length) return;
+            if (saveClipboardImage) {
+              event.preventDefault();
+              void pasteImages(files);
+            } else if (listReferenceFiles) {
+              event.preventDefault();
+              acceptTransfer(event.clipboardData);
+            }
           }}
           onSubmit={(event) => {
             event.preventDefault();
@@ -661,6 +795,23 @@ function Composer({
           }}
         >
           {editing ? <p className="transcript-composer__label">Edit queued message</p> : null}
+          {imageAttachments(images, true)}
+          {savingImages ? (
+            <p className="transcript-composer__image-status" role="status">
+              Saving clipboard image…{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  imageSave.current?.abort();
+                  imageSave.current = null;
+                  setSavingImages(false);
+                  setError("Image paste cancelled. Any images already attached have been kept.");
+                }}
+              >
+                Cancel paste
+              </button>
+            </p>
+          ) : null}
           <InputGroup>
             <InputGroupTextarea
               ref={input}
@@ -793,12 +944,24 @@ function Composer({
                   <div>
                     <p className="transcript-composer__recovery-error">{recovery.error}</p>
                     <p>{recovery.text}</p>
+                    {imageAttachments(recovery.images ?? [])}
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
+                    disabled={savingImages}
                     onClick={() => {
+                      if (
+                        imagesRef.current.length + (recovery.images?.length ?? 0) >
+                        MAX_LOCAL_IMAGES
+                      ) {
+                        setError(
+                          "Remove some draft images before restoring this message (4 images maximum).",
+                        );
+                        return;
+                      }
+                      updateImages([...imagesRef.current, ...(recovery.images ?? [])]);
                       const nextDraft =
                         draftRef.current.length > 0
                           ? `${draftRef.current}\n\n${recovery.text}`
@@ -831,7 +994,7 @@ function Composer({
                       input.current?.focus();
                     }}
                   >
-                    Restore sent text
+                    {recovery.images?.length ? "Restore sent message" : "Restore sent text"}
                   </Button>
                   <Button
                     type="button"
@@ -845,7 +1008,7 @@ function Composer({
                       )
                     }
                   >
-                    Dismiss sent text
+                    {recovery.images?.length ? "Dismiss sent message" : "Dismiss sent text"}
                   </Button>
                 </div>
               ))}

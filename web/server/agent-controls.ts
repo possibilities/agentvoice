@@ -10,6 +10,11 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import {
+  type LocalImageAttachment,
+  MAX_LOCAL_IMAGES,
+} from "../../src/attachment/image-contract.ts";
+import { validateLocalImagePaths } from "../../src/attachment/local-images.ts";
 import type { AgentControlsView } from "../src/types.ts";
 import {
   type AgentOperation,
@@ -18,27 +23,41 @@ import {
   sendAgentOperation,
 } from "./agent-sender.ts";
 
-const text = z
-  .string()
-  .min(1)
-  .refine((value) => value.trim().length > 0 && Buffer.byteLength(value) <= 64 * 1024);
+const text = z.string().refine((value) => Buffer.byteLength(value) <= 64 * 1024);
+const images = z
+  .array(z.object({ path: z.string().min(1).max(4096) }).strict())
+  .max(MAX_LOCAL_IMAGES)
+  .optional();
 const base = { viewId: z.string().uuid(), requestId: z.string().uuid() };
-export const agentCommandSchema = z.discriminatedUnion("action", [
-  z.object({ ...base, action: z.literal("send"), text }).strict(),
-  z.object({ ...base, action: z.literal("steer"), text }).strict(),
-  z.object({ ...base, action: z.literal("queue"), text }).strict(),
-  z.object({ ...base, action: z.literal("interrupt") }).strict(),
-  z.object({ ...base, action: z.literal("edit"), id: z.string().uuid(), text }).strict(),
-  z.object({ ...base, action: z.literal("remove"), id: z.string().uuid() }).strict(),
-  z.object({ ...base, action: z.literal("resume"), id: z.string().uuid() }).strict(),
-  z.object({ ...base, action: z.literal("steerQueued"), id: z.string().uuid() }).strict(),
-  z.object({ ...base, action: z.literal("editing"), id: z.string().uuid().nullable() }).strict(),
-]);
+export const agentCommandSchema = z
+  .discriminatedUnion("action", [
+    z.object({ ...base, action: z.literal("send"), text, images }).strict(),
+    z.object({ ...base, action: z.literal("steer"), text, images }).strict(),
+    z.object({ ...base, action: z.literal("queue"), text, images }).strict(),
+    z.object({ ...base, action: z.literal("interrupt") }).strict(),
+    z.object({ ...base, action: z.literal("edit"), id: z.string().uuid(), text, images }).strict(),
+    z.object({ ...base, action: z.literal("remove"), id: z.string().uuid() }).strict(),
+    z.object({ ...base, action: z.literal("resume"), id: z.string().uuid() }).strict(),
+    z.object({ ...base, action: z.literal("steerQueued"), id: z.string().uuid() }).strict(),
+    z.object({ ...base, action: z.literal("editing"), id: z.string().uuid().nullable() }).strict(),
+  ])
+  .superRefine((command, context) => {
+    if (
+      "text" in command &&
+      command.text.trim().length === 0 &&
+      (command.images?.length ?? 0) === 0
+    )
+      context.addIssue({
+        code: "custom",
+        message: "A message requires text or at least one image.",
+      });
+  });
 export type AgentCommand = z.infer<typeof agentCommandSchema>;
 type Target = AgentTarget & { viewId: string };
 type Row = {
   id: string;
   text: string;
+  images?: LocalImageAttachment[];
   target: Target;
   pausedReason?: string;
   unknown?: boolean;
@@ -50,21 +69,24 @@ type Send = (
   operation: AgentOperation,
   current: () => boolean,
 ) => Promise<string | undefined>;
-const savedRow = z.object({
-  id: z.string().uuid(),
-  text,
-  target: z.object({
-    viewId: z.string().uuid(),
-    instanceId: z.string(),
-    generation: z.number(),
-    workspace: z.string(),
-    threadId: z.string(),
-    controlProtocolVersion: z.union([z.literal(5), z.literal(6)]),
-  }),
-  clientUserMessageId: z.string().uuid().optional(),
-  pausedReason: z.string().optional(),
-  unknown: z.boolean().optional(),
-});
+const savedRow = z
+  .object({
+    id: z.string().uuid(),
+    text,
+    images,
+    target: z.object({
+      viewId: z.string().uuid(),
+      instanceId: z.string(),
+      generation: z.number(),
+      workspace: z.string(),
+      threadId: z.string(),
+      controlProtocolVersion: z.union([z.literal(5), z.literal(6)]),
+    }),
+    clientUserMessageId: z.string().uuid().optional(),
+    pausedReason: z.string().optional(),
+    unknown: z.boolean().optional(),
+  })
+  .refine((row) => row.text.trim().length > 0 || (row.images?.length ?? 0) > 0);
 
 /** A host-owned FIFO. Native history contains only input that Codex actually accepts. */
 export class AgentControls {
@@ -165,6 +187,7 @@ export class AgentControls {
       queue: this.queue.map((row) => ({
         id: row.id,
         text: row.text,
+        ...(row.images ? { images: structuredClone(row.images) } : {}),
         pausedReason:
           this.editing === row.id
             ? "Being edited. Resume to release this message."
@@ -208,9 +231,11 @@ export class AgentControls {
       if (!this.available) throw new Error("Agent is unavailable. The draft was not queued.");
       if (this.notice) throw new Error(this.notice);
       if (this.queue.length >= 20) throw new Error("The queue is full (20 messages).");
+      this.validateImages(command.images, this.target);
       this.queue.push({
         id: command.requestId,
         text: command.text,
+        ...(command.images ? { images: structuredClone(command.images) } : {}),
         target: { ...this.target },
         pausedReason: this.stopping ? "Stopped. Resume this message when ready." : undefined,
       });
@@ -222,8 +247,10 @@ export class AgentControls {
       if (!row) throw new Error("That queued message is no longer available.");
       if (command.action === "remove") this.queue = this.queue.filter((entry) => entry !== row);
       else if (command.action === "edit") {
+        this.validateImages(command.images, this.target);
         Object.assign(row, {
           text: command.text,
+          images: command.images ? structuredClone(command.images) : undefined,
           clientUserMessageId: command.requestId,
           target: { ...this.target },
           pausedReason: undefined,
@@ -231,6 +258,7 @@ export class AgentControls {
         });
       } else if (command.action === "resume") {
         if (row.unknown) throw new Error("Delivery is unknown. Check the transcript first.");
+        this.validateImages(row.images, this.target);
         Object.assign(row, { target: { ...this.target }, pausedReason: undefined });
         if (this.editing === row.id) this.editing = undefined;
       } else if (command.action === "steerQueued") {
@@ -259,6 +287,7 @@ export class AgentControls {
       await this.dispatch({
         action: "steer",
         text: command.text,
+        ...(command.images ? { images: command.images } : {}),
         turnId: this.turn.id,
         clientUserMessageId: command.requestId,
       });
@@ -268,6 +297,7 @@ export class AgentControls {
       await this.dispatch({
         action: "send",
         text: command.text,
+        ...(command.images ? { images: command.images } : {}),
         clientUserMessageId: command.requestId,
       });
     }
@@ -306,11 +336,13 @@ export class AgentControls {
               action: "steer",
               turnId: this.turn.id,
               text: row.text,
+              ...(row.images ? { images: row.images } : {}),
               clientUserMessageId: row.clientUserMessageId ?? row.id,
             }
           : {
               action: "send",
               text: row.text,
+              ...(row.images ? { images: row.images } : {}),
               clientUserMessageId: row.clientUserMessageId ?? row.id,
             },
       );
@@ -328,6 +360,7 @@ export class AgentControls {
     const target = this.target;
     if (!target || !this.available || (this.stopping && operation.action !== "interrupt"))
       throw new Error("Agent is unavailable or stopping. Nothing was sent.");
+    if (operation.action !== "interrupt") this.validateImages(operation.images, target);
     const turnId = this.turn?.status === "inProgress" ? this.turn.id : undefined;
     this.pending = true;
     try {
@@ -349,6 +382,15 @@ export class AgentControls {
       }
     } finally {
       this.pending = false;
+    }
+  }
+
+  private validateImages(images: readonly LocalImageAttachment[] | undefined, target: AgentTarget) {
+    if (!images?.length) return;
+    try {
+      validateLocalImagePaths(images, target);
+    } catch {
+      throw new Error("An attached image is unavailable. Add it again.");
     }
   }
 

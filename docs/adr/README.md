@@ -132,3 +132,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0077: Preserve bounded transcript content summaries](0077-bounded-transcript-content-summaries.md) — accepted; oversized tools keep identity, real status, actionable failures, size metadata, and a safe excerpt without raising transport bounds.
 
 - [0078: Composer local file references remain editable text](0078-composer-local-file-references.md) — accepted; bounded host metadata picker and path-aware drop/paste insert ordinary absolute `@path` text without upload transport.
+
+- [0079: Clipboard images use native local-image input](0079-composer-native-local-images.md) — accepted; retained private local files, numbered image attachments and native localImage parts preserve Codex image semantics.

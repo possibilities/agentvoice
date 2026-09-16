@@ -130,6 +130,20 @@ test("gateway policy exposes only web input and explicit speech on the exact roo
       "turn/start",
       { threadId: identity.threadId, input: [{ type: "localImage", path: "/tmp/x" }] },
     ],
+    [
+      "turn/start",
+      {
+        threadId: identity.threadId,
+        input: [{ type: "image", url: "data:image/png;base64,private" }],
+      },
+    ],
+    [
+      "turn/start",
+      {
+        threadId: identity.threadId,
+        input: [{ type: "image", url: "https://remote.example/private.png" }],
+      },
+    ],
     ["thread/realtime/appendSpeech", { threadId: identity.threadId, text: " " }],
   ] as Array<[string, Record<string, unknown>]>) {
     expect(() => validateAttachmentRequest(method, params, identity)).toThrow();

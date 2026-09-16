@@ -1151,3 +1151,35 @@
 .transcript-file-picker__entries li button > span:first-of-type { min-width: 0; overflow-wrap: anywhere; flex: 1; }
 .transcript-file-picker__kind { font-size: 12px; white-space: nowrap; color: var(--muted-foreground); }
 .transcript-file-picker footer { display: flex; justify-content: end; margin-top: 12px; }
+
+.transcript-composer__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.transcript-composer__images li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding-left: 12px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  font-size: 14px;
+}
+.transcript-composer__images li > span:last-child { padding-right: 12px; }
+.transcript-composer__images button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+.transcript-composer__images button:hover { background: var(--accent-surface); }
+.transcript-composer__images button:focus-visible { outline: 2px solid var(--foreground); outline-offset: -2px; }
+.transcript-composer__images button svg { width: 16px; height: 16px; }
+.transcript-composer__image-status { margin: 0 0 12px; color: var(--muted-foreground); font-size: 13px; }
+.transcript-composer__image-status button { min-height: 44px; padding: 8px; text-decoration: underline; cursor: pointer; }

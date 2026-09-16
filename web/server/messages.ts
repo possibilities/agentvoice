@@ -61,11 +61,13 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
   const { item } = entry;
   const base = { id: itemKey(entry), status: completed ? "complete" : "streaming" } as const;
   if (item.type === "userMessage") {
+    let image = 0;
     const content = item.content
       .map((part) => {
         if (part.type === "text") return part.text;
         if (part.type === "skill" || part.type === "mention") return `@${part.name}`;
-        return `[${part.type === "image" || part.type === "localImage" ? "Image" : "Audio"}]`;
+        if (part.type === "image" || part.type === "localImage") return `[Image #${++image}]`;
+        return "[Audio]";
       })
       .join("\n\n");
     return {

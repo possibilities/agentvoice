@@ -1,13 +1,22 @@
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LocalImageStore } from "../../src/attachment/local-images.ts";
 import { type AgentCommand, AgentControls, agentCommandSchema } from "../server/agent-controls.ts";
 import { type AgentOperation, AgentSendError } from "../server/agent-sender.ts";
 
 function setup() {
-  const directory = mkdtempSync(join(tmpdir(), "av-web-input-"));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "av-web-input-")));
   const target = {
     viewId: randomUUID(),
     instanceId: randomUUID(),
@@ -37,6 +46,23 @@ function setup() {
     },
     close: () => rmSync(directory, { recursive: true, force: true }),
   };
+}
+
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+async function saveImage(workspace: string, threadId: string) {
+  return new LocalImageStore().save({
+    identity: { workspace, threadId },
+    requestId: randomUUID(),
+    mimeType: "image/png",
+    chunks: (async function* () {
+      yield PNG;
+    })(),
+    current: () => true,
+  });
 }
 
 test("send, steer and queue have distinct native semantics; a duplicate request submits once", async () => {
@@ -231,11 +257,92 @@ test("Agent requests reject empty/oversized input and arbitrary native parameter
   const base = { viewId: randomUUID(), requestId: randomUUID(), action: "send" };
   for (const fields of [
     { text: " " },
+    { text: " ", images: [] },
     { text: "x".repeat(65537) },
+    { text: "ok", images: [{ path: "/tmp/image.png", url: "https://example.test/x" }] },
+    { text: "ok", images: Array.from({ length: 5 }, () => ({ path: "/tmp/image.png" })) },
     { text: "ok", threadId: "foreign" },
     { text: "ok", method: "thread/start" },
   ]) {
     expect(agentCommandSchema.safeParse({ ...base, ...fields }).success).toBe(false);
+  }
+});
+
+test("image input preserves order through send, queue persistence, editing and dispatch", async () => {
+  const h = setup();
+  try {
+    const first = await saveImage(h.target.workspace, h.target.threadId);
+    const second = await saveImage(h.target.workspace, h.target.threadId);
+    const images = [{ path: second.path }, { path: first.path }];
+    const send = h.command({ action: "send", text: "", images });
+    await h.controls.command(send);
+    expect(h.operations[0]).toEqual({
+      action: "send",
+      text: "",
+      images,
+      clientUserMessageId: send.requestId,
+    });
+
+    h.controls.observe({ id: "accepted-turn", status: "completed" }, true, 2);
+    const queued = h.command({ action: "queue", text: "Queued image", images });
+    await Promise.all([h.controls.command(queued), h.controls.command(queued)]);
+    expect(h.controls.view().queue).toHaveLength(1);
+    expect(h.controls.view().queue[0]?.images).toEqual(images);
+    expect(new AgentControls(h.directory).view().queue[0]?.images).toEqual(images);
+
+    await h.controls.command(
+      h.command({ action: "edit", id: queued.requestId, text: "Text only after edit" }),
+    );
+    expect(h.controls.view().queue[0]?.images).toBeUndefined();
+    await h.controls.drain();
+    expect(h.operations[1]).toMatchObject({
+      action: "send",
+      text: "Text only after edit",
+      clientUserMessageId: expect.any(String),
+    });
+    expect(h.operations[1]).not.toHaveProperty("images");
+  } finally {
+    h.close();
+  }
+});
+
+test("image admission and queued dispatch reject arbitrary, foreign and replaced paths", async () => {
+  const h = setup();
+  try {
+    const valid = await saveImage(h.target.workspace, h.target.threadId);
+    const foreign = await saveImage(h.target.workspace, "foreign-thread");
+    for (const path of [join(h.directory, "arbitrary.png"), foreign.path])
+      await expect(
+        h.controls.command(h.command({ action: "queue", text: "Private", images: [{ path }] })),
+      ).rejects.toThrow("attached image is unavailable");
+    expect(h.controls.view().queue).toEqual([]);
+
+    const symlink = await saveImage(h.target.workspace, h.target.threadId);
+    unlinkSync(symlink.path);
+    symlinkSync(valid.path, symlink.path);
+    await expect(
+      h.controls.command(
+        h.command({ action: "send", text: "Symlink", images: [{ path: symlink.path }] }),
+      ),
+    ).rejects.toThrow("attached image is unavailable");
+    expect(h.operations).toEqual([]);
+
+    const queued = h.command({
+      action: "queue",
+      text: "Deleted after admission",
+      images: [{ path: valid.path }],
+    });
+    await h.controls.command(queued);
+    unlinkSync(valid.path);
+    await h.controls.drain();
+    expect(h.operations).toEqual([]);
+    expect(h.controls.view().queue[0]).toMatchObject({
+      id: queued.requestId,
+      canResume: true,
+      pausedReason: expect.stringContaining("attached image is unavailable"),
+    });
+  } finally {
+    h.close();
   }
 });
 

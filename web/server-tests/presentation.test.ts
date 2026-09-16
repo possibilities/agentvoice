@@ -28,6 +28,26 @@ test("native voice delegation gets readable shared presentation without changing
   expect(tail?.presentation?.title).toBe("Voice session ended");
 });
 
+test("native image input keeps client identity and ordered transcript markers without references", () => {
+  const privateUrl = "data:image/png;base64,private-image-bytes";
+  const privatePath = "/Users/operator/private/clipboard.png";
+  const item = projectItem({
+    type: "userMessage",
+    id: "native-input",
+    clientId: "client-input",
+    content: [
+      { type: "image", url: privateUrl, detail: null },
+      { type: "localImage", path: privatePath, detail: null },
+      { type: "text", text: "Compare these", text_elements: [] },
+    ],
+  });
+  const message = agentMessage({ turnId: "turn", item })!;
+  expect(message.id).toBe("client:client-input");
+  expect(message.content).toBe("[Image #1]\n\n[Image #2]\n\nCompare these");
+  expect(JSON.stringify(message)).not.toContain(privateUrl);
+  expect(JSON.stringify(message)).not.toContain(privatePath);
+});
+
 test("voice presentation recovers the 5:47 trailing fragment without duplicating it", () => {
   const content = `<realtime_delegation>
   <input>, but we wanna use native SDK</input>

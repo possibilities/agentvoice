@@ -82,7 +82,7 @@ test("picker inserts editable host paths; send, steer and queue remain text-only
   expect(commands).toHaveLength(3);
 });
 
-test("paste and drop consume absolute paths; clipboard bitmaps never expose bytes", async ({
+test("paste and drop consume absolute paths; filename-only drops explain missing paths", async ({
   page,
 }) => {
   let mutations = 0;
@@ -117,7 +117,7 @@ test("paste and drop consume absolute paths; clipboard bitmaps never expose byte
     const transfer = new DataTransfer();
     transfer.items.add(new File(["private bitmap bytes"], "image.png", { type: "image/png" }));
     element.dispatchEvent(
-      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+      new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true }),
     );
   });
   await expect(page.getByRole("alert")).toContainText("did not provide a full local file path");

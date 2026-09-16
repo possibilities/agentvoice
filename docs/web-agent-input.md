@@ -145,8 +145,8 @@ Cancel and picker errors leave the draft intact.
 
 Drop or paste absolute path text or local `file://` URIs into the composer for the
 same result. If a browser exposes only a filename, use the picker or copy the full
-path. Clipboard images without a stable local path cannot be referenced. Files
-are never read, uploaded, copied or saved by these controls. A phone browser's
+path. Ordinary selected/dropped files are never copied or saved by these controls.
+A phone browser's
 picker selects files on the Agent host, not files on the phone.
 
 The host endpoint `POST /api/files` returns directory metadata only. It requires
@@ -155,3 +155,29 @@ responses, excludes hidden entries, symlinks and special files, and bounds reque
 scan and result sizes. Paths outside the home tree can still be typed directly;
 file access remains subject to native Codex permissions. See
 [ADR 0078](adr/0078-composer-local-file-references.md).
+
+## Clipboard images
+
+Paste a PNG, JPEG, WebP or GIF bitmap to attach it as `[Image #N]`. Up to four
+images, each at most 10 MiB, can accompany a message; image-only messages work.
+Remove a numbered attachment with its labeled remove button. Send, Steer, Queue,
+queue editing, saved drafts and failed-send recovery retain the attachment order.
+Saving disables submission until it finishes; **Cancel paste** preserves text and
+any images already attached. A save error leaves the draft available.
+
+`POST /api/clipboard-image` materializes bounded raw image bytes in private
+workspace/thread-owned local storage and returns an absolute path. It requires the
+current view ID, a client-generated image request UUID, loopback peer and exact
+same-origin guards. The separate `/api/agent` request contains only `{path}`
+metadata; the native gateway emits `localImage` with `detail: null`. Native Codex
+prepares the image for the model. No Files API or remote object upload is used.
+
+Completed images remain under `.agentvoice-images/<thread-sha256>/` in the
+workspace, including after removal/cancellation, so saved drafts and queued/history
+references remain usable. Files are 0600 and directories 0700; malformed content,
+symlinks, foreign paths, stale views and quota exhaustion fail visibly. Partial
+writes are removed; abandoned private temporary files older than one hour are
+reclaimed on a later save. The per-thread retained quota is 256 MiB with bounded directory
+scanning; cleanup is explicit workspace maintenance rather than automatic expiry.
+The browser stores paths only and history shows numbered placeholders without
+embedded bytes. See [ADR 0079](adr/0079-composer-native-local-images.md).

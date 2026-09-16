@@ -4,8 +4,13 @@
 Two equal, full-height lanes put Agent on the left and Voice on the right. They use
 the AgentVoice-owned transcript UI with Human / Agent labels, Markdown and inline tool/diff
 disclosures. There is no toolbar or call control.
-The Agent lane includes the shared text composer with an always-visible Send
-button and Steer / Queue choices while Agent is working. Send is disabled when
+The Agent lane includes the shared composer with an always-visible Send
+button and Steer / Queue choices while Agent is working. Clipboard images become
+numbered removable local-image attachments (four per message, 10 MiB each); ordinary
+file selection/drop remains editable `@path` text. Image-only input works. The
+local save endpoint retains private files in workspace/thread-owned storage, while
+composer controls and native input carry paths only. See [image and file input](../docs/web-agent-input.md#clipboard-images)
+for storage lifecycle and failure behavior. Send is disabled when
 its action is unavailable. The divider above the composer shows work without
 changing padding or layout; reduced motion keeps it still. The Voice lane has no
 composer. Browser-local entry recovery preserves drafts, failed submissions and

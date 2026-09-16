@@ -1,3 +1,4 @@
+import type { LocalImageAttachment } from "../../src/attachment/image-contract";
 import type { TranscriptMessage } from "./transcript-ui/transcript/index.ts";
 import type { AgentQueuedMessage, LiveView } from "./types.ts";
 
@@ -5,6 +6,7 @@ export type OptimisticSubmission = {
   id: string;
   viewId: string;
   text: string;
+  images?: LocalImageAttachment[];
   action: "send" | "steer" | "queue";
   anchor?: string;
   state: "pending" | "accepted" | "unknown";
@@ -36,7 +38,9 @@ export function optimisticMessages(
     insertion.push({
       id: `client:${row.id}`,
       role: "user",
-      content: row.text,
+      content: [...(row.images ?? []).map((_, index) => `[Image #${index + 1}]`), row.text]
+        .filter(Boolean)
+        .join("\n\n"),
       status: row.state === "unknown" ? "error" : "working",
       deliveryStatus:
         row.state === "unknown"
@@ -71,6 +75,7 @@ export function optimisticQueue(
     ...additions.map((row) => ({
       id: row.id,
       text: row.text,
+      images: row.images,
       pausedReason:
         row.state === "unknown"
           ? "Queue delivery unknown. Check before resending."

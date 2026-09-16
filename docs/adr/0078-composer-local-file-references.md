@@ -1,6 +1,6 @@
 # 0078: Composer file references remain editable text
 
-Status: Accepted
+Status: Accepted; raw clipboard bitmap limitation superseded by [0079](0079-composer-native-local-images.md).
 
 ## Context
 

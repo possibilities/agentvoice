@@ -87,15 +87,76 @@ describe("conversation content contract", () => {
       arguments: { nested: { token: "[redacted]" } },
       result: { content: [{ type: "text", text: "[redacted]" }] },
     });
-    for (const content of [
-      { type: "audio", url: "private-audio" },
-      { type: "image", url: "data:image/png;base64,aGVsbG8=" },
-    ])
-      expect(projectItem({ type: "userMessage", id: "user", content: [content] })).toMatchObject({
-        type: "unavailable",
-        reason: "media",
+    expect(
+      projectItem({
+        type: "userMessage",
         id: "user",
-      });
+        content: [{ type: "audio", url: "private-audio" }],
+      }),
+    ).toMatchObject({ type: "unavailable", reason: "media", id: "user" });
+    const privateImageUrl = `data:image/png;base64,${"a".repeat(MAX_CONVERSATION_BYTES)}`;
+    const privateImagePath = "/Users/operator/private/clipboard.png";
+    const projectedUser = projectItem({
+      type: "userMessage",
+      id: "user-images",
+      clientId: "client-image-message",
+      content: [
+        { type: "image", url: privateImageUrl, detail: "high" },
+        { type: "localImage", path: privateImagePath, detail: null },
+        { type: "text", text: "Describe both", text_elements: [] },
+      ],
+    });
+    expect(projectedUser).toEqual({
+      type: "userMessage",
+      id: "user-images",
+      clientId: "client-image-message",
+      content: [
+        { type: "image", url: "[image omitted]", detail: "high" },
+        { type: "localImage", path: "[image omitted]", detail: null },
+        { type: "text", text: "Describe both", text_elements: [] },
+      ],
+    });
+    expect(JSON.stringify(projectedUser)).not.toContain(privateImageUrl);
+    expect(JSON.stringify(projectedUser)).not.toContain(privateImagePath);
+    expect(Buffer.byteLength(JSON.stringify(projectedUser))).toBeLessThanOrEqual(
+      MAX_PROJECTED_ITEM_BYTES,
+    );
+    const projectedUserEvent = projectNotification(
+      "item/completed",
+      {
+        threadId: "child",
+        turnId: "turn",
+        item: {
+          type: "userMessage",
+          id: "user-images",
+          clientId: "client-image-message",
+          content: [
+            { type: "image", url: privateImageUrl, detail: "high" },
+            { type: "text", text: "Describe both", text_elements: [] },
+          ],
+        },
+        completedAtMs: 20,
+      },
+      2,
+    )!;
+    expect(projectedUserEvent.event).toBe("conversation.item.completed");
+    expect(projectedUserEvent.data).toMatchObject({
+      item: { type: "userMessage", clientId: "client-image-message" },
+    });
+    expect(JSON.stringify(projectedUserEvent)).not.toContain(privateImageUrl);
+    expect(Buffer.byteLength(JSON.stringify(projectedUserEvent))).toBeLessThanOrEqual(
+      MAX_CONVERSATION_BYTES,
+    );
+    const oversizedImageMessage = projectItem({
+      type: "userMessage",
+      id: "oversized-user-images",
+      content: [
+        { type: "localImage", path: privateImagePath },
+        { type: "text", text: "雪".repeat(MAX_CONVERSATION_BYTES) },
+      ],
+    });
+    expect(oversizedImageMessage).toMatchObject({ type: "unavailable", reason: "oversized" });
+    expect(JSON.stringify(oversizedImageMessage)).not.toContain(privateImagePath);
     expect(projectItem({ type: "futureNativeItem", id: "future", secret: "not a schema" })).toEqual(
       { type: "unavailable", id: "future", nativeType: "futureNativeItem", reason: "unsupported" },
     );

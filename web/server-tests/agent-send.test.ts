@@ -2,11 +2,29 @@ import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { AttachmentGateway } from "../../src/attachment/gateway.ts";
+import { LocalImageStore } from "../../src/attachment/local-images.ts";
 import { agentCommandSchema } from "../server/agent-controls.ts";
 import { dispatchAgentOperation } from "../server/agent-sender.ts";
 import { liveApi } from "../server/api.ts";
 import { LiveReader } from "../server/live-reader.ts";
 import { fixture } from "./fixture.ts";
+
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+async function saveImage(workspace: string, threadId = "main") {
+  return new LocalImageStore().save({
+    identity: { workspace, threadId },
+    requestId: randomUUID(),
+    mimeType: "image/png",
+    chunks: (async function* () {
+      yield PNG;
+    })(),
+    current: () => true,
+  });
+}
 
 async function until(
   reader: LiveReader,
@@ -202,6 +220,52 @@ test("absolute file references remain one exact native text part for send, steer
     ]);
     for (const call of dispatched)
       expect(call.params.input).toEqual([{ type: "text", text, text_elements: [] }]);
+  } finally {
+    await h.close();
+  }
+});
+
+test("verified clipboard images reach native first in exact order with an optional text tail", async () => {
+  const h = await agentFixture();
+  try {
+    const view = await h.reader.read();
+    const first = await saveImage(h.root);
+    const second = await saveImage(h.root);
+    const paths = [{ path: second.path }, { path: first.path }];
+    const send = agentCommandSchema.parse({
+      viewId: view.id,
+      requestId: randomUUID(),
+      action: "send",
+      text: "Compare these",
+      images: paths,
+    });
+    await h.reader.agentCommand(send);
+    const start = h.calls.find((call) => call.method === "turn/start")!;
+    expect(start.params).toEqual({
+      threadId: "main",
+      clientUserMessageId: send.requestId,
+      input: [
+        { type: "localImage", path: second.path, detail: null },
+        { type: "localImage", path: first.path, detail: null },
+        { type: "text", text: "Compare these", text_elements: [] },
+      ],
+    });
+
+    const steer = agentCommandSchema.parse({
+      viewId: view.id,
+      requestId: randomUUID(),
+      action: "steer",
+      text: "",
+      images: [{ path: first.path }],
+    });
+    await h.reader.agentCommand(steer);
+    const nativeSteer = h.calls.find((call) => call.method === "turn/steer")!;
+    expect(nativeSteer.params).toEqual({
+      threadId: "main",
+      expectedTurnId: "turn-1",
+      clientUserMessageId: steer.requestId,
+      input: [{ type: "localImage", path: first.path, detail: null }],
+    });
   } finally {
     await h.close();
   }

@@ -1,3 +1,6 @@
+import { type LocalImageAttachment, MAX_LOCAL_IMAGES } from "./image-contract.ts";
+import { validateLocalImagePaths } from "./local-images.ts";
+
 export type Json = Record<string, unknown>;
 export type AttachmentIdentity = { threadId: string; workspace: string };
 
@@ -16,19 +19,40 @@ function keys(params: Json, allowed: string[]): void {
   if (unknown.length) throw new Error(`Attachment does not support ${unknown.join(", ")}`);
 }
 
-function textInput(value: unknown): void {
-  if (!Array.isArray(value) || value.length !== 1) throw new Error("One text input is required");
-  const input = object(value[0]);
-  keys(input, ["type", "text", "text_elements"]);
-  if (
-    input["type"] !== "text" ||
-    typeof input["text"] !== "string" ||
-    !input["text"].trim() ||
-    Buffer.byteLength(input["text"]) > 64 * 1024 ||
-    (input["text_elements"] !== undefined &&
-      (!Array.isArray(input["text_elements"]) || input["text_elements"].length !== 0))
-  )
-    throw new Error("One nonempty text input of at most 64 KiB is required");
+function turnInput(value: unknown, identity: AttachmentIdentity): void {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LOCAL_IMAGES + 1)
+    throw new Error("One message input is required");
+  const images: LocalImageAttachment[] = [];
+  let hasText = false;
+  for (const part of value) {
+    const input = object(part);
+    if (input["type"] === "localImage") {
+      keys(input, ["type", "path", "detail"]);
+      if (
+        hasText ||
+        images.length === MAX_LOCAL_IMAGES ||
+        typeof input["path"] !== "string" ||
+        input["detail"] !== null
+      )
+        throw new Error("Local image input is invalid");
+      images.push({ path: input["path"] });
+      continue;
+    }
+    keys(input, ["type", "text", "text_elements"]);
+    if (
+      hasText ||
+      input["type"] !== "text" ||
+      typeof input["text"] !== "string" ||
+      !input["text"].trim() ||
+      Buffer.byteLength(input["text"]) > 64 * 1024 ||
+      (input["text_elements"] !== undefined &&
+        (!Array.isArray(input["text_elements"]) || input["text_elements"].length !== 0))
+    )
+      throw new Error("One nonempty text input of at most 64 KiB is required");
+    hasText = true;
+  }
+  if (!images.length && !hasText) throw new Error("One message input is required");
+  if (images.length) validateLocalImagePaths(images, identity);
 }
 
 /** Only host-owned web input and explicit speech operations cross this gateway. */
@@ -45,11 +69,11 @@ export function validateAttachmentRequest(
       break;
     case "turn/start":
       keys(params, ["threadId", "clientUserMessageId", "input"]);
-      textInput(params["input"]);
+      turnInput(params["input"], identity);
       break;
     case "turn/steer":
       keys(params, ["threadId", "expectedTurnId", "clientUserMessageId", "input"]);
-      textInput(params["input"]);
+      turnInput(params["input"], identity);
       break;
     case "turn/interrupt":
       keys(params, ["threadId", "turnId"]);

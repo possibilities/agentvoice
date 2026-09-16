@@ -1,8 +1,10 @@
+import type { LocalImageAttachment } from "../../src/attachment/image-contract.ts";
 import type { TranscriptMessage } from "./transcript-ui/transcript/index.ts";
 
 export type AgentQueuedMessage = {
   id: string;
   text: string;
+  images?: LocalImageAttachment[];
   pausedReason?: string;
   canSteer: boolean;
   canResume: boolean;

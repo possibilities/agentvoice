@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { LocalImageAttachment } from "../../src/attachment/image-contract";
 import { loadDocument } from "./document-loader.ts";
 import { kioskPersistenceInstanceId } from "./kiosk-context.ts";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./optimistic.ts";
 import { type PanePreference, readPanePreference, savePanePreference } from "./pane-preferences.ts";
 import { reconcileView } from "./reconcile-view.ts";
+import type { SaveClipboardImage } from "./transcript-ui/transcript/composer-images";
 import type { ListReferenceFiles } from "./transcript-ui/transcript/file-references";
 import {
   DocumentViewerProvider,
@@ -361,9 +363,40 @@ const AgentInput = memo(function AgentInput({
   onSettle: (id: string, state: OptimisticSubmission["state"] | "rejected") => void;
   isObserved: (viewId: string, id: string) => boolean;
 }) {
+  const saveClipboardImage = useCallback<SaveClipboardImage>(
+    async (file, imageId, signal) => {
+      let response: Response;
+      try {
+        response = await fetch("/api/clipboard-image", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type,
+            "X-AgentVoice-View-Id": viewId,
+            "X-AgentVoice-Image-Id": imageId,
+          },
+          body: file,
+          signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+        });
+      } catch {
+        throw new Error(
+          "Image save could not be confirmed. Paste it again when connected. Your draft has been kept.",
+        );
+      }
+      const result = await response.json().catch(() => undefined);
+      if (!response.ok || typeof result?.path !== "string" || !result.path.startsWith("/"))
+        throw new Error(result?.error ?? "Clipboard image could not be saved. Paste it again.");
+      return { path: result.path };
+    },
+    [viewId],
+  );
+
   const agentCommand = async (
     fields: object,
-    submission?: { clientId: string; mode: "send" | "steer" | "queue" },
+    submission?: {
+      clientId: string;
+      mode: "send" | "steer" | "queue";
+      images?: LocalImageAttachment[];
+    },
   ) => {
     const requestId = submission?.clientId ?? crypto.randomUUID();
     if (submission)
@@ -371,6 +404,7 @@ const AgentInput = memo(function AgentInput({
         id: requestId,
         viewId,
         text: (fields as { text: string }).text,
+        images: submission.images,
         action: submission.mode,
       });
     let response: Response;
@@ -378,7 +412,12 @@ const AgentInput = memo(function AgentInput({
       response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ viewId, requestId, ...fields }),
+        body: JSON.stringify({
+          viewId,
+          requestId,
+          ...fields,
+          ...(submission?.images ? { images: submission.images } : {}),
+        }),
         signal: AbortSignal.timeout(15_000),
       });
     } catch {
@@ -422,6 +461,7 @@ const AgentInput = memo(function AgentInput({
         persistenceScope={persistenceScope}
         persistenceInstanceId={persistenceInstanceId}
         observedSubmissionIds={observedSubmissionIds}
+        saveClipboardImage={saveClipboardImage}
         listReferenceFiles={listReferenceFiles}
         alwaysShowSend
         optimisticSubmit
@@ -439,7 +479,7 @@ const AgentInput = memo(function AgentInput({
         onSteerQueued={(id) => agentCommand({ action: "steerQueued", id })}
         onResumeQueued={(id) => agentCommand({ action: "resume", id })}
         onRemoveQueued={(id) => agentCommand({ action: "remove", id })}
-        onEditQueued={(id, text) => agentCommand({ action: "edit", id, text })}
+        onEditQueued={(id, text, images) => agentCommand({ action: "edit", id, text, images })}
         onEditingQueuedChange={(id) => agentCommand({ action: "editing", id })}
       />
     </>

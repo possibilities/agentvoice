@@ -129,6 +129,12 @@ type Identity = {
   generation: number;
   controlProtocolVersion: ReadableControlProtocol;
 };
+export type LocalImageViewContext = {
+  viewId: string;
+  workspace: string;
+  threadId: string;
+  current: () => boolean;
+};
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
 type HistoryAttempt = { client?: ControlSocket; closed?: boolean };
 
@@ -203,6 +209,31 @@ export class LiveReader {
         .filter((message) => message.role === "assistant")
         .map((message) => message.content),
       current: () => this.identity === identity && this.viewId === viewId && this.current(identity),
+    };
+  }
+
+  /** Clipboard bytes may only bind to the exact verified view that can submit Agent input. */
+  async localImageContext(): Promise<LocalImageViewContext | undefined> {
+    const view = await this.read();
+    const identity = this.identity;
+    const viewId = this.viewId;
+    if (
+      !identity ||
+      !viewId ||
+      view.id !== viewId ||
+      !this.current(identity) ||
+      !this.actionable(identity)
+    )
+      return;
+    return {
+      viewId,
+      workspace: identity.workspace,
+      threadId: identity.threadId,
+      current: () =>
+        this.identity === identity &&
+        this.viewId === viewId &&
+        this.current(identity) &&
+        this.actionable(identity),
     };
   }
 

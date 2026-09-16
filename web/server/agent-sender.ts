@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { acquireAttachment } from "../../src/attachment/bootstrap.ts";
 import type { AttachmentTicket } from "../../src/attachment/gateway.ts";
+import type { LocalImageAttachment } from "../../src/attachment/image-contract.ts";
+import { validateLocalImagePaths } from "../../src/attachment/local-images.ts";
 import type { ReadableControlProtocol } from "../../src/control/discovery.ts";
 
 export type AgentTarget = {
@@ -11,8 +13,19 @@ export type AgentTarget = {
   controlProtocolVersion: ReadableControlProtocol;
 };
 export type AgentOperation =
-  | { action: "send"; text: string; clientUserMessageId?: string }
-  | { action: "steer"; text: string; turnId: string; clientUserMessageId?: string }
+  | {
+      action: "send";
+      text: string;
+      images?: LocalImageAttachment[];
+      clientUserMessageId?: string;
+    }
+  | {
+      action: "steer";
+      text: string;
+      images?: LocalImageAttachment[];
+      turnId: string;
+      clientUserMessageId?: string;
+    }
   | { action: "interrupt"; turnId: string };
 
 export class AgentSendError extends Error {
@@ -53,6 +66,12 @@ export async function dispatchAgentOperation(
   current: () => boolean,
   timeoutMs = 10_000,
 ): Promise<string | undefined> {
+  if (operation.action !== "interrupt" && operation.images?.length)
+    try {
+      validateLocalImagePaths(operation.images, ticket);
+    } catch {
+      throw new AgentSendError("An attached image is unavailable. Add it again.", "not-sent");
+    }
   const headers = { Authorization: `Bearer ${ticket.token}` };
   const watcher = new WebSocket(`${ticket.url}/watch`, { headers });
   let socket: WebSocket | undefined;
@@ -144,7 +163,16 @@ export async function dispatchAgentOperation(
                     ? { threadId: ticket.threadId, turnId: operation.turnId }
                     : {
                         threadId: ticket.threadId,
-                        input: [{ type: "text", text: operation.text, text_elements: [] }],
+                        input: [
+                          ...(operation.images ?? []).map((image) => ({
+                            type: "localImage",
+                            path: image.path,
+                            detail: null,
+                          })),
+                          ...(operation.text.trim()
+                            ? [{ type: "text", text: operation.text, text_elements: [] }]
+                            : []),
+                        ],
                         clientUserMessageId: operation.clientUserMessageId ?? randomUUID(),
                         ...(operation.action === "steer"
                           ? { expectedTurnId: operation.turnId }
