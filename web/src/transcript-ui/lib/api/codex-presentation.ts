@@ -18,6 +18,61 @@ function decode(value: string) {
   return value.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity: string) => entities[entity]!).trim();
 }
 
+type TranscriptEntry = { role: "user" | "assistant"; text: string };
+
+function transcriptEntries(value: string): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+  for (const line of value.split("\n")) {
+    const match = /^(user|assistant): ?(.*)$/.exec(line);
+    if (match) entries.push({ role: match[1] as TranscriptEntry["role"], text: match[2]!.trim() });
+    else if (entries.length > 0 && line.length > 0)
+      entries.at(-1)!.text = `${entries.at(-1)!.text}\n${line}`.trim();
+  }
+  return entries;
+}
+
+function joinsPreviousFragment(input: string, previous: string, between: TranscriptEntry[]) {
+  if (!/^(?:[,.;:!?)}-]|\p{Ll})/u.test(input)) return false;
+  if (/[.!?]["')\]]?$/.test(previous)) return false;
+  return between.length === 1 && between[0]!.role === "assistant" && between[0]!.text.length <= 80;
+}
+
+/**
+ * Reconstruct the human utterance represented by a realtime delegation.
+ *
+ * Native realtime can delegate only a trailing input fragment after publishing
+ * the earlier speech in transcript_delta. Canonical transcript finalization can
+ * also repeat that trailing fragment. Prefer a complete user line that already
+ * contains the input; otherwise join one interrupted, unfinished user fragment.
+ * The native input remains authoritative when the transcript has no such proof.
+ */
+function displayedVoiceInput(input: string, transcript: string) {
+  const entries = transcriptEntries(transcript);
+  let anchor = -1;
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]!;
+    if (entry.role === "user" && (entry.text === input || entry.text.endsWith(input))) {
+      anchor = index;
+      break;
+    }
+  }
+  if (anchor < 0) return input;
+
+  const displayed = entries[anchor]!.text;
+  if (displayed !== input) return displayed;
+
+  let previous = anchor - 1;
+  while (previous >= 0 && entries[previous]!.role !== "user") previous--;
+  if (previous < 0) return displayed;
+
+  const previousText = entries[previous]!.text;
+  if (previous === anchor - 1 && previousText.endsWith(displayed)) return previousText;
+  if (displayed.endsWith(previousText)) return displayed;
+  if (!joinsPreviousFragment(input, previousText, entries.slice(previous + 1, anchor)))
+    return displayed;
+  return `${previousText}${/\s$/.test(previousText) || /^\p{P}/u.test(displayed) ? "" : " "}${displayed}`;
+}
+
 /** Optional Codex interpretation for hosts normalizing app-server message text. */
 export function parseCodexMessagePresentation(content: string): MessagePresentation | undefined {
   const match = delegation.exec(content);
@@ -39,7 +94,7 @@ export function parseCodexMessagePresentation(content: string): MessagePresentat
     }
     return {
       title: "Via Voice",
-      body: input,
+      body: displayedVoiceInput(input, transcript),
       ...(transcript ? { details: [{ label: "Voice context", content: transcript }] } : {}),
     };
   }

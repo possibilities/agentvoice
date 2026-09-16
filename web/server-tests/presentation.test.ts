@@ -2,18 +2,19 @@ import { expect, test } from "bun:test";
 import { projectItem } from "../../src/events/conversation.ts";
 import { agentMessage } from "../server/messages.ts";
 
+const row = (text: string) =>
+  agentMessage({
+    turnId: "turn",
+    item: {
+      type: "userMessage",
+      id: "input",
+      content: [{ type: "text", text, text_elements: [] }],
+    },
+  });
+
 test("native voice delegation gets readable shared presentation without changing saved content", () => {
   const content =
     "<realtime_delegation>\n  <input>Check a &lt; b &amp;&amp; c &gt; d</input>\n  <transcript_delta>assistant: Ready\nuser: Check the comparison</transcript_delta>\n</realtime_delegation>";
-  const row = (text: string) =>
-    agentMessage({
-      turnId: "turn",
-      item: {
-        type: "userMessage",
-        id: "input",
-        content: [{ type: "text", text, text_elements: [] }],
-      },
-    });
   const message = row(content)!;
   expect(message.content).toBe(content);
   expect(message.presentation).toEqual({
@@ -25,6 +26,66 @@ test("native voice delegation gets readable shared presentation without changing
   expect(row(content.replace("</input>", ""))?.presentation).toBeUndefined();
   const tail = row(content.replace("<input>", "<source>transcript_tail_flush</source><input>"));
   expect(tail?.presentation?.title).toBe("Voice session ended");
+});
+
+test("voice presentation recovers the 5:47 trailing fragment without duplicating it", () => {
+  const content = `<realtime_delegation>
+  <input>, but we wanna use native SDK</input>
+  <transcript_delta>assistant: Checking that in the fleet
+user: Great
+assistant: Great.
+user: Yep I think we should do a um... what do you call that? uh- Like a preparatory work item, um, an enabler. That's what I was like trying to think of. An enabler for the Agent Voice Native SDK menu app, where we move the existing menu app with the um QR code over- Just the existing, all existing functionality over from um, whatever it is now, it's a native app, but we wanna use native SDK
+user: , but we wanna use native SDK</transcript_delta>
+</realtime_delegation>`;
+  expect(row(content)?.presentation?.body).toBe(
+    "Yep I think we should do a um... what do you call that? uh- Like a preparatory work item, um, an enabler. That's what I was like trying to think of. An enabler for the Agent Voice Native SDK menu app, where we move the existing menu app with the um QR code over- Just the existing, all existing functionality over from um, whatever it is now, it's a native app, but we wanna use native SDK",
+  );
+});
+
+test("voice presentation preserves the adjacent split input after native rejoins it", () => {
+  const content = `<realtime_delegation>
+  <input>Wait, before we do that, can you make sure that as it start us yet</input>
+  <transcript_delta>assistant: Got it. Checking that.
+user: Yep I think we should make the Native SDK enabler
+assistant: Yes. We’ll make that the enabler.
+user: Wait, before we do that, can you make sure that as it start us yet</transcript_delta>
+</realtime_delegation>`;
+  expect(row(content)?.presentation?.body).toBe(
+    "Wait, before we do that, can you make sure that as it start us yet",
+  );
+});
+
+test("voice presentation rejoins a later interruption split across transcript entries", () => {
+  const content = `<realtime_delegation>
+  <input>update the HUD guidance if this change would affect anything</input>
+  <transcript_delta>assistant: Checking the HUD work item now.
+user: That should, um
+assistant: Yeah.
+user: update the HUD guidance if this change would affect anything</transcript_delta>
+</realtime_delegation>`;
+  expect(row(content)?.presentation?.body).toBe(
+    "That should, um update the HUD guidance if this change would affect anything",
+  );
+});
+
+test("voice presentation does not replace a repeated input with an older user turn", () => {
+  const content = `<realtime_delegation>
+  <input>yes.</input>
+  <transcript_delta>user: I said yes.
+assistant: We can revisit that later.
+user: yes.</transcript_delta>
+</realtime_delegation>`;
+  expect(row(content)?.presentation?.body).toBe("yes.");
+});
+
+test("voice presentation does not prefix a complete transcript row with an older fragment", () => {
+  const content = `<realtime_delegation>
+  <input>fix this</input>
+  <transcript_delta>user: We should maybe
+assistant: Okay.
+user: Please fix this</transcript_delta>
+</realtime_delegation>`;
+  expect(row(content)?.presentation?.body).toBe("Please fix this");
 });
 
 test("function outputs expose decoded JSON and retain the exact native record", () => {

@@ -77,3 +77,35 @@ test("voice delegation is readable, preserves original details and uses shared l
   await expect(inspect).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("Agent transcript shows the complete speech when native input contains only its tail", async ({
+  page,
+}) => {
+  const full =
+    "We move all existing functionality over from whatever it is now, it's a native app, but we wanna use native SDK";
+  const content = `<realtime_delegation>
+  <input>, but we wanna use native SDK</input>
+  <transcript_delta>user: ${full}
+user: , but we wanna use native SDK</transcript_delta>
+</realtime_delegation>`;
+  const view: LiveView = {
+    phase: "live",
+    id: "complete-voice-input",
+    voice: [],
+    agent: [
+      {
+        id: "delegation",
+        role: "user",
+        status: "complete",
+        content,
+        presentation: parseCodexMessagePresentation(content),
+      },
+    ],
+    agentControls: { available: true, active: false, pending: false, stopping: false, queue: [] },
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
+  const agent = page.getByRole("region", { name: "Agent", exact: true });
+  await expect(agent.getByText(full, { exact: true })).toBeVisible();
+  await expect(agent.getByText(", but we wanna use native SDK", { exact: true })).toHaveCount(0);
+});
