@@ -142,6 +142,172 @@ test("runtime sends direct completion metadata with a full working snapshot and 
   }
 });
 
+test("completion admission waits through human speech and assistant commentary", async () => {
+  let completions!: CompletionRuntime;
+  let completion: Completion | undefined;
+  let submissions = 0;
+  let submitted: Record<string, unknown> | undefined;
+  const h = runtimeHarness(
+    {},
+    {
+      onCompletionReady: (runtime) => {
+        completions = runtime;
+      },
+      onCompletion: (event) => {
+        if (event.kind === "completed") completion = event.completion;
+      },
+    },
+  );
+  h.native.override = (method, params) => {
+    if (method === "thread/loaded/list") return Promise.resolve({ data: [], nextCursor: null });
+    if (method === "turn/start" && params["turnTrigger"] === "subagentCompletion") {
+      submissions++;
+      submitted = params;
+      return Promise.resolve({ turn: { id: "completion-turn", status: "inProgress" } });
+    }
+    return undefined;
+  };
+  try {
+    await h.runtime.start();
+    const root = h.runtime.currentReady!.threadId;
+    const notify = h.native.options.onNotification;
+    const user = {
+      id: "human-speaking",
+      realtimeSessionId: "realtime",
+      type: "transcriptSegment" as const,
+      role: "user" as const,
+      text: "I am still describing the work",
+    };
+    notify("thread/realtime/item/started", { threadId: root, item: user });
+    notify("thread/started", {
+      thread: {
+        id: "finished-child",
+        parentThreadId: root,
+        cwd: h.directory,
+        name: "finished child",
+        status: { type: "idle" },
+      },
+    });
+    notify("turn/started", {
+      threadId: "finished-child",
+      turn: { id: "child-turn", status: "inProgress" },
+    });
+    notify("turn/completed", {
+      threadId: "finished-child",
+      turn: { id: "child-turn", status: "completed" },
+    });
+    expect(completion).toBeDefined();
+
+    const pending = completions.deliver({
+      eventId: "deferred-completion",
+      instanceId: "instance",
+      rootThreadId: root,
+      completion: completion!,
+    });
+    await expect(pending).resolves.toEqual({ status: "deferred" });
+    expect(submissions).toBe(0);
+
+    const commentary = {
+      id: "assistant-commentary",
+      realtimeSessionId: "realtime",
+      type: "transcriptSegment" as const,
+      role: "assistant" as const,
+      text: "I will work on that.",
+    };
+    notify("thread/realtime/item/started", { threadId: root, item: commentary });
+    notify("thread/realtime/item/completed", { threadId: root, item: commentary });
+    await Bun.sleep(0);
+    expect(submissions).toBe(0);
+
+    notify("thread/realtime/item/completed", { threadId: root, item: user });
+    await Bun.sleep(0);
+    expect(submissions).toBe(1);
+    expect(submitted).toMatchObject({ threadId: root, turnTrigger: "subagentCompletion" });
+    expect(JSON.parse((submitted!["toolOutput"] as { output: string }).output)).toMatchObject({
+      eventId: "deferred-completion",
+      completion: completion!,
+    });
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("a realtime session close releases a deferred completion", async () => {
+  let completions!: CompletionRuntime;
+  let completion: Completion | undefined;
+  let submissions = 0;
+  const h = runtimeHarness(
+    {},
+    {
+      onCompletionReady: (runtime) => {
+        completions = runtime;
+      },
+      onCompletion: (event) => {
+        if (event.kind === "completed") completion = event.completion;
+      },
+    },
+  );
+  h.native.override = (method, params) => {
+    if (method === "thread/loaded/list") return Promise.resolve({ data: [], nextCursor: null });
+    if (method === "turn/start" && params["turnTrigger"] === "subagentCompletion") {
+      submissions++;
+      return Promise.resolve({ turn: { id: "completion-turn", status: "inProgress" } });
+    }
+    return undefined;
+  };
+  try {
+    await h.runtime.start();
+    const root = h.runtime.currentReady!.threadId;
+    const notify = h.native.options.onNotification;
+    notify("thread/realtime/item/started", {
+      threadId: root,
+      item: {
+        id: "human-speaking",
+        realtimeSessionId: "realtime",
+        type: "transcriptSegment",
+        role: "user",
+        text: "unfinished",
+      },
+    });
+    notify("thread/started", {
+      thread: {
+        id: "finished-child",
+        parentThreadId: root,
+        cwd: h.directory,
+        name: "finished child",
+        status: { type: "idle" },
+      },
+    });
+    notify("turn/completed", {
+      threadId: "finished-child",
+      turn: { id: "child-turn", status: "completed" },
+    });
+    expect(completion).toBeDefined();
+    const pending = completions.deliver({
+      eventId: "release-on-close",
+      instanceId: "instance",
+      rootThreadId: root,
+      completion: completion!,
+    });
+    await expect(pending).resolves.toEqual({ status: "deferred" });
+    expect(submissions).toBe(0);
+
+    notify("thread/realtime/item/completed", {
+      threadId: root,
+      item: {
+        id: "closed",
+        realtimeSessionId: "realtime",
+        type: "realtimeSessionClosed",
+        outcome: "ended",
+      },
+    });
+    await Bun.sleep(0);
+    expect(submissions).toBe(1);
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test("completion delivery remains available while controller MCP readiness is still pending", async () => {
   const readiness = deferred<unknown>();
   let completions: CompletionRuntime | undefined;

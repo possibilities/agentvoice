@@ -988,7 +988,7 @@ export class RuntimeController implements ControlBackend {
     }
     if (this.closed || this.activeIncarnation !== incarnation || this.active !== runtime) return;
     this.pendingCompletions.delete(eventId);
-    if (outcome.status !== "accepted")
+    if (outcome.status !== "accepted" && outcome.status !== "deferred")
       this.notice(`Direct-child completion delivery ${outcome.status}; it will not be retried`);
   }
   private finishHandoff(operation: JournalOperation, outcome: HandoffResult) {
