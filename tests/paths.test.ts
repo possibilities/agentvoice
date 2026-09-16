@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultConfigPath, expandTilde, stateDirectory } from "../src/paths.ts";
+import { cacheDirectory, defaultConfigPath, expandTilde, stateDirectory } from "../src/paths.ts";
 
 const HOME = "/home/tester";
 
@@ -13,6 +13,17 @@ describe("paths", () => {
     expect(defaultConfigPath({ XDG_CONFIG_HOME: "/etc/xdg" }, HOME)).toBe(
       "/etc/xdg/agentvoice/server.json",
     );
+  });
+
+  test("cacheDirectory uses the macOS cache root unless XDG_CACHE_HOME is absolute", () => {
+    expect(cacheDirectory({}, HOME, "darwin")).toBe("/home/tester/Library/Caches/agentvoice");
+    expect(cacheDirectory({ XDG_CACHE_HOME: "relative" }, HOME, "darwin")).toBe(
+      "/home/tester/Library/Caches/agentvoice",
+    );
+    expect(cacheDirectory({ XDG_CACHE_HOME: "/Volumes/cache" }, HOME, "darwin")).toBe(
+      "/Volumes/cache/agentvoice",
+    );
+    expect(cacheDirectory({}, HOME, "linux")).toBe("/home/tester/.cache/agentvoice");
   });
 
   test("expandTilde only rewrites leading ~", () => {

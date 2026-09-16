@@ -8,9 +8,15 @@ export function dataDirectory(env: Environ, home: string): string {
   return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "agentvoice");
 }
 
-export function cacheDirectory(env: Environ, home: string): string {
+export function cacheDirectory(env: Environ, home: string, platform = process.platform): string {
   const xdg = env["XDG_CACHE_HOME"];
-  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".cache"), "agentvoice");
+  const base =
+    xdg && isAbsolute(xdg)
+      ? xdg
+      : platform === "darwin"
+        ? join(home, "Library", "Caches")
+        : join(home, ".cache");
+  return join(base, "agentvoice");
 }
 
 export function stateDirectory(env: Environ, home: string): string {
