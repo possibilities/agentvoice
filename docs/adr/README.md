@@ -143,3 +143,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0086: Illuminate Android connection preparation](0086-illuminated-android-connection-preparation.md) — accepted; Activity-owned preparation presentation keeps audio gates authoritative.
 
 - [0087: Carry gated Android audio energy along the traces](0087-gated-android-trace-energy.md) — accepted; shared clock, independent gated channels, unchanged routes and shipping provenance.
+
+- [0088: Render native subagent lifecycle observations as transcript cards](0088-subagent-lifecycle-transcript-cards.md) — accepted; exact native activity kinds and identities become compact historical notes without inferred settings, Work associations, or live status.

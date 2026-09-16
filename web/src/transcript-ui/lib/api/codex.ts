@@ -12,6 +12,7 @@ import { contextCompactionMessage } from "../system-events.ts";
 import { transcriptTitle } from "../transcript-title.ts";
 import { parseCodexMessagePresentation } from "./codex-presentation.ts";
 import { mapCodexSubagentActivity } from "./codex-subagent-activity.ts";
+import { mapCodexSubagentEvent } from "./codex-subagent-event.ts";
 
 export interface CodexThreadView {
   thread: Thread;
@@ -202,6 +203,11 @@ export function mapCodexItem(record: CodexThreadItemRecord): Message | null {
 
   const createdAt = new Date(record.createdAtMs).toISOString();
   const id = `${record.turnId}:${record.itemId}`;
+
+  if (record.itemType === "subAgentActivity") {
+    const event = mapCodexSubagentEvent(record.item);
+    if (event) return { id, createdAt, ...event };
+  }
 
   if (record.itemType === "contextCompaction") {
     return { id, createdAt, ...contextCompactionMessage(true) };

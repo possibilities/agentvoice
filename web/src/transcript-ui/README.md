@@ -32,6 +32,11 @@ card types retain the existing activity renderer. Explicit system events stay as
 independent measured rows, so they cannot disappear inside a tool group. Both
 Agent and Voice use this same boundary; it does not manufacture events for either source. See
 [ADR 0085](../../../docs/adr/0085-system-event-transcript-cards.md).
+Subagent start, turn completion, and interruption observations use the same card
+registry with exact agent paths and disclosed native identities; communication
+activity retains its tool treatment. No model, effort, Work, or result is inferred
+from these identity-only observations. See
+[ADR 0088](../../../docs/adr/0088-subagent-lifecycle-transcript-cards.md).
 
 The copied component boundary retains scoped lint exceptions for existing
 interaction roles, effect dependencies, and positional rendering keys; migration

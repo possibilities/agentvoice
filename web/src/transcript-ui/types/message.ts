@@ -36,7 +36,7 @@ export interface Message {
   deliveryStatus?: string;
   toolActivity?: ToolActivity;
   fileChanges?: FileChange[];
-  /** Optional user/assistant body interpretation; content remains the original record. */
+  /** Optional plain-text presentation; content remains the original record. */
   presentation?: MessagePresentation;
   /** Exact source item type when custom rendering depends on native item identity. */
   nativeItemType?: string;

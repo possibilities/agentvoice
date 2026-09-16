@@ -114,6 +114,29 @@
 .system-event-card p {
   margin: 4px 0 0;
 }
+.system-event-card__details-trigger {
+  margin-top: 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.system-event-card__details-trigger:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+.system-event-card__details {
+  margin-top: 8px;
+}
+.system-event-card__details > div + div {
+  margin-top: 8px;
+}
+.system-event-card__details dt {
+  color: var(--text);
+  font-weight: 500;
+}
+.system-event-card__details dd {
+  white-space: pre-wrap;
+}
 .message-delivery-status {
   min-width: 0;
   overflow: hidden;

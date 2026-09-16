@@ -70,6 +70,65 @@ test("compaction live completion and saved history remain one system event after
   }
 });
 
+test("subagent lifecycle envelopes and saved history reconcile without duplicating cards", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const item = {
+    type: "subAgentActivity" as const,
+    id: "spawn",
+    kind: "started" as const,
+    agentPath: "/root/check",
+    agentThreadId: "child",
+  };
+  try {
+    await h.start();
+    await until(reader, (view) => view.phase === "live" && !view.agentHistoryLoading);
+    h.feed.conversation({
+      event: "conversation.item.started",
+      revision: 1,
+      data: { threadId: "main", turnId: "turn", item },
+    });
+    const started = await until(
+      reader,
+      (view) => view.agent[0]?.nativeItemType === "subAgentActivity",
+    );
+    expect(started.agent[0]?.role).toBe("system");
+    const id = started.agent[0]?.id;
+    const sentinel = user("after-event", "After lifecycle event");
+    h.history([{ turnId: "turn", item }, sentinel]);
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 2,
+      data: { threadId: "main", turnId: "turn", item },
+    });
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 3,
+      data: { threadId: "main", ...sentinel },
+    });
+    const completed = await until(reader, (view) => view.agent.length === 2);
+    expect(
+      completed.agent.filter((message) => message.nativeItemType === "subAgentActivity"),
+    ).toHaveLength(1);
+    expect(completed.agent[0]?.id).toBe(id);
+    reader.close();
+    const replay = new LiveReader(h.stateDir);
+    try {
+      const restored = await until(
+        replay,
+        (view) => view.agent.length === 2 && !view.agentHistoryLoading,
+      );
+      expect(restored.agent).toEqual(completed.agent);
+      expect(restored.voice).toEqual([]);
+    } finally {
+      replay.close();
+    }
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("initial history pages stay private while live Agent and Voice items keep updating", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
