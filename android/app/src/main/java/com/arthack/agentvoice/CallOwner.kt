@@ -14,15 +14,23 @@ internal class CallOwner(
     val controller: OwnedCallController = controllerFactory(::onUiChanged)
     var activeSession: String? = null
         private set
+    var attemptedProfileId: String? = null
+        private set
     private var startedAtElapsedRealtime = 0L
     private var starting = false
     private var disposed = false
     private var lastNotification: CallNotificationState? = null
     private var lifetimeActive = false
 
-    fun start(credential: CallCredential) {
+    fun start(credential: CallCredential, profileId: String? = null) {
         check(!disposed)
-        if (controller.ui.running) return
+        if (controller.ui.running) {
+            if (attemptedProfileId == profileId) return
+            // stop closes transport, gates and native media synchronously before the successor starts.
+            disconnect()
+            check(!controller.ui.running) { "Previous connection is still closing" }
+        }
+        attemptedProfileId = profileId
         activeSession = newSession()
         startedAtElapsedRealtime = nowElapsedRealtime()
         starting = true

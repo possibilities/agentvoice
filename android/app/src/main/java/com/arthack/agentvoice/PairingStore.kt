@@ -15,7 +15,6 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
-import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -240,83 +239,4 @@ internal class EncryptedPairingStateStorage(
         requireWire(!primitive.isString)
         return primitive.longOrNull ?: throw ProtocolFailure()
     }
-}
-
-internal data class PendingPairingInfo(
-    val endpoint: String,
-    val label: String,
-    val requestId: String,
-    val expiresAt: Long,
-)
-
-internal sealed interface StoredCredential {
-    data object Empty : StoredCredential
-    data class Ready(val credential: CallCredential) : StoredCredential
-    data class Pending(val info: PendingPairingInfo) : StoredCredential
-}
-
-internal class DeviceCredentialStore internal constructor(
-    private val legacyLoad: () -> DeviceGrant?,
-    private val states: PairingStateStorage,
-    internal val keys: DeviceKeyProvider,
-) {
-    constructor(context: Context) : this(
-        legacyLoad = GrantStore(context)::load,
-        states = EncryptedPairingStateStorage(context),
-        keys = AndroidDeviceKeyProvider(),
-    )
-
-    fun load(): StoredCredential = synchronized(DeviceCredentialStore::class.java) {
-        val legacy = legacyLoad()
-        val state = states.load()
-        check(legacy == null || state == null) { "Conflicting saved device access" }
-        if (legacy != null) return@synchronized StoredCredential.Ready(legacy)
-        when (state) {
-            null -> StoredCredential.Empty
-            is PairingStoredState.Pending -> {
-                validateKey(state.value)
-                StoredCredential.Pending(state.value.info())
-            }
-            is PairingStoredState.Ready -> {
-                keys.open(state.value.alias)
-                StoredCredential.Ready(state.value)
-            }
-        }
-    }
-
-    internal fun prepare(qr: PairingQr, label: String): PendingPairing =
-        synchronized(DeviceCredentialStore::class.java) {
-            check(load() == StoredCredential.Empty) { "Device access already exists" }
-            val alias = "agentvoice.device-auth.v1.${UUID.randomUUID()}"
-            val key = keys.create(alias)
-            val pending = PendingPairing(qr, UUID.randomUUID().toString(),
-                normalizePairingLabel(label), alias, encodeBase64Url(key.publicKey))
-            states.saveNew(pending)
-            pending
-        }
-
-    internal fun pendingForRetry(): PendingPairing = synchronized(DeviceCredentialStore::class.java) {
-        check(legacyLoad() == null) { "Device access already exists" }
-        val pending = (states.load() as? PairingStoredState.Pending)?.value
-            ?: throw IllegalStateException("No pairing request is waiting")
-        validateKey(pending)
-        pending
-    }
-
-    internal fun complete(expected: PendingPairing, result: PairingResult): PairedDevice =
-        synchronized(DeviceCredentialStore::class.java) {
-            check(legacyLoad() == null) { "Device access already exists" }
-            val paired = states.complete(expected, result)
-            keys.open(paired.alias)
-            paired
-        }
-
-    private fun validateKey(pending: PendingPairing) {
-        val key = keys.open(pending.alias)
-        requireWire(key.publicKey.contentEquals(decodeBase64Url(pending.publicKey, 384)))
-    }
-
-    private fun PendingPairing.info() = PendingPairingInfo(
-        qr.endpoint, label, requestId, qr.expiresAt,
-    )
 }

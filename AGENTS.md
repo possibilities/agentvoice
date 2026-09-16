@@ -40,14 +40,18 @@ only enrolls the new pairing format. Never silently replace credentials or keys.
 See [Android call navigation](docs/android-call-navigation.md) and
 [client API](docs/client-api.md#android-device-enrollment).
 
-A saved credential gets one automatic attempt on a cold launch. Back opens
+An explicitly selected saved server gets one automatic attempt on a cold launch;
+migration preserves the previously saved server as selected. Pairing alone only
+saves a profile and returns to Connections. Back opens
 connections without hanging up; the private microphone foreground service keeps
 the call through backgrounding and Activity recreation. Disconnect or notification
 Hang up ends it. Notification actions are call-incarnation fenced. Studio rehearses
 this flow without the call service, network, grants or microphone. Its explicit
 notification comparison uses an isolated two-minute short foreground service,
 required by Android for original CallStyle rendering. Failed, revoked or
-unreadable access is retained; there is no delete/replace UI yet.
+unreadable access is retained until explicit Forget server confirmation. Connections
+lists multiple saved servers; switching closes the current phone connection before
+starting another. See [ADR 0081](docs/adr/0081-saved-android-server-profiles.md).
 
 ## What vanilla Codex means
 

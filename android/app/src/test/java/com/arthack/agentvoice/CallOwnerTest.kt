@@ -43,7 +43,10 @@ class CallOwnerTest {
 
         override fun hold() = Unit
         override fun release() = Unit
-        override fun stop(message: String?) = update(CallUi(message = message))
+        override fun stop(message: String?) {
+            events?.add("stop")
+            update(CallUi(message = message))
+        }
         override fun dispose() {
             disposed = true
             update(CallUi())
@@ -81,7 +84,7 @@ class CallOwnerTest {
 
         owner.disconnect()
         owner.dispose()
-        assertEquals(listOf("notification", "lock", "controller", "unlock", "notification-ended"), events)
+        assertEquals(listOf("notification", "lock", "controller", "stop", "unlock", "notification-ended"), events)
     }
 
     @Test fun notificationIgnoresLevelsAndOldActionsCannotControlSuccessor() {
@@ -112,6 +115,29 @@ class CallOwnerTest {
         assertEquals(0, fake.muteCalls)
         assertTrue(owner.toggleMicrophone(successor))
         assertEquals(1, fake.muteCalls)
+    }
+
+    @Test fun switchingProfilesStopsCurrentBeforeSuccessorAndFencesOldNotification() {
+        val events = mutableListOf<String>()
+        lateinit var fake: FakeController
+        var session = 0
+        val owner = CallOwner(
+            controllerFactory = { changed -> FakeController(changed, events).also { fake = it } },
+            nowElapsedRealtime = { 40L },
+            newSession = { "session-${++session}" },
+            notificationChanged = { _, _ -> },
+        )
+        owner.start(grant, "server-1")
+        val oldSession = owner.activeSession
+        owner.start(grant, "server-1")
+        assertEquals(1, fake.startCalls)
+        owner.start(grant, "server-2")
+        assertEquals(listOf("controller", "stop", "controller"), events)
+        assertEquals("server-2", owner.attemptedProfileId)
+        assertFalse(owner.hangUp(oldSession))
+        assertTrue(fake.ui.running)
+        assertTrue(owner.hangUp(owner.activeSession))
+        assertFalse(fake.ui.running)
     }
 
     @Test fun foregroundPublicationFailureDoesNotStartControllerOrRetainSession() {

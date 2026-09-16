@@ -65,10 +65,14 @@ for the default network namespace.
 The Android scanner accepts this pairing format for new enrollment. Existing
 saved bearer grants remain usable until expiry/revocation; `network qr` remains
 a legacy bearer export. Neither stored access nor missing/corrupt keys are
-silently replaced. Recovery currently has no delete or replace control.
+silently replaced. Android retains multiple encrypted server profiles, migrating
+existing access without deleting the original files or keys. Explicit local
+**Forget server** removes the chosen profile; server-side revocation remains a
+separate command. See [ADR 0081](adr/0081-saved-android-server-profiles.md).
 
-Microphone permission is separate. A cold launch with saved access makes one
-automatic call attempt; failures require explicit retry. Back navigates to
+Microphone permission is separate. A cold launch makes one automatic call attempt
+to the last explicitly selected ready profile; saved but unselected profiles open
+Connections. Pairing alone never selects or connects. Failures require explicit retry. Back navigates to
 connections while the foreground-service-owned call continues. Disconnect and
 notification Hang up end it. See [call navigation](android-call-navigation.md).
 

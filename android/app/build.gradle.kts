@@ -74,7 +74,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+    }
     sourceSets.getByName("test").resources.srcDirs("../contract", "../../tests/fixtures")
     lint { abortOnError = true }
 }
@@ -95,6 +98,8 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:150.7871.01")
     implementation("app.rive:rive-android:11.12.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))

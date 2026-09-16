@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.test.platform.app.InstrumentationRegistry
+import android.graphics.Bitmap
+import java.io.File
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
@@ -20,8 +24,7 @@ class ConnectionScreenTest {
         val actions = mutableListOf<String>()
         screen(CallUi(), paired = false, actions = actions)
 
-        compose.onNodeWithText("Make a\nconnection.").assertIsDisplayed()
-        compose.onNodeWithText("Your agent").assertIsDisplayed()
+        compose.onNodeWithText("Connections").assertIsDisplayed()
         compose.onNodeWithTag("connection-scan").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         compose.onNodeWithTag("connection-connect").assertDoesNotExist()
         compose.onNodeWithTag("connection-disconnect").assertDoesNotExist()
@@ -57,8 +60,7 @@ class ConnectionScreenTest {
             }
         }
 
-        compose.onNodeWithText("Your connection.").assertIsDisplayed()
-        compose.onNodeWithText("Finish pairing this phone with your agent.").assertIsDisplayed()
+        compose.onNodeWithText("Connections").assertIsDisplayed()
         compose.onNodeWithTag("connection-status").assertTextEquals("Pairing not finished")
         compose.onNodeWithTag("connection-finish-pairing").assertTextEquals("Finish pairing").performClick()
         compose.onNodeWithTag("connection-scan").assertDoesNotExist()
@@ -122,6 +124,67 @@ class ConnectionScreenTest {
         compose.onNodeWithTag("connection-connect").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         compose.onNodeWithTag("connection-credits").assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
         compose.runOnIdle { assertEquals(listOf("connect", "credits"), actions) }
+    }
+
+    @Test fun multipleServersKeepCurrentCallAndTargetActionsDistinct() {
+        val actions = mutableListOf<String>()
+        compose.setContent {
+            VoiceTheme {
+                ConnectionScreen(CallUi(running = true, connected = true), true, {},
+                    { actions += "return" }, { actions += "disconnect" }, { actions += "scan" },
+                    profiles = fixtureProfiles, attemptedProfileId = "one", selectedProfileId = "one",
+                    onConnectProfile = { actions += "connect:$it" }, onForgetProfile = { actions += "forget:$it" })
+            }
+        }
+        compose.onNodeWithText("Server 1").assertIsDisplayed()
+        compose.onNodeWithText("Server 2").assertIsDisplayed()
+        compose.onNodeWithTag("connection-return").performClick()
+        compose.onNodeWithTag("connection-connect-two").performScrollTo().performClick()
+        compose.onNodeWithTag("connection-menu-two").performScrollTo().performClick()
+        compose.onNodeWithText("Forget server").performClick()
+        compose.runOnIdle { assertEquals(listOf("return", "connect:two", "forget:two"), actions) }
+    }
+
+    @Test fun switchingDisablesConnectionActionsAndRendersEverySavedState() {
+        var saved by mutableStateOf(emptyList<ServerProfile>())
+        var ui by mutableStateOf(CallUi())
+        var busy by mutableStateOf<String?>(null)
+        compose.setContent {
+            VoiceTheme {
+                ConnectionScreen(ui, saved.isNotEmpty(), {}, {}, {}, {}, profiles = saved,
+                    selectedProfileId = "one", attemptedProfileId = "one", busyProfileId = busy,
+                    onConnectProfile = {}, onForgetProfile = {})
+            }
+        }
+        capture("empty")
+        compose.runOnIdle { saved = fixtureProfiles.take(1) }
+        capture("single")
+        compose.runOnIdle { saved = fixtureProfiles }
+        capture("multiple")
+        compose.runOnIdle { ui = CallUi(running = true, connected = true) }
+        capture("current")
+        compose.runOnIdle { ui = CallUi(message = "Private diagnostic") }
+        capture("error")
+        compose.runOnIdle { busy = "two" }
+        compose.onNodeWithText("Switching…").assertIsDisplayed()
+        compose.onNodeWithTag("connection-connect").assertIsNotEnabled()
+        compose.onNodeWithTag("connection-connect-two").assertIsNotEnabled()
+        compose.onNodeWithTag("connection-menu-one").assertIsNotEnabled()
+        capture("switching")
+    }
+
+    private val fixtureProfiles = listOf(
+        ServerProfile("one", "Server 1", "wss://agentvoice.example:48414/v2/client", ServerProfileState.READY),
+        ServerProfile("two", "Server 2", "wss://agentvoice.example:48415/v2/client", ServerProfileState.READY),
+    )
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir,
+            "connection-renders").apply { mkdirs() }
+        File(directory, "$name.png").outputStream().use {
+            check(compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
     }
 
     private fun screen(

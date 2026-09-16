@@ -33,7 +33,7 @@ internal class PairingEnrollment(
         .build()
 
     /** A fresh scan creates and persists exactly one key/request tuple before any network I/O. */
-    suspend fun enrollPairing(qrText: String, label: String, timeoutMs: Long = 15_000): PairedDevice {
+    suspend fun enrollPairing(qrText: String, label: String, timeoutMs: Long = 15_000): CompletedPairing {
         val qr = try { PairingQr.parse(qrText) }
         catch (_: ProtocolFailure) { throw PairingFailure(PairingProblem.InvalidQr) }
         if (qr.isExpired(nowMs())) throw PairingFailure(PairingProblem.ExpiredQr)
@@ -44,13 +44,13 @@ internal class PairingEnrollment(
     }
 
     /** Recovery deliberately ignores the five-minute QR expiry and reuses the persisted tuple. */
-    suspend fun retryPairing(timeoutMs: Long = 15_000): PairedDevice = submit(
-        withContext(Dispatchers.IO) { store.pendingForRetry() }, timeoutMs,
+    suspend fun retryPairing(profileId: String, timeoutMs: Long = 15_000): CompletedPairing = submit(
+        withContext(Dispatchers.IO) { store.pendingForRetry(profileId) }, timeoutMs,
     )
 
-    private suspend fun submit(pending: PendingPairing, timeoutMs: Long): PairedDevice {
+    private suspend fun submit(pending: PendingPairingProfile, timeoutMs: Long): CompletedPairing {
         val result = try {
-            val response = postJson(client, pending.qr.pairingUrl, pending.requestJson(),
+            val response = postJson(client, pending.pairing.qr.pairingUrl, pending.pairing.requestJson(),
                 MAX_PAIRING_RESPONSE_BYTES, timeoutMs)
             when (response.code) {
                 200, 201 -> {
@@ -74,7 +74,9 @@ internal class PairingEnrollment(
         } catch (_: IOException) {
             throw PairingFailure(PairingProblem.Unreachable)
         }
-        return withContext(NonCancellable + Dispatchers.IO) { store.complete(pending, result) }
+        return withContext(NonCancellable + Dispatchers.IO) {
+            store.complete(pending.profileId, pending.pairing, result)
+        }
     }
 }
 

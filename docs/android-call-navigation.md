@@ -4,12 +4,15 @@ The connection screen owns pairing and explicit call actions. The Persona screen
 owns the conversation controls. Navigation does not own the call transport.
 
 An unpaired launch opens the QR camera. After verified enrollment and durable
-storage, the app enters the call, requesting microphone permission separately.
+storage, the app returns to Connections. **Connect** explicitly selects that server
+and requests microphone permission separately. Pairing alone never changes the
+selected server or starts a call.
 A pending pairing request opens the connection screen with **Finish pairing**;
 it never automatically replays enrollment. Canceling an enrollment returns there
 and preserves the exact pending request.
-A cold launch with saved access opens the Persona and makes one automatic call
-attempt. Failure requires an explicit retry; returning to the foreground or
+A cold launch with an explicitly selected saved server opens the Persona and makes
+one automatic call attempt to that server. Saved but unselected profiles open
+Connections; migration preserves the old saved server as selected. Failure requires an explicit retry; returning to the foreground or
 recreating the Activity does not retry a failed attempt. A running call is reused.
 
 Android Back from the Persona releases any held push-to-talk gesture and returns
@@ -36,6 +39,26 @@ bar and the keyboard, but not status/navigation bars. When Android reveals those
 bars during the overview transition, they overlay the scene without changing
 Persona, the control deck or their trace corridor before the task snapshot.
 Studio and connections retain their normal safe-drawing insets.
+
+## Saved servers
+
+Connections lists **Server 1**, **Server 2**, and so on, with each server’s host and
+port. Names are assigned from list order; forgetting a row closes the numbering
+gap. Naming and editing are deferred. **Add server** scans another one-use QR while
+retaining existing credentials. One unfinished enrollment can be retried through
+**Finish pairing**; it never replaces an existing profile.
+
+**Connect** selects that server and ends any current phone connection before
+starting the new one. Its server may then ask **Move voice to this phone?** if a
+different client owns voice there. Cancel leaves that destination owner untouched;
+it does not reconnect the server just left. Back returns to Connections while a
+running call stays active, and **Return to call** enters that exact call.
+
+The row’s options offer **Forget server** with confirmation. Forgetting an active
+server first disconnects the call. It removes local saved access, not the server’s
+device record; pairing again requires a new code. Unavailable or failed access is
+retained until explicitly forgotten. Migration and storage follow
+[ADR 0081](adr/0081-saved-android-server-profiles.md).
 
 ## Ownership
 

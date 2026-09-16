@@ -22,6 +22,28 @@ class CallNavigationTest {
         assertFalse(call.disconnected().shouldAutoConnect(true, true, true, true))
     }
 
+    @Test fun newlyPairedUnselectedProfilesOpenConnectionsWithoutAutoConnectAcrossColdLaunch() {
+        val loaded = CallNavigation().loaded(paired = false, hasSavedProfiles = true)
+        assertEquals(CallRoute.Connection, loaded.route)
+        assertFalse(loaded.shouldAutoConnect(true, false, true, true))
+        assertEquals(CallRoute.Scanner, CallNavigation().loaded(false).route)
+    }
+
+    @Test fun pendingEnrollmentOpensConnectionsEvenWithAnExistingReadyServer() {
+        val loaded = CallNavigation().loaded(paired = true, pairingPending = true)
+        assertEquals(CallRoute.Connection, loaded.route)
+        assertFalse(loaded.shouldAutoConnect(true, true, true, true))
+    }
+
+    @Test fun interruptedPairingReconciliationLeavesScannerWithoutStartingACall() {
+        val interrupted = CallNavigation(route = CallRoute.Scanner)
+            .loaded(paired = true, recoveringPairing = true)
+        assertEquals(CallRoute.Connection, interrupted.route)
+        assertFalse(interrupted.shouldAutoConnect(true, true, true, true))
+        // A deliberate new scan with no interrupted enrollment still survives recreation.
+        assertEquals(CallRoute.Scanner, CallNavigation(route = CallRoute.Scanner).loaded(true).route)
+    }
+
     @Test fun hintRegionNeverOverlapsDeckInEitherHandOrAxis() {
         for (portrait in listOf(true, false)) for (side in listOf("left", "right")) {
             val width = if (portrait) 360f else 760f

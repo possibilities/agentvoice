@@ -93,6 +93,12 @@ The old combined `debug` variant remains a development
 fixture, not the normal phone installation. The desktop/Termux CLI's
 `bun run android:build` is a different artifact.
 
+Host Compose render checks run inside `:app:testStudioUnitTest` using Robolectric
+native graphics (JDK 17, API 35), without a phone or emulator. The saved-server
+screen writes empty, single, multiple, current, error, switching and pending PNGs
+to `app/build/reports/connection-renders/`. These are synthetic UI renders, not
+Keystore or real-call validation. Instrumentation retains those device boundaries.
+
 Root `bun run test`, `bun run typecheck`, and `bun run lint` include the shared
 contract fixtures. Both Kotlin and the server Zod schemas validate
 `contract/server-frames.json`.
@@ -121,17 +127,32 @@ Enrollment uses verified same-authority HTTPS and creates no call or media.
 Before sending, the phone encrypts and atomically saves the exact request in
 no-backup storage. If the response is lost, **Finish pairing** retries that same
 request explicitly; it does not create another key or device. Successful pairing
-enters the call, with microphone permission requested separately. Every later WSS
+returns to Connections and leaves the current call and selected server unchanged.
+**Connect** selects the saved server, with microphone permission requested separately. Every later WSS
 connection authenticates with a fresh signed challenge. No URL, QR secret, SDP,
 audio or transcript is logged. See the [client API](../docs/client-api.md#android-device-enrollment).
 
 Existing saved bearer grants still work until expiry/revocation. The legacy
 `agentvoice network qr` command exports those reusable 30-day credentials; the
 new Android scanner enrolls only the new pairing format. Saved access and missing
-or corrupt keys are never automatically replaced. Manual repair remains necessary
-for rejected access; no delete/replace UI is included in this slice.
+or corrupt keys are never automatically replaced. **Connections** retains multiple
+servers as **Server 1**, **Server 2**, and so on, with host and port shown beneath.
+**Add server** scans another QR; **Connect** closes the previous phone connection
+before connecting the selected server. Its explicit takeover confirmation still
+applies if another client owns voice there. **Forget server** in a row’s options
+requires confirmation and removes only that local profile, disconnecting it first
+if active. Forgetting does not revoke server access or erase migration backups;
+use the issuing server’s `network revoke` command to revoke trust. Numbers follow
+list order; naming and editing are deferred.
 
-With saved access, a cold launch opens Persona and attempts one call. Returning
+The encrypted no-backup collection safely imports old bearer or paired/pending
+state and preserves the original files and Keystore aliases. An empty collection
+remains authoritative, so forgotten access is not re-imported. See
+[ADR 0081](../docs/adr/0081-saved-android-server-profiles.md). For the separate test
+server’s terminal QR, see [targeted pairing](../docs/parallel-test-environment.md#targeted-android-pairing).
+
+With an explicitly selected server, a cold launch opens Persona and attempts one
+call to that server. Saved but unselected profiles open Connections. Returning
 to the foreground reuses a running call and does not retry a failed one. Tailscale
 and upstream Internet access must be available. The server controls conversation
 selection and persistent mute defaults.
@@ -161,9 +182,10 @@ Back, and long-pressing the Persona area replays it. See
 [call navigation](../docs/android-call-navigation.md) for launch and notification behavior.
 
 Expired or revoked grants stay stored and are never auto-replaced. An unreadable
-stored grant is also retained. The app has no refresh-secret, server
-configuration, account, approval or transcript interface, and currently has no
-delete or replacement UI; manual app-data repair is the recovery scope.
+stored grant is also retained. A missing signing key affects that profile without
+preventing other saved servers from connecting. Corrupt collection storage fails
+closed and requires manual repair. The app has no refresh-secret, server
+configuration, account, approval or transcript interface.
 The desktop AgentVoice web UI presents the server's Voice and Agent transcripts
 and typed Agent input without taking phone media ownership. Native approvals stay
 pending because AgentVoice does not answer them.

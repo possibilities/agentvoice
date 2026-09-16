@@ -9,8 +9,12 @@ internal data class CallNavigation(
     val route: CallRoute = CallRoute.Persona,
     val autoConnectPending: Boolean = true,
 ) {
-    fun loaded(paired: Boolean): CallNavigation = if (!paired && route == CallRoute.Persona)
-        copy(route = CallRoute.Scanner) else this
+    fun loaded(paired: Boolean, pairingPending: Boolean = false, recoveringPairing: Boolean = false,
+        hasSavedProfiles: Boolean = paired): CallNavigation = when {
+        pairingPending || recoveringPairing || (!paired && hasSavedProfiles) -> disconnected()
+        !paired && route == CallRoute.Persona -> copy(route = CallRoute.Scanner)
+        else -> this
+    }
     fun back() = copy(route = CallRoute.Connection)
     fun enterCall() = copy(route = CallRoute.Persona, autoConnectPending = false)
     fun disconnected() = copy(route = CallRoute.Connection, autoConnectPending = false)

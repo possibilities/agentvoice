@@ -25,15 +25,17 @@ internal class CallService : Service() {
     inner class LocalBinder : Binder() {
         val controller: OwnedCallController get() = owner.controller
 
+        val attemptedProfileId: String? get() = owner.attemptedProfileId
+
         /** The caller must be a resumed Activity with microphone permission. */
-        fun startCall(credential: CallCredential) {
+        fun startCall(credential: CallCredential, profileId: String) {
             check(Looper.myLooper() == Looper.getMainLooper())
-            if (owner.controller.ui.running) return
+            if (owner.controller.ui.running && owner.attemptedProfileId == profileId) return
             preparationTimeout?.let(main::removeCallbacks)
             preparationTimeout = null
             prepareConsumed = !preparingForeground
             preparingForeground = false
-            owner.start(credential)
+            owner.start(credential, profileId)
         }
 
         fun disconnect() {

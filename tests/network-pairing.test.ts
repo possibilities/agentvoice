@@ -439,6 +439,124 @@ test("private pairing socket supports prepare, render activation, status and can
   }
 });
 
+test("default and workspace gateways bind independent real pairing sockets and reject cross-device auth", async () => {
+  // macOS limits Unix-domain socket paths to 103 bytes. /tmp mirrors the short,
+  // stable production state root better than the long per-user temporary path.
+  const root = mkdtempSync("/tmp/av-pairing-scoped-gateways-");
+  const workspace =
+    "/Users/arthack/.local/state/agentvoice/test-workspace-with-a-deliberately-long-name";
+  const testEndpoint = "wss://test-voice.example:48415/v2/client";
+  const noCall = async () => {
+    throw new Error("pairing and authentication must not create a call");
+  };
+  const productionVoice = new VoiceServer(frontendSocketPath(root), noCall);
+  const workspaceVoice = new VoiceServer(frontendSocketPath(root, workspace), noCall);
+  await productionVoice.start();
+  await workspaceVoice.start();
+  const productionGateway = new NetworkGateway(
+    root,
+    productionVoice.path,
+    { version: 1, endpoint, port: 0 },
+    { interval: 20, timeout: 1_000 },
+  );
+  const workspaceGateway = new NetworkGateway(
+    root,
+    workspaceVoice.path,
+    { version: 1, endpoint: testEndpoint, port: 0 },
+    { interval: 20, timeout: 1_000 },
+    workspace,
+  );
+  await productionGateway.start();
+  await workspaceGateway.start();
+  try {
+    const productionSocket = pairingSocketPath(root);
+    const workspaceSocket = pairingSocketPath(root, workspace);
+    expect(productionSocket).not.toBe(workspaceSocket);
+    expect(Buffer.byteLength(workspaceSocket)).toBeLessThan(104);
+    expect(statSync(productionSocket).mode & 0o777).toBe(0o600);
+    expect(statSync(workspaceSocket).mode & 0o777).toBe(0o600);
+
+    async function enroll(
+      socketPath: string,
+      gateway: NetworkGateway,
+      expectedEndpoint: string,
+      enrollmentRequestId: string,
+      label: string,
+    ): Promise<string> {
+      const control = await ControlSocket.connect(socketPath, 1);
+      try {
+        const pending = (await control.request("prepare", {})) as {
+          enrollmentId: string;
+          receipt: string;
+          payload: string;
+        };
+        const qr = parsePairingQrPayload(pending.payload);
+        expect(qr.endpoint).toBe(expectedEndpoint);
+        await control.request("activate", {
+          enrollmentId: pending.enrollmentId,
+          receipt: pending.receipt,
+        });
+        const response = await fetch(`http://127.0.0.1:${gateway.port}${PAIRING_PATH}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            v: 1,
+            enrollment: qr.enrollment,
+            requestId: enrollmentRequestId,
+            label,
+            publicKey,
+          }),
+        });
+        expect(response.status).toBe(201);
+        return ((await response.json()) as { deviceId: string }).deviceId;
+      } finally {
+        control.close();
+      }
+    }
+
+    const productionDevice = await enroll(
+      productionSocket,
+      productionGateway,
+      endpoint,
+      "22222222-2222-4222-8222-222222222222",
+      "Production phone",
+    );
+    const workspaceDevice = await enroll(
+      workspaceSocket,
+      workspaceGateway,
+      testEndpoint,
+      "33333333-3333-4333-8333-333333333333",
+      "Test phone",
+    );
+    expect(new PairedDevices(root).list().map((record) => record.id)).toEqual([productionDevice]);
+    expect(new PairedDevices(root, workspace).list().map((record) => record.id)).toEqual([
+      workspaceDevice,
+    ]);
+
+    async function challenge(gateway: NetworkGateway, deviceId: string): Promise<Response> {
+      return fetch(`http://127.0.0.1:${gateway.port}${CHALLENGE_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ v: 1, deviceId }),
+      });
+    }
+    expect((await challenge(productionGateway, productionDevice)).status).toBe(200);
+    expect((await challenge(workspaceGateway, workspaceDevice)).status).toBe(200);
+    const productionOnWorkspace = await challenge(workspaceGateway, productionDevice);
+    expect(productionOnWorkspace.status).toBe(404);
+    expect(productionOnWorkspace.headers.get("x-agentvoice-error")).toBe("device_unavailable");
+    const workspaceOnProduction = await challenge(productionGateway, workspaceDevice);
+    expect(workspaceOnProduction.status).toBe(404);
+    expect(workspaceOnProduction.headers.get("x-agentvoice-error")).toBe("device_unavailable");
+  } finally {
+    await workspaceGateway.close();
+    await productionGateway.close();
+    await workspaceVoice.close();
+    await productionVoice.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("HTTP enrollment and signed auth-only WSS upgrade never start a call", async () => {
   const root = mkdtempSync(join(tmpdir(), "av-pairing-http-"));
   let starts = 0;
