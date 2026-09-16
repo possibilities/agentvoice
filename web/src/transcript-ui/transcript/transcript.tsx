@@ -209,6 +209,13 @@ export function Transcript({
   const visibleMessages = useVisibleMessages(messages, detail);
   const blocks = useTranscriptBlocks(visibleMessages);
   const messageIds = useMemo(() => visibleMessages.map((message) => message.id), [visibleMessages]);
+  const countedMessageIds = useMemo(
+    () =>
+      visibleMessages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => message.id),
+    [visibleMessages],
+  );
   const incarnationKey = `${transcriptId}:${detail}:${loading ? "loading" : "ready"}`;
   return (
     <div className={cn("agentchats-transcript chat-pane", className)}>
@@ -219,6 +226,7 @@ export function Transcript({
               key={incarnationKey}
               blocks={blocks}
               messageIds={messageIds}
+              countedMessageIds={countedMessageIds}
               renderBlock={renderTranscriptBlock}
               follow={follow}
               showJumpToLatest={showJumpToLatest}

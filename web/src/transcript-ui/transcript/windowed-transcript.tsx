@@ -14,6 +14,7 @@ import {
 import { Button } from "../components/ui/button";
 
 const END_THRESHOLD = 64;
+const VISIBILITY_EPSILON = 1;
 
 type WindowedRow<T> =
   | { key: "slot:header"; kind: "slot"; content: ReactNode }
@@ -30,6 +31,8 @@ export interface WindowedTranscriptProps<T extends { id: string }> {
   blocks: readonly T[];
   /** Exact visible message IDs, including messages grouped into one block. */
   messageIds: readonly string[];
+  /** Newly appended prose-message IDs eligible for the unread count. */
+  countedMessageIds: readonly string[];
   renderBlock: (block: T) => ReactNode;
   /** Follow the bottom until the reader scrolls away. */
   follow: boolean;
@@ -86,6 +89,7 @@ function restoreReadingAnchor(element: HTMLElement, anchor: ReadingAnchor) {
 export function WindowedTranscript<T extends { id: string }>({
   blocks,
   messageIds,
+  countedMessageIds,
   renderBlock,
   follow,
   showJumpToLatest,
@@ -106,6 +110,8 @@ export function WindowedTranscript<T extends { id: string }>({
   const scrollFrameRef = useRef<number | null>(null);
   const anchorFrameRef = useRef<number | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
+  const edgeFrameRef = useRef<number | null>(null);
+  const updateEdgeRef = useRef<() => void>(() => {});
   const lastIndexRef = useRef(0);
   const lastScrollOffsetRef = useRef(0);
   const frozenOffsetRef = useRef<number | null>(null);
@@ -118,11 +124,14 @@ export function WindowedTranscript<T extends { id: string }>({
   const pointerReadingRef = useRef(false);
   const touchYRef = useRef<number | null>(null);
   const [away, setAway] = useState(false);
+  const [tailOffscreen, setTailOffscreen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [initializing, setInitializing] = useState(true);
   const [startPadding, setStartPadding] = useState(24);
   const [endPadding, setEndPadding] = useState(48);
-  const priorIdsRef = useRef(new Set(messageIds));
+  const priorIdsRef = useRef({ ordered: messageIds, set: new Set(messageIds) });
+  const pendingCountedIdsRef = useRef(new Set<string>());
+  const unreadFrameRef = useRef<number | null>(null);
 
   followRef.current = follow;
   if (!follow && !initializingRef.current) {
@@ -186,6 +195,14 @@ export function WindowedTranscript<T extends { id: string }>({
       if (element && awayRef.current && !restoringAnchorRef.current) {
         anchorRef.current = captureReadingAnchor(element);
       }
+    });
+  }, []);
+
+  const queueEdgeUpdate = useCallback(() => {
+    if (edgeFrameRef.current != null) return;
+    edgeFrameRef.current = requestAnimationFrame(() => {
+      edgeFrameRef.current = null;
+      updateEdgeRef.current();
     });
   }, []);
 
@@ -256,6 +273,7 @@ export function WindowedTranscript<T extends { id: string }>({
       if (awayRef.current && !restoringAnchorRef.current) {
         queueAnchorCapture();
       }
+      if (!sync) queueEdgeUpdate();
       if (!sync && (stickToEndRef.current || initializingRef.current)) {
         queueScrollToEnd(instance);
       }
@@ -274,6 +292,70 @@ export function WindowedTranscript<T extends { id: string }>({
     },
     [virtualizer],
   );
+
+  const logicalTailIsOffscreen = useCallback(() => {
+    const element = viewportRef.current;
+    if (!element || rows.length === 0) return false;
+    const viewportEnd = (virtualizer.scrollOffset ?? element.scrollTop) + element.clientHeight;
+    const lastIndex = rows.length - 1;
+    const measuredTail = virtualizer
+      .getVirtualItems()
+      .find((item) => item.index === lastIndex)?.end;
+    // The end padding is breathing room, not unseen transcript content.
+    const tailEnd = measuredTail ?? Math.max(0, virtualizer.getTotalSize() - endPadding);
+    return tailEnd > viewportEnd + VISIBILITY_EPSILON;
+  }, [endPadding, rows.length, virtualizer]);
+
+  const queueUnreadMeasurement = useCallback(() => {
+    if (unreadFrameRef.current != null || pendingCountedIdsRef.current.size === 0) return;
+    let attempts = 0;
+    let stableFrames = 0;
+    let priorGeometry = "";
+    // New virtual rows first carry estimates. Count only after their measured
+    // range settles, so a row that still fits is treated as already seen.
+    const settleUnread = () => {
+      attempts++;
+      const element = viewportRef.current;
+      if (!element) {
+        unreadFrameRef.current = null;
+        return;
+      }
+      const virtualItems = virtualizer.getVirtualItems();
+      const geometry = `${virtualizer.getTotalSize()}:${virtualItems
+        .map((item) => `${item.index}:${item.start}:${item.end}`)
+        .join(",")}`;
+      stableFrames = geometry === priorGeometry ? stableFrames + 1 : 0;
+      priorGeometry = geometry;
+      if (attempts < 12 && stableFrames < 2) {
+        unreadFrameRef.current = requestAnimationFrame(settleUnread);
+        return;
+      }
+
+      unreadFrameRef.current = null;
+      const viewportEnd = (virtualizer.scrollOffset ?? element.scrollTop) + element.clientHeight;
+      const lastVirtualIndex = virtualItems.at(-1)?.index ?? -1;
+      const byIndex = new Map(virtualItems.map((item) => [item.index, item]));
+      let addedUnread = 0;
+      for (const id of pendingCountedIdsRef.current) {
+        const index = rowKeys.indexOf(`block:${id}`);
+        const item = byIndex.get(index);
+        if (
+          index >= 0 &&
+          ((item && item.end > viewportEnd + VISIBILITY_EPSILON) ||
+            (!item && index > lastVirtualIndex))
+        ) {
+          addedUnread++;
+        }
+      }
+      pendingCountedIdsRef.current.clear();
+      const tailIsOffscreen = logicalTailIsOffscreen();
+      setTailOffscreen(tailIsOffscreen);
+      if (addedUnread > 0 && tailIsOffscreen) {
+        setUnread((current) => current + addedUnread);
+      }
+    };
+    unreadFrameRef.current = requestAnimationFrame(settleUnread);
+  }, [logicalTailIsOffscreen, rowKeys, virtualizer]);
 
   const releaseResizePin = useCallback(() => {
     if (!resizePinRef.current) return;
@@ -321,6 +403,8 @@ export function WindowedTranscript<T extends { id: string }>({
     const element = viewportRef.current;
     if (!element || restoringAnchorRef.current) return;
     const gap = distanceFromEnd(element);
+    const nextTailOffscreen = logicalTailIsOffscreen();
+    setTailOffscreen((current) => (current === nextTailOffscreen ? current : nextTailOffscreen));
     const height = element.clientHeight;
     const previousOffset = lastScrollOffsetRef.current;
     const readingIntent =
@@ -379,7 +463,12 @@ export function WindowedTranscript<T extends { id: string }>({
       towardEndIntentUntilRef.current = 0;
       anchorRef.current = null;
     }
-  }, [queueAnchorCapture, queueScrollToEnd, virtualizer]);
+    if (!nextTailOffscreen) {
+      if (unreadFrameRef.current == null) pendingCountedIdsRef.current.clear();
+      setUnread(0);
+    }
+  }, [logicalTailIsOffscreen, queueAnchorCapture, queueScrollToEnd, virtualizer]);
+  updateEdgeRef.current = updateEdge;
 
   const handleScroll = useCallback((_event: UIEvent<HTMLDivElement>) => updateEdge(), [updateEdge]);
 
@@ -437,6 +526,7 @@ export function WindowedTranscript<T extends { id: string }>({
     if (rows.length === 0) {
       awayRef.current = false;
       setAway(false);
+      setTailOffscreen(false);
       setUnread(0);
       initializingRef.current = false;
       stickToEndRef.current = follow;
@@ -540,18 +630,25 @@ export function WindowedTranscript<T extends { id: string }>({
 
   useLayoutEffect(() => {
     const previous = priorIdsRef.current;
-    let added = 0;
-    for (const id of messageIds) if (!previous.has(id)) added++;
-    priorIdsRef.current = new Set(messageIds);
-    if (added > 0 && (awayRef.current || !follow)) {
-      setUnread((current) => current + added);
+    const previousTail = previous.ordered.at(-1);
+    const previousTailIndex = previousTail ? messageIds.indexOf(previousTail) : -1;
+    const counted = new Set(countedMessageIds);
+    // Earlier native history can prepend IDs; only additions after the prior
+    // logical tail are new transcript messages.
+    if (previousTailIndex >= 0 && (awayRef.current || !follow)) {
+      for (let index = previousTailIndex + 1; index < messageIds.length; index++) {
+        const id = messageIds[index];
+        if (id && counted.has(id) && !previous.set.has(id)) pendingCountedIdsRef.current.add(id);
+      }
       if (!follow) {
         awayRef.current = true;
         setAway(true);
       }
     }
+    priorIdsRef.current = { ordered: messageIds, set: new Set(messageIds) };
+    queueUnreadMeasurement();
     requestAnimationFrame(updateEdge);
-  }, [follow, messageIds, updateEdge]);
+  }, [countedMessageIds, follow, messageIds, queueUnreadMeasurement, updateEdge]);
 
   useLayoutEffect(
     () => () => {
@@ -567,6 +664,14 @@ export function WindowedTranscript<T extends { id: string }>({
         cancelAnimationFrame(restoreFrameRef.current);
         restoreFrameRef.current = null;
       }
+      if (unreadFrameRef.current != null) {
+        cancelAnimationFrame(unreadFrameRef.current);
+        unreadFrameRef.current = null;
+      }
+      if (edgeFrameRef.current != null) {
+        cancelAnimationFrame(edgeFrameRef.current);
+        edgeFrameRef.current = null;
+      }
     },
     [],
   );
@@ -577,7 +682,9 @@ export function WindowedTranscript<T extends { id: string }>({
     towardEndIntentUntilRef.current = 0;
     awayRef.current = false;
     setAway(false);
+    setTailOffscreen(false);
     setUnread(0);
+    pendingCountedIdsRef.current.clear();
     if (rows.length > 0) {
       virtualizer.scrollToIndex(rows.length - 1, {
         align: "end",
@@ -735,7 +842,7 @@ export function WindowedTranscript<T extends { id: string }>({
           })}
         </div>
       </div>
-      {showJumpToLatest && away ? (
+      {showJumpToLatest && away && tailOffscreen ? (
         <Button
           type="button"
           variant="secondary"

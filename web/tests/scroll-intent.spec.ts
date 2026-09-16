@@ -11,6 +11,27 @@ const anchor = (viewport: Locator) =>
     return row ? { key: row.key, top: row.bounds.top } : null;
   });
 
+const tailBelowViewport = (viewport: Locator) =>
+  viewport.evaluate((element) => {
+    const viewportBounds = element.getBoundingClientRect();
+    const rows = [...element.querySelectorAll<HTMLElement>("[data-windowed-row-key]")];
+    const tail = rows.at(-1)?.getBoundingClientRect();
+    return tail ? tail.bottom > viewportBounds.bottom + 1 : false;
+  });
+
+const toolMessage = (id: string) => ({
+  id,
+  role: "tool" as const,
+  status: "complete" as const,
+  content: id,
+  toolActivity: {
+    name: "Command",
+    detail: id,
+    state: "complete" as const,
+    sections: [{ label: "Output", content: `${id} finished` }],
+  },
+});
+
 test("both lanes release follow on the first small upward wheel and retain reading through updates", async ({
   page,
 }) => {
@@ -42,9 +63,7 @@ test("both lanes release follow on the first small upward wheel and retain readi
     await expect.poll(gap).toBeLessThan(2);
     await viewport.hover();
     await page.mouse.wheel(0, -1);
-    await expect(
-      section.getByRole("button", { name: "Jump to latest", exact: true }),
-    ).toBeVisible();
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
     for (let count = 0; count < 3; count++) {
       await page.waitForTimeout(80);
       await page.mouse.wheel(0, -1);
@@ -152,6 +171,9 @@ for (const width of [1440, 390]) {
         .toBeLessThan(2);
       await viewport.hover();
       await page.mouse.wheel(0, -1);
+      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+      await page.mouse.wheel(0, -100);
+      await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
       await expect(
         section.getByRole("button", { name: "Jump to latest", exact: true }),
       ).toBeVisible();
@@ -191,4 +213,112 @@ test("enlarging the viewport clears a jump state once all messages fit", async (
   await page.setViewportSize({ width: 1000, height: 1600 });
   await expect.poll(() => viewport.evaluate((e) => e.scrollHeight - e.clientHeight)).toBe(0);
   await expect(page.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+});
+
+for (const lane of ["agent", "voice"] as const)
+  test(`${lane} visible tool updates stay out of the unread count until a new prose row is unseen`, async ({
+    page,
+  }) => {
+    const messages: LiveView[typeof lane] = [
+      ...Array.from({ length: 40 }, (_, index) => ({
+        id: `${lane}-lead-${index}`,
+        role: "assistant" as const,
+        status: "complete" as const,
+        content: `Earlier message ${index}. ${"Scrollable history. ".repeat(4)}`,
+      })),
+      toolMessage(`${lane}-tool-1`),
+    ];
+    const view: LiveView = {
+      id: `${lane}-visible-tool-tail`,
+      persistenceScope: `${lane}-visible-tool-tail`,
+      phase: "live",
+      agent: lane === "agent" ? messages : [],
+      voice: lane === "voice" ? messages : [],
+    };
+    await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+    await page.goto("/");
+
+    const title = lane === "agent" ? "Agent" : "Voice";
+    const section = page.getByRole("region", { name: title, exact: true });
+    const viewport = page.getByRole("region", { name: `${title} transcript`, exact: true });
+    await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+    await viewport.hover();
+    await page.mouse.wheel(0, -1);
+    await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+    await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+
+    for (let index = 2; index <= 4; index++) {
+      messages.push(toolMessage(`${lane}-tool-${index}`));
+      await expect(section.getByText(`${index} activities`, { exact: true })).toBeVisible();
+      await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+      await expect(section.getByRole("button", { name: /Jump to latest/ })).toHaveCount(0);
+    }
+
+    messages.push({
+      id: `${lane}-new-prose`,
+      role: "assistant",
+      status: "complete",
+      content: "A new prose message below the visible tail.",
+    });
+    await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
+    await expect(
+      section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+    ).toBeVisible();
+  });
+
+test("offscreen tool growth activates a generic jump control and mixed prose adds the count", async ({
+  page,
+}) => {
+  const view: LiveView = {
+    id: "offscreen-tool-tail",
+    persistenceScope: "offscreen-tool-tail",
+    phase: "live",
+    agent: [
+      ...Array.from({ length: 40 }, (_, index) => ({
+        id: `lead-${index}`,
+        role: "assistant" as const,
+        status: "complete" as const,
+        content: `Earlier message ${index}. ${"Scrollable history. ".repeat(4)}`,
+      })),
+      toolMessage("tool-1"),
+      toolMessage("tool-2"),
+    ],
+    voice: [],
+  };
+  await page.route("**/api/live", (route) => route.fulfill({ json: view }));
+  await page.goto("/");
+
+  const section = page.getByRole("region", { name: "Agent", exact: true });
+  const viewport = page.getByRole("region", { name: "Agent transcript", exact: true });
+  await section.locator(".activity-group__trigger").click();
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    )
+    .toBeLessThan(2);
+  await viewport.hover();
+  await page.mouse.wheel(0, -1);
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(false);
+
+  for (let index = 3; index <= 8 && !(await tailBelowViewport(viewport)); index++) {
+    view.agent.push(toolMessage(`tool-${index}`));
+    await expect(section.getByText(`${index} activities`, { exact: true })).toBeVisible();
+  }
+  await expect.poll(() => tailBelowViewport(viewport)).toBe(true);
+  await expect(section.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
+  await expect(section.getByRole("button", { name: /new messages?\. Jump to latest/ })).toHaveCount(
+    0,
+  );
+
+  view.agent.push({
+    id: "mixed-prose",
+    role: "assistant",
+    status: "complete",
+    content: "Prose added after unseen activity.",
+  });
+  await expect(
+    section.getByRole("button", { name: "1 new message. Jump to latest", exact: true }),
+  ).toBeVisible();
 });
