@@ -115,9 +115,9 @@ private fun PreviewLandscapeControls(
         val latestCompleted by rememberUpdatedState(onReleaseCompleted)
         @Composable fun muteColumn() {
             Column(Modifier.width(muteWidth.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(channelGap.dp)) {
-                PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
+                PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.micPending,
                     inks.you, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
-                PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
+                PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.speakerPending,
                     inks.agent, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
             }
         }
@@ -156,9 +156,9 @@ internal fun PreviewMuteControls(
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 130f).coerceIn(.6f, 1.6f)
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(channelGapDp.dp)) {
-            PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending,
+            PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.micPending,
                 inks.you, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
-            PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending,
+            PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.speakerPending,
                 inks.agent, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
         }
     }
@@ -171,6 +171,7 @@ private fun PreviewMuteButton(
     muted: Boolean,
     open: Boolean,
     enabled: Boolean,
+    pending: Boolean,
     ink: Color,
     heightScale: Float,
     light: State<PreviewButtonLight>?,
@@ -189,7 +190,7 @@ private fun PreviewMuteButton(
         presentation.illuminated -> inks.text
         else -> inks.muted
     }
-    val status = when { !enabled -> "wait"; muted && open -> "live"; muted -> "off"; else -> "on" }
+    val status = when { pending -> "wait"; muted && open -> "live"; muted -> "off"; else -> "on" }
     Box(modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled,
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
         onClick = { currentOnMute(target) })

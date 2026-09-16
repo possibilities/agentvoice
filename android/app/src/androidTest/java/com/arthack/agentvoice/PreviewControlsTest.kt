@@ -24,6 +24,25 @@ class PreviewControlsTest {
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
 
+    @Test fun pendingMuteOnlyChangesTheTargetChannelFace() {
+        var ui by mutableStateOf(ready)
+        compose.setContent {
+            VoiceTheme { PreviewMuteControls(ui, {}, Modifier.requiredSize(320.dp, 130.dp)) }
+        }
+        fun pixels(tag: String) = compose.onNodeWithTag(tag).captureToImage().toPixelMap()
+        fun differs(a: androidx.compose.ui.graphics.PixelMap, b: androidx.compose.ui.graphics.PixelMap): Boolean {
+            for (y in 0 until a.height) for (x in 0 until a.width) if (a[x, y] != b[x, y]) return true
+            return false
+        }
+        val micBefore = pixels("mic-mute")
+        val speakerBefore = pixels("speaker-mute")
+        compose.runOnIdle { ui = ready.copy(controlsPending = true, speakerPending = true) }
+        val micPendingElsewhere = pixels("mic-mute")
+        val speakerPending = pixels("speaker-mute")
+        assertFalse("Peer mute face must remain visually stable", differs(micBefore, micPendingElsewhere))
+        assertTrue("Pressed mute face must show pending feedback", differs(speakerBefore, speakerPending))
+    }
+
     @Test fun pendingMuteAcknowledgementsKeepThePushLabelStable() {
         var ui by mutableStateOf(ready)
         var vertical by mutableStateOf(false)

@@ -56,11 +56,14 @@ class AudioGateTest {
     @Test fun stateAndMuteReplyCanArriveInEitherOrder() {
         val gate = ready()
         gate.intent("speaker", true)
+        assertFalse(gate.micPending)
+        assertTrue(gate.speakerPending)
         gate.acknowledgeMute("speaker")
         assertFalse(gate.speakerOpen)
         assertTrue(gate.controlsPending)
         gate.state(muted.copy(speaker = ChannelState(true, true)))
         assertFalse(gate.controlsPending)
+        assertFalse(gate.speakerPending)
         assertFalse(gate.speakerOpen)
     }
     @Test fun unmuteNeverOpensBeforeServerConfirmation() {

@@ -10,6 +10,8 @@ internal class AudioGate {
     private var speakerIntent: Boolean? = null
     private var micAcknowledged = false
     private var speakerAcknowledged = false
+    val micPending get() = micIntent != null
+    val speakerPending get() = speakerIntent != null
     val controlsPending get() = micIntent != null || speakerIntent != null
     val canHold get() = connected && state.available && state.phase == "live" &&
         state.mic.muted && !controlsPending

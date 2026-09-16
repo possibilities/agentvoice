@@ -26,6 +26,8 @@ internal data class CallUi(
     val canHold: Boolean = false,
     val holding: Boolean = false,
     val controlsPending: Boolean = false,
+    val micPending: Boolean = false,
+    val speakerPending: Boolean = false,
     val inputLevel: Float = 0f,
     val outputLevel: Float = 0f,
     val codingActivity: CodingActivity = CodingActivity.Unknown,
@@ -277,6 +279,7 @@ internal class CallController(
             micOpen = admitted && gate.micOpen, speakerOpen = admitted && gate.speakerOpen,
             canHold = admitted && gate.canHold, holding = gate.holding,
             controlsPending = gate.controlsPending,
+            micPending = gate.micPending, speakerPending = gate.speakerPending,
             codingActivity = if (live) gate.state.codingActivity else CodingActivity.Unknown)
     }
     private inline fun guarded(block: () -> Unit) {
