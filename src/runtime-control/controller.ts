@@ -468,6 +468,12 @@ export class RuntimeController implements ControlBackend {
         {
           threadId: handoffTarget?.threadId ?? (this.threadId || undefined),
           frontendAttached: this.frontendAttached,
+          routingIdentity: {
+            controllerId: this.options.instanceId,
+            generation: this.generation,
+            processInstanceId: `${this.options.instanceId}:${candidate.incarnation}`,
+            buildId: info.buildId,
+          },
           mute: { mic: this.microphone.muted, speaker: this.speaker.muted },
         },
         90_000,

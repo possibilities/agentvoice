@@ -215,6 +215,7 @@ export function runRuntimeWorker(
         },
         runtime: {
           exactResume: params.threadId,
+          routingIdentity: params.routingIdentity,
           fast: currentLaunch.provenance.parsed.fast,
           snapshot,
           nativeStateDir: currentLaunch.nativeStateDir,

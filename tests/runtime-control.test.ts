@@ -605,11 +605,23 @@ describe("persistent controller and disposable runtime", () => {
         {
           threadId: "saved",
           frontendAttached: true,
+          routingIdentity: {
+            controllerId: "fake",
+            generation: 2,
+            processInstanceId: "fake:2",
+            buildId: "1",
+          },
           mute: { mic: true, speaker: false },
         },
         {
           threadId: "saved",
           frontendAttached: true,
+          routingIdentity: {
+            controllerId: "fake",
+            generation: 3,
+            processInstanceId: "fake:3",
+            buildId: "2",
+          },
           mute: { mic: true, speaker: false },
         },
       ]);

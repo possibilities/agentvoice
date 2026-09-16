@@ -56,6 +56,7 @@ import {
 } from "./params.ts";
 import { type RoleAssets, readRoleAssets } from "./role.ts";
 import { type DirectoryRoleInfo, RoleContentCapture } from "./role-content.ts";
+import { ManagerRoutingOrientation, type RoutingIdentity } from "./routing-orientation.ts";
 import { ServiceTierSelection, type TierObservation } from "./service-tier.ts";
 import { VoiceSessionManager } from "./session.ts";
 import { readSessionMarker, saveSessionMarker } from "./session-marker.ts";
@@ -100,6 +101,7 @@ export type RuntimeConnection = Pick<AppServerConnection, "request" | "close" | 
   readonly nativeEndpoint?: import("./native-listener.ts").NativeEndpoint;
 };
 export interface RuntimeOptions {
+  routingIdentity?: RoutingIdentity;
   /** Launch-only tier override; omitted preserves native configuration. */
   fast?: boolean;
   nativeStateDir?: string;
@@ -223,6 +225,7 @@ export class VoiceRuntime {
   >();
   private conversationRevision = 0;
   private readonly conversationReader: ConversationReader;
+  private routingOrientation: ManagerRoutingOrientation | undefined;
   private tierSelection: ServiceTierSelection | null = null;
   private tier: TierObservation = {};
   private readonly voiceCatalog: NativeVoiceCatalog;
@@ -470,6 +473,22 @@ export class VoiceRuntime {
       this.threadReady = true;
       void this.threadObserver?.start();
       this.emitReady();
+      if (this.options.routingIdentity && this.attachment) {
+        this.routingOrientation = new ManagerRoutingOrientation({
+          identity: this.options.routingIdentity,
+          clientVersion: this.version,
+          workspace: this.config.orchestrator.workspace,
+          threadId: this.threadId,
+          current: () => ({
+            model: this.tier.model ?? null,
+            effort: this.effort,
+            service_tier: this.tier.serviceTier ?? null,
+          }),
+          request: (method, params, timeout) => this.attachment!.request(method, params, timeout),
+          warning: (message) => this.events.onWarning?.(message),
+        });
+        this.routingOrientation.start();
+      }
     } catch (error) {
       await this.shutdown();
       throw error;
@@ -543,6 +562,7 @@ export class VoiceRuntime {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.agentGateway?.close();
     this.shuttingDown = true;
+    this.routingOrientation?.stop();
     this.threadObserver?.stop();
     this.completionObserver?.stop();
     this.threadReady = false;
@@ -736,6 +756,7 @@ export class VoiceRuntime {
           if (typeof settings["serviceTier"] === "string" || settings["serviceTier"] === null)
             this.tier.serviceTier = settings["serviceTier"] as string | null;
           if (Object.hasOwn(settings, "reasoningEffort")) this.effort = reportedEffort(settings);
+          this.routingOrientation?.refresh();
           this.emitReady();
         }
       }

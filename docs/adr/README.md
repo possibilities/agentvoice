@@ -147,3 +147,5 @@ different decision. Keep this navigation index and the record's status together.
 - [0088: Render native subagent lifecycle observations as transcript cards](0088-subagent-lifecycle-transcript-cards.md) — accepted; exact native activity kinds and identities become compact historical notes without inferred settings, Work associations, or live status.
 
 - [0089: Render native file changes as top-level diff cards](0089-top-level-file-change-diffs.md) — accepted; one correlated file-change item keeps native order and status while exposing lazy Pierre diffs, exact details, and truthful bounded fallbacks.
+
+- [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md)
