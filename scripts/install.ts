@@ -30,7 +30,7 @@ import {
   relaunchMacApp,
 } from "../src/macos-app.ts";
 import { serviceOptions, VoiceService } from "../src/service.ts";
-import { checkPrerequisites } from "./prerequisites.ts";
+import { checkPrerequisites, whichFromEnvironment } from "./prerequisites.ts";
 
 const root = realpathSync(dirname(import.meta.dir));
 const uid = process.getuid?.();
@@ -213,7 +213,7 @@ export async function install(
     safePath(join(root, "build", "macos"));
     safePath(join(root, "dist"));
     for (const command of ["swift", "iconutil", "codesign"]) {
-      if (!Bun.which(command)) refuse(`${command} is required to build AgentVoice.app`);
+      if (!whichFromEnvironment(command)) refuse(`${command} is required to build AgentVoice.app`);
     }
     appDisposition = preflightMacApp(app, sha, options.appChecks, options.quitMenu);
   }
@@ -316,7 +316,7 @@ export async function install(
       renameSync(join(receiptStage, "receipt"), receipt);
       validateDestination();
       console.log(`Installed ${target} -> ${source}\nRecorded ${sha} in ${receipt}`);
-      const onPath = Bun.which("agentvoice");
+      const onPath = whichFromEnvironment("agentvoice");
       if (!onPath || realpathSync(onPath) !== source) {
         console.warn(
           `PATH does not select this command${onPath ? ` (currently ${onPath})` : ""}; put ${binDir} first. No other command was changed.`,

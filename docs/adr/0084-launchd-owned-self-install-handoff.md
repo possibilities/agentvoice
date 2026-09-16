@@ -19,6 +19,11 @@ for the initiating process's exact PID/birth identity to disappear, then reruns
 the complete installer. That external job owns the installer file lock for the
 whole build/publication transaction and the service file lock for its lifecycle
 subtransaction. Its later `bootout` of the server cannot terminate the helper.
+Because Bun command lookup retains the process-start environment, installer
+preflight resolves commands against the carried `PATH` explicitly after the
+helper applies that bounded environment. A helper started with launchd's default
+path therefore uses the initiating installer's Codex, compiler and build-tool
+search path without expanding the environment allowlist.
 
 A self-hosted `agentvoice service restart` uses the same external boundary but
 acquires the installer lock before the service lock and performs only the service
