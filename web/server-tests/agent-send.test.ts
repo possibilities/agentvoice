@@ -54,6 +54,7 @@ async function agentFixture() {
   let revision = 0;
   let turn: { id: string; status: "inProgress" | "completed" | "interrupted" | "failed" } | null =
     null;
+  let threadStatus: "idle" | "active" | "systemError" | undefined;
   const update = () =>
     h.feed.update({
       complete: true,
@@ -62,7 +63,7 @@ async function agentFixture() {
           id: "main",
           parentThreadId: null,
           name: null,
-          status: turn?.status === "inProgress" ? "active" : "idle",
+          status: threadStatus ?? (turn?.status === "inProgress" ? "active" : "idle"),
           activeFlags: [],
           turn,
         },
@@ -87,8 +88,10 @@ async function agentFixture() {
         answer = () => {
           let result: unknown = {};
           if (frame.method === "turn/start" || frame.method === "turn/steer") {
-            if (frame.method === "turn/start")
+            if (frame.method === "turn/start") {
+              threadStatus = undefined;
               turn = { id: `turn-${++revision}`, status: "inProgress" };
+            }
             result = frame.method === "turn/start" ? { turn } : { turnId: turn?.id };
             update();
             h.feed.conversation({
@@ -131,12 +134,25 @@ async function agentFixture() {
     answer: () => answer(),
     complete: (status: "completed" | "interrupted" = "interrupted") => {
       if (turn) turn = { ...turn, status };
+      threadStatus = undefined;
       update();
       h.feed.conversation({
         event: "conversation.turn.completed",
         revision: ++revision,
         data: { threadId: "main", turn: { ...turn, items: [], error: null } },
       });
+    },
+    systemError: (terminal = true, retainInProgressInventory = false) => {
+      threadStatus = "systemError";
+      const completedTurn = terminal && turn ? { ...turn, status: "failed" as const } : turn;
+      if (!retainInProgressInventory) turn = completedTurn;
+      update();
+      if (terminal)
+        h.feed.conversation({
+          event: "conversation.turn.completed",
+          revision: ++revision,
+          data: { threadId: "main", turn: { ...completedTurn, items: [], error: null } },
+        });
     },
     close: async () => {
       reader.close();
@@ -183,6 +199,43 @@ test("detached web Agent send and steer reach the retained exact native thread",
     expect(
       h.calls.some((call) => /account|thread\/start|thread\/resume|realtime/.test(call.method)),
     ).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a failed system-error turn re-enables Send without trusting a still-running turn", async () => {
+  const h = await agentFixture();
+  try {
+    const first = await h.reader.read();
+    await h.reader.agentCommand(
+      agentCommandSchema.parse({
+        viewId: first.id,
+        requestId: randomUUID(),
+        action: "send",
+        text: "Reach the quota boundary",
+      }),
+    );
+
+    h.systemError(false);
+    const unresolved = await until(h.reader, (view) => view.agentControls?.available === false);
+    expect(unresolved.agentControls?.active).toBe(true);
+
+    h.systemError(true, true);
+    const recovered = await until(
+      h.reader,
+      (view) => view.agentControls?.available === true && !view.agentControls.active,
+    );
+    expect(recovered.id).toBe(first.id);
+    await h.reader.agentCommand(
+      agentCommandSchema.parse({
+        viewId: recovered.id,
+        requestId: randomUUID(),
+        action: "send",
+        text: "Retry after quota recovery",
+      }),
+    );
+    expect(h.calls.filter((call) => call.method === "turn/start")).toHaveLength(2);
   } finally {
     await h.close();
   }

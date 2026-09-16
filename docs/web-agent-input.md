@@ -111,6 +111,12 @@ scope. Background history failures do not close the live-read socket. Bounded
 diagnostics retain future failure reasons without conversation bodies or secrets.
 See [ADR 0058](adr/0058-durable-web-composer-and-reader-recovery.md).
 
+A native `systemError` remains the app-server's non-running state until the next
+turn starts. Once the matching failed turn is observed, the exact verified view
+offers Send again; the next native turn clears that state. An in-progress turn or
+missing terminal evidence stays fenced, so reader recovery never guesses that a
+turn ended or submits a draft automatically.
+
 The controller serves the root live view from its own generation-scoped projection
 after checking instance, generation, lease, and root identity. It does not consume
 a disposable-worker history slot for a result it would discard. Native observation

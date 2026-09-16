@@ -137,6 +137,39 @@ export type LocalImageViewContext = {
 };
 type HistoryPass = { rows: AgentItem[]; cursor?: string; bytes: number; revision: number };
 type HistoryAttempt = { client?: ControlSocket; closed?: boolean };
+type ControlTurn = {
+  id: string;
+  status: "inProgress" | "completed" | "interrupted" | "failed";
+};
+
+function controlTurn(
+  root: { status: string; turn: ControlTurn | null } | undefined,
+  observed: readonly ControlTurn[],
+): ControlTurn | undefined {
+  const current = root?.turn ?? undefined;
+  if (root?.status !== "systemError") return current;
+  const latest = observed.at(-1);
+  // Native app-server keeps systemError as a non-running state until the next
+  // turn. Its thread inventory can briefly retain the prior in-progress turn,
+  // so prefer the matching terminal conversation event when it is available.
+  if (
+    current?.status === "inProgress" &&
+    latest?.id === current.id &&
+    latest.status !== "inProgress"
+  )
+    return latest;
+  // Without the inventory's turn id there is no exact evidence that an older
+  // failed event belongs to this systemError transition.
+  return current;
+}
+
+function inputAvailable(root: { status: string } | undefined, turn: ControlTurn | undefined) {
+  return (
+    root?.status === "idle" ||
+    (root?.status === "active" && turn?.status === "inProgress") ||
+    (root?.status === "systemError" && turn?.status === "failed")
+  );
+}
 
 /** Host-selected workspace adapter. The browser can neither choose sockets nor submit RPC methods. */
 export class LiveReader {
@@ -787,11 +820,10 @@ export class LiveReader {
       return empty("connecting");
     }
     this.verifiedClient = client;
+    const turn = controlTurn(root, live.turns);
     this.controls.observe(
-      root?.turn ?? undefined,
-      this.actionable(identity) &&
-        (root?.status === "idle" ||
-          (root?.status === "active" && root.turn?.status === "inProgress")),
+      turn,
+      this.actionable(identity) && inputAvailable(root, turn),
       before.sequence,
     );
     if (root?.status === "active" && !root.turn) {

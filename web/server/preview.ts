@@ -13,7 +13,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535 || process.env.PORTLESS_
 
 // Portless normally adds a wildcard .localhost allowance. This reader serves
 // private history and has exactly one named origin, including for static assets.
-process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = hostname;
+process.env.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = allowedHosts.join(",");
 const root = resolve(import.meta.dirname, "..");
 const server = await preview({
   root,
