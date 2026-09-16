@@ -2,9 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
+import { processIsDescendantOf } from "./core/owned-processes.ts";
 import { lockFile } from "./core/thread-lock.ts";
 import { type Environ, stateDirectory } from "./paths.ts";
 import { ownedDirectory, ownedFile, safeAncestors } from "./private-files.ts";
+import {
+  type ServiceHandoffOutcome,
+  submitInstallerHandoff,
+  submitServiceHandoff,
+} from "./service-handoff.ts";
 import {
   checkServiceRuntime,
   serviceRuntimeExecutable,
@@ -20,6 +26,11 @@ export interface ServiceSnapshot {
   state: "running" | "loaded" | "unloaded" | "notInstalled";
 }
 export type Launchctl = (args: string[]) => Promise<Result>;
+export type ServiceChangeOutcome = { kind: "completed" } | ServiceHandoffOutcome;
+export interface ServiceChangeOptions {
+  forceDirect?: boolean;
+  onLocked?: () => Promise<void>;
+}
 export interface ServiceOptions {
   home: string;
   stateDir: string;
@@ -264,7 +275,33 @@ export class VoiceService {
     const state = loaded ? (/^\s*state = (.+)$/m.exec(loaded.out)?.[1] ?? "loaded") : "not loaded";
     return `${this.label}: ${installed ? state : "not installed"}\nPlist: ${plist}\nLogs: ${installed ? installedLogs(installed).join(", ") : logs}\n`;
   }
-  async change(action: ServiceAction): Promise<void> {
+  async isSelfHosted(): Promise<boolean> {
+    const loaded = await this.loaded();
+    const pidText = loaded && /^\s*pid = (\d+)$/m.exec(loaded.out)?.[1];
+    const pid = pidText === undefined ? undefined : Number(pidText);
+    return !!pid && (await processIsDescendantOf(process.pid, pid));
+  }
+
+  handoffInstaller(quitMenu: boolean): Promise<ServiceHandoffOutcome> {
+    return submitInstallerHandoff(this.options, this.label, quitMenu);
+  }
+
+  private async selfHostedHandoff(
+    action: ServiceAction,
+  ): Promise<ServiceHandoffOutcome | undefined> {
+    if (action !== "install" && action !== "restart") return undefined;
+    if (!(await this.isSelfHosted())) return undefined;
+    return submitServiceHandoff(this.options, this.label, action);
+  }
+
+  async change(
+    action: ServiceAction,
+    changeOptions: ServiceChangeOptions = {},
+  ): Promise<ServiceChangeOutcome> {
+    if (!changeOptions.forceDirect) {
+      const handoff = await this.selfHostedHandoff(action);
+      if (handoff) return handoff;
+    }
     const { directory, plist, logs } = servicePaths(this.options, this.label);
     safeAncestors(directory);
     mkdirSync(directory, { recursive: true, mode: 0o755 });
@@ -281,12 +318,13 @@ export class VoiceService {
       throw error;
     }
     try {
+      await changeOptions.onLocked?.();
       const previous = readManaged(plist, this.label);
       const loaded = await this.loaded();
       if (loaded && !previous)
         throw new Error("Refusing a loaded job without an owned installation");
       if (action !== "install" && !previous) {
-        if (action === "remove") return;
+        if (action === "remove") return { kind: "completed" };
         throw new Error("LaunchAgent is not installed; run scripts/install.sh --install");
       }
       if (action === "install") {
@@ -358,7 +396,7 @@ export class VoiceService {
         if (loaded) await this.unload();
       } else if (action === "load" && loaded) {
         // Loading an already loaded job must never interrupt its retained work.
-        return;
+        return { kind: "completed" };
       } else if (action === "remove") {
         if (loaded) await this.unload();
         unlinkSync(plist);
@@ -372,5 +410,6 @@ export class VoiceService {
     } finally {
       release();
     }
+    return { kind: "completed" };
   }
 }

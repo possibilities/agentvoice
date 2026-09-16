@@ -55,10 +55,21 @@ function inventory(root: string): Record<string, string> {
   visit("AgentVoice.app");
   return files;
 }
-export function checkServiceRuntime(stateDir: string): void {
-  const root = serviceRuntimeRoot(stateDir);
-  safeAncestors(root);
-  if (!lstatSync(root, { throwIfNoEntry: false })) return;
+
+function assertPrivateStageTree(path: string): void {
+  const info = lstatSync(path);
+  if (
+    info.uid !== process.getuid?.() ||
+    info.isSymbolicLink() ||
+    (info.mode & 0o022) !== 0 ||
+    (!info.isDirectory() && (!info.isFile() || info.nlink !== 1))
+  )
+    throw new Error(`Unsafe AgentVoice runtime stage: ${path}`);
+  if (info.isDirectory())
+    for (const name of readdirSync(path)) assertPrivateStageTree(join(path, name));
+}
+
+function checkRuntimeRoot(root: string): void {
   const names = readdirSync(root).sort();
   if (JSON.stringify(names) !== JSON.stringify(["AgentVoice.app", "receipt.json"]))
     throw new Error("Refusing unrelated AgentVoice service runtime");
@@ -71,11 +82,45 @@ export function checkServiceRuntime(stateDir: string): void {
     throw new Error("Refusing modified AgentVoice service runtime");
 }
 
+/** Called while the service-operation lock is held. */
+export function cleanupStagedServiceRuntimes(stateDir: string): void {
+  const parent = join(stateDir, "default", "service");
+  ownedDirectory(parent);
+  const stages = readdirSync(parent)
+    .filter((name) => /^\.runtime-stage-[A-Za-z0-9]{6}$/.test(name))
+    .map((name) => join(parent, name));
+  for (const path of stages) assertPrivateStageTree(path);
+  const recoverable = stages.filter((path) =>
+    lstatSync(join(path, "previous"), { throwIfNoEntry: false }),
+  );
+  if (recoverable.length > 1)
+    throw new Error("Multiple interrupted AgentVoice runtime publications require inspection");
+  const interrupted = recoverable[0];
+  if (interrupted) {
+    const previous = join(interrupted, "previous");
+    const root = serviceRuntimeRoot(stateDir);
+    if (lstatSync(root, { throwIfNoEntry: false })) checkRuntimeRoot(root);
+    else {
+      checkRuntimeRoot(previous);
+      renameSync(previous, root);
+      checkRuntimeRoot(root);
+    }
+  }
+  for (const path of stages) rmSync(path, { recursive: true });
+}
+export function checkServiceRuntime(stateDir: string): void {
+  const root = serviceRuntimeRoot(stateDir);
+  safeAncestors(root);
+  if (!lstatSync(root, { throwIfNoEntry: false })) return;
+  checkRuntimeRoot(root);
+}
+
 /** Stage only an owned copy of Bun. Never re-sign the package manager's executable. */
 export function stageServiceRuntime(stateDir: string, bun: string) {
   checkServiceRuntime(stateDir);
   const parent = join(stateDir, "default", "service");
   ownedDirectory(parent);
+  cleanupStagedServiceRuntimes(stateDir);
   const stage = mkdtempSync(join(parent, ".runtime-stage-"));
   const root = serviceRuntimeRoot(stateDir);
   const backup = join(stage, "previous");

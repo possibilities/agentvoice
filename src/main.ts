@@ -324,6 +324,18 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runRuntimeWorker();
       await new Promise<void>(() => {});
     }
+    if (command === "__service-handoff") {
+      if (argv.length !== 2) throw new UsageError("Invalid internal service handoff request");
+      const { retireServiceHandoffJob, runServiceHandoff } = await import("./service-handoff.ts");
+      await runServiceHandoff(argv[1]!);
+      await retireServiceHandoffJob(argv[1]!);
+    }
+    if (command === "__installer-handoff") {
+      if (argv.length !== 2) throw new UsageError("Invalid internal installer handoff request");
+      const { retireServiceHandoffJob, runInstallerHandoff } = await import("./service-handoff.ts");
+      await runInstallerHandoff(argv[1]!);
+      await retireServiceHandoffJob(argv[1]!);
+    }
     if (command === undefined || command === "help" || command === "--help") {
       console.log(USAGE);
       return 0;
@@ -382,9 +394,28 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         );
       const { VoiceService, serviceOptions } = await import("./service.ts");
       const service = new VoiceService(serviceOptions(import.meta.path));
-      if (action === "load" || action === "unload" || action === "restart" || action === "remove")
-        await service.change(action);
-      console.log(json ? JSON.stringify(await service.snapshot()) : await service.status());
+      const outcome =
+        action === "load" || action === "unload" || action === "restart" || action === "remove"
+          ? await service.change(action)
+          : undefined;
+      if (outcome?.kind === "handedOff") {
+        const snapshot = await service.snapshot();
+        console.log(
+          json
+            ? JSON.stringify({
+                ...snapshot,
+                handoff: {
+                  version: 1,
+                  operationId: outcome.operationId,
+                  state: "accepted",
+                  statusPath: outcome.statusPath,
+                },
+              })
+            : `AgentVoice restart accepted as ${outcome.operationId}. The launchd-owned helper will continue after this command exits.\nStatus: ${outcome.statusPath}`,
+        );
+      } else {
+        console.log(json ? JSON.stringify(await service.snapshot()) : await service.status());
+      }
       return 0;
     }
     if (command === "network") {

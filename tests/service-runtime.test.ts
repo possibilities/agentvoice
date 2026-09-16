@@ -2,15 +2,21 @@ import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import {
   checkServiceRuntime,
+  cleanupStagedServiceRuntimes,
   serviceRuntimeExecutable,
   serviceRuntimeRoot,
   stageServiceRuntime,
@@ -20,6 +26,34 @@ const entitlements = (path: string) =>
   execFileSync("/usr/bin/codesign", ["-d", "--entitlements", ":-", path], {
     stdio: ["ignore", "pipe", "pipe"],
   }).toString();
+
+test("stale runtime stages are removed only after private-tree validation", () => {
+  const state = realpathSync(mkdtempSync("/tmp/av-runtime-stage-cleanup-"));
+  const parent = join(state, "default/service");
+  try {
+    const safe = join(parent, ".runtime-stage-a1B2c3");
+    mkdirSync(join(safe, "next"), { recursive: true, mode: 0o700 });
+    writeFileSync(join(safe, "next/partial"), "staged", { mode: 0o644 });
+    cleanupStagedServiceRuntimes(state);
+    expect(existsSync(safe)).toBe(false);
+
+    const unsafe = join(parent, ".runtime-stage-d4E5f6");
+    mkdirSync(unsafe, { mode: 0o700 });
+    symlinkSync(join(state, "outside"), join(unsafe, "redirect"));
+    expect(() => cleanupStagedServiceRuntimes(state)).toThrow("Unsafe AgentVoice runtime stage");
+    expect(existsSync(unsafe)).toBe(true);
+
+    rmSync(unsafe, { recursive: true });
+    const ambiguous = join(parent, ".runtime-stage-g7H8i9");
+    mkdirSync(join(ambiguous, "previous"), { recursive: true, mode: 0o700 });
+    expect(() => cleanupStagedServiceRuntimes(state)).toThrow(
+      "unrelated AgentVoice service runtime",
+    );
+    expect(existsSync(ambiguous)).toBe(true);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
 
 test.skipIf(process.platform !== "darwin")(
   "owned service runtime preserves Bun entitlements, adds microphone identity and rolls back updates",
@@ -31,6 +65,12 @@ test.skipIf(process.platform !== "darwin")(
       expect(existsSync(serviceRuntimeRoot(state))).toBe(false);
       first.publish();
       first.commit();
+      checkServiceRuntime(state);
+      const interrupted = join(state, "default/service/.runtime-stage-rEc0vR");
+      mkdirSync(interrupted, { mode: 0o700 });
+      renameSync(serviceRuntimeRoot(state), join(interrupted, "previous"));
+      cleanupStagedServiceRuntimes(state);
+      expect(existsSync(interrupted)).toBe(false);
       checkServiceRuntime(state);
       const executable = serviceRuntimeExecutable(state);
       const signed = entitlements(executable);
@@ -54,7 +94,15 @@ test.skipIf(process.platform !== "darwin")(
       expect(execFileSync(executable, ["--version"]).toString().trim()).toBe(Bun.version);
       const second = stageServiceRuntime(state, process.execPath);
       second.publish();
-      second.rollback();
+      const parent = join(state, "default/service");
+      const secondStage = readdirSync(parent).find((name) => name.startsWith(".runtime-stage-"));
+      expect(secondStage).toBeDefined();
+      unlinkSync(join(parent, secondStage!, "previous/receipt.json"));
+      cleanupStagedServiceRuntimes(state);
+      checkServiceRuntime(state);
+      const third = stageServiceRuntime(state, process.execPath);
+      third.publish();
+      third.rollback();
       checkServiceRuntime(state);
       expect(readFileSync(infoPath, "utf8")).toBe(info);
       writeFileSync(infoPath, "changed locally");

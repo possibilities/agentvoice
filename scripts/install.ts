@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { lockFile } from "../src/core/thread-lock.ts";
 import {
   inspectMacApp,
   installMacApp,
@@ -57,6 +58,8 @@ An unrelated existing command is never overwritten. No uninstall or migration.
 export interface InstallOptions {
   appChecks?: MacAppChecks;
   appLifecycle?: MacAppLifecycle;
+  disableSelfHandoff?: boolean;
+  installLockAlreadyHeld?: boolean;
   menuOnly?: boolean;
   quitMenu?: boolean;
 }
@@ -187,6 +190,18 @@ export async function install(
       ? undefined
       : (serviceOverride ??
         (process.platform === "darwin" ? new VoiceService(serviceOptions(source)) : undefined));
+  if (
+    service &&
+    serviceOverride === undefined &&
+    !options.disableSelfHandoff &&
+    (await service.isSelfHosted())
+  ) {
+    const outcome = await service.handoffInstaller(options.quitMenu ?? false);
+    console.log(
+      `AgentVoice installation accepted as ${outcome.operationId}. A launchd-owned helper will run the complete install after this command exits.\nStatus: ${outcome.statusPath}`,
+    );
+    return;
+  }
   const installApp =
     appOverride ?? (process.platform === "darwin" && (menuOnly || service !== undefined));
   if (menuOnly && !installApp) refuse("--menu-only requires macOS");
@@ -244,12 +259,20 @@ export async function install(
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   if (!menuOnly) validateDestination();
   const lock = join(stateDir, ".install-lock");
-  try {
-    mkdirSync(lock, { mode: 0o700 });
-  } catch {
-    refuse(
-      `install lock exists or cannot be created: ${lock}; check for another installer before removing a stale lock`,
-    );
+  let releaseInstallLock = () => {};
+  if (!options.installLockAlreadyHeld) {
+    try {
+      releaseInstallLock = lockFile(
+        lock,
+        `Another AgentVoice installer is already in progress: ${lock}`,
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EISDIR")
+        refuse(
+          `Legacy install lock directory exists: ${lock}; check for another installer before removing it`,
+        );
+      throw error;
+    }
   }
   let linkStage: string | undefined;
   let receiptStage: string | undefined;
@@ -330,13 +353,20 @@ export async function install(
         }
       }
     }
+    let serviceHandedOff = false;
     if (service) {
       try {
-        await service.change("install");
+        const outcome = await service.change("install");
+        if (outcome.kind === "handedOff") {
+          serviceHandedOff = true;
+          console.log(
+            `LaunchAgent installation accepted as ${outcome.operationId}; the launchd-owned helper will finish after this installer exits.\nStatus: ${outcome.statusPath}`,
+          );
+        }
       } catch (error) {
         throw new Error(`Command installed, but LaunchAgent installation failed: ${String(error)}`);
       }
-      console.log(await service.status());
+      if (!serviceHandedOff) console.log(await service.status());
     }
     console.log(
       menuOnly
@@ -365,7 +395,7 @@ export async function install(
       if (info(join(stage, name))) unlinkSync(join(stage, name));
       rmdirSync(stage);
     }
-    rmdirSync(lock);
+    releaseInstallLock();
   }
 }
 

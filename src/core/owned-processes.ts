@@ -6,7 +6,7 @@ import { readdir, readFile } from "node:fs/promises";
 const DEFAULT_POLL_MS = 50;
 const MAX_CAPTURED_PROCESSES = 4_096;
 
-interface ProcessRecord {
+export interface ProcessRecord {
   pid: number;
   ppid: number;
   pgid: number;
@@ -103,7 +103,7 @@ export class OwnedProcessTree {
 
   private capture(record: ProcessRecord): void {
     const previous = this.captured.get(record.pid);
-    if (previous && !sameIdentity(previous, record)) return;
+    if (previous && !sameProcessIdentity(previous, record)) return;
     if (!previous && this.captured.size >= MAX_CAPTURED_PROCESSES)
       throw new Error(`Owned process tracking exceeded ${MAX_CAPTURED_PROCESSES} processes`);
     this.captured.set(record.pid, record);
@@ -127,14 +127,14 @@ export class OwnedProcessTree {
       if (
         root &&
         ((!capturedRoot && root.ppid === this.expectedParentPid) ||
-          (capturedRoot && sameIdentity(root, capturedRoot)))
+          (capturedRoot && sameProcessIdentity(root, capturedRoot)))
       )
         this.capture(root);
 
       const owned = new Set<number>();
       for (const record of this.captured.values()) {
         const current = table.get(record.pid);
-        if (current && sameIdentity(current, record)) owned.add(record.pid);
+        if (current && sameProcessIdentity(current, record)) owned.add(record.pid);
       }
       let changed = true;
       while (changed) {
@@ -157,7 +157,10 @@ export class OwnedProcessTree {
     for (const record of this.captured.values()) {
       if (record.pid === this.rootPid) continue;
       const current = table.get(record.pid);
-      if ((current && !sameIdentity(current, record)) || (!current && !pidExists(record.pid)))
+      if (
+        (current && !sameProcessIdentity(current, record)) ||
+        (!current && !pidExists(record.pid))
+      )
         this.captured.delete(record.pid);
     }
   }
@@ -171,7 +174,7 @@ export class OwnedProcessTree {
     const active: ProcessRecord[] = [];
     for (const record of this.captured.values()) {
       const current = table.get(record.pid);
-      if (current && sameIdentity(current, record)) active.push(current);
+      if (current && sameProcessIdentity(current, record)) active.push(current);
     }
     return active;
   }
@@ -185,7 +188,7 @@ export class OwnedProcessTree {
     for (const record of this.captured.values()) {
       const current = table.get(record.pid);
       if (current) {
-        if (sameIdentity(current, record)) survivors.push(record.pid);
+        if (sameProcessIdentity(current, record)) survivors.push(record.pid);
         continue;
       }
       if (pidExists(record.pid)) uncertain.push(record.pid);
@@ -198,7 +201,7 @@ export class OwnedProcessTree {
   }
 }
 
-function sameIdentity(a: ProcessRecord, b: ProcessRecord): boolean {
+export function sameProcessIdentity(a: ProcessRecord, b: ProcessRecord): boolean {
   return a.pid === b.pid && a.birth === b.birth;
 }
 
@@ -225,10 +228,34 @@ export function processTableBackendForPlatform(platform: string): "proc" | "libp
   throw new Error(`Owned process tracking is unsupported on ${platform}`);
 }
 
-async function processTable(): Promise<Map<number, ProcessRecord>> {
+export async function processTable(): Promise<Map<number, ProcessRecord>> {
   return processTableBackendForPlatform(process.platform) === "proc"
     ? linuxProcessTable()
     : darwinProcessTable();
+}
+
+export async function processIdentity(pid: number): Promise<ProcessRecord | undefined> {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return undefined;
+  return (await processTable()).get(pid);
+}
+
+export async function processIsDescendantOf(pid: number, ancestorPid: number): Promise<boolean> {
+  if (
+    !Number.isSafeInteger(pid) ||
+    pid <= 0 ||
+    !Number.isSafeInteger(ancestorPid) ||
+    ancestorPid <= 0
+  )
+    return false;
+  const table = await processTable();
+  const seen = new Set<number>();
+  let current = table.get(pid);
+  while (current && !seen.has(current.pid)) {
+    if (current.pid === ancestorPid) return true;
+    seen.add(current.pid);
+    current = table.get(current.ppid);
+  }
+  return false;
 }
 
 async function linuxProcessTable(): Promise<Map<number, ProcessRecord>> {

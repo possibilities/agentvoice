@@ -162,7 +162,10 @@ agentvoice service remove
 
 Restart ends any frontend media and the retained workspace session, then starts
 a new waiting server that immediately restores a valid saved marker without
-media. Removal unloads
+media. When invoked through that server, restart first returns a launchd helper
+operation and private status path; the helper owns the unload and reload after
+the initiating process exits. This full service boundary is separate from MCP/API
+runtime restart, which keeps the controller and its workspace session. Removal unloads
 only the owned LaunchAgent and removes its plist; workspace directories, logs,
 configuration, command installation and native history remain. The TUI does not
 automatically reconnect after server loss.
@@ -393,8 +396,13 @@ are refused. A link to another checkout requires its matching receipt; an existi
 link into this checkout can be adopted or refreshed. The receipt records the last
 installation, not the current state of subsequent edits. Build failures leave the
 command/receipt untouched; a failed compile preserves the prior native library.
-Interrupted link/receipt publication is recoverable by rerunning after clearing
-any stale `.install-lock`; check for a running installer before manual removal.
+The retained `.install-lock` is a regular private file whose kernel lock is
+released when an installer exits or is killed; do not remove it between runs. A
+directory at that path is a legacy interrupted-lock condition: inspect process
+state before removing that directory once, then rerun. A full install launched
+from the managed AgentVoice server is accepted by a separate launchd helper and
+continues after the initiating server exits; the printed private status receipt
+distinguishes acceptance, execution, success and recoverable failure.
 If another command shadows the link on PATH, installation warns without deleting it.
 
 For disposable tests or alternate destinations, set absolute

@@ -228,6 +228,7 @@ test("restart waits for launchd to unregister the old job before bootstrap", asy
   expect(f.loaded()).toBe(true);
   expect(f.calls.slice(start).map((args) => args[0])).toEqual([
     "print",
+    "print",
     "bootout",
     "print",
     "print",

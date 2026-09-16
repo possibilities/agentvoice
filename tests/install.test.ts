@@ -59,6 +59,7 @@ function fixture() {
   }
   for (const name of [
     "service.ts",
+    "service-handoff.ts",
     "service-runtime.ts",
     "macos-app.ts",
     "paths.ts",
@@ -67,6 +68,10 @@ function fixture() {
     copyFileSync(join(repository, "src", name), join(root, "src", name));
   }
   copyFileSync(join(repository, "src/core/thread-lock.ts"), join(root, "src/core/thread-lock.ts"));
+  copyFileSync(
+    join(repository, "src/core/owned-processes.ts"),
+    join(root, "src/core/owned-processes.ts"),
+  );
   for (const name of ["bun", "git", "dirname", "bash"]) {
     symlinkSync(name === "bun" ? process.execPath : Bun.which(name)!, join(commands, name));
   }
@@ -342,7 +347,7 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(result.code).toBe(1);
     expect(result.err).toContain("refusing unrelated command");
     expect(readFileSync(f.target, "utf8")).toBe("independent command");
-    expect(readdirSync(f.state)).toEqual([]);
+    expect(readdirSync(f.state)).toEqual([".install-lock"]);
   });
 
   test("installs, reruns, records a commit, and the linked entrypoint preserves caller cwd", async () => {
@@ -354,7 +359,7 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
       expect(readlinkSync(f.target)).toBe(f.source);
       expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
       expect(statSync(f.receipt).mode & 0o777).toBe(0o600);
-      expect(readdirSync(f.state)).toEqual(["deployed-sha"]);
+      expect(readdirSync(f.state).sort()).toEqual([".install-lock", "deployed-sha"]);
       expect(readdirSync(f.bin)).toEqual(["agentvoice"]);
       expect(readFileSync(join(f.root, "bun.lock"), "utf8")).toBe(lock);
     }
@@ -362,6 +367,32 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(linked.exitCode).toBe(0);
     expect(linked.stdout.toString().trim()).toBe(f.base);
     expect(existsSync(join(f.base, "xdg-state"))).toBe(false);
+  });
+
+  test("the installer lock is kernel-released when its owner is killed", async () => {
+    const f = fixture();
+    expect((await f.run()).code).toBe(0);
+    const lock = join(f.state, ".install-lock");
+    expect(statSync(lock).isFile()).toBe(true);
+    expect(statSync(lock).mode & 0o777).toBe(0o600);
+    const holder = Bun.spawn(
+      [process.execPath, join(repository, "tests/fixtures/lock-holder.ts"), "--file", lock],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const reader = holder.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
+    reader.releaseLock();
+    try {
+      const busy = await f.run();
+      expect(busy.code).toBe(1);
+      expect(busy.err).toContain("Another AgentVoice installer is already in progress");
+      holder.kill("SIGKILL");
+      await holder.exited;
+      expect((await f.run()).code).toBe(0);
+    } finally {
+      holder.kill();
+      await holder.exited;
+    }
   });
 
   test("help and invalid args have no install side effects", async () => {
@@ -494,7 +525,7 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(readdirSync(nativeDir)).toEqual([library.split("/").at(-1)!]);
     expect(readlinkSync(f.target)).toBe(f.source);
     expect(readFileSync(f.receipt, "utf8")).toBe(`${f.sha}\n`);
-    expect(readdirSync(f.state)).toEqual(["deployed-sha"]);
+    expect(readdirSync(f.state).sort()).toEqual([".install-lock", "deployed-sha"]);
   });
 
   test("frozen dependency failure never reaches the compiler or publishes a command", async () => {
@@ -507,14 +538,14 @@ describe("command-only editable installer (isolated checkouts, no microphone or 
     expect(result.err).toContain("frozen");
     expect(existsSync(join(f.base, "compiler-called"))).toBe(false);
     expect(existsSync(f.target)).toBe(false);
-    expect(readdirSync(f.state)).toEqual([]);
+    expect(readdirSync(f.state)).toEqual([".install-lock"]);
   });
 
   test("a source change during the build prevents publication", async () => {
     const f = fixture();
     expect((await f.run(undefined, { FIXTURE_CHANGE_SOURCE: "1" })).code).toBe(1);
     expect(existsSync(f.target)).toBe(false);
-    expect(readdirSync(f.state)).toEqual([]);
+    expect(readdirSync(f.state)).toEqual([".install-lock"]);
   });
 
   test("same-checkout updates refresh the receipt and warn when another command shadows it", async () => {
