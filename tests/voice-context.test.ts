@@ -213,6 +213,7 @@ describe("native voice context across call and conversation boundaries", () => {
               outputModality: "audio",
               transport: { type: "webrtc", sdp },
               includeStartupContext: false,
+              delegationAckFiller: false,
               ...scenario.realtime,
             });
             h.native.options.onNotification("thread/realtime/started", {

@@ -18,6 +18,7 @@ describe("WebRTC compatibility default", () => {
       outputModality: "audio",
       version: "v3",
       includeStartupContext: false,
+      delegationAckFiller: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);
@@ -103,6 +104,7 @@ describe("WebRTC compatibility default", () => {
           expect(starts).toHaveLength(3);
           for (const start of starts) {
             expect(start.params["version"]).toBe("version" in extra ? extra.version : "v3");
+            expect(start.params["delegationAckFiller"]).toBe(false);
           }
           expect(starts[0]!.params["threadId"]).toBe("existing");
           expect(starts[2]!.params["threadId"]).toBe("existing");

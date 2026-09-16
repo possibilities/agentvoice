@@ -137,7 +137,7 @@
         },
         "delegation-ack-filler": {
           "type": "boolean",
-          "description": "Let the voice agent emit a filler acknowledgement while the orchestrator works. Unset keeps the Realtime API's own behavior."
+          "description": "Let the voice agent emit a filler acknowledgement while the orchestrator works. Default: false, so native delegation does not speak before the root has decided how to respond. Set true to opt in. Raw voice.extra.delegationAckFiller still overrides this value."
         },
         "codex-response-handoff-mode": {
           "type": "string",

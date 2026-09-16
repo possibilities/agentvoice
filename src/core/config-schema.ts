@@ -166,7 +166,7 @@ export const voiceValuesSchema = z
     "delegation-ack-filler": z
       .boolean()
       .describe(
-        "Let the voice agent emit a filler acknowledgement while the orchestrator works. Unset keeps the Realtime API's own behavior.",
+        "Let the voice agent emit a filler acknowledgement while the orchestrator works. Default: false, so native delegation does not speak before the root has decided how to respond. Set true to opt in. Raw voice.extra.delegationAckFiller still overrides this value.",
       )
       .optional(),
     "codex-response-handoff-mode": z

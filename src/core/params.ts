@@ -243,7 +243,11 @@ export function realtimeParams(
     // Keep this at the request boundary so voiceAppend can still own the slot.
     params["includeStartupContext"] = voice.includeStartupContext ?? false;
   }
-  setIfDefined(params, "delegationAckFiller", voice.delegationAckFiller);
+  // A filler can start speaking as soon as a native delegation is admitted,
+  // before the caller's current utterance has completed. AgentVoice leaves
+  // acknowledgement timing to the root turn, so suppress the native filler
+  // unless an operator explicitly opts in.
+  params["delegationAckFiller"] = voice.delegationAckFiller ?? false;
   setIfDefined(params, "codexResponseHandoffMode", voice.codexResponseHandoffMode);
   setIfDefined(params, "codexResponsesAsItems", voice.codexResponsesAsItems);
   setIfDefined(params, "codexResponseItemPrefix", voice.codexResponseItemPrefix);
