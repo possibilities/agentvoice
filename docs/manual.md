@@ -114,6 +114,12 @@ up controls in its ongoing notification; see
 [Android call navigation](android-call-navigation.md). The older
 `agentvoice network qr --name phone` command remains available for explicit
 30-day bearer compatibility. Microphone permission is requested separately.
+For an independently configured workspace server, pass `--workspace <dir>` to
+`network configure`, `pair`, `list`, and `revoke`. Targeted pairing requires that
+exact server to be running and never falls back to the default server; settings
+and device records remain workspace-scoped. Pairing may also target the exact
+workspace currently owned by the default server; its receipt omits `--workspace`
+because that server retains the default network namespace.
 The [adopted design profile](../android/design/shipping-profile.json) supplies shipping defaults;
 the retained debug studio can audition and promote future designs, including
 [Kenney CC0 switch sound families](../android/third-party/switch-sounds/README.md).

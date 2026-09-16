@@ -96,7 +96,9 @@ owns the current source map and recording/attachment implementation guidance.
   one-use connection challenges, loopback TLS-proxy backend, bounded heartbeat
   framing and client adapter. The native menu and CLI prepare enrollment through
   a separate private UDS and activate it only after rendering. Network and local
-  owners share the same VoiceServer.
+  owners share the same VoiceServer. The default server keeps the existing
+  network namespace; an explicit workspace opts into isolated settings, device
+  records and pairing socket with `network ... --workspace <dir>`.
   Fail closed on invalid credentials, Origin, protocol, frames and liveness;
   close local media ownership immediately without waiting for a network close handshake.
   No automatic reconnect, secret logging, TLS bypass or public Funnel deployment.

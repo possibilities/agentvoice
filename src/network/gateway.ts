@@ -56,11 +56,12 @@ export class NetworkGateway {
     private readonly socketPath: string,
     private readonly settings: NetworkSettings,
     private readonly timings = { interval: HEARTBEAT_INTERVAL_MS, timeout: HEARTBEAT_TIMEOUT_MS },
+    pairingWorkspace?: string,
   ) {
-    this.credentials = new DeviceCredentials(stateDir);
-    this.pairing = new PairingCoordinator(stateDir, settings.endpoint);
+    this.credentials = new DeviceCredentials(stateDir, pairingWorkspace);
+    this.pairing = new PairingCoordinator(stateDir, settings.endpoint, pairingWorkspace);
     this.challenges = new PairingChallenges(this.pairing.paired);
-    this.pairingControl = new PairingControlServer(stateDir, this.pairing);
+    this.pairingControl = new PairingControlServer(stateDir, this.pairing, pairingWorkspace);
   }
   get port(): number {
     return this.server?.port ?? 0;

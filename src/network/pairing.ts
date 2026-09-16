@@ -224,8 +224,8 @@ export class PairedDevices {
   private readonly legacyDirectory: string;
   readonly serverId: string;
 
-  constructor(stateDir: string) {
-    const network = networkDirectory(stateDir);
+  constructor(stateDir: string, workspace?: string) {
+    const network = networkDirectory(stateDir, workspace);
     ownedDirectory(network);
     this.directory = join(network, "paired-devices");
     this.legacyDirectory = join(network, "devices");
@@ -407,9 +407,10 @@ export class PairingCoordinator {
   constructor(
     stateDir: string,
     private readonly endpoint: string,
+    workspace?: string,
   ) {
-    this.paired = new PairedDevices(stateDir);
-    this.directory = join(networkDirectory(stateDir), "enrollments");
+    this.paired = new PairedDevices(stateDir, workspace);
+    this.directory = join(networkDirectory(stateDir, workspace), "enrollments");
     ownedDirectory(this.directory);
   }
 
@@ -802,8 +803,14 @@ export function pairingSignatureInput(
 const localPrepareSchema = z.object({}).strict();
 const localMutationSchema = z.object({ enrollmentId: idSchema, receipt: digestSchema }).strict();
 
-export function pairingSocketPath(stateDir: string): string {
-  return join(networkDirectory(stateDir), "pairing.sock");
+export function pairingSocketPath(stateDir: string, workspace?: string): string {
+  return workspace === undefined
+    ? join(networkDirectory(stateDir), "pairing.sock")
+    : join(
+        networkDirectory(stateDir),
+        "pairing",
+        `${createHash("sha256").update(workspace).digest("hex").slice(0, 24)}.sock`,
+      );
 }
 
 export class PairingControlServer {
@@ -812,8 +819,9 @@ export class PairingControlServer {
   constructor(
     stateDir: string,
     private readonly pairing: PairingCoordinator,
+    workspace?: string,
   ) {
-    this.socket = new JsonSocketServer(pairingSocketPath(stateDir), {
+    this.socket = new JsonSocketServer(pairingSocketPath(stateDir, workspace), {
       version: PAIRING_SOCKET_VERSION,
       handle: (request, peer) => this.handle(request, peer),
     });

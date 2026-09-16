@@ -510,17 +510,21 @@ export async function runServer(
       void server
         .restoreWorkspaceSession()
         .catch((error) => console.error(`Workspace session restore failed: ${String(error)}`));
-    if (endpointWorkspace === undefined) {
-      const { loadNetworkSettings } = await import("../network/credentials.ts");
-      const settings = loadNetworkSettings(stateDir);
-      if (settings) {
-        const { NetworkGateway } = await import("../network/gateway.ts");
-        network = new NetworkGateway(stateDir, frontendSocketPath(stateDir), settings);
-        await network.start();
-        console.log(
-          `Authenticated client API available behind TLS proxy on loopback port ${network.port}`,
-        );
-      }
+    const { loadNetworkSettings } = await import("../network/credentials.ts");
+    const settings = loadNetworkSettings(stateDir, endpointWorkspace);
+    if (settings) {
+      const { NetworkGateway } = await import("../network/gateway.ts");
+      network = new NetworkGateway(
+        stateDir,
+        frontendSocketPath(stateDir, endpointWorkspace),
+        settings,
+        undefined,
+        endpointWorkspace,
+      );
+      await network.start();
+      console.log(
+        `Authenticated client API available behind TLS proxy on loopback port ${network.port}`,
+      );
     }
     console.log(`AgentVoice server waiting in ${workspace ?? "the current default workspace"}`);
     await stopped.promise;

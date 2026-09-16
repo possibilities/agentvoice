@@ -53,6 +53,15 @@ API versions remain unchanged. The complete protocol is [ADR 0046](adr/0046-dura
 The frozen interop vector is
 [`pairing-v1.json`](../tests/fixtures/pairing-v1.json).
 
+For a separately configured workspace server, use `agentvoice network pair
+--workspace <dir>`. The CLI resolves the canonical workspace, verifies the exact
+live server, and opens only that server's workspace-scoped pairing socket. It
+does not fall back to the default server. A separately configured workspace uses
+the same `--workspace` selector for configuration, listing and revocation; its
+settings and device records are isolated. When the selected workspace belongs to
+the default server, the pairing receipt correctly shows an unscoped revoke command
+for the default network namespace.
+
 The Android scanner accepts this pairing format for new enrollment. Existing
 saved bearer grants remain usable until expiry/revocation; `network qr` remains
 a legacy bearer export. Neither stored access nor missing/corrupt keys are

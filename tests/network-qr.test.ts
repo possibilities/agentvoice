@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NETWORK_USAGE, networkCommand, parseNetworkCommand } from "../src/network/command.ts";
-import { configureNetwork, DeviceCredentials } from "../src/network/credentials.ts";
+import {
+  configureNetwork,
+  DeviceCredentials,
+  loadNetworkSettings,
+} from "../src/network/credentials.ts";
+import { pairingSocketPath } from "../src/network/pairing.ts";
 import {
   createGrantQr,
   createGrantQrMatrix,
@@ -50,6 +55,35 @@ test("network qr parser accepts exactly one named device and preserves other str
     output: "phone.json",
   });
   expect(parseNetworkCommand(["pair"])).toEqual({ action: "pair" });
+  expect(parseNetworkCommand(["pair", "--workspace", "~/test-workspace"])).toEqual({
+    action: "pair",
+    workspace: "~/test-workspace",
+  });
+  expect(
+    parseNetworkCommand([
+      "configure",
+      "--workspace",
+      "~/test-workspace",
+      "--port",
+      "44415",
+      "--endpoint",
+      "wss://test.example:48415/v2/client",
+    ]),
+  ).toEqual({
+    action: "configure",
+    endpoint: "wss://test.example:48415/v2/client",
+    port: 44415,
+    workspace: "~/test-workspace",
+  });
+  expect(parseNetworkCommand(["list", "--workspace", "~/test-workspace"])).toEqual({
+    action: "list",
+    workspace: "~/test-workspace",
+  });
+  expect(parseNetworkCommand(["revoke", "abc", "--workspace", "~/test-workspace"])).toEqual({
+    action: "revoke",
+    id: "abc",
+    workspace: "~/test-workspace",
+  });
   for (const args of [
     ["qr"],
     ["qr", "--name"],
@@ -59,8 +93,197 @@ test("network qr parser accepts exactly one named device and preserves other str
     ["--help", "extra"],
     ["status", "extra"],
     ["pair", "extra"],
+    ["pair", "--workspace"],
+    ["pair", "--workspace", "one", "--workspace", "two"],
   ])
     expect(() => parseNetworkCommand(args)).toThrow(NETWORK_USAGE);
+});
+
+test("network pair targets only the exact live workspace server", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-network-pair-target-"));
+  const workspace = join(root, "workspace");
+  try {
+    mkdirSync(workspace);
+    const canonicalWorkspace = realpathSync(workspace);
+    configureNetwork(root, { version: 1, endpoint, port: 44414 }, canonicalWorkspace);
+    const enrollmentId = "77".repeat(16);
+    const expiresAt = 1_800_000_300_000;
+    const payload = `agentvoice-pair:v1:${JSON.stringify({
+      v: 1,
+      endpoint,
+      enrollment: `${enrollmentId}.${"88".repeat(32)}`,
+      expiresAt,
+    })}`;
+    const discoveries: Array<string | undefined> = [];
+    let connectedPath = "";
+    const connection = {
+      async request(method: string) {
+        if (method === "prepare")
+          return { enrollmentId, receipt: "99".repeat(32), payload, expiresAt };
+        if (method === "activate")
+          return { status: "paired", expiresAt, deviceId: "aa".repeat(16) };
+        throw new Error(`unexpected method ${method}`);
+      },
+      close() {},
+    };
+    const output: string[] = [];
+    await networkCommand(["pair", "--workspace", workspace], root, {
+      connectPairing: async (path) => {
+        connectedPath = path;
+        return connection;
+      },
+      discoverServer: async (_stateDir, selected) => {
+        discoveries.push(selected);
+        return selected === canonicalWorkspace
+          ? { busy: false, workspace: canonicalWorkspace, threadId: null }
+          : { busy: false, workspace: "/production", threadId: null };
+      },
+      terminal: { isTTY: false },
+      write: (value) => output.push(value),
+    });
+    expect(discoveries).toEqual([undefined, canonicalWorkspace]);
+    expect(connectedPath).toBe(pairingSocketPath(root, canonicalWorkspace));
+    expect(output.at(-1)).toContain(`--workspace '${canonicalWorkspace}'`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("network pair never falls back when an explicit workspace server is absent or ambiguous", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-network-pair-target-failure-"));
+  const workspace = join(root, "workspace");
+  try {
+    mkdirSync(workspace);
+    const canonicalWorkspace = realpathSync(workspace);
+    configureNetwork(root, { version: 1, endpoint, port: 44414 }, canonicalWorkspace);
+    let connected = false;
+    const options = {
+      connectPairing: async () => {
+        connected = true;
+        throw new Error("must not connect");
+      },
+      discoverServer: async () => undefined,
+    };
+    await expect(
+      Promise.resolve(networkCommand(["pair", "--workspace", workspace], root, options)),
+    ).rejects.toThrow(`No running AgentVoice server found for workspace ${canonicalWorkspace}`);
+    expect(connected).toBe(false);
+
+    await expect(
+      Promise.resolve(
+        networkCommand(["pair", "--workspace", workspace], root, {
+          ...options,
+          discoverServer: async () => ({
+            busy: false,
+            workspace: canonicalWorkspace,
+            threadId: null,
+          }),
+        }),
+      ),
+    ).rejects.toThrow(`Multiple running AgentVoice servers report workspace ${canonicalWorkspace}`);
+    expect(connected).toBe(false);
+
+    await expect(
+      Promise.resolve(
+        networkCommand(["pair", "--workspace", workspace], root, {
+          connectPairing: async () => {
+            throw new Error("ENOENT secret socket path");
+          },
+          discoverServer: async (_stateDir, selected) =>
+            selected === canonicalWorkspace
+              ? { busy: false, workspace: canonicalWorkspace, threadId: null }
+              : undefined,
+        }),
+      ),
+    ).rejects.toThrow("Targeted AgentVoice server pairing is unavailable");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace network configuration and device records stay isolated from production", () => {
+  temporaryState((root) => {
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace);
+    const canonicalWorkspace = realpathSync(workspace);
+    const production = { version: 1 as const, endpoint, port: 44414 };
+    const testSettings = {
+      version: 1 as const,
+      endpoint: "wss://test-voice.example:48415/v2/client",
+      port: 44415,
+    };
+    configureNetwork(root, production);
+    configureNetwork(root, testSettings, canonicalWorkspace);
+    expect(loadNetworkSettings(root)).toEqual(production);
+    expect(loadNetworkSettings(root, canonicalWorkspace)).toEqual(testSettings);
+
+    const productionDevices = new DeviceCredentials(root);
+    const testDevices = new DeviceCredentials(root, canonicalWorkspace);
+    productionDevices.grant("Production", endpoint, join(root, "production.json"));
+    testDevices.grant("Test", testSettings.endpoint, join(root, "test.json"));
+    expect(productionDevices.list().map((device) => device.label)).toEqual(["Production"]);
+    expect(testDevices.list().map((device) => device.label)).toEqual(["Test"]);
+    expect(pairingSocketPath(root)).not.toBe(pairingSocketPath(root, canonicalWorkspace));
+    expect(
+      Buffer.byteLength(
+        pairingSocketPath("/Users/arthack/.local/state/agentvoice", canonicalWorkspace),
+      ),
+    ).toBeLessThan(104);
+    const output: string[] = [];
+    networkCommand(["qr", "--name", "QR Test", "--workspace", workspace], root, {
+      terminal: { isTTY: false },
+      write: (value) => output.push(value),
+    });
+    expect(output.at(-1)).toContain(`--workspace '${canonicalWorkspace}'`);
+  });
+});
+
+test("targeting the default server by exact workspace keeps default management commands", async () => {
+  const root = mkdtempSync(join(tmpdir(), "av-network-pair-default-target-"));
+  const workspace = join(root, "workspace");
+  try {
+    mkdirSync(workspace);
+    const canonicalWorkspace = realpathSync(workspace);
+    configureNetwork(root, { version: 1, endpoint, port: 44414 });
+    const enrollmentId = "ab".repeat(16);
+    const expiresAt = 1_800_000_300_000;
+    const output: string[] = [];
+    await networkCommand(["pair", "--workspace", workspace], root, {
+      connectPairing: async (path) => {
+        expect(path).toBe(pairingSocketPath(root));
+        return {
+          async request(method: string) {
+            if (method === "prepare")
+              return {
+                enrollmentId,
+                receipt: "bc".repeat(32),
+                payload: `agentvoice-pair:v1:${JSON.stringify({
+                  v: 1,
+                  endpoint,
+                  enrollment: `${enrollmentId}.${"cd".repeat(32)}`,
+                  expiresAt,
+                })}`,
+                expiresAt,
+              };
+            if (method === "activate")
+              return { status: "paired", expiresAt, deviceId: "de".repeat(16) };
+            throw new Error(`unexpected method ${method}`);
+          },
+          close() {},
+        };
+      },
+      discoverServer: async (_stateDir, selected) =>
+        selected === undefined
+          ? { busy: false, workspace: canonicalWorkspace, threadId: null }
+          : undefined,
+      terminal: { isTTY: false },
+      write: (value) => output.push(value),
+    });
+    expect(output.at(-1)).toContain(`agentvoice network revoke ${"de".repeat(16)}`);
+    expect(output.at(-1)).not.toContain("--workspace");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("network pair renders before activation, waits for completion and prints a durable receipt", async () => {

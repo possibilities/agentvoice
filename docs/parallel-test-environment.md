@@ -69,14 +69,62 @@ ends that test session's runtime and native work. Ctrl+C in a reader stops only
 that reader and its owned portless route. Rebuild/relaunch test code in its own
 checkout; leave production source, server and reader processes untouched.
 
+## Targeted Android pairing
+
+Network settings, device records and the private pairing socket are scoped to the
+canonical workspace when `--workspace` is present. This lets the supervised test
+server expose its own Android endpoint without reading or changing the default
+server's settings or paired devices. It needs a dedicated trusted WSS proxy route
+and an unused loopback port; do not reuse production's endpoint or backend port.
+Configure that target from the test checkout before restarting only the test
+server with the updated source:
+
+```sh
+bun run src/main.ts network configure \
+  --workspace "$HOME/.local/state/agentvoice/test-workspace" \
+  --endpoint wss://greybird.taile9945f.ts.net:48415/v2/client \
+  --port 44415
+```
+
+The reserved tailnet-only test route is HTTPS port 48415 to
+`http://127.0.0.1:44415`. Prepare and verify that Tailscale Serve route separately;
+the AgentVoice command neither creates nor changes it. Production remains on
+48414 to 44414.
+
+The installed supervised jobs use workspace
+`$HOME/.local/state/agentvoice/test-workspace`, server label
+`io.arthack.agentvoice-test.wait`, reader label
+`io.arthack.agentvoice-test.serve`, and reader origin
+`https://agentvoice-test.localhost`. Once its dedicated proxy and updated server
+are running, generate the one-use QR from the same checkout:
+
+```sh
+bun run src/main.ts network pair \
+  --workspace "$HOME/.local/state/agentvoice/test-workspace"
+```
+
+The command canonicalizes the workspace and verifies the exact live server before
+opening its private pairing socket. If the supervised test server is stopped,
+still runs source without workspace-scoped pairing, or has not loaded its network
+configuration, the command fails. It never falls back to the default server.
+Use the same selector for management:
+
+```sh
+bun run src/main.ts network status --workspace "$HOME/.local/state/agentvoice/test-workspace"
+bun run src/main.ts network list --workspace "$HOME/.local/state/agentvoice/test-workspace"
+bun run src/main.ts network revoke <device-id> --workspace "$HOME/.local/state/agentvoice/test-workspace"
+```
+
 ## Isolation and limits
 
 Keep the normal XDG state and CODEX_HOME environment. Existing workspace-hashed
 frontend sockets, unique controller/event endpoints, workspace/thread leases,
 workspace-scoped roles and transcripts separate session state. An explicit
-workspace server never loads the default network gateway, so it neither binds the
-Android endpoint nor changes its grants. The web reader fails offline if its
-selected socket disappears; it never falls back to the default server. Pending
+workspace server loads a network gateway only from its own workspace-scoped
+configuration. Without that opt-in it binds no Android endpoint; with it, its
+settings, grants, pairings and pairing socket remain separate from the default
+server. The web reader fails offline if its selected socket disappears; it never
+falls back to the default server. Pending
 Agent input is saved in a workspace-hashed host queue; it cannot be displayed,
 resumed or overwritten by the other endpoint. The default queue retains its
 existing recovery file.
@@ -92,8 +140,7 @@ the test server only when intentionally testing other settings. Default config
 and prompt files remain unchanged. A workspace with an ejected role database uses
 its saved binding under the existing role rules.
 
-The shared loopback HTTPS proxy must already be prepared. This workflow does not
-install a LaunchAgent, mutate shared proxy settings, expose another network API,
-launch a browser or create a session picker. A future multi-session server can
-replace endpoint discovery behind the same verified workspace/controller/thread
-identity boundary; origin labels are reader deployment names, not session IDs.
+The shared loopback HTTPS proxy must already be prepared. Source preparation does
+not install a LaunchAgent, mutate shared proxy settings, expose another network
+API, launch a browser or create a session picker. Origin labels are reader
+deployment names, not server or pairing identities.

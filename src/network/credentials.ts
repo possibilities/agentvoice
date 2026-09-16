@@ -106,27 +106,40 @@ export function loadConnectionProfile(path: string): ConnectionProfile {
     throw new Error("Connection profile is missing, unsafe or invalid");
   }
 }
-export function networkDirectory(stateDir: string): string {
-  return join(stateDir, "network");
+export function networkDirectory(stateDir: string, workspace?: string): string {
+  const root = join(stateDir, "network");
+  return workspace === undefined
+    ? root
+    : join(root, "workspaces", createHash("sha256").update(workspace).digest("hex"));
 }
-export function loadNetworkSettings(stateDir: string): NetworkSettings | undefined {
-  const path = join(networkDirectory(stateDir), "settings.json");
+export function loadNetworkSettings(
+  stateDir: string,
+  workspace?: string,
+): NetworkSettings | undefined {
+  const path = join(networkDirectory(stateDir, workspace), "settings.json");
   if (!lstatSync(path, { throwIfNoEntry: false })) return;
   return networkSettingsSchema.parse(readPrivateJson(path));
 }
-export function disableNetwork(stateDir: string): void {
-  const path = join(networkDirectory(stateDir), "settings.json");
-  if (!loadNetworkSettings(stateDir)) return;
+export function disableNetwork(stateDir: string, workspace?: string): void {
+  const path = join(networkDirectory(stateDir, workspace), "settings.json");
+  if (!loadNetworkSettings(stateDir, workspace)) return;
   renameSync(
     path,
-    join(networkDirectory(stateDir), `settings.disabled.${randomBytes(8).toString("hex")}.json`),
+    join(
+      networkDirectory(stateDir, workspace),
+      `settings.disabled.${randomBytes(8).toString("hex")}.json`,
+    ),
   );
 }
-export function configureNetwork(stateDir: string, settings: NetworkSettings): void {
-  const directory = networkDirectory(stateDir);
+export function configureNetwork(
+  stateDir: string,
+  settings: NetworkSettings,
+  workspace?: string,
+): void {
+  const directory = networkDirectory(stateDir, workspace);
   ownedDirectory(directory);
   const path = join(directory, "settings.json");
-  const existing = loadNetworkSettings(stateDir);
+  const existing = loadNetworkSettings(stateDir, workspace);
   if (existing) {
     if (JSON.stringify(existing) === JSON.stringify(settings)) return;
     throw new Error(
@@ -138,8 +151,8 @@ export function configureNetwork(stateDir: string, settings: NetworkSettings): v
 
 export class DeviceCredentials {
   readonly directory: string;
-  constructor(stateDir: string) {
-    this.directory = join(networkDirectory(stateDir), "devices");
+  constructor(stateDir: string, workspace?: string) {
+    this.directory = join(networkDirectory(stateDir, workspace), "devices");
     ownedDirectory(this.directory);
   }
   prepareGrant(label: string, endpoint: string, now = Date.now()): PendingDeviceGrant {
