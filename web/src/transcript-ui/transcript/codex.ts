@@ -2,7 +2,10 @@ import { type CodexTransportOptions, fetchThread, fetchThreadItems } from "../li
 import type { TranscriptSource } from "./types.ts";
 
 export type { CodexTransportOptions } from "../lib/api/codex.ts";
-export { parseCodexMessagePresentation } from "../lib/api/codex-presentation.ts";
+export {
+  parseCodexMessagePresentation,
+  realtimeDelegationInput,
+} from "../lib/api/codex-presentation.ts";
 export {
   type CodexSubagentActivityPresentation,
   mapCodexSubagentActivity,

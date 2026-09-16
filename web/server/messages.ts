@@ -6,6 +6,7 @@ import { contextCompactionMessage } from "../src/transcript-ui/lib/system-events
 import {
   mapCodexSubagentActivity,
   parseCodexMessagePresentation,
+  realtimeDelegationInput,
 } from "../src/transcript-ui/transcript/codex.ts";
 import type { TranscriptMessage } from "../src/transcript-ui/transcript/index.ts";
 
@@ -14,6 +15,25 @@ import { toolOutputSections } from "./tool-output.ts";
 export type AgentItem = { turnId: string; item: z.infer<typeof conversationItemSchema> };
 export const itemKey = ({ turnId, item }: AgentItem) => JSON.stringify([turnId, item.id]);
 const bytes = new Intl.NumberFormat("en-US");
+
+function userContent(item: Extract<AgentItem["item"], { type: "userMessage" }>) {
+  let image = 0;
+  return item.content
+    .map((part) => {
+      if (part.type === "text") return part.text;
+      if (part.type === "skill" || part.type === "mention") return `@${part.name}`;
+      if (part.type === "image" || part.type === "localImage") return `[Image #${++image}]`;
+      return "[Audio]";
+    })
+    .join("\n\n");
+}
+
+/** Exact ordinary realtime input, when this item is a voice delegation. */
+export function voiceDelegationInput(entry: AgentItem) {
+  return entry.item.type === "userMessage"
+    ? realtimeDelegationInput(userContent(entry.item))
+    : undefined;
+}
 
 function unavailableActivity(item: Extract<AgentItem["item"], { type: "unavailable" }>) {
   const omission = item.omission;
@@ -71,15 +91,7 @@ export function agentMessage(entry: AgentItem, completed = true): TranscriptMess
   }
   if (item.type === "contextCompaction") return { ...base, ...contextCompactionMessage(completed) };
   if (item.type === "userMessage") {
-    let image = 0;
-    const content = item.content
-      .map((part) => {
-        if (part.type === "text") return part.text;
-        if (part.type === "skill" || part.type === "mention") return `@${part.name}`;
-        if (part.type === "image" || part.type === "localImage") return `[Image #${++image}]`;
-        return "[Audio]";
-      })
-      .join("\n\n");
+    const content = userContent(item);
     return {
       ...base,
       id: item.clientId ? `client:${item.clientId}` : base.id,
@@ -226,5 +238,12 @@ export class VoiceMessages {
   }
   messages() {
     return [...this.rows.values()].filter((message) => message.content.length > 0);
+  }
+
+  /** Count completed or live human segments with this exact canonical input. */
+  userTranscriptCount(input: string) {
+    return this.messages().filter(
+      (message) => message.role === "user" && message.content.trim() === input,
+    ).length;
   }
 }

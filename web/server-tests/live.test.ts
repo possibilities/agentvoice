@@ -27,6 +27,81 @@ const user = (id: string, text: string) => ({
   turnId: "turn",
   item: { type: "userMessage" as const, id, content: [{ type: "text" as const, text }] },
 });
+const delegatedVoice = (id: string, input: string, transcript = input) =>
+  user(
+    id,
+    `<realtime_delegation><input>${input}</input><transcript_delta>user: ${transcript}</transcript_delta></realtime_delegation>`,
+  );
+
+test("retains one voice delegation while history briefly exposes its response-item view", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const input = "Check the duplicated card.";
+  const history = delegatedVoice("history-response-item", input);
+  const live = delegatedVoice("native-item", input);
+  try {
+    h.history([history]);
+    h.voice("voice.item.completed", {
+      item: {
+        type: "transcriptSegment",
+        id: "spoken-once",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: input,
+      },
+    });
+    await h.start();
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 1,
+      data: { threadId: "main", ...live },
+    });
+    const view = await until(
+      reader,
+      (value) =>
+        !value.agentHistoryLoading &&
+        value.agent.filter((message) => message.presentation?.title === "Via Voice").length === 1,
+    );
+    const messages = view.agent.filter((message) => message.presentation?.title === "Via Voice");
+    expect(messages[0]?.id).toBe(JSON.stringify(["turn", "native-item"]));
+    expect(messages[0]?.presentation?.body).toBe(input);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("retains repeated voice submissions when the recording has both segments", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const input = "Repeat this exactly.";
+  try {
+    h.history([delegatedVoice("first", input), delegatedVoice("second", input)]);
+    for (const id of ["spoken-first", "spoken-second"])
+      h.voice("voice.item.completed", {
+        item: {
+          type: "transcriptSegment",
+          id,
+          realtimeSessionId: "rt",
+          role: "user",
+          text: input,
+        },
+      });
+    await h.start();
+    const view = await until(
+      reader,
+      (value) =>
+        !value.agentHistoryLoading &&
+        value.agent.filter((message) => message.presentation?.title === "Via Voice").length === 2,
+    );
+    expect(
+      view.agent.filter((message) => message.presentation?.title === "Via Voice"),
+    ).toHaveLength(2);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
 
 test("compaction live completion and saved history remain one system event after reconnect", async () => {
   const h = await fixture();

@@ -31,7 +31,13 @@ import type { LiveView } from "../src/types.ts";
 import { type AgentCommand, AgentControls } from "./agent-controls.ts";
 import { sendAgentOperation } from "./agent-sender.ts";
 import type { DocumentViewContext } from "./document-reader.ts";
-import { type AgentItem, agentMessage, itemKey, VoiceMessages } from "./messages.ts";
+import {
+  type AgentItem,
+  agentMessage,
+  itemKey,
+  VoiceMessages,
+  voiceDelegationInput,
+} from "./messages.ts";
 
 const liveSchema = liveSnapshotSchema.extend({ instanceId: z.string(), generation: z.number() });
 const historySchema = readResultSchema.options[4]!.extend({
@@ -856,6 +862,7 @@ export class LiveReader {
     // Establish the current live incarnation before consuming a background history slot.
     // This keeps a newly opened reader useful while the root is actively working.
     this.loadHistoryPage(identity, params);
+    const entries = new Map(this.history.map((entry) => [itemKey(entry), entry]));
     const messages = new Map(this.history.map((entry) => [itemKey(entry), agentMessage(entry)]));
     for (const entry of live.items) {
       if (
@@ -864,8 +871,10 @@ export class LiveReader {
       )
         this.lifecycle.set(itemKey(entry), entry);
       // Incomplete live text cannot replace canonical history or establish delta overlap.
-      if (entry.complete || !messages.has(itemKey(entry)))
+      if (entry.complete || !messages.has(itemKey(entry))) {
+        entries.set(itemKey(entry), entry);
         messages.set(itemKey(entry), agentMessage(entry, entry.completed));
+      }
     }
     const authoritativeOrder = [...messages.keys()];
     for (const [key, entry] of this.lifecycle)
@@ -919,6 +928,33 @@ export class LiveReader {
       return empty("connecting");
     }
     if (this.actionable(identity)) void this.controls.drain();
+    const rendered = new Set(order);
+    const delegated = new Map<string, { input: string; keys: string[] }>();
+    // While native persistence catches up, a history read can expose its
+    // response-item view alongside the same item received from the live event
+    // feed. Only collapse those alternate projections after the complete saved
+    // voice tail proves how many matching human segments were actually observed.
+    // This retains separately repeated speech, and leaves uncorrelated native
+    // messages visible if the recording is unavailable or incomplete.
+    const completeVoiceHistory = this.tail?.initialHistoryLoaded === true;
+    if (completeVoiceHistory) {
+      for (const key of order) {
+        const entry = entries.get(key);
+        const input = entry && voiceDelegationInput(entry);
+        if (!input) continue;
+        const identity = JSON.stringify([entry.turnId, input]);
+        const group = delegated.get(identity) ?? { input, keys: [] };
+        group.keys.push(key);
+        delegated.set(identity, group);
+      }
+      for (const { input, keys } of delegated.values()) {
+        const observed = this.voice.userTranscriptCount(input);
+        if (observed === 0 || keys.length <= observed) continue;
+        // The live event is appended after the history read. Keep the latest
+        // identities so a transient response-item view cannot displace it.
+        for (const key of keys.slice(0, -observed)) rendered.delete(key);
+      }
+    }
     return {
       phase: this.sessionPhase(identity),
       id: this.viewId,
@@ -926,7 +962,7 @@ export class LiveReader {
       voice: this.voice.messages(),
       agent: order.flatMap((key) => {
         const message = messages.get(key);
-        return message ? [message] : [];
+        return message && rendered.has(key) ? [message] : [];
       }),
       agentHistoryLoading: !this.initialHistorySettled,
       voiceHistoryLoading: this.tail ? !this.tail.initialHistoryLoaded : false,

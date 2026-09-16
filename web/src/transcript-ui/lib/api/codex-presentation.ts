@@ -18,6 +18,20 @@ function decode(value: string) {
   return value.replace(/&(amp|lt|gt|quot|apos);/g, (_, entity: string) => entities[entity]!).trim();
 }
 
+/**
+ * Return the canonical spoken input carried by an ordinary realtime delegation.
+ *
+ * This deliberately excludes transcript-tail flushes: those are lifecycle
+ * handoffs, not one spoken submission that can be correlated with the saved
+ * voice recording.
+ */
+export function realtimeDelegationInput(content: string): string | undefined {
+  const match = delegation.exec(content);
+  if (!match || match[1] !== undefined) return;
+  const input = decode(match[2]!);
+  return input || undefined;
+}
+
 type TranscriptEntry = { role: "user" | "assistant"; text: string };
 
 function transcriptEntries(value: string): TranscriptEntry[] {
