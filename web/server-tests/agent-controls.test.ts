@@ -14,11 +14,15 @@ import { join } from "node:path";
 import { LocalImageStore } from "../../src/attachment/local-images.ts";
 import { CONTROL_PROTOCOL_VERSION } from "../../src/control/types.ts";
 import { type AgentCommand, AgentControls, agentCommandSchema } from "../server/agent-controls.ts";
-import { type AgentOperation, AgentSendError } from "../server/agent-sender.ts";
+import {
+  type AgentOperation,
+  AgentSendError,
+  type AgentTarget,
+} from "../server/agent-sender.ts";
 
 function setup() {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "av-web-input-")));
-  const target = {
+  const target: AgentTarget & { viewId: string } = {
     viewId: randomUUID(),
     instanceId: randomUUID(),
     generation: 1,
