@@ -889,7 +889,21 @@ export class LiveReader {
     const authoritativeOrder = [...messages.keys()];
     for (const [key, entry] of this.lifecycle)
       if (!messages.has(key)) messages.set(key, agentMessage(entry));
-    const order = [...authoritativeOrder];
+    // Native history groups a lifecycle observation with the parent turn that
+    // initiated the child. A completion can arrive much later, after newer
+    // turns, so a history refresh (notably after compaction) may move a card
+    // backwards even though the reader already showed it at the live edge.
+    // Once observed, reader order owns that lifecycle row until an explicit
+    // revert/incarnation reset. Remove retained rows from the refreshed order
+    // and place them back relative to the rows that surrounded them live.
+    const authoritative = new Set(authoritativeOrder);
+    const hasSurvivingAnchor = this.agentOrder.some(
+      (key) => authoritative.has(key) && !this.lifecycle.has(key),
+    );
+    const retained = new Set(
+      hasSurvivingAnchor ? this.agentOrder.filter((key) => this.lifecycle.has(key)) : [],
+    );
+    const order = authoritativeOrder.filter((key) => !retained.has(key));
     const included = new Set(order);
     for (let index = 0; index < this.agentOrder.length; index++) {
       const key = this.agentOrder[index]!;

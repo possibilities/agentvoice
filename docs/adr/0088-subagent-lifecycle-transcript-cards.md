@@ -22,6 +22,12 @@ or conversation-incarnation replacement clears them. Event metadata and the
 turn/item row key remain unchanged; this is reader memory, not a durable
 transcript or a reconstruction from prose.
 
+Native history can also contain the same delayed completion under the older
+parent turn that initiated the child. Once the reader has shown that completion
+at the live edge, a history refresh must retain its observed stream position
+rather than move it backward into the initiating turn. This is especially
+visible when context compaction completes and refreshes canonical history.
+
 The labels are “Subagent started,” “Subagent turn completed,” and “Subagent
 interruption requested.” These are historical observations, not current running
 status. In particular, successful turn completion does not close a reusable

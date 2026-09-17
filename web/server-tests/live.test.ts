@@ -363,6 +363,67 @@ test("observed lifecycle cards survive later history replacement and live projec
   }
 });
 
+test("compaction history cannot move an observed completion back into its initiating turn", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const before = user("before-lifecycle", "Before child completion");
+  const later = user("later-turn", "A later turn finished while the child kept working");
+  const lifecycle = {
+    type: "subAgentActivity" as const,
+    id: "delayed-completion",
+    kind: "completed" as const,
+    agentPath: "/root/delayed_worker",
+    agentThreadId: "child",
+  };
+  const compaction = { type: "contextCompaction" as const, id: "compact" };
+  try {
+    h.history([before, later]);
+    await h.start();
+    await until(reader, (view) => view.agent.length === 2 && !view.agentHistoryLoading);
+
+    // Codex attributes the completion to the older initiating turn, but the
+    // live observation appears after the later turn and is shown there first.
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 1,
+      data: { threadId: "main", turnId: "initiating-turn", item: lifecycle },
+    });
+    const observed = await until(
+      reader,
+      (view) => view.agent.at(-1)?.nativeItemType === "subAgentActivity",
+    );
+    const lifecycleId = observed.agent.at(-1)!.id;
+
+    // After compaction, canonical history places the lifecycle item inside its
+    // initiating turn, before the later conversation that preceded observation.
+    h.history([
+      before,
+      { turnId: "initiating-turn", item: lifecycle },
+      later,
+      { turnId: "compaction-turn", item: compaction },
+    ]);
+    h.feed.conversation({
+      event: "conversation.item.completed",
+      revision: 2,
+      data: { threadId: "main", turnId: "compaction-turn", item: compaction },
+    });
+
+    const refreshed = await until(
+      reader,
+      (view) => view.agent.at(-1)?.nativeItemType === "contextCompaction",
+    );
+    expect(refreshed.agent.map((message) => message.id)).toEqual([
+      JSON.stringify(["turn", "before-lifecycle"]),
+      JSON.stringify(["turn", "later-turn"]),
+      lifecycleId,
+      JSON.stringify(["compaction-turn", "compact"]),
+    ]);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("initial history pages stay private while live Agent and Voice items keep updating", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);
