@@ -25,14 +25,6 @@ optgroup {
   /* biome-ignore lint/complexity/noImportantStyles: The global quiet-focus contract must override component focus rings. */
   box-shadow: none !important;
 }
-::selection {
-  color: inherit;
-  background: transparent;
-}
-::-moz-selection {
-  color: inherit;
-  background: transparent;
-}
 body {
   margin: 0;
 }

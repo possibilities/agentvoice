@@ -1,7 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { LiveView } from "../src/types.ts";
 
 const needle = "Native browser find reaches this rendered transcript sentence.";
+
+async function dragSelectText(page: Page, target: Locator): Promise<string> {
+  const points = await target.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.textContent?.trim()) textNodes.push(node as Text);
+    }
+    const first = textNodes.at(0);
+    const last = textNodes.at(-1);
+    if (!first || !last) throw new Error("selection target has no readable text");
+
+    const firstRange = document.createRange();
+    firstRange.setStart(first, 0);
+    firstRange.setEnd(first, 1);
+    const lastRange = document.createRange();
+    lastRange.setStart(last, last.length - 1);
+    lastRange.setEnd(last, last.length);
+    const firstRect = firstRange.getBoundingClientRect();
+    const lastRect = lastRange.getBoundingClientRect();
+    return {
+      start: { x: firstRect.left - 1, y: firstRect.top + firstRect.height / 2 },
+      end: { x: lastRect.right + 1, y: lastRect.top + lastRect.height / 2 },
+    };
+  });
+
+  await page.mouse.move(points.start.x, points.start.y);
+  await page.mouse.down();
+  await page.mouse.move(points.end.x, points.end.y, { steps: 12 });
+  await page.mouse.up();
+  return page.evaluate(() => window.getSelection()?.toString() ?? "");
+}
 
 test.beforeEach(async ({ page }) => {
   const view: LiveView = {
@@ -56,31 +88,30 @@ test("focus frames stay hidden while semantic controls remain keyboard operable"
   await expect(dock).toHaveCSS("border-top-color", restingDivider);
 });
 
-test("selection remains real and rendered transcript text remains findable", async ({ page }) => {
-  const result = await page.getByText(needle, { exact: true }).evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    const selected = selection?.toString();
-    selection?.removeAllRanges();
-    return {
-      selected,
-      userSelect: getComputedStyle(element).userSelect,
-      selectionBackground: getComputedStyle(element, "::selection").backgroundColor,
-      found: (
-        window as typeof window & {
-          find(text: string): boolean;
-        }
-      ).find("Native browser find reaches this rendered transcript sentence."),
-    };
-  });
+test("transcript text remains visibly selectable, copyable, and findable", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const message = page.getByText(needle, { exact: true });
+  const beforeSelection = await message.screenshot();
+  const selected = await dragSelectText(page, message);
+  expect(selected).toContain(needle.slice(1, -1));
+  expect(await message.screenshot()).not.toEqual(beforeSelection);
 
-  expect(result.selected).toBe(needle);
-  expect(result.userSelect).not.toBe("none");
-  expect(result.selectionBackground).toBe("rgba(0, 0, 0, 0)");
-  expect(result.found).toBe(true);
+  await page.evaluate(() => navigator.clipboard.writeText("clipboard sentinel"));
+  await page.keyboard.press("ControlOrMeta+C");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(selected);
+
+  const found = await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges();
+    return (
+      window as typeof window & {
+        find(text: string): boolean;
+      }
+    ).find("Native browser find reaches this rendered transcript sentence.");
+  });
+  expect(found).toBe(true);
 });
 
 test("Command-F and Control-F stay uncancelled and bypass downstream page handlers", async ({
