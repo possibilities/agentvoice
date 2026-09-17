@@ -691,7 +691,7 @@ export class VoiceRuntime {
         model?: string | null;
         modelProvider?: string;
       };
-    }>("thread/read", { threadId: id });
+    }>("thread/read", { threadId: id, includeTurns: false });
     this.assertRunning();
     if (
       read.thread?.id !== id ||

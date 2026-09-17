@@ -67,6 +67,10 @@ describe("foreground runtime ownership", () => {
     try {
       await h.runtime.start();
       expect(h.native.calls.map((c) => c.method)).toEqual(["thread/read", "thread/resume"]);
+      expect(h.native.calls[0]?.params).toEqual({
+        threadId: "existing",
+        includeTurns: false,
+      });
       expect(h.runtime.currentReady?.threadId).toBe("existing");
     } finally {
       await h.cleanup();
