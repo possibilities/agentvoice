@@ -26,6 +26,16 @@ runtime drift warning but does not disable independent Codex guidance. Catalog
 visibility never authorizes execution; managers intersect the routable set with
 AgentFX's exact configured targets, and broker admission rechecks the pin.
 
+Before publishing, the producer checks that every visible Grok account has a
+current-credential catalog with at least 30 seconds of freshness remaining. An
+incomplete, stale, errored or credential-mismatched projection triggers the
+existing credential-contained `agentusage refresh grok --json` operation with a
+65-second subprocess bound. The producer then rereads both routing evidence and
+the catalog at one exact source revision. A failed or unknown refresh outcome
+does not discard last-good state: the reread still publishes its explicit stale
+or unavailable disposition and empty routable set. Fresh catalog evidence and
+review-metadata drift do not trigger a provider refresh.
+
 One coalescing producer refreshes at startup, native settings changes, and every
 five minutes. Each persisted revision receives at most one named native
 `agentusage.routing_context` turn/start submission. Unknown transport outcomes

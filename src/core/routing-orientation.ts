@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const REFRESH_MS = 300_000;
+const GROK_REFRESH_TIMEOUT_MS = 65_000;
+const GROK_MIN_VALIDITY_MS = 30_000;
 type Row = Record<string, unknown>;
 const row = (value: unknown): Row =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Row) : {};
@@ -39,10 +41,15 @@ export function routingIdentityFromStatus(
     buildId: runtime["buildId"],
   };
 }
-export type RoutingCommand = (command: string, args: string[], input?: unknown) => Promise<unknown>;
+export type RoutingCommand = (
+  command: string,
+  args: string[],
+  input?: unknown,
+  timeoutMs?: number,
+) => Promise<unknown>;
 
 /** Bounded subprocess seam. Provider private state and command stderr never enter context. */
-export const routingCommand: RoutingCommand = (command, args, input) =>
+export const routingCommand: RoutingCommand = (command, args, input, timeoutMs) =>
   new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
@@ -54,7 +61,7 @@ export const routingCommand: RoutingCommand = (command, args, input) =>
       child.kill("SIGKILL");
       reject(new Error("routing_command_unavailable"));
     };
-    const timer = setTimeout(refuse, 20_000);
+    const timer = setTimeout(refuse, timeoutMs ?? 20_000);
     child.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > MAX_BYTES) refuse();
@@ -195,6 +202,71 @@ export class ManagerRoutingOrientation {
     } while (cursor);
     return models;
   }
+  private async routingEvidence(): Promise<{ evidence: Row; grokCatalog: Row }> {
+    const evidence = row(await this.command("agentusage", ["routing", "evidence", "--json"]));
+    const evidenceRevision = evidence["source_revision"];
+    if (
+      !(
+        (typeof evidenceRevision === "string" && /^[1-9]\d{0,63}$/u.test(evidenceRevision)) ||
+        (Number.isSafeInteger(evidenceRevision) && Number(evidenceRevision) > 0)
+      )
+    )
+      throw new Error("routing_evidence_unavailable");
+    const grokCatalog = row(
+      await this.command("agentusage", [
+        "routing",
+        "grok-catalog",
+        "--expected-source-revision",
+        String(evidenceRevision),
+        "--json",
+      ]),
+    );
+    if (grokCatalog["source_revision"] !== String(evidenceRevision))
+      throw new Error("grok_catalog_revision_conflict");
+    return { evidence, grokCatalog };
+  }
+  private grokCatalogNeedsRefresh(catalog: Row): boolean {
+    const visibility = row(catalog["visibility"]);
+    if (visibility["complete"] !== true || !Array.isArray(visibility["accounts"])) return true;
+    if (visibility["accounts"].length === 0) return false;
+    if (
+      visibility["accounts"].some((value) => {
+        const account = row(value);
+        return (
+          account["fresh"] !== true ||
+          account["credential_current"] !== true ||
+          account["error_code"] !== null
+        );
+      })
+    )
+      return true;
+    const expiresAt = catalog["expires_at"];
+    return (
+      typeof expiresAt !== "string" ||
+      !Number.isFinite(Date.parse(expiresAt)) ||
+      Date.parse(expiresAt) <= Date.now() + GROK_MIN_VALIDITY_MS
+    );
+  }
+  private async convergedRoutingEvidence(): Promise<{ evidence: Row; grokCatalog: Row }> {
+    let current: { evidence: Row; grokCatalog: Row } | undefined;
+    try {
+      current = await this.routingEvidence();
+      if (!this.grokCatalogNeedsRefresh(current.grokCatalog)) return current;
+    } catch {
+      // A missing Grok sidecar is recoverable through the same owned refresh below.
+    }
+    try {
+      await this.command(
+        "agentusage",
+        ["refresh", "grok", "--json"],
+        undefined,
+        GROK_REFRESH_TIMEOUT_MS,
+      );
+    } catch {
+      // Re-read last-good evidence after any failed or unknown refresh outcome.
+    }
+    return this.routingEvidence();
+  }
   private async publish(): Promise<void> {
     const state = row(
       await this.command("agenthud", ["routing", "state", "--stream", this.stream]),
@@ -215,29 +287,10 @@ export class ManagerRoutingOrientation {
       previous["producer_generation"] === this.generation
         ? Number(previous["context_revision"]) + 1
         : 1;
-    const [evidence, models] = await Promise.all([
-      this.command("agentusage", ["routing", "evidence", "--json"]),
+    const [{ evidence, grokCatalog }, models] = await Promise.all([
+      this.convergedRoutingEvidence(),
       this.catalog(),
     ]);
-    const evidenceRevision = row(evidence)["source_revision"];
-    if (
-      !(
-        (typeof evidenceRevision === "string" && /^[1-9]\d{0,63}$/u.test(evidenceRevision)) ||
-        (Number.isSafeInteger(evidenceRevision) && Number(evidenceRevision) > 0)
-      )
-    )
-      throw new Error("routing_evidence_unavailable");
-    const grokCatalog = row(
-      await this.command("agentusage", [
-        "routing",
-        "grok-catalog",
-        "--expected-source-revision",
-        String(evidenceRevision),
-        "--json",
-      ]),
-    );
-    if (grokCatalog["source_revision"] !== String(evidenceRevision))
-      throw new Error("grok_catalog_revision_conflict");
     if (this.stopped) return;
     const now = new Date().toISOString();
     const identity = this.options.identity;

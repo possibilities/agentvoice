@@ -26,8 +26,9 @@ function fixture(
   overrides: Partial<RoutingOrientationOptions> = {},
   contextOverrides: Record<string, unknown> = {},
   grokOverrides: Record<string, unknown> = {},
+  behavior: { expiredGrokCatalog?: boolean; grokRefreshFails?: boolean } = {},
 ) {
-  const calls: { command: string; args: string[]; input?: unknown }[] = [];
+  const calls: { command: string; args: string[]; input?: unknown; timeoutMs?: number }[] = [];
   const native: { method: string; params: unknown }[] = [];
   const warnings: string[] = [];
   let publication: Record<string, unknown> | null = null;
@@ -35,18 +36,51 @@ function fixture(
   const delivered = new Promise<void>((r) => {
     resolve = r;
   });
-  const command: RoutingCommand = async (command, args, input) => {
-    calls.push({ command, args, input });
+  let grokRefreshed = false;
+  const initialRevision = "6405175911611332984741815";
+  const refreshedRevision = "6405175911611332984741816";
+  const command: RoutingCommand = async (command, args, input, timeoutMs) => {
+    calls.push({ command, args, input, timeoutMs });
+    if (command === "agentusage" && args[0] === "refresh") {
+      if (behavior.grokRefreshFails) throw new Error("refresh failed");
+      grokRefreshed = true;
+      return { schema_version: 1, grok: { outcome: "refreshed", health: "ok" } };
+    }
     if (command === "agentusage" && args[1] === "evidence")
-      return { schema_version: 2, source_revision: "6405175911611332984741815" };
+      return {
+        schema_version: 2,
+        source_revision: grokRefreshed ? refreshedRevision : initialRevision,
+      };
     if (command === "agentusage" && args[1] === "grok-catalog")
       return {
         schema_version: 1,
-        source_revision: "6405175911611332984741815",
-        status: "ok",
-        drift: [],
-        visibility: { complete: true, accounts: [] },
-        routable: { default_model: "grok-4.6", models: [{ model: "grok-4.6" }] },
+        source_revision: grokRefreshed ? refreshedRevision : initialRevision,
+        status: behavior.expiredGrokCatalog && !grokRefreshed ? "drift" : "ok",
+        expires_at:
+          behavior.expiredGrokCatalog && !grokRefreshed
+            ? "2020-01-01T00:00:00.000Z"
+            : "2099-01-01T00:00:00.000Z",
+        drift:
+          behavior.expiredGrokCatalog && !grokRefreshed
+            ? [{ code: "catalog_stale", subject: "grok-2", account_key: "grok-2" }]
+            : [],
+        visibility: {
+          complete: true,
+          accounts: behavior.expiredGrokCatalog
+            ? [
+                {
+                  account_key: "grok-2",
+                  fresh: grokRefreshed,
+                  credential_current: true,
+                  error_code: null,
+                },
+              ]
+            : [],
+        },
+        routable: {
+          default_model: behavior.expiredGrokCatalog && !grokRefreshed ? null : "grok-4.6",
+          models: behavior.expiredGrokCatalog && !grokRefreshed ? [] : [{ model: "grok-4.6" }],
+        },
         ...grokOverrides,
       };
     if (command === "agentusage") {
@@ -156,6 +190,51 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
     "--json",
   ]);
 });
+
+test("expired Grok catalog refreshes before the exact-revision snapshot is published", async () => {
+  const f = fixture({}, {}, {}, { expiredGrokCatalog: true });
+  f.orientation.start();
+  await f.delivered;
+  f.orientation.stop();
+  const refresh = f.calls.findIndex(
+    (call) => call.command === "agentusage" && call.args[0] === "refresh",
+  );
+  const evidenceReads = f.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.command === "agentusage" && call.args[1] === "evidence");
+  expect(refresh).toBeGreaterThan(evidenceReads[0]!.index);
+  expect(refresh).toBeLessThan(evidenceReads[1]!.index);
+  expect(f.calls[refresh]).toMatchObject({
+    args: ["refresh", "grok", "--json"],
+    timeoutMs: 65_000,
+  });
+  const start = f.native.find((call) => call.method === "turn/start")!.params as {
+    toolOutput: { output: string };
+  };
+  expect(JSON.parse(start.toolOutput.output).grok_catalog).toMatchObject({
+    source_revision: "6405175911611332984741816",
+    status: "ok",
+    routable: { default_model: "grok-4.6" },
+  });
+});
+
+test("failed Grok refresh preserves and delivers explicit stale drift", async () => {
+  const f = fixture({}, {}, {}, { expiredGrokCatalog: true, grokRefreshFails: true });
+  f.orientation.start();
+  await f.delivered;
+  f.orientation.stop();
+  expect(f.warnings).toEqual([
+    "Grok catalog drift detected. Only live models with reviewed metadata and fresh included quota are routable.",
+  ]);
+  const start = f.native.find((call) => call.method === "turn/start")!.params as {
+    toolOutput: { output: string };
+  };
+  expect(JSON.parse(start.toolOutput.output).grok_catalog).toMatchObject({
+    status: "drift",
+    routable: { default_model: null, models: [] },
+    drift: [{ code: "catalog_stale", account_key: "grok-2" }],
+  });
+});
 test("stopped producer fences a pending catalog capture from publication or native work", async () => {
   let release: () => void = () => {};
   const hold = new Promise<void>((r) => {
@@ -228,6 +307,9 @@ test("Grok drift stays visible and warns without disabling independent Codex gui
   expect(JSON.parse(start.toolOutput.output).grok_catalog.drift[0]).toMatchObject({
     subject: "grok-next",
   });
+  expect(f.calls.some((call) => call.command === "agentusage" && call.args[0] === "refresh")).toBe(
+    false,
+  );
 });
 
 test("material refreshes coalesce and only the latest persisted revision is submitted", async () => {
