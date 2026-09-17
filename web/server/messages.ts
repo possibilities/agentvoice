@@ -246,4 +246,14 @@ export class VoiceMessages {
       (message) => message.role === "user" && message.content.trim() === input,
     ).length;
   }
+
+  /** Count completed human segments that contain one substantial delegated snapshot. */
+  completedUserTranscriptContainingCount(input: string) {
+    return this.messages().filter(
+      (message) =>
+        message.role === "user" &&
+        message.status === "complete" &&
+        message.content.trim().includes(input),
+    ).length;
+  }
 }

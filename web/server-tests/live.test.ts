@@ -103,6 +103,96 @@ test("retains repeated voice submissions when the recording has both segments", 
   }
 });
 
+test("collapses delayed cumulative delegation snapshots to the fullest saved speech card", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const tail =
+    "dedicate smart agents at each bucket of research, then give Astra the role of planning useful future investigations";
+  const extended = `${tail}. I'm joking about agents being unimaginably smart, but you get the idea`;
+  const prefix =
+    "Send Astra a message that this document should guide future research, capture the desktop evidence, separate the investigation into useful areas, and explain how later workers should improve the shared model. We can keep extending the document as new evidence arrives and ";
+  const complete = `${prefix}${extended}. Did you get that?`;
+  const delegation = (id: string, input: string, transcript: string) =>
+    delegatedVoice(id, input, transcript);
+  try {
+    h.history([
+      delegation("tail-response", tail, complete.slice(0, complete.indexOf(". I'm joking"))),
+      delegation("tail-completed", tail, complete.slice(0, complete.indexOf(". I'm joking"))),
+      delegation("extended-response", extended, extended),
+      delegation("extended-completed", extended, extended),
+      delegation(
+        "final-response",
+        `${extended}. Did you get that?`,
+        `${extended}. Did you get that?`,
+      ),
+      delegation(
+        "final-completed",
+        `${extended}. Did you get that?`,
+        `${extended}. Did you get that?`,
+      ),
+    ]);
+    h.voice("voice.item.completed", {
+      item: {
+        type: "transcriptSegment",
+        id: "one-long-segment",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: complete,
+      },
+    });
+    await h.start();
+    const view = await until(
+      reader,
+      (value) =>
+        !value.agentHistoryLoading &&
+        value.agent.filter((message) => message.presentation?.title === "Via Voice").length === 1,
+    );
+    const messages = view.agent.filter((message) => message.presentation?.title === "Via Voice");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe(JSON.stringify(["turn", "tail-completed"]));
+    expect(messages[0]?.presentation?.body).toBe(
+      complete.slice(0, complete.indexOf(". I'm joking")),
+    );
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
+test("retains unrelated long delegations contained in one saved speech segment", async () => {
+  const h = await fixture();
+  const reader = new LiveReader(h.stateDir);
+  const first =
+    "Review the deployment evidence and identify every remaining validation gap before delivery.";
+  const second =
+    "Send the finished report to the existing research worker and ask for a concrete roadmap.";
+  try {
+    h.history([delegatedVoice("first", first), delegatedVoice("second", second)]);
+    h.voice("voice.item.completed", {
+      item: {
+        type: "transcriptSegment",
+        id: "combined-segment",
+        realtimeSessionId: "rt",
+        role: "user",
+        text: `${first} ${second}`,
+      },
+    });
+    await h.start();
+    const view = await until(
+      reader,
+      (value) =>
+        !value.agentHistoryLoading &&
+        value.agent.filter((message) => message.presentation?.title === "Via Voice").length === 2,
+    );
+    expect(
+      view.agent.filter((message) => message.presentation?.title === "Via Voice"),
+    ).toHaveLength(2);
+  } finally {
+    reader.close();
+    await h.close();
+  }
+});
+
 test("compaction live completion and saved history remain one system event after reconnect", async () => {
   const h = await fixture();
   const reader = new LiveReader(h.stateDir);

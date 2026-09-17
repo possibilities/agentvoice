@@ -939,7 +939,10 @@ export class LiveReader {
     }
     if (this.actionable(identity)) void this.controls.drain();
     const rendered = new Set(order);
-    const delegated = new Map<string, { input: string; keys: string[] }>();
+    const delegated = new Map<
+      string,
+      { input: string; bodyLength: number; key: string; order: number }[]
+    >();
     // While native persistence catches up, a history read can expose its
     // response-item view alongside the same item received from the live event
     // feed. Only collapse those alternate projections after the complete saved
@@ -948,21 +951,66 @@ export class LiveReader {
     // messages visible if the recording is unavailable or incomplete.
     const completeVoiceHistory = this.tail?.initialHistoryLoaded === true;
     if (completeVoiceHistory) {
-      for (const key of order) {
+      for (const [position, key] of order.entries()) {
         const entry = entries.get(key);
         const input = entry && voiceDelegationInput(entry);
         if (!input) continue;
-        const identity = JSON.stringify([entry.turnId, input]);
-        const group = delegated.get(identity) ?? { input, keys: [] };
-        group.keys.push(key);
-        delegated.set(identity, group);
+        const message = messages.get(key);
+        const group = delegated.get(entry.turnId) ?? [];
+        group.push({
+          input,
+          bodyLength: message?.presentation?.body.length ?? input.length,
+          key,
+          order: position,
+        });
+        delegated.set(entry.turnId, group);
       }
-      for (const { input, keys } of delegated.values()) {
-        const observed = this.voice.userTranscriptCount(input);
-        if (observed === 0 || keys.length <= observed) continue;
-        // The live event is appended after the history read. Keep the latest
-        // identities so a transient response-item view cannot displace it.
-        for (const key of keys.slice(0, -observed)) rendered.delete(key);
+      for (const turn of delegated.values()) {
+        const pending = new Set(turn);
+        while (pending.size > 0) {
+          const first = pending.values().next().value!;
+          pending.delete(first);
+          const group = [first];
+          for (let changed = true; changed; ) {
+            changed = false;
+            for (const candidate of pending) {
+              if (
+                !group.some(
+                  (member) =>
+                    member.input.startsWith(candidate.input) ||
+                    candidate.input.startsWith(member.input),
+                )
+              )
+                continue;
+              pending.delete(candidate);
+              group.push(candidate);
+              changed = true;
+            }
+          }
+          const longest = group.reduce((left, right) =>
+            right.input.length > left.input.length ? right : left,
+          ).input;
+          const exactInputs = new Set(group.map((candidate) => candidate.input));
+          let observed = this.voice.userTranscriptCount(longest);
+          // Realtime can publish cumulative snapshots while one long human
+          // segment remains open. Require a substantial, evolving prefix chain
+          // and one completed canonical segment before collapsing that chain.
+          if (observed === 0 && longest.length >= 64 && exactInputs.size > 1)
+            observed = this.voice.completedUserTranscriptContainingCount(longest);
+          if (observed === 0 || group.length <= observed) continue;
+          // Prefer the fullest reconstructed card. Break ties toward the latest
+          // identity so a live item wins over an earlier history projection.
+          const keep = new Set(
+            group
+              .toSorted(
+                (left, right) => right.bodyLength - left.bodyLength || right.order - left.order,
+              )
+              .slice(0, observed)
+              .map((candidate) => candidate.key),
+          );
+          for (const candidate of group)
+            if (!keep.has(candidate.key)) rendered.delete(candidate.key);
+        }
       }
     }
     return {
