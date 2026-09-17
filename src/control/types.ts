@@ -1,11 +1,11 @@
-import type { DirectoryRoleStatus } from "../core/role-content.ts";
+import type { DirectoryRoleStatus, WorkspaceRoleSourceStatus } from "../core/role-content.ts";
 import type { VoiceInspection } from "../core/voice-inspection.ts";
 import type { RoleRef, VoiceEdit } from "../roles/store.ts";
 /**
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 8;
+export const CONTROL_PROTOCOL_VERSION = 9;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -74,6 +74,7 @@ export type ControlOperation = {
 export type ControlStatus = {
   directoryRole?: DirectoryRoleStatus;
   role?: {
+    adoptionSource?: WorkspaceRoleSourceStatus;
     loaded: RoleRef;
     desired?: RoleRef;
     desiredVoice?: string | null;

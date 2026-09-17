@@ -11,14 +11,19 @@ references. Later calls and runtime restarts read database revisions; editing or
 deleting source files has no effect. Unejected workspaces retain file-based
 launch behavior. These commands never start a call, install, or restart a process.
 
-Directory-backed calls additionally expose `directoryRole` through
+Directory-backed calls expose `directoryRole` through
 `agentvoice.status` / `agentvoice_status`: source path, loaded preflight content
 digests and generation, current source digests, and staleness or a bounded error.
 This is read-only inspection; it does not apply changes. Directory skills retain
 their live native path, so the initial observation is not proof of later native
-consumption. Ejected calls omit this field and retain immutable revision status;
-their source directories never become inputs again. See
-[content status](adr/0069-directory-role-content-status.md) for framing and limits.
+consumption. A bound call can instead expose `role.adoptionSource` when its current
+launch configuration still selects a directory role for the exact workspace. It
+compares the loaded immutable revision with the directory's current effective
+prompt, MCP, and skills contents. The directory remains only an explicit adoption
+candidate and never becomes a runtime input. See
+[content status](adr/0069-directory-role-content-status.md) and
+[bound source status](adr/0096-observe-bound-role-adoption-source.md) for framing
+and limits.
 
 ## Capture and run
 
@@ -181,8 +186,12 @@ saved edit without automatic resubmission. Explicitly retry with a new operation
 or save a correction. Failure cannot guarantee uninterrupted old-voice fallback.
 
 Status separates `role.loaded` (full runtime snapshot), `role.desired` (latest
-saved revision) / `role.desiredVoice`, and `role.voiceRevision` / `role.voice` (last confirmed managed
-voice selection). A voice update never marks other pending settings loaded.
+saved database revision) / `role.desiredVoice`, and `role.voiceRevision` /
+`role.voice` (last confirmed managed voice selection). `loaded` equal to `desired`
+does not establish freshness against a directory role. When present,
+`role.adoptionSource` reports that separate content comparison and the generation
+and revision whose database assets supplied its loaded digest. A voice update
+never marks other pending settings loaded.
 Identical operation IDs return their original results; conflicting reuse fails.
 Controller/generation/revision checks prevent cross-call writes and lost edits.
 

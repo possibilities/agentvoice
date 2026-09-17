@@ -324,7 +324,7 @@ Automatic retries pause after three consecutive short-lived failures. The fronte
 shows FAILED and the server prints the cause. Use MCP/API redial to reconnect
 voice, or runtime restart to reload code/configuration and resume the same thread.
 Restart supports an optional caller-provided handoff prompt. These controls have
-no TUI buttons or keybindings. Control protocol 8
+no TUI buttons or keybindings. Control protocol 9
 exposes status, a read-only routing-context query, redial, restart, new session and voice selection with matching MCP tools; see the
 [control API](api.md) and [orchestrator guide](../USAGE.md).
 

@@ -585,21 +585,30 @@ export class LiveReader {
         // Older loaded controllers retain compatible status/event/attachment contracts.
         if (!(error instanceof Error) || !error.message.startsWith("no live AgentVoice controller"))
           throw error;
-        return discoverControllerStatus(this.stateDir, workspace, threadId, 7).catch(
+        return discoverControllerStatus(this.stateDir, workspace, threadId, 8).catch(
           (legacyError: unknown) => {
             if (
               !(legacyError instanceof Error) ||
               !legacyError.message.startsWith("no live AgentVoice controller")
             )
               throw legacyError;
-            return discoverControllerStatus(this.stateDir, workspace, threadId, 6).catch(
+            return discoverControllerStatus(this.stateDir, workspace, threadId, 7).catch(
               (olderError: unknown) => {
                 if (
                   !(olderError instanceof Error) ||
                   !olderError.message.startsWith("no live AgentVoice controller")
                 )
                   throw olderError;
-                return discoverControllerStatus(this.stateDir, workspace, threadId, 5);
+                return discoverControllerStatus(this.stateDir, workspace, threadId, 6).catch(
+                  (oldestError: unknown) => {
+                    if (
+                      !(oldestError instanceof Error) ||
+                      !oldestError.message.startsWith("no live AgentVoice controller")
+                    )
+                      throw oldestError;
+                    return discoverControllerStatus(this.stateDir, workspace, threadId, 5);
+                  },
+                );
               },
             );
           },
@@ -611,6 +620,7 @@ export class LiveReader {
       controlProtocolVersion !== 5 &&
       controlProtocolVersion !== 6 &&
       controlProtocolVersion !== 7 &&
+      controlProtocolVersion !== 8 &&
       controlProtocolVersion !== CONTROL_PROTOCOL_VERSION
     )
       throw new Error("Unsupported controller protocol");

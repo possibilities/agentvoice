@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { handoffPromptSchema } from "../core/handoff.ts";
-import { directoryRoleStatusSchema } from "../core/role-content.ts";
+import {
+  directoryRoleStatusSchema,
+  workspaceRoleSourceStatusSchema,
+} from "../core/role-content.ts";
 import { routingContextViewSchema } from "../core/routing-delivery.ts";
 import {
   randomVoiceSelectionSchema,
@@ -116,6 +119,7 @@ export const controlStatusSchema = z
       .strict(),
     role: z
       .object({
+        adoptionSource: workspaceRoleSourceStatusSchema.optional(),
         loaded: roleRefSchema,
         desired: roleRefSchema.optional(),
         desiredVoice: z.string().nullable().optional(),

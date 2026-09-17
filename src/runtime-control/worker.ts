@@ -9,6 +9,7 @@ import type { ConsoleHostOptions } from "../console/host.ts";
 import type { VoiceHost, VoiceState } from "../console/state.ts";
 import type { ServerConfig } from "../core/config.ts";
 import { type HandoffRequest, type HandoffResult, handoffFailure } from "../core/handoff.ts";
+import { roleContentFromFiles } from "../core/role-content.ts";
 import type { RuntimeSnapshot } from "../core/runtime.ts";
 import type { ThreadInventory } from "../events/contract.ts";
 import {
@@ -127,7 +128,7 @@ export function runRuntimeWorker(
     if (launch) throw new Error("Runtime preflight already completed");
     const before = fingerprint();
     launch = params;
-    const [{ loadLaunchConfig }, runtime, media] = await Promise.all([
+    const [{ configuredWorkspaceRole, loadLaunchConfig }, runtime, media] = await Promise.all([
       import("../core/launch-config.ts"),
       import("../core/runtime.ts"),
       import("../console/host.ts"),
@@ -138,6 +139,20 @@ export function runRuntimeWorker(
         "Reload would change the pinned workspace; use a separate launch to change context",
       );
     snapshot = await runtime.prepareRuntime(config, params.control);
+    const configuredRole = config.roleDatabase
+      ? await configuredWorkspaceRole(
+          params.provenance.parsed,
+          config.orchestrator.workspace,
+          params.provenance.launchCwd,
+        )
+      : undefined;
+    const adoptionSource =
+      configuredRole && config.roleDatabase
+        ? {
+            path: configuredRole,
+            digests: roleContentFromFiles(config.roleDatabase.snapshot.files),
+          }
+        : undefined;
     if (dependencies.mediaFactory) factory = dependencies.mediaFactory;
     else {
       const { clientMediaAdapter } = await import("../console/client-media.ts");
@@ -153,6 +168,7 @@ export function runRuntimeWorker(
         "Runtime code/native artifact changed during preflight; retry after the build finishes",
       );
     return {
+      adoptionSource,
       workspace: config.orchestrator.workspace,
       pid: process.pid,
       buildId: after,

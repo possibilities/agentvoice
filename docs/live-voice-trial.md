@@ -24,7 +24,7 @@ its own settings. Both the owned app-server and attached TUI must use stock Code
 env -u BASH_ENV /bin/bash --noprofile --norc <<'AGENTVOICE_TRIAL'
   set -eu
   cd /Users/arthack/code/agentvoice
-  bun -e 'import { CONTROL_PROTOCOL_VERSION as v } from "./src/control/types.ts"; if (v !== 7) throw new Error(`Expected control API 7, found ${v}`); console.log("Checkout control API: 7");'
+  bun -e 'import { CONTROL_PROTOCOL_VERSION as v } from "./src/control/types.ts"; if (v !== 9) throw new Error(`Expected control API 9, found ${v}`); console.log("Checkout control API: 9");'
   trial_codex="$(bun -e 'import { realpathSync } from "node:fs"; import { homedir } from "node:os"; console.log(realpathSync(`${homedir()}/.local/bin/codex`));')"
   printf 'Stock Codex: %s\n' "$trial_codex"
   "$trial_codex" --version
@@ -111,7 +111,7 @@ workspace and database for the audit.
 
 Review the saved voice conversation and native tool transcript to establish
 whether ordinary requests reached the correct operation without coaching.
-Check protocol 8 and the bound workspace; successful voice-only changes should
+Check protocol 9 and the bound workspace; successful voice-only changes should
 advance saved/applied voice revisions while preserving the working child,
 thread, runtime generation and attachment. A deferred change should advance
 only saved state until the next runtime replacement or server workspace session

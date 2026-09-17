@@ -10,8 +10,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { directoryRoleStatus, readDirectoryRoleContent } from "../src/core/role-content.ts";
+import {
+  directoryRoleStatus,
+  readDirectoryRoleContent,
+  roleContentFromFiles,
+  workspaceRoleSourceStatus,
+} from "../src/core/role-content.ts";
 import { prepareRuntime } from "../src/core/runtime.ts";
+import { captureFiles } from "../src/roles/store.ts";
 import { runtimeHarness } from "./fixtures/runtime-harness.ts";
 
 const roots: string[] = [];
@@ -71,6 +77,32 @@ test("resolved bytes and logical paths determine digests; link targets and unrel
     "renamed.md",
   ])
     expect(JSON.stringify(status)).not.toContain(secret);
+});
+
+test("database assets compare with their configured directory adoption source", () => {
+  const { role } = fixture();
+  mkdirSync(join(role, "skills", "sample"), { recursive: true });
+  writeFileSync(join(role, "APPEND_SYSTEM_PROMPT.md"), "loaded guidance\n");
+  writeFileSync(join(role, "skills", "sample", "SKILL.md"), "skill bytes\n");
+  mkdirSync(join(role, "skills", "empty"));
+  writeFileSync(join(role, "unrelated.json"), "not a runtime role input\n");
+  const loaded = roleContentFromFiles(captureFiles(role, true));
+  expect(loaded).not.toEqual(readDirectoryRoleContent(role));
+  expect(workspaceRoleSourceStatus({ path: role, digests: loaded }, 3, 8)).toMatchObject({
+    source: { kind: "directory", path: role },
+    loaded: { generation: 3, revision: 8, digests: loaded },
+    current: { digests: loaded },
+    stale: false,
+  });
+  writeFileSync(join(role, "APPEND_SYSTEM_PROMPT.md"), "current guidance\n");
+  const stale = workspaceRoleSourceStatus({ path: role, digests: loaded }, 3, 8);
+  expect(stale.stale).toBe(true);
+  expect(stale.current!.digests.prompts).not.toBe(loaded.prompts);
+  rmSync(role, { recursive: true });
+  expect(workspaceRoleSourceStatus({ path: role, digests: loaded }, 3, 8)).toMatchObject({
+    stale: null,
+    error: "Configured role source is unavailable or exceeds observation limits",
+  });
 });
 
 test("missing sources, broken links, cycles and oversized inputs return bounded status errors", () => {

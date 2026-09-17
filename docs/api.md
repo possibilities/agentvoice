@@ -1,6 +1,6 @@
 # AgentVoice control API
 
-Control protocol **8** provides new session, status, voice redial and runtime restart with an
+Control protocol **9** provides new session, status, voice redial and runtime restart with an
 optional handoff prompt, persistent workspace voice selection, and a read-only routing-context query. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
 and control/event endpoints across runtime replacements and frontend detach. A
@@ -86,14 +86,14 @@ The socket is newline-delimited JSON (NDJSON). A request is one UTF-8 line;
 responses may finish out of order and retain the caller-selected `id`.
 
 ```json
-{"v":7,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
+{"v":9,"type":"request","id":"status-1","method":"agentvoice.status","params":{}}
 ```
 
 ```json
-{"v":7,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":7,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
+{"v":9,"type":"response","id":"status-1","ok":true,"result":{"protocolVersion":9,"instanceId":"…","workspace":"/work","threadId":"…","generation":7,"runtime":{"phase":"ready"},"recentOperations":[]}}
 ```
 
-`v` must be `7`; `type` must be `request`; `id` is a nonempty string of at
+`v` must be `9`; `type` must be `request`; `id` is a nonempty string of at
 most 128 characters. Unknown envelope fields are rejected. Input frames are
 capped at 1 MiB, a connection may have at most 128 requests in flight, and
 unwritten response data is capped at 4 MiB. A slow peer is disconnected.
@@ -101,7 +101,7 @@ unwritten response data is capped at 4 MiB. A slow peer is disconnected.
 Failure responses retain the request `id` where it can be recovered:
 
 ```json
-{"v":7,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
+{"v":9,"type":"response","id":"restart-17","ok":false,"error":{"code":"stale_generation","message":"controller generation changed"}}
 ```
 
 Error codes are `invalid_request`, `invalid_params`, `unknown_method`,
@@ -143,7 +143,7 @@ runtime incarnation from bouncing a replacement runtime.
 
 ```ts
 {
-  protocolVersion: 7;
+  protocolVersion: 9;
   instanceId: string;
   workspace: string; // empty while initial candidate startup has not identified it
   threadId: string;  // empty while initial candidate startup has not identified it
@@ -155,6 +155,21 @@ runtime incarnation from bouncing a replacement runtime.
     desired?: { digests: RoleContent };
     stale: boolean | null;
     error?: "Directory role content is unavailable or exceeds observation limits";
+  };
+  role?: {
+    loaded: RoleRef;
+    desired?: RoleRef;
+    desiredVoice?: string | null;
+    voiceRevision: number;
+    voice: string | null;
+    adoptionSource?: {
+      source: { kind: "directory"; path: string };
+      loaded: { generation: number; revision: number; digests: RoleContent };
+      current?: { digests: RoleContent };
+      stale: boolean | null;
+      error?: "Configured role source is unavailable or exceeds observation limits";
+    };
+    error?: string;
   };
   currentOperation?: ControlOperation;
   recentOperations: ControlOperation[];
@@ -168,7 +183,15 @@ last successfully activated runtime's preflight inputs; desired rereads current
 bytes at that source path on each status request. `stale: null` plus the fixed
 error means desired could not be observed, not that the role is current. No
 prompt/MCP contents, commands, arguments, environment values or filesystem error
-details appear in this field. DB-backed `role` revision fields remain unchanged.
+details appear in this field.
+
+For a DB-backed role, `loaded` and `desired` remain immutable database revision
+references. Optional `role.adoptionSource` separately compares the loaded
+revision's effective assets with the current contents at the configured directory
+candidate. It never makes that directory a runtime input, discovers a changed
+selector after preflight, or applies content. Empty skill directories and unrelated
+root files are absent because a database snapshot does not retain them. A null
+staleness value and fixed error mean the recorded source path could not be read.
 
 Redial/reattachment never replace the loaded observation. Successful runtime
 replacement does. Live native skill reads may observe directory edits after
@@ -469,7 +492,7 @@ and desired references, desiredVoice, voiceRevision, voice and a database error
 when needed.
 
 
-Control protocol 8 replaces version 7 for the routing-context query. Existing loaded
+Control protocol 9 replaces version 8 for bound-role adoption-source status. Existing loaded
 controllers retain their old code and MCP catalog; a later explicitly authorized
 server restart loads this API. A voice-only redial or runtime restart cannot replace
 the retained controller. Publishing/building the command does not activate it.

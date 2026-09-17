@@ -42,6 +42,7 @@ import {
   type DirectoryRoleInfo,
   directoryRoleInfoSchema,
   directoryRoleStatus,
+  workspaceRoleSourceStatus,
 } from "../core/role-content.ts";
 import { clearSessionMarker, readSessionMarker } from "../core/session-marker.ts";
 import { lockThread } from "../core/thread-lock.ts";
@@ -121,6 +122,9 @@ export class RuntimeController implements ControlBackend {
   private threadId = "";
   private buildId: string | undefined;
   private loadedRole: RoleRef | undefined;
+  private loadedAdoptionSource:
+    | { info: DirectoryRoleInfo; generation: number; revision: number }
+    | undefined;
   private loadedDirectoryRole: { info: DirectoryRoleInfo; generation: number } | undefined;
   private voiceRevision = 1;
   private loadedVoice: string | null = null;
@@ -158,6 +162,15 @@ export class RuntimeController implements ControlBackend {
         loaded: this.loadedRole,
         voiceRevision: this.voiceRevision,
         voice: this.loadedVoice,
+        ...(this.loadedAdoptionSource
+          ? {
+              adoptionSource: workspaceRoleSourceStatus(
+                this.loadedAdoptionSource.info,
+                this.loadedAdoptionSource.generation,
+                this.loadedAdoptionSource.revision,
+              ),
+            }
+          : {}),
       };
       try {
         const desired = readRoleHead(this.roleDatabasePath());
@@ -418,9 +431,12 @@ export class RuntimeController implements ControlBackend {
       if (this.workspace && info.workspace !== this.workspace)
         throw new Error("Candidate changed pinned workspace");
       if (info.role) roleRefSchema.parse(info.role);
+      if (info.adoptionSource) directoryRoleInfoSchema.parse(info.adoptionSource);
       if (info.directoryRole) directoryRoleInfoSchema.parse(info.directoryRole);
       if (info.role && info.directoryRole)
         throw new Error("Candidate reported conflicting role sources");
+      if (info.adoptionSource && !info.role)
+        throw new Error("Candidate reported an adoption source without a workspace role");
       if (this.loadedRole && info.role?.id !== this.loadedRole.id)
         throw new Error("Candidate changed the bound workspace role");
       this.workspace = info.workspace;
@@ -493,6 +509,14 @@ export class RuntimeController implements ControlBackend {
         throw new Error(this.voice.notice ?? "Runtime failed during activation");
       this.phase = "ready";
       this.loadedRole = info.role;
+      this.loadedAdoptionSource =
+        info.role && info.adoptionSource
+          ? {
+              info: structuredClone(info.adoptionSource),
+              generation: this.generation,
+              revision: info.role.revision,
+            }
+          : undefined;
       this.loadedDirectoryRole = info.directoryRole
         ? { info: structuredClone(info.directoryRole), generation: this.generation }
         : undefined;

@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadLaunchConfig } from "../src/core/launch-config.ts";
+import { configuredWorkspaceRole, loadLaunchConfig } from "../src/core/launch-config.ts";
 import { realtimeParams, threadParams } from "../src/core/params.ts";
 import { prepareRuntime } from "../src/core/runtime.ts";
 import { parseArgs } from "../src/main.ts";
@@ -95,9 +95,11 @@ test("ejection captures complete role contents; later calls and preflights ignor
     expect(original.files).toHaveLength(5);
     expect(original.settings).not.toHaveProperty("role");
     expect(statSync(f.path).mode & 0o777).toBe(0o600);
+    const parsed = parseArgs(["--workspace", f.workspace, "--config", configPath]);
+    expect(await configuredWorkspaceRole(parsed, f.workspace)).toBe(source);
     rmSync(source, { recursive: true });
     writeFileSync(configPath, "invalid JSON, no longer live");
-    const parsed = parseArgs(["--workspace", f.workspace, "--config", configPath]);
+    expect(await configuredWorkspaceRole(parsed, f.workspace)).toBeUndefined();
     const config = await loadLaunchConfig(parsed);
     const snapshot = await prepareRuntime(config);
     expect(snapshot.directoryRole).toBeUndefined();

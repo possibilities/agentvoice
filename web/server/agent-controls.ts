@@ -15,6 +15,7 @@ import {
   MAX_LOCAL_IMAGES,
 } from "../../src/attachment/image-contract.ts";
 import { validateLocalImagePaths } from "../../src/attachment/local-images.ts";
+import { CONTROL_PROTOCOL_VERSION } from "../../src/control/types.ts";
 import type { AgentControlsView } from "../src/types.ts";
 import {
   type AgentOperation,
@@ -80,7 +81,13 @@ const savedRow = z
       generation: z.number(),
       workspace: z.string(),
       threadId: z.string(),
-      controlProtocolVersion: z.union([z.literal(5), z.literal(6)]),
+      controlProtocolVersion: z.union([
+        z.literal(5),
+        z.literal(6),
+        z.literal(7),
+        z.literal(8),
+        z.literal(CONTROL_PROTOCOL_VERSION),
+      ]),
     }),
     clientUserMessageId: z.string().uuid().optional(),
     pausedReason: z.string().optional(),

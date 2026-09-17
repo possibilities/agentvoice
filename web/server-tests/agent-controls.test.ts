@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalImageStore } from "../../src/attachment/local-images.ts";
+import { CONTROL_PROTOCOL_VERSION } from "../../src/control/types.ts";
 import { type AgentCommand, AgentControls, agentCommandSchema } from "../server/agent-controls.ts";
 import { type AgentOperation, AgentSendError } from "../server/agent-sender.ts";
 
@@ -23,7 +24,7 @@ function setup() {
     generation: 1,
     workspace: directory,
     threadId: "main",
-    controlProtocolVersion: 6 as const,
+    controlProtocolVersion: CONTROL_PROTOCOL_VERSION,
   };
   const operations: AgentOperation[] = [];
   let outcome: () => Promise<string | undefined> = async () => "accepted-turn";

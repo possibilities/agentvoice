@@ -39,10 +39,58 @@ export const directoryRoleStatusSchema = z
   })
   .strict();
 export type DirectoryRoleStatus = z.infer<typeof directoryRoleStatusSchema>;
+export const workspaceRoleSourceStatusSchema = z
+  .object({
+    source: z.object({ kind: z.literal("directory"), path: pathSchema }).strict(),
+    loaded: z
+      .object({
+        generation: z.number().int().positive(),
+        revision: z.number().int().positive(),
+        digests: roleContentSchema,
+      })
+      .strict(),
+    current: z.object({ digests: roleContentSchema }).strict().optional(),
+    stale: z.boolean().nullable(),
+    error: z
+      .literal("Configured role source is unavailable or exceeds observation limits")
+      .optional(),
+  })
+  .strict();
+export type WorkspaceRoleSourceStatus = z.infer<typeof workspaceRoleSourceStatusSchema>;
 
 type Entry = { path: string; kind: "file" | "directory"; hash?: string; executable?: boolean };
 function hash(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function finish(entries: Entry[], omitEmptySkillDirectories = false): RoleContent {
+  if (omitEmptySkillDirectories) {
+    const files = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
+    entries = entries.filter(
+      (entry) => entry.kind === "file" || files.some((path) => path.startsWith(`${entry.path}/`)),
+    );
+  }
+  entries = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const digest = (selected: Entry[]) =>
+    hash(JSON.stringify(["agentvoice-role-content-v1", selected]));
+  return {
+    format: "agentvoice-role-content-v1",
+    content: digest(entries),
+    prompts: digest(
+      entries.filter(
+        (entry) =>
+          entry.path !== ROLE_MCP_FILE &&
+          !entry.path.startsWith(`${ROLE_SKILLS_DIR}/`) &&
+          entry.path !== ROLE_SKILLS_DIR,
+      ),
+    ),
+    mcp: digest(entries.filter((entry) => entry.path === ROLE_MCP_FILE)),
+    skills: digest(
+      entries.filter(
+        (entry) => entry.path === ROLE_SKILLS_DIR || entry.path.startsWith(`${ROLE_SKILLS_DIR}/`),
+      ),
+    ),
+  };
 }
 
 /** Prompt and MCP readers supply the exact buffers they decode, avoiding a second read. */
@@ -86,35 +134,53 @@ export class RoleContentCapture {
     }
   }
 
-  finish(): RoleContent {
-    const entries = [...this.entries].sort((a, b) =>
-      a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
-    );
-    const digest = (selected: Entry[]) =>
-      hash(JSON.stringify(["agentvoice-role-content-v1", selected]));
-    return {
-      format: "agentvoice-role-content-v1",
-      content: digest(entries),
-      prompts: digest(
-        entries.filter(
-          (entry) =>
-            entry.path !== ROLE_MCP_FILE &&
-            !entry.path.startsWith(`${ROLE_SKILLS_DIR}/`) &&
-            entry.path !== ROLE_SKILLS_DIR,
-        ),
-      ),
-      mcp: digest(entries.filter((entry) => entry.path === ROLE_MCP_FILE)),
-      skills: digest(
-        entries.filter(
-          (entry) => entry.path === ROLE_SKILLS_DIR || entry.path.startsWith(`${ROLE_SKILLS_DIR}/`),
-        ),
-      ),
-    };
+  finish(options: { omitEmptySkillDirectories?: boolean } = {}): RoleContent {
+    return finish(this.entries, options.omitEmptySkillDirectories);
   }
+}
+
+/** Reconstruct the effective role inputs from an immutable database asset bundle. */
+export function roleContentFromFiles(
+  files: ReadonlyArray<{ path: string; bytes: Uint8Array; executable: boolean }>,
+): RoleContent {
+  const promptNames = new Set<string>([
+    ...Object.values(ROLE_PROMPT_FILES),
+    ...Object.values(PROMPT_FILES),
+  ]);
+  const entries: Entry[] = [];
+  const directories = new Set<string>();
+  for (const file of files) {
+    const relevant =
+      promptNames.has(file.path) ||
+      file.path === ROLE_MCP_FILE ||
+      file.path.startsWith(`${ROLE_SKILLS_DIR}/`);
+    if (!relevant) continue;
+    if (file.path.startsWith(`${ROLE_SKILLS_DIR}/`)) {
+      const parts = file.path.split("/");
+      for (let index = 1; index < parts.length; index++)
+        directories.add(parts.slice(0, index).join("/"));
+    }
+    entries.push({
+      path: file.path,
+      kind: "file",
+      hash: hash(file.bytes),
+      ...(file.path.startsWith(`${ROLE_SKILLS_DIR}/`) ? { executable: file.executable } : {}),
+    });
+  }
+  for (const path of directories) entries.push({ path, kind: "directory" });
+  return finish(entries);
 }
 
 /** Read-only source observation. Deliberately never discovers config, DBs or credentials. */
 export function readDirectoryRoleContent(directory: string): RoleContent {
+  return readRoleContent(directory);
+}
+
+function readAdoptableRoleContent(directory: string): RoleContent {
+  return readRoleContent(directory, true);
+}
+
+function readRoleContent(directory: string, omitEmptySkillDirectories = false): RoleContent {
   if (!statSync(directory).isDirectory()) throw new Error("Role directory unavailable");
   const capture = new RoleContentCapture(directory);
   for (const name of [
@@ -130,7 +196,7 @@ export function readDirectoryRoleContent(directory: string): RoleContent {
     capture.file(path, readFileSync(path));
   }
   capture.skills();
-  return capture.finish();
+  return capture.finish({ omitEmptySkillDirectories });
 }
 
 export function directoryRoleStatus(
@@ -148,6 +214,27 @@ export function directoryRoleStatus(
     status.stale = digests.content !== info.digests.content;
   } catch {
     status.error = "Directory role content is unavailable or exceeds observation limits";
+  }
+  return status;
+}
+
+/** Compare a loaded immutable snapshot with a configured explicit adoption source. */
+export function workspaceRoleSourceStatus(
+  info: DirectoryRoleInfo,
+  generation: number,
+  revision: number,
+): WorkspaceRoleSourceStatus {
+  const status: WorkspaceRoleSourceStatus = {
+    source: { kind: "directory", path: info.path },
+    loaded: { generation, revision, digests: structuredClone(info.digests) },
+    stale: null,
+  };
+  try {
+    const digests = readAdoptableRoleContent(info.path);
+    status.current = { digests };
+    status.stale = digests.content !== info.digests.content;
+  } catch {
+    status.error = "Configured role source is unavailable or exceeds observation limits";
   }
   return status;
 }

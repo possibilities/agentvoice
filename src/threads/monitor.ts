@@ -382,7 +382,7 @@ export async function discoverObservedController(
   discover = discoverControllerStatus,
 ) {
   const matches = new Map<string, Awaited<ReturnType<typeof discoverControllerStatus>>>();
-  for (const version of [undefined, 6, 5] as const) {
+  for (const version of [undefined, 8, 7, 6, 5] as const) {
     try {
       const candidate = await discover(stateDir, workspace, threadId, version);
       const status = candidate.status;

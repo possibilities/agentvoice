@@ -107,3 +107,21 @@ export async function loadLaunchSource(parsed: ParsedArgs, launchCwd = process.c
   delete settings.orchestrator.workspace;
   return { config: { ...config, managedWorkspace }, settings };
 }
+
+/**
+ * Best-effort read of the directory role currently configured for this exact
+ * workspace. Bound launches never consume it; status may expose it only as an
+ * explicit adoption candidate.
+ */
+export async function configuredWorkspaceRole(
+  parsed: ParsedArgs,
+  workspace: string,
+  launchCwd = process.cwd(),
+): Promise<string | undefined> {
+  try {
+    const source = await loadLaunchSource(parsed, launchCwd);
+    return source.config.orchestrator.workspace === workspace ? source.config.role : undefined;
+  } catch {
+    return undefined;
+  }
+}

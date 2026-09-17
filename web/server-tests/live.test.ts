@@ -1371,7 +1371,7 @@ test("recording boundaries preserve non-empty unfinished speech as incomplete", 
   }
 });
 
-for (const version of [5, 6, 7] as const)
+for (const version of [5, 6, 7, 8] as const)
   test(`read-only web discovery can observe a version-${version} controller without changing CLI defaults`, async () => {
     const { discoverControllerStatus, publishControlDescriptor } = await import(
       "../../src/control/discovery.ts"

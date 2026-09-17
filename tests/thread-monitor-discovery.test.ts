@@ -19,6 +19,8 @@ test("read-only discovery retries only compatible legacy status protocols and ke
   expect(result).toBe(fixture);
   expect(calls).toEqual([
     ["/fixture/state", "/fixture/workspace", "root", undefined],
+    ["/fixture/state", "/fixture/workspace", "root", 8],
+    ["/fixture/state", "/fixture/workspace", "root", 7],
     ["/fixture/state", "/fixture/workspace", "root", 6],
     ["/fixture/state", "/fixture/workspace", "root", 5],
   ]);
@@ -50,7 +52,7 @@ test("read-only compatibility discovery checks every protocol and rejects mixed-
       },
     ),
   ).rejects.toThrow("ambiguous");
-  expect(versions).toEqual([undefined, 6, 5]);
+  expect(versions).toEqual([undefined, 8, 7, 6, 5]);
   const same = candidate("same");
   let probes = 0;
   expect(
@@ -59,13 +61,13 @@ test("read-only compatibility discovery checks every protocol and rejects mixed-
       return same;
     }),
   ).toBe(same);
-  expect(probes).toBe(3);
+  expect(probes).toBe(5);
   await expect(
     discoverObservedController(
       "/fixture/state",
       "/fixture/workspace",
       "root",
-      async (_state, _workspace, _thread, version) => candidate("same", version === 6 ? 2 : 1),
+      async (_state, _workspace, _thread, version) => candidate("same", version === 8 ? 2 : 1),
     ),
   ).rejects.toThrow("ambiguous");
 });

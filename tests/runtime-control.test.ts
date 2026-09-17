@@ -15,6 +15,7 @@ import { join } from "node:path";
 import type { VoiceState } from "../src/console/state.ts";
 import { controlStatusSchema } from "../src/control/contract.ts";
 import { CONTROL_MCP_SERVER_NAME, CONTROL_MCP_TOOLS } from "../src/control/types.ts";
+import { roleContentFromFiles } from "../src/core/role-content.ts";
 import { readSessionMarker, saveSessionMarker } from "../src/core/session-marker.ts";
 import { lockThread } from "../src/core/thread-lock.ts";
 import type { ControllerEvent } from "../src/events/contract.ts";
@@ -737,6 +738,67 @@ test("mute preferences changed during activation reach the worker and its final 
     expect(controller.state().speaker).toMatchObject({ muted: true, effectiveMuted: true });
   } finally {
     activation.resolve();
+    await controller.shutdown();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bound role status distinguishes database head freshness from its configured adoption source", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "av-controller-role-source-")));
+  const role = join(root, "manager");
+  mkdirSync(role);
+  writeFileSync(join(role, "APPEND_SYSTEM_PROMPT.md"), "current manager guidance\n");
+  const loadedDigests = roleContentFromFiles([
+    {
+      path: "APPEND_SYSTEM_PROMPT.md",
+      bytes: Buffer.from("older manager guidance\n"),
+      executable: false,
+    },
+  ]);
+  const controller = new RuntimeController({
+    instanceId: "role-source",
+    stateDir: root,
+    version: "test",
+    provenance: {
+      parsed: parseArgs([]),
+      options: { debug: false },
+      launchCwd: root,
+    },
+    control: registration,
+    spawn: (_generation, _event, _lease) => ({
+      pid: 10,
+      nativePid: undefined,
+      exited: Promise.resolve(),
+      stop: async () => false,
+      notify() {},
+      request: async <T>(method: string): Promise<T> => {
+        if (method === "preflight")
+          return {
+            workspace: root,
+            buildId: "fixture",
+            pid: 10,
+            role: { id: "11111111-1111-4111-8111-111111111111", revision: 8 },
+            adoptionSource: { path: role, digests: loadedDigests },
+          } as T;
+        return null as T;
+      },
+    }),
+  });
+  try {
+    await controller.start();
+    const status = controller.status();
+    expect(status.role).toMatchObject({
+      loaded: { revision: 8 },
+      adoptionSource: {
+        source: { kind: "directory", path: role },
+        loaded: { generation: 1, revision: 8, digests: loadedDigests },
+        stale: true,
+      },
+    });
+    expect(status.role!.desired).toBeUndefined();
+    expect(status.role!.adoptionSource!.current!.digests.prompts).not.toBe(loadedDigests.prompts);
+    controlStatusSchema.parse(status);
+  } finally {
     await controller.shutdown();
     rmSync(root, { recursive: true, force: true });
   }

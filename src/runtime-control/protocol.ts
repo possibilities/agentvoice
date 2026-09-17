@@ -15,6 +15,7 @@ export interface LaunchProvenance {
   launchCwd: string;
 }
 export interface CandidateInfo {
+  adoptionSource?: DirectoryRoleInfo;
   directoryRole?: DirectoryRoleInfo;
   role?: RoleRef;
   voice?: string | null;
