@@ -33,6 +33,12 @@ function operation(
 function fakeBackend(
   observe?: (request: unknown) => void,
   observeVoiceGet?: (request: { refresh?: boolean }) => void,
+  routingContext: unknown = {
+    schema_version: 1,
+    status: "unavailable",
+    stream_id: null,
+    reason: "routing_orientation_unavailable",
+  },
 ): ControlBackend {
   const recentOperations: ControlOperation[] = [];
   const byId = new Map<string, ControlOperation>();
@@ -66,12 +72,7 @@ function fakeBackend(
     return next;
   };
   return {
-    routingContext: async () => ({
-      schema_version: 1,
-      status: "unavailable",
-      stream_id: null,
-      reason: "routing_orientation_unavailable",
-    }),
+    routingContext: async () => routingContext,
     status: (): ControlStatus => ({
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: "instance-a",
@@ -187,6 +188,16 @@ async function mcpRequest(
   });
 }
 
+async function mcpPayload(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  const data = text
+    .split("\n")
+    .find((line) => line.startsWith("data: "))
+    ?.slice("data: ".length);
+  if (!data) throw new Error(`missing MCP data event: ${text}`);
+  return JSON.parse(data) as Record<string, unknown>;
+}
+
 describe("controller control transports", () => {
   test("socket and MCP use the same durable mutation dispatch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
@@ -249,11 +260,19 @@ describe("controller control transports", () => {
         { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
         sessionId ?? undefined,
       );
-      const toolText = await tools.text();
+      const toolsPayload = await mcpPayload(tools);
+      const toolText = JSON.stringify(toolsPayload);
       expect(toolText).toContain("agentvoice_restart_runtime");
       expect(toolText).toContain("agentvoice_routing_context");
       expect(toolText).toContain("handoffPrompt");
       expect(toolText).not.toContain("mailbox");
+      const routingTool = (
+        (toolsPayload.result as { tools: Array<Record<string, unknown>> }).tools ?? []
+      ).find((tool) => tool.name === "agentvoice_routing_context");
+      expect(routingTool).toMatchObject({
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+      });
       expect(
         await socketRequest(server.socketPath, {
           v: CONTROL_PROTOCOL_VERSION,
@@ -268,6 +287,29 @@ describe("controller control transports", () => {
           schema_version: 1,
           status: "unavailable",
           reason: "routing_orientation_unavailable",
+        },
+      });
+      const routingCall = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: "routing-mcp",
+          method: "tools/call",
+          params: { name: "agentvoice_routing_context", arguments: {} },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await mcpPayload(routingCall)).toMatchObject({
+        jsonrpc: "2.0",
+        id: "routing-mcp",
+        result: {
+          structuredContent: {
+            schema_version: 1,
+            status: "unavailable",
+            stream_id: null,
+            reason: "routing_orientation_unavailable",
+          },
         },
       });
       expect(
@@ -470,6 +512,123 @@ describe("controller control transports", () => {
         });
         expect(legacy).toMatchObject({ ok: false, error: { code: "invalid_request" } });
       }
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test("routing_context validates and returns an available nested result through MCP", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "agentvoice-control-"));
+    const routingContext = {
+      schema_version: 1,
+      status: "available",
+      stream_id: "manager-a:thread-a",
+      revision: {
+        producer_generation: 2,
+        context_revision: 4,
+        digest: "a".repeat(64),
+      },
+      freshness: {
+        state: "fresh",
+        observed_at: "2026-09-17T12:00:00.000Z",
+        expires_at: "2026-09-17T12:05:00.000Z",
+        checked_at: "2026-09-17T12:01:00.000Z",
+      },
+      fence: {
+        controller_id: "instance-a",
+        controller_generation: 7,
+        thread_id: "thread-a",
+        runtime_build_id: "build-a",
+        matches_current_runtime: true,
+      },
+      delivery: {
+        mode: "full",
+        source_mode: "delta",
+        delivered_at: "2026-09-17T12:00:00.000Z",
+        turn_id: "turn-a",
+        note: "Self-contained full projection.",
+      },
+      context: {
+        current: {
+          provider: "openai",
+          model: "gpt-6-astra",
+          effort: "low",
+          serviceTier: "priority",
+        },
+        guidance: {
+          taskFit: ["architecture"],
+          routingEnabled: true,
+          codexCostOrder: ["luna", "sol"],
+        },
+        nativeCatalog: {
+          capabilityDigest: "catalog-a",
+          drift: [],
+          models: [
+            { model: "gpt-6-astra", efforts: ["low"], serviceTiers: ["priority"], hidden: false },
+          ],
+        },
+        quota: {
+          sourceRevision: 9,
+          eligibleAccountKeys: ["openai:primary"],
+          delegationAvailable: true,
+          accounts: [],
+          grok: [],
+        },
+        grokCatalog: {
+          status: "available",
+          expiresAt: "2026-09-17T12:05:00.000Z",
+          drift: [],
+          routable: { defaultModel: "grok-code-fast-1", models: ["grok-code-fast-1"] },
+          accounts: [],
+        },
+      },
+    };
+    const server = await startControlServer({
+      backend: fakeBackend(undefined, undefined, routingContext),
+      stateDir,
+      instanceId: "instance-a",
+    });
+    try {
+      const initial = await mcpRequest(server.httpUrl, server.bearerToken, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      });
+      const sessionId = initial.headers.get("mcp-session-id");
+      expect(sessionId).toBeString();
+      await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+        sessionId ?? undefined,
+      );
+      const call = await mcpRequest(
+        server.httpUrl,
+        server.bearerToken,
+        {
+          jsonrpc: "2.0",
+          id: "routing-available",
+          method: "tools/call",
+          params: { name: "agentvoice_routing_context", arguments: {} },
+        },
+        sessionId ?? undefined,
+      );
+      expect(await mcpPayload(call)).toMatchObject({
+        result: {
+          structuredContent: {
+            status: "available",
+            stream_id: "manager-a:thread-a",
+            revision: { context_revision: 4, digest: "a".repeat(64) },
+            context: { current: { model: "gpt-6-astra" } },
+          },
+        },
+      });
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });

@@ -150,6 +150,85 @@ export const voiceGetSchema = z
   })
   .strict();
 
+const routingContextResultSchema = z
+  .object({
+    schema_version: z.literal(1),
+    status: z.enum(["available", "unavailable"]),
+    stream_id: z.string().nullable(),
+    reason: z.enum(["no_authoritative_delivery", "routing_orientation_unavailable"]).optional(),
+    revision: z
+      .object({
+        producer_generation: z.number().int().positive(),
+        context_revision: z.number().int().positive(),
+        digest: z.string().regex(/^[a-f0-9]{64}$/u),
+      })
+      .strict()
+      .optional(),
+    freshness: z
+      .object({
+        state: z.enum(["fresh", "stale"]),
+        observed_at: z.string(),
+        expires_at: z.string(),
+        checked_at: z.string(),
+      })
+      .strict()
+      .optional(),
+    fence: z
+      .object({
+        controller_id: z.string(),
+        controller_generation: z.number().int().positive(),
+        thread_id: z.string(),
+        runtime_build_id: z.string(),
+        matches_current_runtime: z.boolean(),
+      })
+      .strict()
+      .optional(),
+    delivery: z
+      .object({
+        mode: z.literal("full"),
+        source_mode: z.enum(["full", "delta"]),
+        delivered_at: z.string(),
+        turn_id: z.string(),
+        note: z.string(),
+      })
+      .strict()
+      .optional(),
+    context: routingContextViewSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const availableFields = ["revision", "freshness", "fence", "delivery", "context"] as const;
+    if (value.status === "available") {
+      if (value.stream_id === null || value.stream_id.length < 1 || value.stream_id.length > 512)
+        context.addIssue({
+          code: "custom",
+          path: ["stream_id"],
+          message: "required when available",
+        });
+      if (value.reason !== undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["reason"],
+          message: "not allowed when available",
+        });
+      for (const field of availableFields) {
+        if (value[field] === undefined)
+          context.addIssue({ code: "custom", path: [field], message: "required when available" });
+      }
+      return;
+    }
+    if (value.reason === undefined)
+      context.addIssue({ code: "custom", path: ["reason"], message: "required when unavailable" });
+    for (const field of availableFields) {
+      if (value[field] !== undefined)
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: "not allowed when unavailable",
+        });
+    }
+  });
+
 export type ControlMethod =
   | "agentvoice.routing_context"
   | "agentvoice.voice_get"
@@ -174,57 +253,9 @@ export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
     description:
       "Read the last authoritatively delivered, privacy-allowlisted manager routing context for this exact conversation. The result carries producer/context revision, digest, freshness and runtime-fence status. Explicit reads return a self-contained full projection; background sequential updates may appear as smaller delta transcript cards. This operation does not refresh providers, publish context, consume a revision, select a model or start work.",
     params: z.object({}).strict(),
-    result: z.union([
-      z
-        .object({
-          schema_version: z.literal(1),
-          status: z.literal("unavailable"),
-          stream_id: z.string().nullable(),
-          reason: z.enum(["no_authoritative_delivery", "routing_orientation_unavailable"]),
-        })
-        .strict(),
-      z
-        .object({
-          schema_version: z.literal(1),
-          status: z.literal("available"),
-          stream_id: z.string().min(1).max(512),
-          revision: z
-            .object({
-              producer_generation: z.number().int().positive(),
-              context_revision: z.number().int().positive(),
-              digest: z.string().regex(/^[a-f0-9]{64}$/u),
-            })
-            .strict(),
-          freshness: z
-            .object({
-              state: z.enum(["fresh", "stale"]),
-              observed_at: z.string(),
-              expires_at: z.string(),
-              checked_at: z.string(),
-            })
-            .strict(),
-          fence: z
-            .object({
-              controller_id: z.string(),
-              controller_generation: z.number().int().positive(),
-              thread_id: z.string(),
-              runtime_build_id: z.string(),
-              matches_current_runtime: z.boolean(),
-            })
-            .strict(),
-          delivery: z
-            .object({
-              mode: z.literal("full"),
-              source_mode: z.enum(["full", "delta"]),
-              delivered_at: z.string(),
-              turn_id: z.string(),
-              note: z.string(),
-            })
-            .strict(),
-          context: routingContextViewSchema,
-        })
-        .strict(),
-    ]),
+    // The MCP SDK's high-level server requires an object root for outputSchema.
+    // Conditional checks preserve the wire union without handing it a root union.
+    result: routingContextResultSchema,
     readOnly: true,
     invoke: async (backend) => {
       if (!backend.routingContext)
