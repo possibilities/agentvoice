@@ -363,7 +363,7 @@ function statusFromSocket(
   });
 }
 
-export type ReadableControlProtocol = typeof CONTROL_PROTOCOL_VERSION | 6 | 5;
+export type ReadableControlProtocol = typeof CONTROL_PROTOCOL_VERSION | 7 | 6 | 5;
 
 export async function discoverControllerStatus(
   stateDir: string,
