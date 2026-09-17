@@ -3,6 +3,11 @@
 Accepted 2026-09-16. This amends [0080](0080-direct-child-completion-delivery.md)'s
 immediate-delivery rule at the voice admission boundary.
 
+Superseded 2026-09-17 by
+[0094](0094-restore-immediate-direct-child-delivery.md). The speech-floor deferral
+was not shown to cause or prevent the reported interruptions, so AgentVoice returned
+to the simpler immediate-delivery rule while further evidence is gathered.
+
 ## Decision
 
 When native Realtime reports an open root-thread user `transcriptSegment`, AgentVoice

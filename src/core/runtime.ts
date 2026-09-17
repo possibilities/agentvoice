@@ -227,9 +227,6 @@ export class VoiceRuntime {
     string,
     { fingerprint: string; outcome: Promise<DeliveryOutcome> }
   >();
-  /** Active native realtime user segments on the root thread. */
-  private readonly humanVoiceItems = new Set<string>();
-  private readonly humanFloorWaiters = new Set<() => void>();
   private conversationRevision = 0;
   private readonly conversationReader: ConversationReader;
   private authenticatedRoutingIdentity: RoutingIdentity | undefined;
@@ -426,12 +423,7 @@ export class VoiceRuntime {
                 : Promise.resolve({ status: "unavailable" });
             if (this.completionDeliveries.size >= MAX_COMPLETION_DELIVERIES)
               return Promise.resolve({ status: "unavailable" });
-            const submit = async (): Promise<DeliveryOutcome> => {
-              // A direct child can finish while the caller is still speaking. Keep
-              // its exact completion pending until native closes that user segment;
-              // the runtime retains the delivery, so this does not drop the result
-              // or make the controller wait past its IPC deadline.
-              await this.waitForHumanFloor();
+            const outcome = Promise.resolve().then(async (): Promise<DeliveryOutcome> => {
               if (
                 this.shuttingDown ||
                 !this.attachment?.alive ||
@@ -475,19 +467,8 @@ export class VoiceRuntime {
                       : "unknown",
                 };
               }
-            };
-            const deferred = this.humanVoiceItems.size > 0;
-            const outcome = deferred
-              ? Promise.resolve<DeliveryOutcome>({ status: "deferred" })
-              : Promise.resolve().then(submit);
+            });
             this.completionDeliveries.set(checked.data.eventId, { fingerprint, outcome });
-            if (deferred)
-              void submit().then((result) => {
-                if (result.status !== "accepted")
-                  this.events.onWarning?.(
-                    `Deferred direct-child completion delivery ${result.status}; it will not be retried`,
-                  );
-              });
             return outcome;
           },
         });
@@ -603,7 +584,6 @@ export class VoiceRuntime {
     this.threadObserver?.stop();
     this.completionObserver?.stop();
     this.threadReady = false;
-    this.releaseHumanFloorWaiters();
     this.shutdownPromise = (async () => {
       try {
         await this.sessions.shutdown();
@@ -767,10 +747,7 @@ export class VoiceRuntime {
     }
     this.threadObserver?.notification(method, params);
     const voice = nativeVoiceNotification(method, params);
-    if (voice) {
-      this.observeHumanFloor(voice);
-      this.options.onVoice?.(voice);
-    }
+    if (voice) this.options.onVoice?.(voice);
     const id = params["threadId"];
     const turn = (params["turn"] ?? {}) as Record<string, unknown>;
     if (typeof id === "string") {
@@ -803,36 +780,6 @@ export class VoiceRuntime {
         }
       }
     }
-  }
-
-  private humanVoiceKey(realtimeSessionId: string, itemId: string) {
-    return `${realtimeSessionId}:${itemId}`;
-  }
-
-  private observeHumanFloor(voice: VoiceNotification): void {
-    if (voice.data.threadId !== this.threadId) return;
-    const item = "item" in voice.data ? voice.data.item : undefined;
-    if (item?.type === "transcriptSegment" && item.role === "user") {
-      const key = this.humanVoiceKey(item.realtimeSessionId, item.id);
-      if (voice.event === "voice.item.started") this.humanVoiceItems.add(key);
-      if (voice.event === "voice.item.completed") this.humanVoiceItems.delete(key);
-    }
-    if (item?.type === "realtimeSessionClosed") {
-      const prefix = `${item.realtimeSessionId}:`;
-      for (const key of this.humanVoiceItems)
-        if (key.startsWith(prefix)) this.humanVoiceItems.delete(key);
-    }
-    if (!this.humanVoiceItems.size) this.releaseHumanFloorWaiters();
-  }
-
-  private async waitForHumanFloor(): Promise<void> {
-    while (this.humanVoiceItems.size && !this.shuttingDown)
-      await new Promise<void>((resolve) => this.humanFloorWaiters.add(resolve));
-  }
-
-  private releaseHumanFloorWaiters() {
-    for (const resolve of this.humanFloorWaiters) resolve();
-    this.humanFloorWaiters.clear();
   }
 
   private async openConnection(): Promise<void> {

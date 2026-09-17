@@ -151,5 +151,6 @@ different decision. Keep this navigation index and the record's status together.
 - [0090: Deliver bounded manager routing orientation](0090-deliver-manager-routing-orientation.md)
 - [0091: Export canonical collaboration task identity](0091-export-canonical-collaboration-identity.md) — accepted; native thread-spawn paths are reconciled by exact thread ID and exported as explicit verified or error evidence.
 
-- [0092: Defer direct-child delivery during human speech](0092-defer-direct-child-delivery-during-human-speech.md) — accepted; direct-child delivery waits for native user-segment completion while root commentary remains a separate native handoff boundary.
+- [0092: Defer direct-child delivery during human speech](0092-defer-direct-child-delivery-during-human-speech.md) — superseded by [0094](0094-restore-immediate-direct-child-delivery.md); the deferral was not shown to affect the reported interruptions.
 - [0093: Throttle routing-context turns and expose read-only context](0093-throttle-routing-context-turns.md) — accepted; one-minute sampling produces a native turn only for coalesced material change, while a fenced full query remains available through control API/MCP.
+- [0094: Restore immediate direct-child completion delivery](0094-restore-immediate-direct-child-delivery.md) — accepted; direct-child completions use the existing `turn/start` path immediately, with the existing dedupe and no-retry semantics.

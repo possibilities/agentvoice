@@ -21,7 +21,7 @@ async function setup() {
   const frontendAttachments: boolean[] = [];
   const deliveries: CompletionRequest[] = [];
   let deliveryWait: Promise<void> | undefined;
-  let mode: "accepted" | "deferred" | "refused" | "unknown" = "accepted";
+  let mode: "accepted" | "refused" | "unknown" = "accepted";
   const c = new RuntimeController({
     instanceId: "instance",
     stateDir: directory,
@@ -62,7 +62,6 @@ async function setup() {
             if (deliveryWait) await deliveryWait;
             if (mode === "unknown") throw new Error("response lost");
             if (mode === "refused") return { status: "refused" } as T;
-            if (mode === "deferred") return { status: "deferred" } as T;
             return { status: "accepted", turnId: "active-parent" } as T;
           }
           return null as T;
@@ -133,20 +132,6 @@ test("unknown and refused acceptance are visible and never retried", async () =>
     expect(h.c.state().notice).toContain("delivery refused");
     h.emit("refused");
     expect(h.deliveries).toHaveLength(2);
-  } finally {
-    await h.close();
-  }
-});
-
-test("a deferred completion clears controller admission without a failure notice", async () => {
-  const h = await setup();
-  try {
-    h.mode("deferred");
-    h.emit("human-speaking");
-    await Bun.sleep(1);
-    expect(h.c.state().notice).toBeUndefined();
-    h.emit("human-speaking");
-    expect(h.deliveries).toHaveLength(1);
   } finally {
     await h.close();
   }

@@ -56,7 +56,6 @@ export const completionDeliverySchema = completionRequestSchema
 
 export const deliveryOutcomeSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("accepted"), turnId: completionId }).strict(),
-  z.object({ status: z.literal("deferred") }).strict(),
   z.object({ status: z.enum(["refused", "unknown", "unavailable"]) }).strict(),
 ]);
 
