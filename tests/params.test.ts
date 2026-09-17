@@ -262,7 +262,6 @@ describe("realtimeParams", () => {
       transport: { type: "webrtc", sdp: "v=0" },
       version: "v3",
       includeStartupContext: false,
-      delegationAckFiller: false,
     });
   });
 
@@ -297,16 +296,24 @@ describe("realtimeParams", () => {
     });
   });
 
-  test("suppresses delegation filler by default while preserving explicit and raw opt-ins", () => {
-    expect(realtime()["delegationAckFiller"]).toBe(false);
+  test("omits delegation filler by default while preserving explicit and raw resolution", () => {
+    expect(realtime()).not.toHaveProperty("delegationAckFiller");
     expect(realtime({ voice: { "delegation-ack-filler": true } })["delegationAckFiller"]).toBe(
       true,
+    );
+    expect(realtime({ voice: { "delegation-ack-filler": false } })["delegationAckFiller"]).toBe(
+      false,
     );
     expect(
       realtime({
         voice: { "delegation-ack-filler": false, extra: { delegationAckFiller: true } },
       })["delegationAckFiller"],
     ).toBe(true);
+    expect(
+      realtime({ voice: { "delegation-ack-filler": true, extra: { delegationAckFiller: null } } })[
+        "delegationAckFiller"
+      ],
+    ).toBeNull();
   });
 
   test("VOICE_AGENT_SYSTEM_PROMPT.md replaces the prompt; empty strips it", () => {

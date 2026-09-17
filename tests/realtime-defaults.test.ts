@@ -8,7 +8,7 @@ const params = (values: ConfigValues = {}, prompts: Prompts = {}) =>
   realtimeParams(config(values), prompts, "thread", "session", "sdp");
 
 describe("WebRTC compatibility default", () => {
-  test("selects v3 and desktop startup-context defaults at the request boundary", () => {
+  test("selects v3 and desktop startup-context defaults while omitting native delegation filler", () => {
     const values = { orchestrator: { config: { realtime: { version: "v1" } } } };
     expect(config().voice.version).toBeUndefined();
     expect(params()).toEqual({
@@ -18,7 +18,6 @@ describe("WebRTC compatibility default", () => {
       outputModality: "audio",
       version: "v3",
       includeStartupContext: false,
-      delegationAckFiller: false,
     });
     expect(params(values)).toEqual(params());
     expect(threadParams(config(values), {}, "start")["config"]).toEqual(values.orchestrator.config);
@@ -89,9 +88,16 @@ describe("WebRTC compatibility default", () => {
     }
   });
 
-  test("compatibility default and explicit overrides survive continue, resume, redial and Fresh", async () => {
+  test("compatibility defaults and delegation filler resolution survive continue, resume, redial and Fresh", async () => {
     for (const resume of [undefined, "existing"]) {
-      for (const extra of [{}, { version: "v1" }, { version: null }]) {
+      for (const [extra, filler] of [
+        [{}, undefined],
+        [{ version: "v1" }, undefined],
+        [{ version: null }, undefined],
+        [{ delegationAckFiller: true }, true],
+        [{ delegationAckFiller: false }, false],
+        [{ delegationAckFiller: null }, null],
+      ] as const) {
         const h = runtimeHarness({ voice: { extra } }, { savedThread: resume ?? "existing" });
         h.native.main("existing", h.directory);
         try {
@@ -104,7 +110,9 @@ describe("WebRTC compatibility default", () => {
           expect(starts).toHaveLength(3);
           for (const start of starts) {
             expect(start.params["version"]).toBe("version" in extra ? extra.version : "v3");
-            expect(start.params["delegationAckFiller"]).toBe(false);
+            if (filler === undefined)
+              expect(start.params).not.toHaveProperty("delegationAckFiller");
+            else expect(start.params["delegationAckFiller"]).toBe(filler);
           }
           expect(starts[0]!.params["threadId"]).toBe("existing");
           expect(starts[2]!.params["threadId"]).toBe("existing");
