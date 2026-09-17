@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,6 +7,7 @@ import {
   FileRoutingDeliveryStore,
   planRoutingTurn,
   routingCandidate,
+  routingDigest,
 } from "../src/core/routing-delivery.ts";
 
 function context(usedPercent = 20, eligible = true) {
@@ -69,7 +70,7 @@ const grok = {
 
 function baseline(usedPercent = 20): DeliveredRoutingBaseline {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     streamId: "stream",
     deliveredAt: "2026-09-17T12:00:00.000Z",
     turnId: "turn-1",
@@ -87,7 +88,7 @@ function baseline(usedPercent = 20): DeliveredRoutingBaseline {
   };
 }
 
-test("repeated identical routing snapshots never create a turn, even after cooldown", () => {
+test("unchanged displayed percentages suppress evidence and decision drift after cooldown", () => {
   const previous = baseline();
   expect(
     planRoutingTurn(
@@ -99,56 +100,39 @@ test("repeated identical routing snapshots never create a turn, even after coold
   expect(
     planRoutingTurn(
       previous,
-      routingCandidate(context(), { ...grok, expires_at: "2026-09-19T00:00:00.000Z" }),
+      routingCandidate(context(20, false), {
+        ...grok,
+        expires_at: "2026-09-19T00:00:00.000Z",
+        drift: [{ code: "catalog_changed", subject: "grok", account_key: null }],
+      }),
       Date.parse("2026-09-17T13:00:00Z"),
     ),
   ).toEqual({ deliver: false, reason: "unchanged" });
 });
 
-test("quota changes require a whole percentage and five minutes, coalescing during cooldown", () => {
+test("displayed percentage changes wait five minutes and coalesce against the accepted baseline", () => {
   const previous = baseline();
   expect(
     planRoutingTurn(
       previous,
-      routingCandidate(context(20.9), grok),
+      routingCandidate(context(20.04), grok),
       Date.parse("2026-09-17T12:10:00Z"),
     ),
-  ).toEqual({ deliver: false, reason: "subthreshold" });
+  ).toEqual({ deliver: false, reason: "unchanged" });
   expect(
     planRoutingTurn(
       previous,
-      routingCandidate(context(21), grok),
+      routingCandidate(context(20.1), grok),
       Date.parse("2026-09-17T12:04:59Z"),
     ),
   ).toEqual({ deliver: false, reason: "cooldown" });
   expect(
     planRoutingTurn(
       previous,
-      routingCandidate(context(22), grok),
+      routingCandidate(context(22.4), grok),
       Date.parse("2026-09-17T12:05:00Z"),
     ),
   ).toEqual({ deliver: true, reason: "usage_change" });
-});
-
-test("eligibility and catalog drift trigger immediately inside quota cooldown", () => {
-  const previous = baseline();
-  expect(
-    planRoutingTurn(
-      previous,
-      routingCandidate(context(20.2, false), grok),
-      Date.parse("2026-09-17T12:00:10Z"),
-    ),
-  ).toEqual({ deliver: true, reason: "decision_change" });
-  expect(
-    planRoutingTurn(
-      previous,
-      routingCandidate(context(), {
-        ...grok,
-        drift: [{ code: "unreviewed_live_model", subject: "grok-next", account_key: "grok-2" }],
-      }),
-      Date.parse("2026-09-17T12:00:10Z"),
-    ),
-  ).toEqual({ deliver: true, reason: "decision_change" });
 });
 
 test("accepted delivery baseline survives a store reopen and contains only the projected allowlist", () => {
@@ -158,7 +142,7 @@ test("accepted delivery baseline survives a store reopen and contains only the p
     const first = new FileRoutingDeliveryStore(root);
     first.write(value);
     first.writeAttempt({
-      schemaVersion: 1,
+      schemaVersion: 2,
       streamId: "stream",
       attemptedAt: "2026-09-17T12:00:00.000Z",
       candidateDigest: value.candidateDigest,
@@ -174,6 +158,44 @@ test("accepted delivery baseline survives a store reopen and contains only the p
     });
     expect(JSON.stringify(loaded)).not.toContain("email");
     expect(JSON.stringify(loaded)).not.toContain("access_token");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a version-one accepted baseline is restored with the displayed percentage projection", () => {
+  const root = mkdtempSync(join(tmpdir(), "agentvoice-routing-delivery-legacy-"));
+  try {
+    const value = baseline();
+    const legacy = {
+      ...value,
+      schemaVersion: 1,
+      usage: value.usage.map(({ key, displayedPercent }) => ({
+        key,
+        usedPercent: 100 - displayedPercent,
+      })),
+    };
+    const directory = join(root, "routing-delivery");
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(directory, `${routingDigest("stream")}.json`),
+      `${JSON.stringify(legacy)}\n`,
+      {
+        mode: 0o600,
+      },
+    );
+    const loaded = new FileRoutingDeliveryStore(root).read("stream");
+    expect(loaded).toMatchObject({
+      schemaVersion: 2,
+      usage: [{ key: "codex:codex-1:primary", displayedPercent: 80 }],
+    });
+    expect(
+      planRoutingTurn(
+        loaded,
+        routingCandidate(context(), grok),
+        Date.parse("2026-09-17T13:00:00Z"),
+      ),
+    ).toEqual({ deliver: false, reason: "unchanged" });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

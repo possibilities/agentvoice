@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+[ADR 0097](0097-gate-routing-updates-on-displayed-usage.md) supersedes the immediate
+non-quota triggers and one-point threshold below. One-minute sampling, the initial snapshot,
+private accepted receipt, read-only query and unknown-outcome rules remain active.
+
 ## Context
 
 The first manager-routing producer coupled its five-minute refresh with publication and a

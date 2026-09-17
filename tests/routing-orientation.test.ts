@@ -1,4 +1,11 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  FileRoutingDeliveryStore,
+  MemoryRoutingDeliveryStore,
+} from "../src/core/routing-delivery.ts";
 import {
   ManagerRoutingOrientation,
   type RoutingCommand,
@@ -24,7 +31,7 @@ const catalog = {
 };
 function fixture(
   overrides: Partial<RoutingOrientationOptions> = {},
-  contextOverrides: Record<string, unknown> = {},
+  contextOverrides: Record<string, unknown> | (() => Record<string, unknown>) = {},
   grokOverrides: Record<string, unknown> = {},
   behavior: { expiredGrokCatalog?: boolean; grokRefreshFails?: boolean } = {},
 ) {
@@ -86,6 +93,8 @@ function fixture(
       };
     if (command === "agentusage") {
       const value = input as Record<string, unknown>;
+      const resolvedContextOverrides =
+        typeof contextOverrides === "function" ? contextOverrides() : contextOverrides;
       return {
         schema_version: 2,
         producer_generation: value["producer_generation"],
@@ -112,7 +121,7 @@ function fixture(
         },
         observed_at: "2026-09-16T12:00:00.000Z",
         expires_at: "2099-01-01T00:00:00.000Z",
-        ...contextOverrides,
+        ...resolvedContextOverrides,
       };
     }
     if (args[1] === "apply") {
@@ -168,6 +177,39 @@ function fixture(
     warnings,
     delivered,
     options,
+  };
+}
+
+function quotaContext(usedPercent: number, eligible = true) {
+  return {
+    quota: {
+      source_revision: "6405175911611332984741815",
+      eligible_account_keys: eligible ? ["codex-1"] : [],
+      delegation_available: eligible,
+      accounts: [
+        {
+          account_key: "codex-1",
+          account_generation: 1,
+          provider_generation: 1,
+          auth_status: "ok",
+          decision_grade: true,
+          eligible,
+          exclusions: eligible ? [] : ["quota_exhausted"],
+          lane: {
+            windows: [
+              {
+                role: "primary",
+                window_seconds: 18_000,
+                used_percent: usedPercent,
+                remaining_percent: 100 - usedPercent,
+                resets_at: "2026-09-18T00:00:00.000Z",
+              },
+            ],
+          },
+        },
+      ],
+      grok: [],
+    },
   };
 }
 test("orientation publishes exact runtime/catalog facts, submits one silent output, and records accepted delivery", async () => {
@@ -396,48 +438,139 @@ test("material refreshes coalesce and only the latest persisted revision is subm
   expect(publications[1]?.input).toMatchObject({ context: { context_revision: 2 } });
 });
 
-test("a repeated identical snapshot is suppressed before publication and turn/start", async () => {
-  const f = fixture();
-  f.orientation.start();
-  await f.delivered;
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  const publications = () =>
-    f.calls.filter(
-      (call) =>
-        call.args[1] === "apply" &&
-        (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+test("a restart suppresses unchanged percentages before publication and turn/start", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agentvoice-routing-restart-"));
+  try {
+    const usedPercent = 20;
+    const first = fixture({ deliveryStore: new FileRoutingDeliveryStore(root) }, () =>
+      quotaContext(usedPercent),
     );
-  expect(publications()).toHaveLength(1);
-  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(1);
-  f.orientation.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  f.orientation.stop();
-  expect(publications()).toHaveLength(1);
-  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(1);
+    await first.orientation.refresh();
+    first.orientation.stop();
+    const restarted = fixture(
+      { deliveryStore: new FileRoutingDeliveryStore(root) },
+      () => ({
+        ...quotaContext(usedPercent, false),
+        current: {
+          provider: "codex",
+          model: "gpt-5.6-sol",
+          effort: "high",
+          service_tier: "priority",
+        },
+      }),
+      {
+        status: "drift",
+        drift: [{ code: "catalog_changed", subject: "grok", account_key: null }],
+      },
+    );
+    await restarted.orientation.refresh();
+    restarted.orientation.stop();
+    expect(
+      restarted.calls.filter(
+        (call) =>
+          call.args[1] === "apply" &&
+          (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+      ),
+    ).toHaveLength(0);
+    expect(restarted.native.filter((call) => call.method === "turn/start")).toHaveLength(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-test("an unknown native delivery outcome is durably attempted and never retried", async () => {
-  let starts = 0;
-  const f = fixture({
-    request: async (method) => {
-      if (method === "model/list") return catalog;
-      starts++;
-      return { turn: { id: "unknown", status: "unknown" } };
-    },
-  });
-  f.orientation.start();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  f.orientation.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+test("cooldown coalesces changed percentages and emits the latest value at the first eligible poll", async () => {
+  const store = new MemoryRoutingDeliveryStore();
+  const startedAt = Date.parse("2026-09-17T12:00:00.000Z");
+  let now = startedAt;
+  let usedPercent = 20;
+  const f = fixture({ deliveryStore: store, now: () => now }, () => quotaContext(usedPercent));
+  await f.orientation.refresh();
+  usedPercent = 21;
+  now = startedAt + 60_000;
+  await f.orientation.refresh();
+  usedPercent = 22;
+  now = startedAt + 4 * 60_000;
+  await f.orientation.refresh();
+  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(1);
+  now = startedAt + 5 * 60_000;
+  await f.orientation.refresh();
   f.orientation.stop();
-  expect(starts).toBe(1);
-  expect(
-    f.calls.filter(
-      (call) =>
-        call.args[1] === "apply" &&
-        (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
-    ),
-  ).toHaveLength(1);
+  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(2);
+  expect(f.orientation.readContext()).toMatchObject({
+    delivery: { delivered_at: "2026-09-17T12:05:00.000Z" },
+    context: { quota: { accounts: [{ windows: [{ remainingPercent: 78 }] }] } },
+  });
+});
+
+test("an unknown outcome preserves the accepted baseline and suppresses the attempted percentage across restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agentvoice-routing-unknown-"));
+  const startedAt = Date.parse("2026-09-17T12:00:00.000Z");
+  let now = startedAt;
+  let usedPercent = 20;
+  try {
+    const accepted = fixture(
+      { deliveryStore: new FileRoutingDeliveryStore(root), now: () => now },
+      () => quotaContext(usedPercent),
+    );
+    await accepted.orientation.refresh();
+    accepted.orientation.stop();
+
+    usedPercent = 21;
+    now = startedAt + 5 * 60_000;
+    let starts = 0;
+    const unknown = fixture(
+      {
+        deliveryStore: new FileRoutingDeliveryStore(root),
+        now: () => now,
+        request: async (method) => {
+          if (method === "model/list") return catalog;
+          starts++;
+          return { turn: { id: "unknown", status: "unknown" } };
+        },
+      },
+      () => quotaContext(usedPercent),
+    );
+    await unknown.orientation.refresh();
+    expect(
+      (unknown.orientation.readContext() as Record<string, unknown>)["delivery"],
+    ).toMatchObject({
+      turn_id: "turn-1",
+      delivered_at: "2026-09-17T12:00:00.000Z",
+    });
+    unknown.orientation.stop();
+
+    const restarted = fixture(
+      {
+        deliveryStore: new FileRoutingDeliveryStore(root),
+        now: () => now,
+        request: async (method) => {
+          if (method === "model/list") return catalog;
+          starts++;
+          return { turn: { id: "unexpected", status: "inProgress" } };
+        },
+      },
+      () => quotaContext(usedPercent, false),
+    );
+    await restarted.orientation.refresh();
+    restarted.orientation.stop();
+    expect(starts).toBe(1);
+    expect(
+      unknown.calls.filter(
+        (call) =>
+          call.args[1] === "apply" &&
+          (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+      ),
+    ).toHaveLength(1);
+    expect(
+      restarted.calls.filter(
+        (call) =>
+          call.args[1] === "apply" &&
+          (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+      ),
+    ).toHaveLength(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("retained controller compatibility uses authenticated exact runtime/root evidence", () => {

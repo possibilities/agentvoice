@@ -37,7 +37,7 @@ export function routingDigest(value: unknown): string {
   return createHash("sha256").update(canonical(value)).digest("hex");
 }
 
-export type RoutingUsageReading = { key: string; usedPercent: number };
+export type RoutingUsageReading = { key: string; displayedPercent: number };
 
 export type RoutingContextView = {
   current: {
@@ -368,16 +368,16 @@ export function routingUsage(view: RoutingContextView): RoutingUsageReading[] {
   const readings: RoutingUsageReading[] = [];
   for (const account of view.quota.accounts)
     for (const window of account.windows)
-      if (account.accountKey && window.role && window.usedPercent !== null)
+      if (account.accountKey && window.role && window.remainingPercent !== null)
         readings.push({
           key: `codex:${account.accountKey}:${window.role}`,
-          usedPercent: window.usedPercent,
+          displayedPercent: Math.round(window.remainingPercent * 10) / 10,
         });
   for (const account of view.quota.grok)
-    if (account.accountKey && account.usedPercent !== null)
+    if (account.accountKey && account.remainingPercent !== null)
       readings.push({
         key: `grok:${account.accountKey}:included`,
-        usedPercent: account.usedPercent,
+        displayedPercent: Math.round(account.remainingPercent * 10) / 10,
       });
   return readings.sort((left, right) => left.key.localeCompare(right.key));
 }
@@ -393,11 +393,11 @@ export function routingCandidate(context: unknown, grokCatalog: unknown): Routin
   const view = routingContextView(context, grokCatalog);
   const signalDigest = routingDigest(decisionProjection(view));
   const usage = routingUsage(view);
-  return { view, signalDigest, candidateDigest: routingDigest({ signalDigest, usage }), usage };
+  return { view, signalDigest, candidateDigest: routingDigest(usage), usage };
 }
 
 export type DeliveredRoutingBaseline = RoutingCandidate & {
-  schemaVersion: 1;
+  schemaVersion: 2;
   streamId: string;
   deliveredAt: string;
   turnId: string;
@@ -414,11 +414,11 @@ export type DeliveredRoutingBaseline = RoutingCandidate & {
 };
 
 export type RoutingDeliveryDecision =
-  | { deliver: true; reason: "initial" | "decision_change" | "usage_change" }
-  | { deliver: false; reason: "unchanged" | "subthreshold" | "cooldown" | "already_attempted" };
+  | { deliver: true; reason: "initial" | "usage_change" }
+  | { deliver: false; reason: "unchanged" | "cooldown" | "already_attempted" };
 
 export type RoutingTurnAttempt = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   streamId: string;
   attemptedAt: string;
   candidateDigest: string;
@@ -428,24 +428,19 @@ export type RoutingTurnAttempt = {
 };
 
 export function planRoutingTurn(
-  baseline: Pick<DeliveredRoutingBaseline, "signalDigest" | "usage" | "deliveredAt"> | null,
+  baseline: Pick<DeliveredRoutingBaseline, "usage" | "deliveredAt"> | null,
   candidate: RoutingCandidate,
   nowMs: number,
   cooldownMs = 5 * 60_000,
-  minimumPercent = 1,
 ): RoutingDeliveryDecision {
   if (!baseline) return { deliver: true, reason: "initial" };
-  if (baseline.signalDigest !== candidate.signalDigest)
-    return { deliver: true, reason: "decision_change" };
-  const previous = new Map(baseline.usage.map((reading) => [reading.key, reading.usedPercent]));
-  let maximumDelta = 0;
-  for (const reading of candidate.usage) {
-    const before = previous.get(reading.key);
-    if (before !== undefined)
-      maximumDelta = Math.max(maximumDelta, Math.abs(reading.usedPercent - before));
-  }
-  if (maximumDelta < minimumPercent)
-    return { deliver: false, reason: maximumDelta === 0 ? "unchanged" : "subthreshold" };
+  const previous = new Map(
+    baseline.usage.map((reading) => [reading.key, reading.displayedPercent]),
+  );
+  const changed =
+    previous.size !== candidate.usage.length ||
+    candidate.usage.some((reading) => previous.get(reading.key) !== reading.displayedPercent);
+  if (!changed) return { deliver: false, reason: "unchanged" };
   const deliveredAt = Date.parse(baseline.deliveredAt);
   if (!Number.isFinite(deliveredAt) || nowMs - deliveredAt < cooldownMs)
     return { deliver: false, reason: "cooldown" };
@@ -504,7 +499,7 @@ function validBaseline(value: unknown, streamId: string): value is DeliveredRout
   return (
     Object.keys(state).length === exact.length &&
     exact.every((key) => Object.hasOwn(state, key)) &&
-    state["schemaVersion"] === 1 &&
+    state["schemaVersion"] === 2 &&
     state["streamId"] === streamId &&
     typeof state["deliveredAt"] === "string" &&
     Number.isFinite(Date.parse(state["deliveredAt"])) &&
@@ -540,12 +535,43 @@ function validBaseline(value: unknown, streamId: string): value is DeliveredRout
       return (
         Object.keys(reading).length === 2 &&
         typeof reading["key"] === "string" &&
-        typeof reading["usedPercent"] === "number" &&
-        Number.isFinite(reading["usedPercent"])
+        typeof reading["displayedPercent"] === "number" &&
+        Number.isFinite(reading["displayedPercent"])
       );
     }) &&
     routingContextViewSchema.safeParse(state["view"]).success
   );
+}
+
+function legacyBaseline(value: unknown, streamId: string): DeliveredRoutingBaseline | null {
+  const state = row(value);
+  if (state["schemaVersion"] !== 1 || state["streamId"] !== streamId) return null;
+  const usage = array(state["usage"]);
+  if (
+    !usage.every((item) => {
+      const reading = row(item);
+      return (
+        Object.keys(reading).length === 2 &&
+        typeof reading["key"] === "string" &&
+        typeof reading["usedPercent"] === "number" &&
+        Number.isFinite(reading["usedPercent"])
+      );
+    })
+  )
+    return null;
+  const migrated: Row = {
+    ...state,
+    schemaVersion: 2,
+    usage: usage.map((item) => {
+      const reading = row(item);
+      return {
+        key: reading["key"],
+        displayedPercent: Math.round((100 - Number(reading["usedPercent"])) * 10) / 10,
+      };
+    }),
+  };
+  migrated["candidateDigest"] = routingDigest(migrated["usage"]);
+  return validBaseline(migrated, streamId) ? migrated : null;
 }
 
 export class FileRoutingDeliveryStore implements RoutingDeliveryStore {
@@ -567,8 +593,10 @@ export class FileRoutingDeliveryStore implements RoutingDeliveryStore {
     if (Buffer.byteLength(text) > MAX_STATE_BYTES)
       throw new Error("Routing delivery state is oversized");
     const value = JSON.parse(text);
-    if (!validBaseline(value, streamId)) throw new Error("Routing delivery state is malformed");
-    return value;
+    if (validBaseline(value, streamId)) return value;
+    const migrated = legacyBaseline(value, streamId);
+    if (!migrated) throw new Error("Routing delivery state is malformed");
+    return migrated;
   }
   write(baseline: DeliveredRoutingBaseline): void {
     this.writePrivate(this.path(baseline.streamId), baseline);
@@ -593,7 +621,7 @@ export class FileRoutingDeliveryStore implements RoutingDeliveryStore {
     if (
       Object.keys(value).length !== keys.length ||
       !keys.every((key) => Object.hasOwn(value, key)) ||
-      value["schemaVersion"] !== 1 ||
+      (value["schemaVersion"] !== 1 && value["schemaVersion"] !== 2) ||
       value["streamId"] !== streamId ||
       typeof value["attemptedAt"] !== "string" ||
       !Number.isFinite(Date.parse(value["attemptedAt"])) ||

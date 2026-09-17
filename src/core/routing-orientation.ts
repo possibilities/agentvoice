@@ -120,6 +120,7 @@ export interface RoutingOrientationOptions {
 export class ManagerRoutingOrientation {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running = false;
+  private draining: Promise<void> | undefined;
   private pending = false;
   private stopped = false;
   private generation: number | undefined;
@@ -139,8 +140,8 @@ export class ManagerRoutingOrientation {
         : new MemoryRoutingDeliveryStore());
   }
   start(): void {
-    this.refresh();
-    this.timer = setInterval(() => this.refresh(), this.options.intervalMs ?? REFRESH_MS);
+    void this.refresh();
+    this.timer = setInterval(() => void this.refresh(), this.options.intervalMs ?? REFRESH_MS);
     this.timer.unref();
   }
   stop(): void {
@@ -148,10 +149,11 @@ export class ManagerRoutingOrientation {
     this.pending = false;
     if (this.timer) clearInterval(this.timer);
   }
-  refresh(): void {
-    if (this.stopped) return;
+  refresh(): Promise<void> {
+    if (this.stopped) return Promise.resolve();
     this.pending = true;
-    if (!this.running) void this.drain();
+    if (!this.running) this.draining = this.drain();
+    return this.draining ?? Promise.resolve();
   }
   private async drain(): Promise<void> {
     this.running = true;
@@ -168,6 +170,7 @@ export class ManagerRoutingOrientation {
       }
     } finally {
       this.running = false;
+      this.draining = undefined;
     }
   }
   private warn(message: string): void {
@@ -452,7 +455,7 @@ export class ManagerRoutingOrientation {
       context: delivery["delivery"],
     };
     const attempt = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       streamId: this.stream,
       attemptedAt: new Date(this.options.now?.() ?? Date.now()).toISOString(),
       candidateDigest: candidate.candidateDigest,
@@ -507,7 +510,7 @@ export class ManagerRoutingOrientation {
       return;
     }
     const baseline: DeliveredRoutingBaseline = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       streamId: this.stream,
       deliveredAt: new Date(this.options.now?.() ?? Date.now()).toISOString(),
       turnId: turn["id"],
