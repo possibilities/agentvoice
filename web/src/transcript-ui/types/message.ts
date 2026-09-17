@@ -40,6 +40,32 @@ export interface Message {
   presentation?: MessagePresentation;
   /** Exact source item type when custom rendering depends on native item identity. */
   nativeItemType?: string;
+  /** Small allowlisted view of a native routing-context output. */
+  routingContext?: RoutingContextPresentation;
+}
+
+export interface RoutingBalance {
+  provider: "Codex" | "Grok";
+  lane: string;
+  remainingPercent: number;
+  resetsAt?: string;
+  eligible?: boolean;
+}
+
+export interface RoutingContextPresentation {
+  revision: number;
+  generation: number;
+  mode: "full" | "delta";
+  current?: {
+    provider?: string;
+    model?: string;
+    effort?: string;
+    serviceTier?: string;
+  };
+  delegationAvailable?: boolean;
+  balances?: readonly RoutingBalance[];
+  observedAt?: string;
+  expiresAt?: string;
 }
 
 /** Provider-neutral, plain-text presentation of a structured message payload. */

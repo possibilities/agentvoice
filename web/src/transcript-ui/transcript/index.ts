@@ -6,6 +6,8 @@ export type {
   MessagePresentation as TranscriptMessagePresentation,
   MessageRole,
   MessageStatus,
+  RoutingBalance,
+  RoutingContextPresentation,
   ToolActivity,
   ToolDetailSection,
 } from "../types/message";

@@ -137,6 +137,55 @@
 .system-event-card__details dd {
   white-space: pre-wrap;
 }
+.routing-context-card__balances {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+.routing-context-card__balance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: baseline;
+}
+.routing-context-card__balances dt {
+  color: var(--text);
+}
+.routing-context-card__balance-value {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  margin: 0;
+  text-align: right;
+}
+.routing-context-card__remaining {
+  color: var(--text);
+  font-weight: 500;
+}
+.routing-context-card__history {
+  margin: 8px 0 0;
+  padding-left: 2ch;
+}
+.routing-context-card__revision + .routing-context-card__revision {
+  margin-top: 8px;
+}
+.routing-context-card__revision-label {
+  color: var(--text);
+}
+.routing-context-card__revision p {
+  margin-top: 0;
+}
+@container transcript (width <= 480px) {
+  .routing-context-card__balance {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .routing-context-card__balance-value {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
 .message-delivery-status {
   min-width: 0;
   overflow: hidden;

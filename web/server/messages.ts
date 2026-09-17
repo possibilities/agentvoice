@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { conversationItemSchema } from "../../src/events/conversation.ts";
 import { recordedVoiceFrame } from "../../src/recording/writer.ts";
 import { mapCodexSubagentEvent } from "../src/transcript-ui/lib/api/codex-subagent-event.ts";
+import { routingContextMessage } from "../src/transcript-ui/lib/api/routing-context.ts";
 import { contextCompactionMessage } from "../src/transcript-ui/lib/system-events.ts";
 import {
   mapCodexSubagentActivity,
@@ -85,6 +86,10 @@ function unavailableActivity(item: Extract<AgentItem["item"], { type: "unavailab
 export function agentMessage(entry: AgentItem, completed = true): TranscriptMessage | undefined {
   const { item } = entry;
   const base = { id: itemKey(entry), status: completed ? "complete" : "streaming" } as const;
+  if (item.type === "functionCallOutput") {
+    const routing = routingContextMessage(item.namespace, item.name, item.output);
+    if (routing !== undefined) return routing ? { ...base, ...routing } : undefined;
+  }
   if (item.type === "subAgentActivity") {
     const event = mapCodexSubagentEvent(item);
     if (event) return { ...base, ...event };

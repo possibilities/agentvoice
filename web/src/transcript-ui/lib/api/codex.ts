@@ -13,6 +13,7 @@ import { transcriptTitle } from "../transcript-title.ts";
 import { parseCodexMessagePresentation } from "./codex-presentation.ts";
 import { mapCodexSubagentActivity } from "./codex-subagent-activity.ts";
 import { mapCodexSubagentEvent } from "./codex-subagent-event.ts";
+import { routingContextMessage } from "./routing-context.ts";
 
 export interface CodexThreadView {
   thread: Thread;
@@ -212,6 +213,15 @@ export function mapCodexItem(record: CodexThreadItemRecord): Message | null {
 
   if (record.itemType === "contextCompaction") {
     return { id, createdAt, ...contextCompactionMessage(true) };
+  }
+
+  if (record.itemType === "functionCallOutput") {
+    const routing = routingContextMessage(
+      record.item["namespace"],
+      record.item["name"],
+      record.item["output"],
+    );
+    if (routing !== undefined) return routing ? { id, createdAt, ...routing } : null;
   }
 
   if (record.itemType === "userMessage") {

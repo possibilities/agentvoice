@@ -3,6 +3,7 @@ import { ArrowDownIcon } from "lucide-react";
 import { memo, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActivityGroup } from "../components/chat/activity-group";
 import { ChatMessage } from "../components/chat/chat-message";
+import { RoutingContextCard } from "../components/chat/routing-context-card";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -85,7 +86,9 @@ export interface TranscriptBlockProps {
 }
 
 const BlockContent = memo(function BlockContent({ block }: TranscriptBlockProps) {
-  return block.kind === "activity" ? (
+  return block.kind === "routing-context" ? (
+    <RoutingContextCard messages={block.messages} context={block.context} />
+  ) : block.kind === "activity" ? (
     <ActivityGroup messages={block.messages} />
   ) : (
     <ChatMessage message={block.message} />
@@ -118,6 +121,13 @@ function useTranscriptBlocks(messages: readonly Message[]) {
     if (!prior || prior.kind !== block.kind) return block;
     if (block.kind === "message" && prior.kind === "message") {
       return block.message === prior.message ? prior : block;
+    }
+    if (block.kind === "routing-context" && prior.kind === "routing-context") {
+      return block.messages.length === prior.messages.length &&
+        block.messages.every((message, index) => message === prior.messages[index]) &&
+        JSON.stringify(block.context) === JSON.stringify(prior.context)
+        ? prior
+        : block;
     }
     if (block.kind === "activity" && prior.kind === "activity") {
       return block.messages.length === prior.messages.length &&
