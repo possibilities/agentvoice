@@ -378,24 +378,22 @@ describe("conversation content contract", () => {
 });
 
 describe("scoped native conversation reads", () => {
-  test("item pages split full native turns without losing entries, and edits invalidate an in-turn cursor", async () => {
+  test("item pages use native item cursors without materializing whole turns", async () => {
     let text = "old";
-    const call = async (_method: string, input: unknown) => {
+    const call = async (method: string, input: unknown) => {
       const params = input as Record<string, unknown>;
-      expect(params["itemsView"]).toBe("full");
+      expect(method).toBe("thread/items/list");
       expect(params["limit"]).toBe(1);
+      if (text === "edited" && params["cursor"] === "item-1") throw new Error("cursor_expired");
+      const index = params["cursor"] === "item-2" ? 2 : params["cursor"] === "item-1" ? 1 : 0;
+      const entries = [
+        { turnId: "turn-1", item: { id: "one", type: "agentMessage", text } },
+        { turnId: "turn-1", item: { id: "two", type: "plan", text: "plan" } },
+        { turnId: "turn-2", item: { id: "three", type: "agentMessage", text: "later" } },
+      ];
       return {
-        data: [
-          {
-            id: params["cursor"] ? "turn-2" : "turn-1",
-            itemsView: "full",
-            items: [
-              { id: "one", type: "agentMessage", text },
-              { id: "two", type: "plan", text: "plan" },
-            ],
-          },
-        ],
-        nextCursor: params["cursor"] ? null : "next-turn",
+        data: entries.slice(index, index + 1),
+        nextCursor: index + 1 < entries.length ? `item-${index + 1}` : null,
       };
     };
     const params = { threadId: "child", limit: 1, sortDirection: "asc" as const };
@@ -405,9 +403,6 @@ describe("scoped native conversation reads", () => {
     expect(second.data.map((entry) => entry.item.id)).toEqual(["two"]);
     const third = await readConversationItems(call, { ...params, cursor: second.nextCursor! }, []);
     expect(third.data[0]?.turnId).toBe("turn-2");
-    const filtered = await readConversationItems(call, { ...params, turnId: "turn-2" }, []);
-    expect(filtered.data).toEqual([]);
-    expect(filtered.nextCursor).not.toBeNull();
     text = "edited";
     await expect(
       readConversationItems(call, { ...params, cursor: first.nextCursor! }, []),
@@ -424,10 +419,14 @@ describe("scoped native conversation reads", () => {
       exitCode: index === 0 ? 23 : 0,
       aggregatedOutput: `${index}: ${"output ".repeat(20_000)}`,
     }));
-    const call = async () => ({
-      data: [{ id: "turn", itemsView: "full", items }],
-      nextCursor: null,
-    });
+    const call = async (_method: string, input: unknown) => {
+      const cursor = (input as Record<string, unknown>)["cursor"];
+      const index = cursor ? Number(String(cursor).slice("item-".length)) : 0;
+      return {
+        data: items.slice(index, index + 1).map((item) => ({ turnId: "turn", item })),
+        nextCursor: index + 1 < items.length ? `item-${index + 1}` : null,
+      };
+    };
     const params = { threadId: "child", limit: 50, sortDirection: "asc" as const };
     const first = await readConversationItems(call, params, []);
     expect(first.data.length).toBeGreaterThan(0);
@@ -474,14 +473,16 @@ describe("scoped native conversation reads", () => {
             ),
           };
         revision++;
-        if (method === "thread/turns/list")
+        if (method === "thread/items/list")
           return {
             data: [
               {
-                id: "turn",
-                status: "completed",
-                itemsView: "full",
-                items: [{ id: "message", type: "agentMessage", text: "canonical native history" }],
+                turnId: "turn",
+                item: {
+                  id: params["cursor"] ? "message-2" : "message",
+                  type: "agentMessage",
+                  text: "canonical native history",
+                },
               },
             ],
             nextCursor: params["cursor"] ? null : "native-cursor",
@@ -491,7 +492,10 @@ describe("scoped native conversation reads", () => {
       "/work",
       () => revision,
     );
-    const params = conversationRequestSchemas["conversation.items.list"].parse(identity);
+    const params = conversationRequestSchemas["conversation.items.list"].parse({
+      ...identity,
+      limit: 1,
+    });
     const first = await reader.read("conversation.items.list", params);
     expect(first).toMatchObject({
       method: "conversation.items.list",
@@ -512,13 +516,12 @@ describe("scoped native conversation reads", () => {
     const second = await reader.read("conversation.items.list", { ...params, limit: 1, cursor });
     expect(second.nextCursor).toBeNull();
     expect(calls.at(-1)).toEqual({
-      method: "thread/turns/list",
+      method: "thread/items/list",
       params: {
         threadId: "child",
         cursor: "native-cursor",
         sortDirection: "asc",
         limit: 1,
-        itemsView: "full",
       },
     });
     expect(
@@ -526,7 +529,7 @@ describe("scoped native conversation reads", () => {
         .filter((call) => call.method === "thread/read")
         .every((call) => call.params["includeTurns"] === false),
     ).toBe(true);
-    expect(calls.every((call) => ["thread/read", "thread/turns/list"].includes(call.method))).toBe(
+    expect(calls.every((call) => ["thread/read", "thread/items/list"].includes(call.method))).toBe(
       true,
     );
   });

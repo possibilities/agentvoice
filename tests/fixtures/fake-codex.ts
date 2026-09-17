@@ -36,6 +36,8 @@ function handle(peer: ServerWebSocket<undefined>, line: string) {
     send({ id: message.id, result: capabilities });
   } else if (message.method === "fragmented") {
     send({ id: message.id, result: "voice 🎤 café" });
+  } else if (message.method === "oversized") {
+    send({ id: message.id, result: "x".repeat(32 * 1024 * 1024) });
   } else if (message.method === "approval") {
     send({ id: message.id, result: {} });
     send({ id: "approval", method: "item/commandExecution/requestApproval", params: {} });

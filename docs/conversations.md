@@ -74,13 +74,11 @@ or survive runtime replacement. Reducing page size is allowed. At most 256 token
 are retained, so clients must handle `cursor_expired` by restarting pagination.
 They are not bearer credentials and never contain raw native cursors on the wire.
 
-Stock Codex **0.153.4** declares `thread/items/list` but returns “not supported yet”.
-AgentVoice implements item pages using `thread/turns/list` with `itemsView:"full"`
-and one native turn per call. Large turns are split into public item pages; a
-digest detects changes between pages and expires the cursor rather than silently
-skipping or duplicating items. Filtering by `turnId` can therefore require empty
-pages while the native turn cursor advances. The server can internally replay a
-legacy rollout for a native turn read; AgentVoice does not scan or edit it.
+Stock Codex **0.154.0** supports `thread/items/list`. AgentVoice reads one native
+item per call and assembles bounded public pages. This prevents a large historical
+turn from becoming one native WebSocket response while retaining native item
+cursors and optional `turnId` filtering. The server can internally replay a legacy
+rollout for an item read; AgentVoice does not scan or edit it.
 
 ## Typed content and streaming
 

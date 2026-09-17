@@ -215,9 +215,9 @@ owns the current source map and recording/attachment implementation guidance.
 - src/core/conversation-reader.ts + conversation-items.ts: explicit read-only native
   history for controller-leased roots and verified descendants. Scope cursors to
   root/thread/turn/order and runtime generation; never resume or submit work for a
-  read. Stock 0.153.4 thread/items/list is a stub despite its schema: item pages use
-  thread/turns/list with full items, one turn per native page. Unmaterialized and
-  ephemeral history is unavailable, not empty. See docs/conversations.md.
+  read. Stock 0.154.0 item pagination supplies one bounded native item at a time so
+  a large turn cannot monopolize the shared WebSocket. Unmaterialized and ephemeral
+  history is unavailable, not empty. See docs/conversations.md.
 - src/ipc/json-socket.ts: shared private NDJSON framing, ownership and bounded writes
   for both Unix endpoints. Never remove another listener or an unrelated file.
 - src/control/: shared Zod contract/dispatch, private UDS NDJSON server,

@@ -115,7 +115,15 @@ export class AppServerConnection {
             );
           }
         },
-        () => connection.fail("Native WebSocket closed"),
+        (error) => {
+          const pending = [
+            ...new Set([...connection.pending.values()].map(({ method }) => method)),
+          ];
+          connection.fail(
+            `${error.message}${pending.length > 0 ? `; pending: ${pending.join(", ")}` : ""}`,
+          );
+        },
+        (id, bytes) => connection.rejectOversizedResponse(id, bytes),
       );
       await connection.request("initialize", {
         clientInfo: { name: "agentvoice", title: "AgentVoice", version: options.clientVersion },
@@ -356,6 +364,17 @@ export class AppServerConnection {
     if (typeof method === "string") {
       this.options.onNotification(method, (message["params"] ?? {}) as Record<string, unknown>);
     }
+  }
+
+  private rejectOversizedResponse(id: number, bytes: number): boolean {
+    const pending = this.pending.get(id);
+    if (!pending) return false;
+    this.pending.delete(id);
+    clearTimeout(pending.timer);
+    pending.reject(
+      new AppServerError(`${pending.method}: native response exceeded 32 MiB (${bytes} bytes)`),
+    );
+    return true;
   }
 
   private respond(id: number | string, result: unknown): void {

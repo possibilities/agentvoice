@@ -149,6 +149,19 @@ describe("owned native WebSocket", () => {
       await c.close();
     }
   });
+  test("rejects one oversized response without dropping the native connection", async () => {
+    const c = await connect();
+    try {
+      const oversized = c.request("oversized", {}, 15_000);
+      await expect(oversized).rejects.toThrow("native response exceeded 32 MiB");
+      expect(await c.request<{ still: string }>("echo", { still: "attached" })).toEqual({
+        still: "attached",
+      });
+      expect(c.alive).toBe(true);
+    } finally {
+      await c.close();
+    }
+  }, 20_000);
   test("delivers native tool/turn notifications while leaving human requests pending", async () => {
     const notices: Array<[string, Record<string, unknown>]> = [];
     const interactions: string[] = [];

@@ -50,8 +50,10 @@ assign it a synthetic item ID. These encodings must not be inferred from prose.
 Compaction can fail after `item/started` without an `item/completed`; the card
 does not claim completion without that observation.
 
-The existing reader obtains saved items through `thread/turns/list` with
-`itemsView: "full"` (`src/core/conversation-items.ts`), not direct JSONL reads.
+The reader obtains saved items through `thread/items/list`
+(`src/core/conversation-items.ts`), not direct JSONL reads. This changed when
+Codex 0.154.0 implemented item pagination; the projection behavior below is
+unchanged.
 For successful paginated compaction, native `project_rollout_line` materializes
 the canonical completed item into the thread store, and full turn pages hydrate
 those rows with the original item ID (inspected in upstream `112be0bd`, also
