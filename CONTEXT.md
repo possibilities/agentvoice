@@ -310,6 +310,18 @@ a current bounded in-flight snapshot; native Codex delivers the worker's full te
 separately. The controller retains only exact child/turn dedupe identities, not
 consumable entries or opening results. _Avoid_: mailbox, wake-up notice, result store.
 
+**Routing turn baseline** — The private, allowlisted receipt for the last routing
+context whose native `turn/start` was authoritatively accepted. It carries the
+revision/digest, percentage readings, decision signal, delivery time and exact
+controller/thread/build fence. It alone advances the five-minute delivery cooldown
+and survives runtime or server replacement. _Avoid_: latest poll, attempted turn,
+provider cache.
+
+**Routing context query** — The read-only control API/MCP projection of that last
+accepted baseline. It returns a self-contained full view with freshness and runtime
+fence status; it never refreshes, publishes, consumes, chooses or dispatches. _Avoid_:
+router, delta cursor, raw AgentHUD state.
+
 
 **Voice transcript** — Automatic private JSONL observation of a workspace session's native voice
 items, stored under state/voice/<canonical-workspace-hash>/<thread-id>.jsonl.

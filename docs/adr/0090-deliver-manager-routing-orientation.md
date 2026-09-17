@@ -60,3 +60,7 @@ without a full server restart. The runtime reuses its existing authenticated
 `agentvoice_status` readiness response to recover the exact controller instance,
 generation, pinned root, runtime PID and build identity. Missing or mismatched
 identity fails closed; no history inventory or guessed process identity is used.
+
+[ADR 0093](0093-throttle-routing-context-turns.md) replaces the five-minute polling/delivery
+coupling above with one-minute sampling, persistent change/cooldown state, and a read-only
+query surface. The one-output-per-persisted-revision and unknown-outcome rules remain.

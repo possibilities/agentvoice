@@ -1,10 +1,20 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import {
+  type DeliveredRoutingBaseline,
+  FileRoutingDeliveryStore,
+  MemoryRoutingDeliveryStore,
+  planRoutingTurn,
+  type RoutingDeliveryStore,
+  routingCandidate,
+} from "./routing-delivery.ts";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const REFRESH_MS = 300_000;
+const REFRESH_MS = 60_000;
 const GROK_REFRESH_TIMEOUT_MS = 65_000;
 const GROK_MIN_VALIDITY_MS = 30_000;
+const ROUTING_MANAGER_ID = "agentvoice-manager";
+const ROUTING_CONSUMER_ID = "agentvoice-routing-turns";
 type Row = Record<string, unknown>;
 const row = (value: unknown): Row =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Row) : {};
@@ -101,9 +111,12 @@ export interface RoutingOrientationOptions {
   warning(message: string): void;
   command?: RoutingCommand;
   intervalMs?: number;
+  stateDir?: string;
+  deliveryStore?: RoutingDeliveryStore;
+  now?: () => number;
 }
 
-/** One coalescing producer per exact native runtime. Native acceptance is not consumption. */
+/** One coalescing producer per exact native runtime with a restart-safe accepted-delivery baseline. */
 export class ManagerRoutingOrientation {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running = false;
@@ -112,10 +125,18 @@ export class ManagerRoutingOrientation {
   private generation: number | undefined;
   private readonly stream: string;
   private readonly command: RoutingCommand;
+  private readonly deliveryStore: RoutingDeliveryStore;
+  private delivered: DeliveredRoutingBaseline | null | undefined;
+  private attempted: ReturnType<RoutingDeliveryStore["readAttempt"]> | undefined;
   private warned: string | undefined;
   constructor(private readonly options: RoutingOrientationOptions) {
     this.stream = `agentvoice:${hash(options.workspace).slice(0, 24)}:${options.threadId}`;
     this.command = options.command ?? routingCommand;
+    this.deliveryStore =
+      options.deliveryStore ??
+      (options.stateDir
+        ? new FileRoutingDeliveryStore(options.stateDir)
+        : new MemoryRoutingDeliveryStore());
   }
   start(): void {
     this.refresh();
@@ -269,7 +290,16 @@ export class ManagerRoutingOrientation {
   }
   private async publish(): Promise<void> {
     const state = row(
-      await this.command("agenthud", ["routing", "state", "--stream", this.stream]),
+      await this.command("agenthud", [
+        "routing",
+        "state",
+        "--stream",
+        this.stream,
+        "--manager",
+        ROUTING_MANAGER_ID,
+        "--consumer",
+        ROUTING_CONSUMER_ID,
+      ]),
     );
     const publication = row(state["publication"]);
     const previous = row(publication["context"]);
@@ -292,13 +322,15 @@ export class ManagerRoutingOrientation {
       this.catalog(),
     ]);
     if (this.stopped) return;
-    const now = new Date().toISOString();
+    const nowMs = this.options.now?.() ?? Date.now();
+    const now = new Date(nowMs).toISOString();
     const identity = this.options.identity;
     const input = {
       schema_version: 1,
       producer_generation: this.generation,
       context_revision: revision,
-      trigger: revision === 1 ? (expected ? "producer_generation_change" : "initial") : "heartbeat",
+      trigger:
+        revision === 1 ? (expected ? "producer_generation_change" : "initial") : "material_change",
       composed_at: now,
       reviewed: {
         revision: 2,
@@ -344,6 +376,12 @@ export class ManagerRoutingOrientation {
       ),
     );
     if (this.stopped) return;
+    if (this.delivered === undefined) this.delivered = this.deliveryStore.read(this.stream);
+    const candidate = routingCandidate(context, grokCatalog);
+    const plan = planRoutingTurn(this.delivered ?? null, candidate, nowMs);
+    if (!plan.deliver) return;
+    if (this.attempted === undefined) this.attempted = this.deliveryStore.readAttempt(this.stream);
+    if (this.attempted?.candidateDigest === candidate.candidateDigest) return;
     await this.command("agenthud", ["routing", "apply", "--file", "-"], {
       action: "publication.publish",
       operationId: `routing-${identity.processInstanceId}-${revision}`,
@@ -372,9 +410,9 @@ export class ManagerRoutingOrientation {
         "--stream",
         this.stream,
         "--manager",
-        "agentvoice-manager",
+        ROUTING_MANAGER_ID,
         "--consumer",
-        identity.processInstanceId,
+        ROUTING_CONSUMER_ID,
       ]),
     );
     const routingPolicy = row(row(context["guidance"])["routing_policy"]);
@@ -395,8 +433,8 @@ export class ManagerRoutingOrientation {
       schema_version: 1,
       type: "routing.context",
       stream_id: this.stream,
-      manager_id: "agentvoice-manager",
-      consumer_id: identity.processInstanceId,
+      manager_id: ROUTING_MANAGER_ID,
+      consumer_id: ROUTING_CONSUMER_ID,
       handling: {
         human_facing_response: "none",
         start_new_work: false,
@@ -413,6 +451,17 @@ export class ManagerRoutingOrientation {
       grok_catalog: grokCatalog,
       context: delivery["delivery"],
     };
+    const attempt = {
+      schemaVersion: 1 as const,
+      streamId: this.stream,
+      attemptedAt: new Date(this.options.now?.() ?? Date.now()).toISOString(),
+      candidateDigest: candidate.candidateDigest,
+      producerGeneration: Number(context["producer_generation"]),
+      contextRevision: Number(context["context_revision"]),
+      contextDigest: String(context["digest"]),
+    };
+    this.deliveryStore.writeAttempt(attempt);
+    this.attempted = attempt;
     // At most one native submission per persisted revision; unknown outcomes are never retried.
     const accepted = row(
       await this.options.request(
@@ -435,7 +484,125 @@ export class ManagerRoutingOrientation {
       !turn["id"] ||
       turn["id"].length > 128 ||
       turn["status"] !== "inProgress"
-    )
+    ) {
       this.warn("Routing context was persisted, but native delivery acknowledgment is unknown.");
+      return;
+    }
+    const payload = row(delivery["delivery"]);
+    const mode = payload["mode"];
+    if (
+      (mode !== "full" && mode !== "delta") ||
+      !Number.isSafeInteger(payload["producer_generation"]) ||
+      !Number.isSafeInteger(payload["context_revision"]) ||
+      typeof payload["digest"] !== "string" ||
+      typeof payload["delivery_digest"] !== "string"
+    ) {
+      this.warn("Routing context was delivered, but its persistent receipt was invalid.");
+      return;
+    }
+    const observedAt = context["observed_at"];
+    const expiresAt = context["expires_at"];
+    if (typeof observedAt !== "string" || typeof expiresAt !== "string") {
+      this.warn("Routing context was delivered, but its freshness receipt was invalid.");
+      return;
+    }
+    const baseline: DeliveredRoutingBaseline = {
+      schemaVersion: 1,
+      streamId: this.stream,
+      deliveredAt: new Date(this.options.now?.() ?? Date.now()).toISOString(),
+      turnId: turn["id"],
+      producerGeneration: Number(payload["producer_generation"]),
+      contextRevision: Number(payload["context_revision"]),
+      contextDigest: payload["digest"],
+      deliveryMode: mode,
+      observedAt,
+      expiresAt,
+      controllerId: identity.controllerId,
+      controllerGeneration: identity.generation,
+      threadId: this.options.threadId,
+      runtimeBuildId: identity.buildId,
+      ...candidate,
+    };
+    this.deliveryStore.write(baseline);
+    this.delivered = baseline;
+    const consumer = row(delivery["consumer"]);
+    const expectedRevision = Number.isSafeInteger(consumer["revision"])
+      ? Number(consumer["revision"])
+      : 0;
+    try {
+      await this.command("agenthud", ["routing", "apply", "--file", "-"], {
+        action: "consumer.consume",
+        operationId: `routing-consume-${identity.processInstanceId}-${baseline.producerGeneration}-${baseline.contextRevision}`,
+        actor: ROUTING_MANAGER_ID,
+        streamId: this.stream,
+        managerId: ROUTING_MANAGER_ID,
+        expectedRevision,
+        receipt: {
+          schema_version: 1,
+          consumer_id: ROUTING_CONSUMER_ID,
+          producer_generation: baseline.producerGeneration,
+          context_revision: baseline.contextRevision,
+          context_digest: baseline.contextDigest,
+          delivery_digest: payload["delivery_digest"],
+          delivery_mode: mode,
+          consumed_at: baseline.deliveredAt,
+        },
+      });
+    } catch {
+      this.warn(
+        "Routing context was delivered, but its durable consumption receipt is unavailable.",
+      );
+    }
+  }
+
+  /** Read-only projection of the last authoritatively accepted native delivery. */
+  readContext(): unknown {
+    if (this.delivered === undefined) this.delivered = this.deliveryStore.read(this.stream);
+    const baseline = this.delivered;
+    if (!baseline)
+      return {
+        schema_version: 1,
+        status: "unavailable",
+        stream_id: this.stream,
+        reason: "no_authoritative_delivery",
+      };
+    const checkedAtMs = this.options.now?.() ?? Date.now();
+    const expiresAtMs = Date.parse(baseline.expiresAt);
+    const currentFence =
+      baseline.controllerId === this.options.identity.controllerId &&
+      baseline.controllerGeneration === this.options.identity.generation &&
+      baseline.threadId === this.options.threadId &&
+      baseline.runtimeBuildId === this.options.identity.buildId;
+    return {
+      schema_version: 1,
+      status: "available",
+      stream_id: baseline.streamId,
+      revision: {
+        producer_generation: baseline.producerGeneration,
+        context_revision: baseline.contextRevision,
+        digest: baseline.contextDigest,
+      },
+      freshness: {
+        state: Number.isFinite(expiresAtMs) && checkedAtMs < expiresAtMs ? "fresh" : "stale",
+        observed_at: baseline.observedAt,
+        expires_at: baseline.expiresAt,
+        checked_at: new Date(checkedAtMs).toISOString(),
+      },
+      fence: {
+        controller_id: baseline.controllerId,
+        controller_generation: baseline.controllerGeneration,
+        thread_id: baseline.threadId,
+        runtime_build_id: baseline.runtimeBuildId,
+        matches_current_runtime: currentFence,
+      },
+      delivery: {
+        mode: "full",
+        source_mode: baseline.deliveryMode,
+        delivered_at: baseline.deliveredAt,
+        turn_id: baseline.turnId,
+        note: "Explicit queries return a self-contained full projection. Background sequential updates may use delta transcript cards.",
+      },
+      context: baseline.view,
+    };
   }
 }

@@ -1,7 +1,7 @@
 # AgentVoice control API
 
-Control protocol **7** provides new session, status, voice redial and runtime restart with an
-optional handoff prompt, and persistent workspace voice selection. MCP and Unix control use the same schemas and dispatcher.
+Control protocol **8** provides new session, status, voice redial and runtime restart with an
+optional handoff prompt, persistent workspace voice selection, and a read-only routing-context query. MCP and Unix control use the same schemas and dispatcher.
 The server-owned controller retains exact conversation identity, operation journal
 and control/event endpoints across runtime replacements and frontend detach. A
 frontend owns only its media attachment; closing it stops realtime voice and
@@ -317,13 +317,15 @@ Zod validation and dispatch implementation:
 | --- | --- | --- |
 | `agentvoice_status` | `agentvoice.status` | `{}` |
 | `agentvoice_voice_get` | `agentvoice.voice_get` | `{refresh?: boolean}` |
+| `agentvoice_routing_context` | `agentvoice.routing_context` | `{}` |
 | `agentvoice_voice_set` | `agentvoice.voice_set` | `MutationRequest` plus `expectedRoleRevision`, `voice` or `selection`, `apply` |
 | `agentvoice_redial` | `agentvoice.redial` | `MutationRequest` |
 | `agentvoice_restart_runtime` | `agentvoice.restart` | `MutationRequest` plus `{scope:"runtime"}` and optional `handoffPrompt` |
 | `agentvoice_new_session` | `agentvoice.new_session` | `MutationRequest` |
 
 MCP tool results carry the same result object as structured content. Validation
-or controller failures are MCP tool errors. `agentvoice_status` and `agentvoice_voice_get` are read-only;
+or controller failures are MCP tool errors. `agentvoice_status`, `agentvoice_voice_get`, and
+`agentvoice_routing_context` are read-only;
 mutation tools are deliberately not marked idempotent at MCP level because the
 caller must supply the durable operation ID.
 
@@ -385,6 +387,31 @@ the failure and refuses new attachments until its process is restarted. The
 disconnected client still closes local devices. A later client explicitly negotiates fresh media; there is
 no reconnect or replay loop.
 
+## Routing context query
+
+`agentvoice.routing_context` / `agentvoice_routing_context` reads the last
+authoritatively accepted routing delivery for the exact controller-bound conversation. It
+does not poll a provider, publish or consume a revision, choose a target, or start work. The
+response is a strict projection: current model/effort/tier, reviewed routing policy, native
+catalog capabilities and drift, sanitized quota/account generations and eligibility, and
+the reviewed Grok catalog intersection. Provider IDs, email, labels, plan names, notes,
+credentials, private broker capabilities and raw source bodies are absent.
+
+An available result carries `(producer_generation, context_revision, digest)`, observed,
+expiry and checked timestamps, and the controller/thread/build fence that accepted the
+delivery. `freshness.state` and `fence.matches_current_runtime` are explicit; callers must
+not treat stale or mismatched results as decision-grade. An unavailable result identifies
+that no authoritative delivery exists without exposing a partial candidate.
+
+Explicit query results are always a self-contained `delivery.mode: "full"` projection so a
+caller never has to reconstruct state from transcript history. Background routing updates
+retain AgentHUD's delivery contract: a sequential quota-only revision may be a delta, while
+initial delivery, a revision gap, producer change, catalog/metadata change or host/control
+change is full. Both native `turn/start` tool outputs and explicit MCP reads appear as tool
+cards in native transcripts; the throttle prevents unchanged polling snapshots from
+creating cards, and an explicit read creates only the ordinary MCP call card requested by
+the manager.
+
 ## Workspace voice selection
 
 `agentvoice.voice_get` / `agentvoice_voice_get` is a read-only dedicated query for
@@ -442,7 +469,7 @@ and desired references, desiredVoice, voiceRevision, voice and a database error
 when needed.
 
 
-Control protocol 7 replaces version 6 for this schema extension. Existing loaded
+Control protocol 8 replaces version 7 for the routing-context query. Existing loaded
 controllers retain their old code and MCP catalog; a later explicitly authorized
 server restart loads this API. A voice-only redial or runtime restart cannot replace
 the retained controller. Publishing/building the command does not activate it.

@@ -5,7 +5,7 @@ import type { RoleRef, VoiceEdit } from "../roles/store.ts";
  * Controller-owned facts exposed by the local control plane.  The transport
  * deliberately has no runtime, thread, or operation-journal ownership.
  */
-export const CONTROL_PROTOCOL_VERSION = 7;
+export const CONTROL_PROTOCOL_VERSION = 8;
 export const CONTROL_MCP_SERVER_NAME = "agentvoice_control";
 export const CONTROL_MCP_PATH = "/mcp";
 export const CONTROL_SOCKET_ENV = "AGENTVOICE_CONTROL_SOCKET";
@@ -16,6 +16,7 @@ export const CONTROL_MCP_TOOLS = [
   "agentvoice_new_session",
   "agentvoice_voice_set",
   "agentvoice_voice_get",
+  "agentvoice_routing_context",
 ] as const;
 
 export type ControlOperationPhase =
@@ -119,6 +120,7 @@ type MaybePromise<T> = T | Promise<T>;
 
 /** The controller implements this; control transports only validate and dispatch. */
 export interface ControlBackend {
+  routingContext?(): Promise<unknown>;
   voiceGet(request: { refresh?: boolean }): Promise<VoiceGetResult>;
   voiceSet(request: VoiceSetRequest): Promise<ControlOperation>;
   status(): MaybePromise<ControlStatus>;

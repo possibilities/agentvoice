@@ -64,6 +64,7 @@ export interface ConsoleHostOptions {
       params: ConversationReadParams,
     ) => Promise<ConversationReadResult>,
   ) => void;
+  onRoutingReady?: (read: () => unknown) => void;
   initialMute?: { mic: boolean; speaker: boolean };
   initialFrontendAttached?: boolean;
   onFrontendReady?: (setAttached: (attached: boolean) => Promise<void>) => void;
@@ -246,6 +247,7 @@ export async function runConsoleHost(
     },
   });
   options.onObservationReady?.((method, params) => runtime!.readConversation(method, params));
+  options.onRoutingReady?.(() => runtime!.routingContext());
 
   function gate(target: AudioTarget): MuteGate {
     return target === "mic" ? microphone : speaker;

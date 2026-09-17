@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { handoffPromptSchema } from "../core/handoff.ts";
 import { directoryRoleStatusSchema } from "../core/role-content.ts";
+import { routingContextViewSchema } from "../core/routing-delivery.ts";
 import {
   randomVoiceSelectionSchema,
   voiceCatalogReceiptSchema,
@@ -150,6 +151,7 @@ export const voiceGetSchema = z
   .strict();
 
 export type ControlMethod =
+  | "agentvoice.routing_context"
   | "agentvoice.voice_get"
   | "agentvoice.voice_set"
   | "agentvoice.status"
@@ -167,6 +169,69 @@ export type ControlMethodEntry = {
 };
 
 export const CONTROL_METHODS: Record<ControlMethod, ControlMethodEntry> = {
+  "agentvoice.routing_context": {
+    tool: "agentvoice_routing_context",
+    description:
+      "Read the last authoritatively delivered, privacy-allowlisted manager routing context for this exact conversation. The result carries producer/context revision, digest, freshness and runtime-fence status. Explicit reads return a self-contained full projection; background sequential updates may appear as smaller delta transcript cards. This operation does not refresh providers, publish context, consume a revision, select a model or start work.",
+    params: z.object({}).strict(),
+    result: z.union([
+      z
+        .object({
+          schema_version: z.literal(1),
+          status: z.literal("unavailable"),
+          stream_id: z.string().nullable(),
+          reason: z.enum(["no_authoritative_delivery", "routing_orientation_unavailable"]),
+        })
+        .strict(),
+      z
+        .object({
+          schema_version: z.literal(1),
+          status: z.literal("available"),
+          stream_id: z.string().min(1).max(512),
+          revision: z
+            .object({
+              producer_generation: z.number().int().positive(),
+              context_revision: z.number().int().positive(),
+              digest: z.string().regex(/^[a-f0-9]{64}$/u),
+            })
+            .strict(),
+          freshness: z
+            .object({
+              state: z.enum(["fresh", "stale"]),
+              observed_at: z.string(),
+              expires_at: z.string(),
+              checked_at: z.string(),
+            })
+            .strict(),
+          fence: z
+            .object({
+              controller_id: z.string(),
+              controller_generation: z.number().int().positive(),
+              thread_id: z.string(),
+              runtime_build_id: z.string(),
+              matches_current_runtime: z.boolean(),
+            })
+            .strict(),
+          delivery: z
+            .object({
+              mode: z.literal("full"),
+              source_mode: z.enum(["full", "delta"]),
+              delivered_at: z.string(),
+              turn_id: z.string(),
+              note: z.string(),
+            })
+            .strict(),
+          context: routingContextViewSchema,
+        })
+        .strict(),
+    ]),
+    readOnly: true,
+    invoke: async (backend) => {
+      if (!backend.routingContext)
+        throw new ControlError("unavailable", "Routing context is unavailable");
+      return await backend.routingContext();
+    },
+  },
   "agentvoice.voice_get": {
     tool: "agentvoice_voice_get",
     description:

@@ -511,6 +511,7 @@ export class VoiceRuntime {
           }),
           request: (method, params, timeout) => this.attachment!.request(method, params, timeout),
           warning: (message) => this.events.onWarning?.(message),
+          stateDir: this.options.nativeStateDir,
         });
         this.routingOrientation.start();
       }
@@ -518,6 +519,17 @@ export class VoiceRuntime {
       await this.shutdown();
       throw error;
     }
+  }
+
+  routingContext(): unknown {
+    return (
+      this.routingOrientation?.readContext() ?? {
+        schema_version: 1,
+        status: "unavailable",
+        stream_id: null,
+        reason: "routing_orientation_unavailable",
+      }
+    );
   }
 
   private voiceAttached = true;

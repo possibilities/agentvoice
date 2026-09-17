@@ -32,6 +32,7 @@ function fixture(
   const native: { method: string; params: unknown }[] = [];
   const warnings: string[] = [];
   let publication: Record<string, unknown> | null = null;
+  let consumer: Record<string, unknown> | null = null;
   let resolve: () => void = () => {};
   const delivered = new Promise<void>((r) => {
     resolve = r;
@@ -91,19 +92,52 @@ function fixture(
         context_revision: value["context_revision"],
         digest: "a".repeat(64),
         sources: { native_catalog_revision: 1, hud_host_revision: 1, hud_domain_revision: 1 },
-        guidance: { routing_policy: { enabled: true } },
         native_catalog: { drift: [] },
+        current: {
+          provider: "codex",
+          model: "gpt-5.6-sol",
+          effort: "medium",
+          service_tier: "priority",
+        },
+        guidance: {
+          task_fit: ["implementation"],
+          routing_policy: { enabled: true, codex_cost_order: ["gpt-5.6-sol"] },
+        },
+        quota: {
+          source_revision: initialRevision,
+          eligible_account_keys: [],
+          delegation_available: false,
+          accounts: [],
+          grok: [],
+        },
+        observed_at: "2026-09-16T12:00:00.000Z",
+        expires_at: "2099-01-01T00:00:00.000Z",
         ...contextOverrides,
       };
     }
     if (args[1] === "apply") {
-      publication = { context: (input as Record<string, unknown>)["context"] };
-      return { published: true };
+      const mutation = input as Record<string, unknown>;
+      if (mutation["action"] === "publication.publish") {
+        publication = { context: mutation["context"] };
+        return { published: true };
+      }
+      consumer = { revision: 1, receipt: mutation["receipt"] };
+      return { published: false };
     }
+    const context = publication?.["context"] as Record<string, unknown> | undefined;
     return {
       publication,
-      delivery: publication ? { mode: "full", payload: publication["context"] } : null,
-      consumer: null,
+      delivery: publication
+        ? {
+            mode: "full",
+            producer_generation: context?.["producer_generation"],
+            context_revision: context?.["context_revision"],
+            digest: context?.["digest"],
+            delivery_digest: "b".repeat(64),
+            payload: publication["context"],
+          }
+        : null,
+      consumer,
     };
   };
   const options: RoutingOrientationOptions = {
@@ -136,10 +170,11 @@ function fixture(
     options,
   };
 }
-test("orientation publishes exact runtime/catalog facts and submits one silent named output without pretending consumption", async () => {
+test("orientation publishes exact runtime/catalog facts, submits one silent output, and records accepted delivery", async () => {
   const f = fixture();
   f.orientation.start();
   await f.delivered;
+  await new Promise((resolve) => setTimeout(resolve, 10));
   f.orientation.stop();
   const compose = f.calls.find((call) => call.args[1] === "compose-native")!;
   expect(compose.input).toMatchObject({
@@ -156,8 +191,8 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
     },
     native_catalog: { source: "codex_app_server_model_list" },
   });
-  expect(f.calls.filter((call) => call.args[1] === "apply")).toHaveLength(1);
-  expect(JSON.stringify(f.calls)).not.toContain("consumer.consume");
+  expect(f.calls.filter((call) => call.args[1] === "apply")).toHaveLength(2);
+  expect(JSON.stringify(f.calls)).toContain("consumer.consume");
   const start = f.native.find((call) => call.method === "turn/start")!.params as {
     toolOutput: { namespace: string; name: string; output: string };
   };
@@ -189,6 +224,17 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
     "6405175911611332984741815",
     "--json",
   ]);
+  const queried = f.orientation.readContext() as Record<string, unknown>;
+  expect(queried).toMatchObject({
+    schema_version: 1,
+    status: "available",
+    revision: { producer_generation: 1, context_revision: 1, digest: "a".repeat(64) },
+    fence: { matches_current_runtime: true, thread_id: "thread-1" },
+    delivery: { mode: "full", source_mode: "full" },
+    context: { current: { model: "gpt-5.6-sol" } },
+  });
+  expect(JSON.stringify(queried)).not.toContain("email");
+  expect(JSON.stringify(queried)).not.toContain("access_token");
 });
 
 test("expired Grok catalog refreshes before the exact-revision snapshot is published", async () => {
@@ -348,6 +394,50 @@ test("material refreshes coalesce and only the latest persisted revision is subm
   const publications = f.calls.filter((call) => call.args[1] === "apply");
   expect(publications).toHaveLength(2);
   expect(publications[1]?.input).toMatchObject({ context: { context_revision: 2 } });
+});
+
+test("a repeated identical snapshot is suppressed before publication and turn/start", async () => {
+  const f = fixture();
+  f.orientation.start();
+  await f.delivered;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const publications = () =>
+    f.calls.filter(
+      (call) =>
+        call.args[1] === "apply" &&
+        (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+    );
+  expect(publications()).toHaveLength(1);
+  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(1);
+  f.orientation.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  f.orientation.stop();
+  expect(publications()).toHaveLength(1);
+  expect(f.native.filter((call) => call.method === "turn/start")).toHaveLength(1);
+});
+
+test("an unknown native delivery outcome is durably attempted and never retried", async () => {
+  let starts = 0;
+  const f = fixture({
+    request: async (method) => {
+      if (method === "model/list") return catalog;
+      starts++;
+      return { turn: { id: "unknown", status: "unknown" } };
+    },
+  });
+  f.orientation.start();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  f.orientation.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  f.orientation.stop();
+  expect(starts).toBe(1);
+  expect(
+    f.calls.filter(
+      (call) =>
+        call.args[1] === "apply" &&
+        (call.input as Record<string, unknown>)?.["action"] === "publication.publish",
+    ),
+  ).toHaveLength(1);
 });
 
 test("retained controller compatibility uses authenticated exact runtime/root evidence", () => {

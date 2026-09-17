@@ -66,6 +66,12 @@ function fakeBackend(
     return next;
   };
   return {
+    routingContext: async () => ({
+      schema_version: 1,
+      status: "unavailable",
+      stream_id: null,
+      reason: "routing_orientation_unavailable",
+    }),
     status: (): ControlStatus => ({
       protocolVersion: CONTROL_PROTOCOL_VERSION,
       instanceId: "instance-a",
@@ -206,6 +212,7 @@ describe("controller control transports", () => {
           "agentvoice_new_session",
           "agentvoice_voice_set",
           "agentvoice_voice_get",
+          "agentvoice_routing_context",
         ],
       });
       const status = await socketRequest(server.socketPath, {
@@ -244,8 +251,25 @@ describe("controller control transports", () => {
       );
       const toolText = await tools.text();
       expect(toolText).toContain("agentvoice_restart_runtime");
+      expect(toolText).toContain("agentvoice_routing_context");
       expect(toolText).toContain("handoffPrompt");
       expect(toolText).not.toContain("mailbox");
+      expect(
+        await socketRequest(server.socketPath, {
+          v: CONTROL_PROTOCOL_VERSION,
+          type: "request",
+          id: "routing-1",
+          method: "agentvoice.routing_context",
+          params: {},
+        }),
+      ).toMatchObject({
+        ok: true,
+        result: {
+          schema_version: 1,
+          status: "unavailable",
+          reason: "routing_orientation_unavailable",
+        },
+      });
       expect(
         await socketRequest(server.socketPath, {
           v: CONTROL_PROTOCOL_VERSION,

@@ -589,6 +589,16 @@ export class RuntimeController implements ControlBackend {
     };
   }
 
+  async routingContext(): Promise<unknown> {
+    const active = this.active;
+    if (!active || this.closed || this.phase !== "ready")
+      throw new ControlError("unavailable", "Routing context requires a ready runtime");
+    const result = await active.request("routing-context", {}, 3000);
+    if (active !== this.active || this.closed)
+      throw new ControlError("unavailable", "Runtime changed during routing context read");
+    return result;
+  }
+
   async voiceSet(input: VoiceSetRequest): Promise<ControlOperation> {
     const checked = voiceEditSchema.safeParse(input);
     if (!checked.success) throw new ControlError("invalid_params", "Invalid voice edit");
@@ -1172,6 +1182,7 @@ export async function createCall(
         newSession: (request) => current().newSession(request),
         voiceSet: (request) => current().voiceSet(request),
         voiceGet: (request) => current().voiceGet(request),
+        routingContext: () => current().routingContext(),
       },
       stateDir,
       instanceId,

@@ -43,6 +43,7 @@ export function runRuntimeWorker(
   let readConversation:
     | Parameters<NonNullable<ConsoleHostOptions["onObservationReady"]>>[0]
     | undefined;
+  let readRoutingContext: (() => unknown) | undefined;
   let hostRun: Promise<void> | undefined;
   let endHost: (() => void) | undefined;
   let tick: ReturnType<typeof setInterval> | undefined;
@@ -206,6 +207,9 @@ export function runRuntimeWorker(
         onObservationReady: (read) => {
           readConversation = read;
         },
+        onRoutingReady: (read) => {
+          readRoutingContext = read;
+        },
         mediaFactory: factory,
         debug: config!.debug,
         initialMute: { mic: true, speaker: true },
@@ -364,6 +368,10 @@ export function runRuntimeWorker(
           throw new Error("Voice settings are unavailable");
         return voiceSettings.inspect(request.refresh);
       }
+      case "routing-context":
+        if (terminalFailure || stopping || !readRoutingContext)
+          throw new Error("Routing context is unavailable");
+        return readRoutingContext();
       case "voice-validate":
       case "voice-apply": {
         const name = z
