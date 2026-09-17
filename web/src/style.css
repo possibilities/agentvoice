@@ -18,6 +18,21 @@ optgroup {
 * {
   box-sizing: border-box;
 }
+:focus,
+:focus-visible {
+  /* biome-ignore lint/complexity/noImportantStyles: The global quiet-focus contract must override component focus rings. */
+  outline: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: The global quiet-focus contract must override component focus rings. */
+  box-shadow: none !important;
+}
+::selection {
+  color: inherit;
+  background: transparent;
+}
+::-moz-selection {
+  color: inherit;
+  background: transparent;
+}
 body {
   margin: 0;
 }
@@ -93,9 +108,6 @@ body,
   [data-slot="input-group"]:has(textarea:focus-visible) {
   border-color: transparent;
   box-shadow: none;
-}
-.agent-dock:has(textarea:focus-visible) {
-  border-top-color: #c5e791;
 }
 .voice-dock {
   /* Add two painted pixels to the existing border without changing dock geometry. */
