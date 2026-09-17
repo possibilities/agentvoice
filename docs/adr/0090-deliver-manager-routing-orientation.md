@@ -17,6 +17,15 @@ prices do not establish subscription consumption or a Codex-to-Grok rate.
 AgentHUD stores the full evidence and context with producer generation, context
 revision, digest and source CAS.
 
+The producer also requests AgentUsage's sanitized Grok catalog projection for
+the exact same routing source revision. The native output carries complete live
+visibility, explicit incompatible/review-required dispositions, reviewed 4.6
+and retained 4.5 task/effort guidance, and the smaller reviewed/routable set
+intersected with fresh included quota. A compatible unknown model raises the
+runtime drift warning but does not disable independent Codex guidance. Catalog
+visibility never authorizes execution; managers intersect the routable set with
+AgentFX's exact configured targets, and broker admission rechecks the pin.
+
 One coalescing producer refreshes at startup, native settings changes, and every
 five minutes. Each persisted revision receives at most one named native
 `agentusage.routing_context` turn/start submission. Unknown transport outcomes

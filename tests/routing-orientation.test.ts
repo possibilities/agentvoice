@@ -25,6 +25,7 @@ const catalog = {
 function fixture(
   overrides: Partial<RoutingOrientationOptions> = {},
   contextOverrides: Record<string, unknown> = {},
+  grokOverrides: Record<string, unknown> = {},
 ) {
   const calls: { command: string; args: string[]; input?: unknown }[] = [];
   const native: { method: string; params: unknown }[] = [];
@@ -38,6 +39,16 @@ function fixture(
     calls.push({ command, args, input });
     if (command === "agentusage" && args[1] === "evidence")
       return { schema_version: 2, source_revision: "6405175911611332984741815" };
+    if (command === "agentusage" && args[1] === "grok-catalog")
+      return {
+        schema_version: 1,
+        source_revision: "6405175911611332984741815",
+        status: "ok",
+        drift: [],
+        visibility: { complete: true, accounts: [] },
+        routable: { default_model: "grok-4.6", models: [{ model: "grok-4.6" }] },
+        ...grokOverrides,
+      };
     if (command === "agentusage") {
       const value = input as Record<string, unknown>;
       return {
@@ -122,14 +133,28 @@ test("orientation publishes exact runtime/catalog facts and submits one silent n
     human_facing_response: "none",
     start_new_work: false,
   });
-  expect(JSON.parse(start.toolOutput.output).routing_guidance).toEqual({
+  const output = JSON.parse(start.toolOutput.output);
+  expect(output.routing_guidance).toEqual({
     provider_preference:
       "When fresh context lists an eligible Grok account and AgentFX advertises a compatible Grok target, prefer it for a well-specified assignment to preserve finite Codex main quota.",
     codex_selection:
       "For Codex work, choose the least expensive reviewed model adequate for the task; task fit and current native target support remain required.",
     economics_boundary:
       "Codex model prices are an official API text-token proxy within OpenAI only. They do not measure subscription quota or establish any numeric Codex-to-Grok comparison.",
+    grok_selection:
+      "Use grok_catalog.routable only. Its default model is the reviewed preference among live compatible models with fresh included quota; visibility also retains intentionally excluded and review-required live models.",
   });
+  expect(output.grok_catalog).toMatchObject({
+    source_revision: "6405175911611332984741815",
+    routable: { default_model: "grok-4.6" },
+  });
+  expect(f.calls.find((call) => call.args[1] === "grok-catalog")?.args).toEqual([
+    "routing",
+    "grok-catalog",
+    "--expected-source-revision",
+    "6405175911611332984741815",
+    "--json",
+  ]);
 });
 test("stopped producer fences a pending catalog capture from publication or native work", async () => {
   let release: () => void = () => {};
@@ -180,6 +205,29 @@ test("catalog drift persists context without delivering routing recommendations"
   expect(f.warnings).toEqual([
     "Routing model catalog drift detected. Delegation recommendations are disabled until reviewed guidance is updated.",
   ]);
+});
+
+test("Grok drift stays visible and warns without disabling independent Codex guidance", async () => {
+  const f = fixture(
+    {},
+    {},
+    {
+      status: "drift",
+      drift: [{ code: "unreviewed_live_model", subject: "grok-next", account_key: "grok-2" }],
+    },
+  );
+  f.orientation.start();
+  await f.delivered;
+  f.orientation.stop();
+  expect(f.warnings).toEqual([
+    "Grok catalog drift detected. Only live models with reviewed metadata and fresh included quota are routable.",
+  ]);
+  const start = f.native.find((call) => call.method === "turn/start")!.params as {
+    toolOutput: { output: string };
+  };
+  expect(JSON.parse(start.toolOutput.output).grok_catalog.drift[0]).toMatchObject({
+    subject: "grok-next",
+  });
 });
 
 test("material refreshes coalesce and only the latest persisted revision is submitted", async () => {

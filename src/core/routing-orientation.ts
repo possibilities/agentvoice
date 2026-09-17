@@ -219,6 +219,25 @@ export class ManagerRoutingOrientation {
       this.command("agentusage", ["routing", "evidence", "--json"]),
       this.catalog(),
     ]);
+    const evidenceRevision = row(evidence)["source_revision"];
+    if (
+      !(
+        (typeof evidenceRevision === "string" && /^[1-9]\d{0,63}$/u.test(evidenceRevision)) ||
+        (Number.isSafeInteger(evidenceRevision) && Number(evidenceRevision) > 0)
+      )
+    )
+      throw new Error("routing_evidence_unavailable");
+    const grokCatalog = row(
+      await this.command("agentusage", [
+        "routing",
+        "grok-catalog",
+        "--expected-source-revision",
+        String(evidenceRevision),
+        "--json",
+      ]),
+    );
+    if (grokCatalog["source_revision"] !== String(evidenceRevision))
+      throw new Error("grok_catalog_revision_conflict");
     if (this.stopped) return;
     const now = new Date().toISOString();
     const identity = this.options.identity;
@@ -282,9 +301,14 @@ export class ManagerRoutingOrientation {
       context,
     });
     const drift = row(context["native_catalog"])["drift"];
+    const grokDrift = grokCatalog["drift"];
     if (Array.isArray(drift) && drift.length)
       this.warn(
         "Routing model catalog drift detected. Delegation recommendations are disabled until reviewed guidance is updated.",
+      );
+    else if (Array.isArray(grokDrift) && grokDrift.length)
+      this.warn(
+        "Grok catalog drift detected. Only live models with reviewed metadata and fresh included quota are routable.",
       );
     else this.warned = undefined;
     if (this.stopped || this.pending) return;
@@ -310,6 +334,8 @@ export class ManagerRoutingOrientation {
               "For Codex work, choose the least expensive reviewed model adequate for the task; task fit and current native target support remain required.",
             economics_boundary:
               "Codex model prices are an official API text-token proxy within OpenAI only. They do not measure subscription quota or establish any numeric Codex-to-Grok comparison.",
+            grok_selection:
+              "Use grok_catalog.routable only. Its default model is the reviewed preference among live compatible models with fresh included quota; visibility also retains intentionally excluded and review-required live models.",
           }
         : undefined;
     const output = {
@@ -331,6 +357,7 @@ export class ManagerRoutingOrientation {
         note: "MCP targets/start/observe/control or bounded run --config FILE --file REQUEST. Require fresh routing_source_revision, explicit target/effort, existing Work and routing-decision association; no uncontrolled fanout.",
       },
       ...(routingGuidance ? { routing_guidance: routingGuidance } : {}),
+      grok_catalog: grokCatalog,
       context: delivery["delivery"],
     };
     // At most one native submission per persisted revision; unknown outcomes are never retried.
