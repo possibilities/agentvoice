@@ -29,17 +29,27 @@ turn state remains a separate mutable field. Partial history affects coverage,
 not the meaning of evidence already observed. Missing, malformed and conflicting
 identity stay explicit.
 
+The monitor enriches every live row from the exact native `thread/read` record
+before publishing it. A bounded retry covers the normal window in which
+`thread/started` has established exact ancestry but the persisted source, model
+and reasoning effort have not settled yet. Rows that enter the inventory during
+the first metadata pass receive the same enrichment before export. A malformed
+persisted `agent_path` remains conclusive error evidence; the retry never derives
+identity from the friendly thread name, nickname, ancestry or timing.
+
 ## Boundary and compatibility
 
-The export remains bounded to 256 rows and 1 MiB. Task paths are capped at 4 KiB
-per row and are the only newly exposed native source data. Friendly `name` and
-`nickname` fields remain untouched for other consumers.
+The export remains bounded to 256 rows and 1 MiB. The command waits for its
+stdout write to finish before returning, so a valid large export cannot be cut at
+the process-exit boundary. Task paths are capped at 4 KiB per row and are the only
+newly exposed native source data. Friendly `name` and `nickname` fields remain
+untouched for other consumers.
 
 AgentHUD accepts versions 1, 2 and 3. Versions 1 and 2 become explicit legacy
 identity errors in its worker tree. Deploy AgentHUD's compatible reader before
 activating the version 3 AgentVoice command. AgentVoice does not persist a second
 identity database; native thread history remains authoritative.
 
-Tests cover source extraction, nested persisted workers, live/history conflicts,
-malformed paths, legacy adaptation and export bounds. No test starts or restarts
-a call.
+Tests cover source extraction, nested persisted workers, workers that appear and
+settle during one observation, live/history conflicts, malformed paths, legacy
+adaptation and export bounds. No test starts or restarts a call.

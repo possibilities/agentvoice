@@ -56,6 +56,85 @@ type ObservedRow = Omit<ThreadRow, "parentage" | "collaborationIdentity"> & {
     | { state: "missing"; reason: "not_reported" | "malformed" };
 };
 
+type ThreadEnrichment = Pick<ThreadRow, "model" | "effort" | "nickname"> & {
+  collaborationIdentity?: ObservedRow["collaborationIdentity"];
+};
+
+const ENRICHMENT_ATTEMPTS = 4;
+
+function enrichmentComplete(
+  threadId: string,
+  rootThreadId: string,
+  enrichment: ThreadEnrichment | undefined,
+): boolean {
+  if (!enrichment || enrichment.model == null || enrichment.effort == null) return false;
+  if (threadId === rootThreadId) return true;
+  return (
+    enrichment.collaborationIdentity?.state === "verified" ||
+    (enrichment.collaborationIdentity?.state === "missing" &&
+      enrichment.collaborationIdentity.reason === "malformed")
+  );
+}
+
+async function enrichThreads(
+  client: Reader,
+  snapshot: ThreadSnapshot,
+  rootThreadId: string,
+  settings: Map<string, ThreadEnrichment>,
+  deadline: number,
+): Promise<void> {
+  const pending = snapshot.threads.filter(
+    (thread) => !enrichmentComplete(thread.id, rootThreadId, settings.get(thread.id)),
+  );
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, pending.length) }, async () => {
+      while (Date.now() < deadline) {
+        const thread = pending[next++];
+        if (!thread) return;
+        for (let attempt = 0; attempt < ENRICHMENT_ATTEMPTS && Date.now() < deadline; attempt++) {
+          try {
+            const raw = await client.request("conversation.thread.get", {
+              expectedInstanceId: snapshot.instanceId,
+              expectedGeneration: snapshot.generation,
+              rootThreadId,
+              threadId: thread.id,
+            });
+            if (!raw || typeof raw !== "object") continue;
+            const result = raw as Record<string, unknown>;
+            if (
+              result["method"] !== "conversation.thread.get" ||
+              result["instanceId"] !== snapshot.instanceId ||
+              result["generation"] !== snapshot.generation ||
+              result["rootThreadId"] !== rootThreadId ||
+              result["threadId"] !== thread.id
+            )
+              continue;
+            const parsed = threadDetailsSchema.safeParse(result["data"]);
+            if (!parsed.success || parsed.data.id !== thread.id) continue;
+            const latest = {
+              model: parsed.data.model,
+              effort: parsed.data.reasoningEffort,
+              nickname: parsed.data.agentNickname,
+              collaborationIdentity: parsed.data.collaborationIdentity,
+            };
+            settings.set(thread.id, latest);
+            if (enrichmentComplete(thread.id, rootThreadId, latest)) break;
+          } catch (error) {
+            if (
+              error instanceof SocketFailure &&
+              ["stale_generation", "instance_mismatch"].includes(error.code ?? "")
+            )
+              throw error;
+          }
+          if (attempt + 1 < ENRICHMENT_ATTEMPTS && Date.now() < deadline)
+            await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+        }
+      }
+    }),
+  );
+}
+
 function rowFromHistory(value: unknown): ObservedRow {
   const row = threadDetailsSchema.parse(value);
   return {
@@ -263,56 +342,10 @@ export async function readThreadMonitor(
     before.runtime.mainThreadId !== expected.threadId
   )
     throw new Error("AgentVoice call changed during discovery; retry");
-  const settings = new Map<
-    string,
-    Pick<ThreadRow, "model" | "effort" | "nickname"> & {
-      collaborationIdentity?: ObservedRow["collaborationIdentity"];
-    }
-  >();
-  let next = 0;
+  const settings = new Map<string, ThreadEnrichment>();
   const settingsBudget = Math.min(4_000, Math.max(0, Math.floor(budgetMs / 3)));
   const deadline = Date.now() + settingsBudget;
-  await Promise.all(
-    Array.from({ length: Math.min(4, before.threads.length) }, async () => {
-      while (Date.now() < deadline) {
-        const thread = before.threads[next++];
-        if (!thread) return;
-        try {
-          const raw = await client.request("conversation.thread.get", {
-            expectedInstanceId: before.instanceId,
-            expectedGeneration: before.generation,
-            rootThreadId: expected.threadId,
-            threadId: thread.id,
-          });
-          if (!raw || typeof raw !== "object") continue;
-          const result = raw as Record<string, unknown>;
-          if (
-            result["method"] !== "conversation.thread.get" ||
-            result["instanceId"] !== before.instanceId ||
-            result["generation"] !== before.generation ||
-            result["rootThreadId"] !== expected.threadId ||
-            result["threadId"] !== thread.id
-          )
-            continue;
-          const parsed = threadDetailsSchema.safeParse(result["data"]);
-          if (!parsed.success || parsed.data.id !== thread.id) continue;
-          settings.set(thread.id, {
-            model: parsed.data.model,
-            effort: parsed.data.reasoningEffort,
-            nickname: parsed.data.agentNickname,
-            collaborationIdentity: parsed.data.collaborationIdentity,
-          });
-        } catch (error) {
-          if (
-            error instanceof SocketFailure &&
-            ["stale_generation", "instance_mismatch"].includes(error.code ?? "")
-          )
-            throw error;
-          // Closed/unavailable threads stay visible with unknown settings until the next inventory cut.
-        }
-      }
-    }),
-  );
+  await enrichThreads(client, before, expected.threadId, settings, deadline);
   const after = eventSnapshotSchema.parse(await client.request("state.get", {}));
   if (
     after.instanceId !== before.instanceId ||
@@ -321,6 +354,10 @@ export async function readThreadMonitor(
     after.runtime.workspace !== before.runtime.workspace
   )
     throw new Error("AgentVoice runtime changed during observation; retry");
+  // A worker may enter the live inventory while the first metadata pass is in
+  // flight. Enrich that exact row before publishing it so normal native startup
+  // does not become a transient missing-identity observation for independent UIs.
+  await enrichThreads(client, after, expected.threadId, settings, deadline);
   const history =
     budgetMs > 0
       ? await readNativeDescendants(
@@ -342,6 +379,16 @@ export async function readThreadMonitor(
     final.runtime.workspace !== before.runtime.workspace
   )
     throw new Error("AgentVoice runtime changed during native history observation; retry");
+  // Cover the smaller race where a worker appears during persisted-history
+  // discovery. This final bounded pass is only for rows not already complete.
+  if (budgetMs > 0)
+    await enrichThreads(
+      client,
+      final,
+      expected.threadId,
+      settings,
+      Date.now() + Math.min(500, settingsBudget),
+    );
   const liveRows = final.threads.map((thread) => ({
     ...thread,
     ...settings.get(thread.id),

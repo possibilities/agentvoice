@@ -5,19 +5,27 @@ import { discoverThreadMonitor, formatThreadMonitor } from "./monitor.ts";
 export async function runThreadsCommand(
   argv: string[],
   stateDir: string,
-  dependencies: { observe?: typeof discoverThreadMonitor; write?: (text: string) => void } = {},
+  dependencies: {
+    observe?: typeof discoverThreadMonitor;
+    write?: (text: string) => void | Promise<void>;
+  } = {},
 ): Promise<number> {
   const write =
     dependencies.write ??
     ((text: string) => {
-      process.stdout.write(text);
+      return new Promise<void>((resolve, reject) => {
+        process.stdout.write(text, (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
     });
   const args = parseArgs(argv, {
     value: new Set(["--workspace", "--thread"]),
     bool: new Set(["--help", "--json"]),
   });
   if (args.help) {
-    write(
+    await write(
       "Usage: agentvoice threads [--workspace <dir>] [--thread <root-id>] [--json]\nShow loaded and persisted native descendant threads, with children indented.\nMonitor with: watch -n 1 agentvoice threads\n--json exports versioned metadata with exact observed identity and parentage diagnostics; no socket or credential fields.\n",
     );
     return 0;
@@ -34,7 +42,7 @@ export async function runThreadsCommand(
       selection && !selection.help ? selection.workspace : undefined,
       threadId,
     );
-    write(
+    await write(
       argv.includes("--json")
         ? `${JSON.stringify(exportThreadMonitor(snapshot))}\n`
         : formatThreadMonitor(snapshot),
@@ -42,7 +50,7 @@ export async function runThreadsCommand(
     return 0;
   } catch (error) {
     if (!argv.includes("--json")) throw error;
-    write(
+    await write(
       `${JSON.stringify(exportThreadMonitor({ phase: "unavailable", inventory: "unavailable", historyCoverage: "unavailable", threads: [], missingSettings: 0 }))}\n`,
     );
     return 1;

@@ -49,6 +49,23 @@ test("JSON command exports versioned exact metadata and excludes incidental priv
   expect(output).not.toContain("secret");
   expect(output).not.toContain("socket");
 });
+test("command waits for its writer before reporting a complete export", async () => {
+  let output = "";
+  let released = false;
+  const result = runThreadsCommand(["--json"], "/fixture/state", {
+    observe: async () => monitor,
+    write: async (text) => {
+      await Bun.sleep(10);
+      output = text;
+      released = true;
+    },
+  });
+  expect(released).toBe(false);
+  expect(await result).toBe(0);
+  expect(released).toBe(true);
+  const exported = threadMonitorExportSchema.parse(JSON.parse(output));
+  expect(exported.monitor).toEqual(monitor as typeof exported.monitor);
+});
 test("JSON observation failure exports unavailable and exits nonzero without leaking diagnostics", async () => {
   let output = "";
   expect(

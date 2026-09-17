@@ -99,11 +99,76 @@ describe("watchable thread inventory", () => {
       effort: "low",
       activeFlags: ["waitingOnApproval"],
     });
-    expect(result.missingSettings).toBe(1);
+    expect(result.missingSettings).toBe(0);
     expect(result.historyCoverage).toBe("unavailable");
     expect(new Set(methods)).toEqual(
       new Set(["state.get", "conversation.thread.get", "conversation.threads.list"]),
     );
+  });
+
+  test("enriches multiple workers that appear during observation before publishing them", async () => {
+    const initial = snapshot([thread("root")]);
+    const latest = snapshot([
+      thread("root"),
+      { ...thread("fresh-a", "root"), status: "active" },
+      { ...thread("fresh-b", "root"), status: "active" },
+    ]);
+    const attempts = new Map<string, number>();
+    let stateReads = 0;
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          if (method === "state.get") return ++stateReads === 1 ? initial : latest;
+          const input = params as Record<string, unknown>;
+          if (method === "conversation.threads.list")
+            return {
+              instanceId: "call",
+              generation: 1,
+              method,
+              rootThreadId: "root",
+              revisionBefore: 1,
+              revisionAfter: 1,
+              changedDuringRead: false,
+              data: [],
+              nextCursor: null,
+            };
+          expect(method).toBe("conversation.thread.get");
+          const id = String(input["threadId"]);
+          const attempt = (attempts.get(id) ?? 0) + 1;
+          attempts.set(id, attempt);
+          if (id !== "root" && attempt === 1)
+            return {
+              ...metadata(id),
+              data: {
+                ...metadata(id).data,
+                model: null,
+                reasoningEffort: null,
+                collaborationIdentity: { state: "missing", reason: "not_reported" },
+              },
+            };
+          return metadata(id);
+        },
+      },
+      expected,
+    );
+
+    expect(attempts.get("fresh-a")).toBe(2);
+    expect(attempts.get("fresh-b")).toBe(2);
+    expect(result.missingSettings).toBe(0);
+    for (const [id, path] of [
+      ["fresh-a", "/root/fresh_a"],
+      ["fresh-b", "/root/fresh_b"],
+    ] as const)
+      expect(result.threads.find((row) => row.id === id)).toMatchObject({
+        parentThreadId: "root",
+        model: "gpt-6-astra",
+        effort: "low",
+        collaborationIdentity: {
+          state: "verified",
+          path,
+          sources: ["live_inventory"],
+        },
+      });
   });
 
   test("unavailable or mismatched metadata never supplies guessed settings", async () => {
