@@ -57,6 +57,7 @@ type ObservedRow = Omit<ThreadRow, "parentage" | "collaborationIdentity"> & {
 };
 
 type ThreadEnrichment = Pick<ThreadRow, "model" | "effort" | "nickname"> & {
+  parentThreadId?: string | null;
   collaborationIdentity?: ObservedRow["collaborationIdentity"];
 };
 
@@ -113,6 +114,7 @@ async function enrichThreads(
             const parsed = threadDetailsSchema.safeParse(result["data"]);
             if (!parsed.success || parsed.data.id !== thread.id) continue;
             const latest = {
+              parentThreadId: parsed.data.parentThreadId,
               model: parsed.data.model,
               effort: parsed.data.reasoningEffort,
               nickname: parsed.data.agentNickname,
@@ -389,19 +391,26 @@ export async function readThreadMonitor(
       settings,
       Date.now() + Math.min(500, settingsBudget),
     );
-  const liveRows = final.threads.map((thread) => ({
-    ...thread,
-    ...settings.get(thread.id),
-    source: "live_inventory" as const,
-  }));
+  const liveRows = final.threads.map((thread) => {
+    const enrichment = settings.get(thread.id);
+    return {
+      ...thread,
+      ...enrichment,
+      parentThreadId: enrichment?.parentThreadId ?? thread.parentThreadId,
+      source: "live_inventory" as const,
+    };
+  });
   let historyRows = history.rows;
   let historyCoverage = history.coverage;
   if (new Set([...liveRows, ...historyRows].map((row) => row.id)).size > MAX_THREADS) {
     const liveIds = new Set(liveRows.map((row) => row.id));
-    historyRows = historyRows
+    const overlapping = historyRows.filter((row) => liveIds.has(row.id));
+    const historyOnly = historyRows
       .filter((row) => !liveIds.has(row.id))
       .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, Math.max(0, MAX_THREADS - liveIds.size));
+    // Corroborating history for a live row costs no additional exported row.
+    historyRows = [...overlapping, ...historyOnly];
     historyCoverage = "partial";
   }
   const threads = mergeRows(after.runtime.mainThreadId, [...liveRows, ...historyRows]);

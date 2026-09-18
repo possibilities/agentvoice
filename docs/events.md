@@ -255,18 +255,20 @@ reports `failed` without forwarding error text. Names are optional and truncated
 to 256 characters. `parentThreadId: null` means no parent was reported.
 
 The inventory covers threads loaded in the **owned app-server**, including
-native subagents. It does not scan
-other Codex processes or native on-disk history. The runtime performs one bounded,
-paginated `thread/loaded/list` scan after native readiness, plus `thread/read`
-without turns for metadata. It then follows native notifications, reading
-metadata for newly observed IDs. Observation does not gate audio readiness.
+native subagents. It does not scan other Codex processes or native on-disk history.
+The runtime performs bounded, paginated `thread/loaded/list` reconciliation after
+native readiness, plus `thread/read` without turns for metadata. It follows
+native notifications and refreshes metadata for newly observed IDs. Observation
+does not gate audio readiness.
 
-`ready` means the initial inventory and metadata reads completed without a known
-failure; it is not a durable guarantee of every native event. An unsupported or
-failed read, malformed inventory, or the 256-thread limit yields `incomplete`.
-Known rows keep updating. There is no periodic polling or automatic retry loop;
-a new runtime performs a new scan. Native `notLoaded` or `thread/closed` removes
-a row. Successful work usually leaves the row present and idle.
+`ready` means the latest reconciliation and metadata reads completed without a
+known failure and at most 256 threads remain live after native `notLoaded` rows
+are removed. It is not a durable guarantee of every native event. An unsupported
+or failed read, malformed inventory, scan safety limit, or more than 256 genuinely
+live threads yields `incomplete`. Known rows keep updating. Incomplete scans retry
+with bounded backoff in the same runtime, and successful reconciliation clears the
+condition. Native `notLoaded` or `thread/closed` removes a row. Successful work
+usually leaves the row present and idle.
 
 ## Events
 
@@ -369,6 +371,8 @@ content; the socket itself adds no transcript logging or persistence.
 Both Unix endpoints share framing and bounded-write code. Each endpoint permits
 128 connections, at most 128 in-flight requests per connection, 1 MiB input
 frames, and 4 MiB of queued output per connection. A slow subscriber is dropped
-without blocking other clients or the voice runtime. The thread projection is
-bounded to 256 rows and stays below the private IPC frame limit. No subscriber
-causes a Codex start, resume, turn, hook, or media operation.
+without blocking other clients or the voice runtime. The published live-thread
+projection is bounded to 256 rows and stays below the private IPC frame limit.
+Reconciliation scans at most 4,096 distinct IDs, 64 pages, and 15 seconds with
+four concurrent metadata reads; those scan bounds are independent of the published
+row bound. No subscriber causes a Codex start, resume, turn, hook, or media operation.

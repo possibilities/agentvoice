@@ -41,6 +41,7 @@ const metadata = (id: string) => ({
   threadId: id,
   data: {
     id,
+    parentThreadId: id === "root" ? null : "root",
     cwd: "/workspace",
     status: { type: "idle" },
     model: "gpt-6-astra",
@@ -110,8 +111,8 @@ describe("watchable thread inventory", () => {
     const initial = snapshot([thread("root")]);
     const latest = snapshot([
       thread("root"),
-      { ...thread("fresh-a", "root"), status: "active" },
-      { ...thread("fresh-b", "root"), status: "active" },
+      { ...thread("fresh-a"), status: "active" },
+      { ...thread("fresh-b"), status: "active" },
     ]);
     const attempts = new Map<string, number>();
     let stateReads = 0;
@@ -251,7 +252,7 @@ describe("watchable thread inventory", () => {
     expect(result.threads.find((row) => row.id === "child")?.parentage).toEqual({
       state: "verified",
       parentThreadId: "root",
-      sources: ["native_history"],
+      sources: ["live_inventory", "native_history"],
     });
     expect(result.threads.find((row) => row.id === "conflict")).toMatchObject({
       parentThreadId: null,
@@ -299,6 +300,82 @@ describe("watchable thread inventory", () => {
       parentThreadId: "root",
       sources: ["live_inventory"],
     });
+  });
+
+  test("partial history retains overlapping evidence for current live parentage", async () => {
+    const liveRows = [
+      thread("root"),
+      ...Array.from({ length: 12 }, (_, index) => ({
+        ...thread(`live-${index}`),
+        status: "active" as const,
+      })),
+    ];
+    const historical = [
+      {
+        id: "live-0",
+        parentThreadId: "root",
+        cwd: "/workspace",
+        status: { type: "notLoaded" as const },
+        collaborationIdentity: { state: "verified" as const, path: "/root/live_0" },
+      },
+      ...Array.from({ length: 255 }, (_, index) => ({
+        id: `history-${index.toString().padStart(3, "0")}`,
+        parentThreadId: "root",
+        cwd: "/workspace",
+        status: { type: "notLoaded" as const },
+        collaborationIdentity: {
+          state: "verified" as const,
+          path: `/root/history_${index.toString().padStart(3, "0")}`,
+        },
+      })),
+    ];
+    const result = await readThreadMonitor(
+      {
+        async request(method, params) {
+          if (method === "state.get") return snapshot(liveRows);
+          const input = params as Record<string, unknown>;
+          if (method === "conversation.thread.get") {
+            const id = String(input["threadId"]);
+            return {
+              ...metadata(id),
+              data: { ...metadata(id).data, parentThreadId: id === "root" ? null : undefined },
+            };
+          }
+          const start = Number(input["cursor"] ?? 0);
+          const limit = Number(input["limit"]);
+          const data = historical.slice(start, start + limit);
+          const next = start + data.length;
+          return {
+            instanceId: "call",
+            generation: 1,
+            method,
+            rootThreadId: "root",
+            revisionBefore: 1,
+            revisionAfter: 1,
+            changedDuringRead: false,
+            data,
+            nextCursor: next >= historical.length ? "more-history" : String(next),
+          };
+        },
+      },
+      expected,
+    );
+    expect(result.historyCoverage).toBe("partial");
+    expect(result.threads).toHaveLength(256);
+    expect(result.threads.find((row) => row.id === "live-0")).toMatchObject({
+      parentThreadId: "root",
+      parentage: {
+        state: "verified",
+        parentThreadId: "root",
+        sources: ["native_history"],
+      },
+      collaborationIdentity: {
+        state: "verified",
+        path: "/root/live_0",
+        sources: ["live_inventory", "native_history"],
+      },
+    });
+    expect(result.threads.filter((row) => row.status !== "notLoaded")).toHaveLength(13);
   });
 
   test("rejects changed call/generation instead of combining runtimes", async () => {

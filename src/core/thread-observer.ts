@@ -1,6 +1,19 @@
 import { MAX_THREADS, type ThreadInventory, type ThreadView } from "../events/contract.ts";
 
 type Request = (method: string, params: unknown, timeout?: number) => Promise<unknown>;
+const SCAN_PAGE_SIZE = 100;
+const MAX_SCAN_IDS = 4_096;
+const MAX_SCAN_PAGES = 64;
+const SCAN_TIMEOUT_MS = 15_000;
+const READ_CONCURRENCY = 4;
+const RETRY_MIN_MS = 1_000;
+const RETRY_MAX_MS = 30_000;
+
+type ObserverOptions = {
+  retryMinMs?: number;
+  retryMaxMs?: number;
+};
+
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -33,30 +46,47 @@ function nativeStatus(value: unknown): Pick<ThreadView, "status" | "activeFlags"
   };
 }
 
+function threadFromRead(value: unknown, expectedId: string): ThreadView {
+  const raw = record(record(value)["thread"]);
+  if (raw["id"] !== expectedId) throw new Error("thread read identity mismatch");
+  const name = raw["name"];
+  return {
+    id: expectedId,
+    parentThreadId: idOf(raw["parentThreadId"]) ?? null,
+    name: typeof name === "string" ? name.slice(0, 256) : null,
+    ...nativeStatus(raw["status"]),
+    turn: null,
+  };
+}
+
 /** Observe only the owned child's live inventory. Reads never resume threads or load turns. */
 export class ThreadObserver {
   private readonly threads = new Map<string, ThreadView>();
   private readonly pending = new Set<string>();
   private readonly renamed = new Set<string>();
-  private readonly seenDuringScan = new Set<string>();
+  private readonly changedDuringScan = new Set<string>();
+  private readonly removedDuringScan = new Set<string>();
   private started = false;
   private stopped = false;
-  private scanning = true;
+  private scanning = false;
   private complete = false;
   private overflow = false;
   private reading = false;
+  private retryAttempt = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
   constructor(
     private readonly request: Request,
     private readonly publish: (inventory: ThreadInventory) => void,
+    private readonly options: ObserverOptions = {},
   ) {}
 
-  seed(value: unknown): void {
+  seed(value: unknown): string | undefined {
     const raw = record(value);
     const id = idOf(raw["id"]);
     if (!id) return;
     const prior = this.threads.get(id);
     const thread = this.ensure(id);
-    if (!thread) return;
+    if (!thread) return id;
     const name = raw["name"];
     this.threads.set(id, {
       ...thread,
@@ -69,53 +99,25 @@ export class ThreadObserver {
       ...(prior && prior.status !== "unknown" ? {} : nativeStatus(raw["status"])),
     });
     this.emit();
+    return id;
   }
 
   async start(): Promise<void> {
     if (this.started || this.stopped) return;
     this.started = true;
-    try {
-      let cursor: string | undefined;
-      const cursors = new Set<string>();
-      let count = 0;
-      do {
-        const page = record(
-          await this.request(
-            "thread/loaded/list",
-            { limit: 100, ...(cursor ? { cursor } : {}) },
-            2_000,
-          ),
-        );
-        if (this.stopped) return;
-        if (!Array.isArray(page["data"])) throw new Error("invalid loaded inventory");
-        for (const rawId of page["data"]) {
-          const id = idOf(rawId);
-          if (!id || ++count > MAX_THREADS) throw new Error("loaded inventory limit");
-          if (!this.seenDuringScan.has(id) && this.ensure(id)) this.pending.add(id);
-        }
-        const next = page["nextCursor"];
-        if (next !== undefined && next !== null && typeof next !== "string")
-          throw new Error("invalid cursor");
-        cursor = typeof next === "string" && next ? next : undefined;
-        if (cursor && cursors.has(cursor)) throw new Error("repeated cursor");
-        if (cursor) cursors.add(cursor);
-        if (cursors.size > MAX_THREADS) throw new Error("inventory page limit");
-      } while (cursor);
-      this.complete = !this.overflow;
-    } catch {
-      this.complete = false;
-    } finally {
-      this.scanning = false;
-      this.seenDuringScan.clear();
-      this.emit();
-      void this.readPending();
-    }
+    await this.reconcile(false);
   }
 
   notification(method: string, params: Record<string, unknown>): void {
     if (this.stopped) return;
     if (method === "thread/started") {
-      this.seed(params["thread"]);
+      const id = this.seed(params["thread"]);
+      if (!id) return;
+      if (this.scanning) this.changedDuringScan.add(id);
+      if (this.threads.has(id)) this.pending.add(id);
+      else this.scheduleRetry();
+      this.emit();
+      void this.readPending();
       return;
     }
     if (
@@ -130,24 +132,26 @@ export class ThreadObserver {
       return;
     const id = idOf(params["threadId"]);
     if (!id) return;
-    if (this.scanning) {
-      if (this.seenDuringScan.size < MAX_THREADS) this.seenDuringScan.add(id);
-      else if (!this.seenDuringScan.has(id)) this.overflow = true;
-    }
+    if (this.scanning) this.changedDuringScan.add(id);
     if (
       method === "thread/closed" ||
       (method === "thread/status/changed" && record(params["status"])["type"] === "notLoaded")
     ) {
+      if (this.scanning) this.removedDuringScan.add(id);
       this.threads.delete(id);
       this.renamed.delete(id);
       this.pending.delete(id);
       this.emit();
+      if (this.overflow) this.scheduleRetry();
       return;
     }
     const existed = this.threads.has(id);
-    if (method === "thread/name/updated" && !existed) return;
+    if (method === "thread/name/updated" && !existed && !this.scanning) return;
     const thread = this.ensure(id);
-    if (!thread) return;
+    if (!thread) {
+      this.scheduleRetry();
+      return;
+    }
     const next = { ...thread };
     if (method === "thread/status/changed") Object.assign(next, nativeStatus(params["status"]));
     if (method === "thread/name/updated") {
@@ -175,10 +179,168 @@ export class ThreadObserver {
     this.emit();
     if (this.started && !this.scanning) void this.readPending();
   }
+
   stop(): void {
     this.stopped = true;
     this.pending.clear();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
   }
+
+  private async reconcile(waitForReads = true): Promise<void> {
+    if (this.scanning || this.stopped) return;
+    if (this.reading) {
+      this.scheduleRetry();
+      return;
+    }
+    this.scanning = true;
+    this.changedDuringScan.clear();
+    this.removedDuringScan.clear();
+    this.emit();
+    const deadline = Date.now() + SCAN_TIMEOUT_MS;
+    let ids: string[];
+    try {
+      ids = await this.scanIds(deadline);
+    } catch {
+      this.finishReconciliation(false);
+      return;
+    }
+    const finishing = this.readAndApply(ids, deadline);
+    if (waitForReads) await finishing;
+  }
+
+  private async readAndApply(ids: string[], deadline: number): Promise<void> {
+    let successful = false;
+    try {
+      const { observed, failed } = await this.readIds(ids, deadline);
+      if (this.stopped) return;
+      const next = new Map<string, ThreadView>();
+      for (const [id, current] of this.threads) {
+        if (this.changedDuringScan.has(id)) next.set(id, current);
+      }
+      for (const id of ids) {
+        const thread = observed.get(id);
+        if (!thread) continue;
+        if (thread.status !== "unknown") this.pending.delete(id);
+        const current = this.threads.get(id);
+        if (this.changedDuringScan.has(id)) {
+          if (current)
+            next.set(id, {
+              ...current,
+              name: this.renamed.has(id) ? current.name : (current.name ?? thread.name),
+              parentThreadId: current.parentThreadId ?? thread.parentThreadId,
+            });
+          continue;
+        }
+        next.set(id, {
+          ...thread,
+          name: this.renamed.has(id) ? (current?.name ?? thread.name) : thread.name,
+          turn: current?.turn ?? null,
+        });
+      }
+      const rows = [...next.values()];
+      this.overflow = rows.length > MAX_THREADS;
+      this.threads.clear();
+      for (const thread of rows.slice(0, MAX_THREADS)) this.threads.set(thread.id, thread);
+      this.complete = !this.overflow && !failed;
+      successful = !failed;
+    } catch {
+      this.complete = false;
+    } finally {
+      this.finishReconciliation(successful);
+    }
+  }
+
+  private finishReconciliation(successful: boolean): void {
+    this.scanning = false;
+    this.changedDuringScan.clear();
+    this.removedDuringScan.clear();
+    if (successful && !this.overflow) this.retryAttempt = 0;
+    this.emit();
+    void this.readPending();
+    if (!successful || this.overflow) this.scheduleRetry();
+  }
+
+  private async scanIds(deadline: number): Promise<string[]> {
+    const ids = new Set<string>();
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      if (Date.now() >= deadline || ++pages > MAX_SCAN_PAGES)
+        throw new Error("inventory scan limit");
+      const page = record(
+        await this.request(
+          "thread/loaded/list",
+          { limit: SCAN_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+          Math.min(2_000, Math.max(1, deadline - Date.now())),
+        ),
+      );
+      if (this.stopped) return [];
+      if (!Array.isArray(page["data"])) throw new Error("invalid loaded inventory");
+      if (page["data"].length > SCAN_PAGE_SIZE) throw new Error("oversized inventory page");
+      for (const rawId of page["data"]) {
+        const id = idOf(rawId);
+        if (!id) throw new Error("invalid loaded inventory");
+        ids.add(id);
+        if (ids.size > MAX_SCAN_IDS) throw new Error("loaded inventory safety limit");
+      }
+      const next = page["nextCursor"];
+      if (next !== undefined && next !== null && typeof next !== "string")
+        throw new Error("invalid cursor");
+      cursor = typeof next === "string" && next ? next : undefined;
+      if (cursor && cursors.has(cursor)) throw new Error("repeated cursor");
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+    return [...ids];
+  }
+
+  private async readIds(
+    ids: string[],
+    deadline: number,
+  ): Promise<{ observed: Map<string, ThreadView>; failed: boolean }> {
+    const observed = new Map<string, ThreadView>();
+    let next = 0;
+    let failed = false;
+    await Promise.all(
+      Array.from({ length: Math.min(READ_CONCURRENCY, ids.length) }, async () => {
+        while (!this.stopped) {
+          const id = ids[next++];
+          if (!id) return;
+          if (this.removedDuringScan.has(id)) continue;
+          observed.set(id, {
+            id,
+            name: null,
+            parentThreadId: null,
+            status: "unknown",
+            activeFlags: [],
+            turn: null,
+          });
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            failed = true;
+            continue;
+          }
+          try {
+            const thread = threadFromRead(
+              await this.request(
+                "thread/read",
+                { threadId: id, includeTurns: false },
+                Math.min(2_000, remaining),
+              ),
+              id,
+            );
+            if (thread.status === "notLoaded") observed.delete(id);
+            else observed.set(id, thread);
+          } catch {
+            failed = true;
+          }
+        }
+      }),
+    );
+    return { observed, failed };
+  }
+
   private ensure(id: string): ThreadView | undefined {
     if (this.stopped) return;
     const existing = this.threads.get(id);
@@ -200,8 +362,9 @@ export class ThreadObserver {
     this.threads.set(id, thread);
     return thread;
   }
+
   private async readPending(): Promise<void> {
-    if (this.reading || this.stopped) return;
+    if (this.reading || this.stopped || this.scanning) return;
     this.reading = true;
     try {
       for (const id of this.pending) {
@@ -209,32 +372,29 @@ export class ThreadObserver {
         const before = this.threads.get(id);
         if (!before) continue;
         try {
-          const result = record(
+          const read = threadFromRead(
             await this.request("thread/read", { threadId: id, includeTurns: false }, 2_000),
+            id,
           );
           if (this.stopped) return;
-          const raw = record(result["thread"]);
-          if (raw["id"] !== id) throw new Error("thread read identity mismatch");
           const current = this.threads.get(id);
           if (!current) continue;
-          if (current === before && record(raw["status"])["type"] === "notLoaded") {
+          if (current === before && read.status === "notLoaded") {
             this.threads.delete(id);
             this.renamed.delete(id);
             this.emit();
             continue;
           }
           // Reads may finish after notifications. Fill metadata, but never rewind newer state.
-          const name = raw["name"];
           this.threads.set(id, {
             ...current,
-            name: this.renamed.has(id)
-              ? current.name
-              : (current.name ?? (typeof name === "string" ? name.slice(0, 256) : null)),
-            parentThreadId: current.parentThreadId ?? idOf(raw["parentThreadId"]) ?? null,
-            ...(current === before ? nativeStatus(raw["status"]) : {}),
+            name: this.renamed.has(id) ? current.name : (current.name ?? read.name),
+            parentThreadId: current.parentThreadId ?? read.parentThreadId,
+            ...(current === before ? { status: read.status, activeFlags: read.activeFlags } : {}),
           });
         } catch {
           this.complete = false;
+          this.scheduleRetry();
         }
         this.emit();
       }
@@ -243,11 +403,28 @@ export class ThreadObserver {
       this.emit();
     }
   }
+
+  private scheduleRetry(): void {
+    if (this.stopped || this.retryTimer) return;
+    const minimum = Math.max(0, this.options.retryMinMs ?? RETRY_MIN_MS);
+    const maximum = Math.max(minimum, this.options.retryMaxMs ?? RETRY_MAX_MS);
+    const delay = Math.min(maximum, minimum * 2 ** Math.min(this.retryAttempt++, 8));
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      void this.reconcile();
+    }, delay);
+  }
+
   private emit(): void {
     if (!this.stopped)
       this.publish({
         threads: [...this.threads.values()],
-        complete: this.complete && !this.scanning && this.pending.size === 0 && !this.reading,
+        complete:
+          this.complete &&
+          !this.overflow &&
+          !this.scanning &&
+          this.pending.size === 0 &&
+          !this.reading,
       });
   }
 }

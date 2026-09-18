@@ -4,6 +4,13 @@ import { MAX_THREADS, type ThreadInventory } from "../src/events/contract.ts";
 import { deferred } from "./fixtures/runtime-harness.ts";
 
 const tick = () => Bun.sleep(0);
+async function until(check: () => boolean, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error("condition timed out");
+    await Bun.sleep(1);
+  }
+}
 describe("native thread observation", () => {
   test("pages only the loaded inventory and projects state without conversation content", async () => {
     const snapshots: ThreadInventory[] = [];
@@ -165,5 +172,126 @@ describe("native thread observation", () => {
     observer.stop();
     observer.notification("thread/closed", { threadId: "t-0" });
     expect(latest.threads).toHaveLength(MAX_THREADS);
+  });
+
+  test("filters unloaded scan rows before the published bound", async () => {
+    const ids = Array.from(
+      { length: 300 },
+      (_, index) => `thread-${index.toString().padStart(3, "0")}`,
+    );
+    let activeReads = 0;
+    let maxActiveReads = 0;
+    let latest!: ThreadInventory;
+    const observer = new ThreadObserver(
+      async (method, params) => {
+        const input = params as { cursor?: string; threadId?: string };
+        if (method === "thread/loaded/list") {
+          const start = Number(input.cursor ?? 0);
+          const data = ids.slice(start, start + 100);
+          const next = start + data.length;
+          return { data, nextCursor: next < ids.length ? String(next) : null };
+        }
+        const index = ids.indexOf(input.threadId!);
+        activeReads++;
+        maxActiveReads = Math.max(maxActiveReads, activeReads);
+        await Bun.sleep(0);
+        activeReads--;
+        return {
+          thread: {
+            id: input.threadId,
+            parentThreadId: index === 287 ? null : "thread-287",
+            name: input.threadId,
+            status: { type: index < 287 ? "notLoaded" : "idle" },
+          },
+        };
+      },
+      (value) => {
+        latest = structuredClone(value);
+      },
+    );
+    await observer.start();
+    await until(() => latest?.complete === true);
+    expect(latest.threads).toHaveLength(13);
+    expect(latest.threads.every((thread) => thread.status === "idle")).toBe(true);
+    expect(maxActiveReads).toBeLessThanOrEqual(4);
+    observer.stop();
+  });
+
+  test("retries a failed scan and refreshes parent metadata for a started thread", async () => {
+    let attempts = 0;
+    let latest!: ThreadInventory;
+    const observer = new ThreadObserver(
+      async (method, params) => {
+        if (method === "thread/loaded/list") {
+          const cursor = (params as { cursor?: string }).cursor;
+          if (!cursor) attempts++;
+          if (attempts === 1) return { data: [], nextCursor: "repeat" };
+          return cursor
+            ? {
+                data: cursor === "continue" ? ["root"] : [],
+                nextCursor: cursor === "continue" ? null : cursor,
+              }
+            : { data: [], nextCursor: "continue" };
+        }
+        const id = (params as { threadId: string }).threadId;
+        return {
+          thread: {
+            id,
+            parentThreadId: id === "child" ? "root" : null,
+            status: { type: id === "child" ? "active" : "idle" },
+          },
+        };
+      },
+      (value) => {
+        latest = structuredClone(value);
+      },
+      { retryMinMs: 1, retryMaxMs: 1 },
+    );
+    await observer.start();
+    expect(latest.complete).toBe(false);
+    await until(() => latest?.complete === true);
+    expect(attempts).toBe(2);
+
+    observer.notification("thread/started", {
+      thread: { id: "child", parentThreadId: null, status: { type: "active" } },
+    });
+    await until(() => latest.threads.some((thread) => thread.parentThreadId === "root"));
+    expect(latest.threads.find((thread) => thread.id === "child")).toMatchObject({
+      parentThreadId: "root",
+      status: "active",
+    });
+    observer.stop();
+  });
+
+  test("keeps genuine live overflow incomplete and clears it after capacity recovers", async () => {
+    let ids = Array.from({ length: MAX_THREADS + 1 }, (_, index) => `live-${index}`);
+    let latest!: ThreadInventory;
+    const observer = new ThreadObserver(
+      async (method, params) => {
+        const input = params as { cursor?: string; threadId?: string };
+        if (method === "thread/loaded/list") {
+          const start = Number(input.cursor ?? 0);
+          const data = ids.slice(start, start + 100);
+          const next = start + data.length;
+          return { data, nextCursor: next < ids.length ? String(next) : null };
+        }
+        return {
+          thread: {
+            id: input.threadId,
+            status: { type: "idle" },
+          },
+        };
+      },
+      (value) => {
+        latest = structuredClone(value);
+      },
+      { retryMinMs: 5, retryMaxMs: 5 },
+    );
+    await observer.start();
+    await until(() => latest?.threads.length === MAX_THREADS && latest.complete === false);
+    ids = ids.slice(0, MAX_THREADS);
+    await until(() => latest?.complete === true);
+    expect(latest.threads).toHaveLength(MAX_THREADS);
+    observer.stop();
   });
 });
