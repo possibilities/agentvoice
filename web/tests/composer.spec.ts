@@ -39,6 +39,11 @@ test("Agent-only shared composer sends, steers, queues and edits without a Stop 
   const voice = page.getByRole("region", { name: "Voice", exact: true });
   const input = agent.getByRole("textbox", { name: "Message Agent" });
   await expect(voice.getByRole("textbox")).toHaveCount(0);
+  await expect(input).toHaveAttribute("aria-autocomplete", "none");
+  await expect(input).toHaveAttribute("autocapitalize", "off");
+  await expect(input).toHaveAttribute("autocomplete", "off");
+  await expect(input).toHaveAttribute("autocorrect", "off");
+  await expect(input).toHaveAttribute("spellcheck", "false");
   await input.fill("Typed request");
   await agent.getByRole("button", { name: "Send", exact: true }).click();
   await expect(agent.getByRole("alert")).toHaveText("Codex rejected the request.");

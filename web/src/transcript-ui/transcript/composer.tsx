@@ -821,7 +821,12 @@ function Composer({
                 error || storageWarning || recoveries.length > 0 ? `${inputId}-error` : undefined
               }
               aria-invalid={Boolean(error || recoveries.length > 0)}
+              aria-autocomplete="none"
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
               placeholder={placeholder}
+              spellCheck={false}
               value={draft}
               disabled={disabled}
               readOnly={
