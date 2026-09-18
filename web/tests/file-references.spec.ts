@@ -133,6 +133,20 @@ test("paste and drop consume absolute paths; filename-only drops explain missing
   await page.screenshot({ path: "test-results/file-reference-composer.png", fullPage: true });
 });
 
+test("pasting a copied worker task path preserves its canonical text", async ({
+  context,
+  page,
+}) => {
+  await page.route("**/api/live", (route) => route.fulfill({ json: makeView() }));
+  await page.goto("/");
+  const input = page.getByRole("textbox", { name: "Message Agent", exact: true });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.evaluate(() => navigator.clipboard.writeText("/root/transcript_worker_path_copy"));
+  await input.focus();
+  await input.press("ControlOrMeta+V");
+  await expect(input).toHaveValue("/root/transcript_worker_path_copy");
+});
+
 test("picker cancellation and folder errors preserve the draft", async ({ page }) => {
   await page.route("**/api/live", (route) => route.fulfill({ json: makeView() }));
   await page.route("**/api/files", (route) =>

@@ -41,6 +41,8 @@ test("lifecycle cards show exact events quietly and expose native identity by ke
     page.getByRole("region", { name: "Voice", exact: true }).getByRole("note"),
   ).toHaveCount(0);
   const start = pane.getByRole("note", { name: "Subagent started", exact: true });
+  await expect(start.getByText("/root/review", { exact: true })).toBeVisible();
+  await expect(start.getByText("@/root/review", { exact: true })).toHaveCount(0);
   await expect(start.getByText("child-thread", { exact: true })).toHaveCount(0);
   const disclosure = start.getByRole("button", { name: "Details", exact: true });
   await disclosure.focus();

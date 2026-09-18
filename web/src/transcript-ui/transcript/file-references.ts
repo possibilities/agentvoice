@@ -10,6 +10,13 @@ export type ListReferenceFiles = (
   signal: AbortSignal,
 ) => Promise<FilePickerListing>;
 
+// Native collaboration identifies workers with these paths. They are not host file references.
+const canonicalWorkerPath = /^\/root(?:\/[a-z0-9_]+)+$/u;
+
+export function isCanonicalWorkerPath(value: string): boolean {
+  return canonicalWorkerPath.test(value.trim());
+}
+
 /** A filename or browser-relative path is never evidence of an absolute host path. */
 export function absoluteReferencePath(value: string): string | null {
   let path = value.trim();
@@ -51,7 +58,9 @@ export function transferredReferencePaths(transfer: {
     .split(/\r?\n/u)
     .filter((line) => line.trim() && !(uriList && line.startsWith("#")));
   if (lines.length) {
-    const paths = lines.map(absoluteReferencePath);
+    const paths = lines.map((line) =>
+      isCanonicalWorkerPath(line) ? null : absoluteReferencePath(line),
+    );
     if (paths.every((path): path is string => path !== null)) return [...new Set(paths)];
   }
   const files = Array.from(transfer.files);
