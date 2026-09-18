@@ -42,8 +42,17 @@ five minutes. Each persisted revision receives at most one named native
 are not retried. Payload handling explicitly forbids speech, status messages or
 new Work caused solely by background refresh. Native submission is not proof of
 manager consumption: HUD acknowledgment remains separately explicit. The root
-uses installed AgentFX's bounded CLI or MCP for authorized delegation, with
-existing Work/routing-decision association and exact fresh source revision.
+uses installed AgentFX's `targets`, `start`, `resume`, `observe`, and
+`control` operations for authorized delegation; `steer`, `cancel`, and `close`
+are control actions. It prepares the Assignment first, keeps its exact
+`taskName` equal to AgentFX `task_slug`, verifies the explicit target's
+provider/model, and supplies explicit effort, idempotency and exact Work,
+Assignment, routing-decision and invoker associations. Ordinary fixed-target
+starts and resumes pass `routing_source_revision: "broker_prepare"` so the
+broker resolves the current exact revision inside admission. The aggregate
+routing-context source revision is orientation and optional exact-fence evidence,
+not a durable launch ticket; callers pass it only when intentionally fencing
+admission to that exact snapshot. Refusal never silently falls back.
 
 Publication and delivery stop at runtime shutdown. The read-only HUD routing
 state remains available after process replacement; a new producer generation

@@ -447,8 +447,18 @@ export class ManagerRoutingOrientation {
       delegation: {
         command: "agentfx",
         config: "~/.config/agentfx/quota-routing.json",
-        operations: ["targets", "start", "observe", "steer", "cancel", "collect"],
-        note: "MCP targets/start/observe/control or bounded run --config FILE --file REQUEST. Require fresh routing_source_revision, explicit target/effort, existing Work and routing-decision association; no uncontrolled fanout.",
+        operations: ["targets", "start", "resume", "observe", "control"],
+        control_actions: ["steer", "cancel", "close"],
+        task_identity:
+          "Prepare the AgentHUD Assignment first and pass its exact taskName as AgentFX task_slug.",
+        routing_source_revision: {
+          ordinary_fixed_target: "broker_prepare",
+          aggregate_context_revision:
+            "Orientation and optional exact-fence evidence only; it is not a durable launch ticket.",
+          exact_fence:
+            "Pass an exact aggregate source revision only when intentionally fencing admission to that exact snapshot.",
+        },
+        note: "Call targets, choose an explicit compatible target_id after verifying its provider/model, and pass an explicit effort plus exact Work, Assignment, routing-decision and invoker associations. Preserve idempotency keys, inspect observation before any retry, and never silently fall back.",
       },
       ...(routingGuidance ? { routing_guidance: routingGuidance } : {}),
       grok_catalog: grokCatalog,
