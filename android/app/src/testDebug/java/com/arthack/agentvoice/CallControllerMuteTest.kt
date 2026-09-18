@@ -14,6 +14,42 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CallControllerMuteTest {
+    @Test fun pushToTalkPublishesImmediatelyAndSettlementDoesNotChangeItsFace() {
+        val fixture = Fixture()
+        try {
+            fixture.live(micMuted = true, speakerMuted = false)
+            fixture.controller.hold()
+            val hold = fixture.transport.requests.last()
+            assertTrue(fixture.controller.ui.holding)
+            assertFalse(fixture.controller.ui.micOpen)
+            assertTrue(fixture.controller.ui.micMuted)
+            fixture.receive(response(hold, true))
+            fixture.receive(state(micMuted = true, speakerMuted = false, micEffectiveMuted = false))
+            assertTrue(fixture.controller.ui.holding)
+            assertTrue(fixture.controller.ui.micOpen)
+            assertTrue(fixture.controller.ui.micMuted)
+            fixture.controller.release()
+            assertFalse(fixture.controller.ui.holding)
+            assertFalse(fixture.controller.ui.micOpen)
+        } finally { fixture.controller.dispose() }
+    }
+
+    @Test fun refusedPushToTalkRestoresOnlyTheMomentaryFaceAndKeepsTheCallLive() {
+        val fixture = Fixture()
+        try {
+            fixture.live(micMuted = true, speakerMuted = false)
+            fixture.controller.hold()
+            val hold = fixture.transport.requests.last()
+            assertTrue(fixture.controller.ui.holding)
+            fixture.receive(response(hold, false))
+            assertFalse(fixture.controller.ui.holding)
+            assertTrue(fixture.controller.ui.micMuted)
+            assertFalse(fixture.controller.ui.speakerMuted)
+            assertTrue(fixture.controller.ui.connected)
+            assertEquals("Server refused push to talk. Try again when it is ready.", fixture.controller.ui.message)
+        } finally { fixture.controller.dispose() }
+    }
+
     @Test fun muteIsImmediateStableOnItsPeerAndReconcilesWithoutASecondFaceChange() {
         val fixture = Fixture()
         try {
@@ -106,6 +142,6 @@ class CallControllerMuteTest {
         fun response(request: JsonObject, ok: Boolean) = if (ok)
             """{"v":3,"type":"response","id":"${request.string("id")}","ok":true,"result":null}"""
         else """{"v":3,"type":"response","id":"${request.string("id")}","ok":false,"error":{"message":"refused"}}"""
-        fun state(micMuted: Boolean, speakerMuted: Boolean) = """{"v":3,"type":"state","state":{"codingActivity":"unknown","available":true,"phase":"live","mic":{"muted":$micMuted,"effectiveMuted":$micMuted},"speaker":{"muted":$speakerMuted,"effectiveMuted":$speakerMuted}}}"""
+        fun state(micMuted: Boolean, speakerMuted: Boolean, micEffectiveMuted: Boolean = micMuted) = """{"v":3,"type":"state","state":{"codingActivity":"unknown","available":true,"phase":"live","mic":{"muted":$micMuted,"effectiveMuted":$micEffectiveMuted},"speaker":{"muted":$speakerMuted,"effectiveMuted":$speakerMuted}}}"""
     }
 }

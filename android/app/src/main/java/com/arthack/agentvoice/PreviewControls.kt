@@ -417,8 +417,8 @@ internal fun PreviewHoldControl(
         role = Role.Button
         contentDescription = "Push to talk"
         stateDescription = when {
+            ui.holding -> "Talking. Release to mute"
             ui.connected && ui.micOpen -> if (ui.holding) "Live now. Release to mute" else "Live now. Microphone open"
-            ui.holding -> "Pressed"
             ui.canHold -> "Ready"
             ui.connected -> "Microphone muted"
             presentation.illuminated -> "Unavailable. ${presentation.label}"
@@ -457,7 +457,9 @@ internal fun RockerHoldFace(
     val inks = theme.palette
     val presentation = LocalVoicePresentation.current
     val largeType = LocalDensity.current.fontScale > 1.3f
-    val live = ui.holding && ui.micOpen
+    // The rocker reflects the finger's local intent immediately. Audio stays governed
+    // by CallController's acknowledgement and authoritative-state fences.
+    val live = ui.holding
     val microphoneLive = ui.connected && ui.micOpen
     BoxWithConstraints(modifier) {
         val verticalFace = maxHeight > maxWidth * 1.15f
@@ -528,6 +530,7 @@ internal fun RockerHoldFace(
                 RockerPressGlyph(ink, ui.holding, Modifier.size(glyphSize))
                 Spacer(Modifier.height(16.dp))
                 ControlText(when {
+                    ui.holding -> "Live\nnow"
                     microphoneLive -> "Live\nnow"
                     ui.connected -> "Push"
                     presentation.illuminated -> "Wait"
@@ -535,6 +538,7 @@ internal fun RockerHoldFace(
                 }, ink, mainSize, bold = true, maxLines = 2, align = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 ControlText(when {
+                    ui.holding -> "release\nto mute"
                     microphoneLive -> if (ui.holding) "release\nto mute" else "mic open"
                     ui.connected -> "to talk"
                     presentation.illuminated -> presentation.label
@@ -547,6 +551,7 @@ internal fun RockerHoldFace(
             Spacer(Modifier.width(if (compactFace) 14.dp else 20.dp))
             Column(Modifier.weight(1f)) {
                 ControlText(when {
+                    ui.holding -> "Live now"
                     microphoneLive -> "Live now"
                     ui.connected -> "Push"
                     presentation.illuminated -> "Wait"
@@ -558,6 +563,7 @@ internal fun RockerHoldFace(
                 }, bold = true)
                 Spacer(Modifier.height((3f * heightScale).coerceIn(2f, 5f).dp))
                 ControlText(when {
+                    ui.holding -> "release to mute"
                     microphoneLive -> if (ui.holding) "release to mute" else "microphone open"
                     ui.connected -> "to talk"
                     presentation.illuminated -> presentation.label

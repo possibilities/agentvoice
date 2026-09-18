@@ -61,6 +61,11 @@ internal class AudioGate {
         return true
     }
     fun acknowledgeHold() { if (holding) holdAcknowledged = true }
+    /** A refused press restores the local PTT face without changing either channel. */
+    fun rejectHold() {
+        holding = false
+        holdAcknowledged = false
+    }
     fun release(): Boolean {
         val wasHolding = holding
         holding = false

@@ -178,6 +178,14 @@ internal class CallController(
                         refresh()
                         return
                     }
+                    if (ack?.action == "hold" || ack?.action == "release") {
+                        // PTT is a local, momentary interaction. A refusal must not tear down
+                        // an otherwise healthy call or alter either persistent mute channel.
+                        if (ack!!.action == "hold" && ack.revision == holdRevision) gate.rejectHold()
+                        ui = ui.copy(message = "Server refused push to talk. Try again when it is ready.")
+                        refresh()
+                        return
+                    }
                     stop(if (method == "call") callAdmissionFailure(frame.errorCode)
                         else "Server refused a control. Start again when it is ready.")
                     return
@@ -268,16 +276,33 @@ internal class CallController(
     override fun hold() = guarded {
         if (!gate.hold()) return@guarded
         holdRevision++
-        send("input", command("hold"), Ack("hold", revision = holdRevision))
+        // Publish the pressed face before the command can wait on the transport. Media
+        // remains closed until the existing acknowledgement and state fences agree.
         refresh()
+        try {
+            send("input", command("hold"), Ack("hold", revision = holdRevision))
+        } catch (error: Exception) {
+            gate.rejectHold()
+            refresh()
+            throw error
+        }
     }
     override fun release() {
         val held = gate.release()
         holdRevision++
         // Close local capture before writing or awaiting any response.
         media?.gates(gate.micOpen && admitted, gate.speakerOpen && admitted)
-        if (held && ui.running) guarded { send("input", command("release")) }
         refresh()
+        if (held && ui.running) guarded {
+            try {
+                send("input", command("release"), Ack("release", revision = holdRevision))
+            } catch (error: Exception) {
+                // Release is already locally safe. Keep that state and let the existing
+                // transport failure path settle the connection.
+                refresh()
+                throw error
+            }
+        }
     }
     private fun refresh() {
         if (!ui.running) return

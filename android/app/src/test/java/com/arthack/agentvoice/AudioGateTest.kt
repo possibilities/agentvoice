@@ -40,6 +40,19 @@ class AudioGateTest {
         gate.release()
         assertFalse(gate.micOpen)
     }
+    @Test fun rejectedHoldRestoresOnlyTheMomentaryPress() {
+        val gate = ready()
+        gate.hold()
+        assertTrue(gate.holding)
+        assertTrue(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
+        assertFalse(gate.micOpen)
+        gate.rejectHold()
+        assertFalse(gate.holding)
+        assertTrue(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
+        assertFalse(gate.micOpen)
+    }
     @Test fun localMuteWinsOverAnOlderUnmutedState() {
         val gate = ready()
         val open = muted.copy(mic = ChannelState(false, false))

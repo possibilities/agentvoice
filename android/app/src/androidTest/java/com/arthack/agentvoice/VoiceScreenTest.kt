@@ -111,6 +111,17 @@ class VoiceScreenTest {
         compose.runOnIdle { assertEquals(PreviewSwitchCue.Down, cues.last()) }
     }
 
+    @Test fun pendingPushToTalkShowsItsIntendedFaceBeforeCaptureOpens() {
+        val pending = ready.copy(holding = true, micOpen = false, canHold = false)
+        compose.setContent {
+            VoiceTheme { VoiceScreen(pending, soundOutput = output, stop = {}, mute = {}, hold = {}, release = {}) }
+        }
+        compose.onNodeWithTag("hold-to-talk")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Talking. Release to mute"))
+        compose.onNodeWithText("Live now").assertExists()
+        compose.onNodeWithText("release to mute").assertExists()
+    }
+
     @Test fun idleScreenHasNoEnrollmentActionsAndRespectsTheDistributorsIconLicense() {
         compose.setContent {
             VoiceTheme { VoiceScreen(CallUi(message = "Connection setup"), soundOutput = output,
