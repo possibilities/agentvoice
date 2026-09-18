@@ -16,9 +16,10 @@ function routing(id: string, revision: number, remaining: number): TranscriptMes
       balances: [
         {
           provider: "Codex",
+          account: "codex-1",
           lane: "primary",
-          remainingPercent: remaining,
-          resetsAt: "2026-09-18T00:00:00.000Z",
+          usedPercent: 100 - remaining,
+          resetsAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
         },
       ],
     },
@@ -35,11 +36,30 @@ test("routing refreshes share one quiet card with newest balance and auditable u
         window as unknown as { transcriptFixture: { setMessages(value: unknown[]): void } }
       ).transcriptFixture.setMessages(value);
     }, messages);
-  const first = routing("routing-1", 1, 72);
+  const first = {
+    ...routing("routing-1", 1, 72),
+    routingContext: {
+      ...routing("routing-1", 1, 72).routingContext!,
+      balances: [
+        ...routing("routing-1", 1, 72).routingContext!.balances!,
+        {
+          provider: "Codex" as const,
+          account: "codex-1",
+          lane: "weekly",
+          usedPercent: 14,
+          resetsAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+    },
+  };
   await setMessages([first]);
   const card = page.getByRole("note", { name: "Routing context", exact: true });
   await expect(card).toContainText("gpt-5.6-sol · medium");
-  await expect(card).toContainText("72% remaining");
+  await expect(card).toContainText("Codex · codex-1");
+  await expect(card).toContainText("primary · 28% used");
+  await expect(card).toContainText("weekly · 14% used");
+  await expect(card).toContainText("resets in");
+  await expect(card.getByText("Codex · codex-1", { exact: true })).toHaveCount(1);
   await card.evaluate((element) => element.setAttribute("data-retained", "yes"));
 
   await setMessages([
@@ -55,11 +75,10 @@ test("routing refreshes share one quiet card with newest balance and auditable u
   ]);
   await expect(card).toHaveCount(1);
   await expect(card).toHaveAttribute("data-retained", "yes");
-  await expect(card).toContainText("68% remaining");
+  await expect(card).toContainText("primary · 32% used");
   await expect(card.getByRole("button", { name: "2 updates", exact: true })).toBeVisible();
   await card.getByRole("button", { name: "2 updates", exact: true }).click();
-  await expect(card).toContainText("Generation 2, revision 2 · delta");
-  await expect(card).toContainText("Generation 2, revision 1 · full");
+  await expect(card.getByText("Routing update", { exact: true })).toHaveCount(2);
   await expect(page.locator(".message-author")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Command pwd", exact: true })).toBeVisible();
 

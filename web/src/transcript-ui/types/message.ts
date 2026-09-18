@@ -46,8 +46,10 @@ export interface Message {
 
 export interface RoutingBalance {
   provider: "Codex" | "Grok";
+  /** Privacy-safe ordinal within the displayed provider. */
+  account: string;
   lane: string;
-  remainingPercent: number;
+  usedPercent: number;
   resetsAt?: string;
   eligible?: boolean;
 }

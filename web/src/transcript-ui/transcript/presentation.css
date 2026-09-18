@@ -159,7 +159,10 @@
   margin: 0;
   text-align: right;
 }
-.routing-context-card__remaining {
+.routing-context-card__lane {
+  display: block;
+}
+.routing-context-card__used {
   color: var(--text);
   font-weight: 500;
 }

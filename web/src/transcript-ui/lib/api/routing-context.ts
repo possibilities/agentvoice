@@ -39,6 +39,7 @@ function percent(value: unknown) {
 
 function balance(
   provider: RoutingBalance["provider"],
+  account: string,
   lane: unknown,
   value: unknown,
   resetsAt: unknown,
@@ -48,8 +49,9 @@ function balance(
   if (remainingPercent === undefined) return undefined;
   return {
     provider,
+    account,
     lane: text(lane, 64) ?? (provider === "Codex" ? "quota" : "included"),
-    remainingPercent,
+    usedPercent: 100 - remainingPercent,
     ...(text(resetsAt, 64) ? { resetsAt: text(resetsAt, 64) } : {}),
     ...(eligible === undefined ? {} : { eligible }),
   };
@@ -83,7 +85,7 @@ export function routingContextPresentation(value: unknown): RoutingContextPresen
   const quota = row(payload["quota"]);
   const balances: RoutingBalance[] = [];
   if (quota && Array.isArray(quota["accounts"])) {
-    for (const candidate of quota["accounts"].slice(0, 16)) {
+    for (const [accountIndex, candidate] of quota["accounts"].slice(0, 16).entries()) {
       if (balances.length >= 16) break;
       const account = row(candidate);
       const lane = row(account?.["lane"]);
@@ -93,6 +95,7 @@ export function routingContextPresentation(value: unknown): RoutingContextPresen
         const window = row(candidateWindow);
         const projected = balance(
           "Codex",
+          `codex-${accountIndex + 1}`,
           window?.["role"],
           window?.["remaining_percent"],
           window?.["resets_at"],
@@ -103,12 +106,13 @@ export function routingContextPresentation(value: unknown): RoutingContextPresen
     }
   }
   if (quota && Array.isArray(quota["grok"])) {
-    for (const candidate of quota["grok"].slice(0, 16)) {
+    for (const [accountIndex, candidate] of quota["grok"].slice(0, 16).entries()) {
       if (balances.length >= 16) break;
       const account = row(candidate);
       const included = row(account?.["included"]);
       const projected = balance(
         "Grok",
+        `grok-${accountIndex + 1}`,
         "included",
         included?.["remainingPercent"],
         included?.["resetsAt"],

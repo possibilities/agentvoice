@@ -72,7 +72,7 @@ test("projects routing output to a dedicated privacy-safe transcript message", (
       mode: "full",
       current: { model: "gpt-5.6-sol", effort: "medium", serviceTier: "priority" },
       delegationAvailable: true,
-      balances: [{ provider: "Codex", lane: "primary", remainingPercent: 72 }],
+      balances: [{ provider: "Codex", account: "codex-1", lane: "primary", usedPercent: 28 }],
     },
   });
   expect(message.toolActivity).toBeUndefined();
