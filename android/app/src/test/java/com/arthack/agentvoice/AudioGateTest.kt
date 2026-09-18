@@ -69,10 +69,38 @@ class AudioGateTest {
     @Test fun unmuteNeverOpensBeforeServerConfirmation() {
         val gate = ready()
         gate.intent("mic", false)
+        assertFalse(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
         gate.acknowledgeMute("mic")
         assertFalse(gate.micOpen)
         gate.state(muted.copy(mic = ChannelState(false, false)))
         assertTrue(gate.micOpen)
+    }
+    @Test fun optimisticMuteChangesOnlyItsDisplayedChannelAndConfirmationDoesNotFlashBack() {
+        val gate = ready()
+        val open = muted.copy(mic = ChannelState(false, false), speaker = ChannelState(false, false))
+        gate.state(open)
+        gate.intent("mic", true)
+        assertTrue(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
+        gate.acknowledgeMute("mic")
+        assertTrue(gate.displayedMicMuted)
+        gate.state(open.copy(mic = ChannelState(true, true)))
+        assertFalse(gate.micPending)
+        assertTrue(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
+    }
+    @Test fun refusedMuteRollsBackOnlyTheTappedChannel() {
+        val gate = ready()
+        val open = muted.copy(mic = ChannelState(false, false), speaker = ChannelState(false, false))
+        gate.state(open)
+        gate.intent("speaker", true)
+        assertFalse(gate.displayedMicMuted)
+        assertTrue(gate.displayedSpeakerMuted)
+        gate.rejectMute("speaker")
+        assertFalse(gate.displayedMicMuted)
+        assertFalse(gate.displayedSpeakerMuted)
+        assertFalse(gate.controlsPending)
     }
     @Test fun teardownAndFailedSessionFenceFurtherState() {
         val gate = ready()

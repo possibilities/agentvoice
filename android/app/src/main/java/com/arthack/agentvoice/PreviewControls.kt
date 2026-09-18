@@ -115,9 +115,9 @@ private fun PreviewLandscapeControls(
         val latestCompleted by rememberUpdatedState(onReleaseCompleted)
         @Composable fun muteColumn() {
             Column(Modifier.width(muteWidth.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(channelGap.dp)) {
-                PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.micPending,
+                PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.connected, ui.micPending,
                     inks.you, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
-                PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.speakerPending,
+                PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.connected, ui.speakerPending,
                     inks.agent, heightScale, light, onMute, Modifier.fillMaxWidth().weight(1f))
             }
         }
@@ -156,9 +156,9 @@ internal fun PreviewMuteControls(
     BoxWithConstraints(modifier) {
         val heightScale = (maxHeight.value / 130f).coerceIn(.6f, 1.6f)
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(channelGapDp.dp)) {
-            PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.micPending,
+            PreviewMuteButton("HUMAN", "mic", ui.micMuted, ui.micOpen, ui.connected && !ui.controlsPending, ui.connected, ui.micPending,
                 inks.you, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
-            PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.speakerPending,
+            PreviewMuteButton("AGENT", "speaker", ui.speakerMuted, ui.speakerOpen, ui.connected && !ui.controlsPending, ui.connected, ui.speakerPending,
                 inks.agent, heightScale, light, onMute, Modifier.weight(1f).fillMaxHeight())
         }
     }
@@ -171,6 +171,7 @@ private fun PreviewMuteButton(
     muted: Boolean,
     open: Boolean,
     enabled: Boolean,
+    available: Boolean,
     pending: Boolean,
     ink: Color,
     heightScale: Float,
@@ -183,16 +184,18 @@ private fun PreviewMuteButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val on = !muted || open
+    // Pending mute immediately changes this face; its media path intentionally waits
+    // for the authoritative state, so an old open gate must not keep the face lit.
+    val on = !muted || (open && !pending)
     val presentation = LocalVoicePresentation.current
     val color = when {
-        on && (enabled || presentation == VoicePresentation.Connected) -> ink
+        on && (available || presentation == VoicePresentation.Connected) -> ink
         presentation.illuminated -> inks.text
         else -> inks.muted
     }
     // Keep the acknowledged state legible while the command is fenced. The sunk face
     // supplies local feedback without replacing the channel's state with a transient label.
-    val status = when { muted && open -> "live"; muted -> "off"; else -> "on" }
+    val status = when { !pending && muted && open -> "live"; muted -> "off"; else -> "on" }
     Box(modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled,
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
         onClick = { currentOnMute(target) })
@@ -202,7 +205,7 @@ private fun PreviewMuteButton(
             stateDescription = when {
                 pending -> if (muted) "Muted; changing" else "On; changing"
                 muted && open -> "Talking; muted on release"
-                !enabled -> (if (muted) "Muted; unavailable" else "On; unavailable") +
+                !available -> (if (muted) "Muted; unavailable" else "On; unavailable") +
                     if (presentation.illuminated) "; ${presentation.label}" else ""
                 muted -> "Muted"
                 else -> "On"

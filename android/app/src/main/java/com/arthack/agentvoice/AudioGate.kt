@@ -13,6 +13,9 @@ internal class AudioGate {
     val micPending get() = micIntent != null
     val speakerPending get() = speakerIntent != null
     val controlsPending get() = micIntent != null || speakerIntent != null
+    /** The pressed channel changes immediately, while its media gate stays authoritative. */
+    val displayedMicMuted get() = micIntent ?: state.mic.muted
+    val displayedSpeakerMuted get() = speakerIntent ?: state.speaker.muted
     val canHold get() = connected && state.available && state.phase == "live" &&
         state.mic.muted && !controlsPending
     val micOpen get() = connected && state.available && !state.mic.effectiveMuted &&
@@ -36,6 +39,16 @@ internal class AudioGate {
         // Clear only after both the request and matching authoritative state arrive.
         if (target == "mic") micAcknowledged = true else speakerAcknowledged = true
         reconcile()
+    }
+    /** A refused command restores only its own confirmed channel. */
+    fun rejectMute(target: String) {
+        if (target == "mic") {
+            micIntent = null
+            micAcknowledged = false
+        } else {
+            speakerIntent = null
+            speakerAcknowledged = false
+        }
     }
     private fun reconcile() {
         if (micAcknowledged && state.mic.muted == micIntent) micIntent = null

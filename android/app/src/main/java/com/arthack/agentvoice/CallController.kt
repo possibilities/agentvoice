@@ -169,6 +169,15 @@ internal class CallController(
                 val method = ledger!!.response(frame.id)
                 val ack = acknowledgements.remove(frame.id)
                 if (!frame.ok) {
+                    if (ack?.action == "mute") {
+                        // Preserve the live call and the peer's confirmed state when one mute
+                        // command is rejected. The gate returns the tapped face to its last
+                        // authoritative state before publishing the existing control error.
+                        gate.rejectMute(ack.target!!)
+                        ui = ui.copy(message = "Server refused a control. Start again when it is ready.")
+                        refresh()
+                        return
+                    }
                     stop(if (method == "call") callAdmissionFailure(frame.errorCode)
                         else "Server refused a control. Start again when it is ready.")
                     return
@@ -246,7 +255,15 @@ internal class CallController(
         val muted = if (target == "mic") !gate.state.mic.muted else !gate.state.speaker.muted
         gate.intent(target, muted)
         refresh()
-        send("input", command("mute", target, muted), Ack("mute", target))
+        try {
+            send("input", command("mute", target, muted), Ack("mute", target))
+        } catch (error: Exception) {
+            // A write failure never leaves a speculative face behind while the
+            // established transport error path tears this attempt down.
+            gate.rejectMute(target)
+            refresh()
+            throw error
+        }
     }
     override fun hold() = guarded {
         if (!gate.hold()) return@guarded
@@ -275,7 +292,7 @@ internal class CallController(
                 gate.state.phase == "negotiating" -> "Connecting voice"
                 else -> "Connecting"
             },
-            micMuted = gate.state.mic.muted, speakerMuted = gate.state.speaker.muted,
+            micMuted = gate.displayedMicMuted, speakerMuted = gate.displayedSpeakerMuted,
             micOpen = admitted && gate.micOpen, speakerOpen = admitted && gate.speakerOpen,
             canHold = admitted && gate.canHold, holding = gate.holding,
             controlsPending = gate.controlsPending,
