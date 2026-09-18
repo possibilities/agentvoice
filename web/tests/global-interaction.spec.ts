@@ -88,7 +88,7 @@ test("focus frames stay hidden while semantic controls remain keyboard operable"
   await expect(dock).toHaveCSS("border-top-color", restingDivider);
 });
 
-test("transcript text remains visibly selectable, copyable, and findable", async ({
+test("transcript text remains visibly selectable and copyable", async ({
   context,
   page,
 }) => {
@@ -103,41 +103,4 @@ test("transcript text remains visibly selectable, copyable, and findable", async
   await page.keyboard.press("ControlOrMeta+C");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(selected);
 
-  const found = await page.evaluate(() => {
-    window.getSelection()?.removeAllRanges();
-    return (
-      window as typeof window & {
-        find(text: string): boolean;
-      }
-    ).find("Native browser find reaches this rendered transcript sentence.");
-  });
-  expect(found).toBe(true);
-});
-
-test("Command-F and Control-F stay uncancelled and bypass downstream page handlers", async ({
-  page,
-}) => {
-  const outcomes = await page.evaluate(() => {
-    const downstream = (event: KeyboardEvent) => event.preventDefault();
-    window.addEventListener("keydown", downstream);
-    const dispatch = (modifier: "meta" | "control") => {
-      const event = new KeyboardEvent("keydown", {
-        key: "f",
-        metaKey: modifier === "meta",
-        ctrlKey: modifier === "control",
-        bubbles: true,
-        cancelable: true,
-      });
-      const accepted = window.dispatchEvent(event);
-      return { accepted, defaultPrevented: event.defaultPrevented };
-    };
-    const result = { command: dispatch("meta"), control: dispatch("control") };
-    window.removeEventListener("keydown", downstream);
-    return result;
-  });
-
-  expect(outcomes).toEqual({
-    command: { accepted: true, defaultPrevented: false },
-    control: { accepted: true, defaultPrevented: false },
-  });
 });

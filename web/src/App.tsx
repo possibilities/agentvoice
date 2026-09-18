@@ -60,21 +60,7 @@ function focusComposerFromDock(event: MouseEvent<HTMLDivElement>) {
   event.currentTarget.querySelector<HTMLTextAreaElement>("textarea")?.focus();
 }
 
-function preserveNativeBrowserFind(event: KeyboardEvent) {
-  const onePrimaryModifier = event.metaKey !== event.ctrlKey;
-  if (event.key.toLowerCase() !== "f" || !onePrimaryModifier || event.altKey || event.shiftKey)
-    return;
-  // Prevent later page handlers from cancelling the browser command. Stopping
-  // propagation does not cancel the browser's native find action.
-  event.stopImmediatePropagation();
-}
-
 export function App() {
-  useLayoutEffect(() => {
-    window.addEventListener("keydown", preserveNativeBrowserFind, { capture: true });
-    return () =>
-      window.removeEventListener("keydown", preserveNativeBrowserFind, { capture: true });
-  }, []);
   const persistenceInstanceId = kioskPersistenceInstanceId();
   const [panePreference, setPanePreference] = useState(() =>
     readPanePreference(persistenceInstanceId),
