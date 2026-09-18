@@ -24,7 +24,7 @@ class PreviewControlsTest {
     private val ready = CallUi(running = true, connected = true, phase = "Connected", micMuted = true,
         speakerMuted = false, speakerOpen = true, canHold = true)
 
-    @Test fun pendingMuteOnlyChangesTheTargetChannelFace() {
+    @Test fun pendingMuteKeepsStateLabelsAndChangesOnlyTheTargetChannelFace() {
         var ui by mutableStateOf(ready)
         compose.setContent {
             VoiceTheme { PreviewMuteControls(ui, {}, Modifier.requiredSize(320.dp, 130.dp)) }
@@ -34,13 +34,29 @@ class PreviewControlsTest {
             for (y in 0 until a.height) for (x in 0 until a.width) if (a[x, y] != b[x, y]) return true
             return false
         }
-        val micBefore = pixels("mic-mute")
-        val speakerBefore = pixels("speaker-mute")
-        compose.runOnIdle { ui = ready.copy(controlsPending = true, speakerPending = true) }
-        val micPendingElsewhere = pixels("mic-mute")
-        val speakerPending = pixels("speaker-mute")
-        assertFalse("Peer mute face must remain visually stable", differs(micBefore, micPendingElsewhere))
-        assertTrue("Pressed mute face must show pending feedback", differs(speakerBefore, speakerPending))
+        for ((target, state) in listOf(
+            "mic" to ready.copy(controlsPending = true, micPending = true),
+            "speaker" to ready.copy(controlsPending = true, speakerPending = true),
+        )) {
+            compose.runOnIdle { ui = ready }
+            val micBefore = pixels("mic-mute")
+            val speakerBefore = pixels("speaker-mute")
+            compose.runOnIdle { ui = state }
+            val micPending = pixels("mic-mute")
+            val speakerPending = pixels("speaker-mute")
+            compose.onNodeWithText("wait", useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithText(if (target == "mic") "off" else "on", useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag(if (target == "mic") "mic-mute" else "speaker-mute").assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,
+                    if (target == "mic") "Muted; changing" else "On; changing"))
+            if (target == "mic") {
+                assertTrue("Pressed microphone face must show pending feedback", differs(micBefore, micPending))
+                assertFalse("Speaker face must remain visually stable", differs(speakerBefore, speakerPending))
+            } else {
+                assertFalse("Microphone face must remain visually stable", differs(micBefore, micPending))
+                assertTrue("Pressed speaker face must show pending feedback", differs(speakerBefore, speakerPending))
+            }
+        }
     }
 
     @Test fun pendingMuteAcknowledgementsKeepThePushLabelStable() {

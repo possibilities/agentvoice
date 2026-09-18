@@ -190,7 +190,9 @@ private fun PreviewMuteButton(
         presentation.illuminated -> inks.text
         else -> inks.muted
     }
-    val status = when { pending -> "wait"; muted && open -> "live"; muted -> "off"; else -> "on" }
+    // Keep the acknowledged state legible while the command is fenced. The sunk face
+    // supplies local feedback without replacing the channel's state with a transient label.
+    val status = when { muted && open -> "live"; muted -> "off"; else -> "on" }
     Box(modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled,
         role = Role.Switch, onClickLabel = if (muted) "Unmute $name" else "Mute $name",
         onClick = { currentOnMute(target) })
@@ -198,6 +200,7 @@ private fun PreviewMuteButton(
             contentDescription = if (target == "speaker") "AGENT speaker" else "HUMAN microphone"
             toggleableState = if (muted) ToggleableState.Off else ToggleableState.On
             stateDescription = when {
+                pending -> if (muted) "Muted; changing" else "On; changing"
                 muted && open -> "Talking; muted on release"
                 !enabled -> (if (muted) "Muted; unavailable" else "On; unavailable") +
                     if (presentation.illuminated) "; ${presentation.label}" else ""
@@ -207,7 +210,7 @@ private fun PreviewMuteButton(
         }.testTag(if (target == "speaker") "speaker-mute" else "mic-mute")) {
         val face = Modifier.fillMaxSize().clearAndSetSemantics { }
         // Momentary capture never moves the persistent mute switch to its on position.
-        RockerMuteFace(name, target == "speaker", muted, color, status, pressed, heightScale,
+        RockerMuteFace(name, target == "speaker", muted, color, status, pressed, pending, heightScale,
             face, light, enabled && !muted && open)
         if (focused) Canvas(Modifier.matchParentSize().clearAndSetSemantics { }) {
             drawCutPlate(inks.text, cut = 5.dp.toPx(), inset = 1.dp.toPx(), stroke = 2.dp.toPx())
@@ -218,13 +221,15 @@ private fun PreviewMuteButton(
 @Composable
 internal fun RockerMuteFace(
     name: String, speaker: Boolean, muted: Boolean, color: Color,
-    status: String, pressed: Boolean, heightScale: Float, modifier: Modifier,
+    status: String, pressed: Boolean, pending: Boolean, heightScale: Float, modifier: Modifier,
     light: State<PreviewButtonLight>?, lightEnabled: Boolean,
 ) {
     val theme = LocalPreviewTheme.current
     val inks = theme.palette
     val illuminated = LocalVoicePresentation.current.illuminated
-    val sink = if (pressed) 2.dp else 0.dp
+    // A pending command remains visibly pressed on its own face until its authoritative
+    // acknowledgement arrives. Its peer does not receive this treatment.
+    val sink = if (pressed || pending) 2.dp else 0.dp
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier) {
@@ -303,7 +308,7 @@ private fun rockerCaption(measurer: TextMeasurer, name: String, width: Float, he
         val statusStyle = style(statusSize, FontWeight.SemiBold)
         val nameLayout = measurer.measure(name, nameStyle, maxLines = 1, softWrap = false)
         // Reserve the same slot in every state; a gate change cannot move or hide a caption.
-        val states = listOf("on", "off", "live", "wait").map {
+        val states = listOf("on", "off", "live").map {
             measurer.measure(it, statusStyle, maxLines = 1, softWrap = false)
         }
         val statusWidth = states.maxOf { it.size.width }.toFloat()

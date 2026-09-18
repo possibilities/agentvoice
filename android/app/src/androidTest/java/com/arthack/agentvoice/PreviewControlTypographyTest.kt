@@ -33,6 +33,7 @@ class PreviewControlTypographyTest {
                         // The real face is tested directly because its owner clears duplicate spoken labels.
                         RockerMuteFace(name, name == "AGENT", status in listOf("off", "live"),
                             if (name == "AGENT") VoiceInk.agent else VoiceInk.you, status, false,
+                            false,
                             (geometry.muteHeightDp / 130f).coerceIn(.6f, 1.6f),
                             Modifier.width(137.dp).height(geometry.muteHeightDp.dp).testTag("rocker-face"), null, false)
                     }
@@ -43,7 +44,7 @@ class PreviewControlTypographyTest {
             for (fontScale in listOf(1f, 1.5f)) for (channel in listOf("HUMAN", "AGENT")) {
                 var previousName: DpRect? = null
                 var previousStatus: DpRect? = null
-                for (state in listOf("on", "off", "live", "wait")) {
+                for (state in listOf("on", "off", "live")) {
                     compose.runOnIdle {
                         geometry = PreviewControlGeometry(height, share)
                         scale = fontScale
@@ -94,7 +95,7 @@ class PreviewControlTypographyTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
-                VoiceTheme { RockerMuteFace(label, label == "AGENT", true, VoiceInk.muted, "wait", false,
+                VoiceTheme { RockerMuteFace(label, label == "AGENT", true, VoiceInk.muted, "off", false, true,
                     (height / 130f).coerceIn(.6f, 1.6f), Modifier.width(width.dp).height(height.dp).testTag("compact-face"), null, false) }
             }
         }
